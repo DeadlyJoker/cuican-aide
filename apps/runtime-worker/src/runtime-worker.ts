@@ -67,6 +67,7 @@ import type {
 import { PlanOutputError, parseProposedPlan } from "./plan-output.ts";
 import { goalToolsForRun, isGoalToolCall } from "./goal-tools.ts";
 import { replaceChangedToolApproval } from "./tool-approval-replacement.ts";
+import { AgentSegmentStateMachine } from "./agent-segment-state-machine.ts";
 import type { WorkflowRuntimeDispatcherPort } from "./workflow-runtime-dispatcher.ts";
 
 export type { RuntimeWorkerScheduler } from "./runtime-worker-watchers.ts";
@@ -876,33 +877,9 @@ export class RuntimeWorker {
     );
     heartbeat.start();
     cancellationWatcher.start();
-    let output = "";
-    let completed = false;
-    let providerCheckpoint: ProviderCheckpoint | null = null;
-    let checkpointSequence: number | null = null;
-    let completedSequence: number | null = null;
-    let latestUsage:
-      | Extract<KernelAgentEvent, { type: "usage.recorded" }>["data"]
-      | null = null;
-    let lastAgentSequence = 0;
-    let checkpointEvent: Extract<
-      KernelAgentEvent,
-      { type: "segment.checkpointed" }
-    > | null = null;
-    const requestedTools: Extract<
-      KernelAgentEvent,
-      { type: "tool.requested" }
-    >[] = [];
+    const segment = new AgentSegmentStateMachine(providerTurnState);
     let toolBoundaryCompleted = false;
     let toolBoundaryOutcome: RuntimeWorkerOutcome | null = null;
-    const bufferedEvents: Exclude<
-      KernelAgentEvent,
-      { type: "segment.continuation_requested" }
-    >[] = [];
-    let assistantContinuation: Extract<
-      KernelAgentEvent,
-      { type: "segment.continuation_requested" }
-    > | null = null;
     try {
       for await (const event of runtime.kernel.runSegment(
         {
@@ -955,77 +932,30 @@ export class RuntimeWorker {
           controller.abort("user_requested");
           return this.#cancel(claim, attempt);
         }
-        lastAgentSequence = event.sequence;
-        if (event.type === "segment.provider_response_created") {
-          providerCheckpoint = event.data.checkpoint;
+        const action = segment.accept(event);
+        if (action.kind === "checkpointProviderResponse") {
           await this.#execution.checkpointModelAttempt(
             claim,
             attempt,
-            event.data.checkpoint,
+            action.checkpoint,
           );
           await this.#afterProviderResponseCheckpointed?.();
           continue;
         }
-        if (event.type === "segment.checkpointed") {
-          if (checkpointSequence !== null) {
-            throw new AgentKernelError("segment_checkpoint_duplicate", false);
-          }
-          providerCheckpoint = event.data.checkpoint;
-          checkpointSequence = event.sequence;
-          checkpointEvent = event;
-          continue;
-        }
-        if (event.type === "segment.completed") {
-          if (event.data.output !== output) {
-            throw new AgentKernelError("segment_output_mismatch", false);
-          }
-          completed = true;
-          providerTurnState = event.data.providerTurnState ?? providerTurnState;
-          completedSequence = event.sequence;
-          continue;
-        }
-        if (event.type === "segment.continuation_requested") {
-          providerTurnState = event.data.providerTurnState ?? providerTurnState;
-          assistantContinuation = event;
-          continue;
-        }
-        if (
-          event.type === "segment.started" ||
-          event.type === "rate_limit.updated"
-        ) {
+        providerTurnState = segment.providerTurnState;
+        if (action.kind === "persistEvent") {
           const persisted = await this.#execution.recordAgentEvent(
             claim,
-            event,
+            action.event,
           );
           run = persisted.state;
-          continue;
-        }
-        bufferedEvents.push(event);
-        if (event.type === "tool.requested") {
-          providerTurnState = event.data.providerTurnState ?? providerTurnState;
-          requestedTools.push(event);
-        }
-        if (
-          (event.type === "model.sampling.retry" ||
-            event.type === "model.transport.fallback") &&
-          event.data.discardedOutput
-        ) {
-          output = "";
-        } else if (event.type === "model.output.delta") {
-          output += event.data.delta;
-        } else if (event.type === "usage.recorded") {
-          latestUsage = event.data;
         } else if (event.type === "segment.failed") {
           break;
         }
       }
-      if (assistantContinuation !== null) {
-        if (
-          assistantContinuation.data.completedAssistantItems.join("") !==
-          assistantContinuation.data.output
-        ) {
-          throw new AgentKernelError("segment_output_mismatch", false);
-        }
+      if (segment.assistantContinuation !== null) {
+        segment.validateContinuation();
+        const assistantContinuation = segment.assistantContinuation;
         await this.#beforeAssistantSampleCommitted?.();
         await this.#execution.commitAssistantSampleContinuation(
           claim,
@@ -1036,25 +966,25 @@ export class RuntimeWorker {
             output: assistantContinuation.data.output,
             completedAssistantItems:
               assistantContinuation.data.completedAssistantItems,
-            events: bufferedEvents,
+            events: segment.bufferedEvents,
             identity: modelIdentity,
             contextRevision: context.revision,
             modelPolicy: {
               contextWindowTokens: runtime.modelContextWindowTokens,
               autoCompactAtTokens: runtime.autoCompactAtTokens,
             },
-            latestUsage,
+            latestUsage: segment.latestUsage,
             checkpoint: assistantContinuation.data.checkpoint,
             providerTurnState,
           },
         );
         await this.#afterAssistantSampleCommitted?.();
-        if (requestedTools.length > 0) {
+        if (segment.requestedTools.length > 0) {
           toolBoundaryOutcome = await this.#executeToolCalls(
             claim,
             run,
-            requestedTools,
-            lastAgentSequence,
+            segment.requestedTools,
+            segment.lastAgentSequence,
             controller.signal,
             runtime,
           );
@@ -1063,7 +993,7 @@ export class RuntimeWorker {
           toolBoundaryCompleted = true;
         }
       } else {
-        for (const event of bufferedEvents) {
+        for (const event of segment.bufferedEvents) {
           const persisted = await this.#execution.recordAgentEvent(
             claim,
             event,
@@ -1079,28 +1009,31 @@ export class RuntimeWorker {
         }
       }
       if (
-        assistantContinuation === null &&
-        !completed &&
-        requestedTools.length > 0
+        segment.assistantContinuation === null &&
+        !segment.completed &&
+        segment.requestedTools.length > 0
       ) {
-        const completedAssistantOutput = requestedTools
+        const completedAssistantOutput = segment.requestedTools
           .flatMap((event) => event.data.completedAssistantItems ?? [])
           .join("");
-        if (output.length > 0 && completedAssistantOutput !== output) {
+        if (
+          segment.output.length > 0 &&
+          completedAssistantOutput !== segment.output
+        ) {
           throw new AgentKernelError(
             "model_tool_call_with_text_unsupported",
             false,
           );
         }
-        if (checkpointEvent !== null) {
-          await this.#execution.recordAgentEvent(claim, checkpointEvent);
+        if (segment.checkpointEvent !== null) {
+          await this.#execution.recordAgentEvent(claim, segment.checkpointEvent);
         }
-        lastAgentSequence += 1;
+        segment.lastAgentSequence += 1;
         await this.#execution.recordAgentEvent(claim, {
           schemaVersion: "crewon.agent-event.v0",
           runId: run.runId,
           segmentId,
-          sequence: lastAgentSequence,
+          sequence: segment.lastAgentSequence,
           type: "segment.completed",
           data: { output: "" },
         });
@@ -1110,8 +1043,8 @@ export class RuntimeWorker {
         toolBoundaryOutcome = await this.#executeToolCalls(
           claim,
           run,
-          requestedTools,
-          lastAgentSequence,
+          segment.requestedTools,
+          segment.lastAgentSequence,
           controller.signal,
           runtime,
         );
@@ -1136,7 +1069,7 @@ export class RuntimeWorker {
           schemaVersion: "crewon.agent-event.v0",
           runId: run.runId,
           segmentId,
-          sequence: lastAgentSequence + 1,
+          sequence: segment.lastAgentSequence + 1,
           type: "segment.failed",
           data: { code: error.code, retryable: false },
         };
@@ -1159,7 +1092,7 @@ export class RuntimeWorker {
         claim,
         attempt,
         error,
-        providerCheckpoint,
+        segment.providerCheckpoint,
       );
     } finally {
       await cancellationWatcher.close();
@@ -1177,15 +1110,15 @@ export class RuntimeWorker {
     if (toolBoundaryCompleted) {
       return this.#executeClaim(claim);
     }
-    if (!completed || completedSequence === null) {
+    if (!segment.completed || segment.completedSequence === null) {
       throw new PermanentWorkerError("segment_completion_missing");
     }
 
-    let completionOutput = output;
+    let completionOutput = segment.output;
     let proposedPlan: string | null = null;
     if (run.collaborationMode === "plan") {
       try {
-        completionOutput = parseProposedPlan(output);
+        completionOutput = parseProposedPlan(segment.output);
         proposedPlan = completionOutput;
       } catch (error) {
         if (!(error instanceof PlanOutputError)) throw error;
@@ -1207,18 +1140,18 @@ export class RuntimeWorker {
         {
           identity: modelIdentity,
           contextRevision: context.revision,
-          checkpoint: providerCheckpoint,
+          checkpoint: segment.providerCheckpoint,
           providerTurnState,
           segment: {
             segmentId,
-            checkpointSequence,
-            completedSequence,
+            checkpointSequence: segment.checkpointSequence,
+            completedSequence: segment.completedSequence,
           },
           modelPolicy: {
             contextWindowTokens: runtime.modelContextWindowTokens,
             autoCompactAtTokens: runtime.autoCompactAtTokens,
           },
-          latestUsage,
+          latestUsage: segment.latestUsage,
           proposedPlan,
         },
       );
@@ -1231,7 +1164,7 @@ export class RuntimeWorker {
         claim,
         attempt,
         error,
-        providerCheckpoint,
+        segment.providerCheckpoint,
       );
     }
   }
