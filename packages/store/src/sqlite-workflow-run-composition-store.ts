@@ -3,6 +3,7 @@ import {
   canonicalJson,
   RunStoreError,
   type WorkflowAgentAttemptAuthority,
+  type CommitWorkflowToolContinuationInput,
   type WorkflowNodeContinuationCheckpoint,
   type CommitWorkflowAssistantContinuationInput,
   type WorkflowRunCompositionStore,
@@ -89,6 +90,7 @@ export class SqliteWorkflowRunCompositionStore
     this.#continuations = new SqliteWorkflowNodeContinuationAuthority(
       this.#database,
       this.#clock,
+      this.#digester,
     );
     configureAndMigrateSqlite(this.#database);
     migrateSqliteWorkflowVersions(this.#database);
@@ -110,6 +112,14 @@ export class SqliteWorkflowRunCompositionStore
     input: CommitWorkflowAssistantContinuationInput,
   ): Promise<WorkflowNodeContinuationCheckpoint> {
     return this.#continuations.commitAssistant(input);
+  }
+
+  async commitWorkflowToolContinuation(
+    input: CommitWorkflowToolContinuationInput,
+  ): ReturnType<
+    import("@crewon/application").WorkflowNodeContinuationStore["commitWorkflowToolContinuation"]
+  > {
+    return this.#continuations.commitTool(input);
   }
 
   async settleWorkflowNode(

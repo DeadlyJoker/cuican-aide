@@ -1,20 +1,36 @@
 import { DatabaseSync } from "node:sqlite";
+import { parseCanonicalAgentEvent } from "@crewon/contracts";
 import {
   RunStoreError,
   validateWorkflowNodeContinuationCheckpoint,
   type CommitWorkflowAssistantContinuationInput,
+  type CommitWorkflowToolContinuationInput,
   type WorkflowAgentAttemptAuthority,
   type WorkflowNodeContinuationCheckpoint,
 } from "@crewon/application";
+import {
+  reduceRunLifecycleEvent,
+  resolveToolExecutionReceipt,
+  type RunLifecycleEvent,
+  type RunState,
+  type ToolExecutionReceiptState,
+  type WorkflowContentDigester,
+} from "@crewon/domain";
 
 import { readLeaseClock, type LeaseClock } from "./lease-clock.ts";
 import {
+  finishSqliteRunAttempt,
   loadSqliteRunAttempt,
   loadSqliteRunStep,
 } from "./sqlite-execution-authority.ts";
 import { rollback } from "./sqlite-schema.ts";
 import { stableJson } from "./store-invariants.ts";
 import { loadSqliteModelDispatchReceipt } from "./sqlite-model-dispatch-evidence.ts";
+import {
+  loadSqliteToolExecutionReceipt,
+  updateSqliteToolExecutionReceipt,
+} from "./sqlite-tool-execution-receipts.ts";
+import { normalizeStoredRunState } from "./stored-run-state.ts";
 import {
   decodeWorkflowExecutionState,
   validateWorkflowExecutionState,
@@ -23,10 +39,16 @@ import {
 export class SqliteWorkflowNodeContinuationAuthority {
   readonly #database: DatabaseSync;
   readonly #clock: LeaseClock;
+  readonly #digester: WorkflowContentDigester;
 
-  constructor(database: DatabaseSync, clock: LeaseClock) {
+  constructor(
+    database: DatabaseSync,
+    clock: LeaseClock,
+    digester: WorkflowContentDigester,
+  ) {
     this.#database = database;
     this.#clock = clock;
+    this.#digester = digester;
   }
 
   async load(
@@ -76,7 +98,9 @@ export class SqliteWorkflowNodeContinuationAuthority {
         updatedAt: input.committedAt,
       });
       if (stableJson(checkpoint.authority) !== stableJson(input.authority))
-        throw new RunStoreError("workflow_node_continuation_authority_mismatch");
+        throw new RunStoreError(
+          "workflow_node_continuation_authority_mismatch",
+        );
       this.#validateCheckpointCorrelation(input.authority, checkpoint);
       const write = this.#database
         .prepare(
@@ -101,6 +125,86 @@ export class SqliteWorkflowNodeContinuationAuthority {
         throw new RunStoreError("workflow_node_continuation_revision_conflict");
       this.#database.exec("COMMIT");
       return checkpoint;
+    } catch (error) {
+      rollback(this.#database);
+      throw error instanceof RunStoreError
+        ? error
+        : new RunStoreError("workflow_node_continuation_store_failed", {
+            cause: error instanceof Error ? error : undefined,
+          });
+    }
+  }
+
+  async commitTool(input: CommitWorkflowToolContinuationInput): Promise<{
+    receipt: ToolExecutionReceiptState;
+    continuation: WorkflowNodeContinuationCheckpoint;
+  }> {
+    try {
+      parseCanonicalAgentEvent(input.completedEvent);
+      this.#database.exec("BEGIN IMMEDIATE");
+      const currentReceipt = loadSqliteToolExecutionReceipt(
+        this.#database,
+        input.receipt,
+      );
+      if (currentReceipt === null)
+        throw new RunStoreError("workflow_tool_continuation_corrupt");
+      if (currentReceipt.status === "completed") {
+        const replay = this.#validateToolReplay(input, currentReceipt);
+        this.#database.exec("COMMIT");
+        return replay;
+      }
+      this.#validateLease(input, readLeaseClock(this.#clock));
+      this.#validateAuthority(input.authority);
+      this.#validateToolCorrelation(input, currentReceipt);
+      const currentContinuation = await this.load(input.authority);
+      const continuation = this.#nextCheckpoint(input, currentContinuation);
+      const receipt = resolveToolExecutionReceipt(currentReceipt, {
+        status: "completed",
+        resolvedAt: input.committedAt,
+        providerReceiptId: input.providerReceiptId,
+        result: requireToolResult(input),
+      });
+      if (stableJson(receipt) !== stableJson(input.receipt))
+        throw new RunStoreError("workflow_tool_completion_mismatch");
+      const event = this.#toolCompletedEvent(input);
+      const currentRun = this.#loadRun(input.authority);
+      const nextRun = reduceRunLifecycleEvent(currentRun, event);
+      const updated = this.#database
+        .prepare(
+          `UPDATE run_snapshots SET revision=?,last_sequence=?,state_json=?,updated_at=?
+           WHERE tenant_id=? AND run_id=? AND revision=?`,
+        )
+        .run(
+          nextRun.revision,
+          nextRun.lastSequence,
+          stableJson(nextRun),
+          input.committedAt,
+          input.authority.tenantId,
+          input.authority.runId,
+          currentRun.revision,
+        );
+      if (updated.changes !== 1) throw new RunStoreError("revision_conflict");
+      updateSqliteToolExecutionReceipt(this.#database, currentReceipt, receipt);
+      finishSqliteRunAttempt(this.#database, {
+        tenantId: input.authority.tenantId,
+        runId: input.authority.runId,
+        workItemId: input.authority.workItemId,
+        leaseEpoch: input.authority.leaseEpoch,
+        attempt: {
+          ...input.toolAttempt,
+          status: "completed",
+          finishedAt: input.committedAt,
+          checkpointDigest: null,
+        },
+      });
+      this.#insertEventAndOutbox(input, event);
+      this.#writeCheckpoint(
+        input.authority,
+        input.expectedContinuationRevision,
+        continuation,
+      );
+      this.#database.exec("COMMIT");
+      return { receipt, continuation };
     } catch (error) {
       rollback(this.#database);
       throw error instanceof RunStoreError
@@ -217,4 +321,367 @@ export class SqliteWorkflowNodeContinuationAuthority {
     )
       throw new RunStoreError("workflow_node_continuation_authority_mismatch");
   }
+
+  #validateToolCorrelation(
+    input: CommitWorkflowToolContinuationInput,
+    receipt: ToolExecutionReceiptState,
+  ): void {
+    const attempt = loadSqliteRunAttempt(this.#database, {
+      tenantId: input.authority.tenantId,
+      runId: input.authority.runId,
+      ...input.toolAttempt,
+    });
+    const event = input.completedEvent;
+    if (
+      receipt.tenantId !== input.authority.tenantId ||
+      receipt.runId !== input.authority.runId ||
+      receipt.workItemId !== input.authority.workItemId ||
+      receipt.stepId !== input.toolAttempt.stepId ||
+      receipt.attemptId !== input.toolAttempt.attemptId ||
+      receipt.status !== "dispatched" ||
+      attempt?.status !== "running" ||
+      attempt.workItemId !== input.authority.workItemId ||
+      attempt.leaseEpoch !== input.authority.leaseEpoch ||
+      event.runId !== input.authority.runId ||
+      receipt.call.segmentId !== event.segmentId ||
+      receipt.call.callId !== event.data.callId ||
+      receipt.call.kind !== event.data.kind ||
+      receipt.call.name !== event.data.name ||
+      !toolSegmentMatches(input.authority.attempt.attemptId, event.segmentId)
+    )
+      throw new RunStoreError("workflow_tool_completion_mismatch");
+    const prior = this.#latestSegmentEvent(input.authority, event.segmentId);
+    if (
+      prior === null ||
+      !("segmentSequence" in prior.data) ||
+      event.sequence !== prior.data.segmentSequence + 1
+    )
+      throw new RunStoreError("workflow_tool_event_sequence_mismatch");
+  }
+
+  #nextCheckpoint(
+    input: CommitWorkflowToolContinuationInput,
+    current: WorkflowNodeContinuationCheckpoint | null,
+  ): WorkflowNodeContinuationCheckpoint {
+    if ((current?.revision ?? null) !== input.expectedContinuationRevision)
+      throw new RunStoreError("workflow_node_continuation_revision_conflict");
+    const next = validateWorkflowNodeContinuationCheckpoint({
+      ...input.next,
+      revision: (current?.revision ?? 0) + 1,
+      updatedAt: input.committedAt,
+    });
+    if (stableJson(next.authority) !== stableJson(input.authority))
+      throw new RunStoreError("workflow_node_continuation_authority_mismatch");
+    this.#validateCheckpointCorrelation(input.authority, next);
+    return next;
+  }
+
+  #writeCheckpoint(
+    authority: WorkflowAgentAttemptAuthority,
+    expectedRevision: number | null,
+    checkpoint: WorkflowNodeContinuationCheckpoint,
+  ): void {
+    const write = this.#database
+      .prepare(
+        `INSERT INTO workflow_node_continuations
+         (tenant_id,run_id,step_id,attempt_id,revision,checkpoint_json,updated_at)
+         VALUES (?,?,?,?,?,?,?)
+         ON CONFLICT(tenant_id,run_id,step_id,attempt_id) DO UPDATE SET
+           revision=excluded.revision,checkpoint_json=excluded.checkpoint_json,
+           updated_at=excluded.updated_at WHERE revision=?`,
+      )
+      .run(
+        authority.tenantId,
+        authority.runId,
+        authority.attempt.stepId,
+        authority.attempt.attemptId,
+        checkpoint.revision,
+        stableJson(checkpoint),
+        checkpoint.updatedAt,
+        expectedRevision ?? 0,
+      );
+    if (write.changes !== 1)
+      throw new RunStoreError("workflow_node_continuation_revision_conflict");
+  }
+
+  #toolCompletedEvent(
+    input: CommitWorkflowToolContinuationInput,
+  ): Extract<RunLifecycleEvent, { type: "tool.completed" }> {
+    const run = this.#loadRun(input.authority);
+    const eventId = this.#id("tool-event", {
+      authority: input.authority,
+      segmentId: input.completedEvent.segmentId,
+      sequence: input.completedEvent.sequence,
+      callId: input.completedEvent.data.callId,
+    });
+    return {
+      schemaVersion: "crewon.run-event.v0",
+      identity: { runId: input.authority.runId },
+      eventId,
+      sequence: run.lastSequence + 1,
+      occurredAt: input.committedAt,
+      type: "tool.completed",
+      data: {
+        segmentId: input.completedEvent.segmentId,
+        segmentSequence: input.completedEvent.sequence,
+        ...input.completedEvent.data,
+      },
+    };
+  }
+
+  #insertEventAndOutbox(
+    input: CommitWorkflowToolContinuationInput,
+    event: Extract<RunLifecycleEvent, { type: "tool.completed" }>,
+  ): void {
+    this.#database
+      .prepare(
+        `INSERT INTO run_events(tenant_id,run_id,sequence,event_id,event_json)
+         VALUES (?,?,?,?,?)`,
+      )
+      .run(
+        input.authority.tenantId,
+        input.authority.runId,
+        event.sequence,
+        event.eventId,
+        stableJson(event),
+      );
+    const messageId = this.#id("tool-outbox", {
+      authority: input.authority,
+      eventId: event.eventId,
+    });
+    const message = {
+      messageId,
+      tenantId: input.authority.tenantId,
+      runId: input.authority.runId,
+      topic: "run.updated",
+      payload: {
+        eventId: event.eventId,
+        eventType: event.type,
+        throughSequence: event.sequence,
+      },
+      createdAt: input.committedAt,
+    };
+    this.#database
+      .prepare(
+        `INSERT INTO outbox(message_id,tenant_id,run_id,topic,message_json,created_at,
+         status,available_at_ms,lease_epoch,attempt_count)
+         VALUES (?,?,?,?,?,?,'pending',?,0,0)`,
+      )
+      .run(
+        messageId,
+        input.authority.tenantId,
+        input.authority.runId,
+        message.topic,
+        stableJson(message),
+        input.committedAt,
+        Date.parse(input.committedAt),
+      );
+  }
+
+  #validateToolReplay(
+    input: CommitWorkflowToolContinuationInput,
+    receipt: ToolExecutionReceiptState,
+  ): {
+    receipt: ToolExecutionReceiptState;
+    continuation: WorkflowNodeContinuationCheckpoint;
+  } {
+    try {
+      if (stableJson(receipt) !== stableJson(input.receipt))
+        throw new Error("receipt mismatch");
+      const attempt = loadSqliteRunAttempt(this.#database, {
+        tenantId: input.authority.tenantId,
+        runId: input.authority.runId,
+        ...input.toolAttempt,
+      });
+      const continuation = this.#loadStoredCheckpoint(input.authority);
+      const expected = validateWorkflowNodeContinuationCheckpoint({
+        ...input.next,
+        revision: (input.expectedContinuationRevision ?? 0) + 1,
+        updatedAt: input.committedAt,
+      });
+      const event = this.#toolCompletedEventForReplay(input);
+      const run = this.#loadRun(input.authority);
+      const messageId = this.#id("tool-outbox", {
+        authority: input.authority,
+        eventId: event.eventId,
+      });
+      const outbox = this.#database
+        .prepare("SELECT message_json FROM outbox WHERE message_id=?")
+        .get(messageId) as { message_json: string } | undefined;
+      if (
+        attempt?.status !== "completed" ||
+        attempt.workItemId !== input.authority.workItemId ||
+        attempt.leaseEpoch !== input.authority.leaseEpoch ||
+        attempt.updatedAt !== input.committedAt ||
+        attempt.terminalAt !== input.committedAt ||
+        attempt.checkpointDigest !== null ||
+        attempt.providerCheckpoint !== null ||
+        attempt.providerTurnState !== null ||
+        attempt.failure !== null ||
+        run.lastSequence !== event.sequence ||
+        run.revision !== event.sequence ||
+        run.updatedAt !== input.committedAt ||
+        stableJson(continuation) !== stableJson(expected) ||
+        stableJson(event.data) !==
+          stableJson({
+            segmentId: input.completedEvent.segmentId,
+            segmentSequence: input.completedEvent.sequence,
+            ...input.completedEvent.data,
+          }) ||
+        event.occurredAt !== input.committedAt ||
+        outbox === undefined ||
+        stableJson(JSON.parse(outbox.message_json)) !==
+          stableJson({
+            messageId,
+            tenantId: input.authority.tenantId,
+            runId: input.authority.runId,
+            topic: "run.updated",
+            payload: {
+              eventId: event.eventId,
+              eventType: event.type,
+              throughSequence: event.sequence,
+            },
+            createdAt: input.committedAt,
+          })
+      )
+        throw new Error("atomic result mismatch");
+      return { receipt, continuation };
+    } catch (error) {
+      throw new RunStoreError("workflow_tool_continuation_corrupt", {
+        cause: error instanceof Error ? error : undefined,
+      });
+    }
+  }
+
+  #loadStoredCheckpoint(
+    authority: WorkflowAgentAttemptAuthority,
+  ): WorkflowNodeContinuationCheckpoint {
+    const row = this.#database
+      .prepare(
+        `SELECT checkpoint_json FROM workflow_node_continuations
+         WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=?`,
+      )
+      .get(
+        authority.tenantId,
+        authority.runId,
+        authority.attempt.stepId,
+        authority.attempt.attemptId,
+      ) as { checkpoint_json: string } | undefined;
+    if (row === undefined) throw new Error("continuation missing");
+    return validateWorkflowNodeContinuationCheckpoint(
+      JSON.parse(row.checkpoint_json),
+    );
+  }
+
+  #toolCompletedEventForReplay(
+    input: CommitWorkflowToolContinuationInput,
+  ): Extract<RunLifecycleEvent, { type: "tool.completed" }> {
+    const eventId = this.#id("tool-event", {
+      authority: input.authority,
+      segmentId: input.completedEvent.segmentId,
+      sequence: input.completedEvent.sequence,
+      callId: input.completedEvent.data.callId,
+    });
+    const row = this.#database
+      .prepare("SELECT sequence,event_json FROM run_events WHERE event_id=?")
+      .get(eventId) as { sequence: number; event_json: string } | undefined;
+    if (row === undefined) throw new Error("event missing");
+    const event = JSON.parse(row.event_json) as RunLifecycleEvent;
+    if (
+      event.type !== "tool.completed" ||
+      event.eventId !== eventId ||
+      event.sequence !== row.sequence
+    )
+      throw new Error("event mismatch");
+    parseCanonicalAgentEvent({
+      schemaVersion: "crewon.agent-event.v0",
+      runId: event.identity.runId,
+      segmentId: event.data.segmentId,
+      sequence: event.data.segmentSequence,
+      type: event.type,
+      data: {
+        callId: event.data.callId,
+        kind: event.data.kind,
+        name: event.data.name,
+        output: event.data.output,
+        isError: event.data.isError,
+        artifactRef: event.data.artifactRef,
+        outputTruncated: event.data.outputTruncated,
+      },
+    });
+    return event;
+  }
+
+  #latestSegmentEvent(
+    authority: WorkflowAgentAttemptAuthority,
+    segmentId: string,
+  ): RunLifecycleEvent | null {
+    const row = this.#database
+      .prepare(
+        `SELECT event_json FROM run_events
+         WHERE tenant_id=? AND run_id=?
+           AND json_extract(event_json,'$.data.segmentId')=?
+         ORDER BY sequence DESC LIMIT 1`,
+      )
+      .get(authority.tenantId, authority.runId, segmentId) as
+      | { event_json: string }
+      | undefined;
+    if (row === undefined) return null;
+    try {
+      return JSON.parse(row.event_json) as RunLifecycleEvent;
+    } catch (error) {
+      throw new RunStoreError("workflow_tool_continuation_corrupt", {
+        cause: error instanceof Error ? error : undefined,
+      });
+    }
+  }
+
+  #loadRun(authority: WorkflowAgentAttemptAuthority): RunState {
+    const row = this.#database
+      .prepare(
+        "SELECT state_json FROM run_snapshots WHERE tenant_id=? AND run_id=?",
+      )
+      .get(authority.tenantId, authority.runId) as
+      | { state_json: string }
+      | undefined;
+    if (row === undefined) throw new RunStoreError("run_not_found");
+    return normalizeStoredRunState(
+      JSON.parse(row.state_json),
+      "stored_run_invalid",
+    );
+  }
+
+  #id(role: string, value: unknown): string {
+    const digest = this.#digester.sha256(
+      stableJson({
+        schemaVersion: "crewon.workflow-tool-authority.v0",
+        role,
+        value,
+      }),
+    );
+    if (!/^sha256:[a-f0-9]{64}$/u.test(digest))
+      throw new RunStoreError("workflow_composition_digest_invalid");
+    return `wf-tool:${role}:${digest.slice(7)}`;
+  }
+}
+
+function requireToolResult(input: CommitWorkflowToolContinuationInput) {
+  const result = input.receipt.result;
+  if (
+    result === null ||
+    result.output !== input.completedEvent.data.output ||
+    result.isError !== input.completedEvent.data.isError ||
+    result.artifactRef !== input.completedEvent.data.artifactRef ||
+    input.receipt.providerReceiptId !== input.providerReceiptId
+  )
+    throw new RunStoreError("workflow_tool_completion_mismatch");
+  return result;
+}
+
+function toolSegmentMatches(
+  parentAttemptId: string,
+  segmentId: string,
+): boolean {
+  const prefix = `segment:${parentAttemptId}`;
+  return segmentId === prefix || segmentId.startsWith(`${prefix}:round:`);
 }
