@@ -154,6 +154,16 @@ export type RunLifecycleEvent =
       }>;
     })
   | (RunEventBase & {
+      type: "model.reasoning.summary";
+      data: Readonly<{
+        segmentId: string;
+        segmentSequence: number;
+        kind: "delta" | "partAdded";
+        summaryIndex: number;
+        delta?: string;
+      }>;
+    })
+  | (RunEventBase & {
       type: "tool.requested";
       data: Readonly<{
         segmentId: string;
@@ -469,6 +479,26 @@ export function reduceRunLifecycleEvent(
         "model_output_delta_invalid",
       );
       return next;
+    case "model.reasoning.summary":
+      requireStatus(state, event.type, ["running"]);
+      validateSegmentIdentity(event.data);
+      requireNonNegativeInteger(
+        event.data.summaryIndex,
+        "model_reasoning_index_invalid",
+      );
+      if (event.data.kind === "delta") {
+        if (event.data.delta === undefined) {
+          throw new RunLifecycleError("model_reasoning_delta_invalid");
+        }
+        requireBoundedNonEmpty(
+          event.data.delta,
+          16 * 1024,
+          "model_reasoning_delta_invalid",
+        );
+      } else if (event.data.kind !== "partAdded") {
+        throw new RunLifecycleError("model_reasoning_kind_invalid");
+      }
+      return next;
     case "model.sampling.retry":
       requireStatus(state, event.type, ["running"]);
       validateSegmentIdentity(event.data);
@@ -599,7 +629,10 @@ export function reduceRunLifecycleEvent(
     case "segment.provider_continuation":
       requireStatus(state, event.type, ["running"]);
       validateSegmentIdentity(event.data);
-      requirePositiveInteger(event.data.sampleIndex, "provider_sample_index_invalid");
+      requirePositiveInteger(
+        event.data.sampleIndex,
+        "provider_sample_index_invalid",
+      );
       requirePositiveInteger(
         event.data.throughHistorySequence,
         "provider_history_sequence_invalid",

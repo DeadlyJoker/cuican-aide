@@ -5,6 +5,8 @@ import { protocolError, transportError } from "./responses-errors.ts";
 import { parseResponsesSse } from "./responses-sse.ts";
 
 const MAX_RESPONSE_ID_LENGTH = 512;
+const MAX_REASONING_DELTA_BYTES = 16 * 1024;
+const MAX_REASONING_BYTES = 64 * 1024;
 
 export type ResponsesSequencePolicy = "required" | "whenPresent";
 
@@ -23,6 +25,7 @@ export class ResponsesProtocolDecoder {
   #output = "";
   #terminal = false;
   #completedHistoryItems: ModelInputItem[] = [];
+  #reasoningBytes = 0;
 
   constructor(options: ResponsesProtocolOptions) {
     this.#options = options;
@@ -207,9 +210,24 @@ export class ResponsesProtocolDecoder {
         requireCreated(this.#created);
         return [];
       case "response.reasoning_summary_text.delta":
+        requireCreated(this.#created);
+        return [
+          this.#reasoningDelta("summary", event.summary_index, event.delta),
+        ];
       case "response.reasoning_text.delta":
+        requireCreated(this.#created);
+        return [
+          this.#reasoningDelta("content", event.content_index, event.delta),
+        ];
       case "response.reasoning_summary_part.added":
-        throw protocolError("responses_event_unsupported");
+        requireCreated(this.#created);
+        return [
+          {
+            type: "reasoning.part.added",
+            channel: "summary",
+            index: reasoningIndex(event.summary_index),
+          },
+        ];
       default:
         return [];
     }
@@ -220,6 +238,35 @@ export class ResponsesProtocolDecoder {
       throw transportError("unavailable", "responses_stream_incomplete", true);
     }
   }
+
+  #reasoningDelta(
+    channel: "summary" | "content",
+    indexValue: unknown,
+    deltaValue: unknown,
+  ): ModelTransportEvent {
+    const delta = boundedString(
+      deltaValue,
+      MAX_REASONING_DELTA_BYTES,
+      "responses_reasoning_delta_invalid",
+    );
+    this.#reasoningBytes += new TextEncoder().encode(delta).byteLength;
+    if (this.#reasoningBytes > MAX_REASONING_BYTES) {
+      throw protocolError("responses_reasoning_budget_exceeded");
+    }
+    return {
+      type: "reasoning.delta",
+      channel,
+      index: reasoningIndex(indexValue),
+      delta,
+    };
+  }
+}
+
+function reasoningIndex(value: unknown): number {
+  if (!Number.isSafeInteger(value) || Number(value) < 0) {
+    throw protocolError("responses_reasoning_index_invalid");
+  }
+  return Number(value);
 }
 
 function completedAssistantMessageContent(

@@ -993,6 +993,109 @@ test("discards partial output and matches the Rust retry reference", async () =>
   assert.deepEqual(retryDelays, [200]);
 });
 
+test("keeps reasoning partials observational across retry and out of the next model request", async () => {
+  const requests: import("./model-transport-port.ts").ModelRequest[] = [];
+  let requestCount = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "reasoning-adapter",
+    adapterVersion: "1",
+    modelId: "reasoning-model",
+    async *stream(request) {
+      requests.push(structuredClone(request));
+      requestCount += 1;
+      if (requestCount === 1) {
+        yield { type: "reasoning.part.added", channel: "summary", index: 0 };
+        yield {
+          type: "reasoning.delta",
+          channel: "summary",
+          index: 0,
+          delta: "discarded observation",
+        };
+        yield {
+          type: "reasoning.delta",
+          channel: "content",
+          index: 0,
+          delta: "provider-private",
+        };
+        return;
+      }
+      yield { type: "output.delta", delta: "done" };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+
+  const events = await collect(
+    new CrewONAgentKernel({
+      transport,
+      streamMaxRetries: 1,
+      retryScheduler: { wait: async () => undefined },
+    }).runSegment(segmentContract(), new AbortController().signal),
+  );
+
+  assert.deepEqual(requests[1]?.input.items, segmentContract().history);
+  assert.deepEqual(
+    events
+      .filter((event) => event.type === "model.reasoning.summary")
+      .map((event) => event.data),
+    [
+      { kind: "partAdded", summaryIndex: 0 },
+      {
+        kind: "delta",
+        summaryIndex: 0,
+        delta: "discarded observation",
+      },
+    ],
+  );
+  assert.deepEqual(
+    events.find((event) => event.type === "model.sampling.retry")?.data,
+    {
+      samplingAttempt: 1,
+      maxRetries: 1,
+      code: "model_stream_incomplete",
+      discardedOutput: true,
+    },
+  );
+});
+
+test("cancellation cuts off partial reasoning without creating model history", async () => {
+  const controller = new AbortController();
+  const transport: ModelTransportPort = {
+    adapterName: "reasoning-cancel-adapter",
+    adapterVersion: "1",
+    modelId: "reasoning-cancel-model",
+    async *stream() {
+      yield {
+        type: "reasoning.delta",
+        channel: "summary",
+        index: 0,
+        delta: "partial",
+      };
+      return;
+    },
+  };
+  const events = new CrewONAgentKernel({ transport })
+    .runSegment(segmentContract(), controller.signal)
+    [Symbol.asyncIterator]();
+
+  assert.equal((await events.next()).value?.type, "segment.started");
+  assert.deepEqual(await events.next(), {
+    done: false,
+    value: {
+      schemaVersion: "crewon.agent-event.v0",
+      runId: "run-1",
+      segmentId: "segment-1",
+      sequence: 2,
+      type: "model.reasoning.summary",
+      data: { kind: "delta", summaryIndex: 0, delta: "partial" },
+    },
+  });
+  controller.abort("user_requested");
+  await assert.rejects(events.next(), hasKernelCode("segment_canceled"));
+  assert.deepEqual(segmentContract().history, [
+    { type: "message", role: "user", content: "hello" },
+  ]);
+});
+
 test("fails closed on output budgets, malformed usage and cancellation", async () => {
   const oversized = new CrewONAgentKernel({
     transport: new DeterministicFakeModelTransport({

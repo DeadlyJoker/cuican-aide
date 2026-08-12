@@ -119,6 +119,67 @@ test("completes a durable Run through the Direct Responses transport", async (co
   await worker.close();
 });
 
+test("durably projects AR-042 summaries without persisting raw reasoning or history", async (context) => {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../packages/test-contracts/fixtures/responses-reasoning.reference.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as Readonly<{
+    events: readonly Readonly<Record<string, unknown>>[];
+    expected: Readonly<{
+      canonicalReasoning: readonly Readonly<Record<string, unknown>>[];
+    }>;
+  }>;
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  const transport = new DirectResponsesTransport(
+    {
+      endpoint: "https://provider.example/v1/responses",
+      model: "provider-model",
+    },
+    {
+      fetch: async () =>
+        new Response(responsesRawEventStream(reference.events), {
+          status: 200,
+          headers: { "content-type": "text/event-stream" },
+        }),
+    },
+  );
+  const worker = fixture.worker({ transport });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  assert.deepEqual(
+    (await fixture.events())
+      .filter((event) => event.type === "model.reasoning.summary")
+      .map((event) => {
+        const {
+          segmentId: _segmentId,
+          segmentSequence: _sequence,
+          ...data
+        } = event.data;
+        return data;
+      }),
+    reference.expected.canonicalReasoning,
+  );
+  assert.deepEqual(
+    (await fixture.messages()).map(({ role, content }) => ({ role, content })),
+    [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: "done" },
+    ],
+  );
+  await worker.close();
+});
+
 test("durably continues AR-031 assistant output without a phantom Message", async (context) => {
   const reference = JSON.parse(
     readFileSync(
@@ -8752,6 +8813,22 @@ function responsesEventStream(
       },
     },
   ];
+  const encoder = new TextEncoder();
+  return new ReadableStream({
+    start(controller) {
+      for (const event of events) {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(event)}\n\n`),
+        );
+      }
+      controller.close();
+    },
+  });
+}
+
+function responsesRawEventStream(
+  events: readonly Readonly<Record<string, unknown>>[],
+): ReadableStream<Uint8Array> {
   const encoder = new TextEncoder();
   return new ReadableStream({
     start(controller) {

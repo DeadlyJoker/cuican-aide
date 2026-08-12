@@ -142,6 +142,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
       let retries = 0;
       while (true) {
         let output = "";
+        let reasoningObserved = false;
         let usageSeen = false;
         let terminalSeen = false;
         let providerRequestsContinuation = false;
@@ -190,6 +191,34 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 yield canonicalEvent(contract, sequence, "model.output.delta", {
                   delta: event.delta,
                 });
+                break;
+              case "reasoning.delta":
+                validateReasoningDelta(event.delta, event.index);
+                reasoningObserved = true;
+                if (event.channel === "summary") {
+                  sequence += 1;
+                  yield canonicalEvent(
+                    contract,
+                    sequence,
+                    "model.reasoning.summary",
+                    {
+                      kind: "delta",
+                      summaryIndex: event.index,
+                      delta: event.delta,
+                    },
+                  );
+                }
+                break;
+              case "reasoning.part.added":
+                validateReasoningIndex(event.index);
+                reasoningObserved = true;
+                sequence += 1;
+                yield canonicalEvent(
+                  contract,
+                  sequence,
+                  "model.reasoning.summary",
+                  { kind: "partAdded", summaryIndex: event.index },
+                );
                 break;
               case "output.item.completed":
                 if (event.item.type === "message") {
@@ -464,7 +493,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
             samplingAttempt: retries,
             maxRetries: this.#streamMaxRetries,
             code: kernelError.code,
-            discardedOutput: output.length > 0,
+            discardedOutput: output.length > 0 || reasoningObserved,
           });
           try {
             await this.#retryScheduler.wait(
@@ -960,6 +989,20 @@ function validateDelta(delta: string): void {
   requireNonEmpty(delta, "model_output_delta_invalid");
   if (byteLength(delta) > MAX_DELTA_BYTES) {
     throw new AgentKernelError("model_output_delta_too_large", false);
+  }
+}
+
+function validateReasoningDelta(delta: string, index: number): void {
+  validateReasoningIndex(index);
+  requireNonEmpty(delta, "model_reasoning_delta_invalid");
+  if (byteLength(delta) > MAX_DELTA_BYTES) {
+    throw new AgentKernelError("model_reasoning_delta_too_large", false);
+  }
+}
+
+function validateReasoningIndex(index: number): void {
+  if (!Number.isSafeInteger(index) || index < 0) {
+    throw new AgentKernelError("model_reasoning_index_invalid", false);
   }
 }
 

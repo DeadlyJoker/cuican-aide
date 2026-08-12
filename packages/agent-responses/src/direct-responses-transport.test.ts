@@ -111,6 +111,35 @@ test("ignores shared AR-041 unknown events and completes the HTTP stream", async
   );
 });
 
+test("projects shared AR-042 reasoning through the real Direct transport boundary", async () => {
+  const reference = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../test-contracts/fixtures/responses-reasoning.reference.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as Readonly<{
+    events: readonly Readonly<Record<string, unknown>>[];
+    expected: Readonly<{
+      transportEvents: readonly Readonly<Record<string, unknown>>[];
+    }>;
+  }>;
+  const transport = new DirectResponsesTransport(
+    {
+      endpoint: "https://provider.example/v1/responses",
+      model: "provider-model",
+    },
+    { fetch: async () => responseStream(reference.events) },
+  );
+
+  assert.deepEqual(
+    await collect(transport.stream(manualRequest(), signal())),
+    reference.expected.transportEvents,
+  );
+});
+
 test("matches the shared Rust Responses Lite request profile", async () => {
   const reference = JSON.parse(
     readFileSync(

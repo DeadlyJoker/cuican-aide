@@ -817,6 +817,73 @@ mod tests {
         expected: Value,
     }
 
+    #[derive(Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct ReasoningFixture {
+        case_id: String,
+        events: Vec<Value>,
+    }
+
+    #[test]
+    fn reasoning_events_match_shared_fixture() {
+        let fixture_path = crewon_utils_cargo_bin::find_resource!(
+            "../../packages/test-contracts/fixtures/responses-reasoning.reference.json"
+        )
+        .expect("reasoning fixture must exist");
+        let fixture: ReasoningFixture = serde_json::from_slice(
+            &std::fs::read(fixture_path).expect("reasoning fixture must be readable"),
+        )
+        .expect("reasoning fixture must parse");
+        let reasoning = fixture
+            .events
+            .into_iter()
+            .filter_map(|value| {
+                let event = serde_json::from_value(value).expect("fixture event must deserialize");
+                match process_responses_event(event).expect("fixture event must process") {
+                    Some(ResponseEvent::ReasoningSummaryDelta {
+                        delta,
+                        summary_index,
+                    }) => Some(json!({
+                        "kind": "delta",
+                        "channel": "summary",
+                        "index": summary_index,
+                        "delta": delta,
+                    })),
+                    Some(ResponseEvent::ReasoningContentDelta {
+                        delta,
+                        content_index,
+                    }) => Some(json!({
+                        "kind": "delta",
+                        "channel": "content",
+                        "index": content_index,
+                        "delta": delta,
+                    })),
+                    Some(ResponseEvent::ReasoningSummaryPartAdded { summary_index }) => {
+                        Some(json!({
+                            "kind": "partAdded",
+                            "channel": "summary",
+                            "index": summary_index,
+                        }))
+                    }
+                    _ => None,
+                }
+            })
+            .collect::<Vec<_>>();
+        assert_eq!(
+            reasoning,
+            vec![
+                json!({"kind": "partAdded", "channel": "summary", "index": 0}),
+                json!({"kind": "delta", "channel": "summary", "index": 0, "delta": "Inspect "}),
+                json!({"kind": "delta", "channel": "content", "index": 0, "delta": "provider-private"}),
+                json!({"kind": "delta", "channel": "summary", "index": 0, "delta": "state."}),
+                json!({"kind": "partAdded", "channel": "summary", "index": 1}),
+                json!({"kind": "delta", "channel": "summary", "index": 1, "delta": "Answer."}),
+            ],
+            "{}",
+            fixture.case_id,
+        );
+    }
+
     #[tokio::test]
     async fn unknown_events_are_ignored_from_shared_fixture() {
         let fixture_path = crewon_utils_cargo_bin::find_resource!(

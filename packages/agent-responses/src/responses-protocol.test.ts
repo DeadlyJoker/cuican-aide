@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { ModelTransportError, type ModelInputItem } from "@crewon/agent-kernel";
+import {
+  ModelTransportError,
+  type ModelInputItem,
+  type ModelTransportEvent,
+} from "@crewon/agent-kernel";
 
 import { ResponsesProtocolDecoder } from "./responses-protocol.ts";
 
@@ -264,6 +268,23 @@ const unknownEventFixture = JSON.parse(
   ),
 ) as UnknownEventFixture;
 
+const reasoningFixture = JSON.parse(
+  readFileSync(
+    new URL(
+      "../../test-contracts/fixtures/responses-reasoning.reference.json",
+      import.meta.url,
+    ),
+    "utf8",
+  ),
+) as Readonly<{
+  caseId: string;
+  events: readonly Readonly<Record<string, unknown>>[];
+  expected: Readonly<{
+    transportEvents: readonly ModelTransportEvent[];
+    completedHistory: readonly ModelInputItem[];
+  }>;
+}>;
+
 for (const sequencePolicy of ["required", "whenPresent"] as const) {
   test(`${unknownEventFixture.caseId}: ${sequencePolicy} ignores unknown non-terminal events`, () => {
     const decoder = new ResponsesProtocolDecoder({
@@ -301,13 +322,12 @@ for (const sequencePolicy of ["required", "whenPresent"] as const) {
 }
 
 test(`${unknownEventFixture.caseId}: framing and fail-closed boundaries remain strict`, () => {
-  const withoutFirstSequence = unknownEventFixture.events.map(
-    (event, index) =>
-      index === 0
-        ? Object.fromEntries(
-            Object.entries(event).filter(([key]) => key !== "sequence_number"),
-          )
-        : event,
+  const withoutFirstSequence = unknownEventFixture.events.map((event, index) =>
+    index === 0
+      ? Object.fromEntries(
+          Object.entries(event).filter(([key]) => key !== "sequence_number"),
+        )
+      : event,
   );
   const websocketDecoder = new ResponsesProtocolDecoder({
     sequencePolicy: "whenPresent",
@@ -362,56 +382,104 @@ test(`${unknownEventFixture.caseId}: framing and fail-closed boundaries remain s
   );
 });
 
-test(`${unknownEventFixture.caseId}: reasoning stays unsupported while authoritative-done framing remains a no-op`, () => {
-  const unsupportedReasoningEvents = [
-    {
-      type: "response.reasoning_summary_text.delta",
-      delta: "summary",
-      summary_index: 0,
-    },
-    {
-      type: "response.reasoning_text.delta",
-      delta: "reasoning",
-      content_index: 0,
-    },
-    {
-      type: "response.reasoning_summary_part.added",
-      summary_index: 0,
-    },
-  ] as const;
-
-  for (const [index, event] of unsupportedReasoningEvents.entries()) {
+for (const sequencePolicy of ["required", "whenPresent"] as const) {
+  test(`${reasoningFixture.caseId}: ${sequencePolicy} preserves ordered bounded projection without history pollution`, () => {
     const decoder = new ResponsesProtocolDecoder({
-      sequencePolicy: "required",
+      sequencePolicy,
       completedCheckpoint: () => null,
     });
-    decoder.accept(unknownEventFixture.events[1]);
-    assert.throws(
-      () => decoder.accept({ ...event, sequence_number: index + 2 }),
-      (error) =>
-        error instanceof ModelTransportError &&
-        error.code === "responses_event_unsupported",
-      event.type,
+    const events = reasoningFixture.events.flatMap((event) =>
+      decoder.accept(
+        sequencePolicy === "whenPresent"
+          ? Object.fromEntries(
+              Object.entries(event).filter(
+                ([key]) => key !== "sequence_number",
+              ),
+            )
+          : event,
+      ),
     );
-  }
+    decoder.finish();
+    assert.deepEqual(events, reasoningFixture.expected.transportEvents);
+    assert.deepEqual(
+      decoder.completedHistoryItems,
+      reasoningFixture.expected.completedHistory,
+    );
+  });
+}
 
+test(`${reasoningFixture.caseId}: malformed, over-budget, and post-terminal reasoning fail closed`, () => {
   const decoder = new ResponsesProtocolDecoder({
     sequencePolicy: "required",
     completedCheckpoint: () => null,
   });
-  decoder.accept(unknownEventFixture.events[1]);
+  decoder.accept(reasoningFixture.events[0]);
+  for (let sequence = 1; sequence <= 4; sequence += 1) {
+    assert.deepEqual(
+      decoder.accept({
+        type: "response.reasoning_text.delta",
+        sequence_number: sequence,
+        content_index: 0,
+        delta: "x".repeat(16 * 1024),
+      }),
+      [
+        {
+          type: "reasoning.delta",
+          channel: "content",
+          index: 0,
+          delta: "x".repeat(16 * 1024),
+        },
+      ],
+    );
+  }
+  assert.throws(
+    () =>
+      decoder.accept({
+        type: "response.reasoning_text.delta",
+        sequence_number: 5,
+        content_index: 0,
+        delta: "x",
+      }),
+    (error) =>
+      error instanceof ModelTransportError &&
+      error.code === "responses_reasoning_budget_exceeded",
+  );
+
+  const terminalDecoder = new ResponsesProtocolDecoder({
+    sequencePolicy: "required",
+    completedCheckpoint: () => null,
+  });
+  for (const event of reasoningFixture.events) terminalDecoder.accept(event);
+  assert.throws(
+    () =>
+      terminalDecoder.accept({
+        type: "response.reasoning_summary_text.delta",
+        sequence_number: 9,
+        summary_index: 2,
+        delta: "late",
+      }),
+    (error) =>
+      error instanceof ModelTransportError &&
+      error.code === "responses_event_after_terminal",
+  );
+
+  const framingDecoder = new ResponsesProtocolDecoder({
+    sequencePolicy: "required",
+    completedCheckpoint: () => null,
+  });
+  framingDecoder.accept(reasoningFixture.events[0]);
   assert.deepEqual(
-    decoder.accept({
+    framingDecoder.accept({
       type: "response.output_item.added",
-      sequence_number: 2,
+      sequence_number: 1,
       item: { type: "message", role: "assistant", content: [] },
     }),
     [],
   );
   assert.deepEqual(
-    decoder.accept({
+    framingDecoder.accept({
       type: "response.custom_tool_call_input.delta",
-      sequence_number: 3,
+      sequence_number: 2,
       delta: "{}",
       item_id: "item-1",
     }),
@@ -434,17 +502,20 @@ test(`${topLevelErrorPayloadFixture.caseId}: fatal denylist is explicit and stab
       sequencePolicy: "required",
       completedCheckpoint: () => null,
     });
-    assert.deepEqual(decoder.accept({
-      type: "error",
-      sequence_number: 0,
-      error: { code: providerCode, message: "sensitive provider copy" },
-    }), [
-      {
-        type: "failed",
-        code: `responses_provider_${providerCode}`,
-        retryable: false,
-      },
-    ]);
+    assert.deepEqual(
+      decoder.accept({
+        type: "error",
+        sequence_number: 0,
+        error: { code: providerCode, message: "sensitive provider copy" },
+      }),
+      [
+        {
+          type: "failed",
+          code: `responses_provider_${providerCode}`,
+          retryable: false,
+        },
+      ],
+    );
   }
 });
 

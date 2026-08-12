@@ -73,6 +73,35 @@ export function mapAgentEvent(
           ),
         },
       };
+    case "model.reasoning.summary": {
+      const kind = event.data.kind;
+      if (kind !== "delta" && kind !== "partAdded") {
+        throw new ApplicationError(
+          "validation",
+          "model_reasoning_kind_invalid",
+        );
+      }
+      return {
+        ...envelope,
+        type: event.type,
+        data: {
+          ...segment,
+          kind,
+          summaryIndex: requireNonNegativeInteger(
+            event.data.summaryIndex,
+            "model_reasoning_index_invalid",
+          ),
+          ...(kind === "delta"
+            ? {
+                delta: requireNonEmpty(
+                  event.data.delta,
+                  "model_reasoning_delta_invalid",
+                ),
+              }
+            : {}),
+        },
+      };
+    }
     case "model.sampling.retry": {
       const samplingAttempt = requirePositiveInteger(
         event.data.samplingAttempt,

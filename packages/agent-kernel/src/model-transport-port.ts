@@ -31,6 +31,17 @@ export type ModelRequest = Readonly<{
 export type ModelTransportEvent =
   | Readonly<{ type: "response.created"; checkpoint: ProviderCheckpoint }>
   | Readonly<{ type: "output.delta"; delta: string }>
+  | Readonly<{
+      type: "reasoning.delta";
+      channel: "summary" | "content";
+      index: number;
+      delta: string;
+    }>
+  | Readonly<{
+      type: "reasoning.part.added";
+      channel: "summary";
+      index: number;
+    }>
   | Readonly<{ type: "output.item.completed"; item: ModelInputItem }>
   | Readonly<{
       type: "usage";

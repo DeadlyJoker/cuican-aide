@@ -82,6 +82,12 @@ export type KernelAgentEvent =
       data: Readonly<{ delta: string }>;
     })
   | (KernelEventBase & {
+      type: "model.reasoning.summary";
+      data:
+        | Readonly<{ kind: "delta"; summaryIndex: number; delta: string }>
+        | Readonly<{ kind: "partAdded"; summaryIndex: number }>;
+    })
+  | (KernelEventBase & {
       type: "model.transport.fallback";
       data: Readonly<{
         fromTransport: string;
