@@ -91,6 +91,15 @@ export type GetAgentVersionResponse =
   components["schemas"]["GetAgentVersionResponse"];
 export type ListAgentVersionsResponse =
   components["schemas"]["ListAgentVersionsResponse"];
+export type PublishWorkflowVersionRequest =
+  components["schemas"]["PublishWorkflowVersionRequest"];
+export type WorkflowVersionView = components["schemas"]["WorkflowVersionView"];
+export type WorkflowVersionMutationResponse =
+  components["schemas"]["WorkflowVersionMutationResponse"];
+export type GetWorkflowVersionResponse =
+  components["schemas"]["GetWorkflowVersionResponse"];
+export type ListWorkflowVersionsResponse =
+  components["schemas"]["ListWorkflowVersionsResponse"];
 export type ActiveAgentVersionCatalogResponse =
   components["schemas"]["ActiveAgentVersionCatalogResponse"];
 export type ArtifactView = components["schemas"]["ArtifactView"];
@@ -118,6 +127,7 @@ const MAX_ROLLBACK_TURNS = 0xffff_ffff;
 const MAX_MESSAGE_PAGE_SIZE = 100;
 const MESSAGE_CURSOR_PREFIX = "crewon.message.cursor.v1:";
 const AGENT_VERSION_CURSOR_PREFIX = "crewon.agent-version.cursor.v1:";
+const WORKFLOW_VERSION_CURSOR_PREFIX = "crewon.workflow-version.cursor.v1:";
 const THREAD_CURSOR_PREFIX = "crewon.thread.cursor.v1:";
 const THREAD_RUN_CURSOR_PREFIX = "crewon.thread-run.cursor.v1:";
 const AUTOMATION_CURSOR_PREFIX = "crewon.automation.cursor.v1:";
@@ -130,6 +140,12 @@ export type MessageListQuery = Readonly<{
 
 export type AgentVersionListQuery = Readonly<{
   afterAgentVersionId: string | null;
+  limit: number;
+}>;
+
+export type WorkflowVersionListQuery = Readonly<{
+  workflowId: string;
+  afterWorkflowVersionId: string | null;
   limit: number;
 }>;
 
@@ -636,6 +652,83 @@ export function formatAgentVersionCursor(agentVersionId: string): string {
   return base64UrlEncode(`${AGENT_VERSION_CURSOR_PREFIX}${id}`);
 }
 
+export function parsePublishWorkflowVersionRequest(
+  input: unknown,
+): PublishWorkflowVersionRequest {
+  if (
+    !hasExactKeys(input, [
+      "description",
+      "entryNodeIds",
+      "inputSchema",
+      "name",
+      "nodes",
+      "outputNodeIds",
+      "outputSchema",
+      "schemaVersion",
+      "workflowId",
+      "workflowVersionId",
+    ])
+  ) {
+    throw new ContractValidationError("workflow_version_fields_invalid");
+  }
+  return structuredClone(input) as PublishWorkflowVersionRequest;
+}
+
+export function parseWorkflowVersionId(input: unknown): string {
+  return requireBoundedString(input, 512, "workflow_version_id_invalid");
+}
+
+export function parseWorkflowVersionListQuery(
+  input: unknown,
+): WorkflowVersionListQuery {
+  if (!isPlainObject(input)) {
+    throw new ContractValidationError("workflow_version_list_query_invalid");
+  }
+  const keys = Object.keys(input);
+  if (
+    keys.some(
+      (key) => key !== "workflowId" && key !== "cursor" && key !== "limit",
+    )
+  ) {
+    throw new ContractValidationError("workflow_version_list_query_invalid");
+  }
+  const workflowId = requireBoundedString(
+    input.workflowId,
+    512,
+    "workflow_id_invalid",
+  );
+  const cursor = parseWorkflowVersionCursor(input.cursor);
+  if (cursor !== null && cursor.workflowId !== workflowId) {
+    throw new ContractValidationError("workflow_version_cursor_invalid");
+  }
+  return {
+    workflowId,
+    afterWorkflowVersionId: cursor?.workflowVersionId ?? null,
+    limit: parseUnsignedQueryInteger(
+      input.limit,
+      100,
+      100,
+      "page_limit_invalid",
+      1,
+    ),
+  };
+}
+
+export function formatWorkflowVersionCursor(
+  workflowId: string,
+  workflowVersionId: string,
+): string {
+  const boundedWorkflowId = requireBoundedString(
+    workflowId,
+    512,
+    "workflow_id_invalid",
+  );
+  const boundedVersionId = parseWorkflowVersionId(workflowVersionId);
+  return base64UrlEncode(
+    `${WORKFLOW_VERSION_CURSOR_PREFIX}${JSON.stringify([boundedWorkflowId, boundedVersionId])}`,
+  );
+}
+
 export function parseCancelRunRequest(input: unknown): CancelRunRequest {
   if (!hasExactKeys(input, ["expectedRevision"])) {
     throw new ContractValidationError("cancel_run_fields_invalid");
@@ -838,6 +931,41 @@ function parseAgentVersionCursor(input: unknown): string | null {
     throw new ContractValidationError("agent_version_cursor_invalid");
   }
   return agentVersionId;
+}
+
+function parseWorkflowVersionCursor(input: unknown): Readonly<{
+  workflowId: string;
+  workflowVersionId: string;
+}> | null {
+  if (input === undefined) return null;
+  if (
+    typeof input !== "string" ||
+    input.length === 0 ||
+    input.length > 2048 ||
+    !/^[A-Za-z0-9_-]+$/u.test(input)
+  ) {
+    throw new ContractValidationError("workflow_version_cursor_invalid");
+  }
+  try {
+    const decoded = base64UrlDecode(input);
+    if (!decoded.startsWith(WORKFLOW_VERSION_CURSOR_PREFIX)) throw new Error();
+    const parsed: unknown = JSON.parse(
+      decoded.slice(WORKFLOW_VERSION_CURSOR_PREFIX.length),
+    );
+    if (!Array.isArray(parsed) || parsed.length !== 2) throw new Error();
+    const [workflowId, workflowVersionId] = parsed;
+    if (
+      formatWorkflowVersionCursor(
+        requireBoundedString(workflowId, 512, "workflow_id_invalid"),
+        parseWorkflowVersionId(workflowVersionId),
+      ) !== input
+    ) {
+      throw new Error();
+    }
+    return { workflowId, workflowVersionId };
+  } catch {
+    throw new ContractValidationError("workflow_version_cursor_invalid");
+  }
 }
 
 function parseResourceListQuery(

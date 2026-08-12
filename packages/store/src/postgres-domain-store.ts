@@ -148,12 +148,19 @@ import {
   validateAgentVersionList,
   validateAgentVersionLocator,
 } from "./agent-version-store-invariants.ts";
+import type { WorkflowContentDigester } from "@crewon/domain";
+import { PostgresWorkflowVersionStore } from "./workflow-version-store.ts";
 
 /** Complete PostgreSQL domain authority for Control API and Runtime Workers. */
 export class PostgresDomainStore
   extends PostgresExecutionStore
   implements DomainStore
 {
+  workflowVersionStore(
+    digester: WorkflowContentDigester,
+  ): PostgresWorkflowVersionStore {
+    return new PostgresWorkflowVersionStore(this.pool, this.schema, digester);
+  }
   static override async open(
     options: PostgresThreadStoreOptions,
   ): Promise<PostgresDomainStore> {

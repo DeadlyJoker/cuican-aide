@@ -24,6 +24,7 @@ import {
   TurnApplicationService,
   ThreadCompactionApplicationService,
   WorkspaceOperationQueryService,
+  WorkflowVersionApplicationService,
   type ActorContext,
   type ApplicationClock,
   type ApplicationIdGenerator,
@@ -32,6 +33,7 @@ import {
   type AutomationApplicationIdKind,
 } from "@crewon/application";
 import { InMemoryArtifactStore } from "@crewon/artifacts";
+import { InMemoryWorkflowVersionStore } from "@crewon/store";
 import type {
   ActiveAgentVersionCatalogResponse,
   AgentVersionMutationResponse,
@@ -45,6 +47,9 @@ import type {
   ListThreadMessagesResponse,
   ListAgentVersionsResponse,
   ListAutomationsResponse,
+  WorkflowVersionMutationResponse,
+  GetWorkflowVersionResponse,
+  ListWorkflowVersionsResponse,
   ProbeModelProviderResponse,
   GetToolApprovalResponse,
   ListThreadRunsResponse,
@@ -63,7 +68,7 @@ import {
   formatThreadCursor,
   formatThreadRunCursor,
 } from "@crewon/contracts";
-import type { RunLifecycleEvent } from "@crewon/domain";
+import type { RunLifecycleEvent, WorkflowVersionSource } from "@crewon/domain";
 import { InMemoryRunStore } from "@crewon/store";
 import type { FastifyInstance } from "fastify";
 
@@ -1920,6 +1925,70 @@ test("publishes, replays and discovers immutable tenant AgentVersions", async (c
   assertError(invalid, 400, "validation", "agent_version_model_window_invalid");
 });
 
+test("publishes, replays and pages tenant WorkflowVersions without exposing authority context", async (context) => {
+  const runtime = await testRuntime(context);
+  const verifier = {
+    ...agentVersionSource(),
+    agentVersionId: "workflow-verifier-1",
+  };
+  const verifierPublished = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/agent-versions",
+    headers: mutationHeaders("workflow-verifier-publish"),
+    payload: verifier,
+  });
+  assert.equal(verifierPublished.statusCode, 201, verifierPublished.body);
+  const first = workflowVersionSource("workflow-version-1");
+  const published = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/workflow-versions",
+    headers: mutationHeaders("ignored-workflow-key"),
+    payload: first,
+  });
+  assert.equal(published.statusCode, 201, published.body);
+  const firstBody = published.json<WorkflowVersionMutationResponse>();
+  assert.equal(firstBody.disposition, "registered");
+  assert.equal(
+    firstBody.workflowVersion.workflowVersionId,
+    "workflow-version-1",
+  );
+  assert.equal(JSON.stringify(firstBody).includes("tenantId"), false);
+  assert.equal(JSON.stringify(firstBody).includes("spaceId"), false);
+
+  const replay = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/workflow-versions",
+    headers: mutationHeaders("ignored-workflow-key-2"),
+    payload: first,
+  });
+  assert.equal(replay.statusCode, 200, replay.body);
+  assert.equal(
+    replay.json<WorkflowVersionMutationResponse>().disposition,
+    "existing",
+  );
+
+  const fetched = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/workflow-versions/workflow-version-1",
+    headers: readHeaders(),
+  });
+  assert.equal(fetched.statusCode, 200, fetched.body);
+  assert.equal(
+    fetched.json<GetWorkflowVersionResponse>().workflowVersion.contentDigest,
+    firstBody.workflowVersion.contentDigest,
+  );
+
+  const listed = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/workflow-versions?workflowId=workflow-1&limit=1",
+    headers: readHeaders(),
+  });
+  assert.equal(listed.statusCode, 200, listed.body);
+  const page = listed.json<ListWorkflowVersionsResponse>();
+  assert.equal(page.data.length, 1);
+  assert.equal(typeof page.nextCursor, "string");
+});
+
 test("queries and decides a durable Tool approval without exposing execution bindings", async (context) => {
   const runtime = await testRuntime(context);
   await runtime.app.inject({
@@ -2444,6 +2513,13 @@ async function testRuntime(
     store,
     authorization,
   });
+  const workflowVersions = new WorkflowVersionApplicationService({
+    store: new InMemoryWorkflowVersionStore(digester),
+    agentVersions: store,
+    authorization,
+    digester,
+    now: () => clock.now(),
+  });
   const agentVersionCatalogs = new AgentVersionCatalogApplicationService({
     store,
     authorization,
@@ -2557,6 +2633,7 @@ async function testRuntime(
     rollbacks,
     approvals,
     agentVersions,
+    workflowVersions,
     agentVersionCatalogs,
     artifacts,
     automations,
@@ -2566,6 +2643,7 @@ async function testRuntime(
     workspaceLists: null,
     workspaceQueries,
     agentVersionDigester: digester,
+    workflowVersionDigester: digester,
     clock,
     identity: new StandaloneIdentity({
       actor,
@@ -2881,6 +2959,50 @@ function standaloneActor(): ActorContext {
     actorId: "standalone-actor",
     tenantId: "standalone-tenant",
     spaceId: "standalone-space",
+  };
+}
+
+function workflowVersionSource(
+  workflowVersionId: string,
+): WorkflowVersionSource {
+  const schema = {
+    type: "object" as const,
+    properties: {},
+    required: [],
+    additionalProperties: false as const,
+  };
+  return {
+    schemaVersion: "crewon.workflow-version-source.v0",
+    workflowId: "workflow-1",
+    workflowVersionId,
+    name: "Production workflow",
+    description: "A compiled immutable workflow",
+    inputSchema: schema,
+    outputSchema: schema,
+    entryNodeIds: ["agent"],
+    outputNodeIds: ["verify"],
+    nodes: [
+      {
+        nodeId: "agent",
+        title: "Agent",
+        instruction: "Complete the workflow",
+        dependsOn: [],
+        inputSchema: schema,
+        outputSchema: schema,
+        kind: "agent" as const,
+        agentVersionId: "agent-version-1",
+      },
+      {
+        nodeId: "verify",
+        title: "Verify",
+        instruction: "Verify the output",
+        dependsOn: ["agent"],
+        inputSchema: schema,
+        outputSchema: schema,
+        kind: "verification" as const,
+        verifierAgentVersionId: "workflow-verifier-1",
+      },
+    ],
   };
 }
 

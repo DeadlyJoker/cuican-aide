@@ -237,6 +237,7 @@ export function projectRunEvent(event: RunLifecycleEvent): RunEventView {
     case "model.reasoning.summary":
       throw new Error("run_event_projection_unsupported");
   }
+  throw new Error("run_event_projection_unsupported");
 }
 
 /** Keeps the immutable audit stream complete while suppressing transient client noise. */

@@ -497,6 +497,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/workflow-versions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listWorkflowVersions"];
+    put?: never;
+    post: operations["publishWorkflowVersion"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/workflow-versions/{workflowVersionId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getWorkflowVersion"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/agent-versions": {
     parameters: {
       query?: never;
@@ -1220,6 +1252,71 @@ export interface components {
       execution: "serial" | "parallel";
       /** @constant */
       inputFormat: "text";
+    };
+    PublishWorkflowVersionRequest: {
+      /** @constant */
+      schemaVersion: "crewon.workflow-version-source.v0";
+      workflowId: string;
+      workflowVersionId: string;
+      name: string;
+      description: string;
+      inputSchema: {
+        [key: string]: unknown;
+      };
+      outputSchema: {
+        [key: string]: unknown;
+      };
+      entryNodeIds: string[];
+      outputNodeIds: string[];
+      nodes: components["schemas"]["WorkflowNodeDefinition"][];
+    };
+    WorkflowNodeDefinition: {
+      nodeId: string;
+      /** @enum {string} */
+      kind: "agent" | "humanGate" | "verification";
+      title: string;
+      instruction: string;
+      dependsOn: string[];
+      inputSchema: {
+        [key: string]: unknown;
+      };
+      outputSchema: {
+        [key: string]: unknown;
+      };
+      agentVersionId?: string;
+      approvalPolicyId?: string;
+      verifierAgentVersionId?: string;
+    };
+    WorkflowVersionView: {
+      workflowId: string;
+      workflowVersionId: string;
+      contentDigest: string;
+      name: string;
+      description: string;
+      inputSchema: {
+        [key: string]: unknown;
+      };
+      outputSchema: {
+        [key: string]: unknown;
+      };
+      entryNodeIds: string[];
+      outputNodeIds: string[];
+      nodes: components["schemas"]["WorkflowNodeDefinition"][];
+      executionOrder: string[];
+      /** Format: date-time */
+      createdAt: string;
+    };
+    WorkflowVersionMutationResponse: {
+      /** @enum {string} */
+      disposition: "registered" | "existing";
+      workflowVersion: components["schemas"]["WorkflowVersionView"];
+    };
+    GetWorkflowVersionResponse: {
+      workflowVersion: components["schemas"]["WorkflowVersionView"];
+    };
+    ListWorkflowVersionsResponse: {
+      data: components["schemas"]["WorkflowVersionView"][];
+      nextCursor: string | null;
     };
     AgentVersionView: {
       agentVersionId: string;
@@ -2941,6 +3038,102 @@ export interface operations {
         };
         content: {
           "text/event-stream": string;
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  listWorkflowVersions: {
+    parameters: {
+      query: {
+        workflowId: string;
+        cursor?: string;
+        limit?: components["parameters"]["Limit"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tenant- and workflow-scoped immutable WorkflowVersions */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListWorkflowVersionsResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  publishWorkflowVersion: {
+    parameters: {
+      query?: never;
+      header?: {
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PublishWorkflowVersionRequest"];
+      };
+    };
+    responses: {
+      /** @description An existing identical immutable WorkflowVersion */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowVersionMutationResponse"];
+        };
+      };
+      /** @description A newly published immutable WorkflowVersion */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowVersionMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getWorkflowVersion: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        workflowVersionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Tenant-scoped immutable WorkflowVersion */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetWorkflowVersionResponse"];
         };
       };
       400: components["responses"]["Error"];

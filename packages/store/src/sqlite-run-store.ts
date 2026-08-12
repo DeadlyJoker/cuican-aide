@@ -1,4 +1,6 @@
 import { DatabaseSync } from "node:sqlite";
+import type { WorkflowContentDigester } from "@crewon/domain";
+import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
 
 import {
   RunLifecycleError,
@@ -509,6 +511,13 @@ export class SqliteRunStore implements DomainStore {
   readonly #clock: LeaseClock;
   readonly #automationAuthority: SqliteAutomationAuthority;
   #closed = false;
+
+  workflowVersionStore(
+    digester: WorkflowContentDigester,
+  ): SqliteWorkflowVersionStore {
+    this.#assertOpen();
+    return new SqliteWorkflowVersionStore(this.#database, digester);
+  }
 
   constructor(path: string, options: { clock?: LeaseClock } = {}) {
     requireNonEmpty(path, "sqlite_path_invalid");

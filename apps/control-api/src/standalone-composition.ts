@@ -13,6 +13,7 @@ import {
   ModelProviderSettingsApplicationService,
   WorkspaceListApplicationService,
   WorkspaceOperationQueryService,
+  WorkflowVersionApplicationService,
   type ActorContext,
   type ArtifactStorePort,
   type AutomationStore,
@@ -108,7 +109,7 @@ export async function createPostgresControlApi(
 }
 
 function composeControlApi(
-  store: DomainStore & ModelProviderSettingsStore & AutomationStore,
+  store: SqliteRunStore | PostgresDomainStore,
   config: ControlApiCompositionConfig,
 ): StandaloneControlApiRuntime {
   const eventHub = new RunEventHub();
@@ -167,6 +168,13 @@ function composeControlApi(
     const agentVersions = new AgentVersionApplicationService({
       store,
       authorization,
+    });
+    const workflowVersions = new WorkflowVersionApplicationService({
+      store: store.workflowVersionStore(digester),
+      agentVersions: store,
+      authorization,
+      digester,
+      now: () => clock.now(),
     });
     const routeResolver = new AdmittedAgentVersionRunRouteResolver({
       actor: config.actor,
@@ -247,6 +255,7 @@ function composeControlApi(
       rollbacks,
       approvals,
       agentVersions,
+      workflowVersions,
       agentVersionCatalogs,
       artifacts,
       automations,
@@ -257,6 +266,7 @@ function composeControlApi(
       providerRuntimeAvailability:
         config.providerProbeWorkers === undefined ? "unavailable" : "available",
       agentVersionDigester: digester,
+      workflowVersionDigester: digester,
       clock,
       identity: new StandaloneIdentity({
         actor: config.actor,

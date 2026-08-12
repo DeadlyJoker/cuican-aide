@@ -12,6 +12,7 @@ import {
   TurnApplicationService,
   ThreadCompactionApplicationService,
   ModelProviderSettingsApplicationService,
+  WorkflowVersionApplicationService,
   type ArtifactStorePort,
   type AutomationAuthorizationPort,
   type AutomationStore,
@@ -72,17 +73,17 @@ export async function createProductionPostgresControlApi(
     statementTimeoutMs: config.statementTimeoutMs,
   });
   try {
-    return composeProductionControlApi(store, config);
+    return await composeProductionControlApi(store, config);
   } catch (error) {
     await store.close();
     throw error;
   }
 }
 
-function composeProductionControlApi(
-  store: DomainStore & ModelProviderSettingsStore & AutomationStore,
+async function composeProductionControlApi(
+  store: PostgresDomainStore,
   config: ProductionPostgresControlApiConfig,
-): StandaloneControlApiRuntime {
+): Promise<StandaloneControlApiRuntime> {
   const eventHub = new RunEventHub();
   const ids = new UuidV7ApplicationIdGenerator();
   const outboxDispatcher = new OutboxDispatcher(
@@ -96,6 +97,8 @@ function composeProductionControlApi(
   try {
     const clock = new SystemApplicationClock();
     const digester = new NodeSha256ContentDigester();
+    const workflowVersionStore = store.workflowVersionStore(digester);
+    await workflowVersionStore.migrate();
     const application = new RunApplicationService({
       store,
       authorization: config.authorization,
@@ -137,6 +140,13 @@ function composeProductionControlApi(
     const agentVersions = new AgentVersionApplicationService({
       store,
       authorization: config.authorization,
+    });
+    const workflowVersions = new WorkflowVersionApplicationService({
+      store: workflowVersionStore,
+      agentVersions: store,
+      authorization: config.authorization,
+      digester,
+      now: () => clock.now(),
     });
     const routeResolver = new ProductionAgentVersionRunRouteResolver({
       agentVersions,
@@ -200,6 +210,7 @@ function composeProductionControlApi(
       rollbacks,
       approvals,
       agentVersions,
+      workflowVersions,
       agentVersionCatalogs,
       artifacts,
       automations,
@@ -211,6 +222,7 @@ function composeProductionControlApi(
       // and authenticated Worker transport are deployed together.
       providerRuntimeAvailability: "unavailable",
       agentVersionDigester: digester,
+      workflowVersionDigester: digester,
       clock,
       identity: config.identity,
       routeResolver,

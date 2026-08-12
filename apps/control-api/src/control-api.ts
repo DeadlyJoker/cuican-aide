@@ -15,6 +15,7 @@ import type {
   TurnApplicationService,
   WorkspaceListApplicationService,
   WorkspaceOperationQueryService,
+  WorkflowVersionApplicationService,
   CommitThreadResult,
   CommitTurnStartResult,
 } from "@crewon/application";
@@ -31,6 +32,7 @@ import {
   formatMessageCursor,
   formatThreadCursor,
   formatThreadRunCursor,
+  formatWorkflowVersionCursor,
   parseAgentVersionId,
   parseAgentVersionListQuery,
   parseArchiveThreadRequest,
@@ -70,6 +72,9 @@ import {
   parseWorkspaceOperationActionRequest,
   parseWorkspaceOperationLastEventSequence,
   parseWorkspaceOperationListQuery,
+  parsePublishWorkflowVersionRequest,
+  parseWorkflowVersionId,
+  parseWorkflowVersionListQuery,
   type AgentVersionMutationResponse,
   type ActiveAgentVersionCatalogResponse,
   type AppendThreadMessageResponse,
@@ -96,6 +101,9 @@ import {
   type GetWorkspaceOperationResponse,
   type ListWorkspaceOperationsResponse,
   type WorkspaceOperationMutationResponse,
+  type WorkflowVersionMutationResponse,
+  type GetWorkflowVersionResponse,
+  type ListWorkflowVersionsResponse,
 } from "@crewon/contracts";
 import Fastify, { type FastifyInstance } from "fastify";
 
@@ -159,6 +167,7 @@ import {
   streamWorkspaceOperationEvents,
   type WorkspaceOperationEventPoller,
 } from "./workspace-operation-event-stream.ts";
+import { projectWorkflowVersion } from "./workflow-version-projection.ts";
 
 export type ControlApiDependencies = Readonly<{
   application: RunApplicationService;
@@ -169,6 +178,7 @@ export type ControlApiDependencies = Readonly<{
   rollbacks: ThreadRollbackApplicationService;
   approvals: ToolApprovalApplicationService;
   agentVersions: AgentVersionApplicationService;
+  workflowVersions: WorkflowVersionApplicationService;
   agentVersionCatalogs: AgentVersionCatalogApplicationService;
   artifacts: ArtifactApplicationService;
   automations: AutomationApplicationService;
@@ -178,6 +188,7 @@ export type ControlApiDependencies = Readonly<{
   workspaceQueries: WorkspaceOperationQueryService;
   workspaceLists: WorkspaceListApplicationService | null;
   agentVersionDigester: ContentDigester;
+  workflowVersionDigester: ContentDigester;
   clock: ApplicationClock;
   identity: ControlApiIdentityPort;
   routeResolver: RunRouteResolverPort;
@@ -1074,6 +1085,86 @@ export function buildControlApi(
       .code(result.disposition === "committed" ? 201 : 200)
       .send(response);
   });
+
+  app.post<{ Body: unknown }>(
+    "/api/v1/workflow-versions",
+    { bodyLimit: 1024 * 1024 },
+    async (request, reply) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const body = parsePublishWorkflowVersionRequest(request.body);
+      const result = await dependencies.workflowVersions.publish(
+        actor,
+        body as unknown as import("@crewon/domain").WorkflowVersionSource,
+      );
+      const response: WorkflowVersionMutationResponse = {
+        disposition: result.disposition,
+        workflowVersion: projectWorkflowVersion(
+          result.asset,
+          dependencies.workflowVersionDigester,
+        ),
+      };
+      return reply
+        .code(result.disposition === "registered" ? 201 : 200)
+        .send(response);
+    },
+  );
+
+  app.get<{ Querystring: Record<string, unknown> }>(
+    "/api/v1/workflow-versions",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const query = parseWorkflowVersionListQuery({ ...request.query });
+      const assets = await dependencies.workflowVersions.list(actor, {
+        workflowId: query.workflowId,
+        after:
+          query.afterWorkflowVersionId === null
+            ? null
+            : {
+                workflowId: query.workflowId,
+                workflowVersionId: query.afterWorkflowVersionId,
+              },
+        limit: query.limit,
+      });
+      const data = assets.map((asset) =>
+        projectWorkflowVersion(asset, dependencies.workflowVersionDigester),
+      );
+      const response: ListWorkflowVersionsResponse = {
+        data,
+        nextCursor:
+          data.length === query.limit && data.at(-1) !== undefined
+            ? formatWorkflowVersionCursor(
+                query.workflowId,
+                data.at(-1)!.workflowVersionId,
+              )
+            : null,
+      };
+      return response;
+    },
+  );
+
+  app.get<{ Params: { workflowVersionId: string } }>(
+    "/api/v1/workflow-versions/:workflowVersionId",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const asset = await dependencies.workflowVersions.get(
+        actor,
+        parseWorkflowVersionId(request.params.workflowVersionId),
+      );
+      const response: GetWorkflowVersionResponse = {
+        workflowVersion: projectWorkflowVersion(
+          asset,
+          dependencies.workflowVersionDigester,
+        ),
+      };
+      return response;
+    },
+  );
 
   app.post<{ Body: unknown }>(
     "/api/v1/agent-versions",

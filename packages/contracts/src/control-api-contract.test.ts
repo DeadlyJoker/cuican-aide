@@ -99,6 +99,8 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/threads/{threadId}:unarchive",
     "/api/v1/tool-approvals/{approvalId}",
     "/api/v1/tool-approvals/{approvalId}:decide",
+    "/api/v1/workflow-versions",
+    "/api/v1/workflow-versions/{workflowVersionId}",
   ]);
   assert.deepEqual(
     Object.keys(openApi.components.schemas.CreateRunRequest.properties),

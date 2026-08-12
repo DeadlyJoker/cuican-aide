@@ -1365,6 +1365,112 @@
         }
       }
     },
+    "/api/v1/workflow-versions": {
+      "post": {
+        "operationId": "publishWorkflowVersion",
+        "parameters": [{ "$ref": "#/components/parameters/CsrfToken" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PublishWorkflowVersionRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An existing identical immutable WorkflowVersion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowVersionMutationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A newly published immutable WorkflowVersion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowVersionMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "get": {
+        "operationId": "listWorkflowVersions",
+        "parameters": [
+          {
+            "name": "workflowId",
+            "in": "query",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 512 }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": { "type": "string", "minLength": 1, "maxLength": 2048 }
+          },
+          { "$ref": "#/components/parameters/Limit" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant- and workflow-scoped immutable WorkflowVersions",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListWorkflowVersionsResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/workflow-versions/{workflowVersionId}": {
+      "get": {
+        "operationId": "getWorkflowVersion",
+        "parameters": [
+          {
+            "name": "workflowVersionId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 512 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Tenant-scoped immutable WorkflowVersion",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetWorkflowVersionResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/api/v1/agent-versions": {
       "post": {
         "operationId": "publishAgentVersion",
@@ -1772,20 +1878,11 @@
       },
       "ModelProviderCredentialKind": {
         "type": "string",
-        "enum": [
-          "environment",
-          "keychain",
-          "none"
-        ]
+        "enum": ["environment", "keychain", "none"]
       },
       "ModelProviderRuntimeAvailability": {
         "type": "string",
-        "enum": [
-          "available",
-          "unconfigured",
-          "switchPending",
-          "unavailable"
-        ]
+        "enum": ["available", "unconfigured", "switchPending", "unavailable"]
       },
       "ModelProviderBindingView": {
         "type": "object",
@@ -1819,10 +1916,7 @@
             "$ref": "#/components/schemas/ModelProviderCredentialKind"
           },
           "environmentVariable": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 128
           },
@@ -1847,10 +1941,7 @@
             "minimum": 0
           },
           "activeProviderId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 128
           },
@@ -1865,10 +1956,7 @@
             "$ref": "#/components/schemas/ModelProviderRuntimeAvailability"
           },
           "updatedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           }
         }
@@ -1876,9 +1964,7 @@
       "GetModelProviderSettingsResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "settings"
-        ],
+        "required": ["settings"],
         "properties": {
           "settings": {
             "$ref": "#/components/schemas/ModelProviderSettingsSnapshot"
@@ -1906,10 +1992,7 @@
       "ModelProviderProbeModelView": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "displayName"
-        ],
+        "required": ["id", "displayName"],
         "properties": {
           "id": {
             "type": "string",
@@ -1917,10 +2000,7 @@
             "maxLength": 256
           },
           "displayName": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 256
           }
@@ -1943,10 +2023,7 @@
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "completed",
-              "replayed"
-            ]
+            "enum": ["completed", "replayed"]
           },
           "providerId": {
             "type": "string",
@@ -1975,10 +2052,7 @@
             ]
           },
           "modelCount": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0,
             "maximum": 100
           },
@@ -1991,10 +2065,7 @@
             "type": "boolean"
           },
           "retryAfterMs": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0,
             "maximum": 86400000
           }
@@ -2031,10 +2102,7 @@
             "maxLength": 9999
           },
           "agentVersionId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 512
           }
@@ -2043,10 +2111,7 @@
       "RunAutomationNowRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedAutomationRevision",
-          "expectedThreadRevision"
-        ],
+        "required": ["expectedAutomationRevision", "expectedThreadRevision"],
         "properties": {
           "expectedAutomationRevision": {
             "type": "integer",
@@ -2125,17 +2190,11 @@
       "AutomationMutationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "automation"
-        ],
+        "required": ["disposition", "automation"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "automation": {
             "$ref": "#/components/schemas/AutomationView"
@@ -2145,9 +2204,7 @@
       "GetAutomationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "automation"
-        ],
+        "required": ["automation"],
         "properties": {
           "automation": {
             "$ref": "#/components/schemas/AutomationView"
@@ -2157,10 +2214,7 @@
       "ListAutomationsResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "data",
-          "nextCursor"
-        ],
+        "required": ["data", "nextCursor"],
         "properties": {
           "data": {
             "type": "array",
@@ -2169,10 +2223,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "pattern": "^[A-Za-z0-9_-]{1,512}$",
             "maxLength": 512
           }
@@ -2182,10 +2233,7 @@
         "type": "object",
         "additionalProperties": false,
         "description": "Safe public association between one Automation definition and its admitted Run. Private invocation IDs, digests and route bindings are omitted.",
-        "required": [
-          "automationId",
-          "runId"
-        ],
+        "required": ["automationId", "runId"],
         "properties": {
           "automationId": {
             "type": "string",
@@ -2203,19 +2251,11 @@
         "type": "object",
         "additionalProperties": false,
         "description": "The Run is projected from the canonical Automation invocation result; private origin bindings and route digests are omitted.",
-        "required": [
-          "disposition",
-          "automation",
-          "invocation",
-          "run"
-        ],
+        "required": ["disposition", "automation", "invocation", "run"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "automation": {
             "$ref": "#/components/schemas/AutomationView"
@@ -2873,11 +2913,29 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["threadId", "executionId", "revision", "status", "result"],
+            "required": [
+              "threadId",
+              "executionId",
+              "revision",
+              "status",
+              "result"
+            ],
             "properties": {
-              "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
-              "executionId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
-              "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "threadId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "executionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "maxLength": 128
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
               "status": { "const": "pending" },
               "result": { "type": "null" }
             }
@@ -2885,35 +2943,93 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["threadId", "executionId", "revision", "status", "result"],
+            "required": [
+              "threadId",
+              "executionId",
+              "revision",
+              "status",
+              "result"
+            ],
             "properties": {
-              "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
-              "executionId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
-              "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "threadId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "executionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "maxLength": 128
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
               "status": { "const": "completed" },
-              "result": { "$ref": "#/components/schemas/WorkspaceCompletedResultView" }
+              "result": {
+                "$ref": "#/components/schemas/WorkspaceCompletedResultView"
+              }
             }
           },
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["threadId", "executionId", "revision", "status", "result"],
+            "required": [
+              "threadId",
+              "executionId",
+              "revision",
+              "status",
+              "result"
+            ],
             "properties": {
-              "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
-              "executionId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
-              "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "threadId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "executionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "maxLength": 128
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
               "status": { "const": "failed" },
-              "result": { "$ref": "#/components/schemas/WorkspaceFailedResultView" }
+              "result": {
+                "$ref": "#/components/schemas/WorkspaceFailedResultView"
+              }
             }
           },
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["threadId", "executionId", "revision", "status", "result"],
+            "required": [
+              "threadId",
+              "executionId",
+              "revision",
+              "status",
+              "result"
+            ],
             "properties": {
-              "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
-              "executionId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
-              "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "threadId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "executionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "maxLength": 128
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
               "status": { "const": "canceled" },
               "result": { "type": "null" }
             }
@@ -2921,11 +3037,29 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": ["threadId", "executionId", "revision", "status", "result"],
+            "required": [
+              "threadId",
+              "executionId",
+              "revision",
+              "status",
+              "result"
+            ],
             "properties": {
-              "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
-              "executionId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
-              "revision": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
+              "threadId": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 128
+              },
+              "executionId": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+                "maxLength": 128
+              },
+              "revision": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 9007199254740991
+              },
               "status": { "const": "unknownOutcome" },
               "result": { "type": "null" }
             }
@@ -2937,8 +3071,16 @@
         "additionalProperties": false,
         "required": ["disposition", "eventSequence", "operation"],
         "properties": {
-          "disposition": { "type": "string", "enum": ["committed", "replayed"] },
-          "eventSequence": { "type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "Exactly equal to operation.revision." },
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "eventSequence": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Exactly equal to operation.revision."
+          },
           "operation": { "$ref": "#/components/schemas/WorkspaceOperationView" }
         }
       },
@@ -2947,8 +3089,15 @@
         "additionalProperties": false,
         "required": ["operation", "eventSequence"],
         "properties": {
-          "operation": { "$ref": "#/components/schemas/WorkspaceOperationView" },
-          "eventSequence": { "type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "Atomic cursor exactly equal to operation.revision." }
+          "operation": {
+            "$ref": "#/components/schemas/WorkspaceOperationView"
+          },
+          "eventSequence": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Atomic cursor exactly equal to operation.revision."
+          }
         }
       },
       "ListWorkspaceOperationsResponse": {
@@ -2971,19 +3120,37 @@
       "WorkspaceOperationEventView": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["schemaVersion", "threadId", "executionId", "sequence", "type", "data"],
+        "required": [
+          "schemaVersion",
+          "threadId",
+          "executionId",
+          "sequence",
+          "type",
+          "data"
+        ],
         "properties": {
           "schemaVersion": { "const": "crewon.workspace-operation-event.v0" },
           "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
-          "executionId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", "maxLength": 128 },
-          "sequence": { "type": "integer", "minimum": 1, "maximum": 9007199254740991, "description": "Exactly equal to data.operation.revision." },
+          "executionId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "maxLength": 128
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991,
+            "description": "Exactly equal to data.operation.revision."
+          },
           "type": { "const": "workspace.operation.replaced" },
           "data": {
             "type": "object",
             "additionalProperties": false,
             "required": ["operation"],
             "properties": {
-              "operation": { "$ref": "#/components/schemas/WorkspaceOperationView" }
+              "operation": {
+                "$ref": "#/components/schemas/WorkspaceOperationView"
+              }
             }
           }
         }
@@ -3413,6 +3580,174 @@
           "description": { "type": "string", "maxLength": 4096 },
           "execution": { "type": "string", "enum": ["serial", "parallel"] },
           "inputFormat": { "type": "string", "const": "text" }
+        }
+      },
+      "PublishWorkflowVersionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "workflowId",
+          "workflowVersionId",
+          "name",
+          "description",
+          "inputSchema",
+          "outputSchema",
+          "entryNodeIds",
+          "outputNodeIds",
+          "nodes"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.workflow-version-source.v0"
+          },
+          "workflowId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "workflowVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "description": { "type": "string", "maxLength": 4096 },
+          "inputSchema": { "type": "object", "additionalProperties": true },
+          "outputSchema": { "type": "object", "additionalProperties": true },
+          "entryNodeIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+          },
+          "outputNodeIds": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+          },
+          "nodes": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 64,
+            "items": { "$ref": "#/components/schemas/WorkflowNodeDefinition" }
+          }
+        }
+      },
+      "WorkflowNodeDefinition": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "nodeId",
+          "kind",
+          "title",
+          "instruction",
+          "dependsOn",
+          "inputSchema",
+          "outputSchema"
+        ],
+        "properties": {
+          "nodeId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "kind": {
+            "type": "string",
+            "enum": ["agent", "humanGate", "verification"]
+          },
+          "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "instruction": { "type": "string", "maxLength": 9999 },
+          "dependsOn": {
+            "type": "array",
+            "maxItems": 64,
+            "items": { "type": "string", "minLength": 1, "maxLength": 128 }
+          },
+          "inputSchema": { "type": "object", "additionalProperties": true },
+          "outputSchema": { "type": "object", "additionalProperties": true },
+          "agentVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "approvalPolicyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "verifierAgentVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          }
+        }
+      },
+      "WorkflowVersionView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workflowId",
+          "workflowVersionId",
+          "contentDigest",
+          "name",
+          "description",
+          "inputSchema",
+          "outputSchema",
+          "entryNodeIds",
+          "outputNodeIds",
+          "nodes",
+          "executionOrder",
+          "createdAt"
+        ],
+        "properties": {
+          "workflowId": { "type": "string" },
+          "workflowVersionId": { "type": "string" },
+          "contentDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          },
+          "name": { "type": "string" },
+          "description": { "type": "string" },
+          "inputSchema": { "type": "object", "additionalProperties": true },
+          "outputSchema": { "type": "object", "additionalProperties": true },
+          "entryNodeIds": { "type": "array", "items": { "type": "string" } },
+          "outputNodeIds": { "type": "array", "items": { "type": "string" } },
+          "nodes": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorkflowNodeDefinition" }
+          },
+          "executionOrder": { "type": "array", "items": { "type": "string" } },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "WorkflowVersionMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "workflowVersion"],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["registered", "existing"]
+          },
+          "workflowVersion": {
+            "$ref": "#/components/schemas/WorkflowVersionView"
+          }
+        }
+      },
+      "GetWorkflowVersionResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workflowVersion"],
+        "properties": {
+          "workflowVersion": {
+            "$ref": "#/components/schemas/WorkflowVersionView"
+          }
+        }
+      },
+      "ListWorkflowVersionsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "nextCursor"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/WorkflowVersionView" }
+          },
+          "nextCursor": { "type": ["string", "null"], "maxLength": 2048 }
         }
       },
       "AgentVersionView": {

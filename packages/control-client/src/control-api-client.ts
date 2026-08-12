@@ -25,6 +25,10 @@ import type {
   ListThreadsResponse,
   ListThreadMessagesResponse,
   PublishAgentVersionRequest,
+  PublishWorkflowVersionRequest,
+  WorkflowVersionMutationResponse,
+  GetWorkflowVersionResponse,
+  ListWorkflowVersionsResponse,
   RenameThreadRequest,
   RollbackThreadRequest,
   RunMutationResponse,
@@ -291,7 +295,12 @@ export class ControlApiClient {
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
   ): Promise<WorkspaceOperationMutationResponse> {
-    return this.#workspaceClient().create(threadId, body, idempotencyKey, options);
+    return this.#workspaceClient().create(
+      threadId,
+      body,
+      idempotencyKey,
+      options,
+    );
   }
 
   listWorkspaceListOperations(
@@ -458,6 +467,41 @@ export class ControlApiClient {
       ...options,
       expectedStatuses: [200, 201],
     });
+  }
+
+  publishWorkflowVersion(
+    body: PublishWorkflowVersionRequest,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowVersionMutationResponse> {
+    return this.#json("POST", "/api/v1/workflow-versions", body, {
+      ...options,
+      expectedStatuses: [200, 201],
+    });
+  }
+
+  getWorkflowVersion(
+    workflowVersionId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetWorkflowVersionResponse> {
+    return this.#json(
+      "GET",
+      `/api/v1/workflow-versions/${resourceId(workflowVersionId)}`,
+      null,
+      { ...options, expectedStatuses: [200] },
+    );
+  }
+
+  listWorkflowVersions(
+    workflowId: string,
+    query: { cursor?: string | null; limit?: number } = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<ListWorkflowVersionsResponse> {
+    return this.#json(
+      "GET",
+      withQuery("/api/v1/workflow-versions", { workflowId, ...query }),
+      null,
+      { ...options, expectedStatuses: [200] },
+    );
   }
 
   getAgentVersion(
@@ -991,9 +1035,13 @@ function withQuery(
     cursor?: string | null;
     limit?: number;
     view?: ThreadHistoryViewMode;
+    workflowId?: string;
   },
 ): string {
   const parameters = new URLSearchParams();
+  if (query.workflowId !== undefined) {
+    parameters.set("workflowId", resourceId(query.workflowId));
+  }
   if (query.cursor !== undefined && query.cursor !== null) {
     parameters.set("cursor", query.cursor);
   }
