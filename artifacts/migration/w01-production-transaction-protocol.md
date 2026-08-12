@@ -101,7 +101,7 @@ by a different Store instance. No fake adapter may be used to claim an end-to-en
 | Scheduler fan-out | 通过（SQLite Slices 1–2） | real Worker persists `run.started`; two-connection Slice 2 creates frozen-order sibling WorkItems with distinct claims and no scheduler Attempt |
 | Node admission | 通过（SQLite Slices 1–2） | two real Workers hold distinct sibling leases and simultaneously running Steps/Attempts; mock adversarial suite separately covers replay and response-loss fencing |
 | Node settlement | 通过（SQLite Slices 1–2） | siblings settle right-before-left without authority reuse; Verification appears only after both dependencies terminate and receives frozen-order input |
-| Human Gate | 实现中 | isolated Store behavior exists; Slice 3 not accepted |
+| Human Gate | 实现中 | SQLite Store/Application/Worker approve/reject vertical passes with exact decision/replay authority; production Control decision/start/read/events wiring remains pending |
 | Reconciliation | 实现中 | SQLite partial; admitted lease expiry/crash behavior remains a mandatory Slice 4 gate; Worker/PG production path incomplete |
 | Terminal convergence | 通过（SQLite Slices 1–2 success path） | single and parallel success Runs reach canonical `completed` with one sample per node; sibling failure/cancel convergence remains a mandatory Slice 5 gate |
 | PostgreSQL real-host | 未验证 | focused real-host checks passed, but Slice 6 dual-process acceptance has not |
