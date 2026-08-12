@@ -20,7 +20,7 @@ export type WorkflowCompositionDependencies = Readonly<{
 }>;
 
 export type WorkflowCompositionResult = Readonly<{
-  disposition: "committed" | "replayed";
+  disposition: "fresh" | "replay" | "reconcileRequired";
   execution: WorkflowExecutionState;
   admissions: readonly WorkflowNodeAttemptAdmission[];
 }>;
@@ -150,6 +150,23 @@ export function claimReadyNodes(input: {
       ? { ...node, status: "unknown" as const, leaseExpiresAt: null }
       : node,
   );
+  if (recovered.some((node) => node.status === "unknown")) {
+    const changed = recovered.some(
+      (node, index) => node !== input.execution.nodes[index],
+    );
+    return {
+      execution: changed
+        ? {
+            ...input.execution,
+            revision: input.execution.revision + 1,
+            nodes: recovered,
+            status: "running",
+            updatedAt: input.now,
+          }
+        : input.execution,
+      claims: [],
+    };
+  }
   if (input.execution.cancelRequested || input.execution.status !== "running") {
     return { execution: input.execution, claims: [] };
   }

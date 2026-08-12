@@ -136,7 +136,7 @@ export class SqliteWorkflowRunCompositionStore
         }
         this.#validateLease(input, nowMs);
         this.#database.exec("COMMIT");
-        return structuredClone({ ...result, disposition: "replayed" as const });
+        return structuredClone({ ...result, disposition: "replay" as const });
       }
 
       let execution = this.#loadExecution(input.tenantId, input.runId);
@@ -243,7 +243,11 @@ export class SqliteWorkflowRunCompositionStore
           input.runId,
         );
       const result = {
-        disposition: "committed" as const,
+        disposition: claimed.execution.nodes.some(
+          (node) => node.status === "unknown",
+        )
+          ? ("reconcileRequired" as const)
+          : ("fresh" as const),
         execution,
         admissions,
       } satisfies WorkflowCompositionResult;

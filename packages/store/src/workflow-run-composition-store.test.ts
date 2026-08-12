@@ -84,7 +84,7 @@ test("SQLite atomically admits stable node authority and replays after reopen", 
   await seed(path, clock.nowEpochMilliseconds() + 60_000);
 
   const first = await store.admitWorkflowNodes(admissionInput());
-  assert.equal(first.disposition, "committed");
+  assert.equal(first.disposition, "fresh");
   assert.deepEqual(
     first.admissions.map((item) => ({
       nodeId: item.claim.node.nodeId,
@@ -119,7 +119,7 @@ test("SQLite atomically admits stable node authority and replays after reopen", 
   store = new SqliteWorkflowRunCompositionStore(path, { digester, clock });
   assert.deepEqual(await store.admitWorkflowNodes(admissionInput()), {
     ...first,
-    disposition: "replayed",
+    disposition: "replay",
   });
   await store.close();
 });
@@ -144,7 +144,7 @@ test("SQLite dual connections converge and a reclaimed lease fences replay", asy
     first.admitWorkflowNodes(admissionInput()),
     second.admitWorkflowNodes(admissionInput()),
   ]);
-  assert.deepEqual(right, { ...left, disposition: "replayed" });
+  assert.deepEqual(right, { ...left, disposition: "replay" });
 
   const database = new DatabaseSync(path);
   database
@@ -202,6 +202,7 @@ test("SQLite expired running node becomes unknown without a second Attempt", asy
     (node) => node.nodeId === "agent",
   )!;
   assert.deepEqual(recovered.admissions, []);
+  assert.equal(recovered.disposition, "reconcileRequired");
   assert.deepEqual(unknown, {
     ...original,
     status: "unknown",

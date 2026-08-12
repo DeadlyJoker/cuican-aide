@@ -181,7 +181,7 @@ export class PostgresWorkflowRunCompositionStore
           input.lease,
         );
         await client.query("COMMIT");
-        return structuredClone({ ...result, disposition: "replayed" as const });
+        return structuredClone({ ...result, disposition: "replay" as const });
       }
 
       const nowResult = await client.query<{ now: Date | string }>(
@@ -298,7 +298,11 @@ export class PostgresWorkflowRunCompositionStore
         [execution.revision, execution, now, input.tenantId, input.runId],
       );
       const result = {
-        disposition: "committed" as const,
+        disposition: claimed.execution.nodes.some(
+          (node) => node.status === "unknown",
+        )
+          ? ("reconcileRequired" as const)
+          : ("fresh" as const),
         execution,
         admissions,
       } satisfies WorkflowCompositionResult;
