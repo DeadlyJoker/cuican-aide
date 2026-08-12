@@ -193,7 +193,9 @@ export async function createStandaloneRuntimeWorker(
   let workspaceReadStore: SqliteWorkspaceReadFileStore | undefined;
   try {
     releasePlan = compileRuntimeAgentVersionRelease(config);
-    store = new SqliteRunStore(config.databasePath);
+    store = config.workflowComposition?.store instanceof SqliteRunStore
+      ? config.workflowComposition.store
+      : new SqliteRunStore(config.databasePath);
     workspaceReadStore =
       config.workspaceReadFile === undefined
         ? undefined
@@ -201,8 +203,8 @@ export async function createStandaloneRuntimeWorker(
   } catch (error) {
     await Promise.allSettled([
       workspaceReadStore?.close() ?? Promise.resolve(),
-      store?.close() ?? Promise.resolve(),
-      closeStartupResources(config),
+      closeStandaloneRoots(config, store),
+      closeStartupResources(config, false),
     ]);
     throw error;
   }
@@ -216,8 +218,8 @@ export async function createStandaloneRuntimeWorker(
   } catch (error) {
     await Promise.allSettled([
       workspaceReadStore?.close() ?? Promise.resolve(),
-      store.close(),
-      closeStartupResources(config),
+      closeStandaloneRoots(config, store),
+      closeStartupResources(config, false),
     ]);
     throw error;
   }
@@ -275,7 +277,7 @@ async function composeRuntimeWorker(
     | SqliteWorkspaceReadFileStore
     | PostgresWorkspaceReadFileStore
     | undefined,
-  config: RuntimeWorkerCompositionConfig,
+  config: StandaloneRuntimeWorkerConfig | PostgresRuntimeWorkerConfig,
   releasePlan: RuntimeAgentVersionReleasePlan,
 ): Promise<StandaloneRuntimeWorker> {
   const ids = new UuidV7ApplicationIdGenerator();
@@ -523,9 +525,8 @@ async function composeRuntimeWorker(
           config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
           agentVersionRegistry.close(),
           artifactStore?.close() ?? Promise.resolve(),
-          workflow?.close() ?? Promise.resolve(),
           workspaceReadStore?.close() ?? Promise.resolve(),
-          store.close(),
+          closeRuntimeRoots(config, store),
         ])),
       );
       const failures = results.flatMap((result) =>
@@ -596,13 +597,50 @@ function validateWorkspaceDeployment(
 
 async function closeStartupResources(
   config: RuntimeWorkerCompositionConfig,
+  includeWorkflow = true,
 ): Promise<void> {
   await Promise.allSettled([
     config.workspacePrivate?.gateway.close() ?? Promise.resolve(),
     config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
     config.artifactStore?.close() ?? Promise.resolve(),
-    config.workflowComposition?.close() ?? Promise.resolve(),
+    includeWorkflow
+      ? config.workflowComposition?.close() ?? Promise.resolve()
+      : Promise.resolve(),
   ]);
+}
+
+async function closeStandaloneRoots(
+  config: StandaloneRuntimeWorkerConfig,
+  store: { close(): Promise<void> } | undefined,
+): Promise<void> {
+  const candidate = config.workflowComposition;
+  const results = await Promise.allSettled([
+    candidate?.close() ?? Promise.resolve(),
+    store !== undefined && !Object.is(candidate?.store, store)
+      ? store.close()
+      : Promise.resolve(),
+  ]);
+  const failures = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason] : []);
+  if (failures.length > 0)
+    throw new AggregateError(failures, "runtime_root_close_failed");
+}
+
+async function closeRuntimeRoots(
+  config: StandaloneRuntimeWorkerConfig | PostgresRuntimeWorkerConfig,
+  store: { close(): Promise<void> },
+): Promise<void> {
+  if ("databasePath" in config) return closeStandaloneRoots(config, store);
+  const results = await Promise.allSettled([
+    config.workflowComposition?.close() ?? Promise.resolve(),
+    Object.is(config.workflowComposition?.store, store)
+      ? Promise.resolve()
+      : store.close(),
+  ]);
+  const failures = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason] : []);
+  if (failures.length > 0)
+    throw new AggregateError(failures, "runtime_root_close_failed");
 }
 
 function staticAgentVersionRuntimeFactory(

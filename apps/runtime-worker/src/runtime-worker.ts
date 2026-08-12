@@ -587,6 +587,15 @@ export class RuntimeWorker {
       ) {
         throw new PermanentWorkerError("workflow_runtime_not_configured");
       }
+      if (run.status === "queued") {
+        await this.#renew(claim);
+        await this.#execution.startRun(claim);
+        await this.#afterRunStarted?.();
+        run = await this.#execution.loadRun(claim);
+      }
+      if (run.status !== "running") {
+        throw new Error("run_not_executable");
+      }
       const outcome = run.cancelRequested
         ? await this.#workflowDispatcher.cancel({ claim, run })
         : await this.#workflowDispatcher.dispatch({ claim, run });

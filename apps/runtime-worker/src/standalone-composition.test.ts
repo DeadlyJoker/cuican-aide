@@ -229,6 +229,21 @@ test("requires exact explicit Workflow certification and closes rejected resourc
   assert.equal(closes, 1);
 });
 
+test("closes a Workflow candidate once when release compilation fails before Store open", async (context) => {
+  let closes = 0;
+  await assert.rejects(createStandaloneRuntimeWorker({
+    ...runtimeConfig(),
+    databasePath: temporaryDatabasePath(context),
+    route: { ...runtimeConfig().route, agentVersionId: "" },
+    scanIntervalMs: null,
+    workflowComposition: workflowCandidate(
+      WORKFLOW_RUNTIME_CAPABILITIES,
+      () => { closes += 1; },
+    ),
+  }));
+  assert.equal(closes, 1);
+});
+
 test("rejects split or injected Workflow Store authorities", async (context) => {
   const databasePath = temporaryDatabasePath(context);
   const config = runtimeConfig();

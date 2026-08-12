@@ -102,7 +102,7 @@ export class ProductionWorkflowRuntimeDispatcher
     if (input.run.purpose !== "workflow" || binding === undefined)
       throw new Error("workflow_runtime_dispatch_invalid");
     const payload = parseWorkflowWorkItemPayload(input.claim.workItem.payload);
-    if (JSON.stringify(payload.binding) !== JSON.stringify(binding))
+    if (canonicalJson(payload.binding) !== canonicalJson(binding))
       throw new Error("workflow_work_item_binding_mismatch");
     const workflow = await loadFrozenWorkflowVersion({
       tenantId: input.run.tenantId,
