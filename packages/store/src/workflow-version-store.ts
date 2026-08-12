@@ -216,6 +216,7 @@ export function migrateSqliteWorkflowVersions(database: DatabaseSync) {
       .get() as { version: number } | undefined;
     if (row?.version !== WORKFLOW_VERSION_SCHEMA_VERSION)
       throw new RunStoreError("workflow_version_schema_unsupported");
+    validateSqliteWorkflowVersionShape(database);
   }
   database.exec("BEGIN IMMEDIATE");
   try {
@@ -237,6 +238,7 @@ export async function migratePostgresWorkflowVersions(
   client: PoolClient,
   schema: string,
 ) {
+  validatePostgresSchemaIdentifier(schema);
   const present = await client.query<{ present: string | null }>(
     "SELECT to_regclass($1)::text AS present",
     [`${schema}.workflow_version_schema`],
@@ -247,6 +249,7 @@ export async function migratePostgresWorkflowVersions(
     );
     if (existing.rows[0]?.version !== WORKFLOW_VERSION_SCHEMA_VERSION)
       throw new RunStoreError("workflow_version_schema_unsupported");
+    await validatePostgresWorkflowVersionShape(client, schema);
   }
   await client.query("BEGIN");
   try {
@@ -266,6 +269,124 @@ export async function migratePostgresWorkflowVersions(
     await client.query("ROLLBACK");
     throw error;
   }
+}
+
+type SqliteColumn = { name: string; type: string; notnull: number; pk: number };
+function validateSqliteWorkflowVersionShape(database: DatabaseSync) {
+  const version = database
+    .prepare("PRAGMA table_info(workflow_version_schema)")
+    .all() as unknown as SqliteColumn[];
+  const assets = database
+    .prepare("PRAGMA table_info(workflow_versions)")
+    .all() as unknown as SqliteColumn[];
+  const sql = database
+    .prepare(
+      "SELECT sql FROM sqlite_master WHERE type='table' AND name='workflow_versions'",
+    )
+    .get() as { sql: string } | undefined;
+  if (
+    !sameSqliteColumns(version, [
+      ["singleton", "INTEGER", 0, 1],
+      ["version", "INTEGER", 1, 0],
+    ]) ||
+    !sameSqliteColumns(assets, [
+      ["tenant_id", "TEXT", 1, 1],
+      ["workflow_id", "TEXT", 1, 0],
+      ["workflow_version_id", "TEXT", 1, 2],
+      ["content_digest", "TEXT", 1, 0],
+      ["definition_json", "TEXT", 1, 0],
+      ["created_at", "TEXT", 1, 0],
+    ]) ||
+    sql === undefined ||
+    !/\bSTRICT\s*$/iu.test(sql.sql) ||
+    !sql.sql.includes("json_valid(definition_json)")
+  )
+    throw new RunStoreError("workflow_version_schema_corrupt");
+}
+function sameSqliteColumns(
+  actual: readonly SqliteColumn[],
+  expected: readonly (readonly [string, string, number, number])[],
+) {
+  return (
+    actual.length === expected.length &&
+    actual.every((column, index) => {
+      const value = expected[index]!;
+      return (
+        column.name === value[0] &&
+        column.type.toUpperCase() === value[1] &&
+        column.notnull === value[2] &&
+        column.pk === value[3]
+      );
+    })
+  );
+}
+
+type PostgresColumn = {
+  column_name: string;
+  data_type: string;
+  is_nullable: "YES" | "NO";
+};
+async function validatePostgresWorkflowVersionShape(
+  client: PoolClient,
+  schema: string,
+) {
+  const versionColumns = await client.query<PostgresColumn>(
+    `SELECT column_name, data_type, is_nullable
+    FROM information_schema.columns WHERE table_schema=$1 AND table_name='workflow_version_schema' ORDER BY ordinal_position`,
+    [schema],
+  );
+  const columns = await client.query<PostgresColumn>(
+    `SELECT column_name, data_type, is_nullable
+    FROM information_schema.columns WHERE table_schema=$1 AND table_name='workflow_versions' ORDER BY ordinal_position`,
+    [schema],
+  );
+  const primaryKey = await client.query<{ definition: string }>(
+    `SELECT pg_get_constraintdef(c.oid) AS definition
+    FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname=$1 AND t.relname='workflow_versions' AND c.contype='p'`,
+    [schema],
+  );
+  const versionPrimaryKey = await client.query<{ definition: string }>(
+    `SELECT pg_get_constraintdef(c.oid) AS definition
+    FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname=$1 AND t.relname='workflow_version_schema' AND c.contype='p'`,
+    [schema],
+  );
+  const expected: readonly (readonly [string, string, "NO"])[] = [
+    ["tenant_id", "text", "NO"],
+    ["workflow_id", "text", "NO"],
+    ["workflow_version_id", "text", "NO"],
+    ["content_digest", "text", "NO"],
+    ["definition_json", "text", "NO"],
+    ["created_at", "timestamp with time zone", "NO"],
+  ];
+  if (
+    versionColumns.rows.length !== 2 ||
+    versionColumns.rows[0]?.column_name !== "singleton" ||
+    versionColumns.rows[0]?.data_type !== "boolean" ||
+    versionColumns.rows[0]?.is_nullable !== "NO" ||
+    versionColumns.rows[1]?.column_name !== "version" ||
+    versionColumns.rows[1]?.data_type !== "integer" ||
+    versionColumns.rows[1]?.is_nullable !== "NO" ||
+    versionPrimaryKey.rows[0]?.definition !== "PRIMARY KEY (singleton)" ||
+    columns.rows.length !== expected.length ||
+    columns.rows.some((column, index) => {
+      const value = expected[index]!;
+      return (
+        column.column_name !== value[0] ||
+        column.data_type !== value[1] ||
+        column.is_nullable !== value[2]
+      );
+    }) ||
+    primaryKey.rows.length !== 1 ||
+    primaryKey.rows[0]?.definition !==
+      "PRIMARY KEY (tenant_id, workflow_version_id)"
+  )
+    throw new RunStoreError("workflow_version_schema_corrupt");
+}
+function validatePostgresSchemaIdentifier(schema: string) {
+  if (!/^[a-z_][a-z0-9_]*$/u.test(schema))
+    throw new RunStoreError("postgres_schema_invalid");
 }
 
 type ListInput = Parameters<WorkflowVersionStore["listWorkflowVersions"]>[0];

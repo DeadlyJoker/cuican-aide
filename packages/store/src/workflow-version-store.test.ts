@@ -58,6 +58,27 @@ test("SQLite migration fails closed without replacing a newer authority", () => 
   assert.deepEqual(sqliteState(database), before);
 });
 
+test("SQLite v1 shape corruption fails closed without repair writes", () => {
+  for (const workflowTable of [
+    `CREATE TABLE workflow_versions (tenant_id TEXT NOT NULL, workflow_id TEXT NOT NULL,
+      workflow_version_id TEXT NOT NULL, content_digest TEXT NOT NULL, created_at TEXT NOT NULL,
+      PRIMARY KEY(tenant_id, workflow_version_id)) STRICT`,
+    `CREATE TABLE workflow_versions (tenant_id TEXT NOT NULL, workflow_id TEXT NOT NULL,
+      workflow_version_id TEXT NOT NULL, content_digest TEXT NOT NULL, definition_json TEXT NOT NULL,
+      created_at TEXT NOT NULL, PRIMARY KEY(workflow_version_id)) STRICT`,
+  ]) {
+    const database = new DatabaseSync(":memory:");
+    database.exec(`CREATE TABLE workflow_version_schema(singleton INTEGER PRIMARY KEY CHECK(singleton=1), version INTEGER NOT NULL);
+      INSERT INTO workflow_version_schema VALUES(1,1); ${workflowTable}`);
+    const before = sqliteMaster(database);
+    assert.throws(
+      () => new SqliteWorkflowVersionStore(database, digester),
+      /workflow_version_schema_corrupt/,
+    );
+    assert.deepEqual(sqliteMaster(database), before);
+  }
+});
+
 if (postgresUrl)
   test("PostgreSQL newer migration rolls back without DDL side effects", async () => {
     const schema = `workflow_newer_${randomUUID().replaceAll("-", "")}`;
@@ -84,6 +105,52 @@ if (postgresUrl)
       await pool.end();
     }
   });
+
+if (postgresUrl)
+  test("PostgreSQL v1 shape corruption fails closed without repair DDL", async () => {
+    const schema = `workflow_corrupt_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    try {
+      await pool.query(`CREATE SCHEMA ${schema}; CREATE TABLE ${schema}.workflow_version_schema
+        (singleton boolean PRIMARY KEY, version integer NOT NULL); INSERT INTO ${schema}.workflow_version_schema VALUES(true,1);
+        CREATE TABLE ${schema}.workflow_versions (tenant_id text NOT NULL, workflow_version_id text PRIMARY KEY)`);
+      const before = await postgresTables(pool, schema);
+      const client = await pool.connect();
+      try {
+        await assert.rejects(
+          import("./workflow-version-store.ts").then(
+            ({ migratePostgresWorkflowVersions }) =>
+              migratePostgresWorkflowVersions(client, schema),
+          ),
+          /workflow_version_schema_corrupt/,
+        );
+      } finally {
+        client.release();
+      }
+      assert.deepEqual(await postgresTables(pool, schema), before);
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await pool.end();
+    }
+  });
+
+test("PostgreSQL migration entry rejects unsafe schema identifiers", async () => {
+  const queries: string[] = [];
+  const client = {
+    query: async (query: string) => {
+      queries.push(query);
+      return { rows: [] };
+    },
+  } as never;
+  const { migratePostgresWorkflowVersions } = await import(
+    "./workflow-version-store.ts"
+  );
+  await assert.rejects(
+    migratePostgresWorkflowVersions(client, "public;DROP SCHEMA public"),
+    /postgres_schema_invalid/,
+  );
+  assert.deepEqual(queries, []);
+});
 
 function registerConformance(
   name: string,
@@ -164,6 +231,13 @@ function sqliteState(database: DatabaseSync) {
     version: database.prepare("SELECT * FROM workflow_version_schema").all(),
     sentinel: database.prepare("SELECT * FROM sentinel").all(),
   };
+}
+function sqliteMaster(database: DatabaseSync) {
+  return database
+    .prepare(
+      "SELECT type,name,tbl_name,sql FROM sqlite_master ORDER BY type,name",
+    )
+    .all();
 }
 async function postgresTables(pool: Pool, schema: string) {
   return (

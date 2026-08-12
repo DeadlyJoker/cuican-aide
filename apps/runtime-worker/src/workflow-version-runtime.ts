@@ -74,7 +74,7 @@ export function readyWorkflowNodes(
         )
       );
     });
-    if (ready[0] !== settlement.nodeId)
+    if (!ready.includes(settlement.nodeId))
       throw new Error("workflow_node_settlement_invalid");
     settled.set(settlement.nodeId, settlement.status);
     failed = settlement.status === "failed";

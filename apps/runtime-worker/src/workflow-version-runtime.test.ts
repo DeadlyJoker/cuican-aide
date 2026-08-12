@@ -89,3 +89,49 @@ test("rejects forged or non-canonical settlement histories", () => {
       /workflow_node_settlement_invalid/,
     );
 });
+
+test("accepts either ready branch while keeping ready output stable", () => {
+  const branch = compileWorkflowVersion(
+    {
+      ...source,
+      workflowVersionId: "branch-version",
+      entryNodeIds: ["A"],
+      outputNodeIds: ["join"],
+      nodes: [
+        { ...common("A", []), kind: "agent", agentVersionId: "agent-a" },
+        { ...common("B", ["A"]), kind: "agent", agentVersionId: "agent-b" },
+        { ...common("C", ["A"]), kind: "agent", agentVersionId: "agent-c" },
+        {
+          ...common("join", ["B", "C"]),
+          kind: "verification",
+          verifierAgentVersionId: "agent-verifier",
+        },
+      ],
+    },
+    {
+      sha256: (value) =>
+        `sha256:${createHash("sha256").update(value).digest("hex")}`,
+    },
+  );
+  assert.deepEqual(
+    readyWorkflowNodes(branch, [{ nodeId: "A", status: "completed" }]).map(
+      (node) => node.nodeId,
+    ),
+    ["B", "C"],
+  );
+  assert.deepEqual(
+    readyWorkflowNodes(branch, [
+      { nodeId: "A", status: "completed" },
+      { nodeId: "C", status: "completed" },
+    ]).map((node) => node.nodeId),
+    ["B"],
+  );
+  assert.deepEqual(
+    readyWorkflowNodes(branch, [
+      { nodeId: "A", status: "completed" },
+      { nodeId: "C", status: "completed" },
+      { nodeId: "B", status: "completed" },
+    ]).map((node) => node.nodeId),
+    ["join"],
+  );
+});
