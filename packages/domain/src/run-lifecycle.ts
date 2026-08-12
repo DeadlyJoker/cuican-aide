@@ -19,7 +19,10 @@ import {
   startRunGoalAccounting,
   type RunGoalAccountingCursor,
 } from "./run-goal-accounting.ts";
-import { parseWorkflowVersionIdentityId } from "./workflow-version.ts";
+import {
+  parseWorkflowVersionIdentityId,
+  type FrozenWorkflowVersionBinding,
+} from "./workflow-version.ts";
 
 export const RUN_STATUSES = [
   "queued",
@@ -313,12 +316,6 @@ export type RunState = Readonly<{
   createdAt: string;
   updatedAt: string;
   terminalAt: string | null;
-}>;
-
-export type FrozenWorkflowVersionBinding = Readonly<{
-  workflowId: string;
-  workflowVersionId: string;
-  contentDigest: string;
 }>;
 
 export class RunLifecycleError extends Error {
