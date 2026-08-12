@@ -1546,6 +1546,37 @@ test("does not sample-retry a private durable control sink failure", async () =>
   assert.deepEqual(released, ["run-1"]);
 });
 
+test("rethrows a null private control sink failure without sampling retry", async () => {
+  let streams = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "turn-state-adapter",
+    adapterVersion: "1",
+    modelId: "turn-state-provider",
+    async *stream(_request, _signal, options) {
+      streams += 1;
+      await options?.controlSink?.providerTurnStateObserved("state-1");
+    },
+  };
+
+  await assert.rejects(
+    collect(
+      new CrewONAgentKernel({ transport, streamMaxRetries: 3 }).runSegment(
+        segmentContract(),
+        new AbortController().signal,
+        {
+          controlSink: {
+            providerTurnStateObserved: async () => {
+              throw null;
+            },
+          },
+        },
+      ),
+    ),
+    (error) => error === null,
+  );
+  assert.equal(streams, 1);
+});
+
 function segmentContract() {
   return {
     schemaVersion: "crewon.agent-segment.v0",

@@ -145,8 +145,13 @@ export function registerRunExecutionStoreConformance(
         }),
         started.attempt,
       );
-      await fixture.store.recordRunAttemptProviderTurnState(mutation);
-      await fixture.store.recordRunAttemptProviderTurnState(mutation);
+      const firstObservation =
+        await fixture.store.recordRunAttemptProviderTurnState(mutation);
+      const replay = await fixture.store.recordRunAttemptProviderTurnState({
+        ...mutation,
+        observedAt: "2026-08-08T00:01:03Z",
+      });
+      assert.deepEqual(replay, firstObservation);
       assert.equal(
         await fixture.store.loadRunProviderTurnState({
           tenantId: "tenant-1",

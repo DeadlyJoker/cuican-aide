@@ -147,8 +147,28 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
       throw protocolError("responses_websocket_concurrent_stream");
     }
     this.#active = true;
+    let controlSinkFailure: Readonly<{ failed: boolean; value: unknown }> = {
+      failed: false,
+      value: undefined,
+    };
     try {
-      const socket = await this.#connection(request.runId, signal, options);
+      const socket = await this.#connection(request.runId, signal, {
+        controlSink:
+          options?.controlSink === undefined
+            ? undefined
+            : {
+                providerTurnStateObserved: async (providerTurnState) => {
+                  try {
+                    await options.controlSink?.providerTurnStateObserved(
+                      providerTurnState,
+                    );
+                  } catch (error) {
+                    controlSinkFailure = { failed: true, value: error };
+                    throw error;
+                  }
+                },
+              },
+      });
       const plan = this.#requestPlan(request, socket);
       const decoder = new ResponsesProtocolDecoder({
         sequencePolicy: this.#sequencePolicy,
@@ -227,6 +247,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
       }
     } catch (error) {
       this.#dropSocket(this.#socket);
+      if (controlSinkFailure.failed) throw controlSinkFailure.value;
       if (signal.aborted) {
         throw transportError(
           "canceled",

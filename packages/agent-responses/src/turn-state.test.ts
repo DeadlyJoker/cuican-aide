@@ -116,6 +116,7 @@ test("AR-043 retains observed HTTP state across a failed stream retry", async ()
 
 test("AR-043 blocks HTTP body events until observed state is durable", async () => {
   let sinkCalls = 0;
+  const sinkFailure = new Error("durable_write_failed");
   const transport = new DirectResponsesTransport(
     { endpoint: "https://provider.example/v1/responses", model: "model" },
     {
@@ -143,16 +144,12 @@ test("AR-043 blocks HTTP body events until observed state is durable", async () 
         controlSink: {
           providerTurnStateObserved: async () => {
             sinkCalls += 1;
-            throw new Error("durable_write_failed");
+            throw sinkFailure;
           },
         },
       }),
     ),
-    (error) =>
-      error instanceof Error &&
-      error.message === "responses_transport_unavailable" &&
-      error.cause instanceof Error &&
-      error.cause.message === "durable_write_failed",
+    (error) => error === sinkFailure,
   );
   await assert.rejects(
     collect(

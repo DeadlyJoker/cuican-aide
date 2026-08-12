@@ -407,6 +407,7 @@ export function recordSqliteRunAttemptProviderTurnState(
   ) {
     throw new RunStoreError("attempt_provider_turn_state_conflict");
   }
+  if (attempt.providerTurnState === providerTurnState) return attempt;
   const next = { ...attempt, providerTurnState, updatedAt: observedAt };
   updateRunAttempt(database, next);
   return next;

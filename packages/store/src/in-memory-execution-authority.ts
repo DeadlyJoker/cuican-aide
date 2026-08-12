@@ -276,6 +276,7 @@ export class InMemoryExecutionAuthority {
     ) {
       throw new RunStoreError("attempt_provider_turn_state_conflict");
     }
+    if (attempt.providerTurnState === providerTurnState) return clone(attempt);
     const next = { ...attempt, providerTurnState, updatedAt: observedAt };
     this.#attempts.set(next.attemptId, clone(next));
     return clone(next);

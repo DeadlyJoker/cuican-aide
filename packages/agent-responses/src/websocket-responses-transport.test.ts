@@ -13,6 +13,7 @@ import {
   ModelTransportError,
   type AgentSegmentContract,
   type ModelRequest,
+  type ModelTransportEvent,
 } from "@crewon/agent-kernel";
 import { WebSocketServer, type WebSocket } from "ws";
 
@@ -438,6 +439,60 @@ test("falls back after the Rust-aligned WebSocket budget and gives HTTP a fresh 
     second.some((event) => event.type === "model.transport.fallback"),
     false,
   );
+});
+
+test("does not HTTP fallback when durable handshake state persistence fails", async (context) => {
+  let handshakes = 0;
+  let httpRequests = 0;
+  let sinkCalls = 0;
+  const sinkFailure = new Error("stale_lease");
+  const fixture = await websocketFixture(context, (_request, response) => {
+    httpRequests += 1;
+    sendHttpCompleted(response, "unexpected-http", "unexpected");
+  });
+  fixture.webSocketServer.on("headers", (headers) => {
+    handshakes += 1;
+    if (handshakes === 2) {
+      headers.push("x-codex-turn-state: durable-state");
+    }
+  });
+  fixture.webSocketServer.on("connection", (socket) => {
+    socket.once("message", () => socket.close());
+  });
+  const transport = new ResilientResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+    websocketMaxRetries: 1,
+  });
+  context.after(() => transport.close());
+
+  await assert.rejects(
+    collect(transport.stream(manualRequest("first"), signal())),
+  );
+  const events: ModelTransportEvent[] = [];
+  await assert.rejects(
+    async () => {
+      for await (const event of transport.stream(
+        manualRequest("second"),
+        signal(),
+        {
+          controlSink: {
+            providerTurnStateObserved: async () => {
+              sinkCalls += 1;
+              throw sinkFailure;
+            },
+          },
+        },
+      )) {
+        events.push(event);
+      }
+    },
+    (error) => error === sinkFailure,
+  );
+
+  assert.equal(httpRequests, 0);
+  assert.equal(sinkCalls, 1);
+  assert.deepEqual(events, []);
 });
 
 test("marks reasoning-only WebSocket partials discarded before successful HTTP fallback", async (context) => {

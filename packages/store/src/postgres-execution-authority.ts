@@ -370,6 +370,7 @@ export async function recordPostgresRunAttemptProviderTurnState(
   ) {
     throw new RunStoreError("attempt_provider_turn_state_conflict");
   }
+  if (attempt.providerTurnState === providerTurnState) return attempt;
   const next = { ...attempt, providerTurnState, updatedAt: observedAt };
   await updateRunAttempt(client, schema, next);
   return next;

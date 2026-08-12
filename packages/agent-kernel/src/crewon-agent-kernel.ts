@@ -166,7 +166,10 @@ export class CrewONAgentKernel implements AgentKernelPort {
       let completedProviderRequestsContinuation = false;
       let completedProviderTurnState = contract.providerTurnState ?? null;
       let persistedProviderTurnState = contract.providerTurnState ?? null;
-      let controlSinkFailure: unknown = null;
+      let controlSinkFailure: Readonly<{
+        failed: boolean;
+        value: unknown;
+      }> = { failed: false, value: undefined };
       let createdCheckpoint: ProviderCheckpoint | null = null;
       let retries = 0;
       while (true) {
@@ -209,7 +212,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
                     validated,
                   );
                 } catch (error) {
-                  controlSinkFailure = error;
+                  controlSinkFailure = { failed: true, value: error };
                   throw error;
                 }
                 persistedProviderTurnState = validated;
@@ -521,9 +524,9 @@ export class CrewONAgentKernel implements AgentKernelPort {
             .map((item) => item.content);
           break;
         } catch (error) {
-          if (controlSinkFailure !== null) {
-            const failure = controlSinkFailure;
-            controlSinkFailure = null;
+          if (controlSinkFailure.failed) {
+            const failure = controlSinkFailure.value;
+            controlSinkFailure = { failed: false, value: undefined };
             throw failure;
           }
           const kernelError = normalizeSamplingError(error, signal);

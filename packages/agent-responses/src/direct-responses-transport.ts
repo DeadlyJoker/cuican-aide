@@ -175,6 +175,10 @@ export class DirectResponsesTransport implements ModelTransportPort {
       );
     }
     const idle = new IdleWatch(this.#idleTimeoutMs, this.#scheduler, signal);
+    let controlSinkFailure: Readonly<{ failed: boolean; value: unknown }> = {
+      failed: false,
+      value: undefined,
+    };
     try {
       const response = await this.#fetch(this.#endpoint, {
         method: "POST",
@@ -215,7 +219,18 @@ export class DirectResponsesTransport implements ModelTransportPort {
       await this.#turnStates.observe(
         request.runId,
         fetchTurnStateHeaders(response.headers),
-        options?.controlSink?.providerTurnStateObserved,
+        options?.controlSink === undefined
+          ? undefined
+          : async (providerTurnState) => {
+              try {
+                await options.controlSink?.providerTurnStateObserved(
+                  providerTurnState,
+                );
+              } catch (error) {
+                controlSinkFailure = { failed: true, value: error };
+                throw error;
+              }
+            },
       );
       const contentType = response.headers.get("content-type");
       if (contentType?.toLowerCase().startsWith("text/event-stream") !== true) {
@@ -248,6 +263,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
         }
       }
     } catch (error) {
+      if (controlSinkFailure.failed) throw controlSinkFailure.value;
       if (signal.aborted) {
         throw transportError(
           "canceled",
