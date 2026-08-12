@@ -1,8 +1,17 @@
 import type { ProviderCheckpoint } from "@crewon/contracts";
-import type { ToolExecutionReceiptState } from "@crewon/domain";
+import type {
+  FrozenWorkflowVersionBinding,
+  ModelDispatchTerminalOutcome,
+  ToolExecutionReceiptState,
+  WorkflowSchemaValue,
+} from "@crewon/domain";
 import type { WorkItemLeaseInput } from "./durable-queue-port.ts";
 import type { RunAttemptIdentity } from "./run-execution-store-port.ts";
 import type { ToolCompletedAgentEvent } from "./run-execution-service.ts";
+import type {
+  WorkflowAtomicHandoff,
+  WorkflowRunDisposition,
+} from "./workflow-run-composition-port.ts";
 
 export const MAX_WORKFLOW_CONTINUATION_HISTORY_ITEMS = 256;
 export const MAX_WORKFLOW_CONTINUATION_HISTORY_BYTES = 512 * 1024;
@@ -50,9 +59,45 @@ export type WorkflowNodeContinuationCheckpoint = Readonly<{
   toolRoundsConsumed: number;
   providerCheckpoint: ProviderCheckpoint | null;
   providerTurnState: string | null;
+  activeDispatch: WorkflowNodeDispatchAuthority | null;
   history: readonly WorkflowContinuationHistoryItem[];
   revision: number;
   updatedAt: string;
+}>;
+
+/** Exact model request evidence that a resumed sample must retrieve or settle. */
+export type WorkflowNodeDispatchAuthority = Readonly<{
+  operationId: string;
+  requestSequence: number;
+  expectedRevision: number;
+  status: "prepared" | "possiblySent" | "responseObserved";
+}>;
+
+export type WorkflowNodeModelTerminalOutcome =
+  | Readonly<{
+      status: "completed";
+      value: WorkflowSchemaValue;
+      canonicalValueJson: string;
+      valueDigest: string;
+    }>
+  | Readonly<{
+      status: "failed";
+      failureCode: string;
+      certainty: "notSent" | "responseObserved";
+    }>
+  | Readonly<{
+      status: "canceled";
+      certainty: "notSent" | "responseObserved";
+    }>;
+
+export type SettleWorkflowNodeModelTerminalInput = Readonly<{
+  lease: WorkItemLeaseInput;
+  binding: FrozenWorkflowVersionBinding;
+  authority: WorkflowAgentAttemptAuthority;
+  dispatch: WorkflowNodeDispatchAuthority;
+  dispatchTerminalOutcome: ModelDispatchTerminalOutcome;
+  operationId: string;
+  outcome: WorkflowNodeModelTerminalOutcome;
 }>;
 
 export type CommitWorkflowToolContinuationInput = Readonly<{
@@ -95,4 +140,23 @@ export interface WorkflowNodeContinuationStore {
   commitWorkflowAssistantContinuation(
     input: CommitWorkflowAssistantContinuationInput,
   ): Promise<WorkflowNodeContinuationCheckpoint>;
+
+  /**
+   * Atomically establishes the single terminal truth for one Workflow node.
+   *
+   * Implementations compare the dispatch receipt revision, terminate that
+   * receipt, validate completed canonical JSON/digest/schema, finish the exact
+   * Agent Attempt and Step, settle the DAG node, and perform the Work Item
+   * handoff in one transaction. A replay returns the already committed result.
+   * A possibly-sent request without response evidence is not terminalizable.
+   */
+  settleWorkflowNodeModelTerminal(
+    input: SettleWorkflowNodeModelTerminalInput,
+  ): Promise<Readonly<{
+    disposition: "settled" | "replay" | "reconciliationScheduled";
+    continuation: null;
+    handoff: WorkflowAtomicHandoff;
+    runDisposition: WorkflowRunDisposition;
+    outcome: WorkflowNodeModelTerminalOutcome;
+  }>>;
 }
