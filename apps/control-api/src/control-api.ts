@@ -16,6 +16,7 @@ import type {
   WorkspaceListApplicationService,
   WorkspaceOperationQueryService,
   WorkflowVersionApplicationService,
+  WorkflowRunApplicationService,
   CommitThreadResult,
   CommitTurnStartResult,
 } from "@crewon/application";
@@ -45,6 +46,7 @@ import {
   parseCompactThreadRequest,
   parseClearThreadGoalRequest,
   parseCreateRunRequest,
+  parseStartWorkflowRunRequest,
   parseCreateAutomationRequest,
   parseCreateThreadRequest,
   parseDecideToolApprovalRequest,
@@ -104,6 +106,7 @@ import {
   type WorkflowVersionMutationResponse,
   type GetWorkflowVersionResponse,
   type ListWorkflowVersionsResponse,
+  type JsonValue,
 } from "@crewon/contracts";
 import Fastify, { type FastifyInstance } from "fastify";
 
@@ -182,6 +185,7 @@ export type ControlApiDependencies = Readonly<{
   approvals: ToolApprovalApplicationService;
   agentVersions: AgentVersionApplicationService;
   workflowVersions: WorkflowVersionApplicationService;
+  workflowRuns?: Pick<WorkflowRunApplicationService, "startWorkflowRun"> | null;
   agentVersionCatalogs: AgentVersionCatalogApplicationService;
   artifacts: ArtifactApplicationService;
   automations: AutomationApplicationService;
@@ -1088,6 +1092,34 @@ export function buildControlApi(
       .code(result.disposition === "committed" ? 201 : 200)
       .send(response);
   });
+
+  app.post<{ Body: unknown }>(
+    "/api/v1/workflow-runs",
+    async (request, reply) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const body = parseStartWorkflowRunRequest(request.body);
+      if (dependencies.workflowRuns == null) {
+        throw new WorkspaceControlUnavailableError();
+      }
+      const result = await dependencies.workflowRuns.startWorkflowRun(actor, {
+        kind: "workflowRun.start",
+        idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
+        workflowVersionId: body.workflowVersionId,
+        threadId: body.threadId,
+        input: body.input as JsonValue,
+      });
+      wakeOutbox(dependencies.outboxWakeup);
+      const response: RunMutationResponse = {
+        disposition: result.run.disposition,
+        run: projectRun(result.run.state),
+      };
+      return reply
+        .code(result.run.disposition === "committed" ? 201 : 200)
+        .send(response);
+    },
+  );
 
   app.post<{ Body: unknown }>(
     "/api/v1/workflow-versions",

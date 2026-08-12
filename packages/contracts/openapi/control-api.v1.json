@@ -1016,6 +1016,49 @@
         }
       }
     },
+    "/api/v1/workflow-runs": {
+      "post": {
+        "operationId": "startWorkflowRun",
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartWorkflowRunRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The exact idempotently replayed Workflow Run",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+              }
+            }
+          },
+          "201": {
+            "description": "A Workflow Run admitted with immutable version provenance and durable execution work",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/api/v1/runs/{runId}": {
       "get": {
         "operationId": "getRun",
@@ -3167,6 +3210,35 @@
             "maxLength": 512,
             "description": "Optional immutable AgentVersion selection. The server admits it before creating a Run; omission uses the configured default."
           }
+        }
+      },
+      "WorkflowInput": {
+        "description": "Bounded JSON input. Runtime validation additionally limits UTF-8 serialization to 32768 bytes, nesting depth to 8, and total values to 1024.",
+        "oneOf": [
+          { "type": "null" },
+          { "type": "boolean" },
+          { "type": "number" },
+          { "type": "string", "maxLength": 8192 },
+          { "type": "array", "maxItems": 256, "items": {} },
+          {
+            "type": "object",
+            "maxProperties": 256,
+            "additionalProperties": true
+          }
+        ]
+      },
+      "StartWorkflowRunRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workflowVersionId", "threadId", "input"],
+        "properties": {
+          "workflowVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "threadId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "input": { "$ref": "#/components/schemas/WorkflowInput" }
         }
       },
       "StartTurnRequest": {

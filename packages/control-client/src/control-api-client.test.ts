@@ -65,6 +65,40 @@ test("preserves exact frozen WorkflowVersion provenance on Run reads", async () 
   assert.equal(JSON.stringify(response).includes("definitionJson"), false);
 });
 
+test("starts a Workflow Run without client-owned digest or root Agent identity", async () => {
+  const requests: { input: string; init: RequestInit }[] = [];
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    csrfToken: "csrf-token",
+    fetch: async (input, init = {}) => {
+      requests.push({ input: String(input), init });
+      return jsonResponse(201, runResponse());
+    },
+  });
+  const body = {
+    workflowVersionId: "workflow-version-1",
+    threadId: "thread-1",
+    input: { prompt: "ship" },
+  } as const;
+  assert.deepEqual(
+    await client.startWorkflowRun(body, "workflow-run-start-1"),
+    runResponse(),
+  );
+  assert.equal(
+    requests[0]?.input,
+    "https://control.example/api/v1/workflow-runs",
+  );
+  const headers = new Headers(requests[0]?.init.headers);
+  assert.equal(headers.get("idempotency-key"), "workflow-run-start-1");
+  assert.equal(headers.get("x-csrf-token"), "csrf-token");
+  assert.deepEqual(JSON.parse(String(requests[0]?.init.body)), body);
+  assert.equal(String(requests[0]?.init.body).includes("contentDigest"), false);
+  assert.equal(
+    String(requests[0]?.init.body).includes("agentVersionId"),
+    false,
+  );
+});
+
 test("lists bounded WorkflowVersion summaries without definition fields", async () => {
   const summary = {
     workflowId: "workflow-1",

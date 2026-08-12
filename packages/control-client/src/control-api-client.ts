@@ -8,6 +8,7 @@ import type {
   ClearThreadGoalRequest,
   CompactThreadRequest,
   CreateRunRequest,
+  StartWorkflowRunRequest,
   CreateThreadRequest,
   DecideToolApprovalRequest,
   DeleteThreadRequest,
@@ -429,6 +430,18 @@ export class ControlApiClient {
     options: ControlApiRequestOptions = {},
   ): Promise<RunMutationResponse> {
     return this.#json("POST", "/api/v1/runs", body, {
+      ...options,
+      idempotencyKey,
+      expectedStatuses: [200, 201],
+    });
+  }
+
+  startWorkflowRun(
+    body: StartWorkflowRunRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<RunMutationResponse> {
+    return this.#json("POST", "/api/v1/workflow-runs", body, {
       ...options,
       idempotencyKey,
       expectedStatuses: [200, 201],
