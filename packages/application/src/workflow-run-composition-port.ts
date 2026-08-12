@@ -14,6 +14,12 @@ export type WorkflowNodeAttemptAdmission = Readonly<{
   attempt: RunAttemptState | null;
 }>;
 
+export type WorkflowAtomicNodeOutcome =
+  | Readonly<{ status: "completed"; resultDigest: string }>
+  | Readonly<{ status: "failed"; failureCode: string }>
+  | Readonly<{ status: "canceled" }>
+  | Readonly<{ status: "unknown" }>;
+
 /**
  * Atomic composition boundary required before Workflow execution is routable.
  *
@@ -31,11 +37,92 @@ export interface WorkflowRunCompositionStore {
     schedulerOperationId: string;
     leaseDurationMs: number;
   }): Promise<
+    | Readonly<{
+        disposition: "fresh";
+        execution: WorkflowExecutionState;
+        admissions: readonly WorkflowNodeAttemptAdmission[];
+        reconciliationClaims: readonly [];
+      }>
+    | Readonly<{
+        disposition: "replay";
+        execution: WorkflowExecutionState;
+        admissions: readonly [];
+        reconciliationClaims: readonly [];
+      }>
+    | Readonly<{
+        disposition: "reconcileRequired";
+        execution: WorkflowExecutionState;
+        admissions: readonly [];
+        reconciliationClaims: readonly WorkflowNodeClaim[];
+      }>
+  >;
+
+  settleWorkflowNode(input: {
+    tenantId: string;
+    runId: string;
+    lease: WorkItemLeaseInput;
+    binding: FrozenWorkflowVersionBinding;
+    nodeId: string;
+    claimId: string;
+    claimEpoch: number;
+    stepId: string;
+    attemptId: string | null;
+    operationId: string;
+    continuationWorkItemId: string;
+    outcome: WorkflowAtomicNodeOutcome;
+  }): Promise<
     Readonly<{
-      /** Only `fresh` admissions may dispatch side effects. */
-      disposition: "fresh" | "replay" | "reconcileRequired";
+      disposition: "settled" | "replay" | "reconcileRequired";
       execution: WorkflowExecutionState;
-      admissions: readonly WorkflowNodeAttemptAdmission[];
     }>
   >;
+
+  publishWorkflowHumanGate(input: {
+    tenantId: string;
+    runId: string;
+    lease: WorkItemLeaseInput;
+    binding: FrozenWorkflowVersionBinding;
+    nodeId: string;
+    claimId: string;
+    claimEpoch: number;
+    stepId: string;
+    approvalPolicyId: string;
+    gateRequestId: string;
+    inputDigest: string;
+    publicationOutboxMessageId: string;
+    approvalResumeWorkItemId: string;
+    operationId: string;
+  }): Promise<Readonly<{ disposition: "published" | "replay" }>>;
+
+  settleWorkflowHumanGate(input: {
+    tenantId: string;
+    runId: string;
+    lease: WorkItemLeaseInput;
+    binding: FrozenWorkflowVersionBinding;
+    nodeId: string;
+    claimId: string;
+    claimEpoch: number;
+    stepId: string;
+    gateRequestId: string;
+    operationId: string;
+    continuationWorkItemId: string;
+    outcome:
+      | Readonly<{ status: "completed"; resultDigest: string }>
+      | Readonly<{ status: "failed"; failureCode: string }>;
+  }): Promise<
+    Readonly<{
+      disposition: "settled" | "replay" | "reconcileRequired";
+      execution: WorkflowExecutionState;
+    }>
+  >;
+
+  scheduleWorkflowReconciliation(input: {
+    tenantId: string;
+    runId: string;
+    lease: WorkItemLeaseInput;
+    binding: FrozenWorkflowVersionBinding;
+    operationId: string;
+    reasonCode: string;
+    reconciliationWorkItemId: string;
+  }): Promise<Readonly<{ disposition: "scheduled" | "replay" }>>;
 }

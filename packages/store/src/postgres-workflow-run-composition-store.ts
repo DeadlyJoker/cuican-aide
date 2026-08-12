@@ -28,6 +28,7 @@ import {
   gateStep,
   initialExecution,
   parseBoundWorkflow,
+  reconciliationClaims,
   type WorkflowCompositionResult,
 } from "./workflow-run-composition-support.ts";
 
@@ -181,7 +182,12 @@ export class PostgresWorkflowRunCompositionStore
           input.lease,
         );
         await client.query("COMMIT");
-        return structuredClone({ ...result, disposition: "replay" as const });
+        return {
+          disposition: "replay" as const,
+          execution: structuredClone(result.execution),
+          admissions: [],
+          reconciliationClaims: [],
+        };
       }
 
       const nowResult = await client.query<{ now: Date | string }>(
@@ -297,15 +303,21 @@ export class PostgresWorkflowRunCompositionStore
          SET revision=$1,state_json=$2,updated_at=$3 WHERE tenant_id=$4 AND run_id=$5`,
         [execution.revision, execution, now, input.tenantId, input.runId],
       );
-      const result = {
-        disposition: claimed.execution.nodes.some(
-          (node) => node.status === "unknown",
-        )
-          ? ("reconcileRequired" as const)
-          : ("fresh" as const),
-        execution,
-        admissions,
-      } satisfies WorkflowCompositionResult;
+      const recovery = reconciliationClaims(execution, workflow);
+      const result: WorkflowCompositionResult =
+        recovery.length === 0
+          ? {
+              disposition: "fresh",
+              execution,
+              admissions,
+              reconciliationClaims: [],
+            }
+          : {
+              disposition: "reconcileRequired",
+              execution,
+              admissions: [],
+              reconciliationClaims: recovery,
+            };
       await client.query(
         `INSERT INTO ${this.schemaSql()}.workflow_execution_receipts
          (tenant_id,run_id,operation_id,fingerprint,state_json,result_json)
@@ -337,6 +349,22 @@ export class PostgresWorkflowRunCompositionStore
     } finally {
       client.release();
     }
+  }
+
+  async settleWorkflowNode(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  async publishWorkflowHumanGate(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  async settleWorkflowHumanGate(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  async scheduleWorkflowReconciliation(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
   }
 }
 

@@ -33,6 +33,7 @@ import {
   gateStep,
   initialExecution,
   parseBoundWorkflow,
+  reconciliationClaims,
   type WorkflowCompositionResult,
 } from "./workflow-run-composition-support.ts";
 
@@ -136,7 +137,12 @@ export class SqliteWorkflowRunCompositionStore
         }
         this.#validateLease(input, nowMs);
         this.#database.exec("COMMIT");
-        return structuredClone({ ...result, disposition: "replay" as const });
+        return {
+          disposition: "replay" as const,
+          execution: structuredClone(result.execution),
+          admissions: [],
+          reconciliationClaims: [],
+        };
       }
 
       let execution = this.#loadExecution(input.tenantId, input.runId);
@@ -242,15 +248,21 @@ export class SqliteWorkflowRunCompositionStore
           input.tenantId,
           input.runId,
         );
-      const result = {
-        disposition: claimed.execution.nodes.some(
-          (node) => node.status === "unknown",
-        )
-          ? ("reconcileRequired" as const)
-          : ("fresh" as const),
-        execution,
-        admissions,
-      } satisfies WorkflowCompositionResult;
+      const recovery = reconciliationClaims(execution, workflow);
+      const result: WorkflowCompositionResult =
+        recovery.length === 0
+          ? {
+              disposition: "fresh",
+              execution,
+              admissions,
+              reconciliationClaims: [],
+            }
+          : {
+              disposition: "reconcileRequired",
+              execution,
+              admissions: [],
+              reconciliationClaims: recovery,
+            };
       this.#database
         .prepare(
           `INSERT INTO workflow_execution_receipts
@@ -276,6 +288,22 @@ export class SqliteWorkflowRunCompositionStore
             cause: error instanceof Error ? error : undefined,
           });
     }
+  }
+
+  async settleWorkflowNode(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  async publishWorkflowHumanGate(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  async settleWorkflowHumanGate(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  async scheduleWorkflowReconciliation(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
   }
 
   #validateLease(

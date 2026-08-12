@@ -19,11 +19,52 @@ export type WorkflowCompositionDependencies = Readonly<{
   digester: WorkflowContentDigester;
 }>;
 
-export type WorkflowCompositionResult = Readonly<{
-  disposition: "fresh" | "replay" | "reconcileRequired";
-  execution: WorkflowExecutionState;
-  admissions: readonly WorkflowNodeAttemptAdmission[];
-}>;
+export type WorkflowCompositionResult =
+  | Readonly<{
+      disposition: "fresh";
+      execution: WorkflowExecutionState;
+      admissions: readonly WorkflowNodeAttemptAdmission[];
+      reconciliationClaims: readonly [];
+    }>
+  | Readonly<{
+      disposition: "replay";
+      execution: WorkflowExecutionState;
+      admissions: readonly [];
+      reconciliationClaims: readonly [];
+    }>
+  | Readonly<{
+      disposition: "reconcileRequired";
+      execution: WorkflowExecutionState;
+      admissions: readonly [];
+      reconciliationClaims: readonly import("@crewon/application").WorkflowNodeClaim[];
+    }>;
+
+export function reconciliationClaims(
+  execution: WorkflowExecutionState,
+  workflow: CompiledWorkflowVersion,
+): readonly import("@crewon/application").WorkflowNodeClaim[] {
+  return workflow.executionOrder.flatMap((nodeId) => {
+    const state = execution.nodes.find((node) => node.nodeId === nodeId)!;
+    if (
+      state.status !== "unknown" ||
+      state.claimId === null ||
+      state.inputDigest === null
+    )
+      return [];
+    const node = workflow.nodes.find(
+      (candidate) => candidate.nodeId === nodeId,
+    )!;
+    return [
+      {
+        node,
+        claimId: state.claimId,
+        claimEpoch: state.claimEpoch,
+        gateRequestId: state.gateRequestId,
+        inputDigest: state.inputDigest,
+      },
+    ];
+  });
+}
 
 export function parseBoundWorkflow(
   definitionJson: string,
