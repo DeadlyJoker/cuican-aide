@@ -97,13 +97,13 @@ by a different Store instance. No fake adapter may be used to claim an end-to-en
 | Capability | Status | Current evidence / gap |
 | --- | --- | --- |
 | transaction contract | 通过 | this protocol plus discriminated Application ports |
-| Workflow Start | 实现中 | real SQLite Application admission plus exact replay passes, but production Control composition remains disabled and Control RunView/events acceptance is pending |
+| Workflow Start | 通过（SQLite Control） | real HTTP Control admission uses the certified `SqliteRunStore`; public RunView/audit events prove queued→running→terminal, and exact Application replay remains covered |
 | Scheduler fan-out | 通过（SQLite Slices 1–2） | real Worker persists `run.started`; two-connection Slice 2 creates frozen-order sibling WorkItems with distinct claims and no scheduler Attempt |
 | Node admission | 通过（SQLite Slices 1–2） | two real Workers hold distinct sibling leases and simultaneously running Steps/Attempts; mock adversarial suite separately covers replay and response-loss fencing |
 | Node settlement | 通过（SQLite Slices 1–2） | siblings settle right-before-left without authority reuse; Verification appears only after both dependencies terminate and receives frozen-order input |
-| Human Gate | 实现中 | SQLite Store/Application/Worker approve/reject vertical passes with exact decision/replay authority; production Control decision/start/read/events wiring remains pending |
+| Human Gate | 通过（SQLite Control） | strict public decision API plus real certified Worker proves approve→Verification→completed and reject→failed; internal receipt/resume authority is not exposed |
 | Reconciliation | 实现中 | SQLite partial; admitted lease expiry/crash behavior remains a mandatory Slice 4 gate; Worker/PG production path incomplete |
 | Terminal convergence | 通过（SQLite Slices 1–2 success path） | single and parallel success Runs reach canonical `completed` with one sample per node; sibling failure/cancel convergence remains a mandatory Slice 5 gate |
 | PostgreSQL real-host | 未验证 | focused real-host checks passed, but Slice 6 dual-process acceptance has not |
 | Packaged crash recovery | 未验证 | no packaged Workflow vertical acceptance |
-| Rust compatibility | 未验证 | base Agent parity evidence exists; W01 protocol/runtime compatibility pending |
+| Rust compatibility | 移出范围 | migration uses the TS runtime only; no Rust compatibility layer, dual-write, fallback, or parity gate will be built unless a hard build dependency blocks the TS path |
