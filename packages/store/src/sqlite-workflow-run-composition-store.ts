@@ -700,7 +700,8 @@ export class SqliteWorkflowRunCompositionStore {
       const recovery = reconciliationClaims(execution, workflow);
       const scheduled = recovery.length === 0
         ? scheduleReadyNodes({ execution, workflow,
-            operationId: input.schedulerOperationId, now, digester: this.#digester })
+            operationId: input.schedulerOperationId, now, digester: this.#digester,
+            inputDigest: (nodeId) => this.#nodeInputDigest(input, workflow, nodeId) })
         : { execution, claims: [] };
       execution = scheduled.execution;
       const nodeWorkItems = [];
@@ -1405,6 +1406,26 @@ export class SqliteWorkflowRunCompositionStore {
         runId: input.runId, nodeId: input.nodeId, claimId: input.claimId,
         claimEpoch: input.claimEpoch, valueDigest }, this.#digester),
       value: structuredClone(value) as import("@crewon/contracts").JsonValue, valueDigest };
+  }
+
+  #nodeInputDigest(
+    input: { tenantId: string; runId: string },
+    workflow: import("@crewon/domain").CompiledWorkflowVersion,
+    nodeId: string,
+  ): string {
+    const root = this.#loadExecutionValue(input.tenantId, input.runId, "rootInput", null);
+    const node = workflow.nodes.find((candidate) => candidate.nodeId === nodeId);
+    if (root === null || node === undefined)
+      throw new RunStoreError("workflow_execution_value_not_found");
+    const dependencyOutputs = node.dependsOn.map((dependencyNodeId) => {
+      const output = this.#loadExecutionValue(input.tenantId, input.runId,
+        "nodeOutput", dependencyNodeId);
+      if (output === null) throw new RunStoreError("workflow_execution_value_not_found");
+      return { nodeId: dependencyNodeId, value: output.value };
+    });
+    return this.#digester.sha256(canonicalJson(composeWorkflowNodeInput({
+      workflow, nodeId, rootInput: root.value, dependencyOutputs,
+    })));
   }
 
   #loadExecutionValue(tenantId: string, runId: string, role: string, nodeId: string | null) {

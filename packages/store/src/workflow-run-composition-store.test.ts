@@ -36,6 +36,12 @@ const common = (nodeId: string, dependsOn: string[] = []) => ({
   inputSchema: objectSchema,
   outputSchema: objectSchema,
 });
+const fanInSchema = {
+  type: "object" as const,
+  properties: { agent: objectSchema, gate: objectSchema },
+  required: ["agent", "gate"],
+  additionalProperties: false as const,
+};
 const source: WorkflowVersionSource = {
   schemaVersion: "crewon.workflow-version-source.v0",
   workflowId: "workflow-1",
@@ -55,6 +61,7 @@ const source: WorkflowVersionSource = {
     },
     {
       ...common("verify", ["agent", "gate"]),
+      inputSchema: fanInSchema,
       kind: "verification",
       verifierAgentVersionId: "verifier-v1",
     },
@@ -475,6 +482,11 @@ async function seed(
       lease.leaseEpoch,
       leaseExpiresAtMs,
     );
+  database.prepare(
+    `INSERT INTO workflow_execution_values
+     (tenant_id,run_id,value_id,role,node_id,value_digest,value_json,created_at)
+     VALUES ('tenant-1','run-1','root-value-1','rootInput',NULL,?,?,?)`,
+  ).run(digester.sha256("{}"), "{}", run.createdAt);
   if (typeof databaseOrPath === "string") database.close();
 }
 

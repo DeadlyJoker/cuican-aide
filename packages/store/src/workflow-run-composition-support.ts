@@ -419,6 +419,7 @@ export function scheduleReadyNodes(input: {
   operationId: string;
   now: string;
   digester: WorkflowContentDigester;
+  inputDigest?: (nodeId: string) => string;
 }): Readonly<{
   execution: WorkflowExecutionState;
   claims: readonly import("@crewon/application").WorkflowNodeClaim[];
@@ -459,7 +460,7 @@ export function scheduleReadyNodes(input: {
       node.kind === "humanGate"
         ? workflowAuthorityId("gate", identity, input.digester)
         : null;
-    const inputDigest = input.digester.sha256(
+    const inputDigest = input.inputDigest?.(node.nodeId) ?? input.digester.sha256(
       JSON.stringify({
         nodeId: node.nodeId,
         contentDigest: input.workflow.contentDigest,
