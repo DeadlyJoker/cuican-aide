@@ -141,6 +141,28 @@ export function listSqliteRunAttempts(
   );
 }
 
+export function loadSqliteRunProviderTurnState(
+  database: DatabaseSync,
+  locator: Readonly<{ tenantId: string; runId: string }>,
+): string | null {
+  const rows = database
+    .prepare(
+      `SELECT ${ATTEMPT_COLUMNS} FROM run_attempts
+       WHERE tenant_id = ? AND run_id = ?
+       ORDER BY updated_at DESC, attempt_id DESC`,
+    )
+    .all(locator.tenantId, locator.runId) as unknown as RunAttemptRow[];
+  for (const row of rows) {
+    const state = decodeRunAttempt(row, {
+      ...locator,
+      stepId: row.step_id,
+      attemptId: row.attempt_id,
+    });
+    if (state.providerTurnState !== null) return state.providerTurnState;
+  }
+  return null;
+}
+
 export function beginSqliteRunAttempt(
   database: DatabaseSync,
   input: BeginRunAttemptInput,
@@ -222,7 +244,15 @@ export function finishSqliteRunAttempt(
   }
   let finished: RunAttemptTransitionResult;
   try {
-    finished = finishRunAttempt(step, attempt, terminalInput(input.attempt));
+    finished = finishRunAttempt(
+      step,
+      {
+        ...attempt,
+        providerTurnState:
+          input.attempt.providerTurnState ?? attempt.providerTurnState,
+      },
+      terminalInput(input.attempt),
+    );
   } catch (error) {
     throw normalizeExecutionLifecycleError(error);
   }
@@ -424,6 +454,7 @@ function decodeRunAttempt(
   const state = {
     ...parsed,
     providerCheckpoint: parsed.providerCheckpoint ?? null,
+    providerTurnState: parsed.providerTurnState ?? null,
   };
   if (
     !isRecord(state) ||

@@ -78,6 +78,7 @@ type RunAttemptFinish = RunAttemptIdentity &
   Readonly<{
     finishedAt: string;
     checkpointDigest: string | null;
+    providerTurnState?: string | null;
   }>;
 
 export type RunAttemptCompletionMutation = RunAttemptFinish &
@@ -123,6 +124,7 @@ export type CompleteRunAttemptInput = Readonly<{
     Readonly<{
       finishedAt: string;
       checkpointDigest: string | null;
+      providerTurnState?: string | null;
     }>;
 }>;
 
@@ -178,7 +180,11 @@ export type CommitAssistantSampleContinuationInput = Readonly<{
   modelState: ThreadModelState;
   continuation: ThreadContinuationCheckpoint | null;
   attempt: RunAttemptIdentity &
-    Readonly<{ finishedAt: string; checkpointDigest: string | null }>;
+    Readonly<{
+      finishedAt: string;
+      checkpointDigest: string | null;
+      providerTurnState?: string | null;
+    }>;
   sampleIndex: number;
 }>;
 
@@ -238,6 +244,7 @@ export type CommitTextRunCompletionInput = Readonly<{
     Readonly<{
       finishedAt: string;
       checkpointDigest: string | null;
+      providerTurnState?: string | null;
     }>;
 }>;
 
@@ -296,6 +303,12 @@ export interface RunExecutionStore {
     afterAttemptNumber: number,
     limit: number,
   ): Promise<readonly RunAttemptState[]>;
+  loadRunProviderTurnState(
+    locator: Readonly<{
+      tenantId: string;
+      runId: string;
+    }>,
+  ): Promise<string | null>;
   beginRunAttempt(input: BeginRunAttemptInput): Promise<BeginRunAttemptResult>;
   checkpointRunAttempt(
     input: CheckpointRunAttemptInput,

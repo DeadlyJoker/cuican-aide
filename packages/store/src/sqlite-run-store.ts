@@ -204,6 +204,7 @@ import {
   finishSqliteRunAttempt,
   listSqliteRunAttempts,
   loadSqliteRunAttempt,
+  loadSqliteRunProviderTurnState,
   loadSqliteRunStep,
 } from "./sqlite-execution-authority.ts";
 import {
@@ -2587,6 +2588,20 @@ export class SqliteRunStore implements DomainStore {
           limit,
         ),
       );
+    } catch (error) {
+      throw normalizeSqliteError(error);
+    }
+  }
+
+  async loadRunProviderTurnState(
+    locator: Readonly<{
+      tenantId: string;
+      runId: string;
+    }>,
+  ) {
+    this.#assertOpen();
+    try {
+      return loadSqliteRunProviderTurnState(this.#database, locator);
     } catch (error) {
       throw normalizeSqliteError(error);
     }

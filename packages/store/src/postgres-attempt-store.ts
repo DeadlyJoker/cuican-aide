@@ -33,6 +33,7 @@ import {
   finishPostgresRunAttempt,
   listPostgresRunAttempts,
   loadPostgresRunAttempt,
+  loadPostgresRunProviderTurnState,
   loadPostgresRunStep,
 } from "./postgres-execution-authority.ts";
 import {
@@ -162,6 +163,24 @@ export class PostgresAttemptStore extends PostgresRunStore {
         locator,
         afterAttemptNumber,
         limit,
+      );
+    } catch (error) {
+      throw normalizePostgresError(error);
+    }
+  }
+
+  async loadRunProviderTurnState(
+    locator: Readonly<{
+      tenantId: string;
+      runId: string;
+    }>,
+  ): Promise<string | null> {
+    this.assertOpen();
+    try {
+      return await loadPostgresRunProviderTurnState(
+        this.pool,
+        this.schemaSql(),
+        locator,
       );
     } catch (error) {
       throw normalizePostgresError(error);

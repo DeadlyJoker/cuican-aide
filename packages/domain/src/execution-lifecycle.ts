@@ -52,6 +52,7 @@ export type RunAttemptState = Readonly<{
   status: RunAttemptStatus;
   checkpointDigest: string | null;
   providerCheckpoint: import("@crewon/contracts").ProviderCheckpoint | null;
+  providerTurnState: string | null;
   failure: Readonly<{ code: string; retryable: boolean }> | null;
   startedAt: string;
   updatedAt: string;
@@ -130,6 +131,7 @@ export function startRunAttempt(
     status: "running",
     checkpointDigest: null,
     providerCheckpoint: null,
+    providerTurnState: null,
     failure: null,
     startedAt: input.startedAt,
     updatedAt: input.startedAt,
@@ -154,6 +156,14 @@ export function finishRunAttempt(
         failure: Readonly<{ code: string; retryable: boolean }>;
       }>,
 ): Readonly<{ step: RunStepState; attempt: RunAttemptState }> {
+  if (
+    attempt.providerTurnState !== null &&
+    (attempt.providerTurnState.length === 0 ||
+      attempt.providerTurnState.length > 4 * 1024 ||
+      /[^\x20-\x2b\x2d-\x7e]/u.test(attempt.providerTurnState))
+  ) {
+    throw new ExecutionLifecycleError("attempt_provider_turn_state_invalid");
+  }
   if (
     step.status !== "running" ||
     attempt.status !== "running" ||

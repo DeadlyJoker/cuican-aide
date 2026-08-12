@@ -837,6 +837,8 @@ export class RuntimeWorker {
       modelIdentity,
     );
     const continuation = selectContinuation(context, storedContinuation);
+    let providerTurnState =
+      await this.#execution.loadRunProviderTurnState(claim);
     const segmentId = `segment:${attempt.attemptId}`;
     const controller = new AbortController();
     await this.#renew(claim);
@@ -909,6 +911,7 @@ export class RuntimeWorker {
             : {
                 reconcileCheckpoint: recoveryCheckpoint,
               }),
+          ...(providerTurnState === null ? {} : { providerTurnState }),
           budget: { maxOutputBytes: 32 * 1024 },
         },
         controller.signal,
@@ -944,10 +947,12 @@ export class RuntimeWorker {
             throw new AgentKernelError("segment_output_mismatch", false);
           }
           completed = true;
+          providerTurnState = event.data.providerTurnState ?? providerTurnState;
           completedSequence = event.sequence;
           continue;
         }
         if (event.type === "segment.continuation_requested") {
+          providerTurnState = event.data.providerTurnState ?? providerTurnState;
           assistantContinuation = event;
           continue;
         }
@@ -964,6 +969,7 @@ export class RuntimeWorker {
         }
         bufferedEvents.push(event);
         if (event.type === "tool.requested") {
+          providerTurnState = event.data.providerTurnState ?? providerTurnState;
           requestedTools.push(event);
         }
         if (
@@ -1006,6 +1012,7 @@ export class RuntimeWorker {
             },
             latestUsage,
             checkpoint: assistantContinuation.data.checkpoint,
+            providerTurnState,
           },
         );
         await this.#afterAssistantSampleCommitted?.();
@@ -1064,7 +1071,9 @@ export class RuntimeWorker {
           type: "segment.completed",
           data: { output: "" },
         });
-        await this.#execution.completeAttempt(claim, attempt);
+        await this.#execution.completeAttempt(claim, attempt, null, {
+          providerTurnState,
+        });
         toolBoundaryOutcome = await this.#executeToolCalls(
           claim,
           run,
@@ -1166,6 +1175,7 @@ export class RuntimeWorker {
           identity: modelIdentity,
           contextRevision: context.revision,
           checkpoint: providerCheckpoint,
+          providerTurnState,
           segment: {
             segmentId,
             checkpointSequence,

@@ -53,6 +53,25 @@ export class InMemoryExecutionAuthority {
       .map(clone);
   }
 
+  loadRunProviderTurnState(
+    locator: Readonly<{
+      tenantId: string;
+      runId: string;
+    }>,
+  ): string | null {
+    return (
+      [...this.#attempts.values()]
+        .filter(
+          (attempt) =>
+            attempt.tenantId === locator.tenantId &&
+            attempt.runId === locator.runId &&
+            attempt.providerTurnState !== null,
+        )
+        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]
+        ?.providerTurnState ?? null
+    );
+  }
+
   begin(input: BeginRunAttemptInput): BeginRunAttemptResult {
     if (this.#attempts.has(input.attemptId)) {
       throw new RunStoreError("attempt_id_conflict");
@@ -116,7 +135,15 @@ export class InMemoryExecutionAuthority {
       throw new RunStoreError("stale_attempt_epoch");
     }
     try {
-      return finishRunAttempt(step, attempt, terminalInput(mutation));
+      return finishRunAttempt(
+        step,
+        {
+          ...attempt,
+          providerTurnState:
+            mutation.providerTurnState ?? attempt.providerTurnState,
+        },
+        terminalInput(mutation),
+      );
     } catch (error) {
       throw normalizeExecutionLifecycleError(error);
     }
@@ -156,6 +183,8 @@ export class InMemoryExecutionAuthority {
         step,
         {
           ...attempt,
+          providerTurnState:
+            mutation.providerTurnState ?? attempt.providerTurnState,
           providerCheckpoint: clone(checkpoint),
           checkpointDigest: mutation.checkpointDigest,
           updatedAt: mutation.finishedAt,

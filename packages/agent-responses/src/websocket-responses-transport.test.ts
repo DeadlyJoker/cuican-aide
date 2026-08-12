@@ -198,8 +198,21 @@ test("reconnects one Run to return its bounded handshake state", async (context)
   });
   context.after(() => transport.close());
 
-  await collect(transport.stream(manualRequest("first"), signal()));
-  await collect(transport.stream(manualRequest("second"), signal()));
+  const first = await collect(
+    transport.stream(manualRequest("first"), signal()),
+  );
+  const terminal = first.at(-1);
+  assert.equal(terminal?.type, "completed");
+  assert.equal(
+    terminal?.type === "completed" ? terminal.providerTurnState : null,
+    "state-1",
+  );
+  await collect(
+    transport.stream(
+      { ...manualRequest("second"), providerTurnState: "state-1" },
+      signal(),
+    ),
+  );
 
   assert.equal(handshakes.length, 2);
   assert.equal(handshakes[0]?.headers["x-codex-turn-state"], undefined);

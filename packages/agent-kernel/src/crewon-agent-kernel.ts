@@ -129,6 +129,9 @@ export class CrewONAgentKernel implements AgentKernelPort {
         input,
         tools,
         maxOutputBytes: contract.budget.maxOutputBytes,
+        ...(contract.providerTurnState === undefined
+          ? {}
+          : { providerTurnState: contract.providerTurnState }),
         ...(contract.reconcileCheckpoint === undefined
           ? {}
           : { reconcileCheckpoint: contract.reconcileCheckpoint }),
@@ -138,6 +141,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
       let completedToolCalls: ObservedToolCall[] = [];
       let completedAssistantItems: string[] = [];
       let completedProviderRequestsContinuation = false;
+      let completedProviderTurnState = contract.providerTurnState ?? null;
       let createdCheckpoint: ProviderCheckpoint | null = null;
       let retries = 0;
       while (true) {
@@ -356,6 +360,14 @@ export class CrewONAgentKernel implements AgentKernelPort {
               case "completed":
                 validateCheckpoint(event.checkpoint, this.modelIdentity);
                 completedCheckpoint = event.checkpoint;
+                completedProviderTurnState =
+                  event.providerTurnState ?? completedProviderTurnState;
+                request = {
+                  ...request,
+                  ...(completedProviderTurnState === null
+                    ? {}
+                    : { providerTurnState: completedProviderTurnState }),
+                };
                 providerRequestsContinuation = event.endTurn === false;
                 terminalSeen = true;
                 break;
@@ -418,6 +430,9 @@ export class CrewONAgentKernel implements AgentKernelPort {
                   output,
                   completedAssistantItems: assistantItems,
                   checkpoint: continuationCheckpoint,
+                  ...(completedProviderTurnState === null
+                    ? {}
+                    : { providerTurnState: completedProviderTurnState }),
                 },
               };
               return;
@@ -518,6 +533,9 @@ export class CrewONAgentKernel implements AgentKernelPort {
         sequence += 1;
         yield canonicalEvent(contract, sequence, "segment.completed", {
           output: completedOutput,
+          ...(completedProviderTurnState === null
+            ? {}
+            : { providerTurnState: completedProviderTurnState }),
         });
         return;
       }
@@ -542,6 +560,9 @@ export class CrewONAgentKernel implements AgentKernelPort {
           ...(completedAssistantItems.length > 0
             ? { completedAssistantItems: [...completedAssistantItems] }
             : {}),
+          ...(completedProviderTurnState === null
+            ? {}
+            : { providerTurnState: completedProviderTurnState }),
         });
         completedAssistantItems.length = 0;
       }
@@ -561,6 +582,9 @@ export class CrewONAgentKernel implements AgentKernelPort {
             output: completedOutput,
             completedAssistantItems: continuationAssistantItems,
             checkpoint: completedCheckpoint,
+            ...(completedProviderTurnState === null
+              ? {}
+              : { providerTurnState: completedProviderTurnState }),
           },
         };
         return;

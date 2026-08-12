@@ -112,6 +112,28 @@ export async function listPostgresRunAttempts(
   );
 }
 
+export async function loadPostgresRunProviderTurnState(
+  connection: Pool | PoolClient,
+  schema: string,
+  locator: Readonly<{ tenantId: string; runId: string }>,
+): Promise<string | null> {
+  const result = await connection.query<RunAttemptRow>(
+    `SELECT ${ATTEMPT_COLUMNS} FROM ${table(schema, "run_attempts")}
+     WHERE tenant_id=$1 AND run_id=$2
+     ORDER BY updated_at DESC, attempt_id DESC`,
+    [locator.tenantId, locator.runId],
+  );
+  for (const row of result.rows) {
+    const state = decodeRunAttempt(row, {
+      ...locator,
+      stepId: row.step_id,
+      attemptId: row.attempt_id,
+    });
+    if (state.providerTurnState !== null) return state.providerTurnState;
+  }
+  return null;
+}
+
 export async function beginPostgresRunAttempt(
   client: PoolClient,
   schema: string,
@@ -193,7 +215,15 @@ export async function finishPostgresRunAttempt(
   }
   let finished: RunAttemptTransitionResult;
   try {
-    finished = finishRunAttempt(step, attempt, terminalInput(input.attempt));
+    finished = finishRunAttempt(
+      step,
+      {
+        ...attempt,
+        providerTurnState:
+          input.attempt.providerTurnState ?? attempt.providerTurnState,
+      },
+      terminalInput(input.attempt),
+    );
   } catch (error) {
     throw normalizeExecutionLifecycleError(error);
   }
@@ -340,6 +370,7 @@ function decodeRunAttempt(
   const state = {
     ...parsed,
     providerCheckpoint: parsed.providerCheckpoint ?? null,
+    providerTurnState: parsed.providerTurnState ?? null,
   };
   if (
     state.schemaVersion !== "crewon.run-attempt.v0" ||

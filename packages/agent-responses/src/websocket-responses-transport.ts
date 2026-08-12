@@ -137,6 +137,10 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
     signal: AbortSignal,
   ): AsyncIterable<ModelTransportEvent> {
     validateResponsesRequest(request);
+    if (request.providerTurnState !== undefined) {
+      this.#dropSocket(this.#socket);
+    }
+    this.#turnStates.seed(request.runId, request.providerTurnState ?? null);
     if (this.#active) {
       throw protocolError("responses_websocket_concurrent_stream");
     }
@@ -186,6 +190,12 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
             }
             if (event.type === "completed") {
               completed = true;
+              const providerTurnState = this.#turnStates.get(request.runId);
+              yield providerTurnState === null
+                ? event
+                : { ...event, providerTurnState };
+              this.#turnStates.release(request.runId);
+              continue;
             }
             yield event;
           }
@@ -207,9 +217,6 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
           };
         } else {
           this.#baseline = null;
-        }
-        if (this.#turnStates.get(request.runId) !== null) {
-          this.#dropSocket(socket);
         }
       } finally {
         queue.close();
@@ -239,6 +246,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
         error,
       );
     } finally {
+      this.#turnStates.release(request.runId);
       this.#active = false;
     }
   }

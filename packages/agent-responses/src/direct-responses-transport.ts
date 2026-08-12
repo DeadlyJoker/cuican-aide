@@ -31,6 +31,7 @@ import {
   ResponsesTurnStateAuthority,
   TURN_STATE_HEADER,
   fetchTurnStateHeaders,
+  parseTurnStateHeader,
 } from "./turn-state.ts";
 
 export type { ResponsesSequencePolicy } from "./responses-protocol.ts";
@@ -142,6 +143,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
     signal: AbortSignal,
   ): AsyncIterable<ModelTransportEvent> {
     validateResponsesRequest(request);
+    this.#turnStates.seed(request.runId, request.providerTurnState ?? null);
     if (request.reconcileCheckpoint !== undefined) {
       if (!this.#storeResponses) {
         throw transportError(
@@ -220,7 +222,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
       if (response.body === null) {
         throw protocolError("responses_body_missing");
       }
-      yield* responsesProtocolEvents(response.body, {
+      const events = responsesProtocolEvents(response.body, {
         sequencePolicy: this.#sequencePolicy,
         onActivity: () => idle.touch(),
         completedCheckpoint: (responseId) =>
@@ -232,6 +234,17 @@ export class DirectResponsesTransport implements ModelTransportPort {
             ? responsesCheckpoint(responseId, this.modelIdentity())
             : null,
       });
+      for await (const event of events) {
+        if (event.type === "completed") {
+          const providerTurnState = this.#turnStates.get(request.runId);
+          yield providerTurnState === null
+            ? event
+            : { ...event, providerTurnState };
+          this.#turnStates.release(request.runId);
+        } else {
+          yield event;
+        }
+      }
     } catch (error) {
       if (signal.aborted) {
         throw transportError(
@@ -262,6 +275,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
         error,
       );
     } finally {
+      this.#turnStates.release(request.runId);
       idle.close();
     }
   }
@@ -403,12 +417,16 @@ export function validateResponsesRequest(request: ModelRequest): void {
       ...(request.reconcileCheckpoint === undefined
         ? []
         : ["reconcileCheckpoint"]),
+      ...(request.providerTurnState === undefined ? [] : ["providerTurnState"]),
     ])
   ) {
     throw protocolError("responses_request_invalid");
   }
   if (request.reconcileCheckpoint !== undefined) {
     parseProviderCheckpoint(request.reconcileCheckpoint);
+  }
+  if (request.providerTurnState !== undefined) {
+    parseTurnStateHeader([request.providerTurnState]);
   }
   boundedNonEmpty(request.runId, 512, "responses_run_id_invalid");
   boundedNonEmpty(request.segmentId, 512, "responses_segment_id_invalid");

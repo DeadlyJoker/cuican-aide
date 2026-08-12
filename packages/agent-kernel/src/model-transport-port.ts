@@ -25,6 +25,8 @@ export type ModelRequest = Readonly<{
   input: ModelInput;
   tools: readonly ToolDefinition[];
   maxOutputBytes: number;
+  /** Run-private continuation control state; never projected into model input. */
+  providerTurnState?: string;
   reconcileCheckpoint?: ProviderCheckpoint;
 }>;
 
@@ -69,6 +71,7 @@ export type ModelTransportEvent =
   | Readonly<{
       type: "completed";
       checkpoint: ProviderCheckpoint | null;
+      providerTurnState?: string | null;
       /** A false Provider directive requires another sampling request in the same Turn. */
       endTurn?: boolean;
     }>

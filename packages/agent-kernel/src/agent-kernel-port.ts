@@ -52,6 +52,8 @@ export type AgentSegmentContract = Readonly<{
   history: readonly AgentHistoryItem[];
   continuation: AgentContinuation;
   reconcileCheckpoint?: ProviderCheckpoint;
+  /** Run-private continuation control state; never projected into history. */
+  providerTurnState?: string;
   budget: Readonly<{
     maxOutputBytes: number;
   }>;
@@ -105,6 +107,8 @@ export type KernelAgentEvent =
         input: string;
         /** Completed assistant items that precede this Tool boundary. */
         completedAssistantItems?: string[];
+        /** Run-private continuation control state; excluded from RunEvent projection. */
+        providerTurnState?: string | null;
       }>;
     })
   | (KernelEventBase & {
@@ -139,7 +143,7 @@ export type KernelAgentEvent =
     })
   | (KernelEventBase & {
       type: "segment.completed";
-      data: Readonly<{ output: string }>;
+      data: Readonly<{ output: string; providerTurnState?: string | null }>;
     })
   | (KernelEventBase & {
       type: "segment.continuation_requested";
@@ -147,6 +151,7 @@ export type KernelAgentEvent =
         output: string;
         completedAssistantItems: string[];
         checkpoint: ProviderCheckpoint | null;
+        providerTurnState?: string | null;
       }>;
     })
   | (KernelEventBase & {

@@ -7,7 +7,6 @@ import type { ModelRequest, ModelTransportEvent } from "@crewon/agent-kernel";
 import { DirectResponsesTransport } from "./direct-responses-transport.ts";
 import {
   MAX_TURN_STATE_BYTES,
-  MAX_TURN_STATE_RUNS,
   ResponsesTurnStateAuthority,
   parseTurnStateHeader,
 } from "./turn-state.ts";
@@ -23,7 +22,6 @@ const fixture = JSON.parse(
 ) as Readonly<{
   header: string;
   maxBytes: number;
-  maxRuns: number;
   state: string;
   runs: readonly [string, string];
 }>;
@@ -49,8 +47,18 @@ test("AR-043 keeps opaque response state within one Run and clears it for anothe
     },
   );
 
-  await collect(transport.stream(request(fixture.runs[0]), signal()));
-  await collect(transport.stream(request(fixture.runs[0]), signal()));
+  const first = await collect(
+    transport.stream(request(fixture.runs[0]), signal()),
+  );
+  const terminal = first.at(-1);
+  assert.equal(terminal?.type, "completed");
+  assert.equal(
+    terminal?.type === "completed" ? terminal.providerTurnState : null,
+    fixture.state,
+  );
+  await collect(
+    transport.stream(request(fixture.runs[0], fixture.state), signal()),
+  );
   await collect(transport.stream(request(fixture.runs[1]), signal()));
 
   assert.deepEqual(observed, [
@@ -62,7 +70,6 @@ test("AR-043 keeps opaque response state within one Run and clears it for anothe
 
 test("AR-043 fails closed on duplicate, oversized, invalid, and conflicting state", () => {
   assert.equal(MAX_TURN_STATE_BYTES, fixture.maxBytes);
-  assert.equal(MAX_TURN_STATE_RUNS, fixture.maxRuns);
   assert.throws(() => parseTurnStateHeader(["a", "a"]), /duplicate/u);
   assert.throws(
     () => parseTurnStateHeader(["x".repeat(fixture.maxBytes + 1)]),
@@ -83,19 +90,20 @@ test("AR-043 fails closed on duplicate, oversized, invalid, and conflicting stat
   authority.observe(fixture.runs[1], ["different"]);
 });
 
-test("AR-043 fails closed instead of retaining unbounded Run state", () => {
+test("AR-043 releases terminal transport state instead of imposing a Run cap", () => {
   const authority = new ResponsesTurnStateAuthority();
-  for (let index = 0; index < MAX_TURN_STATE_RUNS; index += 1) {
+  for (let index = 0; index < 1_000; index += 1) {
     authority.observe(`run-${index}`, [`state-${index}`]);
+    authority.release(`run-${index}`);
   }
-  assert.throws(
-    () => authority.observe("run-over-capacity", ["state-over-capacity"]),
-    /capacity_exceeded/u,
-  );
-  assert.equal(authority.get("run-over-capacity"), null);
+  authority.observe("run-after-terminals", ["state-after-terminals"]);
+  assert.equal(authority.get("run-after-terminals"), "state-after-terminals");
 });
 
-function request(runId: string): ModelRequest {
+function request(
+  runId: string,
+  providerTurnState: string | null = null,
+): ModelRequest {
   return {
     schemaVersion: "crewon.model-request.v0",
     runId,
@@ -108,6 +116,7 @@ function request(runId: string): ModelRequest {
     },
     tools: [],
     maxOutputBytes: 1024,
+    ...(providerTurnState === null ? {} : { providerTurnState }),
   };
 }
 

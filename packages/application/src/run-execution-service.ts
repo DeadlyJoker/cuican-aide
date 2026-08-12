@@ -1562,6 +1562,7 @@ export class RunExecutionService {
     claim: WorkItemClaim,
     attempt: RunAttemptIdentity,
     checkpointDigest: string | null = null,
+    control: Readonly<{ providerTurnState: string | null }> | null = null,
   ): Promise<RunAttemptTransitionResult> {
     const state = await this.loadRun(claim);
     try {
@@ -1573,6 +1574,9 @@ export class RunExecutionService {
           ...attempt,
           finishedAt: this.#now(),
           checkpointDigest,
+          ...(control === null
+            ? {}
+            : { providerTurnState: control.providerTurnState }),
         },
       });
     } catch (error) {
@@ -1636,6 +1640,14 @@ export class RunExecutionService {
       );
     }
     return checkpoint;
+  }
+
+  async loadRunProviderTurnState(claim: WorkItemClaim): Promise<string | null> {
+    const state = await this.loadRun(claim);
+    return await this.#store.loadRunProviderTurnState({
+      tenantId: state.tenantId,
+      runId: state.runId,
+    });
   }
 
   async loadThreadContinuation(
@@ -1725,6 +1737,7 @@ export class RunExecutionService {
       }>;
       latestUsage: ThreadModelState["latestUsage"];
       checkpoint: import("@crewon/contracts").ProviderCheckpoint | null;
+      providerTurnState: string | null;
     }>,
   ): Promise<CommitAssistantSampleContinuationResult> {
     requirePositiveInteger(input.sampleIndex, "assistant_sample_index_invalid");
@@ -1888,6 +1901,7 @@ export class RunExecutionService {
         attempt: {
           ...attempt,
           finishedAt: occurredAt,
+          providerTurnState: input.providerTurnState ?? null,
           checkpointDigest:
             checkpoint === null
               ? null
@@ -1982,6 +1996,7 @@ export class RunExecutionService {
       identity: Omit<ThreadContinuationLocator, "tenantId" | "threadId">;
       contextRevision: string;
       checkpoint: import("@crewon/contracts").ProviderCheckpoint | null;
+      providerTurnState: string | null;
       segment: Readonly<{
         segmentId: string;
         checkpointSequence: number | null;
@@ -2319,6 +2334,7 @@ export class RunExecutionService {
           ...attempt,
           finishedAt: occurredAt,
           checkpointDigest,
+          providerTurnState: continuation.providerTurnState,
         },
       });
     } catch (error) {

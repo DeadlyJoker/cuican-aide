@@ -2381,6 +2381,15 @@ export class InMemoryRunStore implements DomainStore {
     );
   }
 
+  async loadRunProviderTurnState(
+    locator: Readonly<{
+      tenantId: string;
+      runId: string;
+    }>,
+  ) {
+    return this.#executionAuthority.loadRunProviderTurnState(locator);
+  }
+
   async beginRunAttempt(
     input: BeginRunAttemptInput,
   ): Promise<BeginRunAttemptResult> {

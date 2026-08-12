@@ -2,10 +2,14 @@ import { protocolError } from "./responses-errors.ts";
 
 export const TURN_STATE_HEADER = "x-codex-turn-state";
 export const MAX_TURN_STATE_BYTES = 4 * 1024;
-export const MAX_TURN_STATE_RUNS = 64;
-
 export class ResponsesTurnStateAuthority {
   readonly #states = new Map<string, string>();
+
+  seed(runId: string, value: string | null): void {
+    if (value === null) return;
+    const parsed = parseTurnStateHeader([value]);
+    if (parsed !== null) this.#states.set(runId, parsed);
+  }
 
   get(runId: string): string | null {
     return this.#states.get(runId) ?? null;
@@ -18,10 +22,11 @@ export class ResponsesTurnStateAuthority {
     if (current !== undefined && current !== value) {
       throw protocolError("responses_turn_state_conflict");
     }
-    if (current === undefined && this.#states.size >= MAX_TURN_STATE_RUNS) {
-      throw protocolError("responses_turn_state_capacity_exceeded");
-    }
     this.#states.set(runId, value);
+  }
+
+  release(runId: string): void {
+    this.#states.delete(runId);
   }
 }
 
