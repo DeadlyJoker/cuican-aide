@@ -56,7 +56,7 @@ test("production composition rejects missing security authorities before opening
   );
 });
 
-test("production keeps Workflow start disabled without compound Store admission", () => {
+test("production keeps Workflow commands disabled without cross-process certification", () => {
   const source = readFileSync(
     new URL("./production-composition.ts", import.meta.url),
     "utf8",

@@ -212,10 +212,10 @@ async function composeProductionControlApi(
       approvals,
       agentVersions,
       workflowVersions,
-      // Production Workflow start remains fail closed until the Store exposes
-      // one compound admission transaction that also revalidates the active
-      // release and every referenced deployment. Workflow execution schema
-      // migration alone is not admission authority.
+      // PostgreSQL Workflow commands remain fail closed until the Control and
+      // Worker processes receive one explicit, complete cross-process
+      // certification. SQLite admission completeness does not certify the
+      // PostgreSQL or packaged composition.
       workflowRuns:
         selectWorkflowRunStartFactory({ status: "disabled" })?.() ?? null,
       workflowHumanGates: null,
