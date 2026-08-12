@@ -6,6 +6,7 @@ import type { WorkflowContentDigester } from "@crewon/domain";
 import type { PoolClient } from "pg";
 
 import { PostgresAttemptStore } from "./postgres-attempt-store.ts";
+import { settlePostgresWorkflowNode } from "./postgres-workflow-node-settlement.ts";
 import {
   admitPostgresWorkflowNodeWork,
   schedulePostgresWorkflowNodes,
@@ -94,9 +95,16 @@ export class PostgresWorkflowRunCompositionStore
   }
 
   async settleWorkflowNode(
-    _input: Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0],
+    input: Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0],
   ): ReturnType<WorkflowRunCompositionStore["settleWorkflowNode"]> {
-    throw new RunStoreError("workflow_composition_contract_incomplete");
+    return this.#transaction(input, (client) =>
+      settlePostgresWorkflowNode(
+        client,
+        this.schemaSql(),
+        input,
+        this.#digester,
+      ),
+    );
   }
 
   async settleWorkflowHumanGate(
