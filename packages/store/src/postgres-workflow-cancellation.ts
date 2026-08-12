@@ -239,7 +239,9 @@ async function cancelRunningNode(
     attempt.workItemId !== input.lease.workItemId ||
     attempt.leaseEpoch !== input.lease.leaseEpoch ||
     !["prepared", "possiblySent", "responseObserved"].includes(dispatch.status) ||
-    dispatch.responseCheckpointDigest !== null
+    (dispatch.status === "responseObserved"
+      ? dispatch.responseCheckpointDigest === null
+      : dispatch.responseCheckpointDigest !== null)
   )
     throw new RunStoreError("workflow_cancellation_reconciliation_required");
   if (dispatch.status === "possiblySent" || dispatch.status === "responseObserved") {

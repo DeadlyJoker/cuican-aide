@@ -1382,6 +1382,91 @@ if (postgresUrl === undefined) {
       await store.close();
     }
   });
+
+  test("PostgreSQL canceled reconciliation rejects a late response outcome", async () => {
+    const schema = `workflow_cancel_late_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    const store = await PostgresWorkflowRunCompositionStore.open({ pool, schema, digester });
+    try {
+      await seedPostgresComposition(pool, schema);
+      const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+        lease, binding, schedulerOperationId: "schedule-fanout-1",
+        workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+      const work = scheduled.nodeWorkItems[0]!;
+      await pool.query(`UPDATE ${schema}.work_items SET status='leased',lease_owner_id='node-worker',
+        lease_id='node-lease',lease_epoch=1,lease_expires_at=clock_timestamp()+interval '1 minute'
+        WHERE work_item_id=$1`, [work.workItemId]);
+      const nodeLease = { workItemId: work.workItemId, ownerId: "node-worker",
+        leaseId: "node-lease", leaseEpoch: 1 } as const;
+      const admitted = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, binding, nodeId: work.nodeId, claimId: work.claimId,
+        claimEpoch: work.claimEpoch, schedulerOperationId: "schedule-fanout-1",
+        admissionOperationId: "admit-late", attemptLeaseDurationMs: 30_000 });
+      const attempt = admitted.admission!.attempt;
+      const prepared = await store.prepareModelDispatch({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, attempt: { stepId: attempt.stepId, attemptId: attempt.attemptId },
+        operationId: "dispatch-late", requestSequence: 1, operation: "dispatch",
+        requestDigest: digester.sha256("request"), provider: { agentVersionId: "agent-v1",
+          adapterName: "responses", adapterVersion: "1", modelId: "model-1" },
+        preparedAt: "2026-08-13T00:00:00.000Z" });
+      const sent = await store.markModelDispatchPossiblySent({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, attempt: prepared, operationId: prepared.operationId, requestSequence: 1,
+        expectedRevision: prepared.revision, transitionedAt: "2026-08-13T00:00:01.000Z" });
+      const observed = await store.observeModelDispatchResponse({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, attempt: prepared, operationId: prepared.operationId, requestSequence: 1,
+        expectedRevision: sent.revision, checkpointDigest: digester.sha256("checkpoint"),
+        transitionedAt: "2026-08-13T00:00:02.000Z" });
+      const authority = { tenantId: "tenant-1", runId: "run-1", workItemId: work.workItemId,
+        leaseEpoch: 1, nodeId: work.nodeId, nodeKind: "agent" as const,
+        claimId: work.claimId, claimEpoch: work.claimEpoch, agentVersionId: "agent-v1",
+        attempt: { stepId: attempt.stepId, attemptId: attempt.attemptId } };
+      const evidence = createWorkflowNodeTerminalEvidence({ workflow, nodeId: work.nodeId,
+        outcome: { status: "completed", value: {} }, digester });
+      const candidate = { schemaVersion: "crewon.workflow-node-terminal-candidate.v0",
+        candidateId: digester.sha256("late-candidate"), segmentId: "segment-late", evidence,
+        dispatchTerminalOutcome: { kind: "completed", code: null,
+          certainty: "responseObserved" } } as const;
+      const checkpoint = { schemaVersion: "crewon.workflow-node-continuation.v0", authority,
+        segmentId: "segment-late", modelSampleIndex: 1, toolRoundsConsumed: 0,
+        providerCheckpoint: null, providerTurnState: null,
+        activeDispatch: { operationId: observed.operationId, requestSequence: 1,
+          expectedRevision: observed.revision, status: "responseObserved" },
+        terminalCandidate: candidate, history: [], revision: 1,
+        updatedAt: "2026-08-13T00:00:03.000Z" };
+      await pool.query(`INSERT INTO ${schema}.workflow_node_continuations
+        (tenant_id,run_id,node_id,attempt_id,revision,state_json,updated_at)
+        VALUES ('tenant-1','run-1',$1,$2,1,$3,$4)`,
+        [work.nodeId, attempt.attemptId, checkpoint, checkpoint.updatedAt]);
+      const run = await pool.query<{ state_json: Record<string, unknown> }>(
+        `SELECT state_json FROM ${schema}.run_snapshots WHERE run_id='run-1'`);
+      await pool.query(`UPDATE ${schema}.run_snapshots SET state_json=$1 WHERE run_id='run-1'`,
+        [{ ...run.rows[0]!.state_json, cancelRequested: true }]);
+      const canceled = await store.cancelWorkflowExecution({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, binding, operationId: "cancel-late", reasonCode: "user_requested" });
+      await pool.query(`UPDATE ${schema}.work_items SET status='leased',
+        lease_owner_id='reconcile-worker',lease_id='reconcile-lease',lease_epoch=1,
+        lease_expires_at=clock_timestamp()+interval '1 minute' WHERE work_item_id=$1`,
+        [canceled.handoff.nextWorkItemId]);
+      const reconciled = await store.reconcileWorkflowNode({ tenantId: "tenant-1", runId: "run-1",
+        lease: { workItemId: canceled.handoff.nextWorkItemId!, ownerId: "reconcile-worker",
+          leaseId: "reconcile-lease", leaseEpoch: 1 }, binding, nodeId: work.nodeId,
+        claimId: work.claimId, claimEpoch: work.claimEpoch,
+        reconciliationOperationId: "cancel-late:agent" });
+      assert.deepEqual([reconciled.disposition, reconciled.evidenceStatus,
+        reconciled.runDisposition, reconciled.execution.status],
+        ["settled", "responseObserved", "terminalConverged", "canceled"]);
+      const durable = await pool.query(`SELECT
+        (SELECT state_json->>'status' FROM ${schema}.run_snapshots WHERE run_id='run-1') run_status,
+        (SELECT status FROM ${schema}.run_attempts WHERE attempt_id=$1) attempt_status,
+        (SELECT status FROM ${schema}.model_dispatch_receipts WHERE operation_id='dispatch-late') dispatch_status`,
+        [attempt.attemptId]);
+      assert.deepEqual(durable.rows[0], { run_status: "canceled",
+        attempt_status: "canceled", dispatch_status: "terminal" });
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await store.close();
+    }
+  });
 }
 
 async function seedPostgresComposition(
