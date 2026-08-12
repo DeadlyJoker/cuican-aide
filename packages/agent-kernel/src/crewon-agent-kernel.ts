@@ -27,6 +27,7 @@ import {
   type ModelTransportEvent,
   type ModelTransportPort,
 } from "./model-transport-port.ts";
+import { modelRequestDispatchEvidence } from "./model-request-evidence.ts";
 
 const MAX_CONTEXT_MESSAGES = 256;
 const MAX_CONTEXT_BYTES = 512 * 1024;
@@ -46,6 +47,9 @@ You are in Plan mode for this Run. Investigate with read-only tools only. Do not
 </collaboration_mode>`;
 
 export class CrewONAgentKernel implements AgentKernelPort {
+  get supportsModelDispatchEvidence(): boolean {
+    return this.#transport.supportsModelDispatchEvidence === true;
+  }
   readonly #transport: ModelTransportPort;
   readonly #instructions: string | null;
   readonly #toolDefinitions: readonly ToolDefinition[];
@@ -172,6 +176,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
       }> = { failed: false, value: undefined };
       let createdCheckpoint: ProviderCheckpoint | null = null;
       let retries = 0;
+      let requestSequence = 0;
       while (true) {
         let output = "";
         let reasoningObserved = false;
@@ -181,8 +186,18 @@ export class CrewONAgentKernel implements AgentKernelPort {
         const completedItems: ModelInputItem[] = [];
         const toolCalls: ObservedToolCall[] = [];
         try {
+          const dispatchEvidence = modelRequestDispatchEvidence(
+            request,
+            (requestSequence += 1),
+            this.modelIdentity,
+          );
+          await options?.controlSink?.modelRequestPrepared?.(dispatchEvidence);
           for await (const event of this.#transport.stream(request, signal, {
+            dispatchEvidence,
             controlSink: {
+              dispatchBoundaryCrossed: async (evidence) => {
+                await options?.controlSink?.dispatchBoundaryCrossed?.(evidence);
+              },
               providerTurnStateObserved: async (providerTurnState) => {
                 let validated: string | null;
                 try {
@@ -679,15 +694,15 @@ function continueFromProviderCheckpoint(
   request: ModelRequest,
   checkpoint: ProviderCheckpoint,
 ): ModelRequest {
+  const { reconcileCheckpoint: _reconcileCheckpoint, ...base } = request;
   return {
-    ...request,
+    ...base,
     input: {
       strategy: "providerCheckpoint",
       checkpoint: structuredClone(checkpoint),
       items: request.input.items,
       newHistoryStartIndex: request.input.items.length,
     },
-    reconcileCheckpoint: undefined,
   };
 }
 

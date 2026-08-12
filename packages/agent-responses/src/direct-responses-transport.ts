@@ -70,6 +70,7 @@ export type ResponsesTransportIdentity = Readonly<{
 }>;
 
 export class DirectResponsesTransport implements ModelTransportPort {
+  readonly supportsModelDispatchEvidence = true;
   get supportsResponseRetrieve(): boolean {
     return this.#storeResponses;
   }
@@ -180,6 +181,19 @@ export class DirectResponsesTransport implements ModelTransportPort {
       value: undefined,
     };
     try {
+      if (options?.controlSink?.dispatchBoundaryCrossed !== undefined) {
+        if (options.dispatchEvidence === undefined) {
+          throw protocolError("model_dispatch_evidence_missing");
+        }
+        try {
+          await options.controlSink.dispatchBoundaryCrossed(
+            options.dispatchEvidence,
+          );
+        } catch (error) {
+          controlSinkFailure = { failed: true, value: error };
+          throw error;
+        }
+      }
       const response = await this.#fetch(this.#endpoint, {
         method: "POST",
         headers: responsesHeaders(

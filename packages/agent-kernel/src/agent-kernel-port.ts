@@ -166,6 +166,7 @@ export type KernelAgentEvent =
  * `segment.completed`; that is the durable Tool boundary owned by the Worker.
  */
 export interface AgentKernelPort {
+  readonly supportsModelDispatchEvidence?: boolean;
   readonly modelIdentity: Readonly<{
     adapterName: string;
     adapterVersion: string;
@@ -181,6 +182,12 @@ export interface AgentKernelPort {
 /** Private control sink that is never projected into canonical Agent events. */
 export interface AgentSegmentControlSink {
   providerTurnStateObserved(providerTurnState: string): Promise<void>;
+  modelRequestPrepared?(
+    evidence: import("./model-request-evidence.ts").ModelRequestDispatchEvidence,
+  ): Promise<void>;
+  dispatchBoundaryCrossed?(
+    evidence: import("./model-request-evidence.ts").ModelRequestDispatchEvidence,
+  ): Promise<void>;
 }
 
 export type AgentSegmentRunOptions = Readonly<{

@@ -2,6 +2,7 @@ export * from "./execution-lifecycle.ts";
 export * from "./artifact.ts";
 export * from "./automation.ts";
 export * from "./model-history.ts";
+export * from "./model-dispatch-receipt.ts";
 export * from "./proposed-plan.ts";
 export * from "./provider-turn-state.ts";
 export * from "./rate-limit-snapshot.ts";

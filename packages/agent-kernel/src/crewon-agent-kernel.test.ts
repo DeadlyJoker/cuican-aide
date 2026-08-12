@@ -1577,6 +1577,36 @@ test("rethrows a null private control sink failure without sampling retry", asyn
   assert.equal(streams, 1);
 });
 
+test("replays the same durable model operation identity across runSegment restart", async () => {
+  const prepared: import("./model-request-evidence.ts").ModelRequestDispatchEvidence[] =
+    [];
+  const transport: ModelTransportPort = {
+    adapterName: "responses",
+    adapterVersion: "1",
+    modelId: "provider-model",
+    supportsModelDispatchEvidence: true,
+    async *stream() {
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const kernel = new CrewONAgentKernel({ transport });
+  for (let restart = 0; restart < 2; restart += 1) {
+    await collect(
+      kernel.runSegment(segmentContract(), new AbortController().signal, {
+        controlSink: {
+          providerTurnStateObserved: async () => undefined,
+          modelRequestPrepared: async (evidence) => {
+            prepared.push(evidence);
+          },
+        },
+      }),
+    );
+  }
+  assert.equal(prepared.length, 2);
+  assert.deepEqual(prepared[1], prepared[0]);
+  assert.equal(prepared[0]?.operationId, "segment-1:request:1");
+});
+
 function segmentContract() {
   return {
     schemaVersion: "crewon.agent-segment.v0",
