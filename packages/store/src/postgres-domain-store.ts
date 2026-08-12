@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import {
   RunStoreError,
   type ActivateAgentVersionReleaseResult,
@@ -24,6 +26,7 @@ import {
   type PrepareModelProviderSettingsInput,
   type PrepareModelProviderSettingsResult,
   type DomainStore,
+  type WorkflowRuntimeStore,
   type CommitRunInput,
   type CommitAutomationCreateInput,
   type CommitAutomationInvocationInput,
@@ -73,10 +76,7 @@ import {
   POSTGRES_AGENT_VERSION_SCHEMA_VERSION,
   postgresAgentVersionSchemaSql,
 } from "./postgres-agent-version-schema.ts";
-import {
-  lockPostgresRunCommit,
-  PostgresExecutionStore,
-} from "./postgres-execution-store.ts";
+import { lockPostgresRunCommit } from "./postgres-execution-store.ts";
 import {
   insertPostgresToolApproval,
   loadLatestPostgresToolApprovalForRun,
@@ -150,12 +150,21 @@ import {
 } from "./agent-version-store-invariants.ts";
 import type { WorkflowContentDigester } from "@crewon/domain";
 import { PostgresWorkflowVersionStore } from "./workflow-version-store.ts";
+import { PostgresWorkflowRunCompositionStore } from "./postgres-workflow-run-composition-store.ts";
+
+const workflowDigester: WorkflowContentDigester = {
+  sha256: (value) =>
+    `sha256:${createHash("sha256").update(value).digest("hex")}`,
+};
 
 /** Complete PostgreSQL domain authority for Control API and Runtime Workers. */
 export class PostgresDomainStore
-  extends PostgresExecutionStore
-  implements DomainStore
+  extends PostgresWorkflowRunCompositionStore
+  implements DomainStore, WorkflowRuntimeStore
 {
+  constructor(options: PostgresThreadStoreOptions) {
+    super({ ...options, digester: workflowDigester });
+  }
   workflowVersionStore(
     digester: WorkflowContentDigester,
   ): PostgresWorkflowVersionStore {

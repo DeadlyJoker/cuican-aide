@@ -6,11 +6,12 @@ import {
   type WorkflowNodeContinuationStore,
   type WorkflowRunAdmissionStore,
   type WorkflowRunCompositionStore,
+  type WorkflowRuntimeStore,
 } from "@crewon/application";
 import type { WorkflowContentDigester } from "@crewon/domain";
 import type { PoolClient } from "pg";
 
-import { PostgresAttemptStore } from "./postgres-attempt-store.ts";
+import { PostgresExecutionStore } from "./postgres-execution-store.ts";
 import {
   loadPostgresModelDispatchReceipt,
   migratePostgresModelDispatchEvidence,
@@ -55,8 +56,9 @@ export type PostgresWorkflowRunCompositionStoreOptions =
 
 /** PostgreSQL production composition authority with row and advisory fences. */
 export class PostgresWorkflowRunCompositionStore
-  extends PostgresAttemptStore
+  extends PostgresExecutionStore
   implements
+    WorkflowRuntimeStore,
     WorkflowRunCompositionStore,
     WorkflowRunAdmissionStore,
     ModelDispatchEvidenceStore
@@ -101,6 +103,19 @@ export class PostgresWorkflowRunCompositionStore
     } finally {
       client.release();
     }
+  }
+
+  async loadWorkflowExecution(input: { tenantId: string; runId: string }) {
+    this.assertOpen();
+    const result = await this.pool.query<{ state_json: unknown }>(
+      `SELECT state_json FROM ${this.schemaSql()}.workflow_executions
+       WHERE tenant_id=$1 AND run_id=$2`,
+      [input.tenantId, input.runId],
+    );
+    const row = result.rows[0];
+    return row === undefined
+      ? null
+      : decodeWorkflowExecutionState(row.state_json);
   }
 
   async scheduleWorkflowNodes(
