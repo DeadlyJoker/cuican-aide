@@ -637,14 +637,19 @@ async function validateScheduleReplay(
     input,
     digester,
   );
-  validateWorkflowExecutionState(result.execution);
-  assertExecutionBinding(
-    result.execution,
-    input.tenantId,
-    input.runId,
-    input.binding,
-    workflow,
-  );
+  try {
+    validateWorkflowExecutionState(result.execution);
+    assertExecutionBinding(
+      result.execution,
+      input.tenantId,
+      input.runId,
+      input.binding,
+      workflow,
+    );
+  } catch (error) {
+    if (error instanceof RunStoreError) replayCorrupt();
+    throw error;
+  }
   const current = await loadPostgresWorkflowExecution(
     client,
     schema,

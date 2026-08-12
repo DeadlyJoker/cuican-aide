@@ -58,6 +58,10 @@ export function decodePostgresWorkItem(row: PostgresQueueItemRow): WorkItem {
       ? "goalContinuation"
       : value.payload.trigger === "goalActivation"
         ? "goalActivation"
+        : value.payload.trigger === "automationInvocation"
+          ? "automationInvocation"
+          : value.payload.trigger === "workflowScheduler"
+            ? "workflowScheduler"
         : value.payload.trigger === "manualCompaction"
           ? "manualCompaction"
           : "default",

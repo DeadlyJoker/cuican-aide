@@ -369,10 +369,12 @@ if (postgresUrl === undefined) {
       );
       const execution = executionRow.rows[0]!.state_json as {
         revision: number;
+        status: string;
         nodes: Array<Record<string, unknown>>;
         updatedAt: string;
       };
       execution.revision += 1;
+      execution.status = "running";
       execution.updatedAt = "2026-08-12T00:01:00.000Z";
       execution.nodes = execution.nodes.map((node) =>
         node.claimId === null
@@ -381,6 +383,8 @@ if (postgresUrl === undefined) {
               ...node,
               status: "unknown",
               leaseExpiresAt: null,
+              resultDigest: null,
+              failureCode: null,
             },
       );
       await pool.query(

@@ -52,13 +52,13 @@ export class PostgresWorkflowRunCompositionStore
     await super.migrate();
     const client = await this.pool.connect();
     try {
-      await migratePostgresWorkflowVersions(client, this.schemaSql());
+      await migratePostgresWorkflowVersions(client, this.schema);
       await client.query("BEGIN");
       await client.query(
         "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
         [`crewon:${this.schema}:workflow-composition`],
       );
-      await migratePostgresWorkflowExecutions(client, this.schemaSql());
+      await migratePostgresWorkflowExecutions(client, this.schema);
       await client.query("COMMIT");
     } catch (error) {
       await rollbackPostgres(client);
