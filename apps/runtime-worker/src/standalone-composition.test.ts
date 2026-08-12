@@ -17,7 +17,9 @@ import { SqliteRunStore } from "@crewon/store";
 import {
   compileRuntimeAgentVersion,
   createStandaloneRuntimeWorker,
+  WORKFLOW_RUNTIME_CAPABILITIES,
   type RuntimeWorkerCompositionConfig,
+  type WorkflowRuntimeCompositionCandidate,
 } from "./standalone-composition.ts";
 import { activateStandaloneRuntimeAgentVersionRelease } from "./agent-version-release-composition.ts";
 import { DesktopProviderProbeEgressPolicy } from "./provider-probe-egress.ts";
@@ -203,6 +205,49 @@ test("starts and closes the optional private Provider probe server", async (cont
     /^http:\/\/127\.0\.0\.1:\d+$/u,
   );
   await runtime.close();
+});
+
+test("requires exact explicit Workflow certification and closes rejected resources", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const config = runtimeConfig();
+  await activateRelease(databasePath, config);
+  let closes = 0;
+  await assert.rejects(
+    createStandaloneRuntimeWorker({
+      ...config,
+      databasePath,
+      scanIntervalMs: null,
+      workflowComposition: workflowCandidate(
+        [...WORKFLOW_RUNTIME_CAPABILITIES, "ambientCapability"] as never,
+        () => {
+          closes += 1;
+        },
+      ),
+    }),
+    /workflow_runtime_composition_not_certified/,
+  );
+  assert.equal(closes, 1);
+});
+
+test("closes an explicitly certified Workflow candidate without changing ordinary startup", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const config = runtimeConfig();
+  await activateRelease(databasePath, config);
+  let closes = 0;
+  const runtime = await createStandaloneRuntimeWorker({
+    ...config,
+    databasePath,
+    scanIntervalMs: null,
+    workflowComposition: workflowCandidate(
+      WORKFLOW_RUNTIME_CAPABILITIES,
+      () => {
+        closes += 1;
+      },
+    ),
+  });
+  assert.equal(runtime.worker.lastOutcome(), null);
+  await runtime.close();
+  assert.equal(closes, 1);
 });
 
 test("starts the optional loopback Workspace server and closes its Gateway client", async (context) => {
@@ -416,6 +461,24 @@ async function activateRelease(
     clock: { now: () => "2026-08-09T00:00:00Z" },
     activationId: "activation-standalone-test",
   });
+}
+
+function workflowCandidate(
+  capabilities: WorkflowRuntimeCompositionCandidate["certification"]["capabilities"],
+  close: () => void,
+): WorkflowRuntimeCompositionCandidate {
+  return {
+    certification: {
+      schemaVersion: "crewon.workflow-runtime-certification.v0",
+      capabilities,
+    },
+    versions: {} as never,
+    composition: {} as never,
+    modelDispatchEvidence: {} as never,
+    async close() {
+      close();
+    },
+  };
 }
 
 function temporaryDatabasePath(context: TestContext): string {

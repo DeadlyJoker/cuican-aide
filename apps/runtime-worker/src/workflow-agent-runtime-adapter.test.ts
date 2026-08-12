@@ -163,6 +163,7 @@ test("shared engine consumes the supplied attempt and actual value without begin
   const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
     execution,
     store,
+    dispatchEvidence: store,
     leaseDurationMs: 30_000,
   });
   const node = {
@@ -317,26 +318,28 @@ test("workflow heartbeat failure aborts a stalled segment without becoming cance
   assert.equal(renewals, 1, "failed heartbeat timer must be closed");
 });
 
-test("workflow Direct dispatch fails closed before kernel when evidence Store is missing", async () => {
+test("workflow Direct dispatch fails closed before a kernel without evidence capability", async () => {
   let kernelCalls = 0;
   const dependencies = workflowEngineDependencies({
     loadRun: async () => ({ cancelRequested: false }),
     renew: async () => undefined,
   });
-  const store = dependencies.store as unknown as Record<string, unknown>;
-  delete store.prepareModelDispatch;
   const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
     execution: dependencies.execution,
-    store: store as never,
+    store: dependencies.store,
+    dispatchEvidence: dependencies.dispatchEvidence,
     leaseDurationMs: 30_000,
   });
+  const input = workflowEngineInput(async function* () {
+    kernelCalls += 1;
+  });
+  const mutable = input as unknown as {
+    runtime: { kernel: { supportsModelDispatchEvidence: boolean } };
+  };
+  mutable.runtime.kernel.supportsModelDispatchEvidence = false;
   await assert.rejects(
-    engine.execute(
-      workflowEngineInput(async function* () {
-        kernelCalls += 1;
-      }),
-    ),
-    /model_dispatch_evidence_store_missing/,
+    engine.execute(input),
+    /model_dispatch_evidence_unsupported/,
   );
   assert.equal(kernelCalls, 0);
 });
@@ -380,6 +383,7 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
   const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
     execution,
     store: dependencies.store,
+    dispatchEvidence: dependencies.store as never,
     leaseDurationMs: 30_000,
   });
   const input = workflowEngineInput(async function* (contract: unknown) {
@@ -593,6 +597,11 @@ function workflowEngineDependencies(input: {
       async markModelDispatchPossiblySent() {},
       async loadModelDispatchReceipt() {},
     } as never,
+    dispatchEvidence: {
+      async prepareModelDispatch() {},
+      async markModelDispatchPossiblySent() {},
+      async loadModelDispatchReceipt() {},
+    } as never,
   };
 }
 
@@ -762,6 +771,7 @@ async function runToolLimitScenario(
   const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
     execution,
     store: dependencies.store,
+    dispatchEvidence: dependencies.store as never,
     leaseDurationMs: 30_000,
   });
   const input = workflowEngineInput(async function* () {

@@ -13,7 +13,11 @@ import {
   type ArtifactStorePort,
   type DomainStore,
   type ModelProviderSettingsStore,
+  type ModelDispatchEvidenceStore,
   type RunRoute,
+  type WorkflowExecutionStore,
+  type WorkflowRunCompositionStore,
+  type WorkflowVersionStore,
 } from "@crewon/application";
 import {
   PostgresDomainStore,
@@ -77,6 +81,11 @@ import {
   type NativeWorkspaceReadCatalog,
   type RuntimeWorkspaceReadFileConfig,
 } from "./runtime-workspace-read-composition.ts";
+import {
+  SharedWorkflowAdmittedAgentExecutionEngine,
+  WorkflowAgentRuntimeAdapter,
+} from "./workflow-agent-runtime-adapter.ts";
+import { ProductionWorkflowRuntimeDispatcher } from "./workflow-runtime-dispatcher.ts";
 
 export { compileRuntimeAgentVersion } from "./agent-version-release.ts";
 
@@ -134,6 +143,28 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   }>;
   workspaceReadFile?: RuntimeWorkspaceReadFileConfig;
   nativeWorkspaceReadCatalog?: NativeWorkspaceReadCatalog;
+  workflowComposition?: WorkflowRuntimeCompositionCandidate;
+}>;
+
+export const WORKFLOW_RUNTIME_CAPABILITIES = [
+  "receiptFirstAdmission",
+  "exactNodeRuntimeAuthority",
+  "durableModelDispatchEvidence",
+  "atomicNodeSettlement",
+  "durableHumanGate",
+  "evidenceBasedReconciliation",
+  "atomicCancellation",
+] as const;
+
+export type WorkflowRuntimeCompositionCandidate = Readonly<{
+  certification: Readonly<{
+    schemaVersion: "crewon.workflow-runtime-certification.v0";
+    capabilities: typeof WORKFLOW_RUNTIME_CAPABILITIES;
+  }>;
+  versions: WorkflowVersionStore;
+  composition: WorkflowRunCompositionStore & WorkflowExecutionStore;
+  modelDispatchEvidence: ModelDispatchEvidenceStore;
+  close(): Promise<void>;
 }>;
 
 export type StandaloneRuntimeWorkerConfig = RuntimeWorkerCompositionConfig &
@@ -349,12 +380,34 @@ async function composeRuntimeWorker(
       config.agentVersionRuntimeFactory ??
       staticAgentVersionRuntimeFactory(config, toolRuntime),
   });
+  const workflow = certifyWorkflowComposition(config.workflowComposition, store);
   const execution = new RunExecutionService({
     store,
     clock,
     ids,
     digester,
+    ...(workflow === null
+      ? {}
+      : { workflowExecutions: workflow.composition }),
   });
+  const workflowDispatcher =
+    workflow === null
+      ? undefined
+      : new ProductionWorkflowRuntimeDispatcher({
+          versions: workflow.versions,
+          composition: workflow.composition,
+          digester,
+          agent: new WorkflowAgentRuntimeAdapter({
+            runtimes: runtimeResolver,
+            engine: new SharedWorkflowAdmittedAgentExecutionEngine({
+              execution,
+              store,
+              dispatchEvidence: workflow.modelDispatchEvidence,
+              leaseDurationMs: config.leaseDurationMs ?? 30_000,
+            }),
+          }),
+          leaseDurationMs: config.leaseDurationMs ?? 30_000,
+        });
   const worker = new RuntimeWorker(
     {
       store,
@@ -368,6 +421,7 @@ async function composeRuntimeWorker(
         config.modelSwitchCompactionResolver ??
         runtimeResolver.priorModelCompactionResolver(),
       agentVersionRuntimeResolver: runtimeResolver,
+      workflowDispatcher,
       policy,
     },
     {
@@ -472,6 +526,7 @@ async function composeRuntimeWorker(
           config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
           agentVersionRegistry.close(),
           artifactStore?.close() ?? Promise.resolve(),
+          workflow?.close() ?? Promise.resolve(),
           workspaceReadStore?.close() ?? Promise.resolve(),
           store.close(),
         ])),
@@ -484,6 +539,26 @@ async function composeRuntimeWorker(
       }
     },
   };
+}
+
+function certifyWorkflowComposition(
+  candidate: WorkflowRuntimeCompositionCandidate | undefined,
+  store: DomainStore & ModelProviderSettingsStore,
+): WorkflowRuntimeCompositionCandidate | null {
+  if (candidate === undefined) return null;
+  if (
+    candidate.certification.schemaVersion !==
+      "crewon.workflow-runtime-certification.v0" ||
+    candidate.certification.capabilities.length !==
+      WORKFLOW_RUNTIME_CAPABILITIES.length ||
+    candidate.certification.capabilities.some(
+      (capability, index) =>
+        capability !== WORKFLOW_RUNTIME_CAPABILITIES[index],
+    )
+  ) {
+    throw new Error("workflow_runtime_composition_not_certified");
+  }
+  return candidate;
 }
 
 function validateWorkspaceDeployment(
@@ -513,6 +588,7 @@ async function closeStartupResources(
     config.workspacePrivate?.gateway.close() ?? Promise.resolve(),
     config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
     config.artifactStore?.close() ?? Promise.resolve(),
+    config.workflowComposition?.close() ?? Promise.resolve(),
   ]);
 }
 

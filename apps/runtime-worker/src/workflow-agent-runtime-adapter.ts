@@ -64,8 +64,7 @@ export interface WorkflowAdmittedAgentExecutionEngine {
 }
 
 type WorkflowExecutionStore = DomainStore &
-  DurableQueueStore &
-  Partial<ModelDispatchEvidenceStore>;
+  DurableQueueStore;
 
 /** Executes one already-admitted Workflow Agent attempt without owning root Run settlement. */
 export class SharedWorkflowAdmittedAgentExecutionEngine
@@ -73,16 +72,19 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
 {
   readonly #execution: RunExecutionService;
   readonly #store: WorkflowExecutionStore;
+  readonly #dispatchEvidence: ModelDispatchEvidenceStore;
   readonly #leaseDurationMs: number;
   readonly #segments = new AgentSegmentExecutionEngine();
 
   constructor(dependencies: {
     execution: RunExecutionService;
     store: WorkflowExecutionStore;
+    dispatchEvidence: ModelDispatchEvidenceStore;
     leaseDurationMs: number;
   }) {
     this.#execution = dependencies.execution;
     this.#store = dependencies.store;
+    this.#dispatchEvidence = dependencies.dispatchEvidence;
     this.#leaseDurationMs = dependencies.leaseDurationMs;
   }
 
@@ -133,7 +135,10 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       modelSampleIndex === 0
         ? `segment:${authority.attemptId}`
         : `segment:${authority.attemptId}:round:${modelSampleIndex + 1}`;
-    const dispatchStore = modelDispatchStore(runtime, this.#store);
+    if (runtime.kernel.supportsModelDispatchEvidence !== true) {
+      throw new Error("model_dispatch_evidence_unsupported");
+    }
+    const dispatchStore = this.#dispatchEvidence;
     let dispatch: ModelDispatchReceipt | null = null;
     let effectCertainty: WorkflowNodeEffectCertainty = "notSent";
     const controller = new AbortController();
@@ -596,21 +601,6 @@ export class WorkflowAgentRuntimeAdapter implements WorkflowAgentNodePort {
       node: input.node,
     });
   }
-}
-
-function modelDispatchStore(
-  runtime: AgentVersionRuntime,
-  store: WorkflowExecutionStore,
-): ModelDispatchEvidenceStore {
-  if (
-    runtime.kernel.supportsModelDispatchEvidence !== true ||
-    typeof store.prepareModelDispatch !== "function" ||
-    typeof store.markModelDispatchPossiblySent !== "function" ||
-    typeof store.loadModelDispatchReceipt !== "function"
-  ) {
-    throw new Error("model_dispatch_evidence_store_missing");
-  }
-  return store as ModelDispatchEvidenceStore;
 }
 
 function leaseInput(claim: Parameters<WorkflowAgentNodePort["execute"]>[0]["workItemClaim"]) {
