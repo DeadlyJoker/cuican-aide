@@ -36,9 +36,13 @@ export type CommitWorkflowRunStartResult = Readonly<{
  * authority and Run; a fingerprint mismatch conflicts. Otherwise, in one
  * transaction, implementations must validate the tenant/space Thread, load
  * the immutable tenant WorkflowVersion, resolve the server-owned execution
- * route, invoke `prepare` exactly once, and commit the receipt, Run event,
+ * route, invoke `prepare` exactly once while the transaction remains open,
+ * and commit the receipt, Run event,
  * outbox message, and `run.execute` WorkItem. Implementations must fail closed
- * rather than invoke `prepare` when any scope or authority check fails.
+ * rather than invoke `prepare` when any scope or authority check fails. The
+ * callback parses and digest-verifies `definitionJson` and validates input
+ * against its frozen `inputSchema`; an exception from it must roll back every
+ * Run, receipt, outbox, and WorkItem write.
  */
 export interface WorkflowRunAdmissionStore {
   commitWorkflowRunStart(
