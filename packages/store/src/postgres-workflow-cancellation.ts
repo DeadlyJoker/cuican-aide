@@ -238,11 +238,11 @@ async function cancelRunningNode(
     attempt.status !== "running" ||
     attempt.workItemId !== input.lease.workItemId ||
     attempt.leaseEpoch !== input.lease.leaseEpoch ||
-    !["prepared", "possiblySent"].includes(dispatch.status) ||
+    !["prepared", "possiblySent", "responseObserved"].includes(dispatch.status) ||
     dispatch.responseCheckpointDigest !== null
   )
     throw new RunStoreError("workflow_cancellation_reconciliation_required");
-  if (dispatch.status === "possiblySent") {
+  if (dispatch.status === "possiblySent" || dispatch.status === "responseObserved") {
     const reconciliationOperationId = `${input.operationId}:${node.nodeId}`;
     const reconciliationWorkItemId = workflowAuthorityId(
       "reconcile",

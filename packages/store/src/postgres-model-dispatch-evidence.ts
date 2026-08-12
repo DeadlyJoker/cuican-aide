@@ -246,6 +246,68 @@ export async function transitionPostgresModelDispatch(
   return next;
 }
 
+export async function terminatePostgresModelDispatchForAttempt(
+  client: PoolClient,
+  schema: string,
+  input: TerminateModelDispatchInput &
+    Readonly<{
+      attemptWorkItemId: string;
+      attemptLeaseEpoch: number;
+    }>,
+): Promise<ModelDispatchReceipt> {
+  const locator = {
+    tenantId: input.tenantId,
+    runId: input.runId,
+    ...input.attempt,
+    operationId: input.operationId,
+  };
+  const attempt = await loadPostgresRunAttempt(client, schema, locator, true);
+  const current = await loadPostgresModelDispatchReceipt(
+    client,
+    schema,
+    locator,
+    true,
+  );
+  if (
+    attempt === null ||
+    attempt.status !== "running" ||
+    current === null ||
+    attempt.workItemId !== input.attemptWorkItemId ||
+    attempt.leaseEpoch !== input.attemptLeaseEpoch ||
+    current.workItemId !== attempt.workItemId ||
+    current.leaseEpoch !== attempt.leaseEpoch ||
+    current.requestSequence !== input.requestSequence ||
+    current.revision !== input.expectedRevision
+  )
+    throw new RunStoreError("model_dispatch_attempt_fence_conflict");
+  const next = normalize(() =>
+    terminateModelDispatchReceipt(current, {
+      outcome: input.outcome,
+      terminalAt: input.transitionedAt,
+    }),
+  );
+  const updated = await client.query(
+    `UPDATE ${schema}.model_dispatch_receipts SET status=$1,revision=$2,
+     state_json=$3::jsonb,updated_at=$4 WHERE tenant_id=$5 AND run_id=$6
+       AND step_id=$7 AND attempt_id=$8 AND operation_id=$9 AND revision=$10`,
+    [
+      next.status,
+      next.revision,
+      JSON.stringify(next),
+      next.updatedAt,
+      next.tenantId,
+      next.runId,
+      next.stepId,
+      next.attemptId,
+      next.operationId,
+      current.revision,
+    ],
+  );
+  if (updated.rowCount !== 1)
+    throw new RunStoreError("model_dispatch_revision_conflict");
+  return next;
+}
+
 async function requireFencedAttempt(
   client: PoolClient,
   schema: string,

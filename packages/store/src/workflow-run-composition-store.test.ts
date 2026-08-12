@@ -1366,6 +1366,17 @@ if (postgresUrl === undefined) {
       assert.equal(reconciliation.rows[0]?.status, "pending");
       assert.equal(reconciliation.rows[0]?.payload.trigger, "workflowReconcile");
       assert.equal((await store.cancelWorkflowExecution(input)).disposition, "replay");
+      await pool.query(`UPDATE ${schema}.work_items SET status='leased',
+        lease_owner_id='reconcile-worker',lease_id='reconcile-lease',lease_epoch=1,
+        lease_expires_at=clock_timestamp()+interval '1 minute' WHERE work_item_id=$1`,
+        [canceled.handoff.nextWorkItemId]);
+      const reconciled = await store.reconcileWorkflowNode({ tenantId: "tenant-1",
+        runId: "run-1", lease: { workItemId: canceled.handoff.nextWorkItemId!,
+          ownerId: "reconcile-worker", leaseId: "reconcile-lease", leaseEpoch: 1 },
+        binding, nodeId: work.nodeId, claimId: work.claimId, claimEpoch: work.claimEpoch,
+        reconciliationOperationId: "cancel-unknown:agent" });
+      assert.deepEqual([reconciled.disposition, reconciled.evidenceStatus,
+        reconciled.handoff.currentWorkItem], ["retryRequired", "possiblySent", "retained"]);
     } finally {
       await pool.query(`DROP SCHEMA ${schema} CASCADE`);
       await store.close();
