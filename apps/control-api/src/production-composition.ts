@@ -218,6 +218,7 @@ async function composeProductionControlApi(
       // migration alone is not admission authority.
       workflowRuns:
         selectWorkflowRunStartFactory({ status: "disabled" })?.() ?? null,
+      workflowHumanGates: null,
       agentVersionCatalogs,
       artifacts,
       automations,

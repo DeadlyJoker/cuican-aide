@@ -17,6 +17,7 @@ import type {
   WorkspaceOperationQueryService,
   WorkflowVersionApplicationService,
   WorkflowRunApplicationService,
+  WorkflowHumanGateApplicationService,
   CommitThreadResult,
   CommitTurnStartResult,
 } from "@crewon/application";
@@ -47,6 +48,7 @@ import {
   parseClearThreadGoalRequest,
   parseCreateRunRequest,
   parseStartWorkflowRunRequest,
+  parseDecideWorkflowHumanGateRequest,
   parseCreateAutomationRequest,
   parseCreateThreadRequest,
   parseDecideToolApprovalRequest,
@@ -96,6 +98,7 @@ import {
   type ListAutomationsResponse,
   type ProbeModelProviderResponse,
   type RunMutationResponse,
+  type WorkflowHumanGateDecisionResponse,
   type RunAutomationNowResponse,
   type StartTurnResponse,
   type ThreadMutationResponse,
@@ -186,6 +189,10 @@ export type ControlApiDependencies = Readonly<{
   agentVersions: AgentVersionApplicationService;
   workflowVersions: WorkflowVersionApplicationService;
   workflowRuns?: Pick<WorkflowRunApplicationService, "startWorkflowRun"> | null;
+  workflowHumanGates?: Pick<
+    WorkflowHumanGateApplicationService,
+    "decide"
+  > | null;
   agentVersionCatalogs: AgentVersionCatalogApplicationService;
   artifacts: ArtifactApplicationService;
   automations: AutomationApplicationService;
@@ -1118,6 +1125,32 @@ export function buildControlApi(
       return reply
         .code(result.run.disposition === "committed" ? 201 : 200)
         .send(response);
+    },
+  );
+
+  app.post<{ Body: unknown }>(
+    "/api/v1/workflow-gates:decide",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const body = parseDecideWorkflowHumanGateRequest(request.body);
+      if (dependencies.workflowHumanGates == null) {
+        throw new WorkspaceControlUnavailableError();
+      }
+      const result = await dependencies.workflowHumanGates.decide(actor, {
+        kind: "workflowHumanGate.decide",
+        idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
+        ...body,
+      });
+      wakeOutbox(dependencies.outboxWakeup);
+      const response: WorkflowHumanGateDecisionResponse = {
+        disposition: result.disposition,
+        runId: result.runId,
+        nodeId: result.nodeId,
+        gateRequestId: result.gateRequestId,
+      };
+      return response;
     },
   );
 

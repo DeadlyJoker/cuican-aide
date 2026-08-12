@@ -1,4 +1,7 @@
-import type { WorkflowRunApplicationService } from "@crewon/application";
+import type {
+  WorkflowHumanGateApplicationService,
+  WorkflowRunApplicationService,
+} from "@crewon/application";
 
 export const WORKFLOW_PRODUCTION_STORE_CAPABILITIES = [
   "startAdmission",
@@ -17,6 +20,10 @@ export type WorkflowRunStartService = Pick<
   WorkflowRunApplicationService,
   "startWorkflowRun"
 >;
+export type WorkflowHumanGateService = Pick<
+  WorkflowHumanGateApplicationService,
+  "decide"
+>;
 
 /**
  * An explicit certification emitted by the future integrated Store/Worker
@@ -30,6 +37,7 @@ export type WorkflowProductionCompositionCandidate = Readonly<{
   modelDispatchEvidence: "durable";
   agentRuntime: "WorkflowAgentRuntimeAdapter";
   createWorkflowRunStartService: () => WorkflowRunStartService;
+  createWorkflowHumanGateService: () => WorkflowHumanGateService;
 }>;
 
 export type WorkflowProductionCompositionInput =
@@ -42,18 +50,32 @@ export type WorkflowProductionCompositionInput =
 export function selectWorkflowRunStartFactory(
   input: WorkflowProductionCompositionInput,
 ): (() => WorkflowRunStartService) | null {
-  if (input.status === "disabled") return null;
-  const capabilities = input.candidate.storeCapabilities;
-  if (
-    capabilities.length !== WORKFLOW_PRODUCTION_STORE_CAPABILITIES.length ||
-    new Set(capabilities).size !== capabilities.length ||
-    !WORKFLOW_PRODUCTION_STORE_CAPABILITIES.every((capability) =>
-      capabilities.includes(capability),
-    ) ||
-    input.candidate.modelDispatchEvidence !== "durable" ||
-    input.candidate.agentRuntime !== "WorkflowAgentRuntimeAdapter"
-  ) {
-    return null;
-  }
+  if (!isComplete(input)) return null;
   return input.candidate.createWorkflowRunStartService;
+}
+
+export function selectWorkflowHumanGateFactory(
+  input: WorkflowProductionCompositionInput,
+): (() => WorkflowHumanGateService) | null {
+  if (!isComplete(input)) return null;
+  return input.candidate.createWorkflowHumanGateService;
+}
+
+function isComplete(
+  input: WorkflowProductionCompositionInput,
+): input is Extract<
+  WorkflowProductionCompositionInput,
+  { status: "candidate" }
+> {
+  if (input.status === "disabled") return false;
+  const capabilities = input.candidate.storeCapabilities;
+  return (
+    capabilities.length === WORKFLOW_PRODUCTION_STORE_CAPABILITIES.length &&
+    new Set(capabilities).size === capabilities.length &&
+    WORKFLOW_PRODUCTION_STORE_CAPABILITIES.every((capability) =>
+      capabilities.includes(capability),
+    ) &&
+    input.candidate.modelDispatchEvidence === "durable" &&
+    input.candidate.agentRuntime === "WorkflowAgentRuntimeAdapter"
+  );
 }

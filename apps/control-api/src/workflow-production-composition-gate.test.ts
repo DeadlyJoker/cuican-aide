@@ -21,6 +21,11 @@ function completeCandidate(): WorkflowProductionCompositionCandidate {
     modelDispatchEvidence: "durable",
     agentRuntime: "WorkflowAgentRuntimeAdapter",
     createWorkflowRunStartService: () => service,
+    createWorkflowHumanGateService: () => ({
+      async decide() {
+        throw new Error("wiring-only fixture");
+      },
+    }),
   };
 }
 

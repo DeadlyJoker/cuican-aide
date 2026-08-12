@@ -99,6 +99,45 @@ test("starts a Workflow Run without client-owned digest or root Agent identity",
   );
 });
 
+test("decides a Workflow Human Gate with only public claim authority", async () => {
+  let request: { input: string; init: RequestInit } | undefined;
+  const response = {
+    disposition: "recorded" as const,
+    runId: "run-1",
+    nodeId: "gate",
+    gateRequestId: "gate-request-1",
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example",
+    csrfToken: "csrf",
+    fetch: async (input, init = {}) => {
+      request = { input: String(input), init };
+      return jsonResponse(200, response);
+    },
+  });
+  const body = {
+    runId: "run-1",
+    nodeId: "gate",
+    claimId: "claim-1",
+    claimEpoch: 1,
+    gateRequestId: "gate-request-1",
+    decision: "approve" as const,
+  };
+  assert.deepEqual(
+    await client.decideWorkflowHumanGate(body, "decision-1"),
+    response,
+  );
+  assert.equal(
+    request?.input,
+    "https://control.example/api/v1/workflow-gates:decide",
+  );
+  assert.deepEqual(JSON.parse(String(request?.init.body)), body);
+  assert.equal(
+    new Headers(request?.init.headers).get("idempotency-key"),
+    "decision-1",
+  );
+});
+
 test("lists bounded WorkflowVersion summaries without definition fields", async () => {
   const summary = {
     workflowId: "workflow-1",

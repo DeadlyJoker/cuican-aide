@@ -9,6 +9,8 @@ import type {
   CompactThreadRequest,
   CreateRunRequest,
   StartWorkflowRunRequest,
+  DecideWorkflowHumanGateRequest,
+  WorkflowHumanGateDecisionResponse,
   CreateThreadRequest,
   DecideToolApprovalRequest,
   DeleteThreadRequest,
@@ -445,6 +447,18 @@ export class ControlApiClient {
       ...options,
       idempotencyKey,
       expectedStatuses: [200, 201],
+    });
+  }
+
+  decideWorkflowHumanGate(
+    body: DecideWorkflowHumanGateRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<WorkflowHumanGateDecisionResponse> {
+    return this.#json("POST", "/api/v1/workflow-gates:decide", body, {
+      ...options,
+      idempotencyKey,
+      expectedStatuses: [200],
     });
   }
 

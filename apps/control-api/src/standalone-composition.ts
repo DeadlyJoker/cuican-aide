@@ -14,6 +14,8 @@ import {
   WorkspaceListApplicationService,
   WorkspaceOperationQueryService,
   WorkflowVersionApplicationService,
+  WorkflowRunApplicationService,
+  WorkflowHumanGateApplicationService,
   type ActorContext,
   type ArtifactStorePort,
   type AutomationStore,
@@ -44,7 +46,11 @@ import {
 } from "./provider-probe-worker-client.ts";
 import { LoopbackRuntimeWorkspaceWorkerClient } from "./workspace-runtime-worker-client.ts";
 import type { ProcessLocalActivationGate } from "./paused-admission.ts";
-import { selectWorkflowRunStartFactory } from "./workflow-production-composition-gate.ts";
+import {
+  selectWorkflowHumanGateFactory,
+  selectWorkflowRunStartFactory,
+  type WorkflowProductionCompositionCandidate,
+} from "./workflow-production-composition-gate.ts";
 
 type ControlApiCompositionConfig = Readonly<{
   actor: ActorContext;
@@ -58,6 +64,14 @@ type ControlApiCompositionConfig = Readonly<{
   artifactEncryptionKeyId: string;
   providerProbeWorkers?: TenantProviderProbeWorkerRegistry;
   activationGate?: ProcessLocalActivationGate;
+  workflowComposition?: Readonly<{
+    certification: Omit<
+      WorkflowProductionCompositionCandidate,
+      | "backend"
+      | "createWorkflowRunStartService"
+      | "createWorkflowHumanGateService"
+    >;
+  }>;
   workspaceWorker?: Readonly<{
     origin: string;
     token: string;
@@ -88,7 +102,9 @@ export type StandaloneControlApiRuntime = Readonly<{
 export function createStandaloneControlApi(
   config: StandaloneControlApiConfig,
 ): StandaloneControlApiRuntime {
-  const store = new SqliteRunStore(config.databasePath);
+  const store = new SqliteRunStore(config.databasePath, {
+    workflowDigester: new NodeSha256ContentDigester(),
+  });
   return composeControlApi(store, config);
 }
 
@@ -247,6 +263,45 @@ function composeControlApi(
       store,
       authorization,
     });
+    const workflowStore = store instanceof SqliteRunStore ? store : null;
+    const workflowCandidate =
+      config.workflowComposition === undefined || workflowStore === null
+        ? null
+        : {
+            status: "candidate" as const,
+            candidate: {
+              backend: "sqlite" as const,
+              ...config.workflowComposition.certification,
+              createWorkflowRunStartService: () =>
+                new WorkflowRunApplicationService({
+                  store: workflowStore,
+                  authorization,
+                  clock,
+                  ids,
+                  workflowDigester: digester,
+                  routeResolver,
+                }),
+              createWorkflowHumanGateService: () =>
+                new WorkflowHumanGateApplicationService({
+                  store: {
+                    async loadRun(input) {
+                      const run = await workflowStore.loadRun(input);
+                      if (run === null) return null;
+                      return {
+                        ...run,
+                        purpose: run.purpose ?? "turn",
+                        workflowVersionBinding:
+                          run.workflowVersionBinding ?? undefined,
+                      };
+                    },
+                    recordWorkflowHumanGateDecision: (input) =>
+                      workflowStore.recordWorkflowHumanGateDecision(input),
+                  },
+                  authorization,
+                  digester,
+                }),
+            },
+          };
     const app = buildControlApi({
       application,
       threads,
@@ -260,7 +315,13 @@ function composeControlApi(
       // Keep parity with production: no two-step WorkflowVersion load plus Run
       // commit may masquerade as atomic Workflow start admission.
       workflowRuns:
-        selectWorkflowRunStartFactory({ status: "disabled" })?.() ?? null,
+        selectWorkflowRunStartFactory(
+          workflowCandidate ?? { status: "disabled" },
+        )?.() ?? null,
+      workflowHumanGates:
+        selectWorkflowHumanGateFactory(
+          workflowCandidate ?? { status: "disabled" },
+        )?.() ?? null,
       agentVersionCatalogs,
       artifacts,
       automations,
