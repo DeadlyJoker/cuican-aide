@@ -112,6 +112,12 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "manualCompaction",
     "workflow",
   ]);
+  assert.equal(
+    openApi.components.schemas.RunView.required.includes(
+      "workflowVersionBinding",
+    ),
+    true,
+  );
   assert.deepEqual(openApi.components.schemas.ThreadGoalStatus.enum, [
     "active",
     "paused",
@@ -1194,6 +1200,8 @@ test("generated public responses cannot include internal Run routing fields", ()
       cancelRequested: false,
       waitingApproval: null,
       collaborationMode: "default",
+      purpose: "turn",
+      workflowVersionBinding: null,
       goalBinding: null,
       outputRef: null,
       failure: null,
@@ -1210,6 +1218,7 @@ test("generated public responses cannot include internal Run routing fields", ()
     "goalBinding",
     "lastSequence",
     "outputRef",
+    "purpose",
     "revision",
     "runId",
     "status",
@@ -1217,6 +1226,7 @@ test("generated public responses cannot include internal Run routing fields", ()
     "threadId",
     "updatedAt",
     "waitingApproval",
+    "workflowVersionBinding",
   ]);
 });
 
@@ -1268,6 +1278,7 @@ type OpenApiDocument = Readonly<{
       CreateRunRequest: { properties: Record<string, unknown> };
       RunStatus: { enum: readonly string[] };
       RunView: {
+        required: readonly string[];
         properties: { purpose: { enum: readonly string[] } };
       };
       ThreadGoalStatus: { enum: readonly string[] };

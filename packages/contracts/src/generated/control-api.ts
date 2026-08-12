@@ -1121,10 +1121,16 @@ export interface components {
       /** @enum {string} */
       collaborationMode: "default" | "plan";
       /**
-       * @description Immutable Run purpose. Omitted only by legacy servers and interpreted as turn.
+       * @description Immutable normalized Run purpose. Legacy persisted Runs are projected as turn.
        * @enum {string}
        */
-      purpose?: "turn" | "manualCompaction" | "workflow";
+      purpose: "turn" | "manualCompaction" | "workflow";
+      /** @description Exact immutable WorkflowVersion provenance. Required and non-null exactly when purpose is workflow. */
+      workflowVersionBinding: null | {
+        workflowId: string;
+        workflowVersionId: string;
+        contentDigest: string;
+      };
       goalBinding: null | {
         goalId: string;
         revision: number;

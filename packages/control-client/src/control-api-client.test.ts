@@ -44,6 +44,27 @@ test("sends a typed selected-version Run without client-owned route fields", asy
   });
 });
 
+test("preserves exact frozen WorkflowVersion provenance on Run reads", async () => {
+  const binding = {
+    workflowId: "workflow-1",
+    workflowVersionId: "workflow-version-1",
+    contentDigest: `sha256:${"a".repeat(64)}`,
+  } as const;
+  const response = {
+    run: {
+      ...runResponse().run,
+      purpose: "workflow" as const,
+      workflowVersionBinding: binding,
+    },
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async () => jsonResponse(200, response),
+  });
+  assert.deepEqual(await client.getRun("workflow-run-1"), response);
+  assert.equal(JSON.stringify(response).includes("definitionJson"), false);
+});
+
 test("starts a Turn through one atomic typed mutation", async () => {
   const requests: { input: string; init: RequestInit }[] = [];
   const client = new ControlApiClient({

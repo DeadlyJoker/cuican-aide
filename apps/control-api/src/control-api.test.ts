@@ -68,7 +68,11 @@ import {
   formatThreadCursor,
   formatThreadRunCursor,
 } from "@crewon/contracts";
-import type { RunLifecycleEvent, WorkflowVersionSource } from "@crewon/domain";
+import {
+  reduceRunLifecycleEvent,
+  type RunLifecycleEvent,
+  type WorkflowVersionSource,
+} from "@crewon/domain";
 import { InMemoryRunStore } from "@crewon/store";
 import type { FastifyInstance } from "fastify";
 
@@ -78,7 +82,11 @@ import { OutboxDispatcher } from "./outbox-dispatcher.ts";
 import { RunEventHub } from "./run-event-hub.ts";
 import type { ThreadEventPoller } from "./thread-event-stream.ts";
 import type { ThreadGoalEventPoller } from "./thread-goal-event-stream.ts";
-import { projectRunEvent, projectRunEventForView } from "./run-projection.ts";
+import {
+  projectRun,
+  projectRunEvent,
+  projectRunEventForView,
+} from "./run-projection.ts";
 import { projectMessage } from "./thread-projection.ts";
 import {
   AdmittedAgentVersionRunRouteResolver,
@@ -2298,6 +2306,43 @@ test("projects Run events without internal identity, routing or approval digest"
   );
 });
 
+test("projects exact frozen WorkflowVersion provenance and normalizes non-Workflow binding", () => {
+  const binding = {
+    workflowId: "workflow-1",
+    workflowVersionId: "workflow-version-1",
+    contentDigest: `sha256:${"a".repeat(64)}`,
+  } as const;
+  const event: RunLifecycleEvent = {
+    schemaVersion: "crewon.run-event.v0",
+    identity: { runId: "workflow-run-1" },
+    eventId: "workflow-run-created-1",
+    sequence: 1,
+    occurredAt: "2026-08-12T00:00:00.000Z",
+    type: "run.created",
+    data: {
+      threadId: "thread-1",
+      tenantId: "tenant-secret",
+      spaceId: "space-secret",
+      createdByActorId: "actor-secret",
+      authorityId: "authority-secret",
+      runtimeGeneration: "runtime-1",
+      agentVersionId: "agent-version-1",
+      policySnapshotId: "policy-secret",
+      workspaceBindingId: null,
+      workflowVersionBinding: binding,
+      collaborationMode: "default",
+      goalBinding: null,
+      purpose: "workflow",
+    },
+  };
+  const state = reduceRunLifecycleEvent(null, event);
+  const projected = projectRun(state);
+  assert.equal(projected.purpose, "workflow");
+  assert.deepEqual(projected.workflowVersionBinding, binding);
+  assert.equal(JSON.stringify(projected).includes("definitionJson"), false);
+  assert.equal(JSON.stringify(projected).includes("tenant-secret"), false);
+});
+
 test("projects a bounded proposed Plan without tenant or digest authority", () => {
   const projected = projectMessage({
     messageId: "message-plan-1",
@@ -2518,7 +2563,7 @@ async function testRuntime(
     agentVersions: store,
     authorization,
     digester,
-    now: () => clock.now(),
+    now: () => "2026-08-08T00:00:00.000Z",
   });
   const agentVersionCatalogs = new AgentVersionCatalogApplicationService({
     store,

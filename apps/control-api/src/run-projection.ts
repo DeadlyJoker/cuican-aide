@@ -19,6 +19,7 @@ export function projectRun(state: RunState): RunView {
         : { approvalId: state.waitingApproval.approvalId },
     collaborationMode: state.collaborationMode,
     purpose: state.purpose ?? "turn",
+    workflowVersionBinding: state.workflowVersionBinding ?? null,
     goalBinding: state.goalBinding,
     outputRef: state.outputRef,
     failure: state.failure,
