@@ -475,6 +475,9 @@ importers:
 
   packages/store:
     dependencies:
+      '@crewon/agent-version':
+        specifier: workspace:*
+        version: link:../agent-version
       '@crewon/application':
         specifier: workspace:*
         version: link:../application

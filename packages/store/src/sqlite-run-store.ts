@@ -1,6 +1,16 @@
 import { DatabaseSync } from "node:sqlite";
-import type { WorkflowContentDigester } from "@crewon/domain";
+import {
+  AgentVersionError,
+  parseCompiledAgentVersion,
+} from "@crewon/agent-version";
+import {
+  MAX_WORKFLOW_VALUE_BYTES,
+  parseCompiledWorkflowVersion,
+  type WorkflowContentDigester,
+} from "@crewon/domain";
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
+import { migrateSqliteWorkflowExecutions } from "./workflow-execution-schema.ts";
+import { migrateSqliteWorkflowVersions } from "./workflow-version-schema.ts";
 
 import {
   RunLifecycleError,
@@ -27,6 +37,7 @@ import {
   type ToolExecutionReceiptState,
 } from "@crewon/domain";
 import {
+  canonicalJson,
   parseExecutionProviderCheckpoint,
   RunStoreError,
   type ActivateAgentVersionReleaseResult,
@@ -72,6 +83,8 @@ import {
   type CommitThreadGoalMutationResult,
   type CommitTurnStartInput,
   type CommitTurnStartResult,
+  type CommitWorkflowRunStartInput,
+  type CommitWorkflowRunStartResult,
   type AbortModelProviderSettingsInput,
   type AbortModelProviderSettingsResult,
   type FinalizeModelProviderSettingsInput,
@@ -520,6 +533,7 @@ type AutomationRow = Readonly<{
 export class SqliteRunStore implements DomainStore {
   readonly #database: DatabaseSync;
   readonly #clock: LeaseClock;
+  readonly #workflowDigester: WorkflowContentDigester | null;
   readonly #automationAuthority: SqliteAutomationAuthority;
   #closed = false;
 
@@ -530,9 +544,13 @@ export class SqliteRunStore implements DomainStore {
     return new SqliteWorkflowVersionStore(this.#database, digester);
   }
 
-  constructor(path: string, options: { clock?: LeaseClock } = {}) {
+  constructor(path: string, options: {
+    clock?: LeaseClock;
+    workflowDigester?: WorkflowContentDigester;
+  } = {}) {
     requireNonEmpty(path, "sqlite_path_invalid");
     this.#clock = options.clock ?? new SystemLeaseClock();
+    this.#workflowDigester = options.workflowDigester ?? null;
     this.#database = new DatabaseSync(path, {
       enableForeignKeyConstraints: true,
     });
@@ -567,6 +585,8 @@ export class SqliteRunStore implements DomainStore {
     });
     try {
       configureAndMigrateSqlite(this.#database);
+      migrateSqliteWorkflowVersions(this.#database);
+      migrateSqliteWorkflowExecutions(this.#database);
     } catch (error) {
       this.#database.close();
       this.#closed = true;
@@ -3510,6 +3530,140 @@ export class SqliteRunStore implements DomainStore {
     return this.#commitRun(input, null, null);
   }
 
+  async commitWorkflowRunStart(
+    input: CommitWorkflowRunStartInput,
+  ): Promise<CommitWorkflowRunStartResult> {
+    this.#assertOpen();
+    if (this.#workflowDigester === null)
+      throw new RunStoreError("workflow_run_admission_not_configured");
+    const workflowDigester = this.#workflowDigester;
+    const replay = this.#readWorkflowAdmissionReplay(input);
+    if (replay !== null) return replay;
+    const candidateRoute = await input.resolveCandidateRoute();
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const concurrentReplay = this.#loadWorkflowAdmissionReplay(input);
+      if (concurrentReplay !== null) {
+        this.#database.exec("COMMIT");
+        return concurrentReplay;
+      }
+      const thread = this.#loadThread({ tenantId: input.tenantId,
+        threadId: input.threadId });
+      if (thread === null || thread.spaceId !== input.spaceId ||
+          thread.status !== "active")
+        throw new RunStoreError("thread_not_active");
+      const row = this.#database.prepare(
+        `SELECT tenant_id,workflow_id,workflow_version_id,content_digest,
+                definition_json,created_at FROM workflow_versions
+         WHERE tenant_id=? AND workflow_version_id=?`,
+      ).get(input.tenantId, input.workflowVersionId) as
+        | { tenant_id: string; workflow_id: string; workflow_version_id: string;
+            content_digest: string; definition_json: string; created_at: string }
+        | undefined;
+      if (row === undefined) throw new RunStoreError("workflow_version_not_found");
+      const compiled = parseCompiledWorkflowVersion(
+        row.definition_json, workflowDigester);
+      if (compiled.workflowId !== row.workflow_id ||
+          compiled.workflowVersionId !== row.workflow_version_id ||
+          compiled.contentDigest !== row.content_digest)
+        throw new RunStoreError("workflow_version_corrupt");
+      const workflowVersion = { schemaVersion: "crewon.workflow-version-asset.v0" as const,
+        tenantId: row.tenant_id, workflowId: row.workflow_id,
+        workflowVersionId: row.workflow_version_id, contentDigest: row.content_digest,
+        definitionJson: row.definition_json, createdAt: row.created_at };
+      const activeRelease = this.#loadActiveAgentVersionRelease(input.tenantId);
+      if (activeRelease === null) throw new RunStoreError("agent_version_release_not_active");
+      const ids = [...new Set(compiled.nodes.flatMap((node) =>
+        node.kind === "humanGate" ? []
+          : [node.kind === "verification" ? node.verifierAgentVersionId : node.agentVersionId]))];
+      const deployments = ids.map((agentVersionId) => {
+        const deployment = this.#loadAgentVersionDeployment({ tenantId: input.tenantId,
+          agentVersionId });
+        const asset = this.#loadAgentVersion({ tenantId: input.tenantId, agentVersionId });
+        const candidate = activeRelease.bundle.deployments.find(
+          (item) => item.agentVersionId === agentVersionId);
+        if (deployment === null || asset === null || candidate === undefined ||
+            deployment.contentDigest !== asset.contentDigest)
+          throw new RunStoreError("workflow_agent_deployment_mismatch");
+        if (!sameAgentVersionDeploymentCandidate(candidate, deployment))
+          throw new RunStoreError("workflow_agent_deployment_mismatch");
+        const compiledAgent = parseCompiledAgentVersion(
+          asset.definitionJson, workflowDigester);
+        if (compiledAgent.agentVersionId !== asset.agentVersionId ||
+            compiledAgent.contentDigest !== asset.contentDigest)
+          throw new RunStoreError("workflow_agent_deployment_mismatch");
+        return deployment;
+      });
+      const defaultId = activeRelease.bundle.defaultAgentVersionId;
+      const defaultDeployment = this.#loadAgentVersionDeployment({ tenantId: input.tenantId,
+        agentVersionId: defaultId });
+      const defaultAsset = this.#loadAgentVersion({ tenantId: input.tenantId,
+        agentVersionId: defaultId });
+      const defaultCandidate = activeRelease.bundle.deployments.find(
+        (item) => item.agentVersionId === defaultId);
+      if (defaultDeployment === null || defaultAsset === null || defaultCandidate === undefined ||
+          defaultDeployment.contentDigest !== defaultAsset.contentDigest ||
+          !sameAgentVersionDeploymentCandidate(defaultCandidate, defaultDeployment))
+        throw new RunStoreError("workflow_agent_deployment_mismatch");
+      const compiledDefault = parseCompiledAgentVersion(
+        defaultAsset.definitionJson, workflowDigester);
+      if (compiledDefault.agentVersionId !== defaultAsset.agentVersionId ||
+          compiledDefault.contentDigest !== defaultAsset.contentDigest)
+        throw new RunStoreError("workflow_run_route_mismatch");
+      const route = candidateRoute;
+      if (route.agentVersionId !== defaultDeployment.agentVersionId ||
+          route.authorityId !== defaultDeployment.authorityId ||
+          route.workspaceBindingId !== defaultDeployment.workspaceBindingId ||
+          route.runtimeGeneration !== compiledDefault.runtimeGeneration ||
+          route.policySnapshotId !== compiledDefault.policySnapshotId)
+        throw new RunStoreError("workflow_run_route_mismatch");
+      const prepared = input.prepare({ workflowVersion, route });
+      const rootJson = canonicalJson(prepared.workflowInputValue.value);
+      if (prepared.workflowInputValue.schemaVersion !==
+          "crewon.workflow-execution-value.v0" ||
+          !/^[-A-Za-z0-9:._]{1,200}$/u.test(prepared.workflowInputValue.valueId) ||
+          !/^sha256:[a-f0-9]{64}$/u.test(prepared.workflowInputValue.valueDigest) ||
+          rootJson !== canonicalJson(input.workflowInput) ||
+          new TextEncoder().encode(rootJson).byteLength > MAX_WORKFLOW_VALUE_BYTES ||
+          workflowDigester.sha256(rootJson) !== prepared.workflowInputValue.valueDigest)
+        throw new RunStoreError("workflow_execution_value_invalid");
+      this.#validateWorkflowPreparedCommit(input, prepared.commit,
+        workflowVersion, route, prepared.workflowInputValue);
+      const run = this.#commitRun(prepared.commit, null, null, true);
+      const work = run.workItems[0];
+      const ref = { valueId: prepared.workflowInputValue.valueId,
+        valueDigest: prepared.workflowInputValue.valueDigest };
+      const payload = work?.payload as Record<string, unknown> | undefined;
+      if (work === undefined || payload?.schemaVersion !==
+          "crewon.workflow-scheduler-work-item.v1" ||
+          payload.trigger !== "workflowScheduler" ||
+          stableJson(payload.workflowInput) !== stableJson(ref) ||
+          stableJson(payload.binding) !== stableJson({ workflowId: compiled.workflowId,
+            workflowVersionId: compiled.workflowVersionId,
+            contentDigest: compiled.contentDigest }) ||
+          typeof payload.schedulerOperationId !== "string")
+        throw new RunStoreError("workflow_scheduler_work_item_mismatch");
+      this.#database.prepare(
+        `INSERT INTO workflow_execution_values
+         (tenant_id,run_id,value_id,role,node_id,value_digest,value_json,created_at)
+         VALUES (?,?,?,'rootInput',NULL,?,?,?)`,
+      ).run(input.tenantId, run.state.runId, ref.valueId, ref.valueDigest,
+        rootJson, run.state.createdAt);
+      const result = { authority: { workflowVersion, route }, run };
+      this.#database.prepare(
+        `INSERT INTO workflow_run_admission_receipts
+         (tenant_id,scope,idempotency_key,fingerprint,run_id,result_json)
+         VALUES (?,?,?,?,?,?)`,
+      ).run(input.tenantId, input.idempotency.scope, input.idempotency.key,
+        input.idempotency.requestFingerprint, run.state.runId, stableJson(result));
+      this.#database.exec("COMMIT");
+      return clone(result);
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeSqliteError(error);
+    }
+  }
+
   async commitLeasedRun(input: CommitLeasedRunInput): Promise<CommitRunResult> {
     validateQueueLease(
       input.lease,
@@ -5263,6 +5417,96 @@ export class SqliteRunStore implements DomainStore {
     return row ?? null;
   }
 
+  #validateWorkflowAdmissionReplay(result: CommitWorkflowRunStartResult): void {
+    const run = this.#loadRun({ tenantId: result.run.state.tenantId,
+      runId: result.run.state.runId });
+    const root = this.#database.prepare(
+      `SELECT value_id,value_digest,value_json FROM workflow_execution_values
+       WHERE tenant_id=? AND run_id=? AND role='rootInput' AND node_id IS NULL`,
+    ).get(result.run.state.tenantId, result.run.state.runId) as
+      | { value_id: string; value_digest: string; value_json: string }
+      | undefined;
+    const work = result.run.workItems[0];
+    const ref = work?.payload.workflowInput as
+      | { valueId?: unknown; valueDigest?: unknown }
+      | undefined;
+    if (run === null || stableJson(run) !== stableJson(result.run.state) ||
+        root === undefined || ref?.valueId !== root.value_id ||
+        ref.valueDigest !== root.value_digest ||
+        this.#workflowDigester === null ||
+        canonicalJson(JSON.parse(root.value_json)) !== root.value_json ||
+        this.#workflowDigester.sha256(root.value_json) !== root.value_digest)
+      throw new RunStoreError("workflow_run_admission_receipt_corrupt");
+  }
+
+  #readWorkflowAdmissionReplay(
+    input: CommitWorkflowRunStartInput,
+  ): CommitWorkflowRunStartResult | null {
+    try {
+      this.#database.exec("BEGIN");
+      const result = this.#loadWorkflowAdmissionReplay(input);
+      this.#database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeSqliteError(error);
+    }
+  }
+
+  #loadWorkflowAdmissionReplay(
+    input: CommitWorkflowRunStartInput,
+  ): CommitWorkflowRunStartResult | null {
+    const prior = this.#database.prepare(
+      `SELECT tenant_id,fingerprint,result_json FROM workflow_run_admission_receipts
+       WHERE scope=? AND idempotency_key=?`,
+    ).get(input.idempotency.scope, input.idempotency.key) as
+      | { tenant_id: string; fingerprint: string; result_json: string }
+      | undefined;
+    if (prior === undefined) return null;
+    if (prior.tenant_id !== input.tenantId ||
+        prior.fingerprint !== input.idempotency.requestFingerprint)
+      throw new RunStoreError("idempotency_conflict");
+    const result = parseStoredJson<CommitWorkflowRunStartResult>(
+      prior.result_json, "workflow_run_admission_receipt_invalid");
+    this.#validateWorkflowAdmissionReplay(result);
+    return clone({ ...result, run: { ...result.run, disposition: "replayed" } });
+  }
+
+  #validateWorkflowPreparedCommit(
+    input: CommitWorkflowRunStartInput,
+    commit: CommitRunInput,
+    workflowVersion: import("@crewon/application").WorkflowVersionAsset,
+    route: import("@crewon/application").RunRoute,
+    root: import("@crewon/application").WorkflowRunInputAuthority,
+  ): void {
+    const event = commit.events[0];
+    const outbox = commit.outbox[0];
+    const work = commit.workItems[0];
+    if (commit.tenantId !== input.tenantId || commit.expectedRevision !== 0 ||
+        commit.events.length !== 1 || event?.type !== "run.created" ||
+        event.sequence !== 1 || event.data.tenantId !== input.tenantId ||
+        event.data.spaceId !== input.spaceId || event.data.threadId !== input.threadId ||
+        event.data.purpose !== "workflow" || event.data.goalBinding !== null ||
+        event.data.authorityId !== route.authorityId ||
+        event.data.runtimeGeneration !== route.runtimeGeneration ||
+        event.data.agentVersionId !== route.agentVersionId ||
+        event.data.policySnapshotId !== route.policySnapshotId ||
+        event.data.workspaceBindingId !== route.workspaceBindingId ||
+        stableJson(event.data.workflowVersionBinding) !== stableJson({
+          workflowId: workflowVersion.workflowId,
+          workflowVersionId: workflowVersion.workflowVersionId,
+          contentDigest: workflowVersion.contentDigest }) ||
+        commit.outbox.length !== 1 || outbox?.topic !== "run.updated" ||
+        outbox.tenantId !== input.tenantId || outbox.runId !== event.identity.runId ||
+        stableJson(outbox.payload) !== stableJson({ eventId: event.eventId,
+          eventType: event.type, throughSequence: 1 }) ||
+        commit.workItems.length !== 1 || work?.kind !== "run.execute" ||
+        work.tenantId !== input.tenantId || work.runId !== event.identity.runId ||
+        stableJson((work.payload as Record<string, unknown>).workflowInput) !==
+          stableJson({ valueId: root.valueId, valueDigest: root.valueDigest }))
+      throw new RunStoreError("workflow_run_prepare_invalid");
+  }
+
   #loadThreadReceipt(
     scope: string,
     idempotencyKey: string,
@@ -6711,6 +6955,11 @@ function normalizeToolApprovalError(error: unknown): Error {
 }
 
 function normalizeSqliteError(error: unknown): Error {
+  if (error instanceof AgentVersionError) {
+    return new RunStoreError("workflow_agent_deployment_mismatch", {
+      cause: error,
+    });
+  }
   if (error instanceof ThreadGoalError) {
     return new RunStoreError(error.code, { cause: error });
   }

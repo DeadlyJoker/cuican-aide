@@ -434,7 +434,7 @@ test("fails closed on a registered SQLite authority with corrupt physical shape"
 });
 
 for (const legacyVersion of [1, 2, 3, 4] as const) {
-  test(`migrates SQLite Workflow execution v${legacyVersion} to v5 in one call`, () => {
+  test(`migrates SQLite Workflow execution v${legacyVersion} to current in one call`, () => {
     const database = new DatabaseSync(":memory:");
     database.exec(`CREATE TABLE run_snapshots (
       tenant_id TEXT NOT NULL, run_id TEXT NOT NULL,
@@ -471,7 +471,7 @@ for (const legacyVersion of [1, 2, 3, 4] as const) {
     migrateSqliteWorkflowExecutions(database);
     assert.equal(database.prepare(
       "SELECT version FROM workflow_execution_schema WHERE singleton=1",
-    ).get()?.version, 5);
+    ).get()?.version, 6);
     assert.deepEqual(database.prepare(
       `SELECT name FROM sqlite_master WHERE type='index'
        AND name LIKE 'workflow_execution_values_%_role_uq' ORDER BY name`,
