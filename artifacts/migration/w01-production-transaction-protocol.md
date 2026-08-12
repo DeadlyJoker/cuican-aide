@@ -97,7 +97,7 @@ by a different Store instance. No fake adapter may be used to claim an end-to-en
 | Capability | Status | Current evidence / gap |
 | --- | --- | --- |
 | transaction contract | 通过 | this protocol plus discriminated Application ports |
-| Workflow Start | 通过（SQLite Slice 1） | real Application Start plus exact receipt replay; replay performs no route resolution or ID generation |
+| Workflow Start | 实现中 | real SQLite Application admission plus exact replay passes, but production Control composition remains disabled and Control RunView/events acceptance is pending |
 | Scheduler fan-out | 通过（SQLite Slices 1–2） | real Worker persists `run.started`; two-connection Slice 2 creates frozen-order sibling WorkItems with distinct claims and no scheduler Attempt |
 | Node admission | 通过（SQLite Slices 1–2） | two real Workers hold distinct sibling leases and simultaneously running Steps/Attempts; mock adversarial suite separately covers replay and response-loss fencing |
 | Node settlement | 通过（SQLite Slices 1–2） | siblings settle right-before-left without authority reuse; Verification appears only after both dependencies terminate and receives frozen-order input |
