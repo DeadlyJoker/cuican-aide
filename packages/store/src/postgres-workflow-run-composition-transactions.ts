@@ -15,7 +15,11 @@ import {
 } from "@crewon/domain";
 import type { PoolClient } from "pg";
 
-import { beginPostgresRunAttempt } from "./postgres-execution-authority.ts";
+import {
+  beginPostgresRunAttempt,
+  loadPostgresRunAttempt,
+  loadPostgresRunStep,
+} from "./postgres-execution-authority.ts";
 import { stableJson } from "./store-invariants.ts";
 import { normalizeStoredRunState } from "./stored-run-state.ts";
 import {
@@ -24,6 +28,7 @@ import {
 } from "./workflow-execution-store.ts";
 import {
   assertExecutionBinding,
+  assertAdmissionReplayAuthority,
   gateStep,
   initialExecution,
   parseBoundWorkflow,
@@ -53,13 +58,16 @@ export async function schedulePostgresWorkflowNodes(
     "scheduleNodes",
     fingerprint,
   );
-  if (replay !== null)
-    return structuredClone({
-      ...(replay as object),
-      disposition: "replay",
-    }) as Awaited<
-      ReturnType<WorkflowRunCompositionStore["scheduleWorkflowNodes"]>
-    >;
+  if (replay !== null) {
+    const durable = await validateScheduleReplay(
+      client,
+      schema,
+      input,
+      replay,
+      digester,
+    );
+    return { ...durable, disposition: "replay" };
+  }
   const now = await validateLease(client, schema, input);
   const workflow = await loadAuthorities(client, schema, input, digester);
   await assertSchedulerPayload(client, schema, input, digester);
@@ -247,26 +255,11 @@ export async function schedulePostgresWorkflowNodes(
     }
   }
   await writeExecution(client, schema, execution, now);
-  const reconciliationWorkItemId =
-    recovery.length === 0
-      ? null
-      : workflowAuthorityId(
-          "reconcile",
-          {
-            tenantId: input.tenantId,
-            runId: input.runId,
-            binding: input.binding,
-            operationId: input.schedulerOperationId,
-            claims: recovery.map(({ node, claimId, claimEpoch }) => ({
-              nodeId: node.nodeId,
-              claimId,
-              claimEpoch,
-            })),
-          },
-          digester,
-        );
-  if (reconciliationWorkItemId !== null) {
-    const claim = recovery[0]!;
+  const reconciliationWorkItemIds = recovery.map((claim) =>
+    reconciliationWorkItemId(input, claim, digester),
+  );
+  for (const [index, claim] of recovery.entries()) {
+    const reconciliationWorkItemId = reconciliationWorkItemIds[index]!;
     await insertWorkItem(
       client,
       schema,
@@ -284,6 +277,7 @@ export async function schedulePostgresWorkflowNodes(
       now,
     );
   }
+  const firstReconciliationWorkItemId = reconciliationWorkItemIds[0] ?? null;
   const result =
     recovery.length > 0
       ? {
@@ -294,7 +288,7 @@ export async function schedulePostgresWorkflowNodes(
           reconciliationClaims: recovery,
           handoff: {
             currentWorkItem: "completed" as const,
-            nextWorkItemId: reconciliationWorkItemId,
+            nextWorkItemId: firstReconciliationWorkItemId,
             kind: "reconcile" as const,
           },
           runDisposition: "nonTerminal" as const,
@@ -339,14 +333,21 @@ export async function admitPostgresWorkflowNodeWork(
     "admitNode",
     fingerprint,
   );
-  if (replay !== null)
-    return structuredClone({
-      ...(replay as object),
+  if (replay !== null) {
+    const durable = await validateAdmissionReplay(
+      client,
+      schema,
+      input,
+      replay,
+      digester,
+    );
+    return {
       disposition: "replay",
+      execution: durable.execution,
       admission: null,
-    }) as Awaited<
-      ReturnType<WorkflowRunCompositionStore["admitWorkflowNodeWork"]>
-    >;
+      handoff: durable.handoff,
+    };
+  }
   const now = await validateLease(client, schema, input);
   const workflow = await loadAuthorities(client, schema, input, digester);
   const execution = await loadExecution(client, schema, input, true);
@@ -584,6 +585,244 @@ function fingerprintFor(
   digester: WorkflowContentDigester,
 ) {
   return digester.sha256(stableJson({ kind, input }));
+}
+
+type ScheduleResult = Awaited<
+  ReturnType<WorkflowRunCompositionStore["scheduleWorkflowNodes"]>
+>;
+type FreshAdmission = Extract<
+  Awaited<ReturnType<WorkflowRunCompositionStore["admitWorkflowNodeWork"]>>,
+  { disposition: "fresh" }
+>;
+
+async function validateScheduleReplay(
+  client: PoolClient,
+  schema: string,
+  input: ScheduleInput,
+  stored: unknown,
+  digester: WorkflowContentDigester,
+): Promise<ScheduleResult> {
+  const result = stored as ScheduleResult;
+  const workflow = await loadAuthorities(client, schema, input, digester);
+  validateWorkflowExecutionState(result.execution);
+  assertExecutionBinding(
+    result.execution,
+    input.tenantId,
+    input.runId,
+    input.binding,
+    workflow,
+  );
+  const current = await loadExecution(client, schema, input, true);
+  if (
+    current === null ||
+    current.revision < result.execution.revision ||
+    !Array.isArray(result.nodeWorkItems) ||
+    !Array.isArray(result.gatePublications) ||
+    !Array.isArray(result.reconciliationClaims) ||
+    result.runDisposition !== "nonTerminal" ||
+    result.handoff?.currentWorkItem !== "completed"
+  )
+    replayCorrupt();
+  for (const authority of result.nodeWorkItems) {
+    const node = result.execution.nodes.find(
+      (item) => item.nodeId === authority.nodeId,
+    );
+    const payload = await loadPayload(client, schema, authority.workItemId);
+    if (
+      node === undefined ||
+      node.claimId !== authority.claimId ||
+      node.claimEpoch !== authority.claimEpoch ||
+      stableJson(payload) !==
+        stableJson({
+          schemaVersion: "crewon.workflow-node-work-item.v0",
+          trigger: "workflowNode",
+          binding: input.binding,
+          nodeId: authority.nodeId,
+          claimId: authority.claimId,
+          claimEpoch: authority.claimEpoch,
+          schedulerOperationId: input.schedulerOperationId,
+        })
+    )
+      replayCorrupt();
+  }
+  for (const authority of result.gatePublications) {
+    const gate = await client.query<{ state_json: unknown }>(
+      `SELECT state_json FROM ${schema}.workflow_gate_requests
+       WHERE tenant_id=$1 AND run_id=$2 AND node_id=$3 AND gate_request_id=$4`,
+      [input.tenantId, input.runId, authority.nodeId, authority.gateRequestId],
+    );
+    const step = await loadPostgresRunStep(
+      client,
+      schema,
+      {
+        tenantId: input.tenantId,
+        runId: input.runId,
+        stepId: authority.nodeId,
+      },
+      true,
+    );
+    const outbox = await client.query<{ message_json: unknown }>(
+      `SELECT message_json FROM ${schema}.outbox WHERE message_id=$1`,
+      [authority.publicationOutboxMessageId],
+    );
+    const state = gate.rows[0]?.state_json as
+      | Record<string, unknown>
+      | undefined;
+    if (
+      state === undefined ||
+      step === null ||
+      step.kind !== "gate" ||
+      state.claimId !== authority.claimId ||
+      state.claimEpoch !== authority.claimEpoch ||
+      state.publicationOutboxMessageId !==
+        authority.publicationOutboxMessageId ||
+      state.approvalResumeWorkItemId !== authority.approvalResumeWorkItemId ||
+      (outbox.rows[0]?.message_json as { payload?: unknown } | undefined)
+        ?.payload === undefined ||
+      stableJson(
+        (outbox.rows[0]!.message_json as { payload: unknown }).payload,
+      ) !== stableJson(state)
+    )
+      replayCorrupt();
+  }
+  if (result.disposition === "reconcileRequired") {
+    if (result.reconciliationClaims.length === 0) replayCorrupt();
+    for (const claim of result.reconciliationClaims) {
+      const workItemId = reconciliationWorkItemId(input, claim, digester);
+      const payload = await loadPayload(client, schema, workItemId);
+      if (
+        stableJson(payload) !==
+        stableJson({
+          schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+          trigger: "workflowReconcile",
+          binding: input.binding,
+          nodeId: claim.node.nodeId,
+          claimId: claim.claimId,
+          claimEpoch: claim.claimEpoch,
+          reconciliationOperationId: input.schedulerOperationId,
+        })
+      )
+        replayCorrupt();
+    }
+    if (
+      result.handoff.nextWorkItemId !==
+        reconciliationWorkItemId(
+          input,
+          result.reconciliationClaims[0]!,
+          digester,
+        ) ||
+      result.handoff.kind !== "reconcile"
+    )
+      replayCorrupt();
+  } else if (
+    result.disposition !== "scheduled" ||
+    result.handoff.kind !== "none" ||
+    result.handoff.nextWorkItemId !== null ||
+    result.reconciliationClaims.length !== 0
+  )
+    replayCorrupt();
+  return structuredClone(result);
+}
+
+async function validateAdmissionReplay(
+  client: PoolClient,
+  schema: string,
+  input: AdmitInput,
+  stored: unknown,
+  digester: WorkflowContentDigester,
+): Promise<FreshAdmission> {
+  const result = stored as FreshAdmission;
+  const workflow = await loadAuthorities(client, schema, input, digester);
+  validateWorkflowExecutionState(result.execution);
+  assertExecutionBinding(
+    result.execution,
+    input.tenantId,
+    input.runId,
+    input.binding,
+    workflow,
+  );
+  const admission = result.admission;
+  if (
+    result.disposition !== "fresh" ||
+    admission === null ||
+    admission.claim.node.nodeId !== input.nodeId ||
+    admission.claim.claimId !== input.claimId ||
+    admission.claim.claimEpoch !== input.claimEpoch ||
+    admission.attempt.attemptId !==
+      workflowAuthorityId(
+        "attempt",
+        {
+          tenantId: input.tenantId,
+          runId: input.runId,
+          nodeId: input.nodeId,
+          claimId: input.claimId,
+          claimEpoch: input.claimEpoch,
+        },
+        digester,
+      ) ||
+    result.handoff?.currentWorkItem !== "retained" ||
+    result.handoff.kind !== "none" ||
+    result.handoff.nextWorkItemId !== null
+  )
+    replayCorrupt();
+  const step = await loadPostgresRunStep(
+    client,
+    schema,
+    { tenantId: input.tenantId, runId: input.runId, stepId: input.nodeId },
+    true,
+  );
+  const attempt = await loadPostgresRunAttempt(
+    client,
+    schema,
+    {
+      tenantId: input.tenantId,
+      runId: input.runId,
+      stepId: input.nodeId,
+      attemptId: admission.attempt.attemptId,
+    },
+    true,
+  );
+  assertAdmissionReplayAuthority(admission, step, attempt);
+  const value = await loadValue(
+    client,
+    schema,
+    input,
+    "nodeInput",
+    input.nodeId,
+    digester,
+  );
+  if (
+    value === null ||
+    value.valueId !== admission.inputValue.valueId ||
+    value.valueDigest !== admission.inputValue.valueDigest ||
+    stableJson(value.value) !== stableJson(admission.inputValue.value)
+  )
+    replayCorrupt();
+  return structuredClone(result);
+}
+
+function reconciliationWorkItemId(
+  input: ScheduleInput,
+  claim: import("@crewon/application").WorkflowNodeClaim,
+  digester: WorkflowContentDigester,
+): string {
+  return workflowAuthorityId(
+    "reconcile",
+    {
+      tenantId: input.tenantId,
+      runId: input.runId,
+      binding: input.binding,
+      operationId: input.schedulerOperationId,
+      nodeId: claim.node.nodeId,
+      claimId: claim.claimId,
+      claimEpoch: claim.claimEpoch,
+    },
+    digester,
+  );
+}
+
+function replayCorrupt(): never {
+  throw new RunStoreError("workflow_composition_receipt_corrupt");
 }
 
 async function loadReceipt(
