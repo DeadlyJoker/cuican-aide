@@ -19,6 +19,12 @@ const schema = {
   required: [],
   additionalProperties: false as const,
 };
+const fanInSchema = {
+  type: "object" as const,
+  properties: { "branch-a": schema, "branch-b": schema },
+  required: ["branch-a", "branch-b"],
+  additionalProperties: false as const,
+};
 const common = (nodeId: string, dependsOn: string[]) => ({
   nodeId,
   title: nodeId,
@@ -34,7 +40,7 @@ const source: WorkflowVersionSource = {
   name: "durable DAG",
   description: "durable DAG",
   inputSchema: schema,
-  outputSchema: schema,
+  outputSchema: fanInSchema,
   entryNodeIds: ["root"],
   outputNodeIds: ["verify"],
   nodes: [
@@ -51,11 +57,15 @@ const source: WorkflowVersionSource = {
     },
     {
       ...common("gate", ["branch-a", "branch-b"]),
+      inputSchema: fanInSchema,
+      outputSchema: fanInSchema,
       kind: "humanGate",
       approvalPolicyId: "approval-policy-1",
     },
     {
       ...common("verify", ["gate"]),
+      inputSchema: fanInSchema,
+      outputSchema: fanInSchema,
       kind: "verification",
       verifierAgentVersionId: "agent-verifier",
     },
