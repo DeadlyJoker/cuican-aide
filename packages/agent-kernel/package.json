@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@crewon/contracts": "workspace:*",
+    "@crewon/domain": "workspace:*",
     "@crewon/tool-broker": "workspace:*"
   },
   "devDependencies": {

@@ -4,6 +4,7 @@ import {
   startRunAttempt,
   type RunAttemptState,
   type RunStepState,
+  validateProviderTurnState,
 } from "@crewon/domain";
 import {
   RunStoreError,
@@ -236,6 +237,46 @@ export class InMemoryExecutionAuthority {
       checkpointDigest,
       updatedAt: checkpointedAt,
     };
+    this.#attempts.set(next.attemptId, clone(next));
+    return clone(next);
+  }
+
+  recordProviderTurnState(
+    locator: RunAttemptLocator,
+    workItemId: string,
+    leaseEpoch: number,
+    providerTurnState: string,
+    observedAt: string,
+  ): RunAttemptState {
+    try {
+      validateProviderTurnState(providerTurnState);
+    } catch (error) {
+      throw new RunStoreError("attempt_provider_turn_state_invalid", {
+        cause: error,
+      });
+    }
+    const attempt = this.#attempts.get(locator.attemptId);
+    if (
+      attempt?.tenantId !== locator.tenantId ||
+      attempt.runId !== locator.runId ||
+      attempt.stepId !== locator.stepId ||
+      attempt.status !== "running"
+    ) {
+      throw new RunStoreError("run_attempt_not_running");
+    }
+    if (
+      attempt.workItemId !== workItemId ||
+      attempt.leaseEpoch !== leaseEpoch
+    ) {
+      throw new RunStoreError("stale_attempt_epoch");
+    }
+    if (
+      attempt.providerTurnState !== null &&
+      attempt.providerTurnState !== providerTurnState
+    ) {
+      throw new RunStoreError("attempt_provider_turn_state_conflict");
+    }
+    const next = { ...attempt, providerTurnState, updatedAt: observedAt };
     this.#attempts.set(next.attemptId, clone(next));
     return clone(next);
   }

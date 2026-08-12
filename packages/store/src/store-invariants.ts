@@ -29,6 +29,7 @@ import {
   ThreadGoalError,
   validateThreadLifecycleEvent,
   validateThreadState,
+  validateProviderTurnState,
   type ModelHistoryItem,
   type RunAttemptState,
   type RunState,
@@ -72,6 +73,7 @@ import {
   type RunStepLocator,
   type RunGoalContinuationCommit,
   type RetryRunAttemptInput,
+  type RecordRunAttemptProviderTurnStateInput,
   type WorkItem,
   type WorkItemRetryInput,
   type ThreadLocator,
@@ -933,6 +935,54 @@ export function validateBeginRunAttemptInput(
     throw new RunStoreError("attempt_reconcile_kind_invalid");
   }
   parseQueueTimestamp(input.startedAt, "attempt_started_at_invalid");
+}
+
+export function validateRecordRunAttemptProviderTurnStateInput(
+  input: RecordRunAttemptProviderTurnStateInput,
+): void {
+  if (
+    !isPlainObject(input) ||
+    !hasExactKeys(input, [
+      "tenantId",
+      "lease",
+      "runId",
+      "attempt",
+      "providerTurnState",
+      "observedAt",
+    ]) ||
+    !isPlainObject(input.attempt) ||
+    !hasExactKeys(input.attempt, ["stepId", "attemptId"]) ||
+    !isPlainObject(input.lease) ||
+    !hasExactKeys(input.lease, [
+      "workItemId",
+      "ownerId",
+      "leaseId",
+      "leaseEpoch",
+    ])
+  ) {
+    throw new RunStoreError("attempt_provider_turn_state_input_invalid");
+  }
+  validateRunAttemptLocator({
+    tenantId: input.tenantId,
+    runId: input.runId,
+    ...input.attempt,
+  });
+  validateQueueLease(
+    input.lease,
+    input.lease.workItemId,
+    "work_item_id_invalid",
+  );
+  try {
+    validateProviderTurnState(input.providerTurnState);
+  } catch (error) {
+    throw new RunStoreError("attempt_provider_turn_state_invalid", {
+      cause: error,
+    });
+  }
+  parseQueueTimestamp(
+    input.observedAt,
+    "attempt_provider_turn_state_observed_at_invalid",
+  );
 }
 
 export function validateRetryRunAttemptInput(

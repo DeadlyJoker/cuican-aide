@@ -273,6 +273,9 @@ importers:
       '@crewon/contracts':
         specifier: workspace:*
         version: link:../contracts
+      '@crewon/domain':
+        specifier: workspace:*
+        version: link:../domain
       '@crewon/tool-broker':
         specifier: workspace:*
         version: link:../tool-broker

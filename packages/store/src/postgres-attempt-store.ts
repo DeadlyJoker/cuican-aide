@@ -30,6 +30,7 @@ import { type PoolClient } from "pg";
 import {
   beginPostgresRunAttempt,
   checkpointPostgresRunAttempt,
+  recordPostgresRunAttemptProviderTurnState,
   finishPostgresRunAttempt,
   listPostgresRunAttempts,
   loadPostgresRunAttempt,
@@ -76,6 +77,7 @@ import {
   validateRunAttemptPage,
   validateRunStepLocator,
   applyRunTerminalGoalMutation,
+  validateRecordRunAttemptProviderTurnStateInput,
 } from "./store-invariants.ts";
 
 /** PostgreSQL Step/Attempt authority; compound terminal transactions follow separately. */
@@ -273,6 +275,39 @@ export class PostgresAttemptStore extends PostgresRunStore {
         input.tenantId,
         input.runId,
         input.lease,
+      );
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await rollbackPostgres(client);
+      throw normalizePostgresError(error);
+    } finally {
+      client.release();
+    }
+  }
+
+  async recordRunAttemptProviderTurnState(
+    input: import("@crewon/application").RecordRunAttemptProviderTurnStateInput,
+  ): Promise<RunAttemptState> {
+    validateRecordRunAttemptProviderTurnStateInput(input);
+    this.assertOpen();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.tenantId,
+        input.runId,
+        input.lease,
+      );
+      const result = await recordPostgresRunAttemptProviderTurnState(
+        client,
+        this.schemaSql(),
+        { tenantId: input.tenantId, runId: input.runId, ...input.attempt },
+        input.lease.workItemId,
+        input.lease.leaseEpoch,
+        input.providerTurnState,
+        input.observedAt,
       );
       await client.query("COMMIT");
       return result;

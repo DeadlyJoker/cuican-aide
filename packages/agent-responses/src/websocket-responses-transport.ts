@@ -2,6 +2,7 @@ import {
   ModelTransportError,
   type ModelInputItem,
   type ModelRequest,
+  type ModelTransportStreamOptions,
   type ModelTransportEvent,
   type ModelTransportPort,
 } from "@crewon/agent-kernel";
@@ -135,6 +136,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
   async *stream(
     request: ModelRequest,
     signal: AbortSignal,
+    options?: ModelTransportStreamOptions,
   ): AsyncIterable<ModelTransportEvent> {
     validateResponsesRequest(request);
     if (request.providerTurnState !== undefined) {
@@ -146,7 +148,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
     }
     this.#active = true;
     try {
-      const socket = await this.#connection(request.runId, signal);
+      const socket = await this.#connection(request.runId, signal, options);
       const plan = this.#requestPlan(request, socket);
       const decoder = new ResponsesProtocolDecoder({
         sequencePolicy: this.#sequencePolicy,
@@ -277,6 +279,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
   async #connection(
     runId: string | null,
     signal: AbortSignal,
+    options?: ModelTransportStreamOptions,
   ): Promise<WebSocket> {
     if (this.#socket?.readyState === WebSocket.OPEN) {
       if (runId === null || this.#socketRunId === runId) {
@@ -313,7 +316,11 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
         unscopedTurnState = true;
       }
       if (runId !== null) {
-        this.#turnStates.observe(runId, values);
+        await this.#turnStates.observe(
+          runId,
+          values,
+          options?.controlSink?.providerTurnStateObserved,
+        );
       }
     } catch (error) {
       this.#dropSocket(socket);
@@ -428,6 +435,7 @@ export class ResilientResponsesTransport implements ModelTransportPort {
   async *stream(
     request: ModelRequest,
     signal: AbortSignal,
+    options?: ModelTransportStreamOptions,
   ): AsyncIterable<ModelTransportEvent> {
     if (this.#httpOnly) {
       if (this.#pendingFallbackCode !== null) {
@@ -440,12 +448,16 @@ export class ResilientResponsesTransport implements ModelTransportPort {
         };
         this.#pendingFallbackCode = null;
       }
-      yield* this.#http.stream(request, signal);
+      yield* this.#http.stream(request, signal, options);
       return;
     }
     let emittedObservation = false;
     try {
-      for await (const event of this.#websocket.stream(request, signal)) {
+      for await (const event of this.#websocket.stream(
+        request,
+        signal,
+        options,
+      )) {
         if (
           event.type === "output.delta" ||
           event.type === "reasoning.delta" ||
@@ -480,7 +492,13 @@ export class ResilientResponsesTransport implements ModelTransportPort {
       if (this.#websocketFailures <= this.#websocketMaxRetries) {
         throw error;
       }
-      yield* this.#fallback(request, signal, error.code, emittedObservation);
+      yield* this.#fallback(
+        request,
+        signal,
+        error.code,
+        emittedObservation,
+        options,
+      );
     }
   }
 
@@ -518,6 +536,7 @@ export class ResilientResponsesTransport implements ModelTransportPort {
     signal: AbortSignal,
     code: string,
     discardedOutput: boolean,
+    options?: ModelTransportStreamOptions,
   ): AsyncIterable<ModelTransportEvent> {
     this.#httpOnly = true;
     await this.#websocket.close();
@@ -528,7 +547,7 @@ export class ResilientResponsesTransport implements ModelTransportPort {
       code,
       discardedOutput,
     };
-    yield* this.#http.stream(request, signal);
+    yield* this.#http.stream(request, signal, options);
   }
 }
 

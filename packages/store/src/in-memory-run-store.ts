@@ -273,6 +273,7 @@ import {
   validateThreadGoalActiveRunFence,
   validateThreadGoalMutationInput,
   validateRunHistoryCorrelation,
+  validateRecordRunAttemptProviderTurnStateInput,
 } from "./store-invariants.ts";
 import {
   createThreadGoalEvent,
@@ -2419,6 +2420,20 @@ export class InMemoryRunStore implements DomainStore {
       input.checkpoint,
       input.checkpointDigest,
       input.checkpointedAt,
+    );
+  }
+
+  async recordRunAttemptProviderTurnState(
+    input: import("@crewon/application").RecordRunAttemptProviderTurnStateInput,
+  ) {
+    validateRecordRunAttemptProviderTurnStateInput(input);
+    this.#validateExecutionLease(input.tenantId, input.runId, input.lease);
+    return this.#executionAuthority.recordProviderTurnState(
+      { tenantId: input.tenantId, runId: input.runId, ...input.attempt },
+      input.lease.workItemId,
+      input.lease.leaseEpoch,
+      input.providerTurnState,
+      input.observedAt,
     );
   }
 

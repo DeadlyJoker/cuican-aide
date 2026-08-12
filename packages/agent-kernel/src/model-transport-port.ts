@@ -30,6 +30,13 @@ export type ModelRequest = Readonly<{
   reconcileCheckpoint?: ProviderCheckpoint;
 }>;
 
+export type ModelTransportStreamOptions = Readonly<{
+  /** Persists newly observed Run-private control state before body events flow. */
+  controlSink?: Readonly<{
+    providerTurnStateObserved(providerTurnState: string): Promise<void>;
+  }>;
+}>;
+
 export type ModelTransportEvent =
   | Readonly<{ type: "response.created"; checkpoint: ProviderCheckpoint }>
   | Readonly<{ type: "output.delta"; delta: string }>
@@ -87,6 +94,7 @@ export interface ModelTransportPort {
   stream(
     request: ModelRequest,
     signal: AbortSignal,
+    options?: ModelTransportStreamOptions,
   ): AsyncIterable<ModelTransportEvent>;
   /** Releases Run-private transport control state after the Kernel execution scope ends. */
   releaseRun?(runId: string): void;

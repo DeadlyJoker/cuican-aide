@@ -174,8 +174,18 @@ export interface AgentKernelPort {
   runSegment(
     contract: AgentSegmentContract,
     signal: AbortSignal,
+    options?: AgentSegmentRunOptions,
   ): AsyncIterable<KernelAgentEvent>;
 }
+
+/** Private control sink that is never projected into canonical Agent events. */
+export interface AgentSegmentControlSink {
+  providerTurnStateObserved(providerTurnState: string): Promise<void>;
+}
+
+export type AgentSegmentRunOptions = Readonly<{
+  controlSink?: AgentSegmentControlSink;
+}>;
 
 /** Waits between same-Turn sampling attempts and remains abortable. */
 export interface SamplingRetryScheduler {

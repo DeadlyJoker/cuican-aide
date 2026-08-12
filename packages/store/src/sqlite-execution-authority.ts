@@ -379,6 +379,39 @@ export function checkpointSqliteRunAttempt(
   return next;
 }
 
+export function recordSqliteRunAttemptProviderTurnState(
+  database: DatabaseSync,
+  locator: RunAttemptLocator,
+  workItemId: string,
+  leaseEpoch: number,
+  providerTurnState: string,
+  observedAt: string,
+): RunAttemptState {
+  try {
+    validateProviderTurnState(providerTurnState);
+  } catch (error) {
+    throw new RunStoreError("attempt_provider_turn_state_invalid", {
+      cause: error,
+    });
+  }
+  const attempt = loadSqliteRunAttempt(database, locator);
+  if (attempt === null || attempt.status !== "running") {
+    throw new RunStoreError("run_attempt_not_running");
+  }
+  if (attempt.workItemId !== workItemId || attempt.leaseEpoch !== leaseEpoch) {
+    throw new RunStoreError("stale_attempt_epoch");
+  }
+  if (
+    attempt.providerTurnState !== null &&
+    attempt.providerTurnState !== providerTurnState
+  ) {
+    throw new RunStoreError("attempt_provider_turn_state_conflict");
+  }
+  const next = { ...attempt, providerTurnState, updatedAt: observedAt };
+  updateRunAttempt(database, next);
+  return next;
+}
+
 function runStepValues(step: RunStepState): readonly SQLInputValue[] {
   return [
     step.tenantId,

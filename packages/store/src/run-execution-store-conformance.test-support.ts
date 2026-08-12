@@ -12,6 +12,7 @@ import {
   type CommitToolExecutionCompletionInput,
   type CommitToolExecutionUnknownOutcomeInput,
   type DomainStore,
+  type RecordRunAttemptProviderTurnStateInput,
   type WorkItemClaim,
 } from "@crewon/application";
 import {
@@ -68,6 +69,97 @@ export function registerRunExecutionStoreConformance(
       assert.equal(
         await fixture.store.loadRunStep({ ...STEP, tenantId: "tenant-other" }),
         null,
+      );
+    });
+
+    test("atomically records valid Run-private provider state on the leased Attempt", async (context) => {
+      const fixture = await executionFixture(context, createStore);
+      const claim = await claimWork(
+        fixture.store,
+        "state-worker",
+        "state-lease",
+      );
+      const input = beginInput(claim, "state-attempt", "2026-08-08T00:01:01Z");
+      const started = await fixture.store.beginRunAttempt(input);
+      const mutation: RecordRunAttemptProviderTurnStateInput = {
+        tenantId: "tenant-1",
+        lease: input.lease,
+        runId: STEP.runId,
+        attempt: {
+          stepId: STEP.stepId,
+          attemptId: started.attempt.attemptId,
+        },
+        providerTurnState: "durable-state-1",
+        observedAt: "2026-08-08T00:01:02Z",
+      };
+
+      for (const invalidState of [
+        "",
+        "bad\nvalue",
+        "bad,value",
+        "x".repeat(4 * 1024 + 1),
+      ]) {
+        await assert.rejects(
+          fixture.store.recordRunAttemptProviderTurnState({
+            ...mutation,
+            providerTurnState: invalidState,
+          }),
+          hasStoreCode("attempt_provider_turn_state_invalid"),
+        );
+        assert.deepEqual(
+          await fixture.store.loadRunAttempt({
+            ...STEP,
+            attemptId: started.attempt.attemptId,
+          }),
+          started.attempt,
+        );
+      }
+      await assert.rejects(
+        fixture.store.recordRunAttemptProviderTurnState({
+          ...mutation,
+          observedAt: "not-a-timestamp",
+        }),
+        hasStoreCode("attempt_provider_turn_state_observed_at_invalid"),
+      );
+      await assert.rejects(
+        fixture.store.recordRunAttemptProviderTurnState({
+          ...mutation,
+          lease: {
+            ...mutation.lease,
+            leaseEpoch: mutation.lease.leaseEpoch + 1,
+          },
+        }),
+        hasStoreCode("stale_lease"),
+      );
+      await assert.rejects(
+        fixture.store.recordRunAttemptProviderTurnState({
+          ...mutation,
+          unexpected: true,
+        } as unknown as RecordRunAttemptProviderTurnStateInput),
+        hasStoreCode("attempt_provider_turn_state_input_invalid"),
+      );
+      assert.deepEqual(
+        await fixture.store.loadRunAttempt({
+          ...STEP,
+          attemptId: started.attempt.attemptId,
+        }),
+        started.attempt,
+      );
+      await fixture.store.recordRunAttemptProviderTurnState(mutation);
+      await fixture.store.recordRunAttemptProviderTurnState(mutation);
+      assert.equal(
+        await fixture.store.loadRunProviderTurnState({
+          tenantId: "tenant-1",
+          runId: STEP.runId,
+        }),
+        "durable-state-1",
+      );
+      await assert.rejects(
+        fixture.store.recordRunAttemptProviderTurnState({
+          ...mutation,
+          providerTurnState: "different",
+        }),
+        hasStoreCode("attempt_provider_turn_state_conflict"),
       );
     });
 

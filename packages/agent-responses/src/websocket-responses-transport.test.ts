@@ -223,6 +223,7 @@ test("retains handshake state across a failed WebSocket stream retry", async (co
   const fixture = await websocketFixture(context);
   const handshakes: IncomingMessage[] = [];
   let connections = 0;
+  const persisted: string[] = [];
   fixture.webSocketServer.on("headers", (headers) => {
     headers.push("x-codex-turn-state: retry-state");
   });
@@ -244,12 +245,29 @@ test("retains handshake state across a failed WebSocket stream retry", async (co
   context.after(() => transport.close());
 
   await assert.rejects(
-    collect(transport.stream(manualRequest("first"), signal())),
+    collect(
+      transport.stream(manualRequest("first"), signal(), {
+        controlSink: {
+          providerTurnStateObserved: async (providerTurnState) => {
+            persisted.push(providerTurnState);
+          },
+        },
+      }),
+    ),
   );
-  await collect(transport.stream(manualRequest("second"), signal()));
+  await collect(
+    transport.stream(manualRequest("second"), signal(), {
+      controlSink: {
+        providerTurnStateObserved: async (providerTurnState) => {
+          persisted.push(providerTurnState);
+        },
+      },
+    }),
+  );
 
   assert.equal(handshakes[0]?.headers["x-codex-turn-state"], undefined);
   assert.equal(handshakes[1]?.headers["x-codex-turn-state"], "retry-state");
+  assert.deepEqual(persisted, ["retry-state"]);
   transport.releaseRun("run-1");
 });
 

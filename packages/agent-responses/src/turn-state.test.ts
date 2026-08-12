@@ -71,6 +71,7 @@ test("AR-043 keeps opaque response state within one Run and clears it for anothe
 
 test("AR-043 retains observed HTTP state across a failed stream retry", async () => {
   const sent: Array<string | null> = [];
+  const persisted: string[] = [];
   let calls = 0;
   const transport = new DirectResponsesTransport(
     { endpoint: "https://provider.example/v1/responses", model: "model" },
@@ -88,15 +89,86 @@ test("AR-043 retains observed HTTP state across a failed stream retry", async ()
   );
 
   await assert.rejects(
-    collect(transport.stream(request(fixture.runs[0]), signal())),
+    collect(
+      transport.stream(request(fixture.runs[0]), signal(), {
+        controlSink: {
+          providerTurnStateObserved: async (providerTurnState) => {
+            persisted.push(providerTurnState);
+          },
+        },
+      }),
+    ),
   );
-  await collect(transport.stream(request(fixture.runs[0]), signal()));
+  await collect(
+    transport.stream(request(fixture.runs[0]), signal(), {
+      controlSink: {
+        providerTurnStateObserved: async (providerTurnState) => {
+          persisted.push(providerTurnState);
+        },
+      },
+    }),
+  );
   await collect(transport.stream(request(fixture.runs[1]), signal()));
   assert.deepEqual(sent, [null, fixture.state, null]);
+  assert.deepEqual(persisted, [fixture.state]);
   transport.releaseRun(fixture.runs[0]);
 });
 
-test("AR-043 fails closed on duplicate, oversized, invalid, and conflicting state", () => {
+test("AR-043 blocks HTTP body events until observed state is durable", async () => {
+  let sinkCalls = 0;
+  const transport = new DirectResponsesTransport(
+    { endpoint: "https://provider.example/v1/responses", model: "model" },
+    {
+      fetch: async () =>
+        new Response(
+          new ReadableStream({
+            pull(controller) {
+              controller.enqueue(new TextEncoder().encode("data: {}\n\n"));
+              controller.close();
+            },
+          }),
+          {
+            headers: {
+              "content-type": "text/event-stream",
+              [fixture.header]: fixture.state,
+            },
+          },
+        ),
+    },
+  );
+
+  await assert.rejects(
+    collect(
+      transport.stream(request(fixture.runs[0]), signal(), {
+        controlSink: {
+          providerTurnStateObserved: async () => {
+            sinkCalls += 1;
+            throw new Error("durable_write_failed");
+          },
+        },
+      }),
+    ),
+    (error) =>
+      error instanceof Error &&
+      error.message === "responses_transport_unavailable" &&
+      error.cause instanceof Error &&
+      error.cause.message === "durable_write_failed",
+  );
+  await assert.rejects(
+    collect(
+      transport.stream(request(fixture.runs[0]), signal(), {
+        controlSink: {
+          providerTurnStateObserved: async () => {
+            sinkCalls += 1;
+          },
+        },
+      }),
+    ),
+  );
+  assert.equal(sinkCalls, 2);
+});
+
+test("AR-043 fails closed on duplicate, oversized, invalid, and conflicting state", async () => {
   assert.equal(MAX_TURN_STATE_BYTES, fixture.maxBytes);
   assert.throws(() => parseTurnStateHeader(["a", "a"]), /duplicate/u);
   assert.throws(
@@ -110,25 +182,25 @@ test("AR-043 fails closed on duplicate, oversized, invalid, and conflicting stat
     /invalid/u,
   );
   const authority = new ResponsesTurnStateAuthority();
-  authority.observe(fixture.runs[0], [fixture.state]);
-  assert.throws(
-    () => authority.observe(fixture.runs[0], ["different"]),
+  await authority.observe(fixture.runs[0], [fixture.state]);
+  await assert.rejects(
+    authority.observe(fixture.runs[0], ["different"]),
     /conflict/u,
   );
-  authority.observe(fixture.runs[1], ["different"]);
+  await authority.observe(fixture.runs[1], ["different"]);
   assert.throws(
     () => authority.seed(fixture.runs[0], "different"),
     /conflict/u,
   );
 });
 
-test("AR-043 releases terminal transport state instead of imposing a Run cap", () => {
+test("AR-043 releases terminal transport state instead of imposing a Run cap", async () => {
   const authority = new ResponsesTurnStateAuthority();
   for (let index = 0; index < 1_000; index += 1) {
-    authority.observe(`run-${index}`, [`state-${index}`]);
+    await authority.observe(`run-${index}`, [`state-${index}`]);
     authority.release(`run-${index}`);
   }
-  authority.observe("run-after-terminals", ["state-after-terminals"]);
+  await authority.observe("run-after-terminals", ["state-after-terminals"]);
   assert.equal(authority.get("run-after-terminals"), "state-after-terminals");
 });
 

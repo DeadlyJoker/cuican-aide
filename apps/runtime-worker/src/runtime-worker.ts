@@ -915,6 +915,18 @@ export class RuntimeWorker {
           budget: { maxOutputBytes: 32 * 1024 },
         },
         controller.signal,
+        {
+          controlSink: {
+            providerTurnStateObserved: async (observedProviderTurnState) => {
+              await this.#execution.recordProviderTurnState(
+                claim,
+                attempt,
+                observedProviderTurnState,
+              );
+              providerTurnState = observedProviderTurnState;
+            },
+          },
+        },
       )) {
         await this.#renew(claim);
         run = await this.#execution.loadRun(claim);

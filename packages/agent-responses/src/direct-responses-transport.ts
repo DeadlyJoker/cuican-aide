@@ -2,6 +2,7 @@ import {
   ModelTransportError,
   type ModelInputItem,
   type ModelRequest,
+  type ModelTransportStreamOptions,
   type ModelTransportEvent,
   type ModelTransportPort,
 } from "@crewon/agent-kernel";
@@ -141,6 +142,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
   async *stream(
     request: ModelRequest,
     signal: AbortSignal,
+    options?: ModelTransportStreamOptions,
   ): AsyncIterable<ModelTransportEvent> {
     validateResponsesRequest(request);
     this.#turnStates.seed(request.runId, request.providerTurnState ?? null);
@@ -210,9 +212,10 @@ export class DirectResponsesTransport implements ModelTransportPort {
           cyberPolicy: isCyberPolicyBody(errorBody),
         });
       }
-      this.#turnStates.observe(
+      await this.#turnStates.observe(
         request.runId,
         fetchTurnStateHeaders(response.headers),
+        options?.controlSink?.providerTurnStateObserved,
       );
       const contentType = response.headers.get("content-type");
       if (contentType?.toLowerCase().startsWith("text/event-stream") !== true) {

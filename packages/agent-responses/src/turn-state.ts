@@ -20,14 +20,26 @@ export class ResponsesTurnStateAuthority {
     return this.#states.get(runId) ?? null;
   }
 
-  observe(runId: string, values: readonly string[]): void {
+  async observe(
+    runId: string,
+    values: readonly string[],
+    persist?: (value: string) => Promise<void>,
+  ): Promise<string | null> {
     const value = parseTurnStateHeader(values);
-    if (value === null) return;
-    const current = this.#states.get(runId);
+    if (value === null) return null;
+    let current = this.#states.get(runId);
     if (current !== undefined && current !== value) {
       throw protocolError("responses_turn_state_conflict");
     }
+    if (current !== undefined) return null;
+    await persist?.(value);
+    current = this.#states.get(runId);
+    if (current !== undefined && current !== value) {
+      throw protocolError("responses_turn_state_conflict");
+    }
+    if (current !== undefined) return null;
     this.#states.set(runId, value);
+    return value;
   }
 
   release(runId: string): void {

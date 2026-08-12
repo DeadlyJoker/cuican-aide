@@ -74,6 +74,15 @@ export type CheckpointRunAttemptInput = Readonly<{
   checkpointedAt: string;
 }>;
 
+export type RecordRunAttemptProviderTurnStateInput = Readonly<{
+  tenantId: string;
+  lease: WorkItemLeaseInput;
+  runId: string;
+  attempt: RunAttemptIdentity;
+  providerTurnState: string;
+  observedAt: string;
+}>;
+
 type RunAttemptFinish = RunAttemptIdentity &
   Readonly<{
     finishedAt: string;
@@ -312,6 +321,9 @@ export interface RunExecutionStore {
   beginRunAttempt(input: BeginRunAttemptInput): Promise<BeginRunAttemptResult>;
   checkpointRunAttempt(
     input: CheckpointRunAttemptInput,
+  ): Promise<RunAttemptState>;
+  recordRunAttemptProviderTurnState(
+    input: RecordRunAttemptProviderTurnStateInput,
   ): Promise<RunAttemptState>;
   completeRunAttempt(
     input: CompleteRunAttemptInput,

@@ -201,6 +201,7 @@ import { configureAndMigrateSqlite, rollback } from "./sqlite-schema.ts";
 import {
   beginSqliteRunAttempt,
   checkpointSqliteRunAttempt,
+  recordSqliteRunAttemptProviderTurnState,
   finishSqliteRunAttempt,
   listSqliteRunAttempts,
   loadSqliteRunAttempt,
@@ -297,6 +298,7 @@ import {
   validateThreadGoalMutationInput,
   validateRunHistoryCorrelation,
   validateThreadGoalRetainedRunReceipt,
+  validateRecordRunAttemptProviderTurnStateInput,
 } from "./store-invariants.ts";
 import { normalizeStoredRunState } from "./stored-run-state.ts";
 import {
@@ -2666,6 +2668,35 @@ export class SqliteRunStore implements DomainStore {
         input.runId,
         input.lease,
         readLeaseClock(this.#clock),
+      );
+      this.#database.exec("COMMIT");
+      return clone(result);
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeSqliteError(error);
+    }
+  }
+
+  async recordRunAttemptProviderTurnState(
+    input: import("@crewon/application").RecordRunAttemptProviderTurnStateInput,
+  ) {
+    validateRecordRunAttemptProviderTurnStateInput(input);
+    this.#assertOpen();
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      this.#validateExecutionLease(
+        input.tenantId,
+        input.runId,
+        input.lease,
+        readLeaseClock(this.#clock),
+      );
+      const result = recordSqliteRunAttemptProviderTurnState(
+        this.#database,
+        { tenantId: input.tenantId, runId: input.runId, ...input.attempt },
+        input.lease.workItemId,
+        input.lease.leaseEpoch,
+        input.providerTurnState,
+        input.observedAt,
       );
       this.#database.exec("COMMIT");
       return clone(result);

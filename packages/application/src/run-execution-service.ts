@@ -32,6 +32,7 @@ import {
   threadGoalContinuationPrompt,
   threadGoalSteeringPrompt,
   validateProposedPlan,
+  validateProviderTurnState,
 } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
@@ -1600,6 +1601,37 @@ export class RunExecutionService {
         checkpoint: parsed,
         checkpointDigest: this.#digest(canonicalJson(parsed)),
         checkpointedAt: this.#now(),
+      });
+    } catch (error) {
+      throw mapExecutionError(error);
+    }
+  }
+
+  async recordProviderTurnState(
+    claim: WorkItemClaim,
+    attempt: RunAttemptIdentity,
+    providerTurnState: string,
+  ): Promise<RunAttemptState> {
+    const state = await this.loadRun(claim);
+    let validated: string | null;
+    try {
+      validated = validateProviderTurnState(providerTurnState);
+    } catch (error) {
+      throw new ApplicationError("validation", "provider_turn_state_invalid", {
+        cause: error,
+      });
+    }
+    if (validated === null) {
+      throw new ApplicationError("validation", "provider_turn_state_invalid");
+    }
+    try {
+      return await this.#store.recordRunAttemptProviderTurnState({
+        tenantId: state.tenantId,
+        lease: leaseInput(claim),
+        runId: state.runId,
+        attempt,
+        providerTurnState: validated,
+        observedAt: this.#now(),
       });
     } catch (error) {
       throw mapExecutionError(error);

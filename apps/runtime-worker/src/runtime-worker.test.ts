@@ -7987,6 +7987,99 @@ function registerRuntimeWorkerConformance(
       await worker.close();
     });
 
+    test("replays privately persisted provider state into a durable Attempt retry", async (context) => {
+      const fixture = await createFixture(context, createStore);
+      const released: string[] = [];
+      const firstTransport: ModelTransportPort = {
+        adapterName: "durable-turn-state-adapter",
+        adapterVersion: "1",
+        modelId: "durable-turn-state-model",
+        async *stream(_request, _signal, streamOptions) {
+          await streamOptions?.controlSink?.providerTurnStateObserved(
+            "durable-state-1",
+          );
+          yield { type: "failed", code: "provider_busy", retryable: true };
+        },
+        releaseRun(runId) {
+          released.push(`first:${runId}`);
+        },
+      };
+      const first = fixture.worker({
+        transport: firstTransport,
+        streamMaxRetries: 0,
+        retryAfterMs: 0,
+      });
+
+      assert.deepEqual(await first.wake(), {
+        kind: "retried",
+        runId: fixture.runId,
+        code: "provider_busy",
+      });
+      await first.close();
+
+      const replayedRequests: ModelRequest[] = [];
+      const secondTransport: ModelTransportPort = {
+        adapterName: firstTransport.adapterName,
+        adapterVersion: firstTransport.adapterVersion,
+        modelId: firstTransport.modelId,
+        async *stream(request) {
+          replayedRequests.push(structuredClone(request));
+          yield { type: "output.delta", delta: "done" };
+          yield { type: "completed", checkpoint: null };
+        },
+        releaseRun(runId) {
+          released.push(`second:${runId}`);
+        },
+      };
+      const second = fixture.worker({ transport: secondTransport });
+
+      assert.deepEqual(await second.wake(), {
+        kind: "completed",
+        runId: fixture.runId,
+      });
+      assert.equal(replayedRequests[0]?.providerTurnState, "durable-state-1");
+      assert.deepEqual(
+        (await fixture.attempts()).map(
+          ({ attemptNumber, retryOfAttemptId, status, providerTurnState }) => ({
+            attemptNumber,
+            retryOfAttemptId,
+            status,
+            providerTurnState,
+          }),
+        ),
+        [
+          {
+            attemptNumber: 1,
+            retryOfAttemptId: null,
+            status: "failed",
+            providerTurnState: "durable-state-1",
+          },
+          {
+            attemptNumber: 2,
+            retryOfAttemptId: "attempt-1",
+            status: "completed",
+            providerTurnState: "durable-state-1",
+          },
+        ],
+      );
+      const publicEvents = await fixture.events();
+      assert.equal(
+        publicEvents.some((event) =>
+          event.type.includes("provider_turn_state"),
+        ),
+        false,
+      );
+      assert.deepEqual(
+        publicEvents.map((event) => event.sequence),
+        publicEvents.map((_, index) => index + 1),
+      );
+      assert.deepEqual(released, [
+        `first:${fixture.runId}`,
+        `second:${fixture.runId}`,
+      ]);
+      await second.close();
+    });
+
     test("adopts a different prepared Tool approval without Provider side effects", async (context) => {
       const fixture = await createFixture(context, createStore);
       const policy = toolPolicy("mutation", "reconcilable", "perAction");

@@ -341,6 +341,40 @@ export async function checkpointPostgresRunAttempt(
   return next;
 }
 
+export async function recordPostgresRunAttemptProviderTurnState(
+  client: PoolClient,
+  schema: string,
+  locator: RunAttemptLocator,
+  workItemId: string,
+  leaseEpoch: number,
+  providerTurnState: string,
+  observedAt: string,
+): Promise<RunAttemptState> {
+  try {
+    validateProviderTurnState(providerTurnState);
+  } catch (error) {
+    throw new RunStoreError("attempt_provider_turn_state_invalid", {
+      cause: error,
+    });
+  }
+  const attempt = await loadPostgresRunAttempt(client, schema, locator, true);
+  if (attempt === null || attempt.status !== "running") {
+    throw new RunStoreError("run_attempt_not_running");
+  }
+  if (attempt.workItemId !== workItemId || attempt.leaseEpoch !== leaseEpoch) {
+    throw new RunStoreError("stale_attempt_epoch");
+  }
+  if (
+    attempt.providerTurnState !== null &&
+    attempt.providerTurnState !== providerTurnState
+  ) {
+    throw new RunStoreError("attempt_provider_turn_state_conflict");
+  }
+  const next = { ...attempt, providerTurnState, updatedAt: observedAt };
+  await updateRunAttempt(client, schema, next);
+  return next;
+}
+
 function decodeRunStep(row: RunStepRow, locator: RunStepLocator): RunStepState {
   const state = stateObject<RunStepState>(row.state_json);
   if (

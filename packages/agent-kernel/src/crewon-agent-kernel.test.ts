@@ -13,6 +13,7 @@ import { DeterministicFakeModelTransport } from "./deterministic-fake-model.ts";
 import {
   ModelTransportError,
   type ModelInputItem,
+  type ModelRequest,
   type ModelTransportPort,
 } from "./model-transport-port.ts";
 
@@ -1390,18 +1391,15 @@ test("retries an explicitly retryable model terminal in the same segment", async
 test("owns Run-private transport state through retry and releases it at segment terminal", async () => {
   const requests: ModelRequest[] = [];
   const released: string[] = [];
+  const persisted: string[] = [];
   const transport: ModelTransportPort = {
     adapterName: "turn-state-adapter",
     adapterVersion: "1",
     modelId: "turn-state-provider",
-    async *stream(request) {
+    async *stream(request, _signal, options) {
       requests.push(structuredClone(request));
       if (requests.length === 1) {
-        yield {
-          type: "completed",
-          checkpoint: null,
-          providerTurnState: "state-1",
-        };
+        await options?.controlSink?.providerTurnStateObserved("state-1");
         throw new ModelTransportError({
           category: "incomplete",
           code: "stream_failed",
@@ -1420,16 +1418,131 @@ test("owns Run-private transport state through retry and releases it at segment 
     },
   };
 
-  await collect(
+  const events = await collect(
     new CrewONAgentKernel({
       transport,
       streamMaxRetries: 1,
       retryScheduler: { wait: async () => undefined },
-    }).runSegment(segmentContract(), new AbortController().signal),
+    }).runSegment(segmentContract(), new AbortController().signal, {
+      controlSink: {
+        providerTurnStateObserved: async (providerTurnState) => {
+          persisted.push(providerTurnState);
+        },
+      },
+    }),
   );
 
   assert.equal(requests[0]?.providerTurnState, undefined);
   assert.equal(requests[1]?.providerTurnState, "state-1");
+  assert.deepEqual(persisted, ["state-1"]);
+  assert.deepEqual(
+    events.map(({ sequence, type }) => ({ sequence, type })),
+    [
+      { sequence: 1, type: "segment.started" },
+      { sequence: 2, type: "model.sampling.retry" },
+      { sequence: 3, type: "model.output.delta" },
+      { sequence: 4, type: "segment.completed" },
+    ],
+  );
+  assert.deepEqual(released, ["run-1"]);
+});
+
+test("persists observed Run control before retry exhaustion without emitting it", async () => {
+  const persisted: string[] = [];
+  const released: string[] = [];
+  const transport: ModelTransportPort = {
+    adapterName: "turn-state-adapter",
+    adapterVersion: "1",
+    modelId: "turn-state-provider",
+    async *stream(_request, _signal, options) {
+      await options?.controlSink?.providerTurnStateObserved(
+        "state-before-error",
+      );
+      throw new ModelTransportError({
+        category: "protocol",
+        code: "stream_malformed",
+        retryable: true,
+      });
+    },
+    releaseRun(runId) {
+      released.push(runId);
+    },
+  };
+  const events: KernelAgentEvent[] = [];
+
+  await assert.rejects(async () => {
+    for await (const event of new CrewONAgentKernel({
+      transport,
+      streamMaxRetries: 0,
+    }).runSegment(segmentContract(), new AbortController().signal, {
+      controlSink: {
+        providerTurnStateObserved: async (providerTurnState) => {
+          persisted.push(providerTurnState);
+        },
+      },
+    })) {
+      events.push(event);
+    }
+  }, hasKernelCode("stream_malformed"));
+
+  assert.deepEqual(persisted, ["state-before-error"]);
+  assert.deepEqual(
+    events.map(({ sequence, type }) => ({ sequence, type })),
+    [{ sequence: 1, type: "segment.started" }],
+  );
+  assert.deepEqual(released, ["run-1"]);
+});
+
+test("does not sample-retry a private durable control sink failure", async () => {
+  const staleLease = new Error("stale_lease");
+  const released: string[] = [];
+  let streams = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "turn-state-adapter",
+    adapterVersion: "1",
+    modelId: "turn-state-provider",
+    async *stream(_request, _signal, options) {
+      streams += 1;
+      try {
+        await options?.controlSink?.providerTurnStateObserved("state-1");
+      } catch (error) {
+        throw new ModelTransportError({
+          category: "unavailable",
+          code: "responses_transport_unavailable",
+          retryable: true,
+          cause: error,
+        });
+      }
+    },
+    releaseRun(runId) {
+      released.push(runId);
+    },
+  };
+  const events: KernelAgentEvent[] = [];
+
+  await assert.rejects(
+    async () => {
+      for await (const event of new CrewONAgentKernel({
+        transport,
+        streamMaxRetries: 3,
+      }).runSegment(segmentContract(), new AbortController().signal, {
+        controlSink: {
+          providerTurnStateObserved: async () => {
+            throw staleLease;
+          },
+        },
+      })) {
+        events.push(event);
+      }
+    },
+    (error) => error === staleLease,
+  );
+
+  assert.equal(streams, 1);
+  assert.deepEqual(
+    events.map(({ sequence, type }) => ({ sequence, type })),
+    [{ sequence: 1, type: "segment.started" }],
+  );
   assert.deepEqual(released, ["run-1"]);
 });
 

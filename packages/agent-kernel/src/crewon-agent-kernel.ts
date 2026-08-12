@@ -4,6 +4,7 @@ import {
   parseRateLimitSnapshot,
   type ProviderCheckpoint,
 } from "@crewon/contracts";
+import { validateProviderTurnState } from "@crewon/domain";
 import {
   type ToolCallKind,
   type ToolCatalogPort,
@@ -15,6 +16,7 @@ import {
   type AgentHistoryItem,
   type AgentKernelPort,
   type AgentSegmentContract,
+  type AgentSegmentRunOptions,
   type KernelAgentEvent,
   type SamplingRetryScheduler,
 } from "./agent-kernel-port.ts";
@@ -91,16 +93,18 @@ export class CrewONAgentKernel implements AgentKernelPort {
   runSegment(
     contract: AgentSegmentContract,
     signal: AbortSignal,
+    options?: AgentSegmentRunOptions,
   ): AsyncIterable<KernelAgentEvent> {
-    return this.#runSegmentScope(contract, signal);
+    return this.#runSegmentScope(contract, signal, options);
   }
 
   async *#runSegmentScope(
     contract: AgentSegmentContract,
     signal: AbortSignal,
+    options?: AgentSegmentRunOptions,
   ): AsyncIterable<KernelAgentEvent> {
     try {
-      yield* this.#runSegment(contract, signal);
+      yield* this.#runSegment(contract, signal, options);
     } finally {
       this.#transport.releaseRun?.(contract.runId);
     }
@@ -109,6 +113,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
   async *#runSegment(
     contract: AgentSegmentContract,
     signal: AbortSignal,
+    options?: AgentSegmentRunOptions,
   ): AsyncIterable<KernelAgentEvent> {
     validateContract(contract);
     if (
@@ -160,6 +165,8 @@ export class CrewONAgentKernel implements AgentKernelPort {
       let completedAssistantItems: string[] = [];
       let completedProviderRequestsContinuation = false;
       let completedProviderTurnState = contract.providerTurnState ?? null;
+      let persistedProviderTurnState = contract.providerTurnState ?? null;
+      let controlSinkFailure: unknown = null;
       let createdCheckpoint: ProviderCheckpoint | null = null;
       let retries = 0;
       while (true) {
@@ -171,7 +178,46 @@ export class CrewONAgentKernel implements AgentKernelPort {
         const completedItems: ModelInputItem[] = [];
         const toolCalls: ObservedToolCall[] = [];
         try {
-          for await (const event of this.#transport.stream(request, signal)) {
+          for await (const event of this.#transport.stream(request, signal, {
+            controlSink: {
+              providerTurnStateObserved: async (providerTurnState) => {
+                let validated: string | null;
+                try {
+                  validated = validateProviderTurnState(providerTurnState);
+                } catch (error) {
+                  throw new AgentKernelError(
+                    "provider_turn_state_invalid",
+                    false,
+                    { cause: error },
+                  );
+                }
+                if (validated === null) {
+                  throw new AgentKernelError(
+                    "provider_turn_state_invalid",
+                    false,
+                  );
+                }
+                if (persistedProviderTurnState === validated) return;
+                if (persistedProviderTurnState !== null) {
+                  throw new AgentKernelError(
+                    "provider_turn_state_conflict",
+                    false,
+                  );
+                }
+                try {
+                  await options?.controlSink?.providerTurnStateObserved(
+                    validated,
+                  );
+                } catch (error) {
+                  controlSinkFailure = error;
+                  throw error;
+                }
+                persistedProviderTurnState = validated;
+                completedProviderTurnState = validated;
+                request = { ...request, providerTurnState: validated };
+              },
+            },
+          })) {
             throwIfAborted(signal);
             if (terminalSeen) {
               throw new AgentKernelError("model_event_after_terminal", false);
@@ -475,6 +521,11 @@ export class CrewONAgentKernel implements AgentKernelPort {
             .map((item) => item.content);
           break;
         } catch (error) {
+          if (controlSinkFailure !== null) {
+            const failure = controlSinkFailure;
+            controlSinkFailure = null;
+            throw failure;
+          }
           const kernelError = normalizeSamplingError(error, signal);
           if (!kernelError.retryable) {
             throw kernelError;
@@ -507,7 +558,10 @@ export class CrewONAgentKernel implements AgentKernelPort {
             return;
           }
           if (retries >= this.#streamMaxRetries) {
-            if (createdCheckpoint !== null) {
+            if (
+              createdCheckpoint !== null ||
+              persistedProviderTurnState !== null
+            ) {
               throw kernelError;
             }
             throw exhaustedSamplingError(kernelError);
