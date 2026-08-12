@@ -1,7 +1,7 @@
 # W01 production transaction protocol
 
-Status: frozen for implementation. Production Workflow composition remains fail closed until every
-transaction below has real SQLite conformance and the applicable PostgreSQL/cross-process checks.
+Status: accepted for the TypeScript runtime. Production Workflow composition is enabled only when
+one physical SQLite or PostgreSQL Store implements every transaction below.
 
 ## Global authority rules
 
@@ -86,11 +86,12 @@ queued, running, waitingHuman, and unknown nodes: deterministic unsent work may 
 possibly-sent work creates/reuses reconciliation before the current WorkItem completes. Late outcome
 cannot overwrite canceled. Only an exact `terminalConverged` result authorizes Worker completion.
 
-## Production prohibition
+## Production gate
 
-Production export/composition remains disabled when any method is absent, throws
+Production export/composition fails closed when any method is absent, throws
 `workflow_composition_contract_incomplete`, is backed only by a mock/conditional skip, or is supplied
-by a different Store instance. No fake adapter may be used to claim an end-to-end slice.
+by a different Store instance. SQLite and PostgreSQL production composition are enabled only from
+their canonical `DomainStore`; no second pool/Store or fake adapter may claim an end-to-end slice.
 
 ## W01 acceptance matrix (2026-08-13)
 
@@ -104,6 +105,6 @@ by a different Store instance. No fake adapter may be used to claim an end-to-en
 | Human Gate | 通过（SQLite Control） | strict public decision API plus real certified Worker proves approve→Verification→completed and reject→failed; internal receipt/resume authority is not exposed |
 | Reconciliation | 通过（TS SQLite Slice 4） | real second-connection Worker restart covers `possiblySent`, `notDispatched`, checkpoint-only `responseObserved`, and Store-owned terminal candidates. Candidate recovery settles from frozen schema authority with one model sample; exact receipt replay is observation-only and mismatched candidate IDs fail closed |
 | Terminal convergence | 通过（TS SQLite Slices 1–5） | success、Verification、gate、reconcile 与 cancel 均由 Store 单事务收敛；queued、running/notSent、waitingHuman、unknown/possiblySent 以及 responseObserved late outcome 已覆盖，provider 终态仅保留审计证据且不能覆盖 canceled canonical DAG/Step/Attempt/Run |
-| PostgreSQL real-host | 通过 | real PostgreSQL `127.0.0.1:54819` ran 31 focused tests with zero skips; two independent `PostgresWorkflowRunCompositionStore` processes held sibling leases, survived `SIGKILL`/restart with epoch fencing, and preserved unique receipt/continuation authority |
+| PostgreSQL real-host | 通过 | real PostgreSQL ran the complete Store suite (556 pass, 0 fail; one unrelated Provider skip), Worker suite (355/355), and Control suite (112/112). One `PostgresDomainStore` now owns Run, Attempt, dispatch evidence, Workflow composition, and terminal convergence; the public production Control→Worker→Agent→Verification vertical completed with two Attempts. Earlier two-process/SIGKILL tests also preserved lease epochs and unique receipt/continuation authority |
 | Packaged crash recovery | 通过 | packaged `.app` used only the TS Control/Gateway/Worker/Release runtime: after Worker and GUI `SIGKILL`, guardian cleared the process tree and the same HOME resumed Agent→Verification to one canonical `run.completed`; two distinct node requests produced exactly two Attempts with no repeated model side effect |
 | Rust compatibility | 不适用（纯 TS 迁移边界） | migration uses the TS runtime only; Rust is not used during migration, and no compatibility layer, dual-write, fallback, or parity gate will be built; only a hard TS build dependency may receive minimal decoupling |
