@@ -8,6 +8,7 @@ import {
   composeWorkflowNodeInput,
   composeWorkflowOutput,
   reduceRunLifecycleEvent,
+  replayRunLifecycle,
   validateWorkflowSchemaValue,
   workflowNodeInputSchema,
   type RunState,
@@ -458,6 +459,7 @@ export class SqliteWorkflowRunCompositionStore {
     const now = new Date(nowMs).toISOString();
     const fingerprint = this.#fingerprint("settleGate", input);
     try {
+      this.#database.exec("BEGIN IMMEDIATE");
       const replay = this.#receipt(input, "settleGate", fingerprint);
       if (replay !== null) {
         this.#validateTerminalReplay(input, replay);
@@ -1645,6 +1647,9 @@ export class SqliteWorkflowRunCompositionStore {
     const run = this.#loadRun(input.tenantId, input.runId);
     const eventId = workflowAuthorityId("run-event", input, this.#digester);
     const messageId = workflowAuthorityId("run-outbox", input, this.#digester);
+    const eventRows = this.#database.prepare(
+      `SELECT event_json FROM run_events WHERE tenant_id=? AND run_id=? ORDER BY sequence`,
+    ).all(input.tenantId, input.runId) as { event_json: string }[];
     const eventRow = this.#database.prepare(
       `SELECT event_json FROM run_events WHERE tenant_id=? AND run_id=? AND event_id=?`,
     ).get(input.tenantId, input.runId, eventId) as { event_json: string } | undefined;
@@ -1654,11 +1659,29 @@ export class SqliteWorkflowRunCompositionStore {
     if (run === null || eventRow === undefined || outboxRow === undefined ||
         run.lastSequence < 1 || run.status !== execution.status)
       throw new RunStoreError("workflow_composition_terminal_replay_corrupt");
-    const event = JSON.parse(eventRow.event_json) as { eventId?: unknown; sequence?: unknown; type?: unknown };
-    const outbox = JSON.parse(outboxRow.message_json) as { messageId?: unknown; payload?: Record<string, unknown> };
+    const events = eventRows.map((row) => JSON.parse(row.event_json)) as
+      import("@crewon/domain").RunLifecycleEvent[];
+    const event = JSON.parse(eventRow.event_json) as import("@crewon/domain").RunLifecycleEvent;
+    const outbox = JSON.parse(outboxRow.message_json) as {
+      messageId?: unknown; tenantId?: unknown; runId?: unknown; topic?: unknown;
+      createdAt?: unknown; payload?: Record<string, unknown> };
+    const expectedType = execution.status === "completed" ? "run.completed"
+      : execution.status === "failed" ? "run.failed" : "run.canceled";
+    const expectedData = execution.status === "completed"
+      ? { outputRef: run.outputRef }
+      : execution.status === "failed"
+        ? { code: "workflow_node_failed", retryable: false }
+        : { reasonCode: "workflow_canceled" };
     if (event.eventId !== eventId || event.sequence !== run.lastSequence ||
+        event.type !== expectedType || stableJson(event.data) !== stableJson(expectedData) ||
+        stableJson(replayRunLifecycle(events)) !== stableJson(run) ||
         outbox.messageId !== messageId || outbox.payload?.eventId !== eventId ||
-        outbox.payload?.throughSequence !== event.sequence)
+        outbox.tenantId !== input.tenantId || outbox.runId !== input.runId ||
+        outbox.topic !== "run.updated" || outbox.createdAt !== event.occurredAt ||
+        outbox.payload?.eventType !== event.type ||
+        outbox.payload?.throughSequence !== event.sequence ||
+        Object.keys(outbox.payload ?? {}).sort().join(",") !==
+          "eventId,eventType,throughSequence")
       throw new RunStoreError("workflow_composition_terminal_replay_corrupt");
     if (execution.status === "completed") {
       const output = this.#loadExecutionValue(input.tenantId, input.runId,
