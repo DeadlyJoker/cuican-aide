@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer as createHttpsServer, type Server } from "node:https";
@@ -7,6 +8,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { TLSSocket } from "node:tls";
 import test, { type TestContext } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { compileAgentVersion } from "@crewon/agent-version";
 import { canonicalActionIntent } from "@crewon/contracts";
@@ -16,10 +18,7 @@ import {
   loadAgentVersionRuntimeFactory,
   loadRemoteMcpManifestBindings,
 } from "./runtime-binding-config.ts";
-import {
-  installRuntimeNativeBootstrap,
-  takeRuntimeNativeBootstrap,
-} from "./runtime-native-bootstrap.ts";
+import { takeRuntimeNativeBootstrap } from "./runtime-native-bootstrap.ts";
 import { createRuntimeNativeRemoteMcpOwner } from "./runtime-native-remote-mcp.ts";
 import type { PinnedHttpPort } from "./pinned-node-http.ts";
 import { PinnedNodeHttpTransport } from "./pinned-node-http.ts";
@@ -30,14 +29,27 @@ import {
 } from "../../device-gateway/src/mtls-test-certificates.test-support.ts";
 
 const SECRET = "remote-mcp-production-secret-sentinel";
+const PACKAGED_GATE_CHILD = "CREWON_REMOTE_MCP_PACKAGED_GATE_CHILD";
+
+if (process.env[PACKAGED_GATE_CHILD] === "1") {
+  // The packaged sidecar intentionally remains plain JavaScript for Node startup.
+  const { readAndInstallRuntimeNativeBootstrap } = await import(
+    // @ts-ignore no declaration file is shipped for the sidecar module
+    "../../crewon-ui/src-tauri/sidecars/runtime-worker-bootstrap.mjs"
+  );
+  await readAndInstallRuntimeNativeBootstrap();
+}
 
 test("released production composition transport gate reconciles a remote receipt exactly once", async (t) => {
+  if (process.env[PACKAGED_GATE_CHILD] !== "1") {
+    await runPackagedGateChild(t);
+    return;
+  }
   const remote = await ControlledTlsRemoteReceiptServer.listen(t);
   const paths = releasedManifests(t, remote.endpoint.href);
   const identities = loadRemoteMcpManifestBindings(paths.bindingPath);
   assert.equal(identities.length, 1);
 
-  installRuntimeNativeBootstrap(nativeV3Envelope());
   const bootstrap = takeRuntimeNativeBootstrap();
   assert.ok(
     bootstrap?.credentialBindings !== null &&
@@ -136,6 +148,38 @@ test("released production composition transport gate reconciles a remote receipt
   ]);
   assert.deepEqual(remote.admittedAddresses, ["8.8.8.8", "8.8.8.8"]);
 });
+
+async function runPackagedGateChild(t: TestContext): Promise<void> {
+  const environment: NodeJS.ProcessEnv = {
+    ...process.env,
+    [PACKAGED_GATE_CHILD]: "1",
+  };
+  delete environment["NODE_TEST_CONTEXT"];
+  const child = spawn(
+    process.execPath,
+    ["--experimental-strip-types", fileURLToPath(import.meta.url)],
+    {
+      env: environment,
+      stdio: ["pipe", "pipe", "pipe"],
+    },
+  );
+  t.after(() => {
+    if (child.exitCode === null) child.kill("SIGKILL");
+  });
+  child.stdin.end(`${JSON.stringify(nativeV3Envelope())}\n`);
+  const stdout: Buffer[] = [];
+  const stderr: Buffer[] = [];
+  child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+  child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+  const code = await new Promise<number | null>((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", resolve);
+  });
+  const output = `${Buffer.concat(stdout).toString("utf8")}\n${Buffer.concat(stderr).toString("utf8")}`;
+  assert.equal(code, 0, output);
+  assert.match(output, /pass 1/u);
+  assert.doesNotMatch(output, new RegExp(SECRET, "u"));
+}
 
 class ControlledTlsRemoteReceiptServer {
   readonly #receipts = new Map<string, string>();
