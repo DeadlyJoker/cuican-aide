@@ -97,14 +97,13 @@ by a different Store instance. No fake adapter may be used to claim an end-to-en
 | Capability | Status | Current evidence / gap |
 | --- | --- | --- |
 | transaction contract | 通过 | this protocol plus discriminated Application ports |
-| Workflow Start | 实现中 | SQLite/PG isolated authority exists; not yet one real Slice 1 composition |
-| Scheduler fan-out | 实现中 | independent node WorkItems exist; SQLite vertical run not yet accepted |
-| Node admission | 实现中 | fresh-only port and Store paths exist; vertical run not yet accepted |
-| Node settlement | 实现中 | isolated SQLite/PG work exists; full Agent→Verification run pending |
+| Workflow Start | 通过（SQLite Slice 1） | real Application Start plus exact receipt replay; replay performs no route resolution or ID generation |
+| Scheduler fan-out | 通过（SQLite Slice 1） | real Worker persists `run.started`, then scheduler creates independent Agent and Verification WorkItems |
+| Node admission | 通过（SQLite Slice 1） | real certified Worker admits each node under its own WorkItem/Attempt; mock adversarial suite separately covers replay and response-loss fencing |
+| Node settlement | 通过（SQLite Slice 1） | real Agent and Verification dispatch evidence and terminal receipts settle atomically; both nodes sample once |
 | Human Gate | 实现中 | isolated Store behavior exists; Slice 3 not accepted |
 | Reconciliation | 实现中 | SQLite partial; Worker/PG production path incomplete |
-| Terminal convergence | 实现中 | isolated Store convergence exists; canonical Run vertical proof pending |
+| Terminal convergence | 通过（SQLite Slice 1） | real two-node Run reaches canonical `completed`; event replay deep-equals the stored Run and no Attempt remains running |
 | PostgreSQL real-host | 未验证 | focused real-host checks passed, but Slice 6 dual-process acceptance has not |
 | Packaged crash recovery | 未验证 | no packaged Workflow vertical acceptance |
 | Rust compatibility | 未验证 | base Agent parity evidence exists; W01 protocol/runtime compatibility pending |
-
