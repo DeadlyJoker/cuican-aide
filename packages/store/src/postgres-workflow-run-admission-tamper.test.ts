@@ -7,6 +7,7 @@ import {
   postgresFixture,
   service,
 } from "./postgres-workflow-run-admission.test.ts";
+import { createRunningCommitFixture } from "./run-store-conformance.test-support.ts";
 
 const postgresUrl = process.env.CREWON_TEST_POSTGRES_URL;
 
@@ -21,6 +22,9 @@ if (postgresUrl === undefined) {
         command(),
       );
       const runId = first.run.state.runId;
+      const ordinary = await fixture.domain.commitRun(
+        createRunningCommitFixture(),
+      );
       const cases = [
         {
           name: "Run snapshot",
@@ -79,6 +83,45 @@ if (postgresUrl === undefined) {
         );
         await fixture.pool.query(tamper.restore, [runId, tamper.original]);
       }
+
+      await fixture.pool.query(
+        `UPDATE ${fixture.schema}.workflow_run_admission_receipts
+         SET run_id=$2 WHERE run_id=$1`,
+        [runId, ordinary.state.runId],
+      );
+      await assert.rejects(
+        service(fixture.admission).startWorkflowRun(actor(), command()),
+        /workflow_run_admission_receipt_corrupt/u,
+        "specialized receipt run_id",
+      );
+      await fixture.pool.query(
+        `UPDATE ${fixture.schema}.workflow_run_admission_receipts
+         SET run_id=$2 WHERE run_id=$1`,
+        [ordinary.state.runId, runId],
+      );
+
+      const descriptor = await receiptJson(
+        fixture.pool,
+        fixture.schema,
+        "workflow_run_admission_receipts",
+        runId,
+      );
+      await fixture.pool.query(
+        `UPDATE ${fixture.schema}.workflow_run_admission_receipts
+         SET result_json=jsonb_set(result_json,'{generalIdempotency,requestFingerprint}','"tampered"')
+         WHERE run_id=$1`,
+        [runId],
+      );
+      await assert.rejects(
+        service(fixture.admission).startWorkflowRun(actor(), command()),
+        /workflow_run_admission_receipt_corrupt/u,
+        "general receipt descriptor",
+      );
+      await fixture.pool.query(
+        `UPDATE ${fixture.schema}.workflow_run_admission_receipts
+         SET result_json=$2 WHERE run_id=$1`,
+        [runId, descriptor],
+      );
 
       const specialized = await receiptJson(
         fixture.pool,

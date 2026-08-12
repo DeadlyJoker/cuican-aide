@@ -47,6 +47,7 @@ if (postgresUrl === undefined) {
       const first = await service(store).startWorkflowRun(actor(), command());
       const replay = await service(store).startWorkflowRun(actor(), command());
       assert.equal(first.run.disposition, "committed");
+      assert.equal(first.authority.route.agentVersionId, "default-agent");
       assert.deepEqual(replay, {
         ...first,
         run: { ...first.run, disposition: "replayed" },
@@ -166,22 +167,26 @@ if (postgresUrl === undefined) {
     }
   });
 
-  test("ordinary Run writer and Workflow admission do not deadlock", async () => {
-    const fixture = await postgresFixture();
-    try {
-      const store = countingStore(fixture.admission);
-      const outcomes = await Promise.allSettled([
-        service(store).startWorkflowRun(actor(), command()),
-        fixture.domain.commitRun(createRunningCommitFixture()),
-      ]);
-      assert.equal(
-        outcomes.filter((outcome) => outcome.status === "fulfilled").length,
-        2,
-      );
-    } finally {
-      await fixture.close();
-    }
-  });
+  test(
+    "ordinary Run writer and Workflow admission do not deadlock",
+    { timeout: 5_000 },
+    async () => {
+      const fixture = await postgresFixture();
+      try {
+        const store = countingStore(fixture.admission);
+        const outcomes = await Promise.allSettled([
+          service(store).startWorkflowRun(actor(), command()),
+          fixture.domain.commitRun(createRunningCommitFixture()),
+        ]);
+        assert.equal(
+          outcomes.filter((outcome) => outcome.status === "fulfilled").length,
+          2,
+        );
+      } finally {
+        await fixture.close();
+      }
+    },
+  );
 
   test("reopen replays and durable authority tampering fails closed", async () => {
     const fixture = await postgresFixture();
