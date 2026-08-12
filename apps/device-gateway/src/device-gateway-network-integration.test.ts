@@ -340,6 +340,61 @@ test("completes an approved RuntimeWorker Device Tool over the real network", as
   }
 });
 
+test("samples again after a signed raw workspace read crosses the authenticated Gateway", async (context) => {
+  const directory = await mkdtemp(path.join(tmpdir(), "crewon-device-raw-read-"));
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const commandKeys = generateKeyPairSync("ed25519");
+  const runtimeNow = () => new Date();
+  const gateway = await openGateway(
+    path.join(directory, "gateway.sqlite"),
+    commandKeys.publicKey,
+    runtimeNow,
+  );
+  const device = await connectDevice(gateway.port);
+  const dispatch = workerClient(gateway.port);
+  const signer = new Ed25519DeviceCommandSigner({
+    keyId: "control-key-1",
+    privateKey: commandKeys.privateKey,
+    now: runtimeNow,
+    authorizationTtlMs: 60_000,
+  });
+  const signedCommands: DeviceExecutionCommand[] = [];
+  const toolRuntime = createNetworkDeviceToolRuntime(
+    dispatch,
+    signer,
+    signedCommands,
+    "rawRead",
+  );
+  const fixture = await createRuntimeFixture(toolRuntime, "rawRead");
+  try {
+    assert.deepEqual(await fixture.worker.wake(), {
+      kind: "completed",
+      runId: fixture.runId,
+    });
+    assert.equal(fixture.modelRequests.length, 2);
+    assert.deepEqual(fixture.modelRequests[1]?.input.items.at(-1), {
+      type: "tool_result",
+      kind: "function",
+      callId: "device-call-1",
+      output: "device output",
+    });
+    const command = signedCommands[0];
+    assert.ok(command !== undefined);
+    assert.equal(command.capability, "workspace.read_file.raw_tool.v0");
+    assert.equal(command.workspaceBindingId, route.workspaceBindingId);
+    assert.deepEqual(command.arguments, rawReadArguments());
+    assert.match(command.leaseId, /.+/u);
+    assert.equal(command.leaseEpoch, 1);
+    assert.equal(command.authorization.keyId, "control-key-1");
+  } finally {
+    await fixture.worker.close();
+    await fixture.store.close();
+    await toolRuntime.close();
+    await gateway.server.close();
+    device.terminate();
+  }
+});
+
 test("moves a real RuntimeWorker mutation through unknown, reconnect reconciliation and completion", async (context) => {
   const directory = await mkdtemp(
     path.join(tmpdir(), "crewon-device-worker-recovery-"),
@@ -507,7 +562,7 @@ async function connectDevice(port: number): Promise<WebSocket> {
       supportedProtocolVersions: [DEVICE_PROTOCOL_VERSION],
       deviceId: "device-1",
       connectionId: "connection-1",
-      capabilities: ["workspace.read"],
+      capabilities: ["workspace.read", "workspace.read_file.raw_tool.v0"],
       lastAcknowledged: [],
       sentAt: now().toISOString(),
     }),
@@ -653,7 +708,7 @@ async function openDeviceSocket(
       supportedProtocolVersions: [DEVICE_PROTOCOL_VERSION],
       deviceId: "device-1",
       connectionId,
-      capabilities: ["workspace.read"],
+      capabilities: ["workspace.read", "workspace.read_file.raw_tool.v0"],
       lastAcknowledged,
       sentAt: now().toISOString(),
     }),
@@ -678,32 +733,38 @@ function createNetworkDeviceToolRuntime(
   dispatch: HttpsDeviceDispatchClient,
   signer: Ed25519DeviceCommandSigner,
   signedCommands: DeviceExecutionCommand[],
+  mode: "mutation" | "rawRead" = "mutation",
 ): DeviceToolRuntime {
+  const rawRead = mode === "rawRead";
   return new DeviceToolRuntime({
     definitions: [
       {
         schemaVersion: "crewon.tool-definition.v0",
         kind: "function",
-        name: "workspace_write",
-        description: "Writes one bounded workspace value.",
+        name: rawRead ? "read_file" : "workspace_write",
+        description: rawRead
+          ? "Reads one bounded workspace file."
+          : "Writes one bounded workspace value.",
         execution: "serial",
         inputSchema: { type: "object" },
       },
     ],
     policies: new Map([
       [
-        "function:workspace_write",
+        rawRead ? "function:read_file" : "function:workspace_write",
         {
-          effect: "mutation",
-          recovery: "reconcilable",
+          effect: rawRead ? "readOnly" : "mutation",
+          recovery: rawRead ? "replaySafe" : "reconcilable",
           resourceBindingId: null,
           credentialBindingId: null,
           executionTarget: {
             kind: "device",
             bindingId: "device-binding-1",
           },
-          capability: "workspace.read",
-          approvalRequirement: "perAction",
+          capability: rawRead
+            ? "workspace.read_file.raw_tool.v0"
+            : "workspace.read",
+          approvalRequirement: rawRead ? "none" : "perAction",
           limits: {
             timeoutMs: 30_000,
             maxOutputBytes: 64 * 1024,
@@ -748,7 +809,10 @@ async function approvePendingDeviceTool(
   });
 }
 
-async function createRuntimeFixture(toolRuntime: DeviceToolRuntime) {
+async function createRuntimeFixture(
+  toolRuntime: DeviceToolRuntime,
+  mode: "mutation" | "rawRead" = "mutation",
+) {
   const store = new InMemoryRunStore();
   const clock = new SystemApplicationClock();
   const ids = new UuidV7ApplicationIdGenerator();
@@ -792,7 +856,7 @@ async function createRuntimeFixture(toolRuntime: DeviceToolRuntime) {
     threadId: thread.state.threadId,
     expectedRevision: 1,
     role: "user",
-    content: "write through Device",
+    content: mode === "rawRead" ? "read through Device" : "write through Device",
   });
   const run = await runs.createRun(actor(), {
     kind: "run.create",
@@ -814,8 +878,11 @@ async function createRuntimeFixture(toolRuntime: DeviceToolRuntime) {
           type: "tool.call" as const,
           kind: "function" as const,
           callId: "device-call-1",
-          name: "workspace_write",
-          input: '{"value":"approved"}',
+          name: mode === "rawRead" ? "read_file" : "workspace_write",
+          input:
+            mode === "rawRead"
+              ? JSON.stringify(rawReadArguments())
+              : '{"value":"approved"}',
         };
         yield { type: "completed" as const, checkpoint: null };
         return;
@@ -854,6 +921,15 @@ async function createRuntimeFixture(toolRuntime: DeviceToolRuntime) {
   };
 }
 
+function rawReadArguments() {
+  return {
+    schemaVersion: "crewon.device-filesystem-read-arguments.v0",
+    workspaceIncarnationId: "workspace-incarnation-1",
+    relativePathSegments: ["notes", "plan.txt"],
+    encoding: "utf8",
+  } as const;
+}
+
 function actor(): ActorContext {
   return {
     principalId: "principal-1",
@@ -876,9 +952,9 @@ function commandDraft(): Omit<DeviceExecutionCommand, "authorization"> {
     attemptId: "attempt-1",
     executionId: "execution-1",
     workspaceBindingId: "workspace-1",
-    capability: "workspace.read",
+    capability: "workspace.read_file.raw_tool.v0",
     actionDigest: `sha256:${"a".repeat(64)}`,
-    arguments: { path: "relative/file.txt" },
+    arguments: rawReadArguments(),
     payloadRef: null,
     limits: {
       timeoutMs: 30_000,
