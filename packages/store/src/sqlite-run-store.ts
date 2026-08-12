@@ -3629,7 +3629,7 @@ export class SqliteRunStore implements DomainStore {
         throw new RunStoreError("workflow_execution_value_invalid");
       this.#validateWorkflowPreparedCommit(input, prepared.commit,
         workflowVersion, route, prepared.workflowInputValue);
-      const run = this.#commitRun(prepared.commit, null, null, true);
+      const run = this.#commitRun(prepared.commit, null, null, true, true);
       const work = run.workItems[0];
       const ref = { valueId: prepared.workflowInputValue.valueId,
         valueDigest: prepared.workflowInputValue.valueDigest };
@@ -3986,6 +3986,7 @@ export class SqliteRunStore implements DomainStore {
     executionLease: WorkItemLeaseInput | null,
     history: ModelHistoryAppend | null,
     withinTransaction = false,
+    workflowScheduler = false,
   ): CommitRunResult {
     this.#assertOpen();
     const runId = validateCommitInput(input);
@@ -4114,7 +4115,8 @@ export class SqliteRunStore implements DomainStore {
         input.tenantId,
         input.events.at(-1)?.sequence ?? 0,
         (workItemId) => this.#workItemIdExists(workItemId),
-        input.threadAdmission === undefined ? "default" : "manualCompaction",
+        workflowScheduler ? "workflowScheduler"
+          : input.threadAdmission === undefined ? "default" : "manualCompaction",
       );
 
       this.#writeSnapshot(current, next, input.expectedRevision);
@@ -5427,6 +5429,20 @@ export class SqliteRunStore implements DomainStore {
       | { value_id: string; value_digest: string; value_json: string }
       | undefined;
     const work = result.run.workItems[0];
+    const event = result.run.events[0];
+    const outbox = result.run.outbox[0];
+    const storedEvent = event === undefined ? undefined : this.#database.prepare(
+      "SELECT event_json FROM run_events WHERE tenant_id=? AND event_id=?",
+    ).get(result.run.state.tenantId, event.eventId) as
+      | { event_json: string } | undefined;
+    const storedOutbox = outbox === undefined ? undefined : this.#database.prepare(
+      "SELECT topic,message_json FROM outbox WHERE tenant_id=? AND message_id=?",
+    ).get(result.run.state.tenantId, outbox.messageId) as
+      | { topic: string; message_json: string } | undefined;
+    const storedWork = work === undefined ? undefined : this.#database.prepare(
+      "SELECT work_item_json FROM work_items WHERE tenant_id=? AND work_item_id=?",
+    ).get(result.run.state.tenantId, work.workItemId) as
+      | { work_item_json: string } | undefined;
     const ref = work?.payload.workflowInput as
       | { valueId?: unknown; valueDigest?: unknown }
       | undefined;
@@ -5435,7 +5451,11 @@ export class SqliteRunStore implements DomainStore {
         ref.valueDigest !== root.value_digest ||
         this.#workflowDigester === null ||
         canonicalJson(JSON.parse(root.value_json)) !== root.value_json ||
-        this.#workflowDigester.sha256(root.value_json) !== root.value_digest)
+        this.#workflowDigester.sha256(root.value_json) !== root.value_digest ||
+        storedEvent?.event_json !== stableJson(event) ||
+        storedOutbox?.topic !== outbox?.topic ||
+        storedOutbox?.message_json !== stableJson(outbox) ||
+        storedWork?.work_item_json !== stableJson(work))
       throw new RunStoreError("workflow_run_admission_receipt_corrupt");
   }
 

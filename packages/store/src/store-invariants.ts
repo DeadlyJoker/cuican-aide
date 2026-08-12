@@ -3018,6 +3018,7 @@ export function validateWorkItems(
     | "goalContinuation"
     | "goalActivation"
     | "automationInvocation"
+    | "workflowScheduler"
     | "manualCompaction" = "default",
 ): void {
   const workItemIds = new Set<string>();
@@ -3029,7 +3030,15 @@ export function validateWorkItems(
     }
     const payloadKeys = Object.keys(workItem.payload).sort();
     const payloadValid =
-      payloadKind === "default"
+      payloadKind === "workflowScheduler"
+        ? stableJson(payloadKeys) === stableJson([
+            "binding",
+            "schedulerOperationId",
+            "schemaVersion",
+            "trigger",
+            "workflowInput",
+          ])
+        : payloadKind === "default"
         ? stableJson(payloadKeys) === stableJson(["throughSequence"])
         : payloadKind === "goalContinuation"
           ? stableJson(payloadKeys) ===
@@ -3063,7 +3072,8 @@ export function validateWorkItems(
                   "throughSequence",
                   "trigger",
                 ]);
-    if (!payloadValid || workItem.payload.throughSequence !== throughSequence) {
+    if (!payloadValid || (payloadKind !== "workflowScheduler" &&
+        workItem.payload.throughSequence !== throughSequence)) {
       throw new RunStoreError("work_item_payload_invalid");
     }
     if (
