@@ -154,7 +154,7 @@ for (const decision of ["approve", "reject"] as const) test(
   },
 );
 
-test("SQLite Slice 4 restart reconciles possibly-sent model work without resampling", async (t) => {
+test("SQLite Slice 4 restart settles response-observed model work without resampling", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-slice-four-"));
   const path = join(directory, "runtime.sqlite");
   let runtime: Awaited<ReturnType<typeof createStandaloneRuntimeWorker>> | undefined;
@@ -201,15 +201,28 @@ test("SQLite Slice 4 restart reconciles possibly-sent model work without resampl
   await runtime.worker.wake();
   assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
   assert.deepEqual(inspectReconciliation(path, runId), {
-    dispatchStatus: "possiblySent", nodeStatus: "unknown", reconcilePending: 1,
+    dispatchStatus: "responseObserved", continuationCount: 0,
+    terminalEventCount: 0, nodeStatus: "unknown", reconcilePending: 1,
   });
   await runtime.close();
   runtime = await openUncertainRuntime(path, config, samples, "slice-four-recovery-worker");
 
   const reconciled = await runtime.worker.wake();
-  assert.equal(reconciled.kind, "workflowRecovery");
+  assert.deepEqual(reconciled, { kind: "workflowRecovery", runId,
+    code: "workflow_reconciliation_settled" });
   assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
-  assert.equal(inspectReconciliation(path, runId).reconcilePending, 0);
+  assert.deepEqual(inspectReconciliation(path, runId), {
+    dispatchStatus: "terminal", continuationCount: 0,
+    terminalEventCount: 1, nodeStatus: "completed", reconcilePending: 0,
+  });
+
+  const replay = await runtime.worker.wake();
+  assert.notEqual(replay.kind, "workflowRecovery");
+  assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
+  assert.deepEqual(inspectReconciliation(path, runId), {
+    dispatchStatus: "terminal", continuationCount: 0,
+    terminalEventCount: 1, nodeStatus: "completed", reconcilePending: 0,
+  });
 });
 
 test("SQLite Slice 4 not-dispatched reconciliation grants only a new admission", async (t) => {
@@ -375,6 +388,11 @@ function inspectReconciliation(path: string, runId: string) {
       "SELECT state_json FROM workflow_executions WHERE run_id=?").get(runId)!.state_json as string);
     return { dispatchStatus: database.prepare(
       "SELECT status FROM model_dispatch_receipts WHERE run_id=?").get(runId)?.status,
+      continuationCount: database.prepare(
+        "SELECT count(*) count FROM workflow_node_continuations WHERE run_id=?",
+      ).get(runId)!.count,
+      terminalEventCount: database.prepare(`SELECT count(*) count FROM run_events WHERE run_id=?
+        AND json_extract(event_json,'$.type')='workflow.node.completed'`).get(runId)!.count,
       nodeStatus: execution.nodes.find((node: { nodeId: string }) => node.nodeId === "agent")?.status,
       reconcilePending: database.prepare(`SELECT count(*) count FROM work_items WHERE run_id=?
         AND status='pending' AND json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`)
@@ -445,7 +463,13 @@ function uncertainNodeRuntime(agentVersionId: string, samples: Map<string, numbe
           agentVersionId, adapterName: "test", adapterVersion: "1", modelId: "model" } };
       await options.controlSink?.modelRequestPrepared?.(evidence);
       await options.controlSink?.dispatchBoundaryCrossed?.(evidence);
-      throw new Error("provider_connection_lost_after_dispatch");
+      const base = { schemaVersion: "crewon.agent-event.v0", runId: contract.runId,
+        segmentId: contract.segmentId } as const;
+      yield { ...base, sequence: 1, type: "segment.started", data: { attempt: 1, model: "model" } };
+      yield { ...base, sequence: 2, type: "segment.provider_response_created", data: { checkpoint: {
+        schemaVersion: "crewon.provider-checkpoint.v0", adapterName: "test", adapterVersion: "1",
+        modelId: "model", opaquePayload: { responseId: `${agentVersionId}-response` } } } };
+      throw new WorkflowNodeSideEffectUncertainError();
     } } } as never;
 }
 function preparedOnlyNodeRuntime(agentVersionId: string) {
