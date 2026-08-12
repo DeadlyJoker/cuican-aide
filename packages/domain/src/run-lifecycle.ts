@@ -126,10 +126,10 @@ export type RunLifecycleEvent =
       data: Readonly<{
         binding: FrozenWorkflowVersionBinding;
         nodeId: string;
-        claimId: string;
-        claimEpoch: number;
+        claimId: string | null;
+        claimEpoch: number | null;
         stepId: string;
-        attemptId: string;
+        attemptId: string | null;
         status: "completed" | "failed" | "canceled";
         resultDigest: string | null;
         failureCode: string | null;
@@ -360,7 +360,7 @@ export function reduceRunLifecycleEvent(
   if (isTerminal(state.status)) {
     throw new RunLifecycleError("terminal_state");
   }
-  validateCancelProgress(state, event.type);
+  validateCancelProgress(state, event);
 
   const next = {
     ...state,
@@ -493,10 +493,21 @@ export function reduceRunLifecycleEvent(
           "attemptId,binding,claimEpoch,claimId,failureCode,nodeId,resultDigest,status,stepId")
         throw new RunLifecycleError("workflow_node_terminal_shape_invalid");
       parseFrozenWorkflowVersionBinding(event.data.binding);
-      for (const value of [event.data.nodeId, event.data.claimId,
-        event.data.stepId, event.data.attemptId])
+      for (const value of [event.data.nodeId, event.data.stepId])
         requireBoundedNonEmpty(value, 512, "workflow_node_terminal_authority_invalid");
-      requirePositiveInteger(event.data.claimEpoch, "workflow_node_claim_epoch_invalid");
+      if ((event.data.claimId === null) !== (event.data.claimEpoch === null) ||
+          (event.data.claimId === null && event.data.attemptId !== null) ||
+          (event.data.status !== "canceled" &&
+            (event.data.claimId === null || event.data.attemptId === null)))
+        throw new RunLifecycleError("workflow_node_terminal_authority_invalid");
+      if (event.data.claimId !== null) {
+        requireBoundedNonEmpty(event.data.claimId, 512,
+          "workflow_node_terminal_authority_invalid");
+        requirePositiveInteger(event.data.claimEpoch!, "workflow_node_claim_epoch_invalid");
+      }
+      if (event.data.attemptId !== null)
+        requireBoundedNonEmpty(event.data.attemptId, 512,
+          "workflow_node_terminal_authority_invalid");
       if (event.data.status === "completed") {
         if (event.data.resultDigest === null || event.data.failureCode !== null)
           throw new RunLifecycleError("workflow_node_terminal_result_invalid");
@@ -995,20 +1006,21 @@ function validateEventEnvelope(event: RunLifecycleEvent): void {
 
 function validateCancelProgress(
   state: RunState,
-  eventType: RunLifecycleEvent["type"],
+  event: RunLifecycleEvent,
 ): void {
   if (!state.cancelRequested) {
     return;
   }
-  if (eventType === "run.cancel.requested") {
+  if (event.type === "run.cancel.requested") {
     throw new RunLifecycleError("cancel_already_requested");
   }
   if (
-    eventType === "run.canceled" ||
-    eventType === "run.goal.accounting.updated" ||
-    (eventType === "run.reconciliation.required" &&
+    event.type === "run.canceled" ||
+    event.type === "run.goal.accounting.updated" ||
+    (event.type === "workflow.node.terminal" && event.data.status === "canceled") ||
+    (event.type === "run.reconciliation.required" &&
       state.status === "running") ||
-    (eventType === "run.resumed" &&
+    (event.type === "run.resumed" &&
       (state.status === "reconciling" || state.status === "waitingApproval"))
   ) {
     return;

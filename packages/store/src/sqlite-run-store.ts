@@ -4197,8 +4197,15 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
         input.events.at(-1)?.sequence ?? 0,
         (workItemId) => this.#workItemIdExists(workItemId),
         workflowScheduler ? "workflowScheduler"
+          : input.events.length === 1 && input.events[0]?.type === "run.cancel.requested" &&
+              next.purpose === "workflow" ? "workflowCancel"
           : input.threadAdmission === undefined ? "default" : "manualCompaction",
       );
+      if (input.events.length === 1 && input.events[0]?.type === "run.cancel.requested" &&
+          next.purpose === "workflow" &&
+          stableJson(input.workItems[0]?.payload.binding) !==
+            stableJson(next.workflowVersionBinding))
+        throw new RunStoreError("work_item_payload_invalid");
 
       this.#writeSnapshot(current, next, input.expectedRevision);
       this.#writeRunThreadBinding(current, next);

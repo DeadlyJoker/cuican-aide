@@ -118,6 +118,14 @@ export class RunApplicationService {
       actor.actorId,
     );
     const outbox = this.#outbox(actor.tenantId, event, occurredAt);
+    const workflowCancel = command.kind === "run.requestCancel" &&
+      state.purpose === "workflow" && state.workflowVersionBinding !== undefined
+      ? [{ workItemId: this.#nextId("workItem"), tenantId: actor.tenantId,
+          runId: state.runId, kind: "run.execute" as const, createdAt: occurredAt,
+          payload: { schemaVersion: "crewon.workflow-cancel-work-item.v0",
+            trigger: "workflowCancel", binding: state.workflowVersionBinding,
+            cancellationOperationId: event.eventId } }]
+      : [];
 
     return this.#commit({
       tenantId: actor.tenantId,
@@ -125,7 +133,7 @@ export class RunApplicationService {
       expectedRevision: command.expectedRevision,
       events: [event],
       outbox: [outbox],
-      workItems: [],
+      workItems: workflowCancel,
     });
   }
 

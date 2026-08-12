@@ -4,6 +4,12 @@ const MAX_ID_BYTES = 256;
 
 export type WorkflowWorkItemPayload =
   | Readonly<{
+      schemaVersion: "crewon.workflow-cancel-work-item.v0";
+      trigger: "workflowCancel";
+      binding: FrozenWorkflowVersionBinding;
+      cancellationOperationId: string;
+    }>
+  | Readonly<{
       schemaVersion: "crewon.workflow-scheduler-work-item.v1";
       trigger: "workflowScheduler";
       binding: FrozenWorkflowVersionBinding;
@@ -43,6 +49,13 @@ export function parseWorkflowWorkItemPayload(
   input: Readonly<Record<string, unknown>>,
 ): WorkflowWorkItemPayload {
   const trigger = input.trigger;
+  if (trigger === "workflowCancel") {
+    exact(input, ["binding", "cancellationOperationId", "schemaVersion", "trigger"]);
+    if (input.schemaVersion !== "crewon.workflow-cancel-work-item.v0") invalid();
+    return { schemaVersion: input.schemaVersion, trigger,
+      binding: binding(input.binding),
+      cancellationOperationId: id(input.cancellationOperationId) };
+  }
   if (trigger === "workflowScheduler") {
     exact(input, [
       "binding",

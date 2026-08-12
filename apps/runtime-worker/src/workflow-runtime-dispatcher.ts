@@ -111,6 +111,8 @@ export class ProductionWorkflowRuntimeDispatcher
       store: this.#versions,
       digester: this.#digester,
     });
+    if (payload.trigger === "workflowCancel")
+      return this.cancel(input, payload.cancellationOperationId);
     if (payload.trigger === "workflowScheduler") {
       const scheduled = await this.#store.scheduleWorkflowNodes({
         tenantId: input.run.tenantId,
@@ -202,16 +204,22 @@ export class ProductionWorkflowRuntimeDispatcher
   async cancel(input: {
     claim: WorkItemClaim;
     run: RunState;
-  }): Promise<WorkflowRuntimeDispatchOutcome> {
+  }, operationId?: string): Promise<WorkflowRuntimeDispatchOutcome> {
     const binding = input.run.workflowVersionBinding;
     if (input.run.purpose !== "workflow" || binding === undefined)
       throw new Error("workflow_runtime_cancel_invalid");
+    const payload = parseWorkflowWorkItemPayload(input.claim.workItem.payload);
+    if (canonicalJson(payload.binding) !== canonicalJson(binding))
+      throw new Error("workflow_work_item_binding_mismatch");
+    const cancelOperationId = payload.trigger === "workflowCancel"
+      ? payload.cancellationOperationId
+      : operationId ?? `workflow-cancel:${input.claim.workItem.workItemId}`;
     const canceled = await this.#store.cancelWorkflowExecution({
       tenantId: input.run.tenantId,
       runId: input.run.runId,
       lease: leaseInput(input.claim),
       binding,
-      operationId: `workflow-cancel:${input.claim.workItem.workItemId}`,
+      operationId: cancelOperationId,
       reasonCode: "user_requested",
     });
     assertCompletedHandoff(canceled.handoff);

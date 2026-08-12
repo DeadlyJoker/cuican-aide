@@ -6,7 +6,11 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import test from "node:test";
 import { compileAgentVersion, createAgentVersionAsset } from "@crewon/agent-version";
-import { ThreadApplicationService, WorkflowRunApplicationService } from "@crewon/application";
+import {
+  RunApplicationService,
+  ThreadApplicationService,
+  WorkflowRunApplicationService,
+} from "@crewon/application";
 import { compileWorkflowVersion, serializeCompiledWorkflowVersion } from "@crewon/domain";
 import { SqliteRunStore } from "@crewon/store";
 import { activateStandaloneRuntimeAgentVersionRelease } from "./agent-version-release-composition.ts";
@@ -32,6 +36,93 @@ const workflow = compileWorkflowVersion({
         additionalProperties: false }, outputSchema: schema },
   ],
 }, digester);
+const gateOnlyWorkflow = compileWorkflowVersion({
+  schemaVersion: "crewon.workflow-version-source.v0", workflowId: "wf-gate-only",
+  workflowVersionId: "wf-gate-only-v1", name: "gate only", description: "gate only",
+  inputSchema: schema, outputSchema: schema, entryNodeIds: ["gate"], outputNodeIds: ["verification"],
+  nodes: [
+    { nodeId: "gate", title: "gate", instruction: "gate", kind: "humanGate",
+      approvalPolicyId: "approval-policy-1", dependsOn: [], inputSchema: schema, outputSchema: schema },
+    { nodeId: "verification", title: "verification", instruction: "verify", kind: "verification",
+      verifierAgentVersionId: "gate-verification-v1", dependsOn: ["gate"],
+      inputSchema: schema, outputSchema: schema },
+  ],
+}, digester);
+
+test("SQLite workflow cancel wake closes a pure waitingHuman run", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-slice-five-gate-cancel-"));
+  const path = join(directory, "runtime.sqlite");
+  let runtime: Awaited<ReturnType<typeof createStandaloneRuntimeWorker>> | undefined;
+  t.after(async () => {
+    if (runtime !== undefined) await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+  const samples = new Map<string, number>();
+  const versions = ["gate-agent-v1", "gate-verification-v1"].map(agentVersion);
+  const config = { ...baseConfig(), agentVersionDeployments: versions.map((version) => ({
+    schemaVersion: "crewon.agent-version-deployment.v0" as const, tenantId: "tenant-1",
+    agentVersionId: version.agentVersionId, contentDigest: version.contentDigest,
+    materializationDigest: digester.sha256(`materialization:${version.agentVersionId}`),
+    authorityId: `authority-${version.agentVersionId}`, workspaceBindingId: null })),
+    agentVersionRuntimeFactory: { create: ({ version }: { version: { agentVersionId: string } }) =>
+      nodeRuntime(version.agentVersionId, samples) } };
+  const setup = new SqliteRunStore(path, { workflowDigester: digester });
+  for (const version of versions) await setup.registerAgentVersion(createAgentVersionAsset({
+    tenantId: "tenant-1", version, createdAt: "2026-08-12T00:00:00.000Z" }));
+  await activateStandaloneRuntimeAgentVersionRelease({ ...config, databasePath: path,
+    actor: actor(), authorization: allow(), clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    activationId: "activate-gate-only-cancel" });
+  await new ThreadApplicationService({ store: setup, authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:00.000Z" }, ids: { nextId: () => "gate-only-thread" },
+    digester }).createThread(actor(), { kind: "thread.create",
+    idempotencyKey: "thread-gate-only", title: "Gate only" });
+  await setup.workflowVersionStore(digester).registerWorkflowVersion({
+    schemaVersion: "crewon.workflow-version-asset.v0", tenantId: "tenant-1",
+    workflowId: gateOnlyWorkflow.workflowId, workflowVersionId: gateOnlyWorkflow.workflowVersionId,
+    contentDigest: gateOnlyWorkflow.contentDigest,
+    definitionJson: serializeCompiledWorkflowVersion(gateOnlyWorkflow),
+    createdAt: "2026-08-12T00:00:00.000Z" });
+  let id = 0;
+  const started = await new WorkflowRunApplicationService({ store: setup,
+    authorization: allow(), clock: { now: () => "2026-08-12T00:00:01.000Z" },
+    workflowDigester: digester, ids: { nextId: (kind) => `${kind}-${++id}` },
+    routeResolver: { resolveRoute: async () => config.route },
+  }).startWorkflowRun(actor(), { kind: "workflowRun.start", idempotencyKey: "start-gate-only",
+    workflowVersionId: gateOnlyWorkflow.workflowVersionId, threadId: "gate-only-thread", input: {} });
+  const runId = started.run.state.runId;
+  await setup.close();
+  runtime = await openRuntime(path, config, samples, "gate-only-scheduler");
+  await runtime.worker.wake();
+  assert.deepEqual(inspectGateOnlyCancel(path, runId), {
+    gateStatus: "published", gateStepStatus: "waitingApproval", pendingTriggers: [],
+    runStatus: "running", cancelEvents: 0,
+  });
+  await runtime.close();
+  runtime = undefined;
+
+  const cancellationStore = new SqliteRunStore(path, { workflowDigester: digester });
+  const current = await cancellationStore.loadRun({ tenantId: "tenant-1", runId });
+  assert.ok(current);
+  let cancelId = 0;
+  const cancellation = new RunApplicationService({ store: cancellationStore,
+    authorization: allow(), clock: { now: () => "2026-08-12T00:00:02.000Z" },
+    ids: { nextId: (kind) => `cancel-${kind}-${++cancelId}` } });
+  const command = { kind: "run.requestCancel" as const, runId,
+    expectedRevision: current.revision, idempotencyKey: "cancel-gate-only" };
+  await cancellation.transitionRun(actor(), command);
+  await cancellation.transitionRun(actor(), command);
+  assert.deepEqual(inspectGateOnlyCancel(path, runId).pendingTriggers, ["workflowCancel"]);
+  await cancellationStore.close();
+
+  runtime = await openRuntime(path, config, samples, "gate-only-cancel-worker");
+  const outcome = await runtime.worker.wake();
+  assert.equal(outcome.kind, "completed");
+  assert.deepEqual(samples, new Map());
+  assert.deepEqual(inspectGateOnlyCancel(path, runId), {
+    gateStatus: "canceled", gateStepStatus: "canceled", pendingTriggers: [],
+    runStatus: "canceled", cancelEvents: 1,
+  });
+});
 
 for (const decision of ["approve", "reject"] as const) test(
   `SQLite gate Store/Worker vertical ${decision} uses durable resume authority`,
@@ -394,6 +485,28 @@ function inspect(path: string, runId: string) {
         json_extract(work_item_json,'$.payload.trigger')='workflowScheduler'`),
       runStatus: JSON.parse(database.prepare(
         "SELECT state_json FROM run_snapshots WHERE run_id=?").get(runId)!.state_json as string).status };
+  } finally { database.close(); }
+}
+
+function inspectGateOnlyCancel(path: string, runId: string) {
+  const database = new DatabaseSync(path);
+  try {
+    const snapshot = JSON.parse(String(database.prepare(
+      "SELECT state_json FROM run_snapshots WHERE run_id=?").get(runId)!.state_json));
+    return {
+      gateStatus: database.prepare(
+        "SELECT status FROM workflow_gate_requests WHERE run_id=? AND node_id='gate'",
+      ).get(runId)?.status,
+      gateStepStatus: database.prepare(
+        "SELECT status FROM run_steps WHERE run_id=? AND step_id='gate'",
+      ).get(runId)?.status,
+      pendingTriggers: database.prepare(`SELECT json_extract(work_item_json,'$.payload.trigger') trigger
+        FROM work_items WHERE run_id=? AND status='pending' ORDER BY work_item_order`).all(runId)
+        .map(({ trigger }) => String(trigger)),
+      runStatus: snapshot.status,
+      cancelEvents: Number(database.prepare(`SELECT count(*) count FROM run_events
+        WHERE run_id=? AND json_extract(event_json,'$.type')='run.cancel.requested'`).get(runId)!.count),
+    };
   } finally { database.close(); }
 }
 

@@ -1115,6 +1115,7 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
         | "goalActivation"
         | "automationInvocation"
         | "workflowScheduler"
+        | "workflowCancel"
         | "manualCompaction";
       beforeWrite?: (
         authority: Readonly<{
@@ -1251,7 +1252,9 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
       input.events.at(-1)?.sequence ?? 0,
       (id) => workItemIds.has(id),
       options.workItemPayloadKind ??
-        (input.threadAdmission === undefined ? "default" : "manualCompaction"),
+        (input.events.length === 1 && input.events[0]?.type === "run.cancel.requested" &&
+          next.purpose === "workflow" ? "workflowCancel"
+          : input.threadAdmission === undefined ? "default" : "manualCompaction"),
     );
     await options.beforeWrite?.({ current, next, thread });
     await writePostgresRunSnapshot(

@@ -3059,7 +3059,9 @@ export class InMemoryRunStore implements DomainStore {
       input.tenantId,
       input.events.at(-1)?.sequence ?? 0,
       (workItemId) => this.#workItems.has(workItemId),
-      input.threadAdmission === undefined ? "default" : "manualCompaction",
+      input.events.length === 1 && input.events[0]?.type === "run.cancel.requested" &&
+        next.purpose === "workflow" ? "workflowCancel"
+        : input.threadAdmission === undefined ? "default" : "manualCompaction",
     );
 
     const committedEvents = clone(input.events);

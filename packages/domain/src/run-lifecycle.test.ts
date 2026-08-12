@@ -587,6 +587,11 @@ test("records bounded Workflow node terminal authority without terminating the R
       claimId: "claim-1", claimEpoch: 1, stepId: "agent", attemptId: "attempt-1",
       status: "failed", resultDigest: null, failureCode: "x".repeat(129) })),
   hasCode("workflow_node_terminal_failure_invalid"));
+  assert.throws(() => reduceRunLifecycleEvent(running,
+    event(3, "workflow.node.terminal", { binding, nodeId: "agent",
+      claimId: null, claimEpoch: null, stepId: "agent", attemptId: null,
+      status: "completed", resultDigest: `sha256:${"b".repeat(64)}`,
+      failureCode: null })), hasCode("workflow_node_terminal_authority_invalid"));
 });
 
 function stableState(state: RunState): TraceObject {

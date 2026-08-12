@@ -9,6 +9,16 @@ const binding = {
 };
 
 test("strictly discriminates bounded Workflow WorkItem payloads", () => {
+  assert.deepEqual(
+    parseWorkflowWorkItemPayload({
+      schemaVersion: "crewon.workflow-cancel-work-item.v0",
+      trigger: "workflowCancel",
+      binding,
+      cancellationOperationId: "cancel-event-1",
+    }),
+    { schemaVersion: "crewon.workflow-cancel-work-item.v0", trigger: "workflowCancel",
+      binding, cancellationOperationId: "cancel-event-1" },
+  );
   assert.equal(
     parseWorkflowWorkItemPayload({
       schemaVersion: "crewon.workflow-scheduler-work-item.v1",
@@ -60,6 +70,13 @@ test("strictly discriminates bounded Workflow WorkItem payloads", () => {
 
 test("rejects extras, partial reconciliation identity and oversized IDs", () => {
   for (const payload of [
+    {
+      schemaVersion: "crewon.workflow-cancel-work-item.v0",
+      trigger: "workflowCancel",
+      binding,
+      cancellationOperationId: "cancel-event-1",
+      extra: true,
+    },
     {
       schemaVersion: "crewon.workflow-scheduler-work-item.v1",
       trigger: "workflowScheduler",

@@ -4,6 +4,7 @@ import {
   ModelHistoryError,
   parseAutomationInvocationBinding,
   parseAutomationInvocationOrigin,
+  parseFrozenWorkflowVersionBinding,
   accountThreadGoalAtToolBoundary,
   accountThreadGoalProgress,
   advanceRunGoalAccounting,
@@ -3019,6 +3020,7 @@ export function validateWorkItems(
     | "goalActivation"
     | "automationInvocation"
     | "workflowScheduler"
+    | "workflowCancel"
     | "manualCompaction" = "default",
 ): void {
   const workItemIds = new Set<string>();
@@ -3038,6 +3040,9 @@ export function validateWorkItems(
             "trigger",
             "workflowInput",
           ])
+        : payloadKind === "workflowCancel"
+          ? stableJson(payloadKeys) === stableJson([
+              "binding", "cancellationOperationId", "schemaVersion", "trigger"])
         : payloadKind === "default"
         ? stableJson(payloadKeys) === stableJson(["throughSequence"])
         : payloadKind === "goalContinuation"
@@ -3072,9 +3077,19 @@ export function validateWorkItems(
                   "throughSequence",
                   "trigger",
                 ]);
-    if (!payloadValid || (payloadKind !== "workflowScheduler" &&
+    if (!payloadValid || (!["workflowScheduler", "workflowCancel"].includes(payloadKind) &&
         workItem.payload.throughSequence !== throughSequence)) {
       throw new RunStoreError("work_item_payload_invalid");
+    }
+    if (payloadKind === "workflowCancel" &&
+        (workItem.payload.schemaVersion !== "crewon.workflow-cancel-work-item.v0" ||
+         workItem.payload.trigger !== "workflowCancel" ||
+         typeof workItem.payload.cancellationOperationId !== "string" ||
+         workItem.payload.cancellationOperationId.trim().length === 0))
+      throw new RunStoreError("work_item_payload_invalid");
+    if (payloadKind === "workflowCancel") {
+      try { parseFrozenWorkflowVersionBinding(workItem.payload.binding); }
+      catch { throw new RunStoreError("work_item_payload_invalid"); }
     }
     if (
       payloadKind === "goalContinuation" &&

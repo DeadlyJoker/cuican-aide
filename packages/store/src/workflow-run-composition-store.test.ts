@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { Pool } from "pg";
-import { RunStoreError } from "@crewon/application";
+import { RunApplicationService, RunStoreError, ThreadApplicationService } from "@crewon/application";
 import {
   compileWorkflowVersion,
   createWorkflowNodeTerminalEvidence,
@@ -18,6 +18,7 @@ import {
 import type { LeaseClock } from "./lease-clock.ts";
 import { PostgresWorkflowRunCompositionStore } from "./postgres-workflow-run-composition-store.ts";
 import { SqliteWorkflowRunCompositionStore } from "./sqlite-workflow-run-composition-store.ts";
+import { SqliteRunStore } from "./sqlite-run-store.ts";
 import {
   markSqliteModelDispatchPossiblySent,
   observeSqliteModelDispatchResponse,
@@ -42,6 +43,112 @@ const common = (nodeId: string, dependsOn: string[] = []) => ({
   dependsOn,
   inputSchema: objectSchema,
   outputSchema: objectSchema,
+});
+
+test("SQLite cancellation atomically closes queued, pending and waiting gate nodes", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-workflow-cancel-"));
+  const path = join(directory, "cancel.sqlite");
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  const store = new SqliteRunStore(path, { workflowDigester: digester, clock });
+  t.after(() => store.close());
+  await new ThreadApplicationService({ store,
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    ids: { nextId: () => "thread-1" }, digester }).createThread({ tenantId: "tenant-1",
+      principalId: "principal-1", spaceId: "space-1", actorId: "actor-1" }, {
+      kind: "thread.create", idempotencyKey: "cancel-thread", title: "Cancel" });
+  await seed(path, clock.nowEpochMilliseconds() + 60_000);
+  const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+    lease, binding, schedulerOperationId: "cancel-schedule", workflowInput: {
+      valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+  const nodeWork = scheduled.nodeWorkItems[0]!;
+  await new RunApplicationService({ store, authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:01.000Z" },
+    ids: { nextId: (kind) => `cancel-${kind}` } }).transitionRun({ tenantId: "tenant-1",
+      principalId: "principal-1", spaceId: "space-1", actorId: "actor-1" }, { kind: "run.requestCancel",
+      runId: "run-1", expectedRevision: 2, idempotencyKey: "request-cancel" });
+  const wakeDatabase = new DatabaseSync(path);
+  assert.equal(wakeDatabase.prepare(`SELECT count(*) count FROM work_items WHERE status='pending'
+    AND json_extract(work_item_json,'$.payload.trigger')='workflowCancel'`).get()!.count, 1);
+  wakeDatabase.close();
+  clock.set(Date.parse("2026-08-12T00:00:01.000Z"));
+  const claim = await store.claimNextWorkItem({ ownerId: "cancel-worker",
+    leaseId: "cancel-lease", leaseDurationMs: 60_000 });
+  assert.equal(claim?.workItem.workItemId, nodeWork.workItemId);
+  const competing = new SqliteRunStore(path, { workflowDigester: digester, clock });
+  const cancelClaim = await competing.claimNextWorkItem({ ownerId: "cancel-wake-worker",
+    leaseId: "cancel-wake-lease", leaseDurationMs: 60_000 });
+  const raceDatabase = new DatabaseSync(path);
+  const cancelWorkItemId = raceDatabase.prepare(`SELECT work_item_id FROM work_items
+    WHERE json_extract(work_item_json,'$.payload.trigger')='workflowCancel'`).get()!.work_item_id;
+  raceDatabase.close();
+  assert.equal(cancelClaim?.workItem.workItemId, cancelWorkItemId);
+  clock.set(Date.parse("2026-08-12T00:00:02.000Z"));
+  const input = { tenantId: "tenant-1", runId: "run-1", binding,
+    operationId: "cancel-execution", reasonCode: "user_requested",
+    lease: { workItemId: nodeWork.workItemId, ownerId: "cancel-worker",
+      leaseId: "cancel-lease", leaseEpoch: claim!.lease.epoch } };
+  await assert.rejects(store.cancelWorkflowExecution(input),
+    (error: unknown) => error instanceof RunStoreError &&
+      error.code === "workflow_cancellation_wakeup_leased");
+  const rolledBack = new DatabaseSync(path);
+  assert.equal(rolledBack.prepare(`SELECT count(*) count FROM run_events
+    WHERE json_extract(event_json,'$.type')='workflow.node.terminal'`).get()!.count, 0);
+  rolledBack.close();
+  await competing.retryWorkItem({ workItemId: cancelClaim!.workItem.workItemId,
+    ownerId: "cancel-wake-worker", leaseId: "cancel-wake-lease",
+    leaseEpoch: cancelClaim!.lease.epoch, retryAfterMs: 0, reasonCode: "cancel_authority_yield" });
+  await competing.close();
+  const result = await store.cancelWorkflowExecution(input);
+  const database = new DatabaseSync(path);
+  assert.equal(result.runDisposition, "terminalConverged");
+  assert.equal(result.execution.status, "canceled");
+  assert.deepEqual(result.execution.nodes.map((node) => node.status),
+    ["canceled", "canceled", "canceled"]);
+  assert.deepEqual(result.execution.nodes.map((node) => ({ nodeId: node.nodeId,
+    claimId: node.claimId, claimEpoch: node.claimEpoch })), [
+      { nodeId: "agent", claimId: nodeWork.claimId, claimEpoch: nodeWork.claimEpoch },
+      { nodeId: "gate", claimId: scheduled.gatePublications[0]!.claimId,
+        claimEpoch: scheduled.gatePublications[0]!.claimEpoch },
+      { nodeId: "verify", claimId: null, claimEpoch: 0 },
+    ]);
+  assert.equal(database.prepare("SELECT count(*) count FROM run_steps WHERE status='canceled'")
+    .get()!.count, 3);
+  assert.deepEqual(database.prepare(`SELECT step_id stepId,status,current_attempt_id currentAttemptId
+    FROM run_steps ORDER BY step_id`).all().map((row) => ({ ...row })), [
+      { stepId: "agent", status: "canceled", currentAttemptId: null },
+      { stepId: "gate", status: "canceled", currentAttemptId: null },
+      { stepId: "verify", status: "canceled", currentAttemptId: null },
+    ]);
+  assert.equal(database.prepare("SELECT count(*) count FROM run_attempts").get()!.count, 0);
+  assert.equal(database.prepare("SELECT count(*) count FROM workflow_gate_requests WHERE status='canceled'")
+    .get()!.count, 1);
+  assert.equal(database.prepare(`SELECT count(*) count FROM run_events
+    WHERE json_extract(event_json,'$.type')='workflow.node.terminal'`).get()!.count, 3);
+  assert.deepEqual(database.prepare(`SELECT json_extract(event_json,'$.data.nodeId') nodeId,
+    json_extract(event_json,'$.data.claimId') claimId,
+    json_extract(event_json,'$.data.claimEpoch') claimEpoch,
+    json_extract(event_json,'$.data.attemptId') attemptId FROM run_events
+    WHERE json_extract(event_json,'$.type')='workflow.node.terminal' ORDER BY nodeId`).all()
+    .map((row) => ({ ...row })), [
+      { nodeId: "agent", claimId: nodeWork.claimId, claimEpoch: nodeWork.claimEpoch, attemptId: null },
+      { nodeId: "gate", claimId: scheduled.gatePublications[0]!.claimId,
+        claimEpoch: scheduled.gatePublications[0]!.claimEpoch, attemptId: null },
+      { nodeId: "verify", claimId: null, claimEpoch: null, attemptId: null },
+    ]);
+  assert.equal(database.prepare("SELECT count(*) count FROM work_items WHERE status!='completed'")
+    .get()!.count, 0);
+  assert.deepEqual(await store.cancelWorkflowExecution(input), {
+    ...result, disposition: "replay",
+  });
+  database.prepare(`UPDATE run_events SET event_json=json_set(event_json,'$.data.nodeId','forged')
+    WHERE event_id=(SELECT event_id FROM run_events
+      WHERE json_extract(event_json,'$.type')='workflow.node.terminal' LIMIT 1)`).run();
+  await assert.rejects(store.cancelWorkflowExecution(input),
+    (error: unknown) => error instanceof RunStoreError &&
+      error.code === "workflow_cancellation_replay_corrupt");
+  database.close();
 });
 const fanInSchema = {
   type: "object" as const,
@@ -930,6 +1037,11 @@ async function seed(
       JSON.stringify(run),
       run.updatedAt,
     );
+  if (database.prepare(`SELECT 1 FROM sqlite_master WHERE type='table' AND name='threads'`).get() !==
+      undefined && database.prepare(`SELECT 1 FROM threads
+        WHERE tenant_id='tenant-1' AND thread_id='thread-1'`).get() !== undefined)
+    database.prepare(`INSERT INTO run_thread_bindings(tenant_id,run_id,thread_id)
+      VALUES ('tenant-1','run-1','thread-1')`).run();
   const created = { schemaVersion: "crewon.run-event.v0", identity: { runId: "run-1" },
     eventId: "seed-run-created", sequence: 1, occurredAt: run.createdAt,
     type: "run.created", data: { threadId: run.threadId, tenantId: run.tenantId,
