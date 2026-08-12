@@ -95,7 +95,7 @@ test("binds declared input and output schemas to the execution boundary", () => 
         },
         { sha256 },
       ),
-    hasCode("workflow_input_boundary_schema_mismatch"),
+    hasCode("workflow_node_input_flow_schema_mismatch"),
   );
   assert.throws(
     () =>
@@ -110,7 +110,7 @@ test("binds declared input and output schemas to the execution boundary", () => 
         },
         { sha256 },
       ),
-    hasCode("workflow_output_boundary_schema_mismatch"),
+    hasCode("workflow_output_flow_schema_mismatch"),
   );
 });
 
@@ -162,20 +162,21 @@ test("enforces node, edge and total canonical definition limits", () => {
   );
 
   const largeSchema = objectSchemaWithProperties(64);
-  const largeAgentNodes = Array.from({ length: 32 }, (_, index) => ({
-    ...agentNode(`agent-${index.toString().padStart(2, "0")}`, []),
-    inputSchema: largeSchema,
-    outputSchema: largeSchema,
-  }));
-  const largeVerificationNodes = Array.from({ length: 32 }, (_, index) => ({
-    ...commonNode(`verify-${index.toString().padStart(2, "0")}`, [
+  const largeAgentNodes = Array.from({ length: 63 }, (_, index) =>
+    agentNode(
       `agent-${index.toString().padStart(2, "0")}`,
-    ]),
+      index === 0
+        ? []
+        : [`agent-${(index - 1).toString().padStart(2, "0")}`],
+      largeSchema,
+      largeSchema,
+    ),
+  );
+  const largeVerificationNode = {
+    ...commonNode("verify", ["agent-62"], largeSchema, largeSchema),
     kind: "verification" as const,
-    verifierAgentVersionId: `agent-independent-verifier-${index}`,
-    inputSchema: largeSchema,
-    outputSchema: largeSchema,
-  }));
+    verifierAgentVersionId: "agent-independent-verifier",
+  };
   assert.throws(
     () =>
       compileWorkflowVersion(
@@ -183,15 +184,9 @@ test("enforces node, edge and total canonical definition limits", () => {
           ...source,
           inputSchema: largeSchema,
           outputSchema: largeSchema,
-          nodes: [...largeAgentNodes, ...largeVerificationNodes],
-          entryNodeIds: Array.from(
-            { length: 32 },
-            (_, index) => `agent-${index.toString().padStart(2, "0")}`,
-          ),
-          outputNodeIds: Array.from(
-            { length: 32 },
-            (_, index) => `verify-${index.toString().padStart(2, "0")}`,
-          ),
+          nodes: [...largeAgentNodes, largeVerificationNode],
+          entryNodeIds: ["agent-00"],
+          outputNodeIds: ["verify"],
         },
         { sha256 },
       ),
@@ -200,6 +195,7 @@ test("enforces node, edge and total canonical definition limits", () => {
 });
 
 function workflowSource(): WorkflowVersionSource {
+  const result = resultSchema();
   return {
     schemaVersion: "crewon.workflow-version-source.v0",
     workflowId: "workflow-1",
@@ -208,19 +204,24 @@ function workflowSource(): WorkflowVersionSource {
     description:
       "Collect, approve, analyze and independently verify a release.",
     inputSchema: releaseSchema(),
-    outputSchema: resultSchema(),
+    outputSchema: result,
     entryNodeIds: ["collect"],
     outputNodeIds: ["verify"],
     nodes: [
-      agentNode("collect", []),
+      agentNode("collect", [], releaseSchema(), result),
       {
-        ...commonNode("approval", ["collect"]),
+        ...commonNode("approval", ["collect"], result, result),
         kind: "humanGate",
         approvalPolicyId: "workflow-release-approval-v1",
       },
-      agentNode("analyze", ["collect"]),
+      agentNode("analyze", ["collect"], result, result),
       {
-        ...commonNode("verify", ["approval", "analyze"]),
+        ...commonNode(
+          "verify",
+          ["approval", "analyze"],
+          aggregateSchema({ analyze: result, approval: result }),
+          result,
+        ),
         kind: "verification",
         verifierAgentVersionId: "agent-verifier-v1",
       },
@@ -245,22 +246,32 @@ function reorderedSource(): WorkflowVersionSource {
   };
 }
 
-function agentNode(nodeId: string, dependsOn: readonly string[]) {
+function agentNode(
+  nodeId: string,
+  dependsOn: readonly string[],
+  inputSchema: WorkflowObjectSchema = releaseSchema(),
+  outputSchema: WorkflowObjectSchema = resultSchema(),
+) {
   return {
-    ...commonNode(nodeId, dependsOn),
+    ...commonNode(nodeId, dependsOn, inputSchema, outputSchema),
     kind: "agent" as const,
     agentVersionId: `agent-${nodeId}-v1`,
   };
 }
 
-function commonNode(nodeId: string, dependsOn: readonly string[]) {
+function commonNode(
+  nodeId: string,
+  dependsOn: readonly string[],
+  inputSchema: WorkflowObjectSchema = releaseSchema(),
+  outputSchema: WorkflowObjectSchema = resultSchema(),
+) {
   return {
     nodeId,
     title: `${nodeId} step`,
     instruction: `Execute the bounded ${nodeId} step.`,
     dependsOn,
-    inputSchema: releaseSchema(),
-    outputSchema: resultSchema(),
+    inputSchema,
+    outputSchema,
   };
 }
 
@@ -297,6 +308,17 @@ function emptyObjectSchema(): WorkflowObjectSchema {
     type: "object",
     properties: {},
     required: [],
+    additionalProperties: false,
+  };
+}
+
+function aggregateSchema(
+  properties: WorkflowObjectSchema["properties"],
+): WorkflowObjectSchema {
+  return {
+    type: "object",
+    properties,
+    required: Object.keys(properties).sort(),
     additionalProperties: false,
   };
 }
