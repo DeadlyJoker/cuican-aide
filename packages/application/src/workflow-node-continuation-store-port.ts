@@ -1,13 +1,12 @@
 import type { ProviderCheckpoint } from "@crewon/contracts";
 import type {
-  FrozenWorkflowVersionBinding,
   ModelDispatchTerminalOutcome,
   ToolExecutionReceiptState,
-  WorkflowSchemaValue,
 } from "@crewon/domain";
 import type { WorkItemLeaseInput } from "./durable-queue-port.ts";
 import type { RunAttemptIdentity } from "./run-execution-store-port.ts";
 import type { ToolCompletedAgentEvent } from "./run-execution-service.ts";
+import type { WorkflowNodeTerminalSettlement } from "./workflow-node-terminal-settlement.ts";
 import type {
   WorkflowAtomicHandoff,
   WorkflowRunDisposition,
@@ -73,32 +72,14 @@ export type WorkflowNodeDispatchAuthority = Readonly<{
   status: "prepared" | "possiblySent" | "responseObserved";
 }>;
 
-export type WorkflowNodeModelTerminalOutcome =
-  | Readonly<{
-      status: "completed";
-      value: WorkflowSchemaValue;
-      canonicalValueJson: string;
-      valueDigest: string;
-    }>
-  | Readonly<{
-      status: "failed";
-      failureCode: string;
-      certainty: "notSent" | "responseObserved";
-    }>
-  | Readonly<{
-      status: "canceled";
-      certainty: "notSent" | "responseObserved";
-    }>;
-
-export type SettleWorkflowNodeModelTerminalInput = Readonly<{
-  lease: WorkItemLeaseInput;
-  binding: FrozenWorkflowVersionBinding;
-  authority: WorkflowAgentAttemptAuthority;
-  dispatch: WorkflowNodeDispatchAuthority;
-  dispatchTerminalOutcome: ModelDispatchTerminalOutcome;
-  operationId: string;
-  outcome: WorkflowNodeModelTerminalOutcome;
-}>;
+export type SettleWorkflowNodeModelTerminalInput =
+  WorkflowNodeTerminalSettlement &
+  Readonly<{
+    lease: WorkItemLeaseInput;
+    authority: WorkflowAgentAttemptAuthority;
+    dispatch: WorkflowNodeDispatchAuthority;
+    dispatchTerminalOutcome: ModelDispatchTerminalOutcome;
+  }>;
 
 export type CommitWorkflowToolContinuationInput = Readonly<{
   lease: WorkItemLeaseInput;
@@ -157,6 +138,6 @@ export interface WorkflowNodeContinuationStore {
     continuation: null;
     handoff: WorkflowAtomicHandoff;
     runDisposition: WorkflowRunDisposition;
-    outcome: WorkflowNodeModelTerminalOutcome;
+    evidence: WorkflowNodeTerminalSettlement["evidence"];
   }>>;
 }
