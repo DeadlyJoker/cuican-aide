@@ -74,7 +74,7 @@ function parseSchema(
         ...new Set(
           schema.enum.map((value) => requireText(value, maxLength, code)),
         ),
-      ].sort();
+      ].sort(compareUtf8);
       if (enumValues.length !== schema.enum.length) {
         throw new WorkflowVersionError(code);
       }
@@ -122,7 +122,7 @@ function parseSchema(
     throw new WorkflowVersionError(code);
   }
   const properties = requireObject(schema.properties, code);
-  const names = Object.keys(properties).sort();
+  const names = Object.keys(properties).sort(compareUtf8);
   if (
     names.length > MAX_SCHEMA_PROPERTIES ||
     names.some((name) => !validPropertyName(name))
@@ -162,7 +162,7 @@ function parsePropertyNames(input: unknown, code: string): readonly string[] {
   if (new Set(values).size !== values.length) {
     throw new WorkflowVersionError(code);
   }
-  return values.sort();
+  return values.sort(compareUtf8);
 }
 
 function requireObject(input: unknown, code: string): Record<string, unknown> {
@@ -247,7 +247,7 @@ function sortJson(value: unknown): unknown {
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>)
-        .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
+        .sort(([left], [right]) => compareUtf8(left, right))
         .map(([key, child]) => [key, sortJson(child)]),
     );
   }
@@ -264,4 +264,15 @@ function deepFreeze<T>(value: T): T {
 
 function byteLength(value: string): number {
   return new TextEncoder().encode(value).byteLength;
+}
+
+function compareUtf8(left: string, right: string): number {
+  const leftBytes = new TextEncoder().encode(left);
+  const rightBytes = new TextEncoder().encode(right);
+  const length = Math.min(leftBytes.length, rightBytes.length);
+  for (let index = 0; index < length; index += 1) {
+    const difference = leftBytes[index]! - rightBytes[index]!;
+    if (difference !== 0) return difference;
+  }
+  return leftBytes.length - rightBytes.length;
 }

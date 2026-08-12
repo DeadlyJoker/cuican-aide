@@ -33,6 +33,28 @@ test("canonicalizes one bounded nested Workflow schema", () => {
   assert.ok(Object.isFrozen(schema.properties.targets));
 });
 
+test("canonicalizes enum values by UTF-8 bytes for Rust digest parity", () => {
+  const schema = parseWorkflowObjectSchema({
+    type: "object",
+    properties: {
+      value: {
+        type: "string",
+        maxLength: 8,
+        enum: ["\u{10000}", "\uE000"],
+      },
+    },
+    required: ["value"],
+    additionalProperties: false,
+  });
+
+  assert.deepEqual(
+    schema.properties.value.type === "string"
+      ? schema.properties.value.enum
+      : null,
+    ["\uE000", "\u{10000}"],
+  );
+});
+
 test("rejects injected, unbounded, missing and excessively nested schemas", () => {
   const base = emptyObjectSchema();
   let nested: WorkflowObjectSchema = base;
