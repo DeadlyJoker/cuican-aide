@@ -20,6 +20,7 @@ import { PostgresWorkflowRunCompositionStore } from "./postgres-workflow-run-com
 import { SqliteWorkflowRunCompositionStore } from "./sqlite-workflow-run-composition-store.ts";
 import { SqliteRunStore } from "./sqlite-run-store.ts";
 import {
+  loadSqliteModelDispatchReceipt,
   markSqliteModelDispatchPossiblySent,
   observeSqliteModelDispatchResponse,
   prepareSqliteModelDispatch,
@@ -149,6 +150,88 @@ test("SQLite cancellation atomically closes queued, pending and waiting gate nod
     (error: unknown) => error instanceof RunStoreError &&
       error.code === "workflow_cancellation_replay_corrupt");
   database.close();
+});
+
+test("SQLite cancellation terminalizes a running not-dispatched node", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-workflow-cancel-prepared-"));
+  const path = join(directory, "cancel.sqlite");
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  const store = new SqliteRunStore(path, { workflowDigester: digester, clock });
+  t.after(() => store.close());
+  await new ThreadApplicationService({ store,
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    ids: { nextId: () => "thread-1" }, digester }).createThread({ tenantId: "tenant-1",
+      principalId: "principal-1", spaceId: "space-1", actorId: "actor-1" }, {
+      kind: "thread.create", idempotencyKey: "prepared-thread", title: "Prepared cancel" });
+  await seed(path, clock.nowEpochMilliseconds() + 60_000);
+  const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+    lease, binding, schedulerOperationId: "cancel-schedule", workflowInput: {
+      valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+  const work = scheduled.nodeWorkItems[0]!;
+  const claim = await store.claimNextWorkItem({ ownerId: "node-worker",
+    leaseId: "node-lease", leaseDurationMs: 60_000 });
+  assert.equal(claim?.workItem.workItemId, work.workItemId);
+  const nodeLease = { workItemId: work.workItemId, ownerId: "node-worker",
+    leaseId: "node-lease", leaseEpoch: claim!.lease.epoch };
+  const admissionInput = { tenantId: "tenant-1", runId: "run-1", lease: nodeLease,
+    binding, nodeId: work.nodeId, claimId: work.claimId, claimEpoch: work.claimEpoch,
+    schedulerOperationId: "cancel-schedule", admissionOperationId: "admit-prepared",
+    attemptLeaseDurationMs: 60_000 } as const;
+  const admitted = await store.admitWorkflowNodeWork(admissionInput);
+  const attempt = admitted.admission!.attempt;
+  const dispatchDatabase = new DatabaseSync(path);
+  prepareSqliteModelDispatch(dispatchDatabase, { tenantId: "tenant-1", runId: "run-1",
+    lease: nodeLease, attempt, operationId: "prepared-dispatch", requestSequence: 1,
+    operation: "dispatch", requestDigest: digester.sha256("request"), provider: {
+      agentVersionId: "agent-v1", adapterName: "responses", adapterVersion: "1", modelId: "model" },
+    preparedAt: "2026-08-12T00:00:00.000Z" });
+  dispatchDatabase.close();
+  await new RunApplicationService({ store,
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:01.000Z" },
+    ids: { nextId: (kind) => `prepared-${kind}` } }).transitionRun({ tenantId: "tenant-1",
+      principalId: "principal-1", spaceId: "space-1", actorId: "actor-1" }, {
+      kind: "run.requestCancel", runId: "run-1", expectedRevision: 2,
+      idempotencyKey: "request-prepared-cancel" });
+  clock.set(Date.parse("2026-08-12T00:00:02.000Z"));
+  const cancelInput = { tenantId: "tenant-1", runId: "run-1",
+    binding, operationId: "cancel-prepared", reasonCode: "user_requested", lease: nodeLease };
+  const canceled = await store.cancelWorkflowExecution(cancelInput);
+  assert.equal(canceled.runDisposition, "terminalConverged");
+  const database = new DatabaseSync(path);
+  const terminal = loadSqliteModelDispatchReceipt(database, { tenantId: "tenant-1",
+    runId: "run-1", stepId: "agent", attemptId: attempt.attemptId,
+    operationId: "prepared-dispatch" });
+  assert.equal(terminal?.status, "terminal");
+  assert.deepEqual(terminal?.terminalOutcome,
+    { kind: "canceled", code: "user_requested", certainty: "notSent" });
+  assert.deepEqual({ ...database.prepare(`SELECT status FROM run_attempts WHERE attempt_id=?`).get(
+    attempt.attemptId) }, { status: "canceled" });
+  assert.deepEqual({ ...database.prepare(`SELECT status FROM run_steps WHERE step_id='agent'`).get() },
+    { status: "canceled" });
+  const lifecycle = database.prepare(`SELECT json_extract(event_json,'$.type') type,
+    json_extract(event_json,'$.data.nodeId') nodeId,
+    json_extract(event_json,'$.data.attemptId') attemptId FROM run_events
+    ORDER BY sequence`).all().map((row) => ({ ...row }));
+  const agentTerminal = lifecycle.find((event) => event.type === "workflow.node.terminal" &&
+    event.nodeId === "agent");
+  assert.equal(agentTerminal?.attemptId, attempt.attemptId);
+  assert.equal(lifecycle.at(-1)?.type, "run.canceled");
+  database.close();
+  assert.deepEqual(await store.cancelWorkflowExecution(cancelInput),
+    { ...canceled, disposition: "replay" });
+  const replay = await store.admitWorkflowNodeWork(admissionInput);
+  assert.equal(replay.disposition, "replay");
+  assert.equal(replay.admission, null);
+  const tamper = new DatabaseSync(path);
+  tamper.prepare(`UPDATE run_attempts SET state_json=json_set(state_json,'$.status','failed')
+    WHERE attempt_id=?`).run(attempt.attemptId);
+  tamper.close();
+  await assert.rejects(store.cancelWorkflowExecution(cancelInput),
+    (error: unknown) => error instanceof RunStoreError &&
+      error.code === "workflow_cancellation_replay_corrupt");
 });
 const fanInSchema = {
   type: "object" as const,

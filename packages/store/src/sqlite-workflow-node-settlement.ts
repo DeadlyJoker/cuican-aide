@@ -77,6 +77,7 @@ export function settleSqliteWorkflowNodeWithinTransaction<Result = SqliteWorkflo
     attemptAuthority?: Readonly<{ workItemId: string; leaseEpoch: number }>;
     beforeReceipt?(result: SqliteWorkflowNodeSettlementResult): void;
     mapResult?(result: SqliteWorkflowNodeSettlementResult): Result;
+    deferOuterSettlement?: boolean;
   }> = {},
 ): Result {
   const replay = context.receipt(input, "settleNode", fingerprint);
@@ -139,6 +140,12 @@ export function settleSqliteWorkflowNodeWithinTransaction<Result = SqliteWorkflo
     });
   }
   context.writeExecution(next, now);
+  if (options.deferOuterSettlement) return structuredClone({
+    disposition: "settled", execution: next,
+    schedulerContinuationWorkItemId: null,
+    handoff: { currentWorkItem: "retained", nextWorkItemId: null, kind: "none" },
+    runDisposition: "nonTerminal",
+  } as Result);
   const runDisposition = context.convergeTerminalRun(input, workflow, next, now, nowMs);
   let schedulerContinuationWorkItemId: string | null = null;
   let reconciliationWorkItemId: string | null = null;
