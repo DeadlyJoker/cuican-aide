@@ -42,7 +42,8 @@ export function normalizeStoredRunState(
   const effectivePurpose = value.purpose ?? "turn";
   if (
     (effectivePurpose === "workflow") !==
-      ((hasWorkflowBinding ? value.workflowVersionBinding : null) != null)
+      hasWorkflowBinding ||
+    (effectivePurpose === "workflow" && value.collaborationMode !== "default")
   ) {
     throw new RunStoreError(code);
   }

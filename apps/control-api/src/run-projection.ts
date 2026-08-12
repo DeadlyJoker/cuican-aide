@@ -234,6 +234,8 @@ export function projectRunEvent(event: RunLifecycleEvent): RunEventView {
           messageSequence: event.data.messageSequence,
         },
       };
+    case "model.reasoning.summary":
+      throw new Error("run_event_projection_unsupported");
   }
 }
 

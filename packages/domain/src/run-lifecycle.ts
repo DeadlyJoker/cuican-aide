@@ -64,8 +64,8 @@ export type RunLifecycleEvent =
         agentVersionId: string;
         policySnapshotId: string;
         workspaceBindingId: string | null;
-        /** Absent only on legacy events created before Workflow freezing. */
-        workflowVersionBinding?: FrozenWorkflowVersionBinding | null;
+        /** Present only for Workflow Runs; ordinary and legacy Runs omit it. */
+        workflowVersionBinding?: FrozenWorkflowVersionBinding;
         collaborationMode: RunCollaborationMode;
         goalBinding: RunGoalBinding | null;
         /** Absent on legacy events and normalized to a normal user Turn. */
@@ -289,7 +289,7 @@ export type RunState = Readonly<{
   policySnapshotId: string;
   workspaceBindingId: string | null;
   /** Present only for Workflow Runs; absence remains the compatible non-Workflow shape. */
-  workflowVersionBinding?: FrozenWorkflowVersionBinding | null;
+  workflowVersionBinding?: FrozenWorkflowVersionBinding;
   collaborationMode: RunCollaborationMode;
   /** Absent only on legacy snapshots created before Run purpose was durable. */
   purpose?: RunPurpose;
@@ -716,9 +716,10 @@ function createRun(event: RunLifecycleEvent): RunState {
     event.data.workspaceBindingId,
     "workspace_binding_id_invalid",
   );
-  if (event.data.workflowVersionBinding !== undefined) {
-    parseFrozenWorkflowVersionBinding(event.data.workflowVersionBinding);
-  }
+  const workflowVersionBinding =
+    event.data.workflowVersionBinding === undefined
+      ? undefined
+      : parseFrozenWorkflowVersionBinding(event.data.workflowVersionBinding);
   if (
     event.data.collaborationMode !== "default" &&
     event.data.collaborationMode !== "plan"
@@ -767,7 +768,9 @@ function createRun(event: RunLifecycleEvent): RunState {
   const isWorkflow = event.data.purpose === "workflow";
   if (
     isWorkflow !== (event.data.workflowVersionBinding != null) ||
-    (isWorkflow && event.data.goalBinding !== null)
+    (isWorkflow &&
+      (event.data.goalBinding !== null ||
+        event.data.collaborationMode !== "default"))
   ) {
     throw new RunLifecycleError("run_execution_binding_invalid");
   }
@@ -783,9 +786,9 @@ function createRun(event: RunLifecycleEvent): RunState {
     agentVersionId: event.data.agentVersionId,
     policySnapshotId: event.data.policySnapshotId,
     workspaceBindingId: event.data.workspaceBindingId,
-    ...(event.data.workflowVersionBinding === undefined
+    ...(workflowVersionBinding === undefined
       ? {}
-      : { workflowVersionBinding: event.data.workflowVersionBinding }),
+      : { workflowVersionBinding }),
     collaborationMode: event.data.collaborationMode,
     ...(event.data.purpose === undefined
       ? {}
@@ -853,8 +856,7 @@ function validateRunCreatedDataShape(
 
 export function parseFrozenWorkflowVersionBinding(
   value: unknown,
-): FrozenWorkflowVersionBinding | null {
-  if (value === null) return null;
+): FrozenWorkflowVersionBinding {
   if (
     !isPlainObject(value) ||
     Object.keys(value).sort().join(",") !==

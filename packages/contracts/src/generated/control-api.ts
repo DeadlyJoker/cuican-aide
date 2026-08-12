@@ -1092,7 +1092,7 @@ export interface components {
        * @description Immutable Run purpose. Omitted only by legacy servers and interpreted as turn.
        * @enum {string}
        */
-      purpose?: "turn" | "manualCompaction";
+      purpose?: "turn" | "manualCompaction" | "workflow";
       goalBinding: null | {
         goalId: string;
         revision: number;

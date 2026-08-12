@@ -56,6 +56,14 @@ test("normalizes an otherwise current pre-usage Run and rejects corrupt usage", 
       ),
     hasCode("corrupt"),
   );
+  assert.throws(
+    () =>
+      normalizeStoredRunState(
+        { ...runState(), workflowVersionBinding: null } as never,
+        "corrupt",
+      ),
+    hasCode("corrupt"),
+  );
   const { cachedInputTokens: _cachedInputTokens, ...legacyUsage } =
     runState().usage;
   assert.deepEqual(

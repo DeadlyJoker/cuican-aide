@@ -3105,7 +3105,7 @@
           },
           "purpose": {
             "type": "string",
-            "enum": ["turn", "manualCompaction"],
+            "enum": ["turn", "manualCompaction", "workflow"],
             "description": "Immutable Run purpose. Omitted only by legacy servers and interpreted as turn."
           },
           "goalBinding": {

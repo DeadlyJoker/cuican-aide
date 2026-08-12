@@ -108,6 +108,7 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
   assert.deepEqual(openApi.components.schemas.RunView.properties.purpose.enum, [
     "turn",
     "manualCompaction",
+    "workflow",
   ]);
   assert.deepEqual(openApi.components.schemas.ThreadGoalStatus.enum, [
     "active",

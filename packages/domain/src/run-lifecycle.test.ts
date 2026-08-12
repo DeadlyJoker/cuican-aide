@@ -514,13 +514,15 @@ test("binds Workflow purpose to one exact immutable version provenance", () => {
     workflowId: "workflow-1",
     workflowVersionId: "workflow-version-1",
     contentDigest: `sha256:${"a".repeat(64)}`,
-  } as const;
+  };
   const state = reduceRunLifecycleEvent(null, {
     ...base,
     data: { ...base.data, purpose: "workflow", workflowVersionBinding: binding },
   });
   assert.deepEqual(state.workflowVersionBinding, binding);
   assert.equal(state.agentVersionId, "agent-version-1");
+  binding.workflowId = "mutated-after-reduce";
+  assert.equal(state.workflowVersionBinding?.workflowId, "workflow-1");
 
   assert.throws(
     () =>
@@ -537,6 +539,30 @@ test("binds Workflow purpose to one exact immutable version provenance", () => {
         data: { ...base.data, workflowVersionBinding: binding },
       }),
     hasCode("run_execution_binding_invalid"),
+  );
+  assert.throws(
+    () =>
+      reduceRunLifecycleEvent(null, {
+        ...base,
+        data: {
+          ...base.data,
+          purpose: "workflow",
+          collaborationMode: "plan",
+          workflowVersionBinding: {
+            ...binding,
+            workflowId: "workflow-1",
+          },
+        },
+      }),
+    hasCode("run_execution_binding_invalid"),
+  );
+  assert.throws(
+    () =>
+      reduceRunLifecycleEvent(null, {
+        ...base,
+        data: { ...base.data, workflowVersionBinding: null } as never,
+      }),
+    hasCode("workflow_version_binding_invalid"),
   );
 });
 
