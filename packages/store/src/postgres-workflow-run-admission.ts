@@ -655,7 +655,8 @@ function validateSchedulerWork(
   if (
     value.schemaVersion !== "crewon.workflow-scheduler-work-item.v1" ||
     value.trigger !== "workflowScheduler" ||
-    stableJson(value.workflowInput) !== stableJson(root) ||
+    stableJson(value.workflowInput) !==
+      stableJson({ valueId: root.valueId, valueDigest: root.valueDigest }) ||
     stableJson(value.binding) !==
       stableJson({
         workflowId: compiled.workflowId,
