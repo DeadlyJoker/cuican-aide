@@ -584,20 +584,13 @@ export class RuntimeWorker {
         throw new PermanentWorkerError("workflow_runtime_not_configured");
       }
       const outcome = await this.#workflowDispatcher.dispatch({ claim, run });
-      if (outcome.kind === "completed") {
-        await this.#completeWorkItem(claim);
-        return outcome;
-      }
-      if (outcome.kind === "waitingApproval") return outcome;
-      // Admission may already have crossed a model/Tool side-effect boundary.
-      // Retrying this WorkItem could execute the same node again; durable DAG
-      // unknown/recovery state is resumed only by a receipt-aware reconciler.
-      await this.#completeWorkItem(claim);
-      return {
-        kind: "workflowRecovery",
-        runId: outcome.runId,
-        code: outcome.code,
-      };
+      return outcome.kind === "recovery"
+        ? {
+            kind: "workflowRecovery",
+            runId: outcome.runId,
+            code: outcome.code,
+          }
+        : outcome;
     }
     if (isTerminal(run)) {
       await this.#completeWorkItem(claim);

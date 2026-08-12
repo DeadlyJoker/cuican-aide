@@ -14,9 +14,6 @@ import {
   type DomainStore,
   type ModelProviderSettingsStore,
   type RunRoute,
-  type WorkflowExecutionStore,
-  type WorkflowRunCompositionStore,
-  type WorkflowVersionStore,
 } from "@crewon/application";
 import {
   PostgresDomainStore,
@@ -32,7 +29,6 @@ import type {
 import type { ToolRuntimePort } from "@crewon/tool-broker";
 
 import { RuntimeWorker, type RuntimeWorkerConfig } from "./runtime-worker.ts";
-import { WorkflowExecutionService } from "@crewon/application";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import { InMemoryAgentVersionRuntimeRegistry } from "./agent-version-runtime.ts";
 import {
@@ -81,12 +77,6 @@ import {
   type NativeWorkspaceReadCatalog,
   type RuntimeWorkspaceReadFileConfig,
 } from "./runtime-workspace-read-composition.ts";
-import {
-  ProductionWorkflowRuntimeDispatcher,
-  type WorkflowAgentNodePort,
-  type WorkflowHumanGatePort,
-} from "./workflow-runtime-dispatcher.ts";
-import { WorkflowDagExecutor } from "./workflow-dag-executor.ts";
 
 export { compileRuntimeAgentVersion } from "./agent-version-release.ts";
 
@@ -144,13 +134,6 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   }>;
   workspaceReadFile?: RuntimeWorkspaceReadFileConfig;
   nativeWorkspaceReadCatalog?: NativeWorkspaceReadCatalog;
-  workflowRuntime?: Readonly<{
-    versions: WorkflowVersionStore;
-    execution: WorkflowExecutionStore;
-    composition: WorkflowRunCompositionStore;
-    agent: WorkflowAgentNodePort;
-    gate: WorkflowHumanGatePort;
-  }>;
 }>;
 
 export type StandaloneRuntimeWorkerConfig = RuntimeWorkerCompositionConfig &
@@ -228,9 +211,10 @@ export async function createPostgresRuntimeWorker(
     workspaceReadStore =
       config.workspaceReadFile === undefined
         ? undefined
-        : await PostgresWorkspaceReadFileStore.open(config.connectionString, {
-            schema: config.schema,
-          });
+        : await PostgresWorkspaceReadFileStore.open(
+            config.connectionString,
+            { schema: config.schema },
+          );
   } catch (error) {
     await Promise.allSettled([
       workspaceReadStore?.close() ?? Promise.resolve(),
@@ -371,29 +355,6 @@ async function composeRuntimeWorker(
     ids,
     digester,
   });
-  const workflowExecution =
-    config.workflowRuntime === undefined
-      ? undefined
-      : new WorkflowExecutionService({
-          store: config.workflowRuntime.execution,
-          now: () => clock.now(),
-          nextId: () => ids.nextId("attempt"),
-          sha256: (value) => digester.sha256(value),
-        });
-  const workflowDispatcher =
-    config.workflowRuntime === undefined || workflowExecution === undefined
-      ? undefined
-      : new ProductionWorkflowRuntimeDispatcher({
-          versions: config.workflowRuntime.versions,
-          composition: config.workflowRuntime.composition,
-          digester,
-          leaseDurationMs: config.leaseDurationMs ?? 30_000,
-          executor: new WorkflowDagExecutor({
-            execution: workflowExecution,
-            agent: config.workflowRuntime.agent,
-            gate: config.workflowRuntime.gate,
-          }),
-        });
   const worker = new RuntimeWorker(
     {
       store,
@@ -408,7 +369,6 @@ async function composeRuntimeWorker(
         runtimeResolver.priorModelCompactionResolver(),
       agentVersionRuntimeResolver: runtimeResolver,
       policy,
-      workflowDispatcher,
     },
     {
       ownerId: config.ownerId ?? `runtime-worker:${ids.nextId("outboxLease")}`,
