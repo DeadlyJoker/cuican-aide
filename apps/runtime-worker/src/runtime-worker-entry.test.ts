@@ -120,6 +120,39 @@ test("packaged entry rejects malformed stdin without echoing secret bytes", asyn
   );
 });
 
+test("packaged bootstrap rejects non-whitespace arriving after the bootstrap chunk", async () => {
+  const bootstrap = fileURLToPath(
+    new URL(
+      "../../crewon-ui/src-tauri/sidecars/runtime-worker-bootstrap.mjs",
+      import.meta.url,
+    ),
+  );
+  const child = spawn(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      "--input-type=module",
+      "--eval",
+      `import { readBootstrapLine } from ${JSON.stringify(bootstrap)};
+await readBootstrapLine();
+process.stdout.write("bootstrap-ready\\n");`,
+    ],
+    { stdio: ["pipe", "pipe", "pipe"] },
+  );
+  const secret = "DELAYED_BOOTSTRAP_SECRET_SENTINEL";
+  child.stdin.write("{}\n");
+  await waitForStdout(child, "bootstrap-ready\n");
+  const exit = collectExit(child);
+  child.stdin.write(secret);
+  const output = await exit;
+  assert.notEqual(output.code, 0);
+  assert.match(output.stderr, /runtime_native_bootstrap_invalid/u);
+  assert.doesNotMatch(
+    `${output.stdout}\n${output.stderr}`,
+    new RegExp(secret, "u"),
+  );
+});
+
 test("packaged v3 entry redacts credentials when startup fails after composition", async (context) => {
   const directory = mkdtempSync(join(tmpdir(), "crewon-packaged-v3-failure-"));
   context.after(() => rmSync(directory, { recursive: true, force: true }));
@@ -316,6 +349,38 @@ function waitForWorkspaceReady(child: ReturnType<typeof spawn>): Promise<{
 function waitForExit(child: ReturnType<typeof spawn>): Promise<number | null> {
   if (child.exitCode !== null) return Promise.resolve(child.exitCode);
   return new Promise((resolve) => child.once("exit", resolve));
+}
+
+function waitForStdout(
+  child: ReturnType<typeof spawn>,
+  expected: string,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let stdout = "";
+    const timer = setTimeout(
+      () => finish(new Error("packaged_worker_output_timeout")),
+      10_000,
+    );
+    const finish = (error?: Error) => {
+      clearTimeout(timer);
+      child.stdout?.off("data", onData);
+      child.off("exit", onExit);
+      if (error === undefined) resolve();
+      else reject(error);
+    };
+    const onData = (chunk: Buffer) => {
+      stdout += chunk.toString("utf8");
+      if (Buffer.byteLength(stdout) > 32 * 1024) {
+        finish(new Error("packaged_worker_output_too_large"));
+      } else if (stdout.includes(expected)) {
+        finish();
+      }
+    };
+    const onExit = (code: number | null) =>
+      finish(new Error(`packaged_worker_exited_before_output:${code}`));
+    child.stdout?.on("data", onData);
+    child.once("exit", onExit);
+  });
 }
 
 function collectExit(child: ReturnType<typeof spawn>): Promise<{

@@ -18,50 +18,82 @@ export async function readAndInstallRuntimeNativeBootstrap() {
   }
 }
 
-function readBootstrapLine() {
+export function readBootstrapLine({
+  input = process.stdin,
+  rejectTrailingInput = rejectPackagedBootstrap,
+} = {}) {
   return new Promise((resolve, reject) => {
     const storage = Buffer.allocUnsafe(MAX_BOOTSTRAP_BYTES);
     let length = 0;
     let settled = false;
+    const removeBootstrapListeners = () => {
+      input.off("data", onData);
+      input.off("end", onEnd);
+      input.off("error", onError);
+    };
+    const removeTrailingListeners = () => {
+      input.off("data", onTrailingData);
+      input.off("end", onTrailingEnd);
+      input.off("error", onTrailingError);
+    };
     const finish = (error, value) => {
       if (settled) return;
       settled = true;
-      process.stdin.off("data", onData);
-      process.stdin.off("end", onEnd);
-      process.stdin.off("error", onError);
-      process.stdin.pause();
+      removeBootstrapListeners();
       if (error === null) resolve(value);
       else {
         storage.fill(0, 0, length);
+        input.pause();
         reject(error);
       }
     };
+    const onTrailingData = (chunk) => {
+      const trailing = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      const invalid = trailing.some(
+        (byte) => ![0x09, 0x0d, 0x20].includes(byte),
+      );
+      trailing.fill(0);
+      if (invalid) {
+        removeTrailingListeners();
+        rejectTrailingInput(new Error("runtime_native_bootstrap_invalid"));
+      }
+    };
+    const onTrailingEnd = () => removeTrailingListeners();
+    const onTrailingError = () => {
+      removeTrailingListeners();
+      rejectTrailingInput(new Error("runtime_native_bootstrap_invalid"));
+    };
     const onData = (chunk) => {
-      const input = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-      const newline = input.indexOf(0x0a);
-      const body = newline === -1 ? input : input.subarray(0, newline);
+      const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      const newline = bytes.indexOf(0x0a);
+      const body = newline === -1 ? bytes : bytes.subarray(0, newline);
       if (length + body.byteLength > MAX_BOOTSTRAP_BYTES) {
-        input.fill(0);
+        bytes.fill(0);
         finish(new Error("runtime_native_bootstrap_invalid"));
         return;
       }
       const invalidTrailing =
         newline !== -1 &&
-        input
+        bytes
           .subarray(newline + 1)
           .some((byte) => ![0x09, 0x0d, 0x20].includes(byte));
       body.copy(storage, length);
       length += body.byteLength;
-      input.fill(0);
+      bytes.fill(0);
       if (invalidTrailing) {
         finish(new Error("runtime_native_bootstrap_invalid"));
         return;
       }
       if (newline !== -1) {
-        finish(
-          length === 0 ? new Error("runtime_native_bootstrap_required") : null,
-          storage.subarray(0, length),
-        );
+        if (length === 0) {
+          finish(new Error("runtime_native_bootstrap_required"));
+          return;
+        }
+        removeBootstrapListeners();
+        input.on("data", onTrailingData);
+        input.once("end", onTrailingEnd);
+        input.once("error", onTrailingError);
+        finish(null, storage.subarray(0, length));
       }
     };
     const onEnd = () =>
@@ -70,9 +102,13 @@ function readBootstrapLine() {
         storage.subarray(0, length),
       );
     const onError = () => finish(new Error("runtime_native_bootstrap_invalid"));
-    process.stdin.on("data", onData);
-    process.stdin.once("end", onEnd);
-    process.stdin.once("error", onError);
-    process.stdin.resume();
+    input.on("data", onData);
+    input.once("end", onEnd);
+    input.once("error", onError);
+    input.resume();
   });
+}
+
+function rejectPackagedBootstrap(error) {
+  process.stderr.write(`${error.message}\n`, () => process.exit(1));
 }
