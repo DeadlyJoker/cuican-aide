@@ -4,6 +4,10 @@ import {
   parseWorkflowObjectSchema,
   type WorkflowObjectSchema,
 } from "./workflow-schema.ts";
+import {
+  workflowNodeInputSchema,
+  workflowOutputSchema,
+} from "./workflow-value-flow.ts";
 
 export const MAX_WORKFLOW_NODES = 64;
 export const MAX_WORKFLOW_EDGES = 256;
@@ -146,22 +150,28 @@ export function compileWorkflowVersion(
   );
   const nodeById = new Map(nodes.map((node) => [node.nodeId, node]));
   if (
-    entryNodeIds.some(
-      (nodeId) =>
-        canonicalJson(nodeById.get(nodeId)!.inputSchema) !==
-        canonicalJson(inputSchema),
+    nodes.some(
+      (node) =>
+        canonicalJson(node.inputSchema) !==
+        canonicalJson(workflowNodeInputSchema({ inputSchema, nodes }, node.nodeId)),
     )
   ) {
-    throw new WorkflowVersionError("workflow_input_boundary_schema_mismatch");
+    throw new WorkflowVersionError("workflow_node_input_flow_schema_mismatch");
   }
   if (
-    outputNodeIds.some(
-      (nodeId) =>
-        canonicalJson(nodeById.get(nodeId)!.outputSchema) !==
-        canonicalJson(outputSchema),
+    nodes.some(
+      (node) =>
+        node.kind === "humanGate" &&
+        canonicalJson(node.inputSchema) !== canonicalJson(node.outputSchema),
     )
   ) {
-    throw new WorkflowVersionError("workflow_output_boundary_schema_mismatch");
+    throw new WorkflowVersionError("workflow_gate_passthrough_schema_mismatch");
+  }
+  if (
+    canonicalJson(outputSchema) !==
+    canonicalJson(workflowOutputSchema({ nodes, outputNodeIds }))
+  ) {
+    throw new WorkflowVersionError("workflow_output_flow_schema_mismatch");
   }
   const canonicalSource: WorkflowVersionSource = {
     schemaVersion: "crewon.workflow-version-source.v0",
