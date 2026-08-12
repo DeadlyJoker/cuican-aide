@@ -181,6 +181,8 @@ test("shared engine consumes the supplied attempt and actual value without begin
       version: {
         agentVersionId: "node-agent",
         policySnapshotId: "node-policy",
+        execution: { maxToolRounds: 4 },
+        tools: [],
       },
       kernel: {
         supportsModelDispatchEvidence: true,
@@ -339,6 +341,143 @@ test("workflow Direct dispatch fails closed before kernel when evidence Store is
   assert.equal(kernelCalls, 0);
 });
 
+test("workflow executes a durable Tool sub-attempt and continues the same Agent node", async () => {
+  let kernelRound = 0;
+  let toolExecutions = 0;
+  let committedToolAttempt = "";
+  const dependencies = workflowEngineDependencies({
+    loadRun: async () => ({ cancelRequested: false }),
+    renew: async () => undefined,
+  });
+  const execution = {
+    ...((dependencies.execution as unknown) as Record<string, unknown>),
+    async beginToolExecution() {
+      return {
+        disposition: "prepared",
+        attempt: {
+          step: {},
+          abandonedAttempt: null,
+          attempt: {
+            stepId: "tool-step-1",
+            attemptId: "tool-attempt-1",
+          },
+        },
+        receipt: toolReceipt("prepared"),
+      };
+    },
+    async dispatchToolExecution() {
+      return toolReceipt("dispatched");
+    },
+    async commitToolExecutionCompletion(
+      _claim: unknown,
+      _receipt: unknown,
+      attempt: { attemptId: string },
+    ) {
+      committedToolAttempt = attempt.attemptId;
+      return {};
+    },
+  } as never;
+  const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
+    execution,
+    store: dependencies.store,
+    leaseDurationMs: 30_000,
+  });
+  const input = workflowEngineInput(async function* (contract: unknown) {
+    kernelRound += 1;
+    if (kernelRound === 1) {
+      yield kernelEvent(1, "segment.started", { attempt: 1, model: "model" });
+      yield kernelEvent(2, "tool.requested", {
+        callId: "call-1",
+        kind: "function",
+        name: "read_file",
+        input: '{"path":"README.md"}',
+      });
+      return;
+    }
+    assert.match(JSON.stringify(contract), /tool_result/);
+    assert.match(JSON.stringify(contract), /file contents/);
+    yield kernelEvent(1, "segment.started", { attempt: 1, model: "model" });
+    yield kernelEvent(2, "model.output.delta", {
+      delta: '{"answer":"done"}',
+    });
+    yield kernelEvent(3, "segment.completed", {
+      output: '{"answer":"done"}',
+    });
+  });
+  input.node = {
+    ...input.node,
+    outputSchema: {
+      type: "object" as const,
+      properties: {
+        answer: { type: "string" as const, maxLength: 32, enum: null },
+      },
+      required: ["answer"],
+      additionalProperties: false as const,
+    },
+  } as never;
+  const baseRuntime = input.runtime as unknown as {
+    kernel: unknown;
+    version: Record<string, unknown>;
+  };
+  input.runtime = {
+    kernel: baseRuntime.kernel,
+    version: {
+      ...baseRuntime.version,
+      execution: { maxToolRounds: 4 },
+      tools: [
+        {
+          schemaVersion: "crewon.tool-definition.v0",
+          kind: "function",
+          name: "read_file",
+          description: "Read a file",
+          execution: "serial",
+          inputSchema: { type: "object" },
+        },
+      ],
+    },
+    toolRuntime: {
+      executionPolicy() {
+        return {
+          effect: "readOnly",
+          recovery: "replaySafe",
+          resourceBindingId: null,
+          credentialBindingId: null,
+          executionTarget: { kind: "control", bindingId: "read-file" },
+          capability: "workspace.read",
+          approvalRequirement: "none",
+          limits: {
+            timeoutMs: 1_000,
+            maxOutputBytes: 1_024,
+            maxArtifactBytes: 1_024,
+          },
+        };
+      },
+      async execute() {
+        toolExecutions += 1;
+        return {
+          status: "completed" as const,
+          executionId: "tool-execution-1",
+          providerReceiptId: "provider-receipt-1",
+          result: {
+            schemaVersion: "crewon.tool-result.v0" as const,
+            callId: "call-1",
+            output: "file contents",
+            isError: false,
+            artifactRef: null,
+          },
+        };
+      },
+    },
+  } as never;
+  assert.deepEqual(await engine.execute(input), {
+    status: "completed",
+    value: { answer: "done" },
+  });
+  assert.equal(kernelRound, 2);
+  assert.equal(toolExecutions, 1);
+  assert.equal(committedToolAttempt, "tool-attempt-1");
+});
+
 function agentNode() {
   return {
     nodeId: "node-1",
@@ -424,6 +563,8 @@ function workflowEngineInput(
       version: {
         agentVersionId: "node-agent",
         policySnapshotId: "node-policy",
+        execution: { maxToolRounds: 4 },
+        tools: [],
       },
       kernel: {
         supportsModelDispatchEvidence: true,
@@ -461,4 +602,50 @@ function workflowEngineInput(
       valueDigest: "sha256:value",
     },
   };
+}
+
+function toolReceipt(status: "prepared" | "dispatched") {
+  return {
+    status,
+    receiptId: "receipt-1",
+    tenantId: "tenant-1",
+    runId: "run-1",
+    stepId: "tool-step-1",
+    attemptId: "tool-attempt-1",
+    workItemId: "node-work",
+    executionId: "tool-execution-1",
+    idempotencyKey: "tool-key-1",
+    actionDigest: `sha256:${"a".repeat(64)}`,
+    actionIntent: {
+      schemaVersion: "crewon.action-intent.v0",
+      runId: "run-1",
+      segmentId: "segment:attempt-admitted",
+      callId: "call-1",
+      tool: {
+        kind: "function",
+        name: "read_file",
+        inputDigest: `sha256:${"b".repeat(64)}`,
+      },
+      effect: "readOnly",
+      recovery: "replaySafe",
+      policySnapshotId: "node-policy",
+      workspaceBindingId: null,
+      resourceBindingId: null,
+      credentialBindingId: null,
+      executionTarget: { kind: "control", bindingId: "read-file" },
+      capability: "workspace.read",
+      approvalRequirement: "none",
+      limits: {
+        timeoutMs: 1_000,
+        maxOutputBytes: 1_024,
+        maxArtifactBytes: 1_024,
+      },
+    },
+    call: {
+      segmentId: "segment:attempt-admitted",
+      callId: "call-1",
+      kind: "function",
+      name: "read_file",
+    },
+  } as never;
 }
