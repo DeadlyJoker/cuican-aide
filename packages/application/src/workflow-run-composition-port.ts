@@ -2,14 +2,18 @@ import type {
   FrozenWorkflowVersionBinding,
   RunAttemptState,
   RunStepState,
+  WorkflowSchemaValue,
 } from "@crewon/domain";
 
-import type { WorkItemLeaseInput } from "./durable-queue-port.ts";
+import type {
+  WorkflowExecutionValue,
+  WorkItemLeaseInput,
+} from "./durable-queue-port.ts";
 import type { WorkflowExecutionState } from "./workflow-execution-store-port.ts";
 import type { WorkflowNodeClaim } from "./workflow-execution-service.ts";
 
 export type WorkflowAtomicNodeOutcome =
-  | Readonly<{ status: "completed"; resultDigest: string }>
+  | Readonly<{ status: "completed"; value: WorkflowSchemaValue }>
   | Readonly<{ status: "failed"; failureCode: string }>
   | Readonly<{ status: "canceled" }>
   | Readonly<{ status: "unknown" }>;
@@ -18,6 +22,7 @@ export type WorkflowNodeAttemptAdmission = Readonly<{
   claim: WorkflowNodeClaim;
   step: RunStepState;
   attempt: RunAttemptState;
+  inputValue: WorkflowExecutionValue;
 }>;
 
 export type WorkflowNodeWorkAuthority = Readonly<{
@@ -128,7 +133,7 @@ export interface WorkflowRunCompositionStore {
     gateRequestId: string;
     decisionReceiptId: string;
     outcome:
-      | Readonly<{ status: "completed"; resultDigest: string }>
+      | Readonly<{ status: "completed" }>
       | Readonly<{ status: "failed"; failureCode: string }>;
   }): Promise<
     Readonly<{

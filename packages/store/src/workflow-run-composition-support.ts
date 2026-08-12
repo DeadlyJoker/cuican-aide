@@ -23,7 +23,7 @@ export type WorkflowCompositionResult =
   | Readonly<{
       disposition: "fresh";
       execution: WorkflowExecutionState;
-      admissions: readonly (Omit<WorkflowNodeAttemptAdmission, "attempt"> & {
+      admissions: readonly (Omit<WorkflowNodeAttemptAdmission, "attempt" | "inputValue"> & {
         attempt: WorkflowNodeAttemptAdmission["attempt"] | null;
       })[];
       reconciliationClaims: readonly [];
@@ -391,6 +391,7 @@ export function workflowAuthorityId(
     | "gate"
     | "node"
     | "attempt"
+    | "value"
     | "gate-outbox"
     | "gate-resume"
     | "scheduler"
@@ -518,6 +519,7 @@ export function settleWorkflowClaim(input: {
   claimId: string;
   claimEpoch: number;
   outcome: import("@crewon/application").WorkflowAtomicNodeOutcome;
+  resultDigest?: string;
   now: string;
 }): WorkflowExecutionState {
   const target = input.execution.nodes.find(
@@ -538,7 +540,7 @@ export function settleWorkflowClaim(input: {
           leaseExpiresAt: null,
           resultDigest:
             input.outcome.status === "completed"
-              ? input.outcome.resultDigest
+              ? input.resultDigest ?? null
               : null,
           failureCode:
             input.outcome.status === "failed"
