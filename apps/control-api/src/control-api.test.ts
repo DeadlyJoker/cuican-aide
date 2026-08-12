@@ -2535,8 +2535,7 @@ test("keeps internal Workflow node authority out of public Run event views", () 
       stepId: "step-1",
       attemptId: "attempt-1",
       status: "completed",
-      outputRef: "value-1",
-      outputDigest: `sha256:${"b".repeat(64)}`,
+      resultDigest: `sha256:${"b".repeat(64)}`,
       failureCode: null,
     },
   } as Extract<RunLifecycleEvent, { type: "workflow.node.terminal" }>;
