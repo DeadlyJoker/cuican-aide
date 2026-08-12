@@ -7,6 +7,7 @@ use serde::Deserialize;
 use serde::Serialize;
 use zeroize::Zeroizing;
 
+use super::remote_mcp_projection::RemoteMcpProjection;
 use crate::workspace_native::RuntimeRouteProjection;
 
 const PRIVATE_CREDENTIAL_SCHEMA_VERSION: &str = "crewon.remote-mcp-private-credentials.v1";
@@ -55,36 +56,37 @@ struct RuntimeBinding {
     agent_version_id: String,
     content_digest: String,
     authority_id: String,
-    workspace_binding_id: Option<String>,
-    provider: serde_json::Value,
-    mcp_stdio_config_path: Option<String>,
-    device_tool_config_path: Option<String>,
-    remote_mcp_config_path: Option<String>,
+    workspace_binding_id: RequiredNullable,
+    provider: RuntimeProvider,
+    mcp_stdio_config_path: RequiredNullable,
+    device_tool_config_path: RequiredNullable,
+    remote_mcp_config_path: RequiredNullable,
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct RemoteMcpConfig {
-    schema_version: String,
-    servers: Vec<RemoteMcpServer>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-struct RemoteMcpServer {
-    server_id: String,
-    server_binding_id: String,
-    mode: RemoteMcpMode,
+struct RuntimeProvider {
+    kind: String,
     endpoint: String,
-    credential_binding_id: String,
-    tools: serde_json::Value,
+    api_key_environment: RequiredNullable,
+    store_responses: bool,
+    request_profile: String,
+    idle_timeout_ms: u64,
+    sequence_policy: String,
 }
 
-#[derive(Deserialize, PartialEq, Eq)]
-#[serde(rename_all = "camelCase")]
-enum RemoteMcpMode {
-    Production,
-    StandaloneLoopback,
+#[derive(Deserialize)]
+#[serde(transparent)]
+struct RequiredNullable(serde_json::Value);
+
+impl RequiredNullable {
+    fn as_str(&self) -> Result<Option<&str>, ()> {
+        match &self.0 {
+            serde_json::Value::Null => Ok(None),
+            serde_json::Value::String(value) => Ok(Some(value)),
+            _ => Err(()),
+        }
+    }
 }
 
 #[derive(Serialize)]
@@ -194,12 +196,13 @@ fn load_private_credential_bindings_from(
         read_bounded_json(runtime_bindings_path, MAX_MANIFEST_BYTES)?;
     if manifest.schema_version != "crewon.agent-version-runtime-bindings.v0"
         || manifest.bindings.len() > 1_000
+        || manifest.bindings.iter().any(|binding| !binding.valid())
     {
         return Err(PrivateCredentialError::BindingInvalid);
     }
     let mut selected = manifest.bindings.into_iter().filter(|binding| {
         binding.tenant_id == route.tenant_id()
-            && binding.workspace_binding_id.as_deref() == Some(workspace_binding_id)
+            && binding.workspace_binding_id.as_str() == Ok(Some(workspace_binding_id))
             && binding.agent_version_id == agent_version_id
     });
     let binding = selected
@@ -217,31 +220,19 @@ fn load_private_credential_bindings_from(
         &binding.mcp_stdio_config_path,
         &binding.device_tool_config_path,
     );
-    let Some(remote_path) = binding.remote_mcp_config_path else {
+    let Some(remote_path) = binding
+        .remote_mcp_config_path
+        .as_str()
+        .map_err(|()| PrivateCredentialError::BindingInvalid)?
+    else {
         return Ok(None);
     };
-    let config: RemoteMcpConfig =
+    let config: RemoteMcpProjection =
         read_bounded_json(Path::new(&remote_path), MAX_REMOTE_CONFIG_BYTES)?;
-    if config.schema_version != "crewon.remote-mcp-runtime.v0"
-        || config.servers.len() > MAX_BINDINGS
-    {
+    if !config.valid() {
         return Err(PrivateCredentialError::BindingInvalid);
     }
-    let mut credential_ids = BTreeSet::new();
-    for server in config.servers {
-        let _reviewed_server_metadata = (
-            &server.server_id,
-            &server.server_binding_id,
-            &server.endpoint,
-            &server.tools,
-        );
-        if server.mode == RemoteMcpMode::Production {
-            if !valid_id(&server.credential_binding_id) {
-                return Err(PrivateCredentialError::BindingInvalid);
-            }
-            credential_ids.insert(server.credential_binding_id);
-        }
-    }
+    let credential_ids = config.production_credential_ids();
     if credential_ids.is_empty() {
         return Ok(None);
     }
@@ -268,6 +259,64 @@ fn load_private_credential_bindings_from(
     )
     .map(Some)
     .map_err(|()| PrivateCredentialError::BindingInvalid)
+}
+
+impl RuntimeBinding {
+    fn valid(&self) -> bool {
+        bounded(&self.tenant_id, 256)
+            && bounded(&self.agent_version_id, 512)
+            && valid_digest(&self.content_digest)
+            && bounded(&self.authority_id, 512)
+            && self
+                .workspace_binding_id
+                .as_str()
+                .is_ok_and(|value| value.is_none_or(|value| bounded(value, 512)))
+            && self.provider.valid()
+            && [
+                &self.mcp_stdio_config_path,
+                &self.device_tool_config_path,
+                &self.remote_mcp_config_path,
+            ]
+            .into_iter()
+            .all(|path| {
+                path.as_str()
+                    .is_ok_and(|value| value.is_none_or(|value| bounded(value, 4_096)))
+            })
+    }
+}
+
+impl RuntimeProvider {
+    fn valid(&self) -> bool {
+        let _store_responses = self.store_responses;
+        self.kind == "directResponses"
+            && bounded(&self.endpoint, 2_048)
+            && self.api_key_environment.as_str().is_ok_and(|value| {
+                value.is_none_or(|value| {
+                    bounded(value, 128)
+                        && value.bytes().enumerate().all(|(index, byte)| {
+                            byte.is_ascii_uppercase()
+                                || (index > 0 && (byte.is_ascii_digit() || byte == b'_'))
+                        })
+                })
+            })
+            && matches!(self.request_profile.as_str(), "standard" | "responsesLite")
+            && (1..=300_000).contains(&self.idle_timeout_ms)
+            && matches!(self.sequence_policy.as_str(), "required" | "whenPresent")
+    }
+}
+
+fn bounded(value: &str, maximum_bytes: usize) -> bool {
+    !value.trim().is_empty()
+        && value.len() <= maximum_bytes
+        && !value.bytes().any(|byte| matches!(byte, b'\r' | b'\n' | 0))
+}
+
+fn valid_digest(value: &str) -> bool {
+    value.len() == 71
+        && value.starts_with("sha256:")
+        && value[7..]
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
 }
 
 fn secret_key(

@@ -39,6 +39,7 @@ use super::reload::admit_workspace_ready;
 use super::reload::next_provider_generation_for_test;
 use super::reload::with_resolved_runtime_private_credentials;
 use super::reload::RuntimeGeneration;
+use super::workspace_switch::resolve_workspace_private_credentials_before_switch;
 use super::ControlRuntimeSupervisor;
 use super::FailedProcessQuarantine;
 use super::RuntimeLifecycle;
@@ -358,6 +359,30 @@ fn private_credentials_resolve_once_before_detach_and_are_reused_for_rollback() 
             "candidate-failed",
             "activate-rollback",
         ]
+    );
+}
+
+#[test]
+fn workspace_switch_preparses_both_manifests_before_runtime_transition() {
+    let trace = Rc::new(RefCell::new(Vec::new()));
+    let old_trace = Rc::clone(&trace);
+    let candidate_trace = Rc::clone(&trace);
+    let result = resolve_workspace_private_credentials_before_switch(
+        move || {
+            old_trace.borrow_mut().push("old-manifest");
+            Ok::<_, &str>("old-credentials")
+        },
+        move || {
+            candidate_trace
+                .borrow_mut()
+                .push("candidate-manifest-invalid");
+            Err("binding-invalid")
+        },
+    );
+    assert_eq!(result, Err("binding-invalid"));
+    assert_eq!(
+        trace.borrow().as_slice(),
+        ["old-manifest", "candidate-manifest-invalid"]
     );
 }
 

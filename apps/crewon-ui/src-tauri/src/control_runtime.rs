@@ -36,6 +36,8 @@ mod provider_coordinator;
 pub(crate) mod provider_switch;
 #[path = "control_runtime_reload.rs"]
 pub(crate) mod reload;
+#[path = "control_runtime_remote_mcp_projection.rs"]
+mod remote_mcp_projection;
 #[path = "control_runtime_workspace.rs"]
 mod workspace;
 #[path = "control_runtime_workspace_candidate.rs"]

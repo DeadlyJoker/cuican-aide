@@ -66,9 +66,11 @@ pub(super) fn switch_workspace_runtime(
     let candidate_authority = manager
         .pending_candidate_authority(operation_id)
         .map_err(DesktopWorkspaceError::from_native)?;
-    let old_private_credentials = resolve_workspace_private_credentials(&old_authority)?;
-    let candidate_private_credentials =
-        resolve_workspace_private_credentials(&candidate_authority)?;
+    let (old_private_credentials, candidate_private_credentials) =
+        resolve_workspace_private_credentials_before_switch(
+            || resolve_workspace_private_credentials(&old_authority),
+            || resolve_workspace_private_credentials(&candidate_authority),
+        )?;
     if stage_pre_fence_foundation(app, supervisor, paths, &old_authority, &candidate_authority)
         .is_err()
     {
@@ -306,6 +308,15 @@ pub(super) fn switch_workspace_runtime(
         WorkspaceSwitchPhase::Published,
     )?;
     Ok(())
+}
+
+pub(super) fn resolve_workspace_private_credentials_before_switch<T, E>(
+    old: impl FnOnce() -> Result<T, E>,
+    candidate: impl FnOnce() -> Result<T, E>,
+) -> Result<(T, T), E> {
+    let old = old()?;
+    let candidate = candidate()?;
+    Ok((old, candidate))
 }
 
 fn resolve_workspace_private_credentials(
