@@ -88,10 +88,10 @@ for (const decision of ["approve", "reject"] as const) test(
     assert.equal(published.gateStepStatus, "waitingApproval");
     await runtime.close();
     runtime = await openRuntime(path, config, samples, `gate-worker-replay-${decision}`);
-    await runtime.worker.wake();
+    if (decision === "approve") await runtime.worker.wake();
     const afterRestart = inspect(path, runId);
     assert.equal(afterRestart.publicationOutbox, 1);
-    assert.equal(samples.get("gate-agent-v1"), 1);
+    assert.equal(samples.get("gate-agent-v1"), decision === "approve" ? 1 : undefined);
     assert.equal(afterRestart.verificationWorkItems, 0);
 
     const gate = afterRestart.gateRequests[0]!;
@@ -107,6 +107,22 @@ for (const decision of ["approve", "reject"] as const) test(
     assert.equal(recorded.disposition, "recorded");
     assert.deepEqual(await decisions.recordWorkflowHumanGateDecision(decisionInput), {
       ...recorded, disposition: "replay" });
+    if (decision === "reject") {
+      leaseResume(path, recorded.approvalResumeWorkItemId);
+      const settled = await decisions.settleWorkflowHumanGate({
+        tenantId: "tenant-1", runId, binding: decisionInput.binding,
+        nodeId: "gate", claimId: gate.claimId, claimEpoch: gate.claimEpoch,
+        gateRequestId: gate.gateRequestId, decisionReceiptId: `decision-${decision}`,
+        operationId: "settle-reject-with-sibling-pending", lease: {
+          workItemId: recorded.approvalResumeWorkItemId, ownerId: "reject-resume-worker",
+          leaseId: "reject-resume-lease", leaseEpoch: 1 },
+      });
+      assert.equal(settled.runDisposition, "nonTerminal");
+      assert.equal(settled.execution.status, "running");
+      assert.equal(inspect(path, runId).runStatus, "running");
+      await decisions.close();
+      return;
+    }
     await decisions.close();
     const recordedState = inspect(path, runId);
     assert.equal(recordedState.resumeWorkItems, 1);
@@ -117,21 +133,23 @@ for (const decision of ["approve", "reject"] as const) test(
     assert.equal(resumed.resumeCompleted, 1);
     assert.equal(resumed.gateStepStatus, decision === "approve" ? "completed" : "failed");
     assert.equal(resumed.gateDagStatus, decision === "approve" ? "completed" : "failed");
-    if (decision === "approve") {
-      assert.equal(resumed.schedulerPending, 1);
-      assert.equal(resumed.verificationWorkItems, 0);
-      await runtime.worker.wake();
-      assert.equal(inspect(path, runId).verificationWorkItems, 1);
-      for (let wake = 0; wake < 2; wake += 1) await runtime.worker.wake();
-      assert.equal(inspect(path, runId).runStatus, "completed");
-      assert.deepEqual(samples, new Map([
-        ["gate-agent-v1", 1], ["gate-verification-v1", 1],
-      ]));
-    } else {
-      assert.equal(resumed.runStatus, "failed");
-      assert.equal(resumed.verificationWorkItems, 0);
-      assert.equal(samples.get("gate-verification-v1"), undefined);
-    }
+    assert.equal(resumed.schedulerPending, 1);
+    assert.equal(resumed.verificationWorkItems, 0);
+    await runtime.worker.wake();
+    assert.equal(inspect(path, runId).verificationWorkItems, 1);
+    for (let wake = 0; wake < 2; wake += 1) await runtime.worker.wake();
+    assert.equal(inspect(path, runId).runStatus, "completed");
+    assert.deepEqual(samples, new Map([
+      ["gate-agent-v1", 1], ["gate-verification-v1", 1],
+    ]));
+    const receipt = tamperDecisionReceipt(path, `decision-${decision}`);
+    const replayStore = new SqliteRunStore(path, { workflowDigester: digester });
+    await assert.rejects(
+      replayStore.recordWorkflowHumanGateDecision(decisionInput),
+      /corrupt|mismatch/u,
+    );
+    await replayStore.close();
+    restoreDecisionReceipt(path, `decision-${decision}`, receipt);
   },
 );
 
@@ -165,6 +183,33 @@ function inspect(path: string, runId: string) {
       runStatus: JSON.parse(database.prepare(
         "SELECT state_json FROM run_snapshots WHERE run_id=?").get(runId)!.state_json as string).status };
   } finally { database.close(); }
+}
+
+function leaseResume(path: string, workItemId: string) {
+  const database = new DatabaseSync(path);
+  try {
+    database.prepare(`UPDATE work_items SET status='leased',lease_owner_id='reject-resume-worker',
+      lease_id='reject-resume-lease',lease_epoch=1,lease_expires_at_ms=9999999999999
+      WHERE work_item_id=? AND status='pending'`).run(workItemId);
+  } finally { database.close(); }
+}
+
+function tamperDecisionReceipt(path: string, operationId: string): string {
+  const database = new DatabaseSync(path);
+  try {
+    const original = String(database.prepare(
+      "SELECT result_json FROM workflow_composition_receipts WHERE operation_id=?",
+    ).get(operationId)!.result_json);
+    database.prepare(`UPDATE workflow_composition_receipts SET result_json=json_set(
+      result_json,'$.approvalResumeWorkItemId','forged') WHERE operation_id=?`).run(operationId);
+    return original;
+  } finally { database.close(); }
+}
+function restoreDecisionReceipt(path: string, operationId: string, resultJson: string) {
+  const database = new DatabaseSync(path);
+  try { database.prepare(
+    "UPDATE workflow_composition_receipts SET result_json=? WHERE operation_id=?",
+  ).run(resultJson, operationId); } finally { database.close(); }
 }
 
 async function openRuntime(path: string, config: ReturnType<typeof baseConfig> & Record<string, unknown>,
