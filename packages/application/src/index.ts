@@ -49,6 +49,7 @@ export * from "./workflow-version-application-service.ts";
 export * from "./workflow-version-store-port.ts";
 export * from "./workflow-execution-store-port.ts";
 export * from "./workflow-execution-service.ts";
+export * from "./workflow-node-continuation-store-port.ts";
 export * from "./workflow-run-composition-port.ts";
 export * from "./workflow-run-admission-store-port.ts";
 export * from "./workflow-run-application-service.ts";
