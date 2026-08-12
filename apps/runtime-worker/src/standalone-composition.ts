@@ -14,7 +14,6 @@ import {
   type DomainStore,
   type ModelProviderSettingsStore,
   type RunRoute,
-  type WorkflowExecutionStore,
   type WorkflowRuntimeStore,
   type WorkflowVersionStore,
 } from "@crewon/application";
@@ -161,7 +160,7 @@ export type WorkflowRuntimeCompositionCandidate = Readonly<{
     capabilities: typeof WORKFLOW_RUNTIME_CAPABILITIES;
   }>;
   versions: WorkflowVersionStore;
-  store: WorkflowRuntimeStore & DomainStore & WorkflowExecutionStore;
+  store: WorkflowRuntimeStore & DomainStore;
   close(): Promise<void>;
 }>;
 

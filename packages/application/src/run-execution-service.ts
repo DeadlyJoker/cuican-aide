@@ -175,14 +175,17 @@ export class RunExecutionService {
   readonly #clock: ApplicationClock;
   readonly #ids: ApplicationIdGenerator;
   readonly #digester: ContentDigester;
-  readonly #workflowExecutions: WorkflowExecutionStore | null;
+  readonly #workflowExecutions: Pick<
+    WorkflowExecutionStore,
+    "loadWorkflowExecution"
+  > | null;
 
   constructor(dependencies: {
     store: DomainStore;
     clock: ApplicationClock;
     ids: ApplicationIdGenerator;
     digester: ContentDigester;
-    workflowExecutions?: WorkflowExecutionStore;
+    workflowExecutions?: Pick<WorkflowExecutionStore, "loadWorkflowExecution">;
   }) {
     this.#store = dependencies.store;
     this.#clock = dependencies.clock;

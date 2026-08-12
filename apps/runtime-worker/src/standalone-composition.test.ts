@@ -298,7 +298,7 @@ test("closes an explicitly certified Workflow candidate without changing ordinar
         sha256: (value) =>
           `sha256:${createHash("sha256").update(value).digest("hex")}`,
       }),
-      store: workflowStore as never,
+      store: workflowStore,
       async close() {
         closes += 1;
         await workflowStore.close();

@@ -2,6 +2,7 @@ import type { ModelDispatchEvidenceStore } from "./model-dispatch-evidence-store
 import type { WorkflowNodeContinuationStore } from "./workflow-node-continuation-store-port.ts";
 import type { WorkflowRunAdmissionStore } from "./workflow-run-admission-store-port.ts";
 import type { WorkflowRunCompositionStore } from "./workflow-run-composition-port.ts";
+import type { WorkflowExecutionStore } from "./workflow-execution-store-port.ts";
 
 /**
  * Single, non-splittable Workflow runtime transaction authority.
@@ -14,4 +15,5 @@ export interface WorkflowRuntimeStore
   extends WorkflowRunAdmissionStore,
     WorkflowRunCompositionStore,
     WorkflowNodeContinuationStore,
-    ModelDispatchEvidenceStore {}
+    ModelDispatchEvidenceStore,
+    Pick<WorkflowExecutionStore, "loadWorkflowExecution"> {}

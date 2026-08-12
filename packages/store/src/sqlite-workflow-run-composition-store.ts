@@ -70,6 +70,10 @@ type Dependencies = Readonly<{
 export class SqliteWorkflowRunCompositionStore
   implements WorkflowRunCompositionStore
 {
+  async loadWorkflowExecution(input: { tenantId: string; runId: string }) {
+    return this.#loadExecution(input.tenantId, input.runId);
+  }
+
   readonly #database: DatabaseSync;
   readonly #digester: WorkflowContentDigester;
   readonly #clock: LeaseClock;

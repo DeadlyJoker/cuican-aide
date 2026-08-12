@@ -550,6 +550,10 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
     return new SqliteWorkflowVersionStore(this.#database, digester);
   }
 
+  async loadWorkflowExecution(input: { tenantId: string; runId: string }) {
+    return this.#workflow().loadWorkflowExecution(input);
+  }
+
   async scheduleWorkflowNodes(
     input: Parameters<WorkflowRunCompositionStore["scheduleWorkflowNodes"]>[0],
   ): ReturnType<WorkflowRunCompositionStore["scheduleWorkflowNodes"]> {
