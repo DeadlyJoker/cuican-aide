@@ -85,6 +85,7 @@ test(
 
       const next = prepareInput({
         operationId: "operation-2",
+        coordinatorBinding: "desktop-supervisor:generation-8",
         expectedRevision: 1,
         idempotencyKey: "prepare-key-2",
         fingerprint: digest("4"),
@@ -92,6 +93,7 @@ test(
       await first.prepareModelProviderSettings(next);
       const abort = abortInput({
         operationId: "operation-2",
+        coordinatorBinding: "desktop-supervisor:generation-8",
         idempotencyKey: "abort-key-2",
         fingerprint: digest("5"),
       });
@@ -123,12 +125,14 @@ test(
 
       const abortedPrepare = prepareInput({
         operationId: "operation-aborted",
+        coordinatorBinding: "desktop-supervisor:generation-8",
         expectedRevision: 1,
         idempotencyKey: "prepare-aborted",
         fingerprint: digest("4"),
       });
       const aborted = abortInput({
         operationId: "operation-aborted",
+        coordinatorBinding: "desktop-supervisor:generation-8",
         idempotencyKey: "abort-aborted",
         fingerprint: digest("5"),
       });
@@ -137,6 +141,7 @@ test(
 
       const expiredPrepare = prepareInput({
         operationId: "operation-expired",
+        coordinatorBinding: "desktop-supervisor:generation-9",
         expectedRevision: 1,
         idempotencyKey: "prepare-expired",
         fingerprint: digest("6"),
@@ -152,6 +157,7 @@ test(
 
       const pending = prepareInput({
         operationId: "operation-pending",
+        coordinatorBinding: "desktop-supervisor:generation-10",
         expectedRevision: 1,
         idempotencyKey: "prepare-pending",
         fingerprint: digest("8"),
@@ -377,6 +383,7 @@ test(
         prepareStore.prepareModelProviderSettings(
           prepareInput({
             operationId: "operation-2",
+            coordinatorBinding: "desktop-supervisor:generation-8",
             expectedRevision: 1,
             idempotencyKey: "prepare-key-2",
             fingerprint: digest("6"),
@@ -398,6 +405,7 @@ test(
       await finalizeStore.prepareModelProviderSettings(
         prepareInput({
           operationId: "operation-2",
+          coordinatorBinding: "desktop-supervisor:generation-8",
           expectedRevision: 1,
           idempotencyKey: "prepare-key-2",
           fingerprint: digest("6"),
@@ -408,6 +416,7 @@ test(
         finalizeStore.finalizeModelProviderSettings(
           finalizeInput({
             operationId: "operation-2",
+            coordinatorBinding: "desktop-supervisor:generation-8",
             idempotencyKey: "finalize-key-2",
             fingerprint: digest("7"),
           }),
