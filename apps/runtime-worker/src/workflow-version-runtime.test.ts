@@ -103,6 +103,12 @@ test("accepts either ready branch while keeping ready output stable", () => {
         { ...common("C", ["A"]), kind: "agent", agentVersionId: "agent-c" },
         {
           ...common("join", ["B", "C"]),
+          inputSchema: {
+            type: "object",
+            properties: { B: schema, C: schema },
+            required: ["B", "C"],
+            additionalProperties: false,
+          },
           kind: "verification",
           verifierAgentVersionId: "agent-verifier",
         },
