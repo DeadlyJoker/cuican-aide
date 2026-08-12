@@ -146,6 +146,90 @@ test("reuses one authenticated WebSocket and sends only the new Turn suffix", as
   );
 });
 
+test("does not reuse one incremental baseline across different Runs", async (context) => {
+  const fixture = await websocketFixture(context);
+  const frames: Record<string, unknown>[] = [];
+  let connections = 0;
+  fixture.webSocketServer.on("connection", (socket) => {
+    connections += 1;
+    socket.on("message", (raw) => {
+      const frame = JSON.parse(raw.toString()) as Record<string, unknown>;
+      frames.push(frame);
+      sendCompleted(socket, `response-${frames.length}`, "done");
+    });
+  });
+  const transport = new WebSocketResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+    storeResponses: true,
+  });
+  context.after(() => transport.close());
+
+  await collect(transport.stream(manualRequest("first"), signal()));
+  await collect(
+    transport.stream(
+      { ...manualRequest("second"), runId: "run-2", segmentId: "segment-2" },
+      signal(),
+    ),
+  );
+
+  assert.equal(frames[0]?.previous_response_id, undefined);
+  assert.equal(frames[1]?.previous_response_id, undefined);
+  assert.equal(connections, 2);
+});
+
+test("reconnects one Run to return its bounded handshake state", async (context) => {
+  const fixture = await websocketFixture(context);
+  const handshakes: IncomingMessage[] = [];
+  let responseIndex = 0;
+  fixture.webSocketServer.on("headers", (headers) => {
+    headers.push("x-codex-turn-state: state-1");
+  });
+  fixture.webSocketServer.on("connection", (socket, request) => {
+    handshakes.push(request);
+    socket.on("message", () => {
+      responseIndex += 1;
+      sendCompleted(socket, `response-${responseIndex}`, "done");
+    });
+  });
+  const transport = new WebSocketResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+  });
+  context.after(() => transport.close());
+
+  await collect(transport.stream(manualRequest("first"), signal()));
+  await collect(transport.stream(manualRequest("second"), signal()));
+
+  assert.equal(handshakes.length, 2);
+  assert.equal(handshakes[0]?.headers["x-codex-turn-state"], undefined);
+  assert.equal(handshakes[1]?.headers["x-codex-turn-state"], "state-1");
+});
+
+test("prewarm discards unscoped state and reacquires it for the first Run", async (context) => {
+  const fixture = await websocketFixture(context);
+  const handshakes: IncomingMessage[] = [];
+  fixture.webSocketServer.on("headers", (headers) => {
+    headers.push("x-codex-turn-state: state-1");
+  });
+  fixture.webSocketServer.on("connection", (socket, request) => {
+    handshakes.push(request);
+    socket.on("message", () => sendCompleted(socket, "response-1", "done"));
+  });
+  const transport = new WebSocketResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+  });
+  context.after(() => transport.close());
+
+  await transport.prewarm(signal());
+  await collect(transport.stream(manualRequest("first"), signal()));
+
+  assert.equal(handshakes.length, 2);
+  assert.equal(handshakes[0]?.headers["x-codex-turn-state"], undefined);
+  assert.equal(handshakes[1]?.headers["x-codex-turn-state"], undefined);
+});
+
 test("matches the shared Rust Responses Lite profile over WebSocket", async (context) => {
   const reference = JSON.parse(
     readFileSync(

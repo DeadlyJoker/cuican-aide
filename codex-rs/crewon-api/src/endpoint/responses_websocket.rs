@@ -8,6 +8,7 @@ use crate::rate_limits::parse_rate_limit_event;
 use crate::sse::ResponsesStreamEvent;
 use crate::sse::process_responses_event;
 use crate::telemetry::WebsocketTelemetry;
+use crate::turn_state::observe_turn_state;
 use crewon_client::TransportError;
 use crewon_client::maybe_build_rustls_client_config_with_custom_ca;
 use crewon_utils_rustls_provider::ensure_rustls_crypto_provider;
@@ -152,7 +153,6 @@ impl Drop for WsStream {
     }
 }
 
-const X_CODEX_TURN_STATE_HEADER: &str = "x-codex-turn-state";
 const X_MODELS_ETAG_HEADER: &str = "x-models-etag";
 const X_REASONING_INCLUDED_HEADER: &str = "x-reasoning-included";
 const OPENAI_MODEL_HEADER: &str = "openai-model";
@@ -487,13 +487,8 @@ async fn connect_websocket(
         .get(OPENAI_MODEL_HEADER)
         .and_then(|value| value.to_str().ok())
         .map(ToString::to_string);
-    if let Some(turn_state) = turn_state
-        && let Some(header_value) = response
-            .headers()
-            .get(X_CODEX_TURN_STATE_HEADER)
-            .and_then(|value| value.to_str().ok())
-    {
-        let _ = turn_state.set(header_value.to_string());
+    if let Some(turn_state) = turn_state {
+        observe_turn_state(response.headers(), &turn_state)?;
     }
     Ok((
         WsStream::new(stream),

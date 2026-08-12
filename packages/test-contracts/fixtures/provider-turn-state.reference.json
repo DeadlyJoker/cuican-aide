@@ -1,0 +1,8 @@
+{
+  "schemaVersion": "crewon.provider-turn-state-reference.v0",
+  "header": "x-codex-turn-state",
+  "maxBytes": 4096,
+  "maxRuns": 64,
+  "state": "opaque-turn-snapshot-1",
+  "runs": ["run-a", "run-b"]
+}

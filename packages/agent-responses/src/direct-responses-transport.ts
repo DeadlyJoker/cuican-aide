@@ -27,6 +27,11 @@ import {
   readBoundedErrorBody,
 } from "./responses-rate-limits.ts";
 import { projectRetrievedResponse } from "./responses-retrieve.ts";
+import {
+  ResponsesTurnStateAuthority,
+  TURN_STATE_HEADER,
+  fetchTurnStateHeaders,
+} from "./turn-state.ts";
 
 export type { ResponsesSequencePolicy } from "./responses-protocol.ts";
 
@@ -77,6 +82,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
   readonly #sequencePolicy: ResponsesSequencePolicy;
   readonly #fetch: ResponsesFetch;
   readonly #scheduler: ResponsesTimerScheduler;
+  readonly #turnStates: ResponsesTurnStateAuthority;
 
   constructor(
     config: DirectResponsesTransportConfig,
@@ -84,6 +90,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
       fetch?: ResponsesFetch;
       scheduler?: ResponsesTimerScheduler;
       identity?: ResponsesTransportIdentity;
+      turnStates?: ResponsesTurnStateAuthority;
     } = {},
   ) {
     const requestProfile = parseResponsesRequestProfile(
@@ -126,6 +133,8 @@ export class DirectResponsesTransport implements ModelTransportPort {
     }
     this.#fetch = dependencies.fetch ?? globalThis.fetch.bind(globalThis);
     this.#scheduler = dependencies.scheduler ?? systemScheduler;
+    this.#turnStates =
+      dependencies.turnStates ?? new ResponsesTurnStateAuthority();
   }
 
   async *stream(
@@ -165,7 +174,11 @@ export class DirectResponsesTransport implements ModelTransportPort {
     try {
       const response = await this.#fetch(this.#endpoint, {
         method: "POST",
-        headers: responsesHeaders(this.#apiKey, "text/event-stream"),
+        headers: responsesHeaders(
+          this.#apiKey,
+          "text/event-stream",
+          this.#turnStates.get(request.runId),
+        ),
         body: JSON.stringify(
           responsesRequestBody({
             request,
@@ -195,6 +208,10 @@ export class DirectResponsesTransport implements ModelTransportPort {
           cyberPolicy: isCyberPolicyBody(errorBody),
         });
       }
+      this.#turnStates.observe(
+        request.runId,
+        fetchTurnStateHeaders(response.headers),
+      );
       const contentType = response.headers.get("content-type");
       if (contentType?.toLowerCase().startsWith("text/event-stream") !== true) {
         await cancelBody(response.body);
@@ -761,10 +778,14 @@ export function parseResponsesApiKey(value: unknown): string | null {
 export function responsesHeaders(
   apiKey: string | null,
   accept: string,
+  turnState: string | null = null,
 ): Headers {
   const headers = new Headers({ accept, "content-type": "application/json" });
   if (apiKey !== null) {
     headers.set("authorization", `Bearer ${apiKey}`);
+  }
+  if (turnState !== null) {
+    headers.set(TURN_STATE_HEADER, turnState);
   }
   return headers;
 }

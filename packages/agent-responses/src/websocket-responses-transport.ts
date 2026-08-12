@@ -26,6 +26,11 @@ import {
 } from "./direct-responses-transport.ts";
 import { protocolError, transportError } from "./responses-errors.ts";
 import { ResponsesProtocolDecoder } from "./responses-protocol.ts";
+import {
+  parseTurnStateHeader,
+  ResponsesTurnStateAuthority,
+  TURN_STATE_HEADER,
+} from "./turn-state.ts";
 
 const MAX_WEBSOCKET_MESSAGE_BYTES = 1024 * 1024;
 const DEFAULT_WEBSOCKET_RETRIES = 2;
@@ -57,7 +62,9 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
   readonly #sequencePolicy: "required" | "whenPresent";
   readonly #factory: WebSocketFactory;
   readonly #scheduler: ResponsesTimerScheduler;
+  readonly #turnStates: ResponsesTurnStateAuthority;
   #socket: WebSocket | null = null;
+  #socketRunId: string | null = null;
   #baseline: IncrementalBaseline | null = null;
   #active = false;
 
@@ -67,6 +74,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
       factory?: WebSocketFactory;
       scheduler?: ResponsesTimerScheduler;
       identity?: ResponsesTransportIdentity;
+      turnStates?: ResponsesTurnStateAuthority;
     } = {},
   ) {
     const requestProfile = parseResponsesRequestProfile(
@@ -120,6 +128,8 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
     this.#factory =
       dependencies.factory ?? ((url, options) => new WebSocket(url, options));
     this.#scheduler = dependencies.scheduler ?? systemScheduler;
+    this.#turnStates =
+      dependencies.turnStates ?? new ResponsesTurnStateAuthority();
   }
 
   async *stream(
@@ -132,7 +142,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
     }
     this.#active = true;
     try {
-      const socket = await this.#connection(signal);
+      const socket = await this.#connection(request.runId, signal);
       const plan = this.#requestPlan(request, socket);
       const decoder = new ResponsesProtocolDecoder({
         sequencePolicy: this.#sequencePolicy,
@@ -187,6 +197,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
         if (completed && decoder.completedResponseId !== null) {
           this.#baseline = {
             socket,
+            runId: request.runId,
             responseId: decoder.completedResponseId,
             history: [
               ...request.input.items.map(cloneInputItem),
@@ -196,6 +207,9 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
           };
         } else {
           this.#baseline = null;
+        }
+        if (this.#turnStates.get(request.runId) !== null) {
+          this.#dropSocket(socket);
         }
       } finally {
         queue.close();
@@ -230,7 +244,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
   }
 
   async prewarm(signal: AbortSignal): Promise<void> {
-    await this.#connection(signal);
+    await this.#connection(null, signal);
   }
 
   async close(): Promise<void> {
@@ -249,9 +263,18 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
     };
   }
 
-  async #connection(signal: AbortSignal): Promise<WebSocket> {
+  async #connection(
+    runId: string | null,
+    signal: AbortSignal,
+  ): Promise<WebSocket> {
     if (this.#socket?.readyState === WebSocket.OPEN) {
-      return this.#socket;
+      if (runId === null || this.#socketRunId === runId) {
+        return this.#socket;
+      }
+      if (this.#socketRunId === null && this.#turnStates.get(runId) === null) {
+        this.#socketRunId = runId;
+        return this.#socket;
+      }
     }
     this.#dropSocket(this.#socket);
     const headers: Record<string, string> = {};
@@ -261,6 +284,8 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
       },
     );
     headers["OpenAI-Beta"] = WEBSOCKET_BETA;
+    const turnState = runId === null ? null : this.#turnStates.get(runId);
+    if (turnState !== null) headers[TURN_STATE_HEADER] = turnState;
     const socket = this.#factory(this.#endpoint, {
       headers,
       handshakeTimeout: this.#connectTimeoutMs,
@@ -268,16 +293,27 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
       perMessageDeflate: false,
       followRedirects: false,
     });
+    let unscopedTurnState = false;
     try {
-      await waitForOpen(socket, signal);
+      const response = await waitForOpen(socket, signal);
+      const values = incomingHeaderValues(response, TURN_STATE_HEADER);
+      if (runId === null && values.length > 0) {
+        parseTurnStateHeader(values);
+        unscopedTurnState = true;
+      }
+      if (runId !== null) {
+        this.#turnStates.observe(runId, values);
+      }
     } catch (error) {
       this.#dropSocket(socket);
       throw error;
     }
     this.#socket = socket;
+    this.#socketRunId = runId;
     this.#baseline = null;
     socket.on("error", () => this.#dropSocket(socket));
     socket.on("close", () => this.#dropSocket(socket));
+    if (unscopedTurnState) this.#dropSocket(socket);
     return socket;
   }
 
@@ -296,6 +332,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
     if (
       this.#baseline !== null &&
       this.#baseline.socket === socket &&
+      this.#baseline.runId === request.runId &&
       this.#baseline.toolsFingerprint === JSON.stringify(request.tools) &&
       historyHasPrefix(request.input.items, this.#baseline.history)
     ) {
@@ -313,6 +350,7 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
     }
     if (this.#socket === socket) {
       this.#socket = null;
+      this.#socketRunId = null;
       this.#baseline = null;
     }
     if (
@@ -333,6 +371,7 @@ export class ResilientResponsesTransport implements ModelTransportPort {
   readonly modelId: string;
   readonly #websocket: WebSocketResponsesTransport;
   readonly #http: DirectResponsesTransport;
+  readonly #turnStates = new ResponsesTurnStateAuthority();
   readonly #websocketMaxRetries: number;
   #websocketFailures = 0;
   #httpOnly = false;
@@ -357,11 +396,13 @@ export class ResilientResponsesTransport implements ModelTransportPort {
       fetch: dependencies.fetch,
       scheduler: dependencies.scheduler,
       identity: HYBRID_IDENTITY,
+      turnStates: this.#turnStates,
     });
     this.#websocket = new WebSocketResponsesTransport(config, {
       factory: dependencies.factory,
       scheduler: dependencies.scheduler,
       identity: HYBRID_IDENTITY,
+      turnStates: this.#turnStates,
     });
     if (
       this.#http.adapterName !== this.#websocket.adapterName ||
@@ -476,6 +517,7 @@ export class ResilientResponsesTransport implements ModelTransportPort {
 
 type IncrementalBaseline = Readonly<{
   socket: WebSocket;
+  runId: string;
   responseId: string;
   history: readonly ModelInputItem[];
   toolsFingerprint: string;
@@ -622,10 +664,12 @@ class WebSocketMessageQueue {
 async function waitForOpen(
   socket: WebSocket,
   signal: AbortSignal,
-): Promise<void> {
-  await new Promise<void>((resolve, reject) => {
+): Promise<IncomingMessage> {
+  return await new Promise<IncomingMessage>((resolve, reject) => {
+    let upgradeResponse: IncomingMessage | null = null;
     const cleanup = () => {
       socket.off("open", onOpen);
+      socket.off("upgrade", onUpgrade);
       socket.off("error", onError);
       socket.off("close", onClose);
       socket.off("unexpected-response", onUnexpectedResponse);
@@ -635,7 +679,15 @@ async function waitForOpen(
       cleanup();
       callback();
     };
-    const onOpen = () => settle(resolve);
+    const onUpgrade = (response: IncomingMessage) => {
+      upgradeResponse = response;
+    };
+    const onOpen = () =>
+      settle(() =>
+        upgradeResponse === null
+          ? reject(protocolError("responses_websocket_headers_missing"))
+          : resolve(upgradeResponse),
+      );
     const onError = (error: Error) =>
       settle(() =>
         reject(
@@ -688,11 +740,25 @@ async function waitForOpen(
         ),
       );
     socket.once("open", onOpen);
+    socket.once("upgrade", onUpgrade);
     socket.once("error", onError);
     socket.once("close", onClose);
     socket.once("unexpected-response", onUnexpectedResponse);
     signal.addEventListener("abort", onAbort, { once: true });
   });
+}
+
+function incomingHeaderValues(
+  response: IncomingMessage,
+  name: string,
+): readonly string[] {
+  const values: string[] = [];
+  for (let index = 0; index < response.rawHeaders.length; index += 2) {
+    if (response.rawHeaders[index]!.toLowerCase() === name) {
+      values.push(response.rawHeaders[index + 1]!);
+    }
+  }
+  return values;
 }
 
 async function sendFrame(socket: WebSocket, payload: string): Promise<void> {

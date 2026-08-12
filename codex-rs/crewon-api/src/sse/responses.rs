@@ -3,6 +3,7 @@ use crate::common::ResponseStream;
 use crate::error::ApiError;
 use crate::rate_limits::parse_all_rate_limits;
 use crate::telemetry::SseTelemetry;
+use crate::turn_state::observe_turn_state;
 use crewon_client::ByteStream;
 use crewon_client::StreamResponse;
 use crewon_protocol::models::ResponseItem;
@@ -32,7 +33,7 @@ pub fn spawn_response_stream(
     idle_timeout: Duration,
     telemetry: Option<Arc<dyn SseTelemetry>>,
     turn_state: Option<Arc<OnceLock<String>>>,
-) -> ResponseStream {
+) -> Result<ResponseStream, ApiError> {
     let rate_limit_snapshots = parse_all_rate_limits(&stream_response.headers);
     let models_etag = stream_response
         .headers
@@ -53,13 +54,8 @@ pub fn spawn_response_stream(
         .get(REQUEST_ID_HEADER)
         .and_then(|value| value.to_str().ok())
         .map(str::to_string);
-    if let Some(turn_state) = turn_state.as_ref()
-        && let Some(header_value) = stream_response
-            .headers
-            .get("x-codex-turn-state")
-            .and_then(|v| v.to_str().ok())
-    {
-        let _ = turn_state.set(header_value.to_string());
+    if let Some(turn_state) = turn_state.as_ref() {
+        observe_turn_state(&stream_response.headers, turn_state)?;
     }
     let (tx_event, rx_event) = mpsc::channel::<Result<ResponseEvent, ApiError>>(1600);
     tokio::spawn(async move {
@@ -80,10 +76,10 @@ pub fn spawn_response_stream(
         process_sse(stream_response.bytes, tx_event, idle_timeout, telemetry).await;
     });
 
-    ResponseStream {
+    Ok(ResponseStream {
         rx_event,
         upstream_request_id,
-    }
+    })
 }
 
 #[derive(Debug, Deserialize)]
@@ -2004,7 +2000,8 @@ mod tests {
             idle_timeout(),
             /*telemetry*/ None,
             /*turn_state*/ None,
-        );
+        )
+        .expect("valid headers");
         assert_eq!(stream.upstream_request_id.as_deref(), Some("req-1"));
         let event = stream
             .rx_event
@@ -2044,7 +2041,8 @@ mod tests {
             idle_timeout(),
             /*telemetry*/ None,
             /*turn_state*/ None,
-        );
+        )
+        .expect("valid headers");
         let mut events = Vec::new();
         while let Some(event) = stream.rx_event.recv().await {
             events.push(event.expect("expected ok event"));

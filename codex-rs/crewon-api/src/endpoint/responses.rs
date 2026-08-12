@@ -143,11 +143,11 @@ impl<T: HttpTransport> ResponsesClient<T> {
             )
             .await?;
 
-        Ok(spawn_response_stream(
+        spawn_response_stream(
             stream_response,
             self.session.provider().stream_idle_timeout,
             self.sse_telemetry.clone(),
             turn_state,
-        ))
+        )
     }
 }

@@ -11,6 +11,7 @@ pub(crate) mod requests;
 pub(crate) mod search;
 pub(crate) mod sse;
 pub(crate) mod telemetry;
+pub(crate) mod turn_state;
 
 pub use crate::requests::headers::build_session_headers;
 pub use crewon_client::RequestTelemetry;
