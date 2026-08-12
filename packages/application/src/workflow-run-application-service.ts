@@ -192,7 +192,7 @@ export class WorkflowRunApplicationService {
     };
     const commit: CommitRunInput = {
       tenantId: actor.tenantId,
-      idempotency,
+      idempotency: runCommitIdempotencyDescriptor(actor, command, idempotency),
       expectedRevision: 0,
       events: [event],
       outbox: [
@@ -373,6 +373,30 @@ function idempotencyDescriptor(
         workflowVersionId: command.workflowVersionId,
         threadId: command.threadId,
         input,
+      },
+    }),
+  };
+}
+
+function runCommitIdempotencyDescriptor(
+  actor: ActorContext,
+  command: StartWorkflowRunCommand,
+  admission: IdempotencyDescriptor,
+): IdempotencyDescriptor {
+  return {
+    scope: canonicalJson({
+      schemaVersion: "crewon.idempotency-scope.v0",
+      namespace: "workflow-run-commit",
+      tenantId: actor.tenantId,
+      actorId: actor.actorId,
+    }),
+    key: command.idempotencyKey,
+    requestFingerprint: canonicalJson({
+      schemaVersion: "crewon.workflow-run-commit-fingerprint.v0",
+      admission: {
+        scope: admission.scope,
+        key: admission.key,
+        requestFingerprint: admission.requestFingerprint,
       },
     }),
   };

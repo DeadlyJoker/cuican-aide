@@ -54,6 +54,15 @@ test("atomically freezes WorkflowVersion provenance and enqueues bounded input w
     value: { topic: "safe" },
     valueDigest: sha256('{"topic":"safe"}'),
   });
+  assert.notEqual(
+    store.inputs[0]?.idempotency.requestFingerprint,
+    commit.idempotency.requestFingerprint,
+  );
+  assert.match(commit.idempotency.scope, /workflow-run-commit/u);
+  assert.match(
+    commit.idempotency.requestFingerprint,
+    /crewon\.workflow-run-commit-fingerprint\.v0/u,
+  );
 });
 
 test("canonicalizes prototype-like input keys into one digest-bound scheduler authority", async () => {
