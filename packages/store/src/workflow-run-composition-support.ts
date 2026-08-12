@@ -10,36 +10,11 @@ import {
   type RunStepState,
   type WorkflowContentDigester,
 } from "@crewon/domain";
-import type {
-  WorkflowExecutionNodeState,
-  WorkflowExecutionState,
-} from "@crewon/application";
+import type { WorkflowExecutionState } from "@crewon/application";
 
 export type WorkflowCompositionDependencies = Readonly<{
   digester: WorkflowContentDigester;
 }>;
-
-export type WorkflowCompositionResult =
-  | Readonly<{
-      disposition: "fresh";
-      execution: WorkflowExecutionState;
-      admissions: readonly (Omit<WorkflowNodeAttemptAdmission, "attempt" | "inputValue"> & {
-        attempt: WorkflowNodeAttemptAdmission["attempt"] | null;
-      })[];
-      reconciliationClaims: readonly [];
-    }>
-  | Readonly<{
-      disposition: "replay";
-      execution: WorkflowExecutionState;
-      admissions: readonly [];
-      reconciliationClaims: readonly [];
-    }>
-  | Readonly<{
-      disposition: "reconcileRequired";
-      execution: WorkflowExecutionState;
-      admissions: readonly [];
-      reconciliationClaims: readonly import("@crewon/application").WorkflowNodeClaim[];
-    }>;
 
 export function reconciliationClaims(
   execution: WorkflowExecutionState,
@@ -167,126 +142,6 @@ export function assertExecutionBinding(
   ) {
     throw new RunStoreError("workflow_composition_authority_mismatch");
   }
-}
-
-export function claimReadyNodes(input: {
-  execution: WorkflowExecutionState;
-  workflow: CompiledWorkflowVersion;
-  operationId: string;
-  leaseDurationMs: number;
-  now: string;
-  digester: WorkflowContentDigester;
-}): Readonly<{
-  execution: WorkflowExecutionState;
-  claims: readonly import("@crewon/application").WorkflowNodeClaim[];
-}> {
-  if (
-    !Number.isSafeInteger(input.leaseDurationMs) ||
-    input.leaseDurationMs <= 0
-  )
-    throw new RunStoreError("workflow_composition_lease_duration_invalid");
-  const nowMs = Date.parse(input.now);
-  const recovered = input.execution.nodes.map((node) =>
-    node.status === "running" &&
-    node.leaseExpiresAt !== null &&
-    Date.parse(node.leaseExpiresAt) <= nowMs
-      ? { ...node, status: "unknown" as const, leaseExpiresAt: null }
-      : node,
-  );
-  if (recovered.some((node) => node.status === "unknown")) {
-    const changed = recovered.some(
-      (node, index) => node !== input.execution.nodes[index],
-    );
-    return {
-      execution: changed
-        ? {
-            ...input.execution,
-            revision: input.execution.revision + 1,
-            nodes: recovered,
-            status: "running",
-            updatedAt: input.now,
-          }
-        : input.execution,
-      claims: [],
-    };
-  }
-  if (input.execution.cancelRequested || input.execution.status !== "running") {
-    return { execution: input.execution, claims: [] };
-  }
-  const ready = new Set(
-    input.workflow.executionOrder.filter((nodeId) => {
-      const state = recovered.find((item) => item.nodeId === nodeId)!;
-      const node = input.workflow.nodes.find((item) => item.nodeId === nodeId)!;
-      return (
-        state.status === "pending" &&
-        node.dependsOn.every(
-          (dependency) =>
-            recovered.find((item) => item.nodeId === dependency)?.status ===
-            "completed",
-        )
-      );
-    }),
-  );
-  const claims: import("@crewon/application").WorkflowNodeClaim[] = [];
-  const expiresAt = new Date(nowMs + input.leaseDurationMs).toISOString();
-  const nodes = recovered.map((state) => {
-    if (!ready.has(state.nodeId)) return state;
-    const node = input.workflow.nodes.find(
-      (item) => item.nodeId === state.nodeId,
-    )!;
-    const claimId = derivedId(input, state.nodeId, "claim");
-    const gateRequestId =
-      node.kind === "humanGate" ? derivedId(input, state.nodeId, "gate") : null;
-    const inputDigest = input.digester.sha256(
-      JSON.stringify({
-        nodeId: node.nodeId,
-        contentDigest: input.workflow.contentDigest,
-        dependencies: node.dependsOn.map((dependency) => ({
-          nodeId: dependency,
-          resultDigest: recovered.find((item) => item.nodeId === dependency)!
-            .resultDigest,
-        })),
-      }),
-    );
-    claims.push({
-      node,
-      claimId,
-      claimEpoch: state.claimEpoch + 1,
-      gateRequestId,
-      inputDigest,
-    });
-    return {
-      ...state,
-      status: node.kind === "humanGate" ? "waitingHuman" : "running",
-      claimId,
-      claimOperationId: input.operationId,
-      claimEpoch: state.claimEpoch + 1,
-      leaseExpiresAt: node.kind === "humanGate" ? null : expiresAt,
-      gateRequestId,
-      inputDigest,
-    } satisfies WorkflowExecutionNodeState;
-  });
-  if (
-    claims.length === 0 &&
-    nodes.every((node, index) => node === input.execution.nodes[index])
-  )
-    return { execution: input.execution, claims };
-  return {
-    execution: {
-      ...input.execution,
-      revision: input.execution.revision + 1,
-      nodes,
-      status:
-        nodes.some((node) => node.status === "waitingHuman") &&
-        !nodes.some(
-          (node) => node.status === "running" || node.status === "unknown",
-        )
-          ? "waitingHuman"
-          : input.execution.status,
-      updatedAt: input.now,
-    },
-    claims,
-  };
 }
 
 export function gateStep(input: {
@@ -573,14 +428,6 @@ export function settleWorkflowClaim(input: {
     status,
     updatedAt: input.now,
   };
-}
-
-function derivedId(
-  input: { operationId: string; digester: WorkflowContentDigester },
-  nodeId: string,
-  kind: string,
-): string {
-  return `workflow-${kind}:${stripDigest(input.digester.sha256(`${input.operationId}\0${nodeId}\0${kind}`))}`;
 }
 
 function stripDigest(value: string): string {

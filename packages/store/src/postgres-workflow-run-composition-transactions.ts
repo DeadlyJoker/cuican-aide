@@ -70,7 +70,13 @@ export async function schedulePostgresWorkflowNodes(
       replay,
       digester,
     );
-    return { ...durable, disposition: "replay" };
+    return {
+      ...durable,
+      disposition: "replay",
+      nodeWorkItems: [] as const,
+      gatePublications: [] as const,
+      reconciliationClaims: [] as const,
+    };
   }
   const now = await validatePostgresWorkflowLease(client, schema, input);
   const workflow = await loadPostgresWorkflowAuthorities(
@@ -301,8 +307,8 @@ export async function schedulePostgresWorkflowNodes(
       ? {
           disposition: "reconcileRequired" as const,
           execution,
-          nodeWorkItems: [],
-          gatePublications: [],
+          nodeWorkItems: [] as const,
+          gatePublications: [] as const,
           reconciliationClaims: recovery,
           handoff: {
             currentWorkItem: "completed" as const,
@@ -316,7 +322,7 @@ export async function schedulePostgresWorkflowNodes(
           execution,
           nodeWorkItems,
           gatePublications,
-          reconciliationClaims: [],
+          reconciliationClaims: [] as const,
           handoff: {
             currentWorkItem: "completed" as const,
             nextWorkItemId: null,

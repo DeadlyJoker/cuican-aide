@@ -111,7 +111,7 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
   });
   await seed(database, clock.nowEpochMilliseconds() + 60_000);
 
-  const scheduled = await store.scheduleWorkflowNodes({
+  const scheduleInput = {
     tenantId: "tenant-1",
     runId: "run-1",
     lease,
@@ -121,7 +121,8 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
       valueId: "root-value-1",
       valueDigest: digester.sha256("{}"),
     },
-  });
+  } as const;
+  const scheduled = await store.scheduleWorkflowNodes(scheduleInput);
   assert.equal(scheduled.disposition, "scheduled");
   assert.equal(scheduled.nodeWorkItems.length, 1);
   assert.equal(scheduled.gatePublications.length, 1);
@@ -161,6 +162,13 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
       .get()?.status,
     "completed",
   );
+  assert.deepEqual(await store.scheduleWorkflowNodes(scheduleInput), {
+    ...scheduled,
+    disposition: "replay",
+    nodeWorkItems: [],
+    gatePublications: [],
+    reconciliationClaims: [],
+  });
 
   const replayDatabase = new DatabaseSync(":memory:");
   replayDatabase.close();
@@ -281,6 +289,9 @@ if (postgresUrl === undefined) {
       assert.deepEqual(await store.scheduleWorkflowNodes(scheduleInput), {
         ...fresh,
         disposition: "replay",
+        nodeWorkItems: [],
+        gatePublications: [],
+        reconciliationClaims: [],
       });
       await assert.rejects(
         store.scheduleWorkflowNodes({
@@ -320,10 +331,11 @@ if (postgresUrl === undefined) {
         schema,
         digester,
       });
-      assert.equal(
-        (await second.admitWorkflowNodeWork(admitInput)).disposition,
-        "replay",
-      );
+      assert.deepEqual(await second.admitWorkflowNodeWork(admitInput), {
+        ...admitted,
+        disposition: "replay",
+        admission: null,
+      });
       const authority = {
         tenantId: "tenant-1",
         runId: "run-1",

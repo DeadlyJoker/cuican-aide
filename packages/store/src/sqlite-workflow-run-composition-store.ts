@@ -660,7 +660,10 @@ export class SqliteWorkflowRunCompositionStore
         return structuredClone({
           ...(replay as object),
           disposition: "replay",
-        } as Awaited<
+          nodeWorkItems: [] as const,
+          gatePublications: [] as const,
+          reconciliationClaims: [] as const,
+        } as unknown as Awaited<
           ReturnType<WorkflowRunCompositionStore["scheduleWorkflowNodes"]>
         >);
       }
@@ -871,8 +874,8 @@ export class SqliteWorkflowRunCompositionStore
           ? {
               disposition: "reconcileRequired" as const,
               execution,
-              nodeWorkItems: [],
-              gatePublications: [],
+              nodeWorkItems: [] as const,
+              gatePublications: [] as const,
               reconciliationClaims: recovery,
               handoff: { currentWorkItem: "completed" as const, nextWorkItemId: reconciliationWorkItemId, kind: "reconcile" as const },
               runDisposition: "nonTerminal" as const,
@@ -882,7 +885,7 @@ export class SqliteWorkflowRunCompositionStore
               execution,
               nodeWorkItems,
               gatePublications,
-              reconciliationClaims: [],
+              reconciliationClaims: [] as const,
               handoff: { currentWorkItem: "completed" as const, nextWorkItemId: null, kind: "none" as const },
               runDisposition: "nonTerminal" as const,
             };

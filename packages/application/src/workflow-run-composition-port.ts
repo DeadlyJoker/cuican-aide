@@ -65,11 +65,30 @@ export interface WorkflowRunCompositionStore {
     schedulerOperationId: string;
     workflowInput: WorkflowRunInputRef;
   }): Promise<
-    Readonly<{
-      disposition: "scheduled" | "replay" | "reconcileRequired";
+    | Readonly<{
+      disposition: "scheduled";
       execution: WorkflowExecutionState;
       nodeWorkItems: readonly WorkflowNodeWorkAuthority[];
       gatePublications: readonly WorkflowGatePublicationAuthority[];
+      reconciliationClaims: readonly [];
+      handoff: WorkflowAtomicHandoff;
+      runDisposition: WorkflowRunDisposition;
+    }>
+    | Readonly<{
+      /** Receipt replay is observation-only and never grants side-effect permission. */
+      disposition: "replay";
+      execution: WorkflowExecutionState;
+      nodeWorkItems: readonly [];
+      gatePublications: readonly [];
+      reconciliationClaims: readonly [];
+      handoff: WorkflowAtomicHandoff;
+      runDisposition: WorkflowRunDisposition;
+    }>
+    | Readonly<{
+      disposition: "reconcileRequired";
+      execution: WorkflowExecutionState;
+      nodeWorkItems: readonly [];
+      gatePublications: readonly [];
       reconciliationClaims: readonly WorkflowNodeClaim[];
       handoff: WorkflowAtomicHandoff;
       runDisposition: WorkflowRunDisposition;
@@ -95,6 +114,7 @@ export interface WorkflowRunCompositionStore {
         handoff: WorkflowAtomicHandoff;
       }>
     | Readonly<{
+        /** Replay proves the old commit only; it cannot authorize model or Tool execution. */
         disposition: "replay";
         execution: WorkflowExecutionState;
         admission: null;

@@ -203,6 +203,9 @@ function composition() {
     store: null as unknown as WorkflowRuntimeStore,
   };
   fixture.store = {
+    async commitWorkflowRunStart() {
+      throw new Error("unused");
+    },
     async scheduleWorkflowNodes(input) {
       fixture.schedules += 1;
       fixture.workflowInputs.push(input.workflowInput);
