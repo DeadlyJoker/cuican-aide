@@ -127,6 +127,11 @@ async fn native_workflow_uses_durable_local_agent_threads_and_advances_in_order(
         .as_str()
         .expect("workflow id")
         .to_string();
+    assert_eq!(
+        created.config["schemaVersion"],
+        "crewon.legacy-serial-workflow.v0"
+    );
+    assert_eq!(created.config["runtimeAuthority"], "rustLegacySerial");
     assert!(created.file_path.contains(".crewon/workflows/"));
 
     let listed: WorkflowListResponse = request(

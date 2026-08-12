@@ -19,6 +19,7 @@ crewon_rust_crate(
     ],
     test_data_extra = [
         "//codex-rs/provider-agent-platform:tests/fixtures/provider_rs256_test_private.pem",
+        "//:packages/test-contracts/fixtures/workflow-rust-compatibility.reference.json",
     ],
     test_tags = ["no-sandbox"],
 )

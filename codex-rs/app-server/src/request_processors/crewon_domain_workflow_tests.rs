@@ -1,6 +1,7 @@
 use crewon_app_server_protocol::WorkflowCreateParams;
 use crewon_app_server_protocol::WorkflowNodeDefinition;
 use pretty_assertions::assert_eq;
+use serde_json::Value as JsonValue;
 use serde_json::json;
 use tempfile::TempDir;
 
@@ -10,7 +11,88 @@ use super::PreparedWorkflowNodeDispatch;
 use super::create_record;
 use super::recovery::WorkflowActiveTurnRef;
 use super::recovery::WorkflowRecoveryState;
+use super::require_legacy_workflow_runtime;
 use super::validate_create;
+
+const WORKFLOW_COMPATIBILITY_FIXTURE: &str = include_str!(
+    "../../../../packages/test-contracts/fixtures/workflow-rust-compatibility.reference.json"
+);
+
+#[test]
+fn shared_fixture_keeps_typescript_canonical_workflows_out_of_rust_runtime() {
+    let fixture: JsonValue =
+        serde_json::from_str(WORKFLOW_COMPATIBILITY_FIXTURE).expect("compatibility fixture");
+    assert_eq!(
+        require_legacy_workflow_runtime(&fixture["rustLegacyAuthority"]),
+        Ok(())
+    );
+    assert_eq!(
+        require_legacy_workflow_runtime(&fixture["untaggedImportedLegacyAuthority"]),
+        Ok(())
+    );
+    let error = require_legacy_workflow_runtime(&fixture["typescriptCanonicalSource"])
+        .expect_err("TypeScript canonical authority must fail closed");
+    assert_eq!(
+        error.message,
+        "Canonical WorkflowVersion is owned by the TypeScript DAG runtime; Rust only imports and executes legacy serial Workflow records"
+    );
+}
+
+#[tokio::test]
+async fn workflow_run_admission_accepts_untagged_import_and_rejects_canonical_source() {
+    let workspace = TempDir::new().expect("workspace");
+    let cwd = workspace.path().to_string_lossy().into_owned();
+    let legacy = json!({
+        "workflowId": "imported-legacy-workflow",
+        "name": "Imported",
+        "description": "Legacy import",
+        "nodes": [{
+            "nodeId": "node-1",
+            "type": "humanGate",
+            "title": "Approve",
+            "instruction": "Confirm"
+        }],
+        "runs": []
+    });
+    create_record(DomainKind::Workflow, &cwd, legacy)
+        .await
+        .expect("legacy workflow record");
+    let processor = CrewonDomainRequestProcessor::new();
+    let prepared = processor
+        .workflow_run_prepare(
+            crewon_app_server_protocol::WorkflowRunParams {
+                cwd: cwd.clone(),
+                workflow_id: "imported-legacy-workflow".to_string(),
+                input: "input".to_string(),
+            },
+            &std::collections::HashMap::new(),
+        )
+        .await
+        .expect("untagged legacy admission");
+    assert_eq!(prepared.update.response.status, "waitingForApproval");
+
+    let fixture: JsonValue =
+        serde_json::from_str(WORKFLOW_COMPATIBILITY_FIXTURE).expect("compatibility fixture");
+    let canonical = fixture["typescriptCanonicalSource"].clone();
+    create_record(DomainKind::Workflow, &cwd, canonical)
+        .await
+        .expect("canonical source record");
+    let error = processor
+        .workflow_run_prepare(
+            crewon_app_server_protocol::WorkflowRunParams {
+                cwd,
+                workflow_id: "canonical-workflow".to_string(),
+                input: "input".to_string(),
+            },
+            &std::collections::HashMap::new(),
+        )
+        .await
+        .expect_err("canonical source must not enter Rust runtime");
+    assert_eq!(
+        error.message,
+        "Canonical WorkflowVersion is owned by the TypeScript DAG runtime; Rust only imports and executes legacy serial Workflow records"
+    );
+}
 
 #[test]
 fn workflow_create_requires_bounded_nodes() {
