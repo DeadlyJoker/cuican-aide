@@ -1,6 +1,12 @@
 import { DatabaseSync } from "node:sqlite";
-import type { WorkflowContentDigester } from "@crewon/domain";
+import {
+  MAX_WORKFLOW_VALUE_BYTES,
+  parseCompiledWorkflowVersion,
+  type WorkflowContentDigester,
+} from "@crewon/domain";
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
+import { migrateSqliteWorkflowExecutions } from "./workflow-execution-schema.ts";
+import { migrateSqliteWorkflowVersions } from "./workflow-version-schema.ts";
 
 import {
   RunLifecycleError,
@@ -27,6 +33,7 @@ import {
   type ToolExecutionReceiptState,
 } from "@crewon/domain";
 import {
+  canonicalJson,
   parseExecutionProviderCheckpoint,
   RunStoreError,
   type ActivateAgentVersionReleaseResult,
@@ -72,6 +79,8 @@ import {
   type CommitThreadGoalMutationResult,
   type CommitTurnStartInput,
   type CommitTurnStartResult,
+  type CommitWorkflowRunStartInput,
+  type CommitWorkflowRunStartResult,
   type AbortModelProviderSettingsInput,
   type AbortModelProviderSettingsResult,
   type FinalizeModelProviderSettingsInput,
@@ -556,6 +565,8 @@ export class SqliteRunStore implements DomainStore {
     });
     try {
       configureAndMigrateSqlite(this.#database);
+      migrateSqliteWorkflowVersions(this.#database);
+      migrateSqliteWorkflowExecutions(this.#database);
     } catch (error) {
       this.#database.close();
       this.#closed = true;
