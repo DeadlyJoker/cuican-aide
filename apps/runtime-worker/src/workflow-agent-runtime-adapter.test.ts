@@ -163,7 +163,6 @@ test("shared engine consumes the supplied attempt and actual value without begin
   const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
     execution,
     store,
-    dispatchEvidence: store,
     leaseDurationMs: 30_000,
   });
   const node = {
@@ -327,7 +326,6 @@ test("workflow Direct dispatch fails closed before a kernel without evidence cap
   const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
     execution: dependencies.execution,
     store: dependencies.store,
-    dispatchEvidence: dependencies.dispatchEvidence,
     leaseDurationMs: 30_000,
   });
   const input = workflowEngineInput(async function* () {
@@ -371,19 +369,25 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
     async dispatchToolExecution() {
       return toolReceipt("dispatched");
     },
-    async commitToolExecutionCompletion(
-      _claim: unknown,
-      _receipt: unknown,
-      attempt: { attemptId: string },
-    ) {
-      committedToolAttempt = attempt.attemptId;
-      return {};
+  } as never;
+  const store = {
+    ...((dependencies.store as unknown) as Record<string, unknown>),
+    async commitWorkflowToolContinuation(input: {
+      toolAttempt: { attemptId: string };
+      receipt: Record<string, unknown>;
+      next: Record<string, unknown>;
+    }) {
+      committedToolAttempt = input.toolAttempt.attemptId;
+      return {
+        receipt: { ...input.receipt, status: "completed" },
+        continuation: { ...input.next, revision: 2,
+          updatedAt: "2026-08-12T00:00:00.000Z" },
+      };
     },
   } as never;
   const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
     execution,
-    store: dependencies.store,
-    dispatchEvidence: dependencies.store as never,
+    store,
     leaseDurationMs: 30_000,
   });
   const input = workflowEngineInput(async function* (contract: unknown) {
@@ -596,11 +600,17 @@ function workflowEngineDependencies(input: {
       async prepareModelDispatch() {},
       async markModelDispatchPossiblySent() {},
       async loadModelDispatchReceipt() {},
-    } as never,
-    dispatchEvidence: {
-      async prepareModelDispatch() {},
-      async markModelDispatchPossiblySent() {},
-      async loadModelDispatchReceipt() {},
+      async commitWorkflowAssistantContinuation(input: { next: object }) {
+        return { ...input.next, revision: 1,
+          updatedAt: "2026-08-12T00:00:00.000Z" };
+      },
+      async commitWorkflowToolContinuation(input: {
+        receipt: object; next: object;
+      }) {
+        return { receipt: { ...input.receipt, status: "completed" },
+          continuation: { ...input.next, revision: 2,
+            updatedAt: "2026-08-12T00:00:00.000Z" } };
+      },
     } as never,
   };
 }
@@ -764,14 +774,10 @@ async function runToolLimitScenario(
     async dispatchToolExecution() {
       return toolReceipt("dispatched");
     },
-    async commitToolExecutionCompletion() {
-      return {};
-    },
   } as never;
   const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
     execution,
     store: dependencies.store,
-    dispatchEvidence: dependencies.store as never,
     leaseDurationMs: 30_000,
   });
   const input = workflowEngineInput(async function* () {

@@ -400,7 +400,6 @@ async function composeRuntimeWorker(
             engine: new SharedWorkflowAdmittedAgentExecutionEngine({
               execution,
               store: workflow.store,
-              dispatchEvidence: workflow.store,
               leaseDurationMs: config.leaseDurationMs ?? 30_000,
             }),
           }),

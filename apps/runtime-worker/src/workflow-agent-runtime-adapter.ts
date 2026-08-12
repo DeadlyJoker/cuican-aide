@@ -2,8 +2,8 @@ import { AgentKernelError } from "@crewon/agent-kernel";
 import type {
   DomainStore,
   DurableQueueStore,
-  ModelDispatchEvidenceStore,
   RunExecutionService,
+  WorkflowRuntimeStore,
 } from "@crewon/application";
 import type {
   ModelDispatchReceipt,
@@ -29,6 +29,12 @@ import type {
   WorkflowNodeOutcome,
 } from "./workflow-runtime-dispatcher.ts";
 import { WorkflowNodeSideEffectUncertainError } from "./workflow-runtime-dispatcher.ts";
+import {
+  projectWorkflowModelTerminal,
+  workflowAttemptAuthority,
+  workflowContinuationCheckpoint,
+  type WorkflowDurableExecutionAuthority,
+} from "./workflow-agent-durable-continuation.ts";
 import {
   decideWorkflowNodeExecutionError,
   decideWorkflowNodeSegment,
@@ -63,8 +69,7 @@ export interface WorkflowAdmittedAgentExecutionEngine {
   >;
 }
 
-type WorkflowExecutionStore = DomainStore &
-  DurableQueueStore;
+type WorkflowExecutionStore = DomainStore & DurableQueueStore & WorkflowRuntimeStore;
 
 /** Executes one already-admitted Workflow Agent attempt without owning root Run settlement. */
 export class SharedWorkflowAdmittedAgentExecutionEngine
@@ -72,19 +77,16 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
 {
   readonly #execution: RunExecutionService;
   readonly #store: WorkflowExecutionStore;
-  readonly #dispatchEvidence: ModelDispatchEvidenceStore;
   readonly #leaseDurationMs: number;
   readonly #segments = new AgentSegmentExecutionEngine();
 
   constructor(dependencies: {
     execution: RunExecutionService;
     store: WorkflowExecutionStore;
-    dispatchEvidence: ModelDispatchEvidenceStore;
     leaseDurationMs: number;
   }) {
     this.#execution = dependencies.execution;
     this.#store = dependencies.store;
-    this.#dispatchEvidence = dependencies.dispatchEvidence;
     this.#leaseDurationMs = dependencies.leaseDurationMs;
   }
 
@@ -138,7 +140,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
     if (runtime.kernel.supportsModelDispatchEvidence !== true) {
       throw new Error("model_dispatch_evidence_unsupported");
     }
-    const dispatchStore = this.#dispatchEvidence;
+    const dispatchStore = this.#store;
     let dispatch: ModelDispatchReceipt | null = null;
     let effectCertainty: WorkflowNodeEffectCertainty = "notSent";
     const controller = new AbortController();
@@ -304,7 +306,50 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
         canceled: executed.canceled,
         effectCertainty,
       });
-      if (decision.kind === "settle") return decision.outcome;
+      const priorHistory =
+        internal.continuationState?.history ??
+        [
+          ...(runtime.governedContext?.modelItems() ?? []),
+          ...prepared.history,
+        ];
+      const assistantHistory = [
+        ...priorHistory,
+        ...(executed.segment.assistantContinuation === null
+          ? []
+          : [{
+              type: "message" as const,
+              role: "assistant" as const,
+              content: executed.segment.assistantContinuation.data.output,
+            }]),
+      ];
+      let continuationRevision = internal.continuationState?.revision ?? null;
+      const currentDispatch = dispatch as ModelDispatchReceipt | null;
+      if (currentDispatch?.status === "responseObserved") {
+        const committed = await this.#store.commitWorkflowAssistantContinuation({
+          lease: leaseInput(authority.workItemClaim),
+          authority: workflowAttemptAuthority(durableAuthority(input)),
+          expectedContinuationRevision: continuationRevision,
+          next: workflowContinuationCheckpoint({
+            authority: durableAuthority(input),
+            segmentId,
+            modelSampleIndex,
+            toolRoundsConsumed,
+            history: assistantHistory,
+            dispatch: currentDispatch,
+            providerCheckpoint: executed.segment.providerCheckpoint,
+            providerTurnState: executed.segment.providerTurnState,
+          }),
+          committedAt: new Date().toISOString(),
+        });
+        continuationRevision = committed.revision;
+      }
+      if (decision.kind === "settle") {
+        if (decision.outcome.status === "unknown" ||
+            decision.outcome.status === "approvalHandoffRequired") {
+          return decision.outcome;
+        }
+        return projectWorkflowModelTerminal(decision.outcome, currentDispatch);
+      }
       if (
         executed.segment.requestedTools.length === 0 &&
         executed.segment.assistantContinuation === null
@@ -320,21 +365,26 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
           failureCode: "model_tool_round_limit_exceeded",
         };
       }
-      const toolHistory =
+      const toolContinuation =
         executed.segment.requestedTools.length === 0
-          ? []
+          ? { history: [] as import("@crewon/agent-kernel").AgentHistoryItem[],
+              revision: continuationRevision }
           : await this.#executeTools(
               input,
               executed.segment.requestedTools,
               executed.segment.lastAgentSequence,
               controller.signal,
+              {
+                segmentId,
+                modelSampleIndex,
+                toolRoundsConsumed,
+                history: assistantHistory,
+                revision: continuationRevision,
+                dispatch: currentDispatch,
+                providerCheckpoint: executed.segment.providerCheckpoint,
+                providerTurnState: executed.segment.providerTurnState,
+              },
             );
-      const priorHistory =
-        internal.continuationState?.history ??
-        [
-          ...(runtime.governedContext?.modelItems() ?? []),
-          ...prepared.history,
-        ];
       const checkpoint =
         executed.segment.assistantContinuation?.data.checkpoint ??
         executed.segment.providerCheckpoint;
@@ -356,19 +406,11 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
             toolRoundsConsumed +
             (executed.segment.requestedTools.length > 0 ? 1 : 0),
           history: [
-            ...priorHistory,
-            ...(executed.segment.assistantContinuation === null
-              ? []
-              : [
-                  {
-                    type: "message" as const,
-                    role: "assistant" as const,
-                    content: executed.segment.assistantContinuation.data.output,
-                  },
-                ]),
-            ...toolHistory,
+            ...assistantHistory,
+            ...toolContinuation.history,
           ],
           continuation,
+          revision: toolContinuation.revision,
         },
       } as typeof input);
     } catch (error) {
@@ -403,9 +445,23 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
     >[],
     startingSequence: number,
     signal: AbortSignal,
-  ): Promise<import("@crewon/agent-kernel").AgentHistoryItem[]> {
+    continuation: Readonly<{
+      segmentId: string;
+      modelSampleIndex: number;
+      toolRoundsConsumed: number;
+      history: readonly import("@crewon/agent-kernel").AgentHistoryItem[];
+      revision: number | null;
+      dispatch: ModelDispatchReceipt | null;
+      providerCheckpoint: import("@crewon/contracts").ProviderCheckpoint | null;
+      providerTurnState: string | null;
+    }>,
+  ): Promise<Readonly<{
+    history: import("@crewon/agent-kernel").AgentHistoryItem[];
+    revision: number | null;
+  }>> {
     const history: import("@crewon/agent-kernel").AgentHistoryItem[] = [];
     let sequence = startingSequence;
+    let revision = continuation.revision;
     for (const event of requests) {
       const call = event.data;
       const defined = input.runtime.version.tools.some(
@@ -514,16 +570,39 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
         if (toolAttempt === null) {
           throw new Error("workflow_tool_attempt_missing");
         }
-        await this.#execution.commitToolExecutionCompletion(
-          input.authority.workItemClaim,
+        const nextHistory = [
+          ...continuation.history,
+          ...history,
+          { type: "tool_call" as const, kind: call.kind, callId: call.callId,
+            name: call.name, input: call.input },
+          { type: "tool_result" as const, kind: call.kind, callId: call.callId,
+            output: resolution.result.output },
+        ];
+        const committed = await this.#store.commitWorkflowToolContinuation({
+          lease: leaseInput(input.authority.workItemClaim),
+          authority: workflowAttemptAuthority(durableAuthority(input)),
           receipt,
-          {
+          toolAttempt: {
             stepId: toolAttempt.attempt.stepId,
             attemptId: toolAttempt.attempt.attemptId,
           },
           completedEvent,
-          resolution.providerReceiptId,
-        );
+          providerReceiptId: resolution.providerReceiptId,
+          expectedContinuationRevision: revision,
+          next: workflowContinuationCheckpoint({
+            authority: durableAuthority(input),
+            segmentId: continuation.segmentId,
+            modelSampleIndex: continuation.modelSampleIndex,
+            toolRoundsConsumed: continuation.toolRoundsConsumed + 1,
+            history: nextHistory,
+            dispatch: continuation.dispatch,
+            providerCheckpoint: continuation.providerCheckpoint,
+            providerTurnState: continuation.providerTurnState,
+          }),
+          committedAt: new Date().toISOString(),
+        });
+        receipt = committed.receipt;
+        revision = committed.continuation.revision;
       }
       history.push(
         {
@@ -541,7 +620,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
         },
       );
     }
-    return history;
+    return { history, revision };
   }
 }
 
@@ -550,7 +629,26 @@ type WorkflowAgentContinuationState = Readonly<{
   toolRoundsConsumed: number;
   history: readonly import("@crewon/agent-kernel").AgentHistoryItem[];
   continuation: import("@crewon/agent-kernel").AgentContinuation;
+  revision: number | null;
 }>;
+
+function durableAuthority(
+  input: Parameters<WorkflowAdmittedAgentExecutionEngine["execute"]>[0],
+): WorkflowDurableExecutionAuthority {
+  return {
+    tenantId: input.authority.tenantId,
+    runId: input.authority.runId,
+    workItemId: input.authority.workItemClaim.workItem.workItemId,
+    leaseEpoch: input.authority.workItemClaim.lease.epoch,
+    nodeId: input.authority.nodeId,
+    nodeKind: input.node.kind as "agent" | "verification",
+    claimId: input.authority.claimId,
+    claimEpoch: input.authority.claimEpoch,
+    agentVersionId: input.authority.agentVersionId,
+    stepId: input.authority.stepId,
+    attemptId: input.authority.attemptId,
+  };
+}
 
 class WorkflowToolApprovalHandoffError extends Error {
   constructor() {

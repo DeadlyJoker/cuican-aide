@@ -14,11 +14,18 @@ import { loadFrozenWorkflowVersion } from "./workflow-version-runtime.ts";
 import { parseWorkflowWorkItemPayload } from "./workflow-work-item-payload.ts";
 
 export type WorkflowNodeOutcome =
-  | Readonly<{ status: "completed"; value: WorkflowSchemaValue }>
-  | Readonly<{ status: "failed"; failureCode: string }>
-  | Readonly<{ status: "canceled" }>
+  | Readonly<{ status: "completed"; value: WorkflowSchemaValue;
+      modelTerminal?: WorkflowModelTerminalAuthority }>
+  | Readonly<{ status: "failed"; failureCode: string;
+      modelTerminal?: WorkflowModelTerminalAuthority }>
+  | Readonly<{ status: "canceled"; modelTerminal?: WorkflowModelTerminalAuthority }>
   | Readonly<{ status: "unknown" }>
   | Readonly<{ status: "approvalHandoffRequired" }>;
+
+export type WorkflowModelTerminalAuthority = Readonly<{
+  dispatch: import("@crewon/application").WorkflowNodeDispatchAuthority;
+  dispatchTerminalOutcome: import("@crewon/domain").ModelDispatchTerminalOutcome;
+}>;
 
 export interface WorkflowAgentNodePort {
   execute(input: {
