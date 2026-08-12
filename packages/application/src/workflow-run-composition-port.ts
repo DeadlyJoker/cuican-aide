@@ -50,11 +50,11 @@ export type WorkflowAtomicHandoff = Readonly<{
 
 export type WorkflowRunDisposition = "nonTerminal" | "terminalConverged";
 
-export type WorkflowReconciliationObservation =
-  | Readonly<{ status: "completed"; value: WorkflowSchemaValue }>
-  | Readonly<{ status: "failed"; failureCode: string }>
-  | Readonly<{ status: "canceled" }>
-  | Readonly<{ status: "notDispatched" }>;
+export type WorkflowDispatchEvidenceStatus =
+  | "notDispatched"
+  | "possiblySent"
+  | "responseObserved"
+  | "terminal";
 
 export interface WorkflowRunCompositionStore {
   scheduleWorkflowNodes(input: {
@@ -198,10 +198,11 @@ export interface WorkflowRunCompositionStore {
     claimId: string;
     claimEpoch: number;
     reconciliationOperationId: string;
-    observation: WorkflowReconciliationObservation;
+    dispatchOperationId: string;
   }): Promise<
     Readonly<{
       disposition: "evidenceInsufficient";
+      evidenceStatus: WorkflowDispatchEvidenceStatus;
       execution: WorkflowExecutionState;
       handoff: WorkflowAtomicHandoff;
       runDisposition: "nonTerminal";

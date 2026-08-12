@@ -38,6 +38,10 @@ import {
 import { migrateSqliteWorkflowExecutions } from "./workflow-execution-schema.ts";
 import { migrateSqliteWorkflowVersions } from "./workflow-version-schema.ts";
 import {
+  loadSqliteModelDispatchReceipt,
+  migrateSqliteModelDispatchEvidence,
+} from "./sqlite-model-dispatch-evidence.ts";
+import {
   assertExecutionBinding,
   attemptId,
   gateStep,
@@ -80,6 +84,7 @@ export class SqliteWorkflowRunCompositionStore
     configureAndMigrateSqlite(this.#database);
     migrateSqliteWorkflowVersions(this.#database);
     migrateSqliteWorkflowExecutions(this.#database);
+    migrateSqliteModelDispatchEvidence(this.#database);
   }
 
   async close(): Promise<void> {
@@ -577,10 +582,18 @@ export class SqliteWorkflowRunCompositionStore
             attemptId: step.currentAttemptId });
       if (step === null || attempt === null || attempt.status !== "running")
         throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
-      // RunAttempt has no admitted-model dispatch checkpoint. An external
-      // observation cannot prove whether the model side effect was sent.
+      const dispatch = loadSqliteModelDispatchReceipt(this.#database, {
+        tenantId: input.tenantId, runId: input.runId, stepId: input.nodeId,
+        attemptId: attempt.attemptId, operationId: input.dispatchOperationId,
+      });
+      if (dispatch === null || dispatch.workItemId !== attempt.workItemId ||
+          dispatch.leaseEpoch !== attempt.leaseEpoch)
+        throw new RunStoreError("workflow_reconciliation_evidence_missing");
+      const evidenceStatus = dispatch.status === "prepared"
+        ? "notDispatched" as const : dispatch.status;
       const result = { disposition: "evidenceInsufficient" as const,
-        execution: execution!, handoff: { currentWorkItem: "retained" as const,
+        evidenceStatus, execution: execution!,
+        handoff: { currentWorkItem: "retained" as const,
           nextWorkItemId: null, kind: "none" as const },
         runDisposition: "nonTerminal" as const };
       this.#database.exec("COMMIT");
