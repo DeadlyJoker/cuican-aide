@@ -6,70 +6,80 @@ const SCHEMA_VERSION = 6;
 
 export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
   try {
-  database.exec(`CREATE TABLE IF NOT EXISTS workflow_execution_schema (
+    database.exec(`CREATE TABLE IF NOT EXISTS workflow_execution_schema (
     singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
     version INTEGER NOT NULL
   ) STRICT`);
-  const stored = database
-    .prepare("SELECT version FROM workflow_execution_schema WHERE singleton=1")
-    .get() as { version: number } | undefined;
-  if (stored && stored.version > SCHEMA_VERSION)
-    throw new RunStoreError("workflow_execution_schema_too_new");
-  let version = stored?.version;
-  if (version === undefined) {
-    database.exec(sqliteTables);
-    database.exec(sqliteCompositionTables);
-    database
-      .prepare("INSERT INTO workflow_execution_schema VALUES (1, ?)")
-      .run(SCHEMA_VERSION);
-    version = SCHEMA_VERSION;
-  }
-  if (version === 1) {
-    database.exec(
-      "ALTER TABLE workflow_execution_receipts ADD COLUMN result_json TEXT CHECK (result_json IS NULL OR json_valid(result_json))",
-    );
-    database
+    const stored = database
       .prepare(
-        "UPDATE workflow_execution_schema SET version=? WHERE singleton=1",
+        "SELECT version FROM workflow_execution_schema WHERE singleton=1",
       )
-      .run(2);
-    version = 2;
-  }
-  if (version === 2) {
-    database.exec(sqliteCompositionTables);
-    database
-      .prepare(
-        "UPDATE workflow_execution_schema SET version=6 WHERE singleton=1",
-      )
-      .run();
-    version = 6;
-  }
-  if (version === 3) {
-    database.exec(sqliteValueTable);
-    database
-      .prepare("UPDATE workflow_execution_schema SET version=5 WHERE singleton=1")
-      .run();
-    version = 5;
-  }
-  if (version === 4) {
-    database.exec("ALTER TABLE workflow_execution_values RENAME TO workflow_execution_values_v4");
-    database.exec(sqliteValueTable);
-    database.exec(`INSERT INTO workflow_execution_values
+      .get() as { version: number } | undefined;
+    if (stored && stored.version > SCHEMA_VERSION)
+      throw new RunStoreError("workflow_execution_schema_too_new");
+    let version = stored?.version;
+    if (version === undefined) {
+      database.exec(sqliteTables);
+      database.exec(sqliteCompositionTables);
+      database
+        .prepare("INSERT INTO workflow_execution_schema VALUES (1, ?)")
+        .run(SCHEMA_VERSION);
+      version = SCHEMA_VERSION;
+    }
+    if (version === 1) {
+      database.exec(
+        "ALTER TABLE workflow_execution_receipts ADD COLUMN result_json TEXT CHECK (result_json IS NULL OR json_valid(result_json))",
+      );
+      database
+        .prepare(
+          "UPDATE workflow_execution_schema SET version=? WHERE singleton=1",
+        )
+        .run(2);
+      version = 2;
+    }
+    if (version === 2) {
+      database.exec(sqliteCompositionTables);
+      database
+        .prepare(
+          "UPDATE workflow_execution_schema SET version=6 WHERE singleton=1",
+        )
+        .run();
+      version = 6;
+    }
+    if (version === 3) {
+      database.exec(sqliteValueTable);
+      database
+        .prepare(
+          "UPDATE workflow_execution_schema SET version=5 WHERE singleton=1",
+        )
+        .run();
+      version = 5;
+    }
+    if (version === 4) {
+      database.exec(
+        "ALTER TABLE workflow_execution_values RENAME TO workflow_execution_values_v4",
+      );
+      database.exec(sqliteValueTable);
+      database.exec(`INSERT INTO workflow_execution_values
       SELECT * FROM workflow_execution_values_v4;
       DROP TABLE workflow_execution_values_v4`);
-    database
-      .prepare("UPDATE workflow_execution_schema SET version=5 WHERE singleton=1")
-      .run();
-    version = 5;
-  }
-  if (version === 5) {
-    database.exec(sqliteAdmissionTable);
-    database.prepare(
-      "UPDATE workflow_execution_schema SET version=6 WHERE singleton=1",
-    ).run();
-    version = 6;
-  }
-  assertSqliteShape(database);
+      database
+        .prepare(
+          "UPDATE workflow_execution_schema SET version=5 WHERE singleton=1",
+        )
+        .run();
+      version = 5;
+    }
+    if (version === 5) {
+      database.exec(sqliteAdmissionTable);
+      database
+        .prepare(
+          "UPDATE workflow_execution_schema SET version=6 WHERE singleton=1",
+        )
+        .run();
+      version = 6;
+    }
+    assertSqliteShape(database);
   } catch (error) {
     if (error instanceof RunStoreError) throw error;
     throw new RunStoreError("workflow_execution_schema_corrupt", {
@@ -120,11 +130,15 @@ export async function migratePostgresWorkflowExecutions(
   if (version === 3) {
     await client.query(postgresValueTable(schema));
     await client.query(
-      `UPDATE ${schema}.workflow_execution_schema SET version=6 WHERE singleton=true`,
+      `UPDATE ${schema}.workflow_execution_schema SET version=5 WHERE singleton=true`,
     );
-    version = 6;
+    version = 5;
   }
   if (version === 4) {
+    await client.query(
+      `DROP INDEX ${schema}.workflow_execution_values_global_role_uq,
+       ${schema}.workflow_execution_values_node_role_uq`,
+    );
     await client.query(
       `ALTER TABLE ${schema}.workflow_execution_values RENAME TO workflow_execution_values_v4`,
     );
@@ -165,10 +179,14 @@ export async function migratePostgresWorkflowExecutions(
      ORDER BY indexname`,
     [schema],
   );
-  if (indexes.rows.map((row) => row.indexname).join("\n") !== [
-    "workflow_execution_values_global_role_uq",
-    "workflow_execution_values_node_role_uq",
-  ].join("\n")) throw new RunStoreError("workflow_execution_schema_corrupt");
+  if (
+    indexes.rows.map((row) => row.indexname).join("\n") !==
+    [
+      "workflow_execution_values_global_role_uq",
+      "workflow_execution_values_node_role_uq",
+    ].join("\n")
+  )
+    throw new RunStoreError("workflow_execution_schema_corrupt");
 }
 
 const sqliteTables = `CREATE TABLE workflow_executions (
@@ -253,14 +271,20 @@ function assertSqliteShape(database: DatabaseSync): void {
     if (actual.join("\n") !== expected.join("\n"))
       throw new RunStoreError("workflow_execution_schema_corrupt");
   }
-  const indexes = database.prepare(
-    `SELECT name,sql FROM sqlite_master WHERE type='index'
+  const indexes = database
+    .prepare(
+      `SELECT name,sql FROM sqlite_master WHERE type='index'
      AND tbl_name='workflow_execution_values' AND sql IS NOT NULL ORDER BY name`,
-  ).all() as { name: string; sql: string }[];
-  if (indexes.map((row) => row.name).join("\n") !== [
-    "workflow_execution_values_global_role_uq",
-    "workflow_execution_values_node_role_uq",
-  ].join("\n")) throw new RunStoreError("workflow_execution_schema_corrupt");
+    )
+    .all() as { name: string; sql: string }[];
+  if (
+    indexes.map((row) => row.name).join("\n") !==
+    [
+      "workflow_execution_values_global_role_uq",
+      "workflow_execution_values_node_role_uq",
+    ].join("\n")
+  )
+    throw new RunStoreError("workflow_execution_schema_corrupt");
 }
 
 const sqliteColumns = {
@@ -290,7 +314,12 @@ const sqliteColumns = {
     "created_at",
   ],
   workflow_run_admission_receipts: [
-    "tenant_id", "scope", "idempotency_key", "fingerprint", "run_id", "result_json",
+    "tenant_id",
+    "scope",
+    "idempotency_key",
+    "fingerprint",
+    "run_id",
+    "result_json",
   ],
   workflow_composition_receipts: [
     "tenant_id",
