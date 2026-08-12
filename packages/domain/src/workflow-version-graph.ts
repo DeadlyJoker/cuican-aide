@@ -25,6 +25,9 @@ export function validateWorkflowGraph(
   outputNodeIds: readonly string[],
 ): readonly string[] {
   const nodeById = new Map(nodes.map((node) => [node.nodeId, node]));
+  if (nodeById.size !== nodes.length) {
+    throw new WorkflowVersionError("workflow_node_id_conflict");
+  }
   if (
     entryNodeIds.some((nodeId) => !nodeById.has(nodeId)) ||
     outputNodeIds.some((nodeId) => !nodeById.has(nodeId))
@@ -32,6 +35,9 @@ export function validateWorkflowGraph(
     throw new WorkflowVersionError("workflow_boundary_node_not_found");
   }
   for (const node of nodes) {
+    if (new Set(node.dependsOn).size !== node.dependsOn.length) {
+      throw new WorkflowVersionError("workflow_dependencies_invalid");
+    }
     if (node.dependsOn.some((dependency) => !nodeById.has(dependency))) {
       throw new WorkflowVersionError("workflow_dependency_not_found");
     }

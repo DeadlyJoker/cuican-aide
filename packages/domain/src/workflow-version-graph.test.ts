@@ -37,6 +37,21 @@ test("rejects cycles, missing dependencies and dishonest boundaries", () => {
       ["verify"],
       "workflow_dependency_not_found",
     ],
+    [
+      [...nodes, agent("collect", [])],
+      ["collect"],
+      ["verify"],
+      "workflow_node_id_conflict",
+    ],
+    [
+      replace("analyze", (node) => ({
+        ...node,
+        dependsOn: ["collect", "collect"],
+      })),
+      ["collect"],
+      ["verify"],
+      "workflow_dependencies_invalid",
+    ],
     [nodes, ["missing"], ["verify"], "workflow_boundary_node_not_found"],
     [nodes, ["analyze"], ["verify"], "workflow_entry_nodes_invalid"],
     [nodes, ["collect"], ["analyze"], "workflow_output_nodes_invalid"],
