@@ -1,17 +1,28 @@
 import {
   RunStoreError,
   validateWorkflowNodeContinuationCheckpoint,
+  type CommitWorkflowToolContinuationInput,
   type WorkflowAgentAttemptAuthority,
   type WorkflowNodeContinuationCheckpoint,
 } from "@crewon/application";
+import { parseCanonicalAgentEvent } from "@crewon/contracts";
+import type { WorkflowContentDigester } from "@crewon/domain";
 import type { PoolClient } from "pg";
 
 import {
+  finishPostgresRunAttempt,
   loadPostgresRunAttempt,
   loadPostgresRunStep,
 } from "./postgres-execution-authority.ts";
+import {
+  loadPostgresToolExecutionReceipt,
+  updatePostgresToolExecutionReceipt,
+} from "./postgres-tool-execution.ts";
 import { assertPostgresSchemaNotNewer } from "./postgres-store-support.ts";
-import { stableJson } from "./store-invariants.ts";
+import {
+  applyToolExecutionTransition,
+  stableJson,
+} from "./store-invariants.ts";
 import { loadPostgresWorkflowExecution } from "./postgres-workflow-run-composition-transactions.ts";
 
 type Row = Readonly<{
@@ -42,7 +53,7 @@ export async function migratePostgresWorkflowNodeContinuations(
     client,
     schema,
     "workflow_node_continuation",
-    1,
+    2,
   );
   const current = await client.query<{ version: number }>(
     `SELECT version FROM ${schema}.schema_migrations
@@ -63,8 +74,121 @@ export async function migratePostgresWorkflowNodeContinuations(
       FOREIGN KEY (tenant_id, run_id, node_id, attempt_id)
         REFERENCES ${schema}.run_attempts(tenant_id, run_id, step_id, attempt_id)
         ON DELETE CASCADE
-    );`);
-  await assertPhysicalSchema(client, schema, 1);
+    );
+    CREATE TABLE IF NOT EXISTS ${schema}.workflow_agent_events (
+      tenant_id text NOT NULL, run_id text NOT NULL, node_id text NOT NULL,
+      attempt_id text NOT NULL, segment_id text NOT NULL,
+      sequence bigint NOT NULL CHECK (sequence BETWEEN 1 AND 9007199254740991),
+      event_type text NOT NULL, event_json jsonb NOT NULL CHECK (jsonb_typeof(event_json)='object'),
+      PRIMARY KEY (tenant_id,run_id,node_id,attempt_id,segment_id,sequence),
+      FOREIGN KEY (tenant_id,run_id,node_id,attempt_id)
+        REFERENCES ${schema}.run_attempts(tenant_id,run_id,step_id,attempt_id) ON DELETE CASCADE
+    );
+    UPDATE ${schema}.schema_migrations SET version=2
+      WHERE component='workflow_node_continuation' AND version=1;`);
+  await assertPhysicalSchema(client, schema, 2);
+}
+
+export async function commitPostgresWorkflowToolContinuation(
+  client: PoolClient,
+  schema: string,
+  input: CommitWorkflowToolContinuationInput,
+  digester: WorkflowContentDigester,
+): Promise<
+  Readonly<{
+    receipt: import("@crewon/domain").ToolExecutionReceiptState;
+    continuation: WorkflowNodeContinuationCheckpoint;
+  }>
+> {
+  const event = parseCanonicalAgentEvent(input.completedEvent);
+  if (
+    event.type !== "tool.completed" ||
+    event.runId !== input.authority.runId ||
+    event.segmentId !== input.receipt.call.segmentId ||
+    event.data.callId !== input.receipt.call.callId ||
+    event.data.kind !== input.receipt.call.kind ||
+    event.data.name !== input.receipt.call.name
+  )
+    throw new RunStoreError("workflow_tool_continuation_mismatch");
+  await assertAuthority(client, schema, input.authority, true);
+  const current = await loadPostgresToolExecutionReceipt(
+    client,
+    schema,
+    input.receipt,
+    true,
+  );
+  if (
+    current === null ||
+    (current.status !== "completed" &&
+      stableJson(current) !== stableJson(input.receipt)) ||
+    (current.status === "completed" &&
+      current.revision !== input.receipt.revision + 1) ||
+    current.stepId !== input.toolAttempt.stepId ||
+    current.attemptId !== input.toolAttempt.attemptId ||
+    current.workItemId !== input.lease.workItemId
+  )
+    throw new RunStoreError("workflow_tool_receipt_mismatch");
+  const result = {
+    output: input.completedEvent.data.output,
+    outputDigest: digester.sha256(input.completedEvent.data.output),
+    isError: input.completedEvent.data.isError,
+    artifactRef: input.completedEvent.data.artifactRef,
+  };
+  let receipt = current;
+  if (current.status !== "completed") {
+    receipt = applyToolExecutionTransition(current, {
+      tenantId: current.tenantId,
+      runId: current.runId,
+      receiptId: current.receiptId,
+      lease: input.lease,
+      expectedRevision: current.revision,
+      transition: {
+        kind: "complete",
+        occurredAt: input.committedAt,
+        providerReceiptId: input.providerReceiptId,
+        result,
+      },
+    });
+    await finishPostgresRunAttempt(client, schema, {
+      tenantId: input.authority.tenantId,
+      runId: input.authority.runId,
+      workItemId: input.lease.workItemId,
+      leaseEpoch: input.lease.leaseEpoch,
+      attempt: {
+        ...input.toolAttempt,
+        status: "completed",
+        finishedAt: input.committedAt,
+        checkpointDigest: null,
+      },
+    });
+    await updatePostgresToolExecutionReceipt(client, schema, current, receipt);
+    await client.query(
+      `INSERT INTO ${schema}.workflow_agent_events
+       (tenant_id,run_id,node_id,attempt_id,segment_id,sequence,event_type,event_json)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
+      [
+        input.authority.tenantId,
+        input.authority.runId,
+        input.authority.nodeId,
+        input.authority.attempt.attemptId,
+        event.segmentId,
+        event.sequence,
+        event.type,
+        JSON.stringify(input.completedEvent),
+      ],
+    );
+  } else {
+    await validateToolReplay(client, schema, input, current, result);
+  }
+  const continuation = await writePostgresWorkflowNodeContinuation(
+    client,
+    schema,
+    input.authority,
+    input.expectedContinuationRevision,
+    input.next,
+    input.committedAt,
+  );
+  return { receipt, continuation };
 }
 
 export async function loadPostgresWorkflowNodeContinuation(
@@ -121,6 +245,11 @@ export async function writePostgresWorkflowNodeContinuation(
     authority,
     true,
   );
+  if (
+    current?.revision === (expectedRevision ?? 0) + 1 &&
+    stableJson(current) === stableJson(candidate)
+  )
+    return current;
   if ((current?.revision ?? null) !== expectedRevision)
     throw new RunStoreError("workflow_continuation_revision_mismatch");
   const checkpoint = candidate;
@@ -199,6 +328,59 @@ async function assertAuthority(
     throw new RunStoreError("workflow_continuation_authority_mismatch");
 }
 
+async function validateToolReplay(
+  client: PoolClient,
+  schema: string,
+  input: CommitWorkflowToolContinuationInput,
+  receipt: import("@crewon/domain").ToolExecutionReceiptState,
+  result: import("@crewon/domain").ToolExecutionResult,
+): Promise<void> {
+  const attempt = await loadPostgresRunAttempt(
+    client,
+    schema,
+    {
+      tenantId: input.authority.tenantId,
+      runId: input.authority.runId,
+      ...input.toolAttempt,
+    },
+    true,
+  );
+  const event = await client.query<{
+    segment_id: string;
+    sequence: string | number;
+    event_type: string;
+    event_json: unknown;
+  }>(
+    `SELECT segment_id,sequence,event_type,event_json FROM ${schema}.workflow_agent_events
+     WHERE tenant_id=$1 AND run_id=$2 AND node_id=$3 AND attempt_id=$4
+       AND segment_id=$5 AND sequence=$6 FOR UPDATE`,
+    [
+      input.authority.tenantId,
+      input.authority.runId,
+      input.authority.nodeId,
+      input.authority.attempt.attemptId,
+      input.completedEvent.segmentId,
+      input.completedEvent.sequence,
+    ],
+  );
+  const row = event.rows[0];
+  if (
+    receipt.revision !== input.receipt.revision + 1 ||
+    receipt.providerReceiptId !== input.providerReceiptId ||
+    receipt.resolvedAt !== input.committedAt ||
+    stableJson(receipt.result) !== stableJson(result) ||
+    attempt?.status !== "completed" ||
+    attempt.workItemId !== input.lease.workItemId ||
+    attempt.leaseEpoch !== input.lease.leaseEpoch ||
+    attempt.terminalAt !== input.committedAt ||
+    row?.segment_id !== input.completedEvent.segmentId ||
+    Number(row.sequence) !== input.completedEvent.sequence ||
+    row.event_type !== "tool.completed" ||
+    stableJson(row.event_json) !== stableJson(input.completedEvent)
+  )
+    throw new RunStoreError("workflow_tool_continuation_replay_conflict");
+}
+
 async function assertPhysicalSchema(
   client: PoolClient,
   schema: string,
@@ -210,8 +392,13 @@ async function assertPhysicalSchema(
      ORDER BY ordinal_position`,
     [schema.replaceAll('"', "")],
   );
+  const events = await client.query<{ present: boolean }>(
+    "SELECT to_regclass($1) IS NOT NULL AS present",
+    [`${schema.replaceAll('"', "")}.workflow_agent_events`],
+  );
   if (
-    version !== 1 ||
+    (version !== 1 && version !== 2) ||
+    (version === 2 && events.rows[0]?.present !== true) ||
     columns.rows.map((row) => row.column_name).join(",") !== COLUMNS.join(",")
   )
     throw new RunStoreError("postgres_schema_version_unsupported");

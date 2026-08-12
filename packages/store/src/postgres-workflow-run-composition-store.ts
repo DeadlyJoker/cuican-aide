@@ -24,6 +24,7 @@ import {
 import { settlePostgresWorkflowNode } from "./postgres-workflow-node-settlement.ts";
 import { settlePostgresWorkflowNodeModelTerminal } from "./postgres-workflow-model-settlement.ts";
 import {
+  commitPostgresWorkflowToolContinuation,
   loadPostgresWorkflowNodeContinuation,
   migratePostgresWorkflowNodeContinuations,
   writePostgresWorkflowNodeContinuation,
@@ -364,6 +365,29 @@ export class PostgresWorkflowRunCompositionStore
         input.expectedContinuationRevision,
         { ...input.next, terminalCandidate: null },
         input.committedAt,
+      );
+    });
+  }
+
+  async commitWorkflowToolContinuation(
+    input: Parameters<
+      WorkflowNodeContinuationStore["commitWorkflowToolContinuation"]
+    >[0],
+  ): ReturnType<
+    WorkflowNodeContinuationStore["commitWorkflowToolContinuation"]
+  > {
+    return this.#transaction(input.authority, async (client) => {
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.authority.tenantId,
+        input.authority.runId,
+        input.lease,
+      );
+      return commitPostgresWorkflowToolContinuation(
+        client,
+        this.schemaSql(),
+        input,
+        this.#digester,
       );
     });
   }
