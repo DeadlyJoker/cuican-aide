@@ -87,6 +87,7 @@ loopback evidence；AR-012/023/024/029 已新增 Rust+TS shared fixture，但仍
 | AR-040 | `crewon-api/src/sse/responses.rs::process_sse` + TS decoder + Runtime Worker                                      | 顶层 `error` 缺失/畸形 payload 与未来 provider code 使用同一 bounded terminal/retry 语义              | PARITY       | shared payload fixture 覆盖严格 cutoff、fatal denylist、默认 retryable 与 durable budget-exhausted 原子结算                       |
 | AR-041 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS decoder/HTTP transport + Runtime Worker           | 未知非终态 Responses 事件保持前向兼容；TS 仍按 HTTP/WS framing policy 校验 sequence                   | PARITY       | shared unknown-event fixture 覆盖合法 sequence 的 Rust/TS 差分、Direct transport 与 Worker 成功提交；TS 另证 WS 可省略 sequence   |
 | AR-042 | `crewon-api/src/sse/responses.rs::process_responses_event` + TS transport/Kernel/Runtime Worker                   | reasoning summary 有序投影；raw reasoning 仅 transient，任何 partial 均不进入 canonical model history | PARITY       | shared valid-event projection；TS 另有 bounds、first-terminal、retry/cancel、WS→HTTP discard 与 durable Worker hardening evidence |
+| AR-043 | `crewon-api` Responses HTTP/WebSocket turn state + TS Direct/WebSocket transports                                 | opaque provider turn state 只属于一个 Run，不进入模型历史；重复、冲突、畸形或超过 4 KiB 时 fail closed | PARTIAL      | Rust/TS shared header fixture、HTTP/WS Run 隔离和有界缓存已通过；仍需 Run/Attempt 原子持久化、crash replay 与 terminal cache release |
 
 ## 已有证据映射
 
