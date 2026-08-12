@@ -471,7 +471,7 @@ for (const legacyVersion of [1, 2, 3, 4] as const) {
     migrateSqliteWorkflowExecutions(database);
     assert.equal(database.prepare(
       "SELECT version FROM workflow_execution_schema WHERE singleton=1",
-    ).get()?.version, 7);
+    ).get()?.version, 8);
     assert.deepEqual(database.prepare(
       `SELECT name FROM sqlite_master WHERE type='index'
        AND name LIKE 'workflow_execution_values_%_role_uq' ORDER BY name`,

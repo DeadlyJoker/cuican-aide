@@ -2,7 +2,8 @@ import { DatabaseSync } from "node:sqlite";
 import { RunStoreError } from "@crewon/application";
 import type { PoolClient } from "pg";
 
-const SCHEMA_VERSION = 7;
+const SQLITE_SCHEMA_VERSION = 8;
+const POSTGRES_SCHEMA_VERSION = 7;
 
 export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
   try {
@@ -15,7 +16,7 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
         "SELECT version FROM workflow_execution_schema WHERE singleton=1",
       )
       .get() as { version: number } | undefined;
-    if (stored && stored.version > SCHEMA_VERSION)
+    if (stored && stored.version > SQLITE_SCHEMA_VERSION)
       throw new RunStoreError("workflow_execution_schema_too_new");
     let version = stored?.version;
     if (version === undefined) {
@@ -23,8 +24,8 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
       database.exec(sqliteCompositionTables);
       database
         .prepare("INSERT INTO workflow_execution_schema VALUES (1, ?)")
-        .run(SCHEMA_VERSION);
-      version = SCHEMA_VERSION;
+        .run(SQLITE_SCHEMA_VERSION);
+      version = SQLITE_SCHEMA_VERSION;
     }
     if (version === 1) {
       database.exec(
@@ -93,6 +94,15 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
       UPDATE workflow_execution_schema SET version=7 WHERE singleton=1`);
       version = 7;
     }
+    if (version === 7) {
+      database.exec(sqliteContinuationTable);
+      database
+        .prepare(
+          "UPDATE workflow_execution_schema SET version=? WHERE singleton=1",
+        )
+        .run(SQLITE_SCHEMA_VERSION);
+      version = SQLITE_SCHEMA_VERSION;
+    }
     assertSqliteShape(database);
   } catch (error) {
     if (error instanceof RunStoreError) throw error;
@@ -114,15 +124,15 @@ export async function migratePostgresWorkflowExecutions(
     `SELECT version FROM ${schema}.workflow_execution_schema WHERE singleton=true`,
   );
   let version = stored.rows[0]?.version;
-  if (version !== undefined && version > SCHEMA_VERSION)
+  if (version !== undefined && version > POSTGRES_SCHEMA_VERSION)
     throw new RunStoreError("workflow_execution_schema_too_new");
   if (version === undefined) {
     await client.query(postgresTables(schema));
     await client.query(
       `INSERT INTO ${schema}.workflow_execution_schema(singleton, version) VALUES (true,$1)`,
-      [SCHEMA_VERSION],
+      [POSTGRES_SCHEMA_VERSION],
     );
-    version = SCHEMA_VERSION;
+    version = POSTGRES_SCHEMA_VERSION;
   }
   if (version === 1) {
     await client.query(
@@ -254,8 +264,19 @@ const sqliteAdmissionTable = `CREATE TABLE workflow_run_admission_receipts (
   FOREIGN KEY(tenant_id,run_id) REFERENCES run_snapshots(tenant_id,run_id)
 ) STRICT;`;
 
+const sqliteContinuationTable = `CREATE TABLE IF NOT EXISTS workflow_node_continuations (
+  tenant_id TEXT NOT NULL, run_id TEXT NOT NULL, step_id TEXT NOT NULL,
+  attempt_id TEXT NOT NULL, revision INTEGER NOT NULL CHECK(revision >= 1),
+  checkpoint_json TEXT NOT NULL CHECK(json_valid(checkpoint_json)),
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY(tenant_id,run_id,step_id,attempt_id),
+  FOREIGN KEY(tenant_id,run_id,step_id,attempt_id)
+    REFERENCES run_attempts(tenant_id,run_id,step_id,attempt_id)
+) STRICT;`;
+
 const sqliteCompositionTables = `${sqliteValueTable}
 ${sqliteAdmissionTable}
+${sqliteContinuationTable}
 CREATE TABLE workflow_composition_receipts (
   tenant_id TEXT NOT NULL,
   run_id TEXT NOT NULL,
@@ -369,6 +390,15 @@ const sqliteColumns = {
     "status",
     "state_json",
     "created_at",
+    "updated_at",
+  ],
+  workflow_node_continuations: [
+    "tenant_id",
+    "run_id",
+    "step_id",
+    "attempt_id",
+    "revision",
+    "checkpoint_json",
     "updated_at",
   ],
 } as const;
