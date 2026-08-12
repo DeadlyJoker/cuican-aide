@@ -1,5 +1,8 @@
 import {
   RunStoreError,
+  type CommitWorkflowRunStartInput,
+  type CommitWorkflowRunStartResult,
+  type WorkflowRunAdmissionStore,
   type WorkflowRunCompositionStore,
 } from "@crewon/application";
 import type { WorkflowContentDigester } from "@crewon/domain";
@@ -7,6 +10,10 @@ import type { PoolClient } from "pg";
 
 import { PostgresAttemptStore } from "./postgres-attempt-store.ts";
 import { settlePostgresWorkflowNode } from "./postgres-workflow-node-settlement.ts";
+import {
+  commitPostgresWorkflowRunStart,
+  readPostgresWorkflowRunStartReplay,
+} from "./postgres-workflow-run-admission.ts";
 import {
   admitPostgresWorkflowNodeWork,
   schedulePostgresWorkflowNodes,
@@ -26,7 +33,7 @@ export type PostgresWorkflowRunCompositionStoreOptions =
 /** PostgreSQL production composition authority with row and advisory fences. */
 export class PostgresWorkflowRunCompositionStore
   extends PostgresAttemptStore
-  implements WorkflowRunCompositionStore
+  implements WorkflowRunCompositionStore, WorkflowRunAdmissionStore
 {
   readonly #digester: WorkflowContentDigester;
 
@@ -92,6 +99,43 @@ export class PostgresWorkflowRunCompositionStore
         this.#digester,
       ),
     );
+  }
+
+  async commitWorkflowRunStart(
+    input: CommitWorkflowRunStartInput,
+  ): Promise<CommitWorkflowRunStartResult> {
+    this.assertOpen();
+    const replay = await readPostgresWorkflowRunStartReplay(
+      this.pool,
+      this.schemaSql(),
+      input,
+      this.#digester,
+    );
+    if (replay !== null) return replay;
+    const candidateRoute = await input.resolveCandidateRoute();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await commitPostgresWorkflowRunStart(
+        client,
+        this.schemaSql(),
+        input,
+        candidateRoute,
+        this.#digester,
+        (commit) => this.commitRunWithin(client, commit),
+      );
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await rollbackPostgres(client);
+      throw error instanceof RunStoreError
+        ? error
+        : new RunStoreError("workflow_run_admission_store_failed", {
+            cause: error instanceof Error ? error : undefined,
+          });
+    } finally {
+      client.release();
+    }
   }
 
   async settleWorkflowNode(
