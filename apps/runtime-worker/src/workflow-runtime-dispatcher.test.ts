@@ -102,6 +102,9 @@ test("loads the immutable binding and admits through the atomic composition boun
         assert.deepEqual(input.workflow, workflow);
         return state("completed");
       },
+      async settleHumanGate() {
+        throw new Error("not used");
+      },
     },
   });
 
@@ -147,6 +150,9 @@ test("fails closed before admission when immutable content does not match", asyn
     leaseDurationMs: 30_000,
     executor: {
       async executeAdmissions() {
+        throw new Error("not used");
+      },
+      async settleHumanGate() {
         throw new Error("not used");
       },
     },
@@ -207,6 +213,9 @@ test("uses the admitted Workflow node identity and rejects root-agent substituti
       async executeAdmissions() {
         executed = true;
         return state("completed");
+      },
+      async settleHumanGate() {
+        throw new Error("not used");
       },
     },
   });

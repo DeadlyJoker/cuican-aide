@@ -33,14 +33,20 @@ export class ProductionWorkflowRuntimeDispatcher
   readonly #versions: WorkflowVersionStore;
   readonly #digester: WorkflowContentDigester;
   readonly #composition: ExperimentalWorkflowRunCompositionAdapter;
-  readonly #executor: Pick<WorkflowDagExecutor, "executeAdmissions">;
+  readonly #executor: Pick<
+    WorkflowDagExecutor,
+    "executeAdmissions" | "settleHumanGate"
+  >;
   readonly #leaseDurationMs: number;
 
   constructor(dependencies: {
     versions: WorkflowVersionStore;
     composition: WorkflowRunCompositionStore;
     digester: WorkflowContentDigester;
-    executor: Pick<WorkflowDagExecutor, "executeAdmissions">;
+    executor: Pick<
+      WorkflowDagExecutor,
+      "executeAdmissions" | "settleHumanGate"
+    >;
     leaseDurationMs: number;
   }) {
     this.#versions = dependencies.versions;
@@ -138,6 +144,47 @@ export class ProductionWorkflowRuntimeDispatcher
           ? "workflow_failed"
           : "workflow_recovery_required",
     };
+  }
+
+  async settleHumanGate(input: {
+    run: RunState;
+    nodeId: string;
+    claimId: string;
+    operationId: string;
+    approved: boolean;
+    resultDigest: string;
+  }): Promise<WorkflowRuntimeDispatchOutcome> {
+    const binding = input.run.workflowVersionBinding;
+    if (input.run.purpose !== "workflow" || binding === undefined) {
+      throw new Error("workflow_runtime_dispatch_invalid");
+    }
+    const workflow = await loadFrozenWorkflowVersion({
+      tenantId: input.run.tenantId,
+      binding,
+      store: this.#versions,
+      digester: this.#digester,
+    });
+    const state = await this.#executor.settleHumanGate({
+      tenantId: input.run.tenantId,
+      runId: input.run.runId,
+      binding,
+      workflow,
+      nodeId: input.nodeId,
+      claimId: input.claimId,
+      operationId: input.operationId,
+      approved: input.approved,
+      resultDigest: input.resultDigest,
+    });
+    return state.status === "completed"
+      ? { kind: "completed", runId: input.run.runId }
+      : {
+          kind: "recovery",
+          runId: input.run.runId,
+          code:
+            state.status === "failed"
+              ? "workflow_human_gate_rejected"
+              : "workflow_rescheduled_after_human_gate",
+        };
   }
 }
 
