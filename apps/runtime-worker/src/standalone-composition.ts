@@ -554,7 +554,8 @@ function certifyWorkflowComposition(
     candidate.certification.capabilities.some(
       (capability, index) =>
         capability !== WORKFLOW_RUNTIME_CAPABILITIES[index],
-    )
+    ) ||
+    !Object.is(candidate.store, store)
   ) {
     throw new Error("workflow_runtime_composition_not_certified");
   }

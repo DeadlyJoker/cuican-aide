@@ -265,6 +265,19 @@ test("rejects split or injected Workflow Store authorities", async (context) => 
       }),
       /workflow_runtime_composition_not_certified/u,
     );
+
+  await assert.rejects(
+    createStandaloneRuntimeWorker({
+      ...config,
+      databasePath,
+      scanIntervalMs: null,
+      workflowComposition: workflowCandidate(
+        WORKFLOW_RUNTIME_CAPABILITIES,
+        () => {},
+      ),
+    }),
+    /workflow_runtime_composition_not_certified/u,
+  );
 });
 
 test("closes an explicitly certified Workflow candidate without changing ordinary startup", async (context) => {
@@ -272,16 +285,25 @@ test("closes an explicitly certified Workflow candidate without changing ordinar
   const config = runtimeConfig();
   await activateRelease(databasePath, config);
   let closes = 0;
+  const workflowStore = new SqliteRunStore(databasePath);
   const runtime = await createStandaloneRuntimeWorker({
     ...config,
     databasePath,
     scanIntervalMs: null,
-    workflowComposition: workflowCandidate(
-      WORKFLOW_RUNTIME_CAPABILITIES,
-      () => {
+    workflowComposition: {
+      ...workflowCandidate(WORKFLOW_RUNTIME_CAPABILITIES, () => {
         closes += 1;
+      }),
+      versions: workflowStore.workflowVersionStore({
+        sha256: (value) =>
+          `sha256:${createHash("sha256").update(value).digest("hex")}`,
+      }),
+      store: workflowStore as never,
+      async close() {
+        closes += 1;
+        await workflowStore.close();
       },
-    ),
+    },
   });
   assert.equal(runtime.worker.lastOutcome(), null);
   await runtime.close();
