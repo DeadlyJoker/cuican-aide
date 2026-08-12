@@ -54,6 +54,40 @@ const SESSION_TOKEN = "e2e-session-token-32-bytes-minimum-1";
 const CSRF_TOKEN = "e2e-csrf-token-32-bytes-minimum-val1";
 const ORIGIN = "http://127.0.0.1:5175";
 
+test("fails closed over real HTTP before Workflow Store/Worker composition is certified", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  await activateSqliteReleaseProcess(databasePath);
+  const control = createStandaloneControlApi(config(databasePath));
+  context.after(() => closeIfListening(control.app));
+  await control.app.listen({ host: "127.0.0.1", port: 0 });
+
+  const response = await fetch(
+    `${serverBaseUrl(control.app)}/api/v1/workflow-runs`,
+    {
+      method: "POST",
+      headers: mutationHeaders("workflow-production-gate-1"),
+      body: JSON.stringify({
+        workflowVersionId: "workflow-version-not-admitted",
+        threadId: "thread-not-admitted",
+        input: { prompt: "must not reach a fake adapter" },
+      }),
+    },
+  );
+
+  assert.equal(response.status, 503);
+  assert.equal(
+    ((await response.json()) as { error: { code: string } }).error.code,
+    "workspace_command_factory_unavailable",
+  );
+  const database = new DatabaseSync(databasePath);
+  context.after(() => database.close());
+  assert.equal(
+    database.prepare("SELECT COUNT(*) AS count FROM run_snapshots").get()
+      ?.count,
+    0,
+  );
+});
+
 test("streams durable SQLite Run events over real loopback HTTP and resumes after restart", async (context) => {
   const databasePath = temporaryDatabasePath(context);
   await activateSqliteReleaseProcess(databasePath);
