@@ -130,7 +130,7 @@ const MAX_WORKFLOW_INPUT_BYTES = 32 * 1024;
 const MAX_WORKFLOW_INPUT_DEPTH = 8;
 const MAX_WORKFLOW_INPUT_NODES = 1024;
 const MAX_WORKFLOW_INPUT_COLLECTION_SIZE = 256;
-const MAX_WORKFLOW_INPUT_STRING_LENGTH = 8192;
+const MAX_WORKFLOW_INPUT_STRING_BYTES = 8192;
 const MAX_THREAD_GOAL_OBJECTIVE_CHARS = 4_000;
 const MAX_ROLLBACK_TURNS = 0xffff_ffff;
 const MAX_MESSAGE_PAGE_SIZE = 100;
@@ -575,7 +575,10 @@ function parseWorkflowInput(input: unknown): StartWorkflowRunRequest["input"] {
     if (value === null || typeof value === "boolean") return value;
     if (typeof value === "number" && Number.isFinite(value)) return value;
     if (typeof value === "string") {
-      if ([...value].length > MAX_WORKFLOW_INPUT_STRING_LENGTH) {
+      if (
+        new TextEncoder().encode(value).byteLength >
+        MAX_WORKFLOW_INPUT_STRING_BYTES
+      ) {
         throw new ContractValidationError("workflow_input_too_large");
       }
       return value;
