@@ -92,7 +92,7 @@ Production export/composition remains disabled when any method is absent, throws
 `workflow_composition_contract_incomplete`, is backed only by a mock/conditional skip, or is supplied
 by a different Store instance. No fake adapter may be used to claim an end-to-end slice.
 
-## W01 acceptance matrix (2026-08-12)
+## W01 acceptance matrix (2026-08-13)
 
 | Capability | Status | Current evidence / gap |
 | --- | --- | --- |
@@ -102,8 +102,8 @@ by a different Store instance. No fake adapter may be used to claim an end-to-en
 | Node admission | 通过（SQLite Slices 1–2） | two real Workers hold distinct sibling leases and simultaneously running Steps/Attempts; mock adversarial suite separately covers replay and response-loss fencing |
 | Node settlement | 通过（SQLite Slices 1–2） | siblings settle right-before-left without authority reuse; Verification appears only after both dependencies terminate and receives frozen-order input |
 | Human Gate | 通过（SQLite Control） | strict public decision API plus real certified Worker proves approve→Verification→completed and reject→failed; internal receipt/resume authority is not exposed |
-| Reconciliation | 实现中（TS SQLite） | real Worker restart proves `possiblySent` is not resampled; `notDispatched` atomically retires the old Attempt/reconcile work and creates a new claim whose later fresh admission alone may sample. `responseObserved`/terminal-completed settlement remains the Slice 4 gate |
-| Terminal convergence | 通过（SQLite Slices 1–2 success path） | single and parallel success Runs reach canonical `completed` with one sample per node; sibling failure/cancel convergence remains a mandatory Slice 5 gate |
+| Reconciliation | 通过（TS SQLite Slice 4） | real second-connection Worker restart covers `possiblySent`, `notDispatched`, checkpoint-only `responseObserved`, and Store-owned terminal candidates. Candidate recovery settles from frozen schema authority with one model sample; exact receipt replay is observation-only and mismatched candidate IDs fail closed |
+| Terminal convergence | 通过（SQLite success/reconcile path） | node value, DAG, Step/Attempt, `workflow.node.terminal` event, reduced Run snapshot, outbox, WorkItem and receipt converge in one transaction; full cancel/late-outcome coverage remains the Slice 5 gate |
 | PostgreSQL real-host | 未验证 | focused real-host checks passed, but Slice 6 dual-process acceptance has not |
 | Packaged crash recovery | 未验证 | no packaged Workflow vertical acceptance |
 | Rust compatibility | 移出范围 | migration uses the TS runtime only; no Rust compatibility layer, dual-write, fallback, or parity gate will be built unless a hard build dependency blocks the TS path |
