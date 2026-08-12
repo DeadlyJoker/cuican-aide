@@ -154,7 +154,7 @@ for (const decision of ["approve", "reject"] as const) test(
   },
 );
 
-test("SQLite Slice 4 restart settles response-observed model work without resampling", async (t) => {
+test("SQLite Slice 4 completes checkpoint-only reconciliation without resampling", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-slice-four-"));
   const path = join(directory, "runtime.sqlite");
   let runtime: Awaited<ReturnType<typeof createStandaloneRuntimeWorker>> | undefined;
@@ -209,19 +209,19 @@ test("SQLite Slice 4 restart settles response-observed model work without resamp
 
   const reconciled = await runtime.worker.wake();
   assert.deepEqual(reconciled, { kind: "workflowRecovery", runId,
-    code: "workflow_reconciliation_settled" });
+    code: "workflow_reconciliation_evidence_insufficient" });
   assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
   assert.deepEqual(inspectReconciliation(path, runId), {
-    dispatchStatus: "terminal", continuationCount: 0,
-    terminalEventCount: 1, nodeStatus: "completed", reconcilePending: 0,
+    dispatchStatus: "responseObserved", continuationCount: 0,
+    terminalEventCount: 0, nodeStatus: "unknown", reconcilePending: 0,
   });
 
   const replay = await runtime.worker.wake();
   assert.notEqual(replay.kind, "workflowRecovery");
   assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
   assert.deepEqual(inspectReconciliation(path, runId), {
-    dispatchStatus: "terminal", continuationCount: 0,
-    terminalEventCount: 1, nodeStatus: "completed", reconcilePending: 0,
+    dispatchStatus: "responseObserved", continuationCount: 0,
+    terminalEventCount: 0, nodeStatus: "unknown", reconcilePending: 0,
   });
 });
 

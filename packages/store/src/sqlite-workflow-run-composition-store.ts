@@ -635,14 +635,15 @@ export class SqliteWorkflowRunCompositionStore
         this.#database.exec("COMMIT");
         return structuredClone(result);
       }
-      const completePossiblySent = evidenceStatus === "possiblySent";
+      const completeEvidenceInsufficient =
+        evidenceStatus === "possiblySent" || evidenceStatus === "responseObserved";
       const result = { disposition: "evidenceInsufficient" as const,
         evidenceStatus, execution: execution!, handoff: {
-          currentWorkItem: completePossiblySent
+          currentWorkItem: completeEvidenceInsufficient
             ? "completed" as const : "retained" as const,
           nextWorkItemId: null,
           kind: "none" as const }, runDisposition: "nonTerminal" as const };
-      if (completePossiblySent) {
+      if (completeEvidenceInsufficient) {
         this.#insertReceipt(receiptInput, "reconcileNode", fingerprint, result);
         this.#completeLease(input, nowMs);
       }
