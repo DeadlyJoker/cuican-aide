@@ -4,13 +4,28 @@ import type {
   WorkflowVersionStore,
 } from "@crewon/application";
 import type { RunState, WorkflowContentDigester } from "@crewon/domain";
-
-import type {
-  WorkflowAgentNodePort,
-  WorkflowNodeOutcome,
-} from "./workflow-dag-executor.ts";
-import { ExperimentalWorkflowRunCompositionAdapter } from "./workflow-run-composition-adapter.ts";
 import { loadFrozenWorkflowVersion } from "./workflow-version-runtime.ts";
+import { parseWorkflowWorkItemPayload } from "./workflow-work-item-payload.ts";
+
+export type WorkflowNodeOutcome =
+  | Readonly<{ status: "completed"; resultDigest: string }>
+  | Readonly<{ status: "failed"; failureCode: string }>
+  | Readonly<{ status: "canceled" }>
+  | Readonly<{ status: "unknown" }>;
+
+export interface WorkflowAgentNodePort {
+  execute(input: {
+    tenantId: string;
+    runId: string;
+    nodeId: string;
+    agentVersionId: string;
+    inputDigest: string;
+    claimId: string;
+    claimEpoch: number;
+    stepId: string;
+    attemptId: string;
+  }): Promise<WorkflowNodeOutcome>;
+}
 
 export type WorkflowRuntimeDispatchOutcome =
   | Readonly<{ kind: "completed"; runId: string }>
@@ -24,13 +39,13 @@ export interface WorkflowRuntimeDispatcherPort {
   }): Promise<WorkflowRuntimeDispatchOutcome>;
 }
 
-/** Internal production candidate; no public composition enables it without a Store implementation. */
+/** Internal candidate; production composition remains disabled until every Store transaction exists. */
 export class ProductionWorkflowRuntimeDispatcher
   implements WorkflowRuntimeDispatcherPort
 {
   readonly #versions: WorkflowVersionStore;
+  readonly #composition: WorkflowRunCompositionStore;
   readonly #digester: WorkflowContentDigester;
-  readonly #composition: ExperimentalWorkflowRunCompositionAdapter;
   readonly #agent: WorkflowAgentNodePort;
   readonly #leaseDurationMs: number;
 
@@ -42,10 +57,8 @@ export class ProductionWorkflowRuntimeDispatcher
     leaseDurationMs: number;
   }) {
     this.#versions = dependencies.versions;
+    this.#composition = dependencies.composition;
     this.#digester = dependencies.digester;
-    this.#composition = new ExperimentalWorkflowRunCompositionAdapter(
-      dependencies.composition,
-    );
     this.#agent = dependencies.agent;
     this.#leaseDurationMs = dependencies.leaseDurationMs;
   }
@@ -55,244 +68,173 @@ export class ProductionWorkflowRuntimeDispatcher
     run: RunState;
   }): Promise<WorkflowRuntimeDispatchOutcome> {
     const binding = input.run.workflowVersionBinding;
-    if (input.run.purpose !== "workflow" || binding === undefined) {
+    if (input.run.purpose !== "workflow" || binding === undefined)
       throw new Error("workflow_runtime_dispatch_invalid");
-    }
+    const payload = parseWorkflowWorkItemPayload(input.claim.workItem.payload);
+    if (JSON.stringify(payload.binding) !== JSON.stringify(binding))
+      throw new Error("workflow_work_item_binding_mismatch");
     const workflow = await loadFrozenWorkflowVersion({
       tenantId: input.run.tenantId,
       binding,
       store: this.#versions,
       digester: this.#digester,
     });
-    const lease = leaseInput(input.claim);
-    const schedulerOperationId = `workflow:${input.claim.workItem.workItemId}:${input.claim.lease.epoch}`;
-    const admitted = await this.#composition.admit({
-      tenantId: input.run.tenantId,
-      runId: input.run.runId,
-      lease,
-      binding,
-      schedulerOperationId,
-      leaseDurationMs: this.#leaseDurationMs,
-    });
-    if (admitted.disposition !== "fresh") {
-      if (admitted.admissions.length !== 0) {
-        throw new Error("workflow_replayed_admissions_must_be_empty");
-      }
-      await this.#composition.scheduleReconciliation({
+    if (payload.trigger === "workflowScheduler") {
+      const scheduled = await this.#composition.scheduleWorkflowNodes({
         tenantId: input.run.tenantId,
         runId: input.run.runId,
-        lease,
+        lease: leaseInput(input.claim),
         binding,
-        operationId: `${schedulerOperationId}:reconcile`,
-        reasonCode:
-          admitted.disposition === "replay"
-            ? "workflow_admission_replayed"
-            : "workflow_admission_reconcile_required",
-        reconciliationWorkItemId: durableId(
-          input.run.runId,
-          `${schedulerOperationId}:reconcile`,
-        ),
+        schedulerOperationId: payload.schedulerOperationId,
       });
-      return {
-        kind: "recovery",
+      return scheduled.execution.status === "completed"
+        ? { kind: "completed", runId: input.run.runId }
+        : {
+            kind: "recovery",
+            runId: input.run.runId,
+            code:
+              scheduled.disposition === "reconcileRequired"
+                ? "workflow_scheduler_reconcile_required"
+                : "workflow_fanout_committed",
+          };
+    }
+    if (payload.trigger === "workflowNode")
+      return this.#executeNode(input, payload, workflow);
+    if (payload.trigger === "workflowGateResume") {
+      const settled = await this.#composition.settleWorkflowHumanGate({
+        tenantId: input.run.tenantId,
         runId: input.run.runId,
-        code: "workflow_reconciliation_scheduled",
-      };
+        lease: leaseInput(input.claim),
+        binding,
+        nodeId: payload.nodeId,
+        claimId: payload.claimId,
+        claimEpoch: payload.claimEpoch,
+        gateRequestId: payload.gateRequestId,
+        decisionReceiptId: payload.decisionReceiptId,
+        operationId: `gate-settle:${payload.decisionReceiptId}`,
+      });
+      return settled.execution.status === "completed"
+        ? { kind: "completed", runId: input.run.runId }
+        : {
+            kind: "recovery",
+            runId: input.run.runId,
+            code:
+              settled.disposition === "reconcileRequired"
+                ? "workflow_gate_reconcile_required"
+                : "workflow_gate_settled",
+          };
     }
-    if (admitted.admissions.length > 1) {
-      throw new Error("workflow_multiple_admissions_per_lease_forbidden");
-    }
-
-    let execution = admitted.execution;
-    for (const admission of admitted.admissions) {
-      const nodeState = execution.nodes.find(
-        (node) => node.nodeId === admission.claim.node.nodeId,
-      );
-      const immutableAgentVersionId =
-        admission.claim.node.kind === "agent"
-          ? admission.claim.node.agentVersionId
-          : admission.claim.node.kind === "verification"
-            ? admission.claim.node.verifierAgentVersionId
-            : null;
-      if (
-        nodeState === undefined ||
-        nodeState.kind !== admission.claim.node.kind ||
-        nodeState.agentVersionId !== immutableAgentVersionId
-      ) {
-        throw new Error("workflow_node_execution_identity_mismatch");
-      }
-      if (admission.claim.node.kind === "humanGate") {
-        const gateRequestId = admission.claim.gateRequestId;
-        if (gateRequestId === null) {
-          throw new Error("workflow_human_gate_receipt_missing");
-        }
-        await this.#composition.publishHumanGate({
-          tenantId: input.run.tenantId,
-          runId: input.run.runId,
-          lease,
-          binding,
-          nodeId: admission.claim.node.nodeId,
-          claimId: admission.claim.claimId,
-          claimEpoch: admission.claim.claimEpoch,
-          stepId: admission.step.stepId,
-          approvalPolicyId: admission.claim.node.approvalPolicyId,
-          gateRequestId,
-          inputDigest: admission.claim.inputDigest,
-          publicationOutboxMessageId: durableId(
-            input.run.runId,
-            `gate-outbox:${gateRequestId}`,
-          ),
-          approvalResumeWorkItemId: durableId(
-            input.run.runId,
-            `gate-resume:${gateRequestId}`,
-          ),
-          operationId: `${schedulerOperationId}:gate-release:${admission.claim.claimId}`,
-        });
-        return {
-          kind: "waitingApproval",
-          runId: input.run.runId,
-          approvalId: gateRequestId,
-        };
-      }
-      const attempt = admission.attempt;
-      if (attempt === null) {
-        throw new Error("workflow_node_attempt_admission_missing");
-      }
-      let outcome: WorkflowNodeOutcome;
-      try {
-        outcome = await this.#agent.execute({
-          tenantId: input.run.tenantId,
-          runId: input.run.runId,
-          nodeId: admission.claim.node.nodeId,
-          agentVersionId: nodeState.agentVersionId!,
-          inputDigest: admission.claim.inputDigest,
-          claimId: admission.claim.claimId,
-          claimEpoch: admission.claim.claimEpoch,
-          stepId: admission.step.stepId,
-          attemptId: attempt.attemptId,
-        });
-      } catch {
-        outcome = { status: "unknown" };
-      }
-      try {
-        const settled = await this.#composition.settleNode({
-          tenantId: input.run.tenantId,
-          runId: input.run.runId,
-          lease,
-          binding,
-          nodeId: admission.claim.node.nodeId,
-          claimId: admission.claim.claimId,
-          claimEpoch: admission.claim.claimEpoch,
-          stepId: admission.step.stepId,
-          attemptId: attempt.attemptId,
-          operationId: `node:${admission.claim.claimId}:settle`,
-          continuationWorkItemId: durableId(
-            input.run.runId,
-            `continue:${admission.claim.claimId}`,
-          ),
-          outcome,
-        });
-        execution = settled.execution;
-      } catch {
-        await this.#scheduleRecovery(
-          input,
-          `${schedulerOperationId}:settlement:${admission.claim.claimId}`,
-          "workflow_settlement_recovery_required",
-        );
-        return {
-          kind: "recovery",
-          runId: input.run.runId,
-          code: "workflow_settlement_recovery_required",
-        };
-      }
-    }
-    return execution.status === "completed"
-      ? { kind: "completed", runId: input.run.runId }
-      : {
-          kind: "recovery",
-          runId: input.run.runId,
-          code: "workflow_scheduler_continuation_committed",
-        };
-  }
-
-  async settleHumanGate(input: {
-    claim: WorkItemClaim;
-    run: RunState;
-    nodeId: string;
-    nodeClaimId: string;
-    nodeClaimEpoch: number;
-    stepId: string;
-    gateRequestId: string;
-    operationId: string;
-    outcome:
-      | Readonly<{ status: "completed"; resultDigest: string }>
-      | Readonly<{ status: "failed"; failureCode: string }>;
-  }): Promise<WorkflowRuntimeDispatchOutcome> {
-    const binding = input.run.workflowVersionBinding;
-    if (input.run.purpose !== "workflow" || binding === undefined) {
-      throw new Error("workflow_runtime_dispatch_invalid");
-    }
-    await loadFrozenWorkflowVersion({
-      tenantId: input.run.tenantId,
-      binding,
-      store: this.#versions,
-      digester: this.#digester,
-    });
-    const settled = await this.#composition.settleHumanGate({
+    await this.#composition.scheduleWorkflowReconciliation({
       tenantId: input.run.tenantId,
       runId: input.run.runId,
       lease: leaseInput(input.claim),
       binding,
-      nodeId: input.nodeId,
-      claimId: input.nodeClaimId,
-      claimEpoch: input.nodeClaimEpoch,
-      stepId: input.stepId,
-      gateRequestId: input.gateRequestId,
-      operationId: input.operationId,
-      continuationWorkItemId: durableId(
-        input.run.runId,
-        `gate-continue:${input.gateRequestId}`,
-      ),
-      outcome: input.outcome,
+      operationId: payload.reconciliationOperationId,
+      reasonCode: "workflow_reconciliation_claimed",
+      nodeId: payload.nodeId,
+      claimId: payload.claimId,
+      claimEpoch: payload.claimEpoch,
     });
-    if (settled.disposition === "reconcileRequired") {
-      return {
-        kind: "recovery",
-        runId: input.run.runId,
-        code: "workflow_gate_settlement_reconcile_required",
-      };
-    }
-    return settled.execution.status === "completed"
-      ? { kind: "completed", runId: input.run.runId }
-      : {
-          kind: "recovery",
-          runId: input.run.runId,
-          code:
-            settled.execution.status === "failed"
-              ? "workflow_human_gate_rejected"
-              : "workflow_scheduler_continuation_committed",
-        };
+    return {
+      kind: "recovery",
+      runId: input.run.runId,
+      code: "workflow_reconciliation_rescheduled",
+    };
   }
 
-  async #scheduleRecovery(
+  async #executeNode(
     input: { claim: WorkItemClaim; run: RunState },
-    operationId: string,
-    reasonCode: string,
-  ): Promise<void> {
-    await this.#composition.scheduleReconciliation({
+    payload: Extract<
+      ReturnType<typeof parseWorkflowWorkItemPayload>,
+      { trigger: "workflowNode" }
+    >,
+    workflow: Awaited<ReturnType<typeof loadFrozenWorkflowVersion>>,
+  ): Promise<WorkflowRuntimeDispatchOutcome> {
+    const binding = input.run.workflowVersionBinding!;
+    const admitted = await this.#composition.admitWorkflowNodeWork({
       tenantId: input.run.tenantId,
       runId: input.run.runId,
       lease: leaseInput(input.claim),
-      binding: input.run.workflowVersionBinding!,
-      operationId,
-      reasonCode,
-      reconciliationWorkItemId: durableId(input.run.runId, operationId),
+      binding,
+      nodeId: payload.nodeId,
+      claimId: payload.claimId,
+      claimEpoch: payload.claimEpoch,
+      schedulerOperationId: payload.schedulerOperationId,
+      admissionOperationId: `node-admit:${payload.claimId}:${input.claim.lease.epoch}`,
+      attemptLeaseDurationMs: this.#leaseDurationMs,
     });
+    if (admitted.disposition !== "fresh")
+      return {
+        kind: "recovery",
+        runId: input.run.runId,
+        code:
+          admitted.disposition === "replay"
+            ? "workflow_node_admission_replayed"
+            : "workflow_node_reconcile_required",
+      };
+    const node = workflow.nodes.find(
+      (candidate) => candidate.nodeId === payload.nodeId,
+    );
+    const agentVersionId =
+      node?.kind === "agent"
+        ? node.agentVersionId
+        : node?.kind === "verification"
+          ? node.verifierAgentVersionId
+          : null;
+    const state = admitted.execution.nodes.find(
+      (candidate) => candidate.nodeId === payload.nodeId,
+    );
+    if (
+      agentVersionId === null ||
+      state?.agentVersionId !== agentVersionId ||
+      admitted.admission.claim.claimId !== payload.claimId
+    )
+      throw new Error("workflow_node_execution_identity_mismatch");
+    let outcome: WorkflowNodeOutcome;
+    try {
+      outcome = await this.#agent.execute({
+        tenantId: input.run.tenantId,
+        runId: input.run.runId,
+        nodeId: payload.nodeId,
+        agentVersionId,
+        inputDigest: admitted.admission.claim.inputDigest,
+        claimId: payload.claimId,
+        claimEpoch: payload.claimEpoch,
+        stepId: admitted.admission.step.stepId,
+        attemptId: admitted.admission.attempt.attemptId,
+      });
+    } catch {
+      outcome = { status: "unknown" };
+    }
+    try {
+      const settled = await this.#composition.settleWorkflowNode({
+        tenantId: input.run.tenantId,
+        runId: input.run.runId,
+        lease: leaseInput(input.claim),
+        binding,
+        nodeId: payload.nodeId,
+        claimId: payload.claimId,
+        claimEpoch: payload.claimEpoch,
+        stepId: admitted.admission.step.stepId,
+        attemptId: admitted.admission.attempt.attemptId,
+        operationId: `node-settle:${payload.claimId}`,
+        outcome,
+      });
+      return settled.execution.status === "completed"
+        ? { kind: "completed", runId: input.run.runId }
+        : {
+            kind: "recovery",
+            runId: input.run.runId,
+            code: "workflow_node_settled",
+          };
+    } catch {
+      return {
+        kind: "recovery",
+        runId: input.run.runId,
+        code: "workflow_settlement_result_unknown",
+      };
+    }
   }
-}
-
-function durableId(runId: string, operationId: string): string {
-  return `workflow:${runId}:${operationId}`;
 }
 
 function leaseInput(claim: WorkItemClaim) {
