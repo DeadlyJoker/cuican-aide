@@ -7,6 +7,7 @@ import type {
 
 import type {
   WorkflowExecutionValue,
+  WorkflowRunInputRef,
   WorkItemLeaseInput,
 } from "./durable-queue-port.ts";
 import type { WorkflowExecutionState } from "./workflow-execution-store-port.ts";
@@ -56,6 +57,7 @@ export interface WorkflowRunCompositionStore {
     lease: WorkItemLeaseInput;
     binding: FrozenWorkflowVersionBinding;
     schedulerOperationId: string;
+    workflowInput: WorkflowRunInputRef;
   }): Promise<
     Readonly<{
       disposition: "scheduled" | "replay" | "reconcileRequired";

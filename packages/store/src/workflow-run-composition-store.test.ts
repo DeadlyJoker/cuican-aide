@@ -282,6 +282,7 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
     lease,
     binding,
     schedulerOperationId: "schedule-fanout-1",
+    workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") },
   });
   assert.equal(scheduled.disposition, "scheduled");
   assert.equal(scheduled.nodeWorkItems.length, 1);
@@ -474,7 +475,13 @@ async function seed(
       "tenant-1",
       "run-1",
       "run.execute",
-      "{}",
+      JSON.stringify({ workItemId: "work-1", tenantId: "tenant-1", runId: "run-1",
+        kind: "run.execute", createdAt: run.createdAt, payload: {
+          schemaVersion: "crewon.workflow-scheduler-work-item.v1",
+          trigger: "workflowScheduler", binding,
+          schedulerOperationId: "schedule-fanout-1",
+          workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") },
+        } }),
       run.createdAt,
       0,
       lease.ownerId,

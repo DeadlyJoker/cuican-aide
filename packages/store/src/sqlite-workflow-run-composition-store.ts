@@ -11,6 +11,7 @@ import {
   replayRunLifecycle,
   validateWorkflowSchemaValue,
   workflowNodeInputSchema,
+  MAX_WORKFLOW_VALUE_BYTES,
   type RunState,
   type WorkflowContentDigester,
   type WorkflowSchemaValue,
@@ -712,7 +713,22 @@ export class SqliteWorkflowRunCompositionStore {
             `UPDATE workflow_gate_requests SET status='canceled',updated_at=?
              WHERE tenant_id=? AND run_id=? AND node_id=? AND status='published'`,
           ).run(now, input.tenantId, input.runId, node.nodeId);
-          if (changed.changes === 1) return { ...node, status: "canceled" as const };
+          if (changed.changes === 1) {
+            const step = loadSqliteRunStep(this.#database, {
+              tenantId: input.tenantId, runId: input.runId, stepId: node.nodeId,
+            });
+            if (step === null || step.kind !== "gate" || step.status !== "waitingApproval")
+              throw new RunStoreError("workflow_composition_gate_mismatch");
+            const terminal = { ...step, status: "canceled" as const,
+              revision: step.revision + 1, updatedAt: now, terminalAt: now };
+            const updated = this.#database.prepare(
+              `UPDATE run_steps SET status='canceled',revision=?,state_json=?,updated_at=?,terminal_at=?
+               WHERE tenant_id=? AND run_id=? AND step_id=? AND revision=?`,
+            ).run(terminal.revision, stableJson(terminal), now, now,
+              input.tenantId, input.runId, node.nodeId, step.revision);
+            if (updated.changes !== 1) throw new RunStoreError("revision_conflict");
+            return { ...node, status: "canceled" as const };
+          }
           requiresReconciliation = true;
         }
         return node;
@@ -1420,6 +1436,23 @@ export class SqliteWorkflowRunCompositionStore {
       throw new RunStoreError("workflow_composition_work_item_mismatch");
   }
 
+  #assertSchedulerWorkPayload(
+    input: Parameters<WorkflowRunCompositionStore["scheduleWorkflowNodes"]>[0],
+  ): void {
+    const row = this.#database.prepare(
+      "SELECT work_item_json FROM work_items WHERE work_item_id=?",
+    ).get(input.lease.workItemId) as { work_item_json: string } | undefined;
+    const item = row === undefined ? null : JSON.parse(row.work_item_json) as { payload?: unknown };
+    const expected = { schemaVersion: "crewon.workflow-scheduler-work-item.v1",
+      trigger: "workflowScheduler", binding: input.binding,
+      schedulerOperationId: input.schedulerOperationId,
+      workflowInput: input.workflowInput };
+    const root = this.#rootInputRef(input);
+    if (stableJson(item?.payload) !== stableJson(expected) ||
+        stableJson(root) !== stableJson(input.workflowInput))
+      throw new RunStoreError("workflow_composition_work_item_mismatch");
+  }
+
   #loadGate(input: {
     tenantId: string;
     runId: string;
@@ -1540,12 +1573,22 @@ export class SqliteWorkflowRunCompositionStore {
     ).get(tenantId, runId, role, nodeId) as
       | { value_id: string; value_digest: string; value_json: string }
       | undefined;
-    return row === undefined ? null : { valueId: row.value_id,
-      valueDigest: row.value_digest, value: JSON.parse(row.value_json) as WorkflowSchemaValue };
+    if (row === undefined) return null;
+    const value = JSON.parse(row.value_json) as WorkflowSchemaValue;
+    const valueJson = canonicalJson(value);
+    if (new TextEncoder().encode(valueJson).byteLength > MAX_WORKFLOW_VALUE_BYTES ||
+        valueJson !== row.value_json || this.#digester.sha256(valueJson) !== row.value_digest)
+      throw new RunStoreError("workflow_execution_value_corrupt");
+    return { valueId: row.value_id, valueDigest: row.value_digest, value };
   }
 
   #insertExecutionValue(input: { tenantId: string; runId: string; valueId: string;
     role: string; nodeId: string | null; valueDigest: string; valueJson: string; now: string }): void {
+    const canonical = canonicalJson(JSON.parse(input.valueJson));
+    if (canonical !== input.valueJson ||
+        new TextEncoder().encode(canonical).byteLength > MAX_WORKFLOW_VALUE_BYTES ||
+        this.#digester.sha256(canonical) !== input.valueDigest)
+      throw new RunStoreError("workflow_execution_value_invalid");
     const existing = this.#database.prepare(
       `SELECT role,node_id,value_digest,value_json FROM workflow_execution_values
        WHERE tenant_id=? AND run_id=? AND value_id=?`,
