@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
+import { canonicalJson } from "./canonical-json.ts";
 import { WorkflowHumanGateApplicationService } from "./workflow-human-gate-application-service.ts";
 
 const actor = { principalId: "principal-1", actorId: "actor-1",
@@ -17,15 +18,16 @@ const command = { kind: "workflowHumanGate.decide" as const,
   decision: "approve" as const };
 const digester = { sha256: (value: string) =>
   `sha256:${createHash("sha256").update(value).digest("hex")}` };
-const expectedReceiptId = digester.sha256(JSON.stringify({
+const expectedReceiptId = `workflow-gate-decision:${digester.sha256(canonicalJson({
   tenantId: actor.tenantId, spaceId: actor.spaceId,
   principalId: actor.principalId, actorId: actor.actorId,
   runId: command.runId, nodeId: command.nodeId,
   gateRequestId: command.gateRequestId, idempotencyKey: command.idempotencyKey,
-}));
+})).slice("sha256:".length)}`;
 
 type AuthorizationInput = Readonly<{ action: string; tenantId: string;
-  spaceId: string; resource: Readonly<{ threadId: string; runId: string }> }>;
+  spaceId: string; resource: Readonly<{ kind: "run"; tenantId: string;
+    spaceId: string; threadId: string; runId: string }> }>;
 type DecisionInput = Readonly<{ tenantId: string; runId: string;
   binding: typeof binding; nodeId: string; claimId: string; claimEpoch: number;
   gateRequestId: string; decisionReceiptId: string }>;
@@ -46,6 +48,8 @@ test("Human Gate decision loads canonical Run and authorizes its resource before
   };
   const service = new WorkflowHumanGateApplicationService({ store,
     digester, authorization: { async authorize(input: AuthorizationInput) {
+      assert.deepEqual(input.resource, { kind: "run", tenantId: "tenant-1",
+        spaceId: "space-1", threadId: "thread-1", runId: "run-1" });
       calls.push(`authorize:${input.action}:${input.resource.threadId}:${input.resource.runId}`);
       return { outcome: "allow" as const };
     } } });
@@ -57,7 +61,7 @@ test("Human Gate decision loads canonical Run and authorizes its resource before
   });
   assert.deepEqual(calls, [
     "load:tenant-1:run-1",
-    "authorize:workflowHumanGate.decide:thread-1:run-1",
+    "authorize:run:execute:thread-1:run-1",
     `record:${expectedReceiptId}`,
   ]);
 });
