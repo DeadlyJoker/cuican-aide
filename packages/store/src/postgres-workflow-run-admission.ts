@@ -239,23 +239,21 @@ async function validateReplay(
     result.run.disposition !== "committed"
   )
     replayCorrupt();
-  const [snapshot, events, general, outbox, workItems, root] =
-    await Promise.all([
-      client.query<{ state_json: unknown }>(
-        `SELECT state_json FROM ${schema}.run_snapshots WHERE tenant_id=$1 AND run_id=$2`,
-        [tenantId, runId],
-      ),
-      client.query<{
+  const snapshot = await client.query<{ state_json: unknown }>(
+    `SELECT state_json FROM ${schema}.run_snapshots WHERE tenant_id=$1 AND run_id=$2`,
+    [tenantId, runId],
+  );
+  const events = await client.query<{
         tenant_id: string;
         run_id: string;
         sequence: string | number;
         event_id: string;
         event_json: unknown;
       }>(
-        `SELECT tenant_id,run_id,sequence,event_id,event_json FROM ${schema}.run_events WHERE tenant_id=$1 AND run_id=$2 ORDER BY sequence`,
-        [tenantId, runId],
-      ),
-      client.query<{
+    `SELECT tenant_id,run_id,sequence,event_id,event_json FROM ${schema}.run_events WHERE tenant_id=$1 AND run_id=$2 ORDER BY sequence`,
+    [tenantId, runId],
+  );
+  const general = await client.query<{
         tenant_id: string;
         scope: string;
         idempotency_key: string;
@@ -263,39 +261,38 @@ async function validateReplay(
         run_id: string;
         result_json: unknown;
       }>(
-        `SELECT tenant_id,scope,idempotency_key,fingerprint,run_id,result_json
-         FROM ${schema}.idempotency_receipts WHERE scope=$1 AND idempotency_key=$2`,
-        [stored.generalIdempotency.scope, stored.generalIdempotency.key],
-      ),
-      client.query<{
+    `SELECT tenant_id,scope,idempotency_key,fingerprint,run_id,result_json
+     FROM ${schema}.idempotency_receipts WHERE scope=$1 AND idempotency_key=$2`,
+    [stored.generalIdempotency.scope, stored.generalIdempotency.key],
+  );
+  const outbox = await client.query<{
         message_id: string;
         tenant_id: string;
         run_id: string;
         topic: string;
         message_json: unknown;
       }>(
-        `SELECT message_id,tenant_id,run_id,topic,message_json FROM ${schema}.outbox WHERE tenant_id=$1 AND run_id=$2 ORDER BY created_at,message_id`,
-        [tenantId, runId],
-      ),
-      client.query<{
+    `SELECT message_id,tenant_id,run_id,topic,message_json FROM ${schema}.outbox WHERE tenant_id=$1 AND run_id=$2 ORDER BY created_at,message_id`,
+    [tenantId, runId],
+  );
+  const workItems = await client.query<{
         work_item_id: string;
         tenant_id: string;
         run_id: string;
         kind: string;
         work_item_json: unknown;
       }>(
-        `SELECT work_item_id,tenant_id,run_id,kind,work_item_json FROM ${schema}.work_items WHERE tenant_id=$1 AND run_id=$2 ORDER BY created_at,work_item_id`,
-        [tenantId, runId],
-      ),
-      client.query<{
+    `SELECT work_item_id,tenant_id,run_id,kind,work_item_json FROM ${schema}.work_items WHERE tenant_id=$1 AND run_id=$2 ORDER BY created_at,work_item_id`,
+    [tenantId, runId],
+  );
+  const root = await client.query<{
         value_id: string;
         value_digest: string;
         value_json: unknown;
       }>(
-        `SELECT value_id,value_digest,value_json FROM ${schema}.workflow_execution_values WHERE tenant_id=$1 AND run_id=$2 AND role='rootInput' AND node_id IS NULL`,
-        [tenantId, runId],
-      ),
-    ]);
+    `SELECT value_id,value_digest,value_json FROM ${schema}.workflow_execution_values WHERE tenant_id=$1 AND run_id=$2 AND role='rootInput' AND node_id IS NULL`,
+    [tenantId, runId],
+  );
   const storedState = snapshot.rows[0]?.state_json;
   if (storedState === undefined) replayCorrupt();
   const state = normalizeStoredRunState(
