@@ -170,6 +170,9 @@ import {
   type WorkspaceOperationReceiptQuery,
   type WorkspaceOperationRecord,
   type WorkspaceOperationSnapshot,
+  type WorkflowNodeContinuationStore,
+  type WorkflowRunCompositionStore,
+  type WorkflowRuntimeStore,
 } from "@crewon/application";
 import {
   validateAutomationRecord,
@@ -218,6 +221,7 @@ import {
   type LeaseClock,
 } from "./lease-clock.ts";
 import { configureAndMigrateSqlite, rollback } from "./sqlite-schema.ts";
+import { SqliteWorkflowRunCompositionStore } from "./sqlite-workflow-run-composition-store.ts";
 import {
   beginSqliteRunAttempt,
   checkpointSqliteRunAttempt,
@@ -531,11 +535,12 @@ type AutomationRow = Readonly<{
   updated_at: string;
 }>;
 
-export class SqliteRunStore implements DomainStore {
+export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
   readonly #database: DatabaseSync;
   readonly #clock: LeaseClock;
   readonly #workflowDigester: WorkflowContentDigester | null;
   readonly #automationAuthority: SqliteAutomationAuthority;
+  #workflowRuntime: SqliteWorkflowRunCompositionStore | null = null;
   #closed = false;
 
   workflowVersionStore(
@@ -543,6 +548,67 @@ export class SqliteRunStore implements DomainStore {
   ): SqliteWorkflowVersionStore {
     this.#assertOpen();
     return new SqliteWorkflowVersionStore(this.#database, digester);
+  }
+
+  async scheduleWorkflowNodes(
+    input: Parameters<WorkflowRunCompositionStore["scheduleWorkflowNodes"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["scheduleWorkflowNodes"]> {
+    return this.#workflow().scheduleWorkflowNodes(input);
+  }
+  async admitWorkflowNodeWork(
+    input: Parameters<WorkflowRunCompositionStore["admitWorkflowNodeWork"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["admitWorkflowNodeWork"]> {
+    return this.#workflow().admitWorkflowNodeWork(input);
+  }
+  async settleWorkflowNode(
+    input: Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["settleWorkflowNode"]> {
+    return this.#workflow().settleWorkflowNode(input);
+  }
+  async recordWorkflowHumanGateDecision(
+    input: Parameters<WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]> {
+    return this.#workflow().recordWorkflowHumanGateDecision(input);
+  }
+  async settleWorkflowHumanGate(
+    input: Parameters<WorkflowRunCompositionStore["settleWorkflowHumanGate"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["settleWorkflowHumanGate"]> {
+    return this.#workflow().settleWorkflowHumanGate(input);
+  }
+  async scheduleWorkflowReconciliation(
+    input: Parameters<WorkflowRunCompositionStore["scheduleWorkflowReconciliation"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["scheduleWorkflowReconciliation"]> {
+    return this.#workflow().scheduleWorkflowReconciliation(input);
+  }
+  async reconcileWorkflowNode(
+    input: Parameters<WorkflowRunCompositionStore["reconcileWorkflowNode"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["reconcileWorkflowNode"]> {
+    return this.#workflow().reconcileWorkflowNode(input);
+  }
+  async cancelWorkflowExecution(
+    input: Parameters<WorkflowRunCompositionStore["cancelWorkflowExecution"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["cancelWorkflowExecution"]> {
+    return this.#workflow().cancelWorkflowExecution(input);
+  }
+  async loadWorkflowNodeContinuation(
+    authority: Parameters<WorkflowNodeContinuationStore["loadWorkflowNodeContinuation"]>[0],
+  ): ReturnType<WorkflowNodeContinuationStore["loadWorkflowNodeContinuation"]> {
+    return this.#workflow().loadWorkflowNodeContinuation(authority);
+  }
+  async commitWorkflowAssistantContinuation(
+    input: Parameters<WorkflowNodeContinuationStore["commitWorkflowAssistantContinuation"]>[0],
+  ): ReturnType<WorkflowNodeContinuationStore["commitWorkflowAssistantContinuation"]> {
+    return this.#workflow().commitWorkflowAssistantContinuation(input);
+  }
+  async commitWorkflowToolContinuation(
+    input: Parameters<WorkflowNodeContinuationStore["commitWorkflowToolContinuation"]>[0],
+  ): ReturnType<WorkflowNodeContinuationStore["commitWorkflowToolContinuation"]> {
+    return this.#workflow().commitWorkflowToolContinuation(input);
+  }
+  async settleWorkflowNodeModelTerminal(
+    _input: Parameters<WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]>[0],
+  ): ReturnType<WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
   }
 
   constructor(path: string, options: {
@@ -588,6 +654,11 @@ export class SqliteRunStore implements DomainStore {
       configureAndMigrateSqlite(this.#database);
       migrateSqliteWorkflowVersions(this.#database);
       migrateSqliteWorkflowExecutions(this.#database);
+      if (this.#workflowDigester !== null)
+        this.#workflowRuntime = new SqliteWorkflowRunCompositionStore(
+          this.#database,
+          { digester: this.#workflowDigester, clock: this.#clock },
+        );
     } catch (error) {
       this.#database.close();
       this.#closed = true;
@@ -4880,6 +4951,13 @@ export class SqliteRunStore implements DomainStore {
     if (this.#closed) {
       throw new RunStoreError("store_closed");
     }
+  }
+
+  #workflow(): SqliteWorkflowRunCompositionStore {
+    this.#assertOpen();
+    if (this.#workflowRuntime === null)
+      throw new RunStoreError("workflow_run_admission_not_configured");
+    return this.#workflowRuntime;
   }
 
   #loadAgentVersion(input: {
