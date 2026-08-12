@@ -28,7 +28,9 @@ import type {
   CommitWorkflowRunStartResult,
   WorkflowRunAdmissionAuthority,
   WorkflowRunAdmissionStore,
+  WorkflowRunRouteAuthority,
 } from "./workflow-run-admission-store-port.ts";
+import type { RunRoute } from "./run-commands.ts";
 
 export const MAX_WORKFLOW_INPUT_BYTES = 32_768;
 export const MAX_WORKFLOW_INPUT_DEPTH = 8;
@@ -50,6 +52,11 @@ export class WorkflowRunApplicationService {
   readonly #clock: ApplicationClock;
   readonly #ids: ApplicationIdGenerator;
   readonly #workflowDigester: WorkflowContentDigester;
+  readonly #resolveRoute: (
+    actor: ActorContext,
+    threadId: string,
+    authority: WorkflowRunRouteAuthority,
+  ) => RunRoute;
 
   constructor(dependencies: {
     store: WorkflowRunAdmissionStore;
@@ -57,12 +64,18 @@ export class WorkflowRunApplicationService {
     clock: ApplicationClock;
     ids: ApplicationIdGenerator;
     workflowDigester: WorkflowContentDigester;
+    resolveRoute: (
+      actor: ActorContext,
+      threadId: string,
+      authority: WorkflowRunRouteAuthority,
+    ) => RunRoute;
   }) {
     this.#store = dependencies.store;
     this.#authorization = dependencies.authorization;
     this.#clock = dependencies.clock;
     this.#ids = dependencies.ids;
     this.#workflowDigester = dependencies.workflowDigester;
+    this.#resolveRoute = dependencies.resolveRoute;
   }
 
   async startWorkflowRun(
@@ -82,6 +95,8 @@ export class WorkflowRunApplicationService {
         workflowVersionId: command.workflowVersionId,
         workflowInput,
         idempotency,
+        resolveRoute: (authority) =>
+          this.#resolveRoute(actor, command.threadId, authority),
         prepare: (authority) =>
           this.#prepare(actor, command, workflowInput, idempotency, authority),
       });

@@ -170,6 +170,7 @@ class RecordingStore implements WorkflowRunAdmissionStore {
   writeCount = 0;
   prepareCalls = 0;
   authority = workflowAuthority();
+  routeAuthority = workflowRouteAuthority();
   receipt: Awaited<
     ReturnType<WorkflowRunAdmissionStore["commitWorkflowRunStart"]>
   > | null = null;
@@ -186,7 +187,11 @@ class RecordingStore implements WorkflowRunAdmissionStore {
       };
     }
     this.prepareCalls += 1;
-    const preparation = input.prepare(this.authority);
+    const authority = {
+      workflowVersion: this.authority.workflowVersion,
+      route: input.resolveRoute(this.routeAuthority),
+    };
+    const preparation = input.prepare(authority);
     this.lastPreparation = preparation;
     const commit = preparation.commit;
     this.lastCommit = commit;
@@ -196,7 +201,7 @@ class RecordingStore implements WorkflowRunAdmissionStore {
       state = reduceRunLifecycleEvent(state, event);
     if (!state) throw new Error("missing state");
     const result = {
-      authority: this.authority,
+      authority,
       run: {
         disposition: "committed" as const,
         state,
@@ -237,7 +242,57 @@ function service(
     clock: { now: () => "2026-08-12T00:00:00Z" },
     ids: { nextId: () => ids.shift()! },
     workflowDigester: { sha256 },
+    resolveRoute: (_actor, _threadId, authority) => {
+      assert.deepEqual(authority, store.routeAuthority);
+      return store.authority.route;
+    },
   });
+}
+
+function workflowRouteAuthority() {
+  const authority = workflowAuthority();
+  const deployments = [
+    ["root-version", "root-authority"],
+    ["node-agent-version", "node-authority"],
+    ["verifier-version", "verifier-authority"],
+  ].map(([agentVersionId, authorityId]) => ({
+    schemaVersion: "crewon.agent-version-deployment.v0" as const,
+    tenantId: "tenant-1",
+    agentVersionId: agentVersionId!,
+    contentDigest: `sha256:${agentVersionId!.padEnd(64, "0").slice(0, 64)}`,
+    materializationDigest: `sha256:${authorityId!.padEnd(64, "0").slice(0, 64)}`,
+    authorityId: authorityId!,
+    workspaceBindingId: "workspace-1",
+    deployedAt: "2026-08-12T00:00:00Z",
+  }));
+  return {
+    workflowVersion: authority.workflowVersion,
+    activeRelease: {
+      bundle: {
+        schemaVersion: "crewon.agent-version-release-bundle.v0" as const,
+        tenantId: "tenant-1",
+        releaseId: "release-1",
+        manifestDigest: `sha256:${"a".repeat(64)}`,
+        defaultAgentVersionId: "root-version",
+        deployments: deployments.map(({ deployedAt: _, ...deployment }) =>
+          deployment),
+      },
+      activation: {
+        schemaVersion: "crewon.agent-version-release-activation.v0" as const,
+        tenantId: "tenant-1",
+        releaseId: "release-1",
+        activationId: "activation-1",
+        previousReleaseId: null,
+        operator: {
+          principalId: "principal-1",
+          actorId: "actor-1",
+          spaceId: "space-1",
+        },
+        activatedAt: "2026-08-12T00:00:00Z",
+      },
+    },
+    deployments,
+  };
 }
 
 function workflowAuthority(inputSchema: WorkflowObjectSchema = objectSchema()) {
