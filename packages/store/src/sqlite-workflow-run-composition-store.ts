@@ -802,16 +802,12 @@ export class SqliteWorkflowRunCompositionStore
         }
       }
       this.#writeExecution(execution, now);
-      const reconciliationWorkItemId = recovery.length === 0
-        ? null
-        : workflowAuthorityId("reconcile", {
-            tenantId: input.tenantId, runId: input.runId,
-            binding: input.binding, operationId: input.schedulerOperationId,
-            claims: recovery.map((claim) => ({ nodeId: claim.node.nodeId,
-              claimId: claim.claimId, claimEpoch: claim.claimEpoch })),
-          }, this.#digester);
-      if (reconciliationWorkItemId !== null) {
-        const claim = recovery[0]!;
+      const reconciliationWorkItemIds = recovery.map((claim) => {
+        const reconciliationWorkItemId = workflowAuthorityId("reconcile", {
+          tenantId: input.tenantId, runId: input.runId, binding: input.binding,
+          operationId: input.schedulerOperationId, nodeId: claim.node.nodeId,
+          claimId: claim.claimId, claimEpoch: claim.claimEpoch,
+        }, this.#digester);
         this.#insertWorkflowWorkItem(reconciliationWorkItemId, input, {
           schemaVersion: "crewon.workflow-reconcile-work-item.v0",
           trigger: "workflowReconcile", binding: input.binding,
@@ -819,7 +815,9 @@ export class SqliteWorkflowRunCompositionStore
           claimEpoch: claim.claimEpoch,
           reconciliationOperationId: input.schedulerOperationId,
         }, now, nowMs);
-      }
+        return reconciliationWorkItemId;
+      });
+      const reconciliationWorkItemId = reconciliationWorkItemIds[0] ?? null;
       const result =
         recovery.length > 0
           ? {
