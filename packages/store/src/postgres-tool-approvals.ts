@@ -173,7 +173,26 @@ function storedApproval(value: unknown): ToolApprovalState {
   } catch (error) {
     throw new RunStoreError("stored_tool_approval_invalid", { cause: error });
   }
-  return value as ToolApprovalState;
+  const state = value as ToolApprovalState;
+  return {
+    schemaVersion: state.schemaVersion,
+    approvalId: state.approvalId,
+    tenantId: state.tenantId,
+    spaceId: state.spaceId,
+    runId: state.runId,
+    receiptId: state.receiptId,
+    workItemId: state.workItemId,
+    actionDigest: state.actionDigest,
+    policySnapshotId: state.policySnapshotId,
+    requestedByActorId: state.requestedByActorId,
+    requiredAt: state.requiredAt,
+    expiresAt: state.expiresAt,
+    status: state.status,
+    revision: state.revision,
+    decision: state.decision,
+    terminalReasonCode: state.terminalReasonCode,
+    updatedAt: state.updatedAt,
+  };
 }
 
 function validate(approval: ToolApprovalState): void {
