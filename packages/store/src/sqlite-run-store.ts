@@ -1,5 +1,9 @@
 import { DatabaseSync } from "node:sqlite";
 import {
+  AgentVersionError,
+  parseCompiledAgentVersion,
+} from "@crewon/agent-version";
+import {
   MAX_WORKFLOW_VALUE_BYTES,
   parseCompiledWorkflowVersion,
   type WorkflowContentDigester,
@@ -3445,6 +3449,7 @@ export class SqliteRunStore implements DomainStore {
     this.#assertOpen();
     if (this.#workflowDigester === null)
       throw new RunStoreError("workflow_run_admission_not_configured");
+    const workflowDigester = this.#workflowDigester;
     try {
       this.#database.exec("BEGIN IMMEDIATE");
       const prior = this.#database.prepare(
@@ -3478,7 +3483,7 @@ export class SqliteRunStore implements DomainStore {
         | undefined;
       if (row === undefined) throw new RunStoreError("workflow_version_not_found");
       const compiled = parseCompiledWorkflowVersion(
-        row.definition_json, this.#workflowDigester);
+        row.definition_json, workflowDigester);
       if (compiled.workflowId !== row.workflow_id ||
           compiled.workflowVersionId !== row.workflow_version_id ||
           compiled.contentDigest !== row.content_digest)
@@ -3503,6 +3508,11 @@ export class SqliteRunStore implements DomainStore {
           throw new RunStoreError("workflow_agent_deployment_mismatch");
         if (!sameAgentVersionDeploymentCandidate(candidate, deployment))
           throw new RunStoreError("workflow_agent_deployment_mismatch");
+        const compiledAgent = parseCompiledAgentVersion(
+          asset.definitionJson, workflowDigester);
+        if (compiledAgent.agentVersionId !== asset.agentVersionId ||
+            compiledAgent.contentDigest !== asset.contentDigest)
+          throw new RunStoreError("workflow_agent_deployment_mismatch");
         return deployment;
       });
       const defaultId = activeRelease.bundle.defaultAgentVersionId;
@@ -3516,11 +3526,17 @@ export class SqliteRunStore implements DomainStore {
           defaultDeployment.contentDigest !== defaultAsset.contentDigest ||
           !sameAgentVersionDeploymentCandidate(defaultCandidate, defaultDeployment))
         throw new RunStoreError("workflow_agent_deployment_mismatch");
-      const route = input.resolveRoute({ workflowVersion, activeRelease,
-        defaultDeployment, deployments });
+      const compiledDefault = parseCompiledAgentVersion(
+        defaultAsset.definitionJson, workflowDigester);
+      if (compiledDefault.agentVersionId !== defaultAsset.agentVersionId ||
+          compiledDefault.contentDigest !== defaultAsset.contentDigest)
+        throw new RunStoreError("workflow_run_route_mismatch");
+      const route = input.candidateRoute;
       if (route.agentVersionId !== defaultDeployment.agentVersionId ||
           route.authorityId !== defaultDeployment.authorityId ||
-          route.workspaceBindingId !== defaultDeployment.workspaceBindingId)
+          route.workspaceBindingId !== defaultDeployment.workspaceBindingId ||
+          route.runtimeGeneration !== compiledDefault.runtimeGeneration ||
+          route.policySnapshotId !== compiledDefault.policySnapshotId)
         throw new RunStoreError("workflow_run_route_mismatch");
       const prepared = input.prepare({ workflowVersion, route });
       const rootJson = canonicalJson(prepared.workflowInputValue.value);
@@ -3530,7 +3546,7 @@ export class SqliteRunStore implements DomainStore {
           !/^sha256:[a-f0-9]{64}$/u.test(prepared.workflowInputValue.valueDigest) ||
           rootJson !== canonicalJson(input.workflowInput) ||
           new TextEncoder().encode(rootJson).byteLength > MAX_WORKFLOW_VALUE_BYTES ||
-          this.#workflowDigester.sha256(rootJson) !== prepared.workflowInputValue.valueDigest)
+          workflowDigester.sha256(rootJson) !== prepared.workflowInputValue.valueDigest)
         throw new RunStoreError("workflow_execution_value_invalid");
       this.#validateWorkflowPreparedCommit(input, prepared.commit,
         workflowVersion, route, prepared.workflowInputValue);
@@ -6827,6 +6843,11 @@ function normalizeToolApprovalError(error: unknown): Error {
 }
 
 function normalizeSqliteError(error: unknown): Error {
+  if (error instanceof AgentVersionError) {
+    return new RunStoreError("workflow_agent_deployment_mismatch", {
+      cause: error,
+    });
+  }
   if (error instanceof ThreadGoalError) {
     return new RunStoreError(error.code, { cause: error });
   }
