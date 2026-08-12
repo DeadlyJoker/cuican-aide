@@ -12,6 +12,7 @@ import {
 } from "@crewon/domain";
 
 import { SqliteWorkflowExecutionStore } from "./workflow-execution-store.ts";
+import { migrateSqliteWorkflowExecutions } from "./workflow-execution-schema.ts";
 
 const schema = {
   type: "object" as const,
@@ -431,6 +432,56 @@ test("fails closed on a registered SQLite authority with corrupt physical shape"
   );
   database.close();
 });
+
+for (const legacyVersion of [1, 2, 3, 4] as const) {
+  test(`migrates SQLite Workflow execution v${legacyVersion} to v5 in one call`, () => {
+    const database = new DatabaseSync(":memory:");
+    database.exec(`CREATE TABLE run_snapshots (
+      tenant_id TEXT NOT NULL, run_id TEXT NOT NULL,
+      PRIMARY KEY (tenant_id,run_id)) STRICT;
+      CREATE TABLE run_steps (
+      tenant_id TEXT NOT NULL,run_id TEXT NOT NULL,step_id TEXT NOT NULL,
+      PRIMARY KEY(tenant_id,run_id,step_id)) STRICT;
+      CREATE TABLE workflow_execution_schema (
+      singleton INTEGER PRIMARY KEY CHECK(singleton=1),version INTEGER NOT NULL) STRICT;
+      INSERT INTO workflow_execution_schema VALUES(1,${legacyVersion});
+      CREATE TABLE workflow_executions (
+      tenant_id TEXT NOT NULL,run_id TEXT NOT NULL,revision INTEGER NOT NULL,
+      state_json TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(tenant_id,run_id)) STRICT;
+      CREATE TABLE workflow_execution_receipts (
+      tenant_id TEXT NOT NULL,run_id TEXT NOT NULL,operation_id TEXT NOT NULL,
+      fingerprint TEXT NOT NULL,state_json TEXT NOT NULL${legacyVersion === 1 ? "" : ",result_json TEXT"},
+      PRIMARY KEY(tenant_id,run_id,operation_id)) STRICT;`);
+    if (legacyVersion >= 3) database.exec(`CREATE TABLE workflow_composition_receipts (
+      tenant_id TEXT NOT NULL,run_id TEXT NOT NULL,operation_id TEXT NOT NULL,
+      kind TEXT NOT NULL,fingerprint TEXT NOT NULL,result_json TEXT NOT NULL,
+      PRIMARY KEY(tenant_id,run_id,operation_id)) STRICT;
+      CREATE TABLE workflow_gate_requests (
+      tenant_id TEXT NOT NULL,run_id TEXT NOT NULL,node_id TEXT NOT NULL,
+      gate_request_id TEXT NOT NULL UNIQUE,claim_id TEXT NOT NULL,claim_epoch INTEGER NOT NULL,
+      step_id TEXT NOT NULL,approval_policy_id TEXT NOT NULL,input_digest TEXT NOT NULL,
+      publication_outbox_message_id TEXT NOT NULL UNIQUE,
+      approval_resume_work_item_id TEXT NOT NULL UNIQUE,status TEXT NOT NULL,
+      state_json TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,
+      PRIMARY KEY(tenant_id,run_id,node_id)) STRICT;`);
+    if (legacyVersion === 4) database.exec(`CREATE TABLE workflow_execution_values (
+      tenant_id TEXT NOT NULL,run_id TEXT NOT NULL,value_id TEXT NOT NULL,
+      role TEXT NOT NULL,node_id TEXT,value_digest TEXT NOT NULL,value_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,PRIMARY KEY(tenant_id,run_id,value_id)) STRICT;`);
+    migrateSqliteWorkflowExecutions(database);
+    assert.equal(database.prepare(
+      "SELECT version FROM workflow_execution_schema WHERE singleton=1",
+    ).get()?.version, 5);
+    assert.deepEqual(database.prepare(
+      `SELECT name FROM sqlite_master WHERE type='index'
+       AND name LIKE 'workflow_execution_values_%_role_uq' ORDER BY name`,
+    ).all().map((row) => ({ ...(row as { name: string }) })), [
+      { name: "workflow_execution_values_global_role_uq" },
+      { name: "workflow_execution_values_node_role_uq" },
+    ]);
+    database.close();
+  });
+}
 
 test("serializes two SQLite clients to one stable scheduler claim", async (context) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-workflow-race-"));

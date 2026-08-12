@@ -39,17 +39,17 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
     database.exec(sqliteCompositionTables);
     database
       .prepare(
-        "UPDATE workflow_execution_schema SET version=3 WHERE singleton=1",
+        "UPDATE workflow_execution_schema SET version=5 WHERE singleton=1",
       )
       .run();
-    version = 3;
+    version = 5;
   }
   if (version === 3) {
     database.exec(sqliteValueTable);
     database
-      .prepare("UPDATE workflow_execution_schema SET version=4 WHERE singleton=1")
+      .prepare("UPDATE workflow_execution_schema SET version=5 WHERE singleton=1")
       .run();
-    version = 4;
+    version = 5;
   }
   if (version === 4) {
     database.exec("ALTER TABLE workflow_execution_values RENAME TO workflow_execution_values_v4");
@@ -106,16 +106,16 @@ export async function migratePostgresWorkflowExecutions(
   if (version === 2) {
     await client.query(postgresCompositionTables(schema));
     await client.query(
-      `UPDATE ${schema}.workflow_execution_schema SET version=3 WHERE singleton=true`,
+      `UPDATE ${schema}.workflow_execution_schema SET version=5 WHERE singleton=true`,
     );
-    version = 3;
+    version = 5;
   }
   if (version === 3) {
     await client.query(postgresValueTable(schema));
     await client.query(
-      `UPDATE ${schema}.workflow_execution_schema SET version=4 WHERE singleton=true`,
+      `UPDATE ${schema}.workflow_execution_schema SET version=5 WHERE singleton=true`,
     );
-    version = 4;
+    version = 5;
   }
   if (version === 4) {
     await client.query(
