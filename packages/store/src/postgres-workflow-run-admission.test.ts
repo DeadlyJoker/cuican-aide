@@ -338,7 +338,7 @@ export async function postgresFixture(
     workflowVersionId: workflow.workflowVersionId,
     contentDigest: workflow.contentDigest,
     definitionJson: serializeCompiledWorkflowVersion(workflow),
-    createdAt: "2026-08-12T00:00:00Z",
+    createdAt: "2026-08-12T00:00:00.000Z",
   });
   return {
     schema,
@@ -468,7 +468,7 @@ function workflowSource(
         title: "verify",
         instruction: "verify",
         dependsOn: ["node"],
-        inputSchema,
+        inputSchema: outputSchema,
         outputSchema,
         verifierAgentVersionId: "verifier-agent",
       },
