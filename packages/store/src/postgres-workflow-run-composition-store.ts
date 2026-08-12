@@ -2,6 +2,7 @@ import {
   RunStoreError,
   type CommitWorkflowRunStartInput,
   type CommitWorkflowRunStartResult,
+  type ModelDispatchEvidenceStore,
   type WorkflowRunAdmissionStore,
   type WorkflowRunCompositionStore,
 } from "@crewon/application";
@@ -9,6 +10,12 @@ import type { WorkflowContentDigester } from "@crewon/domain";
 import type { PoolClient } from "pg";
 
 import { PostgresAttemptStore } from "./postgres-attempt-store.ts";
+import {
+  loadPostgresModelDispatchReceipt,
+  migratePostgresModelDispatchEvidence,
+  preparePostgresModelDispatch,
+  transitionPostgresModelDispatch,
+} from "./postgres-model-dispatch-evidence.ts";
 import {
   recordPostgresWorkflowGateDecision,
   settlePostgresWorkflowGate,
@@ -37,7 +44,10 @@ export type PostgresWorkflowRunCompositionStoreOptions =
 /** PostgreSQL production composition authority with row and advisory fences. */
 export class PostgresWorkflowRunCompositionStore
   extends PostgresAttemptStore
-  implements WorkflowRunCompositionStore, WorkflowRunAdmissionStore
+  implements
+    WorkflowRunCompositionStore,
+    WorkflowRunAdmissionStore,
+    ModelDispatchEvidenceStore
 {
   readonly #digester: WorkflowContentDigester;
 
@@ -70,6 +80,7 @@ export class PostgresWorkflowRunCompositionStore
         [`crewon:${this.schema}:workflow-composition`],
       );
       await migratePostgresWorkflowExecutions(client, this.schema);
+      await migratePostgresModelDispatchEvidence(client, this.schemaSql());
       await client.query("COMMIT");
     } catch (error) {
       await rollbackPostgres(client);
@@ -211,6 +222,98 @@ export class PostgresWorkflowRunCompositionStore
     >[0],
   ): ReturnType<WorkflowRunCompositionStore["cancelWorkflowExecution"]> {
     throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  async loadModelDispatchReceipt(
+    locator: Parameters<
+      ModelDispatchEvidenceStore["loadModelDispatchReceipt"]
+    >[0],
+  ): ReturnType<ModelDispatchEvidenceStore["loadModelDispatchReceipt"]> {
+    this.assertOpen();
+    return loadPostgresModelDispatchReceipt(
+      this.pool,
+      this.schemaSql(),
+      locator,
+    );
+  }
+
+  async prepareModelDispatch(
+    input: Parameters<ModelDispatchEvidenceStore["prepareModelDispatch"]>[0],
+  ): ReturnType<ModelDispatchEvidenceStore["prepareModelDispatch"]> {
+    return this.#modelDispatchTransaction(input, (client) =>
+      preparePostgresModelDispatch(client, this.schemaSql(), input),
+    );
+  }
+
+  async markModelDispatchPossiblySent(
+    input: Parameters<
+      ModelDispatchEvidenceStore["markModelDispatchPossiblySent"]
+    >[0],
+  ): ReturnType<ModelDispatchEvidenceStore["markModelDispatchPossiblySent"]> {
+    return this.#modelDispatchTransaction(input, (client) =>
+      transitionPostgresModelDispatch(
+        client,
+        this.schemaSql(),
+        input,
+        "possiblySent",
+      ),
+    );
+  }
+
+  async observeModelDispatchResponse(
+    input: Parameters<
+      ModelDispatchEvidenceStore["observeModelDispatchResponse"]
+    >[0],
+  ): ReturnType<ModelDispatchEvidenceStore["observeModelDispatchResponse"]> {
+    return this.#modelDispatchTransaction(input, (client) =>
+      transitionPostgresModelDispatch(
+        client,
+        this.schemaSql(),
+        input,
+        "responseObserved",
+      ),
+    );
+  }
+
+  async terminateModelDispatch(
+    input: Parameters<ModelDispatchEvidenceStore["terminateModelDispatch"]>[0],
+  ): ReturnType<ModelDispatchEvidenceStore["terminateModelDispatch"]> {
+    return this.#modelDispatchTransaction(input, (client) =>
+      transitionPostgresModelDispatch(
+        client,
+        this.schemaSql(),
+        input,
+        "terminal",
+      ),
+    );
+  }
+
+  async #modelDispatchTransaction<T>(
+    input: Readonly<{
+      tenantId: string;
+      runId: string;
+      lease: Parameters<
+        ModelDispatchEvidenceStore["prepareModelDispatch"]
+      >[0]["lease"];
+    }>,
+    operation: (client: PoolClient) => Promise<T>,
+  ): Promise<T> {
+    return this.#transaction(input, async (client) => {
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.tenantId,
+        input.runId,
+        input.lease,
+      );
+      const result = await operation(client);
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.tenantId,
+        input.runId,
+        input.lease,
+      );
+      return result;
+    });
   }
 
   async #transaction<T>(
