@@ -211,6 +211,11 @@ async function composeProductionControlApi(
       approvals,
       agentVersions,
       workflowVersions,
+      // Production Workflow start remains fail closed until the Store exposes
+      // one compound admission transaction that also revalidates the active
+      // release and every referenced deployment. Workflow execution schema
+      // migration alone is not admission authority.
+      workflowRuns: null,
       agentVersionCatalogs,
       artifacts,
       automations,
