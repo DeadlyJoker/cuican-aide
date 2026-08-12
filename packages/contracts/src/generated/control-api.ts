@@ -1128,9 +1128,12 @@ export interface components {
     };
     DecideWorkflowHumanGateRequest: {
       runId: string;
+      /** @description Additionally capped at 256 UTF-8 bytes by the runtime parser. */
       nodeId: string;
+      /** @description Additionally capped at 256 UTF-8 bytes by the runtime parser. */
       claimId: string;
       claimEpoch: number;
+      /** @description Additionally capped at 256 UTF-8 bytes by the runtime parser. */
       gateRequestId: string;
       /** @enum {string} */
       decision: "approve" | "reject";
@@ -1141,7 +1144,6 @@ export interface components {
       runId: string;
       nodeId: string;
       gateRequestId: string;
-      resumeWorkItemId: string;
     };
     StartTurnRequest: {
       expectedRevision: number;

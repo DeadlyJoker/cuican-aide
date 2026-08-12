@@ -572,19 +572,39 @@ export function parseStartWorkflowRunRequest(
 export function parseDecideWorkflowHumanGateRequest(
   input: unknown,
 ): DecideWorkflowHumanGateRequest {
-  if (!hasExactKeys(input, [
-    "claimEpoch", "claimId", "decision", "gateRequestId", "nodeId", "runId",
-  ])) throw new ContractValidationError("workflow_gate_fields_invalid");
+  if (
+    !hasExactKeys(input, [
+      "claimEpoch",
+      "claimId",
+      "decision",
+      "gateRequestId",
+      "nodeId",
+      "runId",
+    ])
+  )
+    throw new ContractValidationError("workflow_gate_fields_invalid");
   if (!Number.isSafeInteger(input.claimEpoch) || Number(input.claimEpoch) < 1)
     throw new ContractValidationError("workflow_gate_claim_epoch_invalid");
   if (input.decision !== "approve" && input.decision !== "reject")
     throw new ContractValidationError("workflow_gate_decision_invalid");
   return {
     runId: parseRunId(input.runId),
-    nodeId: requireBoundedString(input.nodeId, 512, "workflow_gate_node_id_invalid"),
-    claimId: requireBoundedString(input.claimId, 512, "workflow_gate_claim_id_invalid"),
+    nodeId: requireBoundedUtf8String(
+      input.nodeId,
+      256,
+      "workflow_gate_node_id_invalid",
+    ),
+    claimId: requireBoundedUtf8String(
+      input.claimId,
+      256,
+      "workflow_gate_claim_id_invalid",
+    ),
     claimEpoch: Number(input.claimEpoch),
-    gateRequestId: requireBoundedString(input.gateRequestId, 512, "workflow_gate_request_id_invalid"),
+    gateRequestId: requireBoundedUtf8String(
+      input.gateRequestId,
+      256,
+      "workflow_gate_request_id_invalid",
+    ),
     decision: input.decision,
   };
 }
@@ -1184,6 +1204,17 @@ function requireBoundedString(
     throw new ContractValidationError(code);
   }
   return input;
+}
+
+function requireBoundedUtf8String(
+  input: unknown,
+  maxBytes: number,
+  code: string,
+): string {
+  const value = requireBoundedString(input, maxBytes, code);
+  if (new TextEncoder().encode(value).byteLength > maxBytes)
+    throw new ContractValidationError(code);
+  return value;
 }
 
 function parseNullableExpectedRevision(input: unknown): number | null {

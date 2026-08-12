@@ -1070,7 +1070,9 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/DecideWorkflowHumanGateRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/DecideWorkflowHumanGateRequest"
+              }
             }
           }
         },
@@ -1079,7 +1081,9 @@
             "description": "A durable Human Gate decision or its exact replay",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/WorkflowHumanGateDecisionResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/WorkflowHumanGateDecisionResponse"
+                }
               }
             }
           },
@@ -3278,26 +3282,55 @@
       "DecideWorkflowHumanGateRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["runId", "nodeId", "claimId", "claimEpoch", "gateRequestId", "decision"],
+        "required": [
+          "runId",
+          "nodeId",
+          "claimId",
+          "claimEpoch",
+          "gateRequestId",
+          "decision"
+        ],
         "properties": {
           "runId": { "type": "string", "minLength": 1, "maxLength": 128 },
-          "nodeId": { "type": "string", "minLength": 1, "maxLength": 512 },
-          "claimId": { "type": "string", "minLength": 1, "maxLength": 512 },
-          "claimEpoch": { "type": "integer", "minimum": 1, "maximum": 9007199254740991 },
-          "gateRequestId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "nodeId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "Additionally capped at 256 UTF-8 bytes by the runtime parser."
+          },
+          "claimId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "Additionally capped at 256 UTF-8 bytes by the runtime parser."
+          },
+          "claimEpoch": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "gateRequestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256,
+            "description": "Additionally capped at 256 UTF-8 bytes by the runtime parser."
+          },
           "decision": { "type": "string", "enum": ["approve", "reject"] }
         }
       },
       "WorkflowHumanGateDecisionResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["disposition", "runId", "nodeId", "gateRequestId", "resumeWorkItemId"],
+        "required": ["disposition", "runId", "nodeId", "gateRequestId"],
         "properties": {
           "disposition": { "type": "string", "enum": ["recorded", "replay"] },
           "runId": { "type": "string", "minLength": 1, "maxLength": 128 },
           "nodeId": { "type": "string", "minLength": 1, "maxLength": 512 },
-          "gateRequestId": { "type": "string", "minLength": 1, "maxLength": 512 },
-          "resumeWorkItemId": { "type": "string", "minLength": 1, "maxLength": 512 }
+          "gateRequestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          }
         }
       },
       "StartTurnRequest": {

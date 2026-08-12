@@ -157,13 +157,35 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
 });
 
 test("accepts only public Workflow Human Gate decision authority", () => {
-  const input = { runId: "run-1", nodeId: "gate", claimId: "claim-1",
-    claimEpoch: 1, gateRequestId: "gate-request-1", decision: "approve" as const };
+  const input = {
+    runId: "run-1",
+    nodeId: "gate",
+    claimId: "claim-1",
+    claimEpoch: 1,
+    gateRequestId: "gate-request-1",
+    decision: "approve" as const,
+  };
   assert.deepEqual(parseDecideWorkflowHumanGateRequest(input), input);
-  for (const injected of ["binding", "decisionReceiptId", "failureCode", "tenantId"]) {
-    assert.throws(() => parseDecideWorkflowHumanGateRequest({ ...input, [injected]: "forged" }),
-      /workflow_gate_fields_invalid/u);
+  for (const injected of [
+    "binding",
+    "decisionReceiptId",
+    "failureCode",
+    "tenantId",
+  ]) {
+    assert.throws(
+      () =>
+        parseDecideWorkflowHumanGateRequest({ ...input, [injected]: "forged" }),
+      /workflow_gate_fields_invalid/u,
+    );
   }
+  assert.throws(
+    () =>
+      parseDecideWorkflowHumanGateRequest({
+        ...input,
+        nodeId: "界".repeat(86),
+      }),
+    /workflow_gate_node_id_invalid/u,
+  );
 });
 
 test("parses only bounded Workflow Run start authority", () => {
