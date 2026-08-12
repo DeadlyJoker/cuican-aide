@@ -1,0 +1,342 @@
+import assert from "node:assert/strict";
+import { createHash, randomUUID } from "node:crypto";
+import { DatabaseSync } from "node:sqlite";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import test from "node:test";
+import { Pool } from "pg";
+import {
+  compileWorkflowVersion,
+  serializeCompiledWorkflowVersion,
+  type RunState,
+  type WorkflowVersionSource,
+} from "@crewon/domain";
+
+import type { LeaseClock } from "./lease-clock.ts";
+import { PostgresWorkflowRunCompositionStore } from "./postgres-workflow-run-composition-store.ts";
+import { SqliteWorkflowRunCompositionStore } from "./sqlite-workflow-run-composition-store.ts";
+import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
+
+const digester = {
+  sha256: (value: string) =>
+    `sha256:${createHash("sha256").update(value).digest("hex")}`,
+};
+const objectSchema = {
+  type: "object" as const,
+  properties: {},
+  required: [],
+  additionalProperties: false as const,
+};
+const common = (nodeId: string, dependsOn: string[] = []) => ({
+  nodeId,
+  title: nodeId,
+  instruction: nodeId,
+  dependsOn,
+  inputSchema: objectSchema,
+  outputSchema: objectSchema,
+});
+const source: WorkflowVersionSource = {
+  schemaVersion: "crewon.workflow-version-source.v0",
+  workflowId: "workflow-1",
+  workflowVersionId: "workflow-version-1",
+  name: "composition",
+  description: "composition",
+  inputSchema: objectSchema,
+  outputSchema: objectSchema,
+  entryNodeIds: ["agent", "gate"],
+  outputNodeIds: ["verify"],
+  nodes: [
+    { ...common("agent"), kind: "agent", agentVersionId: "agent-v1" },
+    {
+      ...common("gate"),
+      kind: "humanGate",
+      approvalPolicyId: "approval-1",
+    },
+    {
+      ...common("verify", ["agent", "gate"]),
+      kind: "verification",
+      verifierAgentVersionId: "verifier-v1",
+    },
+  ],
+};
+const workflow = compileWorkflowVersion(source, digester);
+const binding = {
+  workflowId: workflow.workflowId,
+  workflowVersionId: workflow.workflowVersionId,
+  contentDigest: workflow.contentDigest,
+};
+const lease = {
+  workItemId: "work-1",
+  ownerId: "worker-1",
+  leaseId: "lease-1",
+  leaseEpoch: 1,
+};
+
+test("SQLite atomically admits stable node authority and replays after reopen", async (context) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "crewon-workflow-composition-"),
+  );
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "authority.sqlite");
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  let store = new SqliteWorkflowRunCompositionStore(path, { digester, clock });
+  await seed(path, clock.nowEpochMilliseconds() + 60_000);
+
+  const first = await store.admitWorkflowNodes(admissionInput());
+  assert.deepEqual(
+    first.admissions.map((item) => ({
+      nodeId: item.claim.node.nodeId,
+      frozenAgentVersionId: first.execution.nodes.find(
+        (node) => node.nodeId === item.claim.node.nodeId,
+      )?.agentVersionId,
+      stepKind: item.step.kind,
+      hasAttempt: item.attempt !== null,
+    })),
+    [
+      {
+        nodeId: "agent",
+        frozenAgentVersionId: "agent-v1",
+        stepKind: "agent",
+        hasAttempt: true,
+      },
+      {
+        nodeId: "gate",
+        frozenAgentVersionId: null,
+        stepKind: "gate",
+        hasAttempt: false,
+      },
+    ],
+  );
+  assert.equal(
+    first.execution.nodes.find((node) => node.nodeId === "verify")
+      ?.agentVersionId,
+    "verifier-v1",
+  );
+  await store.close();
+
+  store = new SqliteWorkflowRunCompositionStore(path, { digester, clock });
+  assert.deepEqual(await store.admitWorkflowNodes(admissionInput()), first);
+  await store.close();
+});
+
+test("SQLite dual connections converge and a reclaimed lease fences replay", async (context) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "crewon-workflow-composition-race-"),
+  );
+  context.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "authority.sqlite");
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  const first = new SqliteWorkflowRunCompositionStore(path, {
+    digester,
+    clock,
+  });
+  await seed(path, clock.nowEpochMilliseconds() + 60_000);
+  const second = new SqliteWorkflowRunCompositionStore(path, {
+    digester,
+    clock,
+  });
+  const [left, right] = await Promise.all([
+    first.admitWorkflowNodes(admissionInput()),
+    second.admitWorkflowNodes(admissionInput()),
+  ]);
+  assert.deepEqual(right, left);
+
+  const database = new DatabaseSync(path);
+  database
+    .prepare(
+      `UPDATE work_items SET lease_owner_id='worker-2',lease_id='lease-2',
+       lease_epoch=2,lease_expires_at_ms=? WHERE work_item_id='work-1'`,
+    )
+    .run(clock.nowEpochMilliseconds() + 60_000);
+  database.close();
+  await assert.rejects(
+    second.admitWorkflowNodes(admissionInput()),
+    /stale_lease/u,
+  );
+  await first.close();
+  await second.close();
+});
+
+test("SQLite rejects expired lease and frozen binding drift without partial DAG state", async () => {
+  const database = new DatabaseSync(":memory:");
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  const store = new SqliteWorkflowRunCompositionStore(database, {
+    digester,
+    clock,
+  });
+  await seed(database, clock.nowEpochMilliseconds());
+  await assert.rejects(
+    store.admitWorkflowNodes(admissionInput()),
+    /lease_expired/u,
+  );
+  assert.equal(
+    database.prepare("SELECT count(*) AS count FROM workflow_executions").get()
+      ?.count,
+    0,
+  );
+  database
+    .prepare(
+      "UPDATE work_items SET lease_expires_at_ms=? WHERE work_item_id='work-1'",
+    )
+    .run(clock.nowEpochMilliseconds() + 60_000);
+  await assert.rejects(
+    store.admitWorkflowNodes({
+      ...admissionInput(),
+      binding: { ...binding, workflowVersionId: "substituted-version" },
+    }),
+    /run_authority_mismatch/u,
+  );
+  assert.equal(
+    database.prepare("SELECT count(*) AS count FROM workflow_executions").get()
+      ?.count,
+    0,
+  );
+});
+
+const postgresUrl = process.env.CREWON_TEST_POSTGRES_URL;
+if (postgresUrl === undefined) {
+  test.skip("PostgreSQL workflow composition requires CREWON_TEST_POSTGRES_URL", () => {});
+} else {
+  test("PostgreSQL workflow composition migrates the registered physical authority", async () => {
+    const schema = `workflow_composition_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    const store = await PostgresWorkflowRunCompositionStore.open({
+      pool,
+      schema,
+      digester,
+    });
+    try {
+      const columns = await pool.query<{ column_name: string }>(
+        `SELECT column_name FROM information_schema.columns
+         WHERE table_schema=$1 AND table_name='workflow_execution_receipts'
+         ORDER BY ordinal_position`,
+        [schema],
+      );
+      assert.deepEqual(
+        columns.rows.map((row) => row.column_name),
+        [
+          "tenant_id",
+          "run_id",
+          "operation_id",
+          "fingerprint",
+          "state_json",
+          "result_json",
+        ],
+      );
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await store.close();
+    }
+  });
+}
+
+function admissionInput() {
+  return {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease,
+    binding,
+    schedulerOperationId: "scheduler-operation-1",
+    leaseDurationMs: 5_000,
+  } as const;
+}
+
+async function seed(
+  databaseOrPath: DatabaseSync | string,
+  leaseExpiresAtMs: number,
+): Promise<void> {
+  const database =
+    typeof databaseOrPath === "string"
+      ? new DatabaseSync(databaseOrPath)
+      : databaseOrPath;
+  const versions = new SqliteWorkflowVersionStore(database, digester);
+  await versions.registerWorkflowVersion({
+    schemaVersion: "crewon.workflow-version-asset.v0",
+    tenantId: "tenant-1",
+    workflowId: workflow.workflowId,
+    workflowVersionId: workflow.workflowVersionId,
+    contentDigest: workflow.contentDigest,
+    definitionJson: serializeCompiledWorkflowVersion(workflow),
+    createdAt: "2026-08-12T00:00:00.000Z",
+  });
+  const run = runState();
+  database
+    .prepare(
+      `INSERT INTO run_snapshots
+       (tenant_id,space_id,run_id,revision,last_sequence,state_json,updated_at)
+       VALUES (?,?,?,?,?,?,?)`,
+    )
+    .run(
+      "tenant-1",
+      "space-1",
+      "run-1",
+      2,
+      2,
+      JSON.stringify(run),
+      run.updatedAt,
+    );
+  database
+    .prepare(
+      `INSERT INTO work_items
+       (work_item_id,tenant_id,run_id,kind,work_item_json,created_at,status,
+        available_at_ms,lease_owner_id,lease_id,lease_epoch,lease_expires_at_ms,attempt_count)
+       VALUES (?,?,?,?,?,?,'leased',?,?,?,?,?,1)`,
+    )
+    .run(
+      "work-1",
+      "tenant-1",
+      "run-1",
+      "run.execute",
+      "{}",
+      run.createdAt,
+      0,
+      lease.ownerId,
+      lease.leaseId,
+      lease.leaseEpoch,
+      leaseExpiresAtMs,
+    );
+  if (typeof databaseOrPath === "string") database.close();
+}
+
+function runState(): RunState {
+  return {
+    runId: "run-1",
+    threadId: "thread-1",
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    createdByActorId: "actor-1",
+    authorityId: "authority-1",
+    runtimeGeneration: "ts-v0",
+    agentVersionId: "orchestrator-v1",
+    policySnapshotId: "policy-1",
+    workspaceBindingId: null,
+    collaborationMode: "default",
+    purpose: "workflow",
+    workflowVersionBinding: binding,
+    goalBinding: null,
+    goalAccounting: null,
+    usage: {
+      inputTokens: 0,
+      cachedInputTokens: 0,
+      outputTokens: 0,
+      totalTokens: 0,
+    },
+    status: "running",
+    revision: 2,
+    lastSequence: 2,
+    cancelRequested: false,
+    waitingApproval: null,
+    suspensionReasonCode: null,
+    reconciliationReceiptId: null,
+    outputRef: null,
+    failure: null,
+    createdAt: "2026-08-12T00:00:00.000Z",
+    updatedAt: "2026-08-12T00:00:00.000Z",
+    terminalAt: null,
+  };
+}
+
+function mutableClock(initial: number): LeaseClock {
+  return { nowEpochMilliseconds: () => initial };
+}
