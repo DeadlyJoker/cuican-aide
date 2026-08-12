@@ -627,6 +627,9 @@ export class SqliteWorkflowRunCompositionStore {
         >);
       }
       this.#validateLease(input, nowMs);
+      const currentPayload = this.#loadWorkItemPayload(input.lease.workItemId);
+      if ((currentPayload as { trigger?: unknown }).trigger === "workflowReconcile")
+        throw new RunStoreError("workflow_reconciliation_handoff_loop");
       assertCanonicalRun(
         this.#loadRun(input.tenantId, input.runId),
         input.binding,
@@ -1439,18 +1442,25 @@ export class SqliteWorkflowRunCompositionStore {
   #assertSchedulerWorkPayload(
     input: Parameters<WorkflowRunCompositionStore["scheduleWorkflowNodes"]>[0],
   ): void {
-    const row = this.#database.prepare(
-      "SELECT work_item_json FROM work_items WHERE work_item_id=?",
-    ).get(input.lease.workItemId) as { work_item_json: string } | undefined;
-    const item = row === undefined ? null : JSON.parse(row.work_item_json) as { payload?: unknown };
+    const payload = this.#loadWorkItemPayload(input.lease.workItemId);
     const expected = { schemaVersion: "crewon.workflow-scheduler-work-item.v1",
       trigger: "workflowScheduler", binding: input.binding,
       schedulerOperationId: input.schedulerOperationId,
       workflowInput: input.workflowInput };
     const root = this.#rootInputRef(input);
-    if (stableJson(item?.payload) !== stableJson(expected) ||
+    if (stableJson(payload) !== stableJson(expected) ||
         stableJson(root) !== stableJson(input.workflowInput))
       throw new RunStoreError("workflow_composition_work_item_mismatch");
+  }
+
+  #loadWorkItemPayload(workItemId: string): unknown {
+    const row = this.#database.prepare(
+      "SELECT work_item_json FROM work_items WHERE work_item_id=?",
+    ).get(workItemId) as { work_item_json: string } | undefined;
+    if (row === undefined) throw new RunStoreError("queue_item_not_found");
+    const item = JSON.parse(row.work_item_json) as { payload?: unknown };
+    if (item.payload === undefined) throw new RunStoreError("workflow_composition_work_item_mismatch");
+    return item.payload;
   }
 
   #loadGate(input: {
