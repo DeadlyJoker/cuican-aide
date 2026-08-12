@@ -336,6 +336,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/workflow-runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["startWorkflowRun"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/runs/{runId}": {
     parameters: {
       query?: never;
@@ -1078,6 +1094,21 @@ export interface components {
       threadId: string;
       /** @description Optional immutable AgentVersion selection. The server admits it before creating a Run; omission uses the configured default. */
       agentVersionId?: string | null;
+    };
+    /** @description Bounded JSON input. Runtime validation additionally limits UTF-8 serialization to 32768 bytes, nesting depth to 8, and total values to 1024. */
+    WorkflowInput:
+      | null
+      | boolean
+      | number
+      | string
+      | unknown[]
+      | {
+          [key: string]: unknown;
+        };
+    StartWorkflowRunRequest: {
+      workflowVersionId: string;
+      threadId: string;
+      input: components["schemas"]["WorkflowInput"];
     };
     StartTurnRequest: {
       expectedRevision: number;
@@ -2699,6 +2730,49 @@ export interface operations {
       400: components["responses"]["Error"];
       401: components["responses"]["Error"];
       403: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  startWorkflowRun: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StartWorkflowRunRequest"];
+      };
+    };
+    responses: {
+      /** @description The exact idempotently replayed Workflow Run */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunMutationResponse"];
+        };
+      };
+      /** @description A Workflow Run admitted with immutable version provenance and durable execution work */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
       409: components["responses"]["Error"];
       500: components["responses"]["Error"];
     };

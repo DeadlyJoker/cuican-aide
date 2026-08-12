@@ -64,6 +64,8 @@ export type ListThreadsResponse = components["schemas"]["ListThreadsResponse"];
 export type ListThreadMessagesResponse =
   components["schemas"]["ListThreadMessagesResponse"];
 export type CreateRunRequest = components["schemas"]["CreateRunRequest"];
+export type StartWorkflowRunRequest =
+  components["schemas"]["StartWorkflowRunRequest"];
 export type StartTurnRequest = components["schemas"]["StartTurnRequest"];
 export type CompactThreadRequest =
   components["schemas"]["CompactThreadRequest"];
@@ -124,6 +126,11 @@ const MAX_RESOURCE_ID_LENGTH = 128;
 const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
 const MAX_THREAD_TITLE_LENGTH = 256;
 const MAX_MESSAGE_BYTES = 32 * 1024;
+const MAX_WORKFLOW_INPUT_BYTES = 32 * 1024;
+const MAX_WORKFLOW_INPUT_DEPTH = 8;
+const MAX_WORKFLOW_INPUT_NODES = 1024;
+const MAX_WORKFLOW_INPUT_COLLECTION_SIZE = 256;
+const MAX_WORKFLOW_INPUT_STRING_LENGTH = 8192;
 const MAX_THREAD_GOAL_OBJECTIVE_CHARS = 4_000;
 const MAX_ROLLBACK_TURNS = 0xffff_ffff;
 const MAX_MESSAGE_PAGE_SIZE = 100;
@@ -536,6 +543,66 @@ export function parseCreateRunRequest(input: unknown): CreateRunRequest {
         ? null
         : parseAgentVersionId(input.agentVersionId),
   };
+}
+
+export function parseStartWorkflowRunRequest(
+  input: unknown,
+): StartWorkflowRunRequest {
+  if (!hasExactKeys(input, ["input", "threadId", "workflowVersionId"])) {
+    throw new ContractValidationError("workflow_run_fields_invalid");
+  }
+  const workflowInput = parseWorkflowInput(input.input);
+  if (
+    new TextEncoder().encode(JSON.stringify(workflowInput)).byteLength >
+    MAX_WORKFLOW_INPUT_BYTES
+  ) {
+    throw new ContractValidationError("workflow_input_too_large");
+  }
+  return {
+    workflowVersionId: parseWorkflowVersionId(input.workflowVersionId),
+    threadId: parseThreadId(input.threadId),
+    input: workflowInput,
+  };
+}
+
+function parseWorkflowInput(input: unknown): StartWorkflowRunRequest["input"] {
+  let nodes = 0;
+  const visit = (value: unknown, depth: number): unknown => {
+    nodes += 1;
+    if (nodes > MAX_WORKFLOW_INPUT_NODES || depth > MAX_WORKFLOW_INPUT_DEPTH) {
+      throw new ContractValidationError("workflow_input_too_large");
+    }
+    if (value === null || typeof value === "boolean") return value;
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string") {
+      if ([...value].length > MAX_WORKFLOW_INPUT_STRING_LENGTH) {
+        throw new ContractValidationError("workflow_input_too_large");
+      }
+      return value;
+    }
+    if (Array.isArray(value)) {
+      if (value.length > MAX_WORKFLOW_INPUT_COLLECTION_SIZE) {
+        throw new ContractValidationError("workflow_input_too_large");
+      }
+      return value.map((item) => visit(item, depth + 1));
+    }
+    if (isPlainObject(value)) {
+      const entries = Object.entries(value);
+      if (entries.length > MAX_WORKFLOW_INPUT_COLLECTION_SIZE) {
+        throw new ContractValidationError("workflow_input_too_large");
+      }
+      return Object.fromEntries(
+        entries.map(([key, item]) => {
+          if (key.length === 0 || [...key].length > MAX_RESOURCE_ID_LENGTH) {
+            throw new ContractValidationError("workflow_input_invalid");
+          }
+          return [key, visit(item, depth + 1)];
+        }),
+      );
+    }
+    throw new ContractValidationError("workflow_input_invalid");
+  };
+  return visit(input, 0) as StartWorkflowRunRequest["input"];
 }
 
 export function parseStartTurnRequest(input: unknown): StartTurnRequest {
