@@ -485,8 +485,11 @@ Gate 报告为通过。
   64 properties、总 canonical source 1 MiB；拒绝 prototype-like 注入、lone surrogate、非 canonical durable bytes 与 digest 漂移。
   DAG 最多 64 nodes / 256 edges，使用 UTF-8 byte-order 稳定拓扑排序；roots/terminals 必须诚实，terminal 必须为 Verification，且
   verifier 不能与任一上游 Agent/Verifier 相同。compiler、immutable digest 与 2 MiB durable codec 已完成，Domain `96/96` 与 typecheck
-  通过。本阶段仍只是领域基础；Store/Application/Control/Runtime production integration 正在独立 worktree 中推进，不能据此宣告 Workflow
-  已可运行。
+  通过。`628eccef9..c7c7165ba` 又接入 Memory/SQLite/PostgreSQL immutable WorkflowVersion authority、Application publish/get/list、
+  existing-schema physical shape gate，以及 Runtime Worker 的 frozen version load、stable ready-node 计算和并行分支结算。主分支证据为 Store
+  `303 pass + 51 environment-conditional skip`、Application `121/121`、Runtime Worker `277 pass + 1 skip`，并全部通过 typecheck。
+  生产 Control API composition、Run 对 WorkflowVersion 的完整冻结绑定和完整 DAG executor 仍未接通，因此这仍是 production foundation，
+  不能据此宣告 Workflow 已可由用户端到端运行。
 - raw Native Tool 的 Device production wiring 由 `c2f1b9ca9` 接通：`workspace.read_file.raw_tool.v0` 现在通过专用 Tool journal、receipt、event
   与 cumulative ACK authority 执行只读 stable-handle read，既有 `workspace.read_file.v0` wire 保持不变。Hello 的跨 authority ACK 总量上限为 256，重连
   execution 上限为 64；超过上限直接终止 session，不做静默截断。`3c4a43af1` 进一步让 active cancel map 已释放后的 late cancellation 仍查询
@@ -500,12 +503,19 @@ Gate 报告为通过。
 - AR-043 阶段提交 `96f4c80a1` 统一 Rust HTTP/WebSocket 与 TS Direct/WebSocket 的 `x-codex-turn-state` grammar：唯一、visible ASCII、禁止
   comma、1..=4096 bytes，重复、冲突、非法与超限值全部 fail closed。TS state 按 Run ID 隔离；WebSocket incremental baseline 与 socket
   不能跨 Run 复用；无状态 prewarm 仍可由首个 Run 认领，prewarm 收到未绑定 state 时丢弃连接并由首个 Run 重新握手。Resilient transport 的
-  WS→HTTP fallback 共享同一 Run state authority。当前 64-Run capacity 只是长生命周期 AgentVersion transport 的临时有界保护，不是最终
-  retention 策略；durable Run/Attempt authority、sample/Tool boundary 原子提交、crash replay 与 terminal release 正在独立 worktree 中实现。
-- 本阶段主工作树组合验证全部以 0 退出：Agent Responses `73/73`、Contracts `78/78`、Domain `96/96`；Store
-  `290 pass + 50 environment-conditional skip`；Device Protocol `3/3`、Device Journal `28/28`、Device `33/33`、Device Runtime `23/23`、
-  Rust API `137/137`、Tauri `107/107`。上述 TypeScript 包及 Runtime Worker、Application 均通过各自 test/typecheck 命令。PostgreSQL 条件项
-  因未配置 `CREWON_TEST_POSTGRES_URL` 明确记为 skip，没有计作通过；仓库级完整 Rust `just test` 未运行。
+  WS→HTTP fallback 共享同一 Run state authority。`691169535..b853a5373` 将 state 接入 durable RunAttempt：HTTP response header 或 WebSocket
+  upgrade 一旦观察到 state，必须先等待 private Store sink 成功，body/frame 才能进入 Kernel；state 不生成 AgentEvent、RunEvent、模型历史、
+  ProviderCheckpoint 或日志。Memory/SQLite/PostgreSQL authority 以 run/attempt/lease exact fence 原子写入，重复相同 state 不漂移 `updatedAt`，
+  多个冲突 state 或 stored corruption fail closed。Worker 重新实例化后会从 Store 恢复 state，sample、Tool、terminal/cancel/error 和 iterator
+  提前释放边界均有覆盖；private sink 的任意原始错误禁止 sampling retry 和 WS→HTTP fallback。长生命周期 transport Map 现在只是运行中缓存，
+  durable Store 才是恢复 authority，terminal path 会释放缓存。
+- packaged Runtime Worker bootstrap 由 `fc89f6b0c` 加固为单行凭据协议；第一次读取后仍持续监视 stdin，延迟到达的非空输入会 fatal exit，
+  后续 chunk 会清零，不允许把多条 secret 或控制输入悄悄留在 sidecar 进程中。
+- 本阶段最新主工作树组合验证全部以 0 退出：Agent Responses `77/77`、Agent Kernel `31/31`、Domain `96/96`、Application `121/121`；
+  Store `303 pass + 51 environment-conditional skip`；Runtime Worker `277 pass + 1 skip`。上述 TypeScript 包全部通过各自 typecheck。
+  先前 Rust focused 证据仍为 Device Protocol `3/3`、Device Journal `28/28`、Device `33/33`、Device Runtime `23/23`、Rust API
+  `137/137`、Tauri `107/107`。PostgreSQL 条件项因未配置 `CREWON_TEST_POSTGRES_URL` 明确记为 skip，没有计作通过；仓库级完整 Rust
+  `just test` 未运行。
 
 ## 尚未关闭的完整迁移 Gate
 
@@ -514,10 +524,10 @@ Gate 报告为通过。
 - updater 私钥、Apple signing/notarization、DMG 与发布凭据。
 - 本轮没有 PostgreSQL URL，因此 56 个 Store / Gateway / Worker / Control 条件测试没有被报告为通过；Team 仍需真实 Identity/PIM、
   跨副本 quota/rate、backup/restore、network partition/chaos 与 rolling compatibility 证据。
-- WorkflowVersion 的 Store/Application/Control/Runtime production integration、Office/Human Gate、Memory、Resource/PIM、真实 packaged
+- WorkflowVersion 的 production Control composition、Run frozen binding 与完整 DAG executor，Office/Human Gate、Memory、Resource/PIM、真实 packaged
   keyring + controlled remote TLS MCP、plugin/skill、Config 与 legacy app-server cutover 仍需后续纵切。
-- AR-043 仍需 durable Run/Attempt continuation、跨进程 crash replay、terminal cache release，以及与 sample/Tool boundary 的原子性证据；
-  当前有界 transport Map 不能作为最终 authority。
+- AR-043 的代码级 parity 已由 durable RunAttempt、Worker 重建 replay 和 transport-before-stream gate 关闭；真实 provider endpoint 下的 OS 进程
+  kill/restart 仍作为 packaged production acceptance 保留，但 transport Map 已不再是恢复 authority。
 - Rust core 只运行了与本轮变更对应的 focused suite；仓库级完整 `just test` 仍须按仓库规则单独获准后运行。
 
 因此本轮证明的是基础 Agent P0 completed-item 边界和 Native Workspace 四进程纵切已在当前分支落地，而不是完整产品迁移或生产发布已经完成。
