@@ -12,3 +12,5 @@ export * from "./thread-goal.ts";
 export * from "./thread-goal-event.ts";
 export * from "./tool-approval.ts";
 export * from "./tool-execution-receipt.ts";
+export * from "./workflow-schema.ts";
+export * from "./workflow-version-error.ts";
