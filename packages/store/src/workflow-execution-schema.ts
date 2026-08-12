@@ -13,9 +13,7 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
     .prepare("SELECT version FROM workflow_execution_schema WHERE singleton=1")
     .get() as { version: number } | undefined;
   if (stored && stored.version > SCHEMA_VERSION)
-    throw new RunStoreError(
-      "workflow_execution_schema_too_new",
-    );
+    throw new RunStoreError("workflow_execution_schema_too_new");
   if (!stored) {
     database.exec(sqliteTables);
     database
@@ -26,7 +24,9 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
       "ALTER TABLE workflow_execution_receipts ADD COLUMN result_json TEXT CHECK (result_json IS NULL OR json_valid(result_json))",
     );
     database
-      .prepare("UPDATE workflow_execution_schema SET version=? WHERE singleton=1")
+      .prepare(
+        "UPDATE workflow_execution_schema SET version=? WHERE singleton=1",
+      )
       .run(SCHEMA_VERSION);
   }
   assertSqliteShape(database);
@@ -45,9 +45,7 @@ export async function migratePostgresWorkflowExecutions(
   );
   const version = stored.rows[0]?.version;
   if (version !== undefined && version > SCHEMA_VERSION)
-    throw new RunStoreError(
-      "workflow_execution_schema_too_new",
-    );
+    throw new RunStoreError("workflow_execution_schema_too_new");
   if (version === undefined) {
     await client.query(postgresTables(schema));
     await client.query(
@@ -83,7 +81,6 @@ const sqliteTables = `CREATE TABLE workflow_executions (
   run_id TEXT NOT NULL,
   revision INTEGER NOT NULL CHECK (revision >= 1),
   state_json TEXT NOT NULL CHECK (json_valid(state_json)),
-  result_json TEXT CHECK (result_json IS NULL OR json_valid(result_json)),
   updated_at TEXT NOT NULL,
   PRIMARY KEY (tenant_id, run_id)
 ) STRICT;
@@ -93,6 +90,7 @@ CREATE TABLE workflow_execution_receipts (
   operation_id TEXT NOT NULL,
   fingerprint TEXT NOT NULL,
   state_json TEXT NOT NULL CHECK (json_valid(state_json)),
+  result_json TEXT CHECK (result_json IS NULL OR json_valid(result_json)),
   PRIMARY KEY (tenant_id, run_id, operation_id),
   FOREIGN KEY (tenant_id, run_id) REFERENCES workflow_executions(tenant_id, run_id)
 ) STRICT;`;
@@ -114,7 +112,6 @@ const sqliteColumns = {
     "run_id",
     "revision",
     "state_json",
-    "result_json",
     "updated_at",
   ],
   workflow_execution_receipts: [
@@ -123,6 +120,7 @@ const sqliteColumns = {
     "operation_id",
     "fingerprint",
     "state_json",
+    "result_json",
   ],
 } as const;
 

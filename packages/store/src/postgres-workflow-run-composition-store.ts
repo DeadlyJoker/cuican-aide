@@ -5,7 +5,11 @@ import {
 import type { WorkflowContentDigester } from "@crewon/domain";
 import type { PoolClient } from "pg";
 
-import { beginPostgresRunAttempt, loadPostgresRunStep } from "./postgres-execution-authority.ts";
+import {
+  beginPostgresRunAttempt,
+  loadPostgresRunAttempt,
+  loadPostgresRunStep,
+} from "./postgres-execution-authority.ts";
 import { PostgresAttemptStore } from "./postgres-attempt-store.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
 import type { PostgresThreadStoreOptions } from "./postgres-thread-store.ts";
@@ -60,9 +64,10 @@ export class PostgresWorkflowRunCompositionStore
     try {
       await migratePostgresWorkflowVersions(client, this.schemaSql());
       await client.query("BEGIN");
-      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
-        `crewon:${this.schema}:workflow-composition`,
-      ]);
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+        [`crewon:${this.schema}:workflow-composition`],
+      );
       await migratePostgresWorkflowExecutions(client, this.schemaSql());
       await client.query("COMMIT");
     } catch (error) {
@@ -76,14 +81,23 @@ export class PostgresWorkflowRunCompositionStore
   async admitWorkflowNodes(
     input: Parameters<WorkflowRunCompositionStore["admitWorkflowNodes"]>[0],
   ): Promise<WorkflowCompositionResult> {
-    const fingerprint = compositionFingerprint({ ...input, digester: this.#digester });
+    const fingerprint = compositionFingerprint({
+      ...input,
+      digester: this.#digester,
+    });
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      await client.query("SELECT pg_advisory_xact_lock(hashtextextended($1,0))", [
-        `workflow:${input.tenantId}:${input.runId}`,
-      ]);
-      await this.validateExecutionLeaseWithin(client, input.tenantId, input.runId, input.lease);
+      await client.query(
+        "SELECT pg_advisory_xact_lock(hashtextextended($1,0))",
+        [`workflow:${input.tenantId}:${input.runId}`],
+      );
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.tenantId,
+        input.runId,
+        input.lease,
+      );
       const run = await this.loadRunWithin(
         client,
         { tenantId: input.tenantId, runId: input.runId },
@@ -94,7 +108,8 @@ export class PostgresWorkflowRunCompositionStore
         run.purpose !== "workflow" ||
         run.status !== "running" ||
         run.workflowVersionBinding?.workflowId !== input.binding.workflowId ||
-        run.workflowVersionBinding.workflowVersionId !== input.binding.workflowVersionId ||
+        run.workflowVersionBinding.workflowVersionId !==
+          input.binding.workflowVersionId ||
         run.workflowVersionBinding.contentDigest !== input.binding.contentDigest
       )
         throw new RunStoreError("workflow_composition_run_authority_mismatch");
@@ -106,7 +121,11 @@ export class PostgresWorkflowRunCompositionStore
       const definitionJson = workflowResult.rows[0]?.definition_json;
       if (definitionJson === undefined)
         throw new RunStoreError("workflow_composition_version_not_found");
-      const workflow = parseBoundWorkflow(definitionJson, input.binding, this.#digester);
+      const workflow = parseBoundWorkflow(
+        definitionJson,
+        input.binding,
+        this.#digester,
+      );
       const receiptResult = await client.query<{
         fingerprint: string;
         result_json: unknown | null;
@@ -122,10 +141,45 @@ export class PostgresWorkflowRunCompositionStore
           throw new RunStoreError("workflow_composition_idempotency_conflict");
         const result = receipt.result_json as WorkflowCompositionResult;
         validateWorkflowExecutionState(result.execution);
-        assertExecutionBinding(result.execution, input.tenantId, input.runId, input.binding, workflow);
+        assertExecutionBinding(
+          result.execution,
+          input.tenantId,
+          input.runId,
+          input.binding,
+          workflow,
+        );
         if (!Array.isArray(result.admissions))
           throw new RunStoreError("workflow_composition_receipt_corrupt");
-        await this.validateExecutionLeaseWithin(client, input.tenantId, input.runId, input.lease);
+        for (const admission of result.admissions) {
+          const locator = {
+            tenantId: input.tenantId,
+            runId: input.runId,
+            stepId: admission.claim.node.nodeId,
+          };
+          const step = await loadPostgresRunStep(
+            client,
+            this.schemaSql(),
+            locator,
+            true,
+          );
+          const attempt =
+            admission.attempt === null
+              ? null
+              : await loadPostgresRunAttempt(
+                  client,
+                  this.schemaSql(),
+                  { ...locator, attemptId: admission.attempt.attemptId },
+                  true,
+                );
+          if (step === null || (admission.attempt !== null && attempt === null))
+            throw new RunStoreError("workflow_composition_receipt_corrupt");
+        }
+        await this.validateExecutionLeaseWithin(
+          client,
+          input.tenantId,
+          input.runId,
+          input.lease,
+        );
         await client.query("COMMIT");
         return structuredClone(result);
       }
@@ -134,7 +188,12 @@ export class PostgresWorkflowRunCompositionStore
         "SELECT clock_timestamp() AS now",
       );
       const now = new Date(nowResult.rows[0]!.now).toISOString();
-      let execution = await loadExecution(client, this.schemaSql(), input.tenantId, input.runId);
+      let execution = await loadExecution(
+        client,
+        this.schemaSql(),
+        input.tenantId,
+        input.runId,
+      );
       if (execution === null) {
         execution = initialExecution({
           tenantId: input.tenantId,
@@ -148,7 +207,13 @@ export class PostgresWorkflowRunCompositionStore
           [input.tenantId, input.runId, 1, execution, now],
         );
       }
-      assertExecutionBinding(execution, input.tenantId, input.runId, input.binding, workflow);
+      assertExecutionBinding(
+        execution,
+        input.tenantId,
+        input.runId,
+        input.binding,
+        workflow,
+      );
       const claimed = claimReadyNodes({
         execution,
         workflow,
@@ -163,7 +228,11 @@ export class PostgresWorkflowRunCompositionStore
           const existing = await loadPostgresRunStep(
             client,
             this.schemaSql(),
-            { tenantId: input.tenantId, runId: input.runId, stepId: claim.node.nodeId },
+            {
+              tenantId: input.tenantId,
+              runId: input.runId,
+              stepId: claim.node.nodeId,
+            },
             true,
           );
           if (existing !== null)
@@ -179,20 +248,46 @@ export class PostgresWorkflowRunCompositionStore
              (tenant_id,run_id,step_id,kind,status,revision,current_attempt_id,
               attempt_count,state_json,created_at,updated_at,terminal_at)
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-            [step.tenantId, step.runId, step.stepId, step.kind, step.status, 1, null, 0, step, now, now, null],
+            [
+              step.tenantId,
+              step.runId,
+              step.stepId,
+              step.kind,
+              step.status,
+              1,
+              null,
+              0,
+              step,
+              now,
+              now,
+              null,
+            ],
           );
           admissions.push({ claim, step, attempt: null });
         } else {
-          const started = await beginPostgresRunAttempt(client, this.schemaSql(), {
-            tenantId: input.tenantId,
-            runId: input.runId,
-            lease: input.lease,
-            stepId: claim.node.nodeId,
-            kind: claim.node.kind === "verification" ? "verification" : "agent",
-            attemptId: attemptId(input.schedulerOperationId, claim.node.nodeId, this.#digester),
-            startedAt: now,
+          const started = await beginPostgresRunAttempt(
+            client,
+            this.schemaSql(),
+            {
+              tenantId: input.tenantId,
+              runId: input.runId,
+              lease: input.lease,
+              stepId: claim.node.nodeId,
+              kind:
+                claim.node.kind === "verification" ? "verification" : "agent",
+              attemptId: attemptId(
+                input.schedulerOperationId,
+                claim.node.nodeId,
+                this.#digester,
+              ),
+              startedAt: now,
+            },
+          );
+          admissions.push({
+            claim,
+            step: started.step,
+            attempt: started.attempt,
           });
-          admissions.push({ claim, step: started.step, attempt: started.attempt });
         }
       }
       execution = claimed.execution;
@@ -202,14 +297,29 @@ export class PostgresWorkflowRunCompositionStore
          SET revision=$1,state_json=$2,updated_at=$3 WHERE tenant_id=$4 AND run_id=$5`,
         [execution.revision, execution, now, input.tenantId, input.runId],
       );
-      const result = { execution, admissions } satisfies WorkflowCompositionResult;
+      const result = {
+        execution,
+        admissions,
+      } satisfies WorkflowCompositionResult;
       await client.query(
         `INSERT INTO ${this.schemaSql()}.workflow_execution_receipts
          (tenant_id,run_id,operation_id,fingerprint,state_json,result_json)
          VALUES ($1,$2,$3,$4,$5,$6)`,
-        [input.tenantId, input.runId, input.schedulerOperationId, fingerprint, execution, result],
+        [
+          input.tenantId,
+          input.runId,
+          input.schedulerOperationId,
+          fingerprint,
+          execution,
+          result,
+        ],
       );
-      await this.validateExecutionLeaseWithin(client, input.tenantId, input.runId, input.lease);
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.tenantId,
+        input.runId,
+        input.lease,
+      );
       await client.query("COMMIT");
       return structuredClone(result);
     } catch (error) {

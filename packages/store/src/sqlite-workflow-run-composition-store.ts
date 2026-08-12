@@ -5,8 +5,16 @@ import {
 } from "@crewon/application";
 import type { RunState, WorkflowContentDigester } from "@crewon/domain";
 
-import { readLeaseClock, SystemLeaseClock, type LeaseClock } from "./lease-clock.ts";
-import { beginSqliteRunAttempt, loadSqliteRunStep } from "./sqlite-execution-authority.ts";
+import {
+  readLeaseClock,
+  SystemLeaseClock,
+  type LeaseClock,
+} from "./lease-clock.ts";
+import {
+  beginSqliteRunAttempt,
+  loadSqliteRunAttempt,
+  loadSqliteRunStep,
+} from "./sqlite-execution-authority.ts";
 import { configureAndMigrateSqlite, rollback } from "./sqlite-schema.ts";
 import { stableJson } from "./store-invariants.ts";
 import { normalizeStoredRunState } from "./stored-run-state.ts";
@@ -43,10 +51,15 @@ export class SqliteWorkflowRunCompositionStore
 
   constructor(database: DatabaseSync, dependencies: Dependencies);
   constructor(path: string, dependencies: Dependencies);
-  constructor(databaseOrPath: DatabaseSync | string, dependencies: Dependencies) {
+  constructor(
+    databaseOrPath: DatabaseSync | string,
+    dependencies: Dependencies,
+  ) {
     this.#database =
       typeof databaseOrPath === "string"
-        ? new DatabaseSync(databaseOrPath, { enableForeignKeyConstraints: true })
+        ? new DatabaseSync(databaseOrPath, {
+            enableForeignKeyConstraints: true,
+          })
         : databaseOrPath;
     this.#ownsDatabase = typeof databaseOrPath === "string";
     this.#digester = dependencies.digester;
@@ -65,7 +78,10 @@ export class SqliteWorkflowRunCompositionStore
   ): Promise<WorkflowCompositionResult> {
     const nowMs = readLeaseClock(this.#clock);
     const now = new Date(nowMs).toISOString();
-    const fingerprint = compositionFingerprint({ ...input, digester: this.#digester });
+    const fingerprint = compositionFingerprint({
+      ...input,
+      digester: this.#digester,
+    });
     try {
       this.#database.exec("BEGIN IMMEDIATE");
       this.#validateLease(input, nowMs);
@@ -97,8 +113,27 @@ export class SqliteWorkflowRunCompositionStore
       if (receipt !== undefined) {
         if (receipt.fingerprint !== fingerprint || receipt.result_json === null)
           throw new RunStoreError("workflow_composition_idempotency_conflict");
-        const result = JSON.parse(receipt.result_json) as WorkflowCompositionResult;
+        const result = JSON.parse(
+          receipt.result_json,
+        ) as WorkflowCompositionResult;
         validateCompositionReplay(result, input, workflow);
+        for (const admission of result.admissions) {
+          const locator = {
+            tenantId: input.tenantId,
+            runId: input.runId,
+            stepId: admission.claim.node.nodeId,
+          };
+          const step = loadSqliteRunStep(this.#database, locator);
+          const attempt =
+            admission.attempt === null
+              ? null
+              : loadSqliteRunAttempt(this.#database, {
+                  ...locator,
+                  attemptId: admission.attempt.attemptId,
+                });
+          if (step === null || (admission.attempt !== null && attempt === null))
+            throw new RunStoreError("workflow_composition_receipt_corrupt");
+        }
         this.#validateLease(input, nowMs);
         this.#database.exec("COMMIT");
         return structuredClone(result);
@@ -119,7 +154,13 @@ export class SqliteWorkflowRunCompositionStore
           )
           .run(input.tenantId, input.runId, 1, stableJson(execution), now);
       }
-      assertExecutionBinding(execution, input.tenantId, input.runId, input.binding, workflow);
+      assertExecutionBinding(
+        execution,
+        input.tenantId,
+        input.runId,
+        input.binding,
+        workflow,
+      );
       const claimed = claimReadyNodes({
         execution,
         workflow,
@@ -180,7 +221,11 @@ export class SqliteWorkflowRunCompositionStore
             ),
             startedAt: now,
           });
-          admissions.push({ claim, step: started.step, attempt: started.attempt });
+          admissions.push({
+            claim,
+            step: started.step,
+            attempt: started.attempt,
+          });
         }
       }
       execution = claimed.execution;
@@ -190,8 +235,17 @@ export class SqliteWorkflowRunCompositionStore
           `UPDATE workflow_executions SET revision=?,state_json=?,updated_at=?
            WHERE tenant_id=? AND run_id=?`,
         )
-        .run(execution.revision, stableJson(execution), now, input.tenantId, input.runId);
-      const result = { execution, admissions } satisfies WorkflowCompositionResult;
+        .run(
+          execution.revision,
+          stableJson(execution),
+          now,
+          input.tenantId,
+          input.runId,
+        );
+      const result = {
+        execution,
+        admissions,
+      } satisfies WorkflowCompositionResult;
       this.#database
         .prepare(
           `INSERT INTO workflow_execution_receipts
@@ -239,37 +293,53 @@ export class SqliteWorkflowRunCompositionStore
       row.lease_epoch !== input.lease.leaseEpoch
     )
       throw new RunStoreError("stale_lease");
-    if (typeof row.lease_expires_at_ms !== "number" || row.lease_expires_at_ms <= nowMs)
+    if (
+      typeof row.lease_expires_at_ms !== "number" ||
+      row.lease_expires_at_ms <= nowMs
+    )
       throw new RunStoreError("lease_expired");
   }
 
   #loadRun(tenantId: string, runId: string): RunState | null {
     const row = this.#database
-      .prepare("SELECT state_json FROM run_snapshots WHERE tenant_id=? AND run_id=?")
+      .prepare(
+        "SELECT state_json FROM run_snapshots WHERE tenant_id=? AND run_id=?",
+      )
       .get(tenantId, runId) as { state_json: string } | undefined;
     return row === undefined
       ? null
-      : normalizeStoredRunState(JSON.parse(row.state_json) as RunState, "stored_run_invalid");
+      : normalizeStoredRunState(
+          JSON.parse(row.state_json) as RunState,
+          "stored_run_invalid",
+        );
   }
 
   #loadExecution(tenantId: string, runId: string) {
     const row = this.#database
-      .prepare("SELECT state_json FROM workflow_executions WHERE tenant_id=? AND run_id=?")
+      .prepare(
+        "SELECT state_json FROM workflow_executions WHERE tenant_id=? AND run_id=?",
+      )
       .get(tenantId, runId) as { state_json: string } | undefined;
-    return row === undefined ? null : decodeWorkflowExecutionState(row.state_json);
+    return row === undefined
+      ? null
+      : decodeWorkflowExecutionState(row.state_json);
   }
 }
 
 function assertCanonicalRun(
   run: RunState | null,
-  binding: Parameters<WorkflowRunCompositionStore["admitWorkflowNodes"]>[0]["binding"],
+  binding: Parameters<
+    WorkflowRunCompositionStore["admitWorkflowNodes"]
+  >[0]["binding"],
 ): void {
-  if (run === null) throw new RunStoreError("workflow_composition_run_not_found");
+  if (run === null)
+    throw new RunStoreError("workflow_composition_run_not_found");
   if (
     run.purpose !== "workflow" ||
     run.status !== "running" ||
     run.workflowVersionBinding?.workflowId !== binding.workflowId ||
-    run.workflowVersionBinding.workflowVersionId !== binding.workflowVersionId ||
+    run.workflowVersionBinding.workflowVersionId !==
+      binding.workflowVersionId ||
     run.workflowVersionBinding.contentDigest !== binding.contentDigest
   )
     throw new RunStoreError("workflow_composition_run_authority_mismatch");
@@ -281,7 +351,13 @@ function validateCompositionReplay(
   workflow: import("@crewon/domain").CompiledWorkflowVersion,
 ): void {
   validateWorkflowExecutionState(result.execution);
-  assertExecutionBinding(result.execution, input.tenantId, input.runId, input.binding, workflow);
+  assertExecutionBinding(
+    result.execution,
+    input.tenantId,
+    input.runId,
+    input.binding,
+    workflow,
+  );
   if (!Array.isArray(result.admissions))
     throw new RunStoreError("workflow_composition_receipt_corrupt");
 }

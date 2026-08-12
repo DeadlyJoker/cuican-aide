@@ -1,4 +1,7 @@
-import { RunStoreError, type WorkflowNodeAttemptAdmission } from "@crewon/application";
+import {
+  RunStoreError,
+  type WorkflowNodeAttemptAdmission,
+} from "@crewon/application";
 import {
   parseCompiledWorkflowVersion,
   type CompiledWorkflowVersion,
@@ -132,7 +135,10 @@ export function claimReadyNodes(input: {
   execution: WorkflowExecutionState;
   claims: readonly import("@crewon/application").WorkflowNodeClaim[];
 }> {
-  if (!Number.isSafeInteger(input.leaseDurationMs) || input.leaseDurationMs <= 0)
+  if (
+    !Number.isSafeInteger(input.leaseDurationMs) ||
+    input.leaseDurationMs <= 0
+  )
     throw new RunStoreError("workflow_composition_lease_duration_invalid");
   const nowMs = Date.parse(input.now);
   const recovered = input.execution.nodes.map((node) =>
@@ -163,7 +169,9 @@ export function claimReadyNodes(input: {
   const expiresAt = new Date(nowMs + input.leaseDurationMs).toISOString();
   const nodes = recovered.map((state) => {
     if (!ready.has(state.nodeId)) return state;
-    const node = input.workflow.nodes.find((item) => item.nodeId === state.nodeId)!;
+    const node = input.workflow.nodes.find(
+      (item) => item.nodeId === state.nodeId,
+    )!;
     const claimId = derivedId(input, state.nodeId, "claim");
     const gateRequestId =
       node.kind === "humanGate" ? derivedId(input, state.nodeId, "gate") : null;
@@ -196,16 +204,23 @@ export function claimReadyNodes(input: {
       inputDigest,
     } satisfies WorkflowExecutionNodeState;
   });
-  if (claims.length === 0 && nodes.every((node, index) => node === input.execution.nodes[index]))
+  if (
+    claims.length === 0 &&
+    nodes.every((node, index) => node === input.execution.nodes[index])
+  )
     return { execution: input.execution, claims };
   return {
     execution: {
       ...input.execution,
       revision: input.execution.revision + 1,
       nodes,
-      status: nodes.some((node) => node.status === "waitingHuman")
-        ? "waitingHuman"
-        : input.execution.status,
+      status:
+        nodes.some((node) => node.status === "waitingHuman") &&
+        !nodes.some(
+          (node) => node.status === "running" || node.status === "unknown",
+        )
+          ? "waitingHuman"
+          : input.execution.status,
       updatedAt: input.now,
     },
     claims,
@@ -237,7 +252,12 @@ export function gateStep(input: {
 export function compositionFingerprint(input: {
   tenantId: string;
   runId: string;
-  lease: { workItemId: string; ownerId: string; leaseId: string; leaseEpoch: number };
+  lease: {
+    workItemId: string;
+    ownerId: string;
+    leaseId: string;
+    leaseEpoch: number;
+  };
   binding: FrozenWorkflowVersionBinding;
   schedulerOperationId: string;
   leaseDurationMs: number;
