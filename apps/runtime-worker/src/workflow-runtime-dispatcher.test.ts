@@ -92,6 +92,29 @@ test("node admission replay performs zero duplicate side effects", async () => {
   assert.equal(fixture.settlements, 0);
 });
 
+test("settlement commit-before-return replay executes the Agent exactly once", async () => {
+  const fixture = composition();
+  fixture.loseFirstSettlementResponse = true;
+  let executeCount = 0;
+  const dispatcher = create(fixture.store, async () => {
+    executeCount += 1;
+    return { status: "completed", value: {} };
+  });
+
+  assert.deepEqual(await dispatcher.dispatch(input("node")), {
+    kind: "recovery",
+    runId: "r",
+    code: "workflow_settlement_result_unknown",
+  });
+  assert.deepEqual(await dispatcher.dispatch(input("node")), {
+    kind: "recovery",
+    runId: "r",
+    code: "workflow_node_admission_replayed",
+  });
+  assert.equal(executeCount, 1);
+  assert.equal(fixture.settlements, 1);
+});
+
 test("fresh sibling admissions pass actual values and settle independently", async () => {
   const left = composition();
   const right = composition();
@@ -200,6 +223,8 @@ function composition() {
     workflowInputs: [] as unknown[],
     nodeDisposition: "fresh" as "fresh" | "replay",
     failSettlement: false,
+    loseFirstSettlementResponse: false,
+    settlementCommitted: false,
     store: null as unknown as WorkflowRuntimeStore,
   };
   fixture.store = {
@@ -224,7 +249,7 @@ function composition() {
       };
     },
     async admitWorkflowNodeWork(input) {
-      if (fixture.nodeDisposition === "replay")
+      if (fixture.nodeDisposition === "replay" || fixture.settlementCommitted)
         return {
           disposition: "replay",
           execution: state(),
@@ -270,6 +295,9 @@ function composition() {
       fixture.settlements += 1;
       fixture.outcomes.push(input.outcome);
       if (fixture.failSettlement) throw new Error("commit unknown");
+      fixture.settlementCommitted = true;
+      if (fixture.loseFirstSettlementResponse)
+        throw new Error("response lost after commit");
       return {
         disposition: "settled",
         execution: state("completed"),
@@ -316,15 +344,33 @@ function composition() {
         runDisposition: "terminalConverged",
       };
     },
-    async loadWorkflowNodeContinuation() { return null; },
-    async commitWorkflowToolContinuation() { throw new Error("unused"); },
-    async commitWorkflowAssistantContinuation() { throw new Error("unused"); },
-    async settleWorkflowNodeModelTerminal() { throw new Error("unused"); },
-    async loadModelDispatchReceipt() { return null; },
-    async prepareModelDispatch() { throw new Error("unused"); },
-    async markModelDispatchPossiblySent() { throw new Error("unused"); },
-    async observeModelDispatchResponse() { throw new Error("unused"); },
-    async terminateModelDispatch() { throw new Error("unused"); },
+    async loadWorkflowNodeContinuation() {
+      return null;
+    },
+    async commitWorkflowToolContinuation() {
+      throw new Error("unused");
+    },
+    async commitWorkflowAssistantContinuation() {
+      throw new Error("unused");
+    },
+    async settleWorkflowNodeModelTerminal() {
+      throw new Error("unused");
+    },
+    async loadModelDispatchReceipt() {
+      return null;
+    },
+    async prepareModelDispatch() {
+      throw new Error("unused");
+    },
+    async markModelDispatchPossiblySent() {
+      throw new Error("unused");
+    },
+    async observeModelDispatchResponse() {
+      throw new Error("unused");
+    },
+    async terminateModelDispatch() {
+      throw new Error("unused");
+    },
   };
   return fixture;
 }
@@ -373,13 +419,13 @@ function input(kind: "scheduler" | "node" | "reconcile", claimId = "claim-1") {
         }
       : kind === "node"
         ? {
-          schemaVersion: "crewon.workflow-node-work-item.v0",
-          trigger: "workflowNode",
-          binding,
-          nodeId: "a",
-          claimId,
-          claimEpoch: 1,
-          schedulerOperationId: "schedule-1",
+            schemaVersion: "crewon.workflow-node-work-item.v0",
+            trigger: "workflowNode",
+            binding,
+            nodeId: "a",
+            claimId,
+            claimEpoch: 1,
+            schedulerOperationId: "schedule-1",
           }
         : {
             schemaVersion: "crewon.workflow-reconcile-work-item.v0",
