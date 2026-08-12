@@ -388,7 +388,11 @@ async function registerRelease(
       activationId: `activation-${digestCharacter}`,
       previousReleaseId:
         digestCharacter === "a" ? null : `sha256:${"a".repeat(64)}`,
-      operator: actor(),
+      operator: {
+        actorId: "actor-1",
+        principalId: "principal-1",
+        spaceId: "space-1",
+      },
       activatedAt: "2026-08-12T00:00:00Z",
     },
   };
