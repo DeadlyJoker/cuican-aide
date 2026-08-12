@@ -8,10 +8,20 @@ import type {
   IdempotencyDescriptor,
 } from "./run-store-port.ts";
 import type { WorkflowVersionAsset } from "./workflow-version-store-port.ts";
+import type {
+  ActiveAgentVersionRelease,
+} from "./agent-version-release-store-port.ts";
+import type { AgentVersionDeployment } from "./agent-version-deployment-store-port.ts";
 
 export type WorkflowRunAdmissionAuthority = Readonly<{
   workflowVersion: WorkflowVersionAsset;
   route: RunRoute;
+}>;
+
+export type WorkflowRunRouteAuthority = Readonly<{
+  workflowVersion: WorkflowVersionAsset;
+  activeRelease: ActiveAgentVersionRelease;
+  deployments: readonly AgentVersionDeployment[];
 }>;
 
 export type CommitWorkflowRunStartInput = Readonly<{
@@ -21,6 +31,7 @@ export type CommitWorkflowRunStartInput = Readonly<{
   workflowVersionId: string;
   workflowInput: JsonValue;
   idempotency: IdempotencyDescriptor;
+  resolveRoute: (authority: WorkflowRunRouteAuthority) => RunRoute;
   prepare: (authority: WorkflowRunAdmissionAuthority) => Readonly<{
     commit: CommitRunInput;
     workflowInputValue: WorkflowRunInputAuthority;
