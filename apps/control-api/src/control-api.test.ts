@@ -2515,6 +2515,36 @@ test("projects provider continuation metadata in client and audit views", () => 
   assert.deepEqual(projectRunEventForView(event, "audit"), expected);
 });
 
+test("keeps internal Workflow node authority out of public Run event views", () => {
+  const event = {
+    schemaVersion: "crewon.run-event.v0",
+    identity: { runId: "workflow-run" },
+    eventId: "workflow-node-terminal",
+    sequence: 5,
+    occurredAt: "2026-08-13T00:00:05Z",
+    type: "workflow.node.terminal",
+    data: {
+      binding: {
+        workflowId: "workflow",
+        workflowVersionId: "workflow-v1",
+        contentDigest: `sha256:${"a".repeat(64)}`,
+      },
+      nodeId: "agent",
+      claimId: "claim-1",
+      claimEpoch: 1,
+      stepId: "step-1",
+      attemptId: "attempt-1",
+      status: "completed",
+      outputRef: "value-1",
+      outputDigest: `sha256:${"b".repeat(64)}`,
+      failureCode: null,
+    },
+  } as Extract<RunLifecycleEvent, { type: "workflow.node.terminal" }>;
+
+  assert.equal(projectRunEventForView(event, "client"), null);
+  assert.equal(projectRunEventForView(event, "audit"), null);
+});
+
 async function testRuntime(
   context: TestContext,
   options: Readonly<{

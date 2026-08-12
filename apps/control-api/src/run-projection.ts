@@ -246,6 +246,12 @@ export function projectRunEventForView(
   event: RunLifecycleEvent,
   view: RunEventViewMode,
 ): RunEventView | null {
+  // Store-internal Workflow authority evidence is intentionally not part of
+  // the public Run event contract. The canonical Run terminal event that
+  // follows it remains visible in both views.
+  if (event.type === "workflow.node.terminal") {
+    return null;
+  }
   if (
     view === "client" &&
     event.type === "model.sampling.retry" &&
