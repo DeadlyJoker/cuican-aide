@@ -69,7 +69,8 @@ import type {
 import { PlanOutputError, parseProposedPlan } from "./plan-output.ts";
 import { goalToolsForRun, isGoalToolCall } from "./goal-tools.ts";
 import { replaceChangedToolApproval } from "./tool-approval-replacement.ts";
-import { AgentSegmentStateMachine } from "./agent-segment-state-machine.ts";
+import { AgentSegmentExecutionEngine } from "./agent-segment-execution-engine.ts";
+import type { AgentSegmentStateMachine } from "./agent-segment-state-machine.ts";
 import type { WorkflowRuntimeDispatcherPort } from "./workflow-runtime-dispatcher.ts";
 
 export type { RuntimeWorkerScheduler } from "./runtime-worker-watchers.ts";
@@ -885,13 +886,15 @@ export class RuntimeWorker {
     );
     heartbeat.start();
     cancellationWatcher.start();
-    const segment = new AgentSegmentStateMachine(providerTurnState);
+    const segmentEngine = new AgentSegmentExecutionEngine();
+    let segment: AgentSegmentStateMachine | null = null;
     let activeDispatchReceipt: ModelDispatchReceipt | null = null;
     let toolBoundaryCompleted = false;
     let toolBoundaryOutcome: RuntimeWorkerOutcome | null = null;
     try {
-      for await (const event of runtime.kernel.runSegment(
-        {
+      const executed = await segmentEngine.execute({
+        kernel: runtime.kernel,
+        contract: {
           schemaVersion: "crewon.agent-segment.v0",
           purpose: "agent",
           runId: run.runId,
@@ -921,113 +924,113 @@ export class RuntimeWorker {
           ...(providerTurnState === null ? {} : { providerTurnState }),
           budget: { maxOutputBytes: 32 * 1024 },
         },
-        controller.signal,
-        {
-          controlSink: {
-            modelRequestPrepared: async (evidence) => {
-              if (dispatchEvidenceStore === null) return;
-              activeDispatchReceipt =
-                await dispatchEvidenceStore.prepareModelDispatch({
-                  tenantId: run.tenantId,
-                  runId: run.runId,
-                  lease: leaseInput(claim),
-                  attempt,
-                  operationId: evidence.operationId,
-                  requestSequence: evidence.requestSequence,
-                  operation: evidence.operation,
-                  requestDigest: evidence.requestDigest,
-                  provider: evidence.provider,
-                  preparedAt: new Date().toISOString(),
-                });
-            },
-            dispatchBoundaryCrossed: async (evidence) => {
-              if (dispatchEvidenceStore === null) return;
-              if (
-                activeDispatchReceipt === null ||
-                activeDispatchReceipt.requestSequence !==
-                  evidence.requestSequence ||
-                activeDispatchReceipt.operationId !== evidence.operationId ||
-                activeDispatchReceipt.requestDigest !== evidence.requestDigest
-              ) {
-                throw new AgentKernelError(
-                  "model_dispatch_preparation_missing",
-                  false,
-                );
-              }
-              activeDispatchReceipt =
-                await dispatchEvidenceStore.markModelDispatchPossiblySent({
-                  tenantId: run.tenantId,
-                  runId: run.runId,
-                  lease: leaseInput(claim),
-                  attempt,
-                  operationId: evidence.operationId,
-                  requestSequence: evidence.requestSequence,
-                  expectedRevision: activeDispatchReceipt.revision,
-                  transitionedAt: new Date().toISOString(),
-                });
-            },
-            providerTurnStateObserved: async (observedProviderTurnState) => {
-              await this.#execution.recordProviderTurnState(
-                claim,
-                attempt,
-                observedProviderTurnState,
+        signal: controller.signal,
+        providerTurnState,
+        authority: {
+          renewLease: () => this.#renew(claim),
+          cancellationRequested: async () => {
+            run = await this.#execution.loadRun(claim);
+            return run.cancelRequested;
+          },
+          checkpointProviderResponse: async (checkpoint) => {
+            if (
+              dispatchEvidenceStore !== null &&
+              activeDispatchReceipt === null
+            ) {
+              throw new AgentKernelError(
+                "model_dispatch_preparation_missing",
+                false,
               );
-              providerTurnState = observedProviderTurnState;
-            },
+            }
+            await this.#execution.checkpointModelAttempt(
+              claim,
+              attempt,
+              checkpoint,
+              activeDispatchReceipt === null
+                ? undefined
+                : {
+                    requestSequence: activeDispatchReceipt.requestSequence,
+                    operationId: activeDispatchReceipt.operationId,
+                    expectedRevision: activeDispatchReceipt.revision,
+                  },
+            );
+            if (activeDispatchReceipt !== null) {
+              activeDispatchReceipt =
+                await dispatchEvidenceStore!.loadModelDispatchReceipt({
+                  tenantId: run.tenantId,
+                  runId: run.runId,
+                  ...attempt,
+                  operationId: activeDispatchReceipt.operationId,
+                });
+            }
+            await this.#afterProviderResponseCheckpointed?.();
+          },
+          persistImmediateEvent: async (event) => {
+            const persisted = await this.#execution.recordAgentEvent(
+              claim,
+              event,
+            );
+            run = persisted.state;
+          },
+          recordProviderTurnState: async (observedProviderTurnState) => {
+            await this.#execution.recordProviderTurnState(
+              claim,
+              attempt,
+              observedProviderTurnState,
+            );
+            providerTurnState = observedProviderTurnState;
           },
         },
-      )) {
-        await this.#renew(claim);
-        run = await this.#execution.loadRun(claim);
-        if (run.cancelRequested) {
-          controller.abort("user_requested");
-          return this.#cancel(claim, attempt);
-        }
-        const action = segment.accept(event);
-        if (action.kind === "checkpointProviderResponse") {
-          if (
-            dispatchEvidenceStore !== null &&
-            activeDispatchReceipt === null
-          ) {
-            throw new AgentKernelError(
-              "model_dispatch_preparation_missing",
-              false,
-            );
-          }
-          await this.#execution.checkpointModelAttempt(
-            claim,
-            attempt,
-            action.checkpoint,
-            activeDispatchReceipt === null
-              ? undefined
-              : {
-                  requestSequence: activeDispatchReceipt.requestSequence,
-                  operationId: activeDispatchReceipt.operationId,
-                  expectedRevision: activeDispatchReceipt.revision,
-                },
-          );
-          if (activeDispatchReceipt !== null) {
+        controlSink: {
+          modelRequestPrepared: async (evidence) => {
+            if (dispatchEvidenceStore === null) return;
             activeDispatchReceipt =
-              await dispatchEvidenceStore!.loadModelDispatchReceipt({
+              await dispatchEvidenceStore.prepareModelDispatch({
                 tenantId: run.tenantId,
                 runId: run.runId,
-                ...attempt,
-                operationId: activeDispatchReceipt.operationId,
+                lease: leaseInput(claim),
+                attempt,
+                operationId: evidence.operationId,
+                requestSequence: evidence.requestSequence,
+                operation: evidence.operation,
+                requestDigest: evidence.requestDigest,
+                provider: evidence.provider,
+                preparedAt: new Date().toISOString(),
               });
-          }
-          await this.#afterProviderResponseCheckpointed?.();
-          continue;
-        }
-        providerTurnState = segment.providerTurnState;
-        if (action.kind === "persistEvent") {
-          const persisted = await this.#execution.recordAgentEvent(
-            claim,
-            action.event,
-          );
-          run = persisted.state;
-        } else if (event.type === "segment.failed") {
-          break;
-        }
+          },
+          dispatchBoundaryCrossed: async (evidence) => {
+            if (dispatchEvidenceStore === null) return;
+            if (
+              activeDispatchReceipt === null ||
+              activeDispatchReceipt.requestSequence !==
+                evidence.requestSequence ||
+              activeDispatchReceipt.operationId !== evidence.operationId ||
+              activeDispatchReceipt.requestDigest !== evidence.requestDigest
+            ) {
+              throw new AgentKernelError(
+                "model_dispatch_preparation_missing",
+                false,
+              );
+            }
+            activeDispatchReceipt =
+              await dispatchEvidenceStore.markModelDispatchPossiblySent({
+                tenantId: run.tenantId,
+                runId: run.runId,
+                lease: leaseInput(claim),
+                attempt,
+                operationId: evidence.operationId,
+                requestSequence: evidence.requestSequence,
+                expectedRevision: activeDispatchReceipt.revision,
+                transitionedAt: new Date().toISOString(),
+              });
+          },
+        },
+      });
+      segment = executed.segment;
+      providerTurnState = segment.providerTurnState;
+      if (executed.canceled) {
+        controller.abort("user_requested");
+        return this.#cancel(claim, attempt);
       }
       if (segment.assistantContinuation !== null) {
         segment.validateContinuation();
@@ -1145,7 +1148,7 @@ export class RuntimeWorker {
           schemaVersion: "crewon.agent-event.v0",
           runId: run.runId,
           segmentId,
-          sequence: segment.lastAgentSequence + 1,
+          sequence: (segment?.lastAgentSequence ?? 0) + 1,
           type: "segment.failed",
           data: { code: error.code, retryable: false },
         };
@@ -1168,7 +1171,7 @@ export class RuntimeWorker {
         claim,
         attempt,
         error,
-        segment.providerCheckpoint,
+        segment?.providerCheckpoint ?? null,
       );
     } finally {
       await cancellationWatcher.close();
@@ -1179,6 +1182,9 @@ export class RuntimeWorker {
     }
     if (heartbeat.failure() !== null) {
       throw heartbeat.failure();
+    }
+    if (segment === null) {
+      throw new PermanentWorkerError("segment_execution_missing");
     }
     if (toolBoundaryOutcome !== null) {
       return toolBoundaryOutcome;
