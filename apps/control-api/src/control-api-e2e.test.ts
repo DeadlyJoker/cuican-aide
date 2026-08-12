@@ -39,7 +39,9 @@ import { Pool } from "pg";
 import { SqliteRunStore } from "@crewon/store";
 import {
   activateStandaloneRuntimeAgentVersionRelease,
+  activatePostgresRuntimeAgentVersionRelease,
   ConfiguredAgentVersionRuntimeFactory,
+  createPostgresRuntimeWorker,
   createStandaloneRuntimeWorker,
   WORKFLOW_RUNTIME_CAPABILITIES,
 } from "@crewon/runtime-worker";
@@ -904,6 +906,78 @@ test("persists a complete Tool output through the encrypted Artifact authority a
 const postgresConnectionString = process.env.CREWON_TEST_POSTGRES_URL;
 
 test(
+  "runs PostgreSQL Workflow Agent to Verification through production Control and Worker",
+  { skip: postgresConnectionString === undefined },
+  async (context) => {
+    const connectionString = requiredPostgresUrl();
+    const schema = postgresSchema("wf");
+    const controlConfig = postgresConfig(connectionString, schema);
+    const control = await createPostgresControlApi(controlConfig);
+    await activatePostgresReleaseProcess(connectionString, schema);
+    const admin = new Pool({ connectionString, max: 1 });
+    context.after(() => closePostgresFixture(control.app, admin, schema));
+    await control.app.listen({ host: "127.0.0.1", port: 0 });
+    const client = new ControlApiClient({ baseUrl: serverBaseUrl(control.app),
+      accessToken: SESSION_TOKEN, csrfToken: CSRF_TOKEN, origin: ORIGIN });
+    const verifierSource = { ...selectedAgentVersionSource(),
+      agentVersionId: "workflow-postgres-verifier",
+      instructions: "Verify empty JSON." };
+    const verifier = compileAgentVersion(verifierSource, digest);
+    await client.publishAgentVersion(verifierSource);
+    const runtimeFactory = new ConfiguredAgentVersionRuntimeFactory([{
+      tenantId: "tenant-e2e-1", agentVersionId: verifier.agentVersionId,
+      contentDigest: verifier.contentDigest,
+      authorityId: "workflow-postgres-verifier-authority",
+      workspaceBindingId: null,
+      materializationDigest: digest.sha256("workflow-postgres-verifier"),
+      createTransport: workflowModelTransport,
+      createToolRuntime: () => new InMemoryToolBroker(),
+    }]);
+    await activatePostgresRuntimeAgentVersionRelease({
+      connectionString, schema, runtimeTenantId: "tenant-e2e-1",
+      route: config(":unused:").route, transport: workflowModelTransport(),
+      agentVersionDeployments:
+        runtimeFactory.deploymentBindings("tenant-e2e-1"),
+      actor: { principalId: "release-principal", actorId: "release-actor",
+        tenantId: "tenant-e2e-1", spaceId: "space-e2e-1" },
+      authorization: { authorize: async () => ({ outcome: "allow" }) },
+      clock: { now: () => "2026-08-13T00:00:00.000Z" },
+      activationId: "postgres-workflow-release",
+    });
+    const thread = await client.createThread(
+      { title: "PostgreSQL Workflow" }, "postgres-workflow-thread",
+    );
+    await client.publishWorkflowVersion(workflowPostgresSource());
+    const started = await client.startWorkflowRun({
+      workflowVersionId: "workflow-postgres-v1",
+      threadId: thread.thread.threadId,
+      input: {},
+    }, "postgres-workflow-start");
+    const worker = await createPostgresRuntimeWorker({
+      connectionString,
+      schema,
+      runtimeTenantId: "tenant-e2e-1",
+      route: config(":unused:").route,
+      transport: workflowModelTransport(),
+      agentVersionRuntimeFactory: runtimeFactory,
+      agentVersionDeployments:
+        runtimeFactory.deploymentBindings("tenant-e2e-1"),
+      scanIntervalMs: null,
+    });
+    context.after(() => worker.close());
+    await wakeUntil(worker.worker, async () =>
+      (await client.getRun(started.run.runId)).run.status === "completed");
+    const terminal = (await client.getRun(started.run.runId)).run;
+    assert.equal(terminal.status, "completed");
+    const attempts = await admin.query<{ count: string }>(
+      `SELECT count(*)::text count FROM "${schema}".run_attempts WHERE run_id=$1`,
+      [started.run.runId],
+    );
+    assert.equal(attempts.rows[0]?.count, "2");
+  },
+);
+
+test(
   "allows exactly one of two PostgreSQL Worker processes to execute a Run",
   { skip: postgresConnectionString === undefined },
   async (context) => {
@@ -1383,6 +1457,24 @@ function workflowGateSource(decision: "approve" | "reject") {
   };
 }
 
+function workflowPostgresSource() {
+  const empty = { type: "object" as const, properties: {}, required: [],
+    additionalProperties: false as const };
+  return { schemaVersion: "crewon.workflow-version-source.v0" as const,
+    workflowId: "workflow-postgres", workflowVersionId: "workflow-postgres-v1",
+    name: "PostgreSQL Workflow", description: "Production vertical",
+    inputSchema: empty, outputSchema: empty, entryNodeIds: ["agent"],
+    outputNodeIds: ["verification"], nodes: [
+      { nodeId: "agent", title: "Agent", instruction: "Return {}",
+        kind: "agent" as const, agentVersionId: "agent-version-e2e-1",
+        dependsOn: [], inputSchema: empty, outputSchema: empty },
+      { nodeId: "verification", title: "Verification", instruction: "Verify {}",
+        kind: "verification" as const,
+        verifierAgentVersionId: "workflow-postgres-verifier",
+        dependsOn: ["agent"], inputSchema: empty, outputSchema: empty },
+    ] };
+}
+
 function workflowModelTransport(): ModelTransportPort {
   return {
     adapterName: "deterministic-fake",
@@ -1508,7 +1600,7 @@ function postgresConfig(
   connectionString: string,
   schema: string,
 ): PostgresControlApiConfig {
-  const standalone = config(":unused:");
+  const standalone = config(":unused:", new InMemoryArtifactStore(), true);
   const { databasePath: _, route: _route, ...common } = standalone;
   return { ...common, connectionString, schema };
 }
