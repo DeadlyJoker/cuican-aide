@@ -34,12 +34,17 @@ import {
 
 export type PostgresWorkflowRunCompositionStoreOptions =
   PostgresThreadStoreOptions & Readonly<{ digester: WorkflowContentDigester }>;
+type LegacyAdmissionInput = Readonly<{
+  tenantId: string;
+  runId: string;
+  lease: import("@crewon/application").WorkItemLeaseInput;
+  binding: import("@crewon/domain").FrozenWorkflowVersionBinding;
+  schedulerOperationId: string;
+  leaseDurationMs: number;
+}>;
 
 /** PostgreSQL production composition authority with row and advisory fences. */
-export class PostgresWorkflowRunCompositionStore
-  extends PostgresAttemptStore
-  implements WorkflowRunCompositionStore
-{
+export class PostgresWorkflowRunCompositionStore extends PostgresAttemptStore {
   readonly #digester: WorkflowContentDigester;
 
   constructor(options: PostgresWorkflowRunCompositionStoreOptions) {
@@ -81,7 +86,7 @@ export class PostgresWorkflowRunCompositionStore
   }
 
   async admitWorkflowNodes(
-    input: Parameters<WorkflowRunCompositionStore["admitWorkflowNodes"]>[0],
+    input: LegacyAdmissionInput,
   ): Promise<WorkflowCompositionResult> {
     const fingerprint = compositionFingerprint({
       ...input,
@@ -363,6 +368,18 @@ export class PostgresWorkflowRunCompositionStore
   }
 
   async scheduleWorkflowReconciliation(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  async scheduleWorkflowNodes(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  async admitWorkflowNodeWork(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  async recordWorkflowHumanGateDecision(): Promise<never> {
     throw new RunStoreError("workflow_composition_contract_incomplete");
   }
 }

@@ -41,11 +41,17 @@ type Dependencies = Readonly<{
   digester: WorkflowContentDigester;
   clock?: LeaseClock;
 }>;
+type LegacyAdmissionInput = Readonly<{
+  tenantId: string;
+  runId: string;
+  lease: import("@crewon/application").WorkItemLeaseInput;
+  binding: import("@crewon/domain").FrozenWorkflowVersionBinding;
+  schedulerOperationId: string;
+  leaseDurationMs: number;
+}>;
 
 /** SQLite production composition authority. Every admission is one IMMEDIATE transaction. */
-export class SqliteWorkflowRunCompositionStore
-  implements WorkflowRunCompositionStore
-{
+export class SqliteWorkflowRunCompositionStore {
   readonly #database: DatabaseSync;
   readonly #digester: WorkflowContentDigester;
   readonly #clock: LeaseClock;
@@ -76,7 +82,7 @@ export class SqliteWorkflowRunCompositionStore
   }
 
   async admitWorkflowNodes(
-    input: Parameters<WorkflowRunCompositionStore["admitWorkflowNodes"]>[0],
+    input: LegacyAdmissionInput,
   ): Promise<WorkflowCompositionResult> {
     const nowMs = readLeaseClock(this.#clock);
     const now = new Date(nowMs).toISOString();
@@ -305,10 +311,19 @@ export class SqliteWorkflowRunCompositionStore
     throw new RunStoreError("workflow_composition_contract_incomplete");
   }
 
-  #validateLease(
-    input: Parameters<WorkflowRunCompositionStore["admitWorkflowNodes"]>[0],
-    nowMs: number,
-  ): void {
+  async scheduleWorkflowNodes(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  async admitWorkflowNodeWork(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  async recordWorkflowHumanGateDecision(): Promise<never> {
+    throw new RunStoreError("workflow_composition_contract_incomplete");
+  }
+
+  #validateLease(input: LegacyAdmissionInput, nowMs: number): void {
     const row = this.#database
       .prepare(
         `SELECT tenant_id,run_id,status,lease_owner_id,lease_id,lease_epoch,lease_expires_at_ms
@@ -361,7 +376,7 @@ export class SqliteWorkflowRunCompositionStore
 function assertCanonicalRun(
   run: RunState | null,
   binding: Parameters<
-    WorkflowRunCompositionStore["admitWorkflowNodes"]
+    WorkflowRunCompositionStore["scheduleWorkflowNodes"]
   >[0]["binding"],
 ): void {
   if (run === null)
@@ -379,7 +394,7 @@ function assertCanonicalRun(
 
 function validateCompositionReplay(
   result: WorkflowCompositionResult,
-  input: Parameters<WorkflowRunCompositionStore["admitWorkflowNodes"]>[0],
+  input: LegacyAdmissionInput,
   workflow: import("@crewon/domain").CompiledWorkflowVersion,
 ): void {
   validateWorkflowExecutionState(result.execution);

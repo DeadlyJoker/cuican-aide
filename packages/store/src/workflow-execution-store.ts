@@ -450,6 +450,7 @@ function validateNode(node: unknown): void {
     (value.kind === "humanGate") !== (value.agentVersionId === null) ||
     ![
       "pending",
+      "queued",
       "running",
       "waitingHuman",
       "completed",
@@ -472,6 +473,7 @@ function validateNode(node: unknown): void {
     throw new RunStoreError("workflow_execution_state_invalid");
   const unclaimed = value.status === "pending";
   const active =
+    value.status === "queued" ||
     value.status === "running" ||
     value.status === "waitingHuman" ||
     value.status === "unknown";

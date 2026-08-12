@@ -23,7 +23,9 @@ export type WorkflowCompositionResult =
   | Readonly<{
       disposition: "fresh";
       execution: WorkflowExecutionState;
-      admissions: readonly WorkflowNodeAttemptAdmission[];
+      admissions: readonly (Omit<WorkflowNodeAttemptAdmission, "attempt"> & {
+        attempt: WorkflowNodeAttemptAdmission["attempt"] | null;
+      })[];
       reconciliationClaims: readonly [];
     }>
   | Readonly<{
@@ -310,7 +312,9 @@ export function gateStep(input: {
 }
 
 export function assertAdmissionReplayAuthority(
-  admission: WorkflowNodeAttemptAdmission,
+  admission: Omit<WorkflowNodeAttemptAdmission, "attempt"> & {
+    attempt: WorkflowNodeAttemptAdmission["attempt"] | null;
+  },
   step: RunStepState | null,
   attempt: RunAttemptState | null,
 ): void {
