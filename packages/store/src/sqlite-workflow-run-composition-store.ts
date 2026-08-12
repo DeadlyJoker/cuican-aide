@@ -57,6 +57,7 @@ import {
   workflowAuthorityId,
 } from "./workflow-run-composition-support.ts";
 import { SqliteWorkflowNodeContinuationAuthority } from "./sqlite-workflow-node-continuation.ts";
+import { settleSqliteWorkflowNodeWithinTransaction } from "./sqlite-workflow-node-settlement.ts";
 
 type Dependencies = Readonly<{
   digester: WorkflowContentDigester;
@@ -130,132 +131,30 @@ export class SqliteWorkflowRunCompositionStore
     const fingerprint = this.#fingerprint("settleNode", input);
     try {
       this.#database.exec("BEGIN IMMEDIATE");
-      const replay = this.#receipt(input, "settleNode", fingerprint);
-      if (replay !== null) {
-        this.#validateTerminalReplay(input, replay);
-        this.#database.exec("COMMIT");
-        return structuredClone({
-          ...(replay as object),
-          disposition: "replay",
-        } as Awaited<
-          ReturnType<WorkflowRunCompositionStore["settleWorkflowNode"]>
-        >);
-      }
-      this.#validateLease(input, nowMs);
-      assertCanonicalRun(
-        this.#loadRun(input.tenantId, input.runId),
-        input.binding,
-      );
-      const execution = this.#loadExecution(input.tenantId, input.runId);
-      const step = loadSqliteRunStep(this.#database, input);
-      const attempt = loadSqliteRunAttempt(this.#database, input);
-      if (
-        execution === null ||
-        step === null ||
-        attempt === null ||
-        input.stepId !== input.nodeId ||
-        step.currentAttemptId !== input.attemptId ||
-        attempt.workItemId !== input.lease.workItemId ||
-        attempt.leaseEpoch !== input.lease.leaseEpoch
-      )
-        throw new RunStoreError("workflow_composition_attempt_mismatch");
-      const workflow = this.#loadWorkflow(input);
-      const definition = workflow.nodes.find((node) => node.nodeId === input.nodeId);
-      if (definition === undefined)
-        throw new RunStoreError("workflow_composition_claim_mismatch");
-      let resultDigest: string | undefined;
-      if (input.outcome.status === "completed") {
-        const value = validateWorkflowSchemaValue(input.outcome.value, definition.outputSchema);
-        const valueJson = canonicalJson(value);
-        resultDigest = this.#digester.sha256(valueJson);
-        const valueId = workflowAuthorityId("value", {
-          tenantId: input.tenantId, runId: input.runId, nodeId: input.nodeId,
-          claimId: input.claimId, claimEpoch: input.claimEpoch, resultDigest,
-        }, this.#digester);
-        this.#insertExecutionValue({ ...input, valueId, role: "nodeOutput",
-          nodeId: input.nodeId, valueDigest: resultDigest, valueJson, now });
-      }
-      const next = settleWorkflowClaim({ execution, ...input, resultDigest, now });
-      if (input.outcome.status !== "unknown") {
-        finishSqliteRunAttempt(this.#database, {
-          tenantId: input.tenantId,
-          runId: input.runId,
-          workItemId: input.lease.workItemId,
-          leaseEpoch: input.lease.leaseEpoch,
-          attempt: terminalAttempt(input, now),
-        });
-      }
-      this.#writeExecution(next, now);
-      const runDisposition = this.#convergeTerminalRun(input, workflow, next, now, nowMs);
-      let schedulerContinuationWorkItemId: string | null = null;
-      let reconciliationWorkItemId: string | null = null;
-      if (input.outcome.status === "unknown") {
-        reconciliationWorkItemId = workflowAuthorityId(
-          "reconcile",
-          { tenantId: input.tenantId, runId: input.runId, binding: input.binding,
-            operationId: input.operationId, nodeId: input.nodeId,
-            claimId: input.claimId, claimEpoch: input.claimEpoch },
-          this.#digester,
-        );
-        this.#insertWorkflowWorkItem(reconciliationWorkItemId, input, {
-          schemaVersion: "crewon.workflow-reconcile-work-item.v0",
-          trigger: "workflowReconcile", binding: input.binding,
-          nodeId: input.nodeId, claimId: input.claimId,
-          claimEpoch: input.claimEpoch,
-          reconciliationOperationId: input.operationId,
-        }, now, nowMs);
-      } else if (
-        !next.nodes.some((node) =>
-          ["queued", "running", "unknown", "waitingHuman"].includes(node.status),
-        ) &&
-        next.status === "running"
-      ) {
-        schedulerContinuationWorkItemId = workflowAuthorityId(
-          "scheduler",
-          {
-            tenantId: input.tenantId,
-            runId: input.runId,
-            binding: input.binding,
-            settledNodeId: input.nodeId,
-            claimId: input.claimId,
-            claimEpoch: input.claimEpoch,
-          },
-          this.#digester,
-        );
-        this.#insertWorkflowWorkItem(
-          schedulerContinuationWorkItemId,
-          input,
-          {
-            schemaVersion: "crewon.workflow-scheduler-work-item.v1",
-            trigger: "workflowScheduler",
-            binding: input.binding,
-            schedulerOperationId: schedulerContinuationWorkItemId,
-            workflowInput: this.#rootInputRef(input),
-          },
-          now,
-          nowMs,
-        );
-      }
-      const result = {
-        disposition:
-          input.outcome.status === "unknown"
-            ? ("reconciliationScheduled" as const)
-            : ("settled" as const),
-        execution: next,
-        schedulerContinuationWorkItemId,
-        handoff: {
-          currentWorkItem: "completed" as const,
-          nextWorkItemId: reconciliationWorkItemId ?? schedulerContinuationWorkItemId,
-          kind: reconciliationWorkItemId !== null
-            ? "reconcile" as const
-            : schedulerContinuationWorkItemId === null ? "none" as const : "scheduler" as const,
-        },
-        runDisposition,
-      };
-      this.#insertReceipt(input, "settleNode", fingerprint, result);
-      this.#completeLease(input, nowMs);
+      const result = settleSqliteWorkflowNodeWithinTransaction({
+        database: this.#database,
+        digester: this.#digester,
+        receipt: (value, kind, hash) => this.#receipt(value, kind, hash),
+        validateTerminalReplay: (value, replay) =>
+          this.#validateTerminalReplay(value, replay),
+        validateLease: (value, clock) => this.#validateLease(value, clock),
+        assertCanonicalRun,
+        loadRun: (tenantId, runId) => this.#loadRun(tenantId, runId),
+        loadExecution: (tenantId, runId) => this.#loadExecution(tenantId, runId),
+        loadWorkflow: (value) => this.#loadWorkflow(value),
+        insertExecutionValue: (value) => this.#insertExecutionValue(value),
+        writeExecution: (value, timestamp) => this.#writeExecution(value, timestamp),
+        convergeTerminalRun: (value, workflow, execution, timestamp, clock) =>
+          this.#convergeTerminalRun(value, workflow, execution, timestamp, clock),
+        insertWorkflowWorkItem: (id, value, payload, timestamp, clock) =>
+          this.#insertWorkflowWorkItem(id, value, payload, timestamp, clock),
+        rootInputRef: (value) => this.#rootInputRef(value),
+        insertReceipt: (value, kind, hash, receipt) =>
+          this.#insertReceipt(value, kind, hash, receipt),
+        completeLease: (value, clock) => this.#completeLease(value, clock),
+      }, input, fingerprint, now, nowMs);
       this.#database.exec("COMMIT");
-      return structuredClone(result);
+      return result;
     } catch (error) {
       rollback(this.#database);
       throw normalizeCompositionError(error);
@@ -1691,30 +1590,4 @@ function normalizeCompositionError(error: unknown): Error {
     : new RunStoreError("workflow_composition_store_failed", {
         cause: error instanceof Error ? error : undefined,
       });
-}
-
-function terminalAttempt(
-  input: Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0],
-  now: string,
-) {
-  const common = {
-    stepId: input.stepId,
-    attemptId: input.attemptId,
-    finishedAt: now,
-    checkpointDigest: null,
-  };
-  switch (input.outcome.status) {
-    case "completed":
-      return { ...common, status: "completed" as const };
-    case "failed":
-      return {
-        ...common,
-        status: "failed" as const,
-        failure: { code: input.outcome.failureCode, retryable: false },
-      };
-    case "canceled":
-      return { ...common, status: "canceled" as const };
-    case "unknown":
-      throw new RunStoreError("workflow_composition_unknown_not_terminal");
-  }
 }
