@@ -129,12 +129,16 @@ function parseSchema(
   ) {
     throw new WorkflowVersionError(code);
   }
-  const normalized: Record<string, WorkflowValueSchema> = {};
+  const normalizedEntries: [string, WorkflowValueSchema][] = [];
   for (const name of names) {
-    normalized[name] = parseSchema(properties[name], code, depth + 1, tracker);
+    normalizedEntries.push([
+      name,
+      parseSchema(properties[name], code, depth + 1, tracker),
+    ]);
   }
+  const normalized = Object.fromEntries(normalizedEntries);
   const required = parsePropertyNames(schema.required, code);
-  if (required.some((name) => !(name in normalized))) {
+  if (required.some((name) => !Object.hasOwn(normalized, name))) {
     throw new WorkflowVersionError(code);
   }
   return {

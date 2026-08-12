@@ -120,6 +120,29 @@ test("rejects schema byte, property and total node limit violations", () => {
   }
 });
 
+test("treats prototype-like property names only as exact own properties", () => {
+  assert.throws(
+    () =>
+      parseWorkflowObjectSchema({
+        ...emptyObjectSchema(),
+        required: ["constructor"],
+      }),
+    hasCode("workflow_schema_invalid"),
+  );
+
+  const schema = parseWorkflowObjectSchema(
+    JSON.parse(`{
+      "type": "object",
+      "properties": {"__proto__": {"type": "boolean"}},
+      "required": ["__proto__"],
+      "additionalProperties": false
+    }`),
+  );
+  assert.deepEqual(Object.keys(schema.properties), ["__proto__"]);
+  assert.equal(Object.getPrototypeOf(schema.properties), Object.prototype);
+  assert.equal(Object.hasOwn(schema.properties, "__proto__"), true);
+});
+
 function emptyObjectSchema(): WorkflowObjectSchema {
   return {
     type: "object",
