@@ -16,6 +16,7 @@ import {
 import {
   loadSqliteModelDispatchReceipt,
   terminateSqliteModelDispatch,
+  terminateSqliteModelDispatchForAttempt,
 } from "./sqlite-model-dispatch-evidence.ts";
 import {
   settleSqliteWorkflowNodeWithinTransaction,
@@ -35,14 +36,16 @@ export function settleSqliteWorkflowNodeModelTerminalWithinTransaction(
   fingerprint: string,
   now: string,
   nowMs: number,
+  source: "liveNode" | "reconciliation" = "liveNode",
 ): Result {
   const settlement = ordinarySettlement(input);
-  const replay = context.receipt(settlement, "settleNode", fingerprint);
+  const replay = source === "liveNode"
+    ? context.receipt(settlement, "settleNode", fingerprint) : null;
   if (replay !== null) {
     validateReplay(context, input, settlement, replay);
     return structuredClone({ ...(replay as Result), disposition: "replay" });
   }
-  validateInputAuthority(context, input);
+  validateInputAuthority(context, input, source);
   const workflow = context.loadWorkflow(settlement);
   const evidence = validateWorkflowNodeTerminalEvidence({
     workflow,
@@ -61,30 +64,37 @@ export function settleSqliteWorkflowNodeModelTerminalWithinTransaction(
     dispatch.provider.agentVersionId !== input.authority.agentVersionId
   ) mismatch();
   validateContinuation(context, input, dispatch.responseCheckpointDigest);
-  const terminal = terminateSqliteModelDispatch(context.database, {
+  const terminalInput = {
     tenantId: input.authority.tenantId,
     runId: input.authority.runId,
-    lease: input.lease,
     attempt: input.authority.attempt,
     operationId: input.dispatch.operationId,
     requestSequence: input.dispatch.requestSequence,
     expectedRevision: input.dispatch.expectedRevision,
     transitionedAt: now,
     outcome: input.dispatchTerminalOutcome,
-  });
+  };
+  const terminal = source === "liveNode"
+    ? terminateSqliteModelDispatch(context.database, { ...terminalInput, lease: input.lease })
+    : terminateSqliteModelDispatchForAttempt(context.database, { ...terminalInput,
+        attemptWorkItemId: input.authority.workItemId,
+        attemptLeaseEpoch: input.authority.leaseEpoch });
   if (terminal.terminalOutcome === null) mismatch();
   validateWorkflowDispatchTerminalCorrelation({
     dispatch: terminal.terminalOutcome,
     evidence,
   });
   return settleSqliteWorkflowNodeWithinTransaction<Result>(
-    { ...context, receipt: () => null },
+    { ...context, receipt: () => null,
+      ...(source === "reconciliation" ? { insertReceipt: () => undefined } : {}) },
     settlement,
     fingerprint,
     now,
     nowMs,
     {
       attemptCheckpointDigest: terminal.responseCheckpointDigest,
+      attemptAuthority: { workItemId: input.authority.workItemId,
+        leaseEpoch: input.authority.leaseEpoch },
       beforeReceipt: () => deleteContinuation(context, input),
       mapResult: (settled) => ({
         disposition: settled.disposition,
@@ -121,12 +131,14 @@ function ordinarySettlement(input: SettleWorkflowNodeModelTerminalInput) {
 function validateInputAuthority(
   context: SqliteWorkflowNodeSettlementContext,
   input: SettleWorkflowNodeModelTerminalInput,
+  source: "liveNode" | "reconciliation",
 ): void {
   const authority = input.authority;
   if (
     input.nodeId !== authority.nodeId ||
-    input.lease.workItemId !== authority.workItemId ||
-    input.lease.leaseEpoch !== authority.leaseEpoch
+    (source === "liveNode" &&
+      (input.lease.workItemId !== authority.workItemId ||
+       input.lease.leaseEpoch !== authority.leaseEpoch))
   ) mismatch();
   const execution = context.loadExecution(authority.tenantId, authority.runId);
   const node = execution?.nodes.find((candidate) => candidate.nodeId === authority.nodeId);
@@ -140,8 +152,9 @@ function validateInputAuthority(
     runId: authority.runId,
     ...authority.attempt,
   });
+  if (node === undefined) mismatch();
   if (
-    node?.status !== "running" ||
+    (source === "liveNode" ? node?.status !== "running" : node?.status !== "unknown") ||
     node.kind !== authority.nodeKind ||
     node.claimId !== authority.claimId ||
     node.claimEpoch !== authority.claimEpoch ||

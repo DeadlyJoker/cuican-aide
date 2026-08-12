@@ -71,6 +71,7 @@ export function settleSqliteWorkflowNodeWithinTransaction<Result = SqliteWorkflo
   nowMs: number,
   options: Readonly<{
     attemptCheckpointDigest?: string | null;
+    attemptAuthority?: Readonly<{ workItemId: string; leaseEpoch: number }>;
     beforeReceipt?(result: SqliteWorkflowNodeSettlementResult): void;
     mapResult?(result: SqliteWorkflowNodeSettlementResult): Result;
   }> = {},
@@ -91,14 +92,15 @@ export function settleSqliteWorkflowNodeWithinTransaction<Result = SqliteWorkflo
   const execution = context.loadExecution(input.tenantId, input.runId);
   const step = loadSqliteRunStep(context.database, input);
   const attempt = loadSqliteRunAttempt(context.database, input);
+  const attemptAuthority = options.attemptAuthority ?? input.lease;
   if (
     execution === null ||
     step === null ||
     attempt === null ||
     input.stepId !== input.nodeId ||
     step.currentAttemptId !== input.attemptId ||
-    attempt.workItemId !== input.lease.workItemId ||
-    attempt.leaseEpoch !== input.lease.leaseEpoch
+    attempt.workItemId !== attemptAuthority.workItemId ||
+    attempt.leaseEpoch !== attemptAuthority.leaseEpoch
   )
     throw new RunStoreError("workflow_composition_attempt_mismatch");
   const workflow = context.loadWorkflow(input);
@@ -122,8 +124,8 @@ export function settleSqliteWorkflowNodeWithinTransaction<Result = SqliteWorkflo
     finishSqliteRunAttempt(context.database, {
       tenantId: input.tenantId,
       runId: input.runId,
-      workItemId: input.lease.workItemId,
-      leaseEpoch: input.lease.leaseEpoch,
+      workItemId: attemptAuthority.workItemId,
+      leaseEpoch: attemptAuthority.leaseEpoch,
       attempt: terminalAttempt(
         input,
         now,

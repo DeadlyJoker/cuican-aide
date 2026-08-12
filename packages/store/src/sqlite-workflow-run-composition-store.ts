@@ -12,6 +12,7 @@ import {
 import {
   composeWorkflowNodeInput,
   composeWorkflowOutput,
+  createWorkflowNodeTerminalEvidence,
   reduceRunLifecycleEvent,
   replayRunLifecycle,
   validateWorkflowSchemaValue,
@@ -45,7 +46,6 @@ import { migrateSqliteWorkflowVersions } from "./workflow-version-schema.ts";
 import {
   loadSqliteModelDispatchReceipt,
   migrateSqliteModelDispatchEvidence,
-  terminateSqliteModelDispatch,
 } from "./sqlite-model-dispatch-evidence.ts";
 import {
   assertExecutionBinding,
@@ -566,46 +566,41 @@ export class SqliteWorkflowRunCompositionStore
         throw new RunStoreError("workflow_reconciliation_evidence_missing");
       const evidenceStatus = dispatch.status === "prepared"
         ? "notDispatched" as const : dispatch.status;
-      if ((dispatch.status === "terminal" &&
-          dispatch.terminalOutcome?.kind !== "completed") ||
-          dispatch.status === "responseObserved") {
-        const terminalDispatch = dispatch.status === "responseObserved"
-          ? terminateSqliteModelDispatch(this.#database, {
-              tenantId: input.tenantId, runId: input.runId,
-              lease: { workItemId: attempt.workItemId,
-                ownerId: input.lease.ownerId, leaseId: input.lease.leaseId,
-                leaseEpoch: attempt.leaseEpoch },
-              attempt: { stepId: input.nodeId, attemptId: attempt.attemptId },
-              operationId: dispatch.operationId,
-              requestSequence: dispatch.requestSequence,
-              expectedRevision: dispatch.revision, transitionedAt: now,
-              outcome: { kind: "failed", certainty: "responseObserved",
-                code: "workflow_response_evidence_unavailable" },
-            }) : dispatch;
-        const outcome = terminalDispatch.terminalOutcome!.kind === "failed"
+      if (dispatch.status === "responseObserved") {
+        const dispatchOutcome = { kind: "failed" as const,
+          certainty: "responseObserved" as const,
+          code: "workflow_response_evidence_unavailable" };
+        const outcome = dispatchOutcome.kind === "failed"
           ? { status: "failed" as const,
-              failureCode: terminalDispatch.terminalOutcome!.code ?? "model_dispatch_failed" }
+              failureCode: dispatchOutcome.code ?? "model_dispatch_failed" }
           : { status: "canceled" as const };
-        const next = settleWorkflowClaim({ execution: execution!, ...input,
-          outcome, now });
-        finishSqliteRunAttempt(this.#database, { tenantId: input.tenantId,
-          runId: input.runId, workItemId: attempt.workItemId,
-          leaseEpoch: attempt.leaseEpoch,
-          attempt: { stepId: input.nodeId, attemptId: attempt.attemptId,
-            finishedAt: now, checkpointDigest: terminalDispatch.responseCheckpointDigest,
-            ...(outcome.status === "failed"
-              ? { status: "failed" as const,
-                  failure: { code: outcome.failureCode, retryable: false } }
-              : { status: "canceled" as const }) } });
-        this.#writeExecution(next, now);
-        const runDisposition = this.#convergeTerminalRun(
-          receiptInput, this.#loadWorkflow(input), next, now, nowMs);
+        const workflow = this.#loadWorkflow(input);
+        const evidence = createWorkflowNodeTerminalEvidence({ workflow,
+          nodeId: input.nodeId, outcome: outcome.status === "failed"
+            ? { ...outcome, certainty: dispatchOutcome.certainty }
+            : { status: "canceled", certainty: dispatchOutcome.certainty },
+          digester: this.#digester });
+        const settled = settleSqliteWorkflowNodeModelTerminalWithinTransaction(
+          this.#nodeSettlementContext(), { binding: input.binding,
+            nodeId: input.nodeId, operationId: `node-model-terminal:${input.claimId}`,
+            evidence, lease: input.lease, authority: { tenantId: input.tenantId,
+              runId: input.runId, workItemId: attempt.workItemId,
+              leaseEpoch: attempt.leaseEpoch, nodeId: input.nodeId,
+              nodeKind: node.kind === "verification" ? "verification" : "agent",
+              claimId: input.claimId, claimEpoch: input.claimEpoch,
+              agentVersionId: node.agentVersionId!, attempt: {
+                stepId: input.nodeId, attemptId: attempt.attemptId } },
+            dispatch: { operationId: dispatch.operationId,
+              requestSequence: dispatch.requestSequence,
+              expectedRevision: dispatch.revision, status: dispatch.status },
+            dispatchTerminalOutcome: dispatchOutcome },
+          this.#fingerprint("settleNode", { input, evidence, dispatchOutcome }),
+          now, nowMs, "reconciliation");
         const result = { disposition: "settled" as const, evidenceStatus,
-          execution: next, handoff: { currentWorkItem: "completed" as const,
-            nextWorkItemId: null, kind: "none" as const }, runDisposition };
+          execution: this.#loadExecution(input.tenantId, input.runId)!,
+          handoff: settled.handoff, runDisposition: settled.runDisposition };
         this.#insertReceipt(
           receiptInput, "reconcileNode", fingerprint, result);
-        this.#completeLease(input, nowMs);
         this.#database.exec("COMMIT");
         return structuredClone(result);
       }

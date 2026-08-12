@@ -185,7 +185,7 @@ export function markSqliteModelDispatchPossiblySent(
   database: DatabaseSync,
   input: TransitionModelDispatchInput,
 ): ModelDispatchReceipt {
-  return transition(database, input, (current) =>
+  return transition(database, input, input.lease, (current) =>
     markModelDispatchPossiblySent(current, input.transitionedAt),
   );
 }
@@ -194,7 +194,7 @@ export function observeSqliteModelDispatchResponse(
   database: DatabaseSync,
   input: ObserveModelDispatchResponseInput,
 ): ModelDispatchReceipt {
-  return transition(database, input, (current) =>
+  return transition(database, input, input.lease, (current) =>
     observeModelDispatchResponse(current, {
       checkpointDigest: input.checkpointDigest,
       observedAt: input.transitionedAt,
@@ -206,7 +206,7 @@ export function terminateSqliteModelDispatch(
   database: DatabaseSync,
   input: TerminateModelDispatchInput,
 ): ModelDispatchReceipt {
-  return transition(database, input, (current) =>
+  return transition(database, input, input.lease, (current) =>
     terminateModelDispatchReceipt(current, {
       outcome: input.outcome,
       terminalAt: input.transitionedAt,
@@ -214,9 +214,24 @@ export function terminateSqliteModelDispatch(
   );
 }
 
+export function terminateSqliteModelDispatchForAttempt(
+  database: DatabaseSync,
+  input: Omit<TerminateModelDispatchInput, "lease"> & Readonly<{
+    attemptWorkItemId: string; attemptLeaseEpoch: number;
+  }>,
+): ModelDispatchReceipt {
+  return transition(database, input, {
+    workItemId: input.attemptWorkItemId, leaseEpoch: input.attemptLeaseEpoch,
+  }, (current) =>
+    terminateModelDispatchReceipt(current, {
+      outcome: input.outcome, terminalAt: input.transitionedAt,
+    }));
+}
+
 function transition(
   database: DatabaseSync,
-  input: TransitionModelDispatchInput,
+  input: Omit<TransitionModelDispatchInput, "lease">,
+  fence: Pick<TransitionModelDispatchInput["lease"], "workItemId" | "leaseEpoch">,
   mutate: (current: ModelDispatchReceipt) => ModelDispatchReceipt,
 ): ModelDispatchReceipt {
   const locator = {
@@ -226,7 +241,7 @@ function transition(
     operationId: input.operationId,
     requestSequence: input.requestSequence,
   };
-  requireFencedAttempt(database, locator, input.lease);
+  requireFencedAttempt(database, locator, fence);
   const current = loadSqliteModelDispatchReceipt(database, locator);
   if (current === null)
     throw new RunStoreError("model_dispatch_receipt_missing");
@@ -268,7 +283,7 @@ function transition(
 function requireFencedAttempt(
   database: DatabaseSync,
   locator: RunAttemptLocator,
-  lease: PrepareModelDispatchInput["lease"],
+  lease: Pick<PrepareModelDispatchInput["lease"], "workItemId" | "leaseEpoch">,
 ) {
   const attempt = loadSqliteRunAttempt(database, locator);
   if (

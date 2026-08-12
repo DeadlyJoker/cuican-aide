@@ -215,6 +215,10 @@ test("SQLite Slice 4 completes checkpoint-only reconciliation without resampling
     dispatchStatus: "terminal", continuationCount: 0,
     terminalEventCount: 0, nodeStatus: "failed", reconcilePending: 0,
   });
+  assert.deepEqual(inspectTerminalRecovery(path, runId), {
+    stepStatus: "failed", attemptStatus: "failed", reconcileCompleted: 1,
+    nodeCompleted: 1, failedEventCount: 0, runStatus: "running",
+  });
 
   const replay = await runtime.worker.wake();
   assert.notEqual(replay.kind, "workflowRecovery");
@@ -397,6 +401,21 @@ function inspectReconciliation(path: string, runId: string) {
       reconcilePending: database.prepare(`SELECT count(*) count FROM work_items WHERE run_id=?
         AND status='pending' AND json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`)
         .get(runId)!.count };
+  } finally { database.close(); }
+}
+function inspectTerminalRecovery(path: string, runId: string) {
+  const database = new DatabaseSync(path);
+  try {
+    const scalar = (sql: string) => database.prepare(sql).get(runId) as Record<string, unknown>;
+    return { stepStatus: scalar("SELECT status FROM run_steps WHERE run_id=? AND step_id='agent'").status,
+      attemptStatus: scalar("SELECT status FROM run_attempts WHERE run_id=? AND step_id='agent'").status,
+      reconcileCompleted: scalar(`SELECT count(*) count FROM work_items WHERE run_id=? AND status='completed'
+        AND json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`).count,
+      nodeCompleted: scalar(`SELECT count(*) count FROM work_items WHERE run_id=? AND status='completed'
+        AND json_extract(work_item_json,'$.payload.trigger')='workflowNode'`).count,
+      failedEventCount: scalar(`SELECT count(*) count FROM run_events WHERE run_id=?
+        AND json_extract(event_json,'$.type')='workflow.node.failed'`).count,
+      runStatus: JSON.parse(String(scalar("SELECT state_json FROM run_snapshots WHERE run_id=?").state_json)).status };
   } finally { database.close(); }
 }
 function inspectNodeAuthorities(path: string, runId: string) {
