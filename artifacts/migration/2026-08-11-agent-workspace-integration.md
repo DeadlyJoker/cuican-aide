@@ -479,7 +479,7 @@ Gate 报告为通过。
   重启后 route 精确推进到 epoch 19，新 connection 下 `packaged-native-tool-foundation-v2` 再次 `201 completed`。最终正常 SIGTERM 后进程树
   与端口再次全部清理。
 
-## WorkflowVersion foundation、raw Native Tool production 与 AR-043
+## WorkflowVersion foundation、raw Native Tool Device wiring 与 AR-043
 
 - WorkflowVersion 领域基础由 `293ec0bd7..8fd2211ea` 分阶段落地。严格 bounded schema 支持深度 16、总节点 4096、单对象
   64 properties、总 canonical source 1 MiB；拒绝 prototype-like 注入、lone surrogate、非 canonical durable bytes 与 digest 漂移。
@@ -487,10 +487,12 @@ Gate 报告为通过。
   verifier 不能与任一上游 Agent/Verifier 相同。compiler、immutable digest 与 2 MiB durable codec 已完成，Domain `96/96` 与 typecheck
   通过。本阶段仍只是领域基础；Store/Application/Control/Runtime production integration 正在独立 worktree 中推进，不能据此宣告 Workflow
   已可运行。
-- raw Native Tool production 由 `c2f1b9ca9` 接通：`workspace.read_file.raw_tool.v0` 现在通过专用 Tool journal、receipt、event 与 cumulative
-  ACK authority 执行只读 stable-handle read，既有 `workspace.read_file.v0` wire 保持不变。Hello 的跨 authority ACK 总量上限为 256，重连
+- raw Native Tool 的 Device production wiring 由 `c2f1b9ca9` 接通：`workspace.read_file.raw_tool.v0` 现在通过专用 Tool journal、receipt、event
+  与 cumulative ACK authority 执行只读 stable-handle read，既有 `workspace.read_file.v0` wire 保持不变。Hello 的跨 authority ACK 总量上限为 256，重连
   execution 上限为 64；超过上限直接终止 session，不做静默截断。`3c4a43af1` 进一步让 active cancel map 已释放后的 late cancellation 仍查询
-  durable Tool journal，并以 device/lease/epoch exact fence 判定安全 no-op；没有增加 shell、process 或 mutation 能力。
+  durable Tool journal，并以 device/lease/epoch exact fence 判定安全 no-op；没有增加 shell、process 或 mutation 能力。Runtime Worker 与 Gateway
+  已有可承载该 capability 的通用 Device Tool transport，但现有组合测试与 packaged smoke 只明确覆盖 dedicated `workspace.read_file.v0`；raw
+  capability 的完整 Run→Gateway→Device→follow-up sampling 与 crash replay 正在独立 worktree 中验证，不能只凭 Device advertisement 外推完成。
 - Remote MCP credential gate `fecd523f2` 通过 hermetic child process 调用 production keyring adapter：secret 只从 stdin 注入，读取后进入
   `Zeroizing` v3 bootstrap；argv、environment、stdout、stderr 均不含 secret。测试在第一次读取后旋转 keyring 值，证明 candidate 与 rollback
   共用同一 snapshot 且生产 adapter 恰好读取一次。主工作树 Tauri `107/107` 通过；真实 packaged remote endpoint、动态轮换与 network chaos
