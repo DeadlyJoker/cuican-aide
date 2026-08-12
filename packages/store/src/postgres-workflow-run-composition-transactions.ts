@@ -37,10 +37,10 @@ import {
   workflowAuthorityId,
 } from "./workflow-run-composition-support.ts";
 
-type ScheduleInput = Parameters<
+export type ScheduleInput = Parameters<
   WorkflowRunCompositionStore["scheduleWorkflowNodes"]
 >[0];
-type AdmitInput = Parameters<
+export type AdmitInput = Parameters<
   WorkflowRunCompositionStore["admitWorkflowNodeWork"]
 >[0];
 
@@ -50,8 +50,12 @@ export async function schedulePostgresWorkflowNodes(
   input: ScheduleInput,
   digester: WorkflowContentDigester,
 ): ReturnType<WorkflowRunCompositionStore["scheduleWorkflowNodes"]> {
-  const fingerprint = fingerprintFor("scheduleNodes", input, digester);
-  const replay = await loadReceipt(
+  const fingerprint = postgresWorkflowFingerprint(
+    "scheduleNodes",
+    input,
+    digester,
+  );
+  const replay = await loadPostgresWorkflowReceipt(
     client,
     schema,
     input,
@@ -68,10 +72,20 @@ export async function schedulePostgresWorkflowNodes(
     );
     return { ...durable, disposition: "replay" };
   }
-  const now = await validateLease(client, schema, input);
-  const workflow = await loadAuthorities(client, schema, input, digester);
+  const now = await validatePostgresWorkflowLease(client, schema, input);
+  const workflow = await loadPostgresWorkflowAuthorities(
+    client,
+    schema,
+    input,
+    digester,
+  );
   await assertSchedulerPayload(client, schema, input, digester);
-  let execution = await loadExecution(client, schema, input, true);
+  let execution = await loadPostgresWorkflowExecution(
+    client,
+    schema,
+    input,
+    true,
+  );
   if (execution === null) {
     execution = initialExecution({ ...input, workflow, updatedAt: now });
     await client.query(
@@ -230,7 +244,7 @@ export async function schedulePostgresWorkflowNodes(
       });
     } else {
       const workItemId = workflowAuthorityId("node", authority, digester);
-      await insertWorkItem(
+      await insertPostgresWorkflowWorkItem(
         client,
         schema,
         workItemId,
@@ -254,13 +268,13 @@ export async function schedulePostgresWorkflowNodes(
       });
     }
   }
-  await writeExecution(client, schema, execution, now);
+  await writePostgresWorkflowExecution(client, schema, execution, now);
   const reconciliationWorkItemIds = recovery.map((claim) =>
     reconciliationWorkItemId(input, claim, digester),
   );
   for (const [index, claim] of recovery.entries()) {
     const reconciliationWorkItemId = reconciliationWorkItemIds[index]!;
-    await insertWorkItem(
+    await insertPostgresWorkflowWorkItem(
       client,
       schema,
       reconciliationWorkItemId,
@@ -306,7 +320,7 @@ export async function schedulePostgresWorkflowNodes(
           },
           runDisposition: "nonTerminal" as const,
         };
-  await insertReceipt(
+  await insertPostgresWorkflowReceipt(
     client,
     schema,
     input,
@@ -314,7 +328,7 @@ export async function schedulePostgresWorkflowNodes(
     fingerprint,
     result,
   );
-  await completeLease(client, schema, input, now);
+  await completePostgresWorkflowLease(client, schema, input, now);
   return structuredClone(result);
 }
 
@@ -325,8 +339,8 @@ export async function admitPostgresWorkflowNodeWork(
   digester: WorkflowContentDigester,
 ): ReturnType<WorkflowRunCompositionStore["admitWorkflowNodeWork"]> {
   const receiptInput = { ...input, operationId: input.admissionOperationId };
-  const fingerprint = fingerprintFor("admitNode", input, digester);
-  const replay = await loadReceipt(
+  const fingerprint = postgresWorkflowFingerprint("admitNode", input, digester);
+  const replay = await loadPostgresWorkflowReceipt(
     client,
     schema,
     receiptInput,
@@ -348,9 +362,19 @@ export async function admitPostgresWorkflowNodeWork(
       handoff: durable.handoff,
     };
   }
-  const now = await validateLease(client, schema, input);
-  const workflow = await loadAuthorities(client, schema, input, digester);
-  const execution = await loadExecution(client, schema, input, true);
+  const now = await validatePostgresWorkflowLease(client, schema, input);
+  const workflow = await loadPostgresWorkflowAuthorities(
+    client,
+    schema,
+    input,
+    digester,
+  );
+  const execution = await loadPostgresWorkflowExecution(
+    client,
+    schema,
+    input,
+    true,
+  );
   if (execution === null)
     throw new RunStoreError("workflow_execution_not_found");
   const node = execution.nodes.find(
@@ -410,7 +434,7 @@ export async function admitPostgresWorkflowNodeWork(
     ),
     updatedAt: now,
   };
-  await writeExecution(client, schema, next, now);
+  await writePostgresWorkflowExecution(client, schema, next, now);
   const inputValue = await composeNodeInputValue(
     client,
     schema,
@@ -441,7 +465,7 @@ export async function admitPostgresWorkflowNodeWork(
       kind: "none" as const,
     },
   };
-  await insertReceipt(
+  await insertPostgresWorkflowReceipt(
     client,
     schema,
     receiptInput,
@@ -452,10 +476,14 @@ export async function admitPostgresWorkflowNodeWork(
   return structuredClone(result);
 }
 
-async function loadAuthorities(
+export async function loadPostgresWorkflowAuthorities(
   client: PoolClient,
   schema: string,
-  input: ScheduleInput | AdmitInput,
+  input: {
+    tenantId: string;
+    runId: string;
+    binding: ScheduleInput["binding"];
+  },
   digester: WorkflowContentDigester,
 ) {
   const runResult = await client.query<{ state_json: RunState }>(
@@ -491,7 +519,7 @@ async function loadAuthorities(
   );
 }
 
-async function validateLease(
+export async function validatePostgresWorkflowLease(
   client: PoolClient,
   schema: string,
   input: { tenantId: string; runId: string; lease: ScheduleInput["lease"] },
@@ -527,7 +555,7 @@ async function validateLease(
   return now;
 }
 
-async function completeLease(
+export async function completePostgresWorkflowLease(
   client: PoolClient,
   schema: string,
   input: { lease: ScheduleInput["lease"] },
@@ -548,7 +576,7 @@ async function completeLease(
   if (result.rowCount !== 1) throw new RunStoreError("stale_lease");
 }
 
-async function loadExecution(
+export async function loadPostgresWorkflowExecution(
   client: PoolClient,
   schema: string,
   input: { tenantId: string; runId: string },
@@ -563,7 +591,7 @@ async function loadExecution(
     : decodeWorkflowExecutionState(result.rows[0].state_json);
 }
 
-async function writeExecution(
+export async function writePostgresWorkflowExecution(
   client: PoolClient,
   schema: string,
   execution: import("@crewon/application").WorkflowExecutionState,
@@ -579,7 +607,7 @@ async function writeExecution(
     throw new RunStoreError("workflow_execution_not_found");
 }
 
-function fingerprintFor(
+export function postgresWorkflowFingerprint(
   kind: string,
   input: unknown,
   digester: WorkflowContentDigester,
@@ -603,7 +631,12 @@ async function validateScheduleReplay(
   digester: WorkflowContentDigester,
 ): Promise<ScheduleResult> {
   const result = stored as ScheduleResult;
-  const workflow = await loadAuthorities(client, schema, input, digester);
+  const workflow = await loadPostgresWorkflowAuthorities(
+    client,
+    schema,
+    input,
+    digester,
+  );
   validateWorkflowExecutionState(result.execution);
   assertExecutionBinding(
     result.execution,
@@ -612,7 +645,12 @@ async function validateScheduleReplay(
     input.binding,
     workflow,
   );
-  const current = await loadExecution(client, schema, input, true);
+  const current = await loadPostgresWorkflowExecution(
+    client,
+    schema,
+    input,
+    true,
+  );
   if (current === null) replayCorrupt();
   assertExecutionBinding(
     current,
@@ -739,7 +777,12 @@ async function validateAdmissionReplay(
   digester: WorkflowContentDigester,
 ): Promise<FreshAdmission> {
   const result = stored as FreshAdmission;
-  const workflow = await loadAuthorities(client, schema, input, digester);
+  const workflow = await loadPostgresWorkflowAuthorities(
+    client,
+    schema,
+    input,
+    digester,
+  );
   validateWorkflowExecutionState(result.execution);
   assertExecutionBinding(
     result.execution,
@@ -748,7 +791,12 @@ async function validateAdmissionReplay(
     input.binding,
     workflow,
   );
-  const current = await loadExecution(client, schema, input, true);
+  const current = await loadPostgresWorkflowExecution(
+    client,
+    schema,
+    input,
+    true,
+  );
   if (current === null) replayCorrupt();
   assertExecutionBinding(
     current,
@@ -800,7 +848,7 @@ async function validateAdmissionReplay(
     true,
   );
   assertAdmissionReplayAuthority(admission, step, attempt);
-  const value = await loadValue(
+  const value = await loadPostgresWorkflowValue(
     client,
     schema,
     input,
@@ -842,7 +890,7 @@ function replayCorrupt(): never {
   throw new RunStoreError("workflow_composition_receipt_corrupt");
 }
 
-async function loadReceipt(
+export async function loadPostgresWorkflowReceipt(
   client: PoolClient,
   schema: string,
   input: {
@@ -871,7 +919,7 @@ async function loadReceipt(
   return row.result_json;
 }
 
-async function insertReceipt(
+export async function insertPostgresWorkflowReceipt(
   client: PoolClient,
   schema: string,
   input: {
@@ -898,7 +946,7 @@ async function insertReceipt(
   );
 }
 
-async function insertWorkItem(
+export async function insertPostgresWorkflowWorkItem(
   client: PoolClient,
   schema: string,
   workItemId: string,
@@ -922,7 +970,7 @@ async function insertWorkItem(
   );
 }
 
-async function loadValue(
+export async function loadPostgresWorkflowValue(
   client: PoolClient,
   schema: string,
   input: { tenantId: string; runId: string },
@@ -962,7 +1010,7 @@ async function nodeInputDigest(
   nodeId: string,
   digester: WorkflowContentDigester,
 ): Promise<string> {
-  const root = await loadValue(
+  const root = await loadPostgresWorkflowValue(
     client,
     schema,
     input,
@@ -975,7 +1023,7 @@ async function nodeInputDigest(
     throw new RunStoreError("workflow_execution_value_not_found");
   const dependencyOutputs = [];
   for (const dependencyNodeId of node.dependsOn) {
-    const output = await loadValue(
+    const output = await loadPostgresWorkflowValue(
       client,
       schema,
       input,
@@ -1008,7 +1056,7 @@ async function composeNodeInputValue(
   now: string,
   digester: WorkflowContentDigester,
 ) {
-  const root = await loadValue(
+  const root = await loadPostgresWorkflowValue(
     client,
     schema,
     input,
@@ -1023,7 +1071,7 @@ async function composeNodeInputValue(
     throw new RunStoreError("workflow_execution_value_not_found");
   const dependencyOutputs = [];
   for (const nodeId of node.dependsOn) {
-    const output = await loadValue(
+    const output = await loadPostgresWorkflowValue(
       client,
       schema,
       input,
@@ -1091,7 +1139,7 @@ async function assertSchedulerPayload(
   digester: WorkflowContentDigester,
 ) {
   const payload = await loadPayload(client, schema, input.lease.workItemId);
-  const root = await loadValue(
+  const root = await loadPostgresWorkflowValue(
     client,
     schema,
     input,
