@@ -1,4 +1,5 @@
 import {
+  WorkflowVersionError,
   compileWorkflowVersion,
   serializeCompiledWorkflowVersion,
   type WorkflowContentDigester,
@@ -12,6 +13,7 @@ import type {
   WorkflowVersionListCursor,
   WorkflowVersionStore,
 } from "./workflow-version-store-port.ts";
+import { RunStoreError } from "./run-store-port.ts";
 
 /** Publishes server-compiled WorkflowVersions after resolving every AgentVersion authority. */
 export class WorkflowVersionApplicationService {
@@ -34,8 +36,14 @@ export class WorkflowVersionApplicationService {
   }
 
   async publish(actor: ActorContext, source: WorkflowVersionSource) {
-    await this.#authorize(actor, "publish", source.workflowVersionId);
-    const version = compileWorkflowVersion(source, this.#dependencies.digester);
+    validateActor(actor);
+    let version;
+    try {
+      version = compileWorkflowVersion(source, this.#dependencies.digester);
+    } catch (error) {
+      throw mapWorkflowError(error, "publish");
+    }
+    await this.#authorize(actor, "publish", version.workflowVersionId);
     const referenced = new Set<string>();
     for (const node of version.nodes) {
       if (node.kind === "agent") referenced.add(node.agentVersionId);
@@ -44,35 +52,50 @@ export class WorkflowVersionApplicationService {
       }
     }
     for (const agentVersionId of referenced) {
-      if (
-        (await this.#dependencies.agentVersions.loadAgentVersion({
-          tenantId: actor.tenantId,
-          agentVersionId,
-        })) === null
-      ) {
+      let referencedVersion;
+      try {
+        referencedVersion =
+          await this.#dependencies.agentVersions.loadAgentVersion({
+            tenantId: actor.tenantId,
+            agentVersionId,
+          });
+      } catch (error) {
+        throw mapWorkflowError(error, "reference");
+      }
+      if (referencedVersion === null) {
         throw new ApplicationError(
           "validation",
           "workflow_agent_version_not_found",
         );
       }
     }
-    return this.#dependencies.store.registerWorkflowVersion({
-      schemaVersion: "crewon.workflow-version-asset.v0",
-      tenantId: actor.tenantId,
-      workflowId: version.workflowId,
-      workflowVersionId: version.workflowVersionId,
-      contentDigest: version.contentDigest,
-      definitionJson: serializeCompiledWorkflowVersion(version),
-      createdAt: this.#dependencies.now(),
-    });
+    try {
+      return await this.#dependencies.store.registerWorkflowVersion({
+        schemaVersion: "crewon.workflow-version-asset.v0",
+        tenantId: actor.tenantId,
+        workflowId: version.workflowId,
+        workflowVersionId: version.workflowVersionId,
+        contentDigest: version.contentDigest,
+        definitionJson: serializeCompiledWorkflowVersion(version),
+        createdAt: this.#dependencies.now(),
+      });
+    } catch (error) {
+      throw mapWorkflowError(error, "publish");
+    }
   }
 
   async get(actor: ActorContext, workflowVersionId: string) {
+    validateActor(actor);
     await this.#authorize(actor, "read", workflowVersionId);
-    const asset = await this.#dependencies.store.loadWorkflowVersion({
-      tenantId: actor.tenantId,
-      workflowVersionId,
-    });
+    let asset;
+    try {
+      asset = await this.#dependencies.store.loadWorkflowVersion({
+        tenantId: actor.tenantId,
+        workflowVersionId,
+      });
+    } catch (error) {
+      throw mapWorkflowError(error, "read");
+    }
     if (asset === null) {
       throw new ApplicationError("notFound", "workflow_version_not_found");
     }
@@ -87,11 +110,16 @@ export class WorkflowVersionApplicationService {
       limit: number;
     },
   ) {
+    validateActor(actor);
     await this.#authorize(actor, "list", null);
-    return this.#dependencies.store.listWorkflowVersions({
-      tenantId: actor.tenantId,
-      ...input,
-    });
+    try {
+      return await this.#dependencies.store.listWorkflowVersions({
+        tenantId: actor.tenantId,
+        ...input,
+      });
+    } catch (error) {
+      throw mapWorkflowError(error, "list");
+    }
   }
 
   async #authorize(
@@ -99,18 +127,81 @@ export class WorkflowVersionApplicationService {
     operation: "publish" | "read" | "list",
     workflowVersionId: string | null,
   ) {
-    const decision = await this.#dependencies.authorization.authorize({
-      actor,
-      action: `workflowVersion:${operation}`,
-      resource: {
-        kind: "workflowVersion",
-        tenantId: actor.tenantId,
-        spaceId: actor.spaceId,
-        workflowVersionId,
-      },
-    });
-    if (decision.outcome !== "allow") {
-      throw new ApplicationError("authorization", "authorization_denied");
+    try {
+      const decision = await this.#dependencies.authorization.authorize({
+        actor,
+        action: `workflowVersion:${operation}`,
+        resource: {
+          kind: "workflowVersion",
+          tenantId: actor.tenantId,
+          spaceId: actor.spaceId,
+          workflowVersionId,
+        },
+      });
+      if (decision.outcome !== "allow")
+        throw new ApplicationError("authorization", "authorization_denied");
+    } catch (error) {
+      if (error instanceof ApplicationError) throw error;
+      throw new ApplicationError("authorization", "authorization_unavailable", {
+        cause: error,
+      });
     }
   }
+}
+
+function validateActor(actor: ActorContext) {
+  if (
+    !isPlainObject(actor) ||
+    !hasExactKeys(actor, ["actorId", "principalId", "spaceId", "tenantId"]) ||
+    [actor.actorId, actor.principalId, actor.spaceId, actor.tenantId].some(
+      (value) => typeof value !== "string" || value.trim().length === 0,
+    )
+  )
+    throw new ApplicationError("validation", "actor_invalid");
+}
+
+function mapWorkflowError(
+  error: unknown,
+  operation: "publish" | "read" | "list" | "reference",
+) {
+  if (error instanceof ApplicationError) return error;
+  if (error instanceof WorkflowVersionError)
+    return new ApplicationError("validation", error.code, { cause: error });
+  if (error instanceof RunStoreError) {
+    if (
+      operation === "publish" &&
+      error.code === "workflow_version_id_conflict"
+    )
+      return new ApplicationError("conflict", error.code, { cause: error });
+    if (isWorkflowValidationCode(error.code))
+      return new ApplicationError("validation", error.code, { cause: error });
+    return new ApplicationError("internal", error.code, { cause: error });
+  }
+  return new ApplicationError("internal", "workflow_version_operation_failed", {
+    cause: error instanceof Error ? error : undefined,
+  });
+}
+function isWorkflowValidationCode(code: string) {
+  return (
+    code.startsWith("workflow_") &&
+    !code.includes("corrupt") &&
+    !code.includes("schema_") &&
+    code !== "workflow_version_store_failed"
+  );
+}
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.getPrototypeOf(value) === Object.prototype
+  );
+}
+function hasExactKeys(value: object, expected: readonly string[]) {
+  const actual = Object.keys(value).sort();
+  const keys = [...expected].sort();
+  return (
+    actual.length === keys.length &&
+    actual.every((key, index) => key === keys[index])
+  );
 }
