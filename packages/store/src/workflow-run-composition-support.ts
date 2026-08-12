@@ -512,6 +512,64 @@ export function scheduleReadyNodes(input: {
   };
 }
 
+export function settleWorkflowClaim(input: {
+  execution: WorkflowExecutionState;
+  nodeId: string;
+  claimId: string;
+  claimEpoch: number;
+  outcome: import("@crewon/application").WorkflowAtomicNodeOutcome;
+  now: string;
+}): WorkflowExecutionState {
+  const target = input.execution.nodes.find(
+    (node) => node.nodeId === input.nodeId,
+  );
+  if (
+    target === undefined ||
+    target.claimId !== input.claimId ||
+    target.claimEpoch !== input.claimEpoch
+  )
+    throw new RunStoreError("workflow_composition_claim_mismatch");
+  const nodes = input.execution.nodes.map((node) =>
+    node.nodeId !== input.nodeId
+      ? node
+      : {
+          ...node,
+          status: input.outcome.status,
+          leaseExpiresAt: null,
+          resultDigest:
+            input.outcome.status === "completed"
+              ? input.outcome.resultDigest
+              : null,
+          failureCode:
+            input.outcome.status === "failed"
+              ? input.outcome.failureCode
+              : null,
+        },
+  );
+  const active = nodes.some((node) =>
+    ["queued", "running", "unknown", "waitingHuman"].includes(node.status),
+  );
+  const status = nodes.some((node) => node.status === "failed")
+    ? "failed"
+    : nodes.every((node) => node.status === "completed")
+      ? "completed"
+      : input.execution.cancelRequested && !active
+        ? "canceled"
+        : nodes.some((node) => node.status === "waitingHuman") &&
+            !nodes.some((node) =>
+              ["queued", "running", "unknown"].includes(node.status),
+            )
+          ? "waitingHuman"
+          : "running";
+  return {
+    ...input.execution,
+    revision: input.execution.revision + 1,
+    nodes,
+    status,
+    updatedAt: input.now,
+  };
+}
+
 function derivedId(
   input: { operationId: string; digester: WorkflowContentDigester },
   nodeId: string,

@@ -12,6 +12,7 @@ import {
 } from "./lease-clock.ts";
 import {
   beginSqliteRunAttempt,
+  finishSqliteRunAttempt,
   loadSqliteRunAttempt,
   loadSqliteRunStep,
 } from "./sqlite-execution-authority.ts";
@@ -35,6 +36,7 @@ import {
   parseBoundWorkflow,
   reconciliationClaims,
   scheduleReadyNodes,
+  settleWorkflowClaim,
   workflowAuthorityId,
   type WorkflowCompositionResult,
 } from "./workflow-run-composition-support.ts";
@@ -297,20 +299,323 @@ export class SqliteWorkflowRunCompositionStore {
     }
   }
 
-  async settleWorkflowNode(): Promise<never> {
-    throw new RunStoreError("workflow_composition_contract_incomplete");
+  async settleWorkflowNode(
+    input: Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["settleWorkflowNode"]> {
+    const nowMs = readLeaseClock(this.#clock);
+    const now = new Date(nowMs).toISOString();
+    const fingerprint = this.#fingerprint("settleNode", input);
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const replay = this.#receipt(input, "settleNode", fingerprint);
+      if (replay !== null) {
+        this.#database.exec("COMMIT");
+        return structuredClone({
+          ...(replay as object),
+          disposition: "replay",
+        } as Awaited<
+          ReturnType<WorkflowRunCompositionStore["settleWorkflowNode"]>
+        >);
+      }
+      this.#validateLease(input, nowMs);
+      assertCanonicalRun(
+        this.#loadRun(input.tenantId, input.runId),
+        input.binding,
+      );
+      const execution = this.#loadExecution(input.tenantId, input.runId);
+      const step = loadSqliteRunStep(this.#database, input);
+      const attempt = loadSqliteRunAttempt(this.#database, input);
+      if (
+        execution === null ||
+        step === null ||
+        attempt === null ||
+        input.stepId !== input.nodeId ||
+        step.currentAttemptId !== input.attemptId ||
+        attempt.workItemId !== input.lease.workItemId ||
+        attempt.leaseEpoch !== input.lease.leaseEpoch
+      )
+        throw new RunStoreError("workflow_composition_attempt_mismatch");
+      const next = settleWorkflowClaim({ execution, ...input, now });
+      if (input.outcome.status !== "unknown") {
+        finishSqliteRunAttempt(this.#database, {
+          tenantId: input.tenantId,
+          runId: input.runId,
+          workItemId: input.lease.workItemId,
+          leaseEpoch: input.lease.leaseEpoch,
+          attempt: terminalAttempt(input, now),
+        });
+      }
+      this.#writeExecution(next, now);
+      let schedulerContinuationWorkItemId: string | null = null;
+      let reconciliationWorkItemId: string | null = null;
+      if (input.outcome.status === "unknown") {
+        reconciliationWorkItemId = workflowAuthorityId(
+          "reconcile",
+          { tenantId: input.tenantId, runId: input.runId, binding: input.binding,
+            operationId: input.operationId, nodeId: input.nodeId,
+            claimId: input.claimId, claimEpoch: input.claimEpoch },
+          this.#digester,
+        );
+        this.#insertWorkflowWorkItem(reconciliationWorkItemId, input, {
+          schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+          trigger: "workflowReconcile", binding: input.binding,
+          nodeId: input.nodeId, claimId: input.claimId,
+          claimEpoch: input.claimEpoch,
+          reconciliationOperationId: input.operationId,
+        }, now, nowMs);
+      } else if (
+        !next.nodes.some((node) =>
+          ["queued", "running", "unknown", "waitingHuman"].includes(node.status),
+        ) &&
+        next.status === "running"
+      ) {
+        schedulerContinuationWorkItemId = workflowAuthorityId(
+          "scheduler",
+          {
+            tenantId: input.tenantId,
+            runId: input.runId,
+            binding: input.binding,
+            settledNodeId: input.nodeId,
+            claimId: input.claimId,
+            claimEpoch: input.claimEpoch,
+          },
+          this.#digester,
+        );
+        this.#insertWorkflowWorkItem(
+          schedulerContinuationWorkItemId,
+          input,
+          {
+            schemaVersion: "crewon.workflow-scheduler-work-item.v0",
+            trigger: "workflowScheduler",
+            binding: input.binding,
+            schedulerOperationId: schedulerContinuationWorkItemId,
+          },
+          now,
+          nowMs,
+        );
+      }
+      const result = {
+        disposition:
+          input.outcome.status === "unknown"
+            ? ("reconciliationScheduled" as const)
+            : ("settled" as const),
+        execution: next,
+        schedulerContinuationWorkItemId,
+        handoff: {
+          currentWorkItem: "completed" as const,
+          nextWorkItemId: reconciliationWorkItemId ?? schedulerContinuationWorkItemId,
+          kind: reconciliationWorkItemId !== null
+            ? "reconcile" as const
+            : schedulerContinuationWorkItemId === null ? "none" as const : "scheduler" as const,
+        },
+        runDisposition: "nonTerminal" as const,
+      };
+      this.#insertReceipt(input, "settleNode", fingerprint, result);
+      this.#completeLease(input, nowMs);
+      this.#database.exec("COMMIT");
+      return structuredClone(result);
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeCompositionError(error);
+    }
   }
 
-  async publishWorkflowHumanGate(): Promise<never> {
-    throw new RunStoreError("workflow_composition_contract_incomplete");
+  async settleWorkflowHumanGate(
+    input: Parameters<
+      WorkflowRunCompositionStore["settleWorkflowHumanGate"]
+    >[0],
+  ): ReturnType<WorkflowRunCompositionStore["settleWorkflowHumanGate"]> {
+    const nowMs = readLeaseClock(this.#clock);
+    const now = new Date(nowMs).toISOString();
+    const fingerprint = this.#fingerprint("settleGate", input);
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const replay = this.#receipt(input, "settleGate", fingerprint);
+      if (replay !== null) {
+        this.#database.exec("COMMIT");
+        return structuredClone({
+          ...(replay as object),
+          disposition: "replay",
+        } as Awaited<
+          ReturnType<WorkflowRunCompositionStore["settleWorkflowHumanGate"]>
+        >);
+      }
+      this.#validateLease(input, nowMs);
+      assertCanonicalRun(
+        this.#loadRun(input.tenantId, input.runId),
+        input.binding,
+      );
+      const gate = this.#loadGate(input);
+      if (
+        gate.decisionReceiptId !== input.decisionReceiptId ||
+        gate.status === "published"
+      )
+        throw new RunStoreError("workflow_gate_decision_mismatch");
+      this.#assertGateResumePayload(input, gate);
+      const execution = this.#loadExecution(input.tenantId, input.runId);
+      const step = loadSqliteRunStep(this.#database, {
+        ...input,
+        stepId: input.nodeId,
+      });
+      if (
+        execution === null ||
+        step === null ||
+        step.kind !== "gate" ||
+        step.status !== "waitingApproval"
+      )
+        throw new RunStoreError("workflow_composition_gate_mismatch");
+      const outcome = gate.outcome as
+        | { status: "completed"; resultDigest: string }
+        | { status: "failed"; failureCode: string };
+      const terminalStep = {
+        ...step,
+        status: outcome.status,
+        revision: step.revision + 1,
+        updatedAt: now,
+        terminalAt: now,
+      };
+      this.#database
+        .prepare(
+          `UPDATE run_steps SET status=?,revision=?,state_json=?,updated_at=?,terminal_at=?
+         WHERE tenant_id=? AND run_id=? AND step_id=? AND revision=?`,
+        )
+        .run(
+          terminalStep.status,
+          terminalStep.revision,
+          stableJson(terminalStep),
+          now,
+          now,
+          input.tenantId,
+          input.runId,
+          input.nodeId,
+          step.revision,
+        );
+      const next = settleWorkflowClaim({ execution, ...input, outcome, now });
+      this.#writeExecution(next, now);
+      let schedulerContinuationWorkItemId: string | null = null;
+      if (
+        next.status === "running" &&
+        !next.nodes.some((node) =>
+          ["queued", "running", "unknown", "waitingHuman"].includes(node.status),
+        )
+      ) {
+        schedulerContinuationWorkItemId = workflowAuthorityId(
+          "scheduler",
+          {
+            tenantId: input.tenantId,
+            runId: input.runId,
+            binding: input.binding,
+            gateRequestId: input.gateRequestId,
+            decisionReceiptId: input.decisionReceiptId,
+          },
+          this.#digester,
+        );
+        this.#insertWorkflowWorkItem(
+          schedulerContinuationWorkItemId,
+          input,
+          {
+            schemaVersion: "crewon.workflow-scheduler-work-item.v0",
+            trigger: "workflowScheduler",
+            binding: input.binding,
+            schedulerOperationId: schedulerContinuationWorkItemId,
+          },
+          now,
+          nowMs,
+        );
+      }
+      const result = {
+        disposition: "settled" as const,
+        execution: next,
+        schedulerContinuationWorkItemId,
+        handoff: {
+          currentWorkItem: "completed" as const,
+          nextWorkItemId: schedulerContinuationWorkItemId,
+          kind: schedulerContinuationWorkItemId === null ? "none" as const : "scheduler" as const,
+        },
+        runDisposition: "nonTerminal" as const,
+      };
+      this.#insertReceipt(input, "settleGate", fingerprint, result);
+      this.#completeLease(input, nowMs);
+      this.#database.exec("COMMIT");
+      return structuredClone(result);
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeCompositionError(error);
+    }
   }
 
-  async settleWorkflowHumanGate(): Promise<never> {
-    throw new RunStoreError("workflow_composition_contract_incomplete");
-  }
-
-  async scheduleWorkflowReconciliation(): Promise<never> {
-    throw new RunStoreError("workflow_composition_contract_incomplete");
+  async scheduleWorkflowReconciliation(
+    input: Parameters<
+      WorkflowRunCompositionStore["scheduleWorkflowReconciliation"]
+    >[0],
+  ): ReturnType<WorkflowRunCompositionStore["scheduleWorkflowReconciliation"]> {
+    const nowMs = readLeaseClock(this.#clock);
+    const now = new Date(nowMs).toISOString();
+    const fingerprint = this.#fingerprint("scheduleReconciliation", input);
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const replay = this.#receipt(
+        input,
+        "scheduleReconciliation",
+        fingerprint,
+      );
+      if (replay !== null) {
+        this.#database.exec("COMMIT");
+        return structuredClone({
+          ...(replay as object),
+          disposition: "replay",
+        } as Awaited<
+          ReturnType<
+            WorkflowRunCompositionStore["scheduleWorkflowReconciliation"]
+          >
+        >);
+      }
+      this.#validateLease(input, nowMs);
+      assertCanonicalRun(
+        this.#loadRun(input.tenantId, input.runId),
+        input.binding,
+      );
+      const reconciliationWorkItemId = workflowAuthorityId(
+        "reconcile",
+        {
+          tenantId: input.tenantId,
+          runId: input.runId,
+          binding: input.binding,
+          operationId: input.operationId,
+          nodeId: input.nodeId,
+          claimId: input.claimId,
+          claimEpoch: input.claimEpoch,
+        },
+        this.#digester,
+      );
+      this.#insertWorkflowWorkItem(
+        reconciliationWorkItemId,
+        input,
+        {
+          schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+          trigger: "workflowReconcile",
+          binding: input.binding,
+          nodeId: input.nodeId,
+          claimId: input.claimId,
+          claimEpoch: input.claimEpoch,
+          reconciliationOperationId: input.operationId,
+        },
+        now,
+        nowMs,
+      );
+      const result = {
+        disposition: "scheduled" as const,
+        reconciliationWorkItemId,
+        handoff: { currentWorkItem: "completed" as const, nextWorkItemId: reconciliationWorkItemId, kind: "reconcile" as const },
+      };
+      this.#insertReceipt(input, "scheduleReconciliation", fingerprint, result);
+      this.#completeLease(input, nowMs);
+      this.#database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeCompositionError(error);
+    }
   }
 
   async scheduleWorkflowNodes(
@@ -360,13 +665,10 @@ export class SqliteWorkflowRunCompositionStore {
         workflow,
       );
       const recovery = reconciliationClaims(execution, workflow);
-      const scheduled = scheduleReadyNodes({
-        execution,
-        workflow,
-        operationId: input.schedulerOperationId,
-        now,
-        digester: this.#digester,
-      });
+      const scheduled = recovery.length === 0
+        ? scheduleReadyNodes({ execution, workflow,
+            operationId: input.schedulerOperationId, now, digester: this.#digester })
+        : { execution, claims: [] };
       execution = scheduled.execution;
       const nodeWorkItems = [];
       const gatePublications = [];
@@ -513,6 +815,24 @@ export class SqliteWorkflowRunCompositionStore {
         }
       }
       this.#writeExecution(execution, now);
+      const reconciliationWorkItemId = recovery.length === 0
+        ? null
+        : workflowAuthorityId("reconcile", {
+            tenantId: input.tenantId, runId: input.runId,
+            binding: input.binding, operationId: input.schedulerOperationId,
+            claims: recovery.map((claim) => ({ nodeId: claim.node.nodeId,
+              claimId: claim.claimId, claimEpoch: claim.claimEpoch })),
+          }, this.#digester);
+      if (reconciliationWorkItemId !== null) {
+        const claim = recovery[0]!;
+        this.#insertWorkflowWorkItem(reconciliationWorkItemId, input, {
+          schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+          trigger: "workflowReconcile", binding: input.binding,
+          nodeId: claim.node.nodeId, claimId: claim.claimId,
+          claimEpoch: claim.claimEpoch,
+          reconciliationOperationId: input.schedulerOperationId,
+        }, now, nowMs);
+      }
       const result =
         recovery.length > 0
           ? {
@@ -521,6 +841,8 @@ export class SqliteWorkflowRunCompositionStore {
               nodeWorkItems: [],
               gatePublications: [],
               reconciliationClaims: recovery,
+              handoff: { currentWorkItem: "completed" as const, nextWorkItemId: reconciliationWorkItemId, kind: "reconcile" as const },
+              runDisposition: "nonTerminal" as const,
             }
           : {
               disposition: "scheduled" as const,
@@ -528,6 +850,8 @@ export class SqliteWorkflowRunCompositionStore {
               nodeWorkItems,
               gatePublications,
               reconciliationClaims: [],
+              handoff: { currentWorkItem: "completed" as const, nextWorkItemId: null, kind: "none" as const },
+              runDisposition: "nonTerminal" as const,
             };
       this.#insertReceipt(input, "scheduleNodes", fingerprint, result);
       this.#completeLease(input, nowMs);
@@ -637,6 +961,7 @@ export class SqliteWorkflowRunCompositionStore {
         disposition: "fresh" as const,
         execution: next,
         admission: { claim, step: started.step, attempt: started.attempt },
+        handoff: { currentWorkItem: "retained" as const, nextWorkItemId: null, kind: "none" as const },
       };
       this.#insertReceipt(
         { ...input, operationId: input.admissionOperationId },
@@ -652,8 +977,100 @@ export class SqliteWorkflowRunCompositionStore {
     }
   }
 
-  async recordWorkflowHumanGateDecision(): Promise<never> {
-    throw new RunStoreError("workflow_composition_contract_incomplete");
+  async recordWorkflowHumanGateDecision(
+    input: Parameters<
+      WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]
+    >[0],
+  ): ReturnType<
+    WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]
+  > {
+    const nowMs = readLeaseClock(this.#clock);
+    const now = new Date(nowMs).toISOString();
+    const fingerprint = this.#fingerprint("recordGateDecision", input);
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const replay = this.#receipt(
+        { ...input, operationId: input.decisionReceiptId },
+        "recordGateDecision",
+        fingerprint,
+      );
+      if (replay !== null) {
+        this.#database.exec("COMMIT");
+        return structuredClone({
+          ...(replay as object),
+          disposition: "replay",
+        } as Awaited<
+          ReturnType<
+            WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]
+          >
+        >);
+      }
+      assertCanonicalRun(
+        this.#loadRun(input.tenantId, input.runId),
+        input.binding,
+      );
+      const gate = this.#loadGate(input);
+      if (
+        gate.status !== "published" ||
+        gate.claimId !== input.claimId ||
+        gate.claimEpoch !== input.claimEpoch
+      )
+        throw new RunStoreError("workflow_gate_decision_mismatch");
+      const state = {
+        ...gate,
+        status: input.outcome.status,
+        decisionReceiptId: input.decisionReceiptId,
+        outcome: input.outcome,
+        updatedAt: now,
+      };
+      const approvalResumeWorkItemId = gate.approvalResumeWorkItemId;
+      if (typeof approvalResumeWorkItemId !== "string")
+        throw new RunStoreError("workflow_gate_store_corrupt");
+      this.#database
+        .prepare(
+          `UPDATE workflow_gate_requests SET status=?,state_json=?,updated_at=?
+         WHERE tenant_id=? AND run_id=? AND node_id=? AND status='published'`,
+        )
+        .run(
+          input.outcome.status,
+          stableJson(state),
+          now,
+          input.tenantId,
+          input.runId,
+          input.nodeId,
+        );
+      this.#insertWorkflowWorkItem(
+        approvalResumeWorkItemId,
+        input,
+        {
+          schemaVersion: "crewon.workflow-gate-resume-work-item.v0",
+          trigger: "workflowGateResume",
+          binding: input.binding,
+          nodeId: input.nodeId,
+          claimId: input.claimId,
+          claimEpoch: input.claimEpoch,
+          gateRequestId: input.gateRequestId,
+          decisionReceiptId: input.decisionReceiptId,
+        },
+        now,
+        nowMs,
+      );
+      const result = {
+        disposition: "recorded" as const,
+        approvalResumeWorkItemId,
+      };
+      this.#insertReceipt(
+        { ...input, operationId: input.decisionReceiptId },
+        "recordGateDecision",
+        fingerprint,
+        result,
+      );
+      this.#database.exec("COMMIT");
+      return result;
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeCompositionError(error);
+    }
   }
 
   #validateLease(
@@ -868,6 +1285,54 @@ export class SqliteWorkflowRunCompositionStore {
       throw new RunStoreError("workflow_composition_work_item_mismatch");
   }
 
+  #loadGate(input: {
+    tenantId: string;
+    runId: string;
+    nodeId: string;
+    gateRequestId: string;
+  }): Record<string, unknown> {
+    const row = this.#database
+      .prepare(
+        `SELECT state_json FROM workflow_gate_requests
+       WHERE tenant_id=? AND run_id=? AND node_id=? AND gate_request_id=?`,
+      )
+      .get(input.tenantId, input.runId, input.nodeId, input.gateRequestId) as
+      | { state_json: string }
+      | undefined;
+    if (row === undefined) throw new RunStoreError("workflow_gate_not_found");
+    return JSON.parse(row.state_json) as Record<string, unknown>;
+  }
+
+  #assertGateResumePayload(
+    input: Parameters<
+      WorkflowRunCompositionStore["settleWorkflowHumanGate"]
+    >[0],
+    gate: Record<string, unknown>,
+  ): void {
+    const row = this.#database
+      .prepare("SELECT work_item_json FROM work_items WHERE work_item_id=?")
+      .get(input.lease.workItemId) as { work_item_json: string } | undefined;
+    const item =
+      row === undefined
+        ? null
+        : (JSON.parse(row.work_item_json) as { payload?: unknown });
+    const expected = {
+      schemaVersion: "crewon.workflow-gate-resume-work-item.v0",
+      trigger: "workflowGateResume",
+      binding: input.binding,
+      nodeId: input.nodeId,
+      claimId: input.claimId,
+      claimEpoch: input.claimEpoch,
+      gateRequestId: input.gateRequestId,
+      decisionReceiptId: input.decisionReceiptId,
+    };
+    if (
+      input.lease.workItemId !== gate.approvalResumeWorkItemId ||
+      stableJson(item?.payload) !== stableJson(expected)
+    )
+      throw new RunStoreError("workflow_composition_work_item_mismatch");
+  }
+
   #loadExecution(tenantId: string, runId: string) {
     const row = this.#database
       .prepare(
@@ -922,4 +1387,30 @@ function normalizeCompositionError(error: unknown): Error {
     : new RunStoreError("workflow_composition_store_failed", {
         cause: error instanceof Error ? error : undefined,
       });
+}
+
+function terminalAttempt(
+  input: Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0],
+  now: string,
+) {
+  const common = {
+    stepId: input.stepId,
+    attemptId: input.attemptId,
+    finishedAt: now,
+    checkpointDigest: null,
+  };
+  switch (input.outcome.status) {
+    case "completed":
+      return { ...common, status: "completed" as const };
+    case "failed":
+      return {
+        ...common,
+        status: "failed" as const,
+        failure: { code: input.outcome.failureCode, retryable: false },
+      };
+    case "canceled":
+      return { ...common, status: "canceled" as const };
+    case "unknown":
+      throw new RunStoreError("workflow_composition_unknown_not_terminal");
+  }
 }
