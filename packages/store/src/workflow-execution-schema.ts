@@ -168,7 +168,7 @@ CREATE TABLE workflow_composition_receipts (
   tenant_id TEXT NOT NULL,
   run_id TEXT NOT NULL,
   operation_id TEXT NOT NULL,
-  kind TEXT NOT NULL CHECK (kind IN ('admit','scheduleNodes','admitNode','settleNode','recordGateDecision','settleGate','scheduleReconciliation')),
+  kind TEXT NOT NULL CHECK (kind IN ('admit','scheduleNodes','admitNode','settleNode','recordGateDecision','settleGate','scheduleReconciliation','cancelExecution')),
   fingerprint TEXT NOT NULL,
   result_json TEXT NOT NULL CHECK (json_valid(result_json)),
   PRIMARY KEY (tenant_id, run_id, operation_id),
@@ -186,7 +186,7 @@ CREATE TABLE workflow_gate_requests (
   input_digest TEXT NOT NULL,
   publication_outbox_message_id TEXT NOT NULL UNIQUE,
   approval_resume_work_item_id TEXT NOT NULL UNIQUE,
-  status TEXT NOT NULL CHECK (status IN ('published','completed','failed')),
+  status TEXT NOT NULL CHECK (status IN ('published','completed','failed','canceled')),
   state_json TEXT NOT NULL CHECK (json_valid(state_json)),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -276,7 +276,7 @@ function postgresCompositionTables(schema: string): string {
   return `${postgresValueTable(schema)}
   CREATE TABLE ${schema}.workflow_composition_receipts (
     tenant_id text NOT NULL, run_id text NOT NULL, operation_id text NOT NULL,
-    kind text NOT NULL CHECK (kind IN ('admit','scheduleNodes','admitNode','settleNode','recordGateDecision','settleGate','scheduleReconciliation')),
+    kind text NOT NULL CHECK (kind IN ('admit','scheduleNodes','admitNode','settleNode','recordGateDecision','settleGate','scheduleReconciliation','cancelExecution')),
     fingerprint text NOT NULL, result_json jsonb NOT NULL,
     PRIMARY KEY (tenant_id,run_id,operation_id),
     FOREIGN KEY (tenant_id,run_id) REFERENCES ${schema}.workflow_executions(tenant_id,run_id));
@@ -286,7 +286,7 @@ function postgresCompositionTables(schema: string): string {
     step_id text NOT NULL, approval_policy_id text NOT NULL, input_digest text NOT NULL,
     publication_outbox_message_id text NOT NULL UNIQUE,
     approval_resume_work_item_id text NOT NULL UNIQUE,
-    status text NOT NULL CHECK (status IN ('published','completed','failed')),
+    status text NOT NULL CHECK (status IN ('published','completed','failed','canceled')),
     state_json jsonb NOT NULL, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL,
     PRIMARY KEY (tenant_id,run_id,node_id),
     FOREIGN KEY (tenant_id,run_id) REFERENCES ${schema}.workflow_executions(tenant_id,run_id),

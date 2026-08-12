@@ -668,6 +668,84 @@ export class SqliteWorkflowRunCompositionStore {
     }
   }
 
+  async cancelWorkflowExecution(
+    input: Parameters<WorkflowRunCompositionStore["cancelWorkflowExecution"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["cancelWorkflowExecution"]> {
+    const nowMs = readLeaseClock(this.#clock);
+    const now = new Date(nowMs).toISOString();
+    const fingerprint = this.#fingerprint("cancelExecution", input);
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const replay = this.#receipt(input, "cancelExecution", fingerprint);
+      if (replay !== null) {
+        this.#database.exec("COMMIT");
+        return structuredClone({ ...(replay as object), disposition: "replay" } as
+          Awaited<ReturnType<WorkflowRunCompositionStore["cancelWorkflowExecution"]>>);
+      }
+      this.#validateLease(input, nowMs);
+      assertCanonicalRun(this.#loadRun(input.tenantId, input.runId), input.binding);
+      const execution = this.#loadExecution(input.tenantId, input.runId);
+      if (execution === null) throw new RunStoreError("workflow_execution_not_found");
+      let requiresReconciliation = false;
+      const nodes = execution.nodes.map((node) => {
+        if (node.status === "queued") {
+          const work = this.#database.prepare(
+            `SELECT status FROM work_items WHERE tenant_id=? AND run_id=?
+             AND json_extract(work_item_json,'$.payload.nodeId')=?`,
+          ).get(input.tenantId, input.runId, node.nodeId) as { status: string } | undefined;
+          if (work?.status !== "pending") { requiresReconciliation = true; return node; }
+          this.#database.prepare(
+            `UPDATE work_items SET status='completed',completed_at_ms=?
+             WHERE tenant_id=? AND run_id=? AND status='pending'
+             AND json_extract(work_item_json,'$.payload.nodeId')=?`,
+          ).run(nowMs, input.tenantId, input.runId, node.nodeId);
+          return { ...node, status: "canceled" as const };
+        }
+        if (["running", "unknown"].includes(node.status)) requiresReconciliation = true;
+        if (node.status === "waitingHuman") {
+          const changed = this.#database.prepare(
+            `UPDATE workflow_gate_requests SET status='canceled',updated_at=?
+             WHERE tenant_id=? AND run_id=? AND node_id=? AND status='published'`,
+          ).run(now, input.tenantId, input.runId, node.nodeId);
+          if (changed.changes === 1) return { ...node, status: "canceled" as const };
+          requiresReconciliation = true;
+        }
+        return node;
+      });
+      const active = nodes.some((node) =>
+        ["queued", "running", "unknown", "waitingHuman"].includes(node.status));
+      const next = { ...execution, revision: execution.revision + 1,
+        cancelRequested: true, nodes,
+        status: active ? "running" as const : "canceled" as const, updatedAt: now };
+      this.#writeExecution(next, now);
+      let reconciliationWorkItemId: string | null = null;
+      if (requiresReconciliation) {
+        reconciliationWorkItemId = workflowAuthorityId("reconcile", input, this.#digester);
+        this.#insertWorkflowWorkItem(reconciliationWorkItemId, input, {
+          schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+          trigger: "workflowReconcile", binding: input.binding,
+          nodeId: null, claimId: null, claimEpoch: null,
+          reconciliationOperationId: input.operationId,
+        }, now, nowMs);
+      }
+      const runDisposition = this.#convergeTerminalRun(
+        input, this.#loadWorkflow(input), next, now, nowMs);
+      const result = { disposition: requiresReconciliation
+        ? "reconciliationScheduled" as const : "canceled" as const,
+        execution: next, handoff: { currentWorkItem: "completed" as const,
+          nextWorkItemId: reconciliationWorkItemId,
+          kind: reconciliationWorkItemId === null ? "none" as const : "reconcile" as const },
+        runDisposition };
+      this.#insertReceipt(input, "cancelExecution", fingerprint, result);
+      this.#completeLease(input, nowMs);
+      this.#database.exec("COMMIT");
+      return structuredClone(result);
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeCompositionError(error);
+    }
+  }
+
   async scheduleWorkflowNodes(
     input: Parameters<WorkflowRunCompositionStore["scheduleWorkflowNodes"]>[0],
   ): ReturnType<WorkflowRunCompositionStore["scheduleWorkflowNodes"]> {
