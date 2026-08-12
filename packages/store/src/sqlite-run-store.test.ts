@@ -2011,6 +2011,59 @@ test("fails closed when stored Attempt detail violates its bounded schema", asyn
   );
 });
 
+test("fails closed when stored provider turn state violates header grammar", async (context) => {
+  const path = temporaryDatabasePath(context);
+  const clock = new ManualLeaseClock();
+  const store = new SqliteRunStore(path, { clock });
+  context.after(() => store.close());
+  await seedThread(store);
+  await store.commitRun(createRunningCommitFixture());
+  const claim = await store.claimNextWorkItem({
+    ownerId: "turn-state-corruption-worker",
+    leaseId: "turn-state-corruption-lease",
+    leaseDurationMs: 1_000,
+  });
+  assert.ok(claim !== null);
+  await store.beginRunAttempt({
+    tenantId: "tenant-1",
+    lease: {
+      workItemId: claim.workItem.workItemId,
+      ownerId: claim.lease.ownerId,
+      leaseId: claim.lease.leaseId,
+      leaseEpoch: claim.lease.epoch,
+    },
+    runId: "run-store-1",
+    stepId: "work-item-1",
+    kind: "model",
+    attemptId: "attempt-turn-state-corrupted",
+    startedAt: "2026-08-08T00:01:01Z",
+  });
+  for (const invalid of [
+    { not: "a-string" },
+    "comma,state",
+    "control\nstate",
+    "x".repeat(4 * 1024 + 1),
+  ]) {
+    const corruptor = new DatabaseSync(path);
+    corruptor
+      .prepare(
+        `UPDATE run_attempts
+         SET state_json = json_set(state_json, '$.providerTurnState', json(?))
+         WHERE attempt_id = ?`,
+      )
+      .run(JSON.stringify(invalid), "attempt-turn-state-corrupted");
+    corruptor.close();
+
+    await assert.rejects(
+      store.loadRunProviderTurnState({
+        tenantId: "tenant-1",
+        runId: "run-store-1",
+      }),
+      hasStoreCode("stored_run_attempt_invalid"),
+    );
+  }
+});
+
 function downgradeModelHistoryAuthority(database: DatabaseSync): void {
   database.exec(`
     DROP TABLE tool_execution_receipts;

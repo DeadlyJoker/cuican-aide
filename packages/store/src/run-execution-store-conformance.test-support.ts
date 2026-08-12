@@ -159,6 +159,36 @@ export function registerRunExecutionStoreConformance(
       );
     });
 
+    test("resolves equal-timestamp Run state by consistency instead of attempt ordering", async (context) => {
+      const fixture = await executionFixture(context, createStore);
+      const claim = await claimWork(fixture.store, "worker-1", "lease-1");
+      for (const [stepId, attemptId] of [
+        ["model-step-a", "attempt-z"],
+        ["model-step-b", "attempt-a"],
+      ] as const) {
+        const started = await fixture.store.beginRunAttempt({
+          ...beginInput(claim, attemptId, "2026-08-08T00:01:01Z"),
+          stepId,
+        });
+        await fixture.store.completeRunAttempt({
+          tenantId: STEP.tenantId,
+          lease: beginInput(claim, "unused", "2026-08-08T00:01:01Z").lease,
+          runId: STEP.runId,
+          attempt: {
+            stepId: started.step.stepId,
+            attemptId: started.attempt.attemptId,
+            finishedAt: "2026-08-08T00:01:02Z",
+            checkpointDigest: null,
+            providerTurnState: "same-state",
+          },
+        });
+      }
+      assert.equal(
+        await fixture.store.loadRunProviderTurnState(STEP),
+        "same-state",
+      );
+    });
+
     test("fences stale epochs and links a reclaimed lease to an abandoned Attempt", async (context) => {
       const fixture = await executionFixture(context, createStore);
       const firstClaim = await claimWork(

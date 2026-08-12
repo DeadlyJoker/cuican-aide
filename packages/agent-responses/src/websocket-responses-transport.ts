@@ -194,7 +194,6 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
               yield providerTurnState === null
                 ? event
                 : { ...event, providerTurnState };
-              this.#turnStates.release(request.runId);
               continue;
             }
             yield event;
@@ -246,9 +245,13 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
         error,
       );
     } finally {
-      this.#turnStates.release(request.runId);
       this.#active = false;
     }
+  }
+
+  releaseRun(runId: string): void {
+    this.#turnStates.release(runId);
+    if (this.#socketRunId === runId) this.#dropSocket(this.#socket);
   }
 
   async prewarm(signal: AbortSignal): Promise<void> {
@@ -502,6 +505,12 @@ export class ResilientResponsesTransport implements ModelTransportPort {
 
   async close(): Promise<void> {
     await this.#websocket.close();
+  }
+
+  releaseRun(runId: string): void {
+    this.#turnStates.release(runId);
+    this.#websocket.releaseRun(runId);
+    this.#http.releaseRun(runId);
   }
 
   async *#fallback(

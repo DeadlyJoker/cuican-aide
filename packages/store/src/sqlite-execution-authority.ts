@@ -6,6 +6,7 @@ import {
   startRunAttempt,
   type RunAttemptState,
   type RunStepState,
+  validateProviderTurnState,
 } from "@crewon/domain";
 import {
   parseExecutionProviderCheckpoint,
@@ -149,18 +150,20 @@ export function loadSqliteRunProviderTurnState(
     .prepare(
       `SELECT ${ATTEMPT_COLUMNS} FROM run_attempts
        WHERE tenant_id = ? AND run_id = ?
-       ORDER BY updated_at DESC, attempt_id DESC`,
+       ORDER BY step_id ASC, attempt_number ASC`,
     )
     .all(locator.tenantId, locator.runId) as unknown as RunAttemptRow[];
+  const values = new Set<string>();
   for (const row of rows) {
     const state = decodeRunAttempt(row, {
       ...locator,
       stepId: row.step_id,
       attemptId: row.attempt_id,
     });
-    if (state.providerTurnState !== null) return state.providerTurnState;
+    if (state.providerTurnState !== null) values.add(state.providerTurnState);
   }
-  return null;
+  if (values.size > 1) throw new RunStoreError("stored_run_attempt_invalid");
+  return values.values().next().value ?? null;
 }
 
 export function beginSqliteRunAttempt(
@@ -454,7 +457,9 @@ function decodeRunAttempt(
   const state = {
     ...parsed,
     providerCheckpoint: parsed.providerCheckpoint ?? null,
-    providerTurnState: parsed.providerTurnState ?? null,
+    providerTurnState: validateStoredProviderTurnState(
+      parsed.providerTurnState,
+    ),
   };
   if (
     !isRecord(state) ||
@@ -493,6 +498,14 @@ function decodeRunAttempt(
     throw new RunStoreError("stored_run_attempt_invalid");
   }
   return state;
+}
+
+function validateStoredProviderTurnState(value: unknown): string | null {
+  try {
+    return validateProviderTurnState(value);
+  } catch {
+    throw new RunStoreError("stored_run_attempt_invalid");
+  }
 }
 
 function validProviderCheckpoint(value: unknown): boolean {

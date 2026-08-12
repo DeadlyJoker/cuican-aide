@@ -156,12 +156,9 @@ export function finishRunAttempt(
         failure: Readonly<{ code: string; retryable: boolean }>;
       }>,
 ): Readonly<{ step: RunStepState; attempt: RunAttemptState }> {
-  if (
-    attempt.providerTurnState !== null &&
-    (attempt.providerTurnState.length === 0 ||
-      attempt.providerTurnState.length > 4 * 1024 ||
-      /[^\x20-\x2b\x2d-\x7e]/u.test(attempt.providerTurnState))
-  ) {
+  try {
+    validateProviderTurnState(attempt.providerTurnState);
+  } catch {
     throw new ExecutionLifecycleError("attempt_provider_turn_state_invalid");
   }
   if (
@@ -268,3 +265,4 @@ function requireTimestamp(value: string, code: string): void {
     throw new ExecutionLifecycleError(code);
   }
 }
+import { validateProviderTurnState } from "./provider-turn-state.ts";

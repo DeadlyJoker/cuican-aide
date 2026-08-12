@@ -240,7 +240,6 @@ export class DirectResponsesTransport implements ModelTransportPort {
           yield providerTurnState === null
             ? event
             : { ...event, providerTurnState };
-          this.#turnStates.release(request.runId);
         } else {
           yield event;
         }
@@ -275,9 +274,12 @@ export class DirectResponsesTransport implements ModelTransportPort {
         error,
       );
     } finally {
-      this.#turnStates.release(request.runId);
       idle.close();
     }
+  }
+
+  releaseRun(runId: string): void {
+    this.#turnStates.release(runId);
   }
 
   async *#retrieve(

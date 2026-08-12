@@ -59,7 +59,7 @@ export class InMemoryExecutionAuthority {
       runId: string;
     }>,
   ): string | null {
-    return (
+    const values = new Set(
       [...this.#attempts.values()]
         .filter(
           (attempt) =>
@@ -67,9 +67,12 @@ export class InMemoryExecutionAuthority {
             attempt.runId === locator.runId &&
             attempt.providerTurnState !== null,
         )
-        .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))[0]
-        ?.providerTurnState ?? null
+        .map((attempt) => attempt.providerTurnState!),
     );
+    if (values.size > 1) {
+      throw new RunStoreError("stored_run_attempt_invalid");
+    }
+    return values.values().next().value ?? null;
   }
 
   begin(input: BeginRunAttemptInput): BeginRunAttemptResult {

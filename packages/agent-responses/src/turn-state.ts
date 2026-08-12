@@ -8,7 +8,12 @@ export class ResponsesTurnStateAuthority {
   seed(runId: string, value: string | null): void {
     if (value === null) return;
     const parsed = parseTurnStateHeader([value]);
-    if (parsed !== null) this.#states.set(runId, parsed);
+    if (parsed === null) return;
+    const current = this.#states.get(runId);
+    if (current !== undefined && current !== parsed) {
+      throw protocolError("responses_turn_state_conflict");
+    }
+    this.#states.set(runId, parsed);
   }
 
   get(runId: string): string | null {

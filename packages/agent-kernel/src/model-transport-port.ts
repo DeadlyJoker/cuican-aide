@@ -88,6 +88,8 @@ export interface ModelTransportPort {
     request: ModelRequest,
     signal: AbortSignal,
   ): AsyncIterable<ModelTransportEvent>;
+  /** Releases Run-private transport control state after the Kernel execution scope ends. */
+  releaseRun?(runId: string): void;
   close?(): Promise<void>;
 }
 

@@ -14,6 +14,7 @@ import {
   startRunAttempt,
   type RunAttemptState,
   type RunStepState,
+  validateProviderTurnState,
 } from "@crewon/domain";
 import { type Pool, type PoolClient } from "pg";
 
@@ -120,18 +121,20 @@ export async function loadPostgresRunProviderTurnState(
   const result = await connection.query<RunAttemptRow>(
     `SELECT ${ATTEMPT_COLUMNS} FROM ${table(schema, "run_attempts")}
      WHERE tenant_id=$1 AND run_id=$2
-     ORDER BY updated_at DESC, attempt_id DESC`,
+     ORDER BY step_id ASC, attempt_number ASC`,
     [locator.tenantId, locator.runId],
   );
+  const values = new Set<string>();
   for (const row of result.rows) {
     const state = decodeRunAttempt(row, {
       ...locator,
       stepId: row.step_id,
       attemptId: row.attempt_id,
     });
-    if (state.providerTurnState !== null) return state.providerTurnState;
+    if (state.providerTurnState !== null) values.add(state.providerTurnState);
   }
-  return null;
+  if (values.size > 1) throw new RunStoreError("stored_run_attempt_invalid");
+  return values.values().next().value ?? null;
 }
 
 export async function beginPostgresRunAttempt(
@@ -370,7 +373,9 @@ function decodeRunAttempt(
   const state = {
     ...parsed,
     providerCheckpoint: parsed.providerCheckpoint ?? null,
-    providerTurnState: parsed.providerTurnState ?? null,
+    providerTurnState: validateStoredProviderTurnState(
+      parsed.providerTurnState,
+    ),
   };
   if (
     state.schemaVersion !== "crewon.run-attempt.v0" ||
@@ -395,6 +400,14 @@ function decodeRunAttempt(
     throw new RunStoreError("stored_run_attempt_invalid");
   }
   return structuredClone(state);
+}
+
+function validateStoredProviderTurnState(value: unknown): string | null {
+  try {
+    return validateProviderTurnState(value);
+  } catch {
+    throw new RunStoreError("stored_run_attempt_invalid");
+  }
 }
 
 function validProviderCheckpoint(value: unknown): boolean {

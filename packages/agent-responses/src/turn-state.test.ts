@@ -66,6 +66,34 @@ test("AR-043 keeps opaque response state within one Run and clears it for anothe
     { runId: fixture.runs[0], state: fixture.state },
     { runId: fixture.runs[1], state: null },
   ]);
+  transport.releaseRun(fixture.runs[0]);
+});
+
+test("AR-043 retains observed HTTP state across a failed stream retry", async () => {
+  const sent: Array<string | null> = [];
+  let calls = 0;
+  const transport = new DirectResponsesTransport(
+    { endpoint: "https://provider.example/v1/responses", model: "model" },
+    {
+      fetch: async (_url, init) => {
+        sent.push(new Headers(init?.headers).get(fixture.header));
+        const headers = new Headers({ "content-type": "text/event-stream" });
+        if (calls++ === 0) {
+          headers.set(fixture.header, fixture.state);
+          return new Response("data: not-json\n\n", { headers });
+        }
+        return response(headers);
+      },
+    },
+  );
+
+  await assert.rejects(
+    collect(transport.stream(request(fixture.runs[0]), signal())),
+  );
+  await collect(transport.stream(request(fixture.runs[0]), signal()));
+  await collect(transport.stream(request(fixture.runs[1]), signal()));
+  assert.deepEqual(sent, [null, fixture.state, null]);
+  transport.releaseRun(fixture.runs[0]);
 });
 
 test("AR-043 fails closed on duplicate, oversized, invalid, and conflicting state", () => {
@@ -88,6 +116,10 @@ test("AR-043 fails closed on duplicate, oversized, invalid, and conflicting stat
     /conflict/u,
   );
   authority.observe(fixture.runs[1], ["different"]);
+  assert.throws(
+    () => authority.seed(fixture.runs[0], "different"),
+    /conflict/u,
+  );
 });
 
 test("AR-043 releases terminal transport state instead of imposing a Run cap", () => {

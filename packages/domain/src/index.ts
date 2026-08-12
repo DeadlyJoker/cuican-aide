@@ -3,6 +3,7 @@ export * from "./artifact.ts";
 export * from "./automation.ts";
 export * from "./model-history.ts";
 export * from "./proposed-plan.ts";
+export * from "./provider-turn-state.ts";
 export * from "./rate-limit-snapshot.ts";
 export * from "./run-lifecycle.ts";
 export * from "./run-goal-accounting.ts";

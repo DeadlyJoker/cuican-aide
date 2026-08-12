@@ -88,7 +88,25 @@ export class CrewONAgentKernel implements AgentKernelPort {
     });
   }
 
-  async *runSegment(
+  runSegment(
+    contract: AgentSegmentContract,
+    signal: AbortSignal,
+  ): AsyncIterable<KernelAgentEvent> {
+    return this.#runSegmentScope(contract, signal);
+  }
+
+  async *#runSegmentScope(
+    contract: AgentSegmentContract,
+    signal: AbortSignal,
+  ): AsyncIterable<KernelAgentEvent> {
+    try {
+      yield* this.#runSegment(contract, signal);
+    } finally {
+      this.#transport.releaseRun?.(contract.runId);
+    }
+  }
+
+  async *#runSegment(
     contract: AgentSegmentContract,
     signal: AbortSignal,
   ): AsyncIterable<KernelAgentEvent> {

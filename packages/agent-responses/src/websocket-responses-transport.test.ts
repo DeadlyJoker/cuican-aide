@@ -219,6 +219,40 @@ test("reconnects one Run to return its bounded handshake state", async (context)
   assert.equal(handshakes[1]?.headers["x-codex-turn-state"], "state-1");
 });
 
+test("retains handshake state across a failed WebSocket stream retry", async (context) => {
+  const fixture = await websocketFixture(context);
+  const handshakes: IncomingMessage[] = [];
+  let connections = 0;
+  fixture.webSocketServer.on("headers", (headers) => {
+    headers.push("x-codex-turn-state: retry-state");
+  });
+  fixture.webSocketServer.on("connection", (socket, request) => {
+    connections += 1;
+    handshakes.push(request);
+    socket.on("message", () => {
+      if (connections === 1) {
+        socket.send("not-json");
+      } else {
+        sendCompleted(socket, `response-${connections}`, "done");
+      }
+    });
+  });
+  const transport = new WebSocketResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+  });
+  context.after(() => transport.close());
+
+  await assert.rejects(
+    collect(transport.stream(manualRequest("first"), signal())),
+  );
+  await collect(transport.stream(manualRequest("second"), signal()));
+
+  assert.equal(handshakes[0]?.headers["x-codex-turn-state"], undefined);
+  assert.equal(handshakes[1]?.headers["x-codex-turn-state"], "retry-state");
+  transport.releaseRun("run-1");
+});
+
 test("prewarm discards unscoped state and reacquires it for the first Run", async (context) => {
   const fixture = await websocketFixture(context);
   const handshakes: IncomingMessage[] = [];

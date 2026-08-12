@@ -1387,6 +1387,52 @@ test("retries an explicitly retryable model terminal in the same segment", async
   );
 });
 
+test("owns Run-private transport state through retry and releases it at segment terminal", async () => {
+  const requests: ModelRequest[] = [];
+  const released: string[] = [];
+  const transport: ModelTransportPort = {
+    adapterName: "turn-state-adapter",
+    adapterVersion: "1",
+    modelId: "turn-state-provider",
+    async *stream(request) {
+      requests.push(structuredClone(request));
+      if (requests.length === 1) {
+        yield {
+          type: "completed",
+          checkpoint: null,
+          providerTurnState: "state-1",
+        };
+        throw new ModelTransportError({
+          category: "incomplete",
+          code: "stream_failed",
+          retryable: true,
+        });
+      }
+      yield { type: "output.delta", delta: "done" };
+      yield {
+        type: "completed",
+        checkpoint: null,
+        providerTurnState: "state-1",
+      };
+    },
+    releaseRun(runId) {
+      released.push(runId);
+    },
+  };
+
+  await collect(
+    new CrewONAgentKernel({
+      transport,
+      streamMaxRetries: 1,
+      retryScheduler: { wait: async () => undefined },
+    }).runSegment(segmentContract(), new AbortController().signal),
+  );
+
+  assert.equal(requests[0]?.providerTurnState, undefined);
+  assert.equal(requests[1]?.providerTurnState, "state-1");
+  assert.deepEqual(released, ["run-1"]);
+});
+
 function segmentContract() {
   return {
     schemaVersion: "crewon.agent-segment.v0",
