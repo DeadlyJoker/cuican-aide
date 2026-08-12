@@ -2,6 +2,9 @@ import { DatabaseSync } from "node:sqlite";
 import {
   canonicalJson,
   RunStoreError,
+  type WorkflowAgentAttemptAuthority,
+  type WorkflowNodeContinuationCheckpoint,
+  type CommitWorkflowAssistantContinuationInput,
   type WorkflowRunCompositionStore,
 } from "@crewon/application";
 import {
@@ -52,6 +55,7 @@ import {
   settleWorkflowClaim,
   workflowAuthorityId,
 } from "./workflow-run-composition-support.ts";
+import { SqliteWorkflowNodeContinuationAuthority } from "./sqlite-workflow-node-continuation.ts";
 
 type Dependencies = Readonly<{
   digester: WorkflowContentDigester;
@@ -65,6 +69,7 @@ export class SqliteWorkflowRunCompositionStore
   readonly #digester: WorkflowContentDigester;
   readonly #clock: LeaseClock;
   readonly #ownsDatabase: boolean;
+  readonly #continuations: SqliteWorkflowNodeContinuationAuthority;
 
   constructor(database: DatabaseSync, dependencies: Dependencies);
   constructor(path: string, dependencies: Dependencies);
@@ -81,6 +86,10 @@ export class SqliteWorkflowRunCompositionStore
     this.#ownsDatabase = typeof databaseOrPath === "string";
     this.#digester = dependencies.digester;
     this.#clock = dependencies.clock ?? new SystemLeaseClock();
+    this.#continuations = new SqliteWorkflowNodeContinuationAuthority(
+      this.#database,
+      this.#clock,
+    );
     configureAndMigrateSqlite(this.#database);
     migrateSqliteWorkflowVersions(this.#database);
     migrateSqliteWorkflowExecutions(this.#database);
@@ -89,6 +98,18 @@ export class SqliteWorkflowRunCompositionStore
 
   async close(): Promise<void> {
     if (this.#ownsDatabase) this.#database.close();
+  }
+
+  async loadWorkflowNodeContinuation(
+    authority: WorkflowAgentAttemptAuthority,
+  ): Promise<WorkflowNodeContinuationCheckpoint | null> {
+    return this.#continuations.load(authority);
+  }
+
+  async commitWorkflowAssistantContinuation(
+    input: CommitWorkflowAssistantContinuationInput,
+  ): Promise<WorkflowNodeContinuationCheckpoint> {
+    return this.#continuations.commitAssistant(input);
   }
 
   async settleWorkflowNode(
