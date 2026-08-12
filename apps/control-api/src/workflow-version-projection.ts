@@ -3,7 +3,10 @@ import {
   parseCompiledWorkflowVersion,
   type WorkflowContentDigester,
 } from "@crewon/domain";
-import type { WorkflowVersionView } from "@crewon/contracts";
+import type {
+  WorkflowVersionSummaryView,
+  WorkflowVersionView,
+} from "@crewon/contracts";
 
 export function projectWorkflowVersion(
   asset: WorkflowVersionAsset,
@@ -24,6 +27,21 @@ export function projectWorkflowVersion(
       version.nodes,
     ) as unknown as WorkflowVersionView["nodes"],
     executionOrder: [...version.executionOrder],
+    createdAt: asset.createdAt,
+  };
+}
+
+export function projectWorkflowVersionSummary(
+  asset: WorkflowVersionAsset,
+  digester: WorkflowContentDigester,
+): WorkflowVersionSummaryView {
+  const version = parseCompiledWorkflowVersion(asset.definitionJson, digester);
+  return {
+    workflowId: version.workflowId,
+    workflowVersionId: version.workflowVersionId,
+    contentDigest: version.contentDigest,
+    name: version.name,
+    description: version.description,
     createdAt: asset.createdAt,
   };
 }

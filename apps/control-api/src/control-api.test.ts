@@ -1995,6 +1995,34 @@ test("publishes, replays and pages tenant WorkflowVersions without exposing auth
   const page = listed.json<ListWorkflowVersionsResponse>();
   assert.equal(page.data.length, 1);
   assert.equal(typeof page.nextCursor, "string");
+  assert.deepEqual(Object.keys(page.data[0]!).sort(), [
+    "contentDigest",
+    "createdAt",
+    "description",
+    "name",
+    "workflowId",
+    "workflowVersionId",
+  ]);
+  for (const forbidden of [
+    "definitionJson",
+    "nodes",
+    "inputSchema",
+    "outputSchema",
+    "executionOrder",
+  ]) {
+    assert.equal(JSON.stringify(page).includes(forbidden), false, forbidden);
+  }
+  const wrongWorkflowCursor = await runtime.app.inject({
+    method: "GET",
+    url: `/api/v1/workflow-versions?workflowId=workflow-2&cursor=${page.nextCursor}`,
+    headers: readHeaders(),
+  });
+  assertError(
+    wrongWorkflowCursor,
+    400,
+    "validation",
+    "workflow_version_cursor_invalid",
+  );
 });
 
 test("queries and decides a durable Tool approval without exposing execution bindings", async (context) => {

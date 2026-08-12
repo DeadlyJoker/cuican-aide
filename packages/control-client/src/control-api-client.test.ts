@@ -65,6 +65,46 @@ test("preserves exact frozen WorkflowVersion provenance on Run reads", async () 
   assert.equal(JSON.stringify(response).includes("definitionJson"), false);
 });
 
+test("lists bounded WorkflowVersion summaries without definition fields", async () => {
+  const summary = {
+    workflowId: "workflow-1",
+    workflowVersionId: "workflow-version-1",
+    contentDigest: `sha256:${"a".repeat(64)}`,
+    name: "Workflow",
+    description: "Bounded metadata",
+    createdAt: "2026-08-12T00:00:00.000Z",
+  };
+  const response = { data: [summary], nextCursor: null };
+  let requestedUrl = "";
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async (input) => {
+      requestedUrl = String(input);
+      return jsonResponse(200, response);
+    },
+  });
+  assert.deepEqual(
+    await client.listWorkflowVersions("workflow-1", { limit: 100 }),
+    response,
+  );
+  assert.equal(
+    requestedUrl,
+    "https://control.example/api/v1/workflow-versions?workflowId=workflow-1&limit=100",
+  );
+  for (const forbidden of [
+    "definitionJson",
+    "nodes",
+    "inputSchema",
+    "outputSchema",
+  ]) {
+    assert.equal(
+      JSON.stringify(response).includes(forbidden),
+      false,
+      forbidden,
+    );
+  }
+});
+
 test("starts a Turn through one atomic typed mutation", async () => {
   const requests: { input: string; init: RequestInit }[] = [];
   const client = new ControlApiClient({

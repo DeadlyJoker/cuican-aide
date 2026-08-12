@@ -1317,11 +1317,20 @@ export interface components {
       disposition: "registered" | "existing";
       workflowVersion: components["schemas"]["WorkflowVersionView"];
     };
+    WorkflowVersionSummaryView: {
+      workflowId: string;
+      workflowVersionId: string;
+      contentDigest: string;
+      name: string;
+      description: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
     GetWorkflowVersionResponse: {
       workflowVersion: components["schemas"]["WorkflowVersionView"];
     };
     ListWorkflowVersionsResponse: {
-      data: components["schemas"]["WorkflowVersionView"][];
+      data: components["schemas"]["WorkflowVersionSummaryView"][];
       nextCursor: string | null;
     };
     AgentVersionView: {

@@ -94,6 +94,8 @@ export type ListAgentVersionsResponse =
 export type PublishWorkflowVersionRequest =
   components["schemas"]["PublishWorkflowVersionRequest"];
 export type WorkflowVersionView = components["schemas"]["WorkflowVersionView"];
+export type WorkflowVersionSummaryView =
+  components["schemas"]["WorkflowVersionSummaryView"];
 export type WorkflowVersionMutationResponse =
   components["schemas"]["WorkflowVersionMutationResponse"];
 export type GetWorkflowVersionResponse =

@@ -167,7 +167,10 @@ import {
   streamWorkspaceOperationEvents,
   type WorkspaceOperationEventPoller,
 } from "./workspace-operation-event-stream.ts";
-import { projectWorkflowVersion } from "./workflow-version-projection.ts";
+import {
+  projectWorkflowVersion,
+  projectWorkflowVersionSummary,
+} from "./workflow-version-projection.ts";
 
 export type ControlApiDependencies = Readonly<{
   application: RunApplicationService;
@@ -1130,7 +1133,10 @@ export function buildControlApi(
         limit: query.limit,
       });
       const data = assets.map((asset) =>
-        projectWorkflowVersion(asset, dependencies.workflowVersionDigester),
+        projectWorkflowVersionSummary(
+          asset,
+          dependencies.workflowVersionDigester,
+        ),
       );
       const response: ListWorkflowVersionsResponse = {
         data,

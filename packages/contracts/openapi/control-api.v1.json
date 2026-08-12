@@ -3761,6 +3761,38 @@
           }
         }
       },
+      "WorkflowVersionSummaryView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "workflowId",
+          "workflowVersionId",
+          "contentDigest",
+          "name",
+          "description",
+          "createdAt"
+        ],
+        "properties": {
+          "workflowId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "workflowVersionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "contentDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$",
+            "maxLength": 71
+          },
+          "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "description": { "type": "string", "maxLength": 4096 },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "maxLength": 24
+          }
+        }
+      },
       "GetWorkflowVersionResponse": {
         "type": "object",
         "additionalProperties": false,
@@ -3778,7 +3810,9 @@
         "properties": {
           "data": {
             "type": "array",
-            "items": { "$ref": "#/components/schemas/WorkflowVersionView" }
+            "items": {
+              "$ref": "#/components/schemas/WorkflowVersionSummaryView"
+            }
           },
           "nextCursor": { "type": ["string", "null"], "maxLength": 2048 }
         }

@@ -492,6 +492,31 @@ test("freezes strict immutable AgentVersion publication and pagination", () => {
   }
 });
 
+test("bounds WorkflowVersion lists to metadata-only summaries", () => {
+  const summary = openApi.components.schemas.WorkflowVersionSummaryView;
+  assert.deepEqual(Object.keys(summary.properties).sort(), [
+    "contentDigest",
+    "createdAt",
+    "description",
+    "name",
+    "workflowId",
+    "workflowVersionId",
+  ]);
+  const list = openApi.components.schemas.ListWorkflowVersionsResponse;
+  assert.deepEqual(list.properties.data.items, {
+    $ref: "#/components/schemas/WorkflowVersionSummaryView",
+  });
+  for (const forbidden of [
+    "definitionJson",
+    "nodes",
+    "inputSchema",
+    "outputSchema",
+    "executionOrder",
+  ]) {
+    assert.equal(JSON.stringify(summary).includes(forbidden), false, forbidden);
+  }
+});
+
 test("freezes strict Thread and text Message authority without client scope fields", () => {
   assert.deepEqual(parseCreateThreadRequest({ title: null }), { title: null });
   assert.deepEqual(parseCreateThreadRequest({ title: "Planning" }), {
@@ -1280,6 +1305,12 @@ type OpenApiDocument = Readonly<{
       RunView: {
         required: readonly string[];
         properties: { purpose: { enum: readonly string[] } };
+      };
+      WorkflowVersionSummaryView: {
+        properties: Record<string, unknown>;
+      };
+      ListWorkflowVersionsResponse: {
+        properties: { data: { items: unknown } };
       };
       ThreadGoalStatus: { enum: readonly string[] };
       ThreadStatus: { enum: readonly string[] };
