@@ -1,6 +1,8 @@
 import { WorkflowVersionError } from "./workflow-version-error.ts";
 import type { WorkflowValueSchema } from "./workflow-schema.ts";
 
+export const MAX_WORKFLOW_VALUE_BYTES = 32_768;
+
 export type WorkflowSchemaValue =
   | null
   | boolean

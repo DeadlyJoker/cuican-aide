@@ -20,7 +20,7 @@ export class SqliteWorkflowExecutionStore implements WorkflowExecutionStore {
   }
 
   async createWorkflowExecution(state: WorkflowExecutionState) {
-    validateState(state);
+    validateWorkflowExecutionState(state);
     try {
       this.#database.exec("BEGIN IMMEDIATE");
       const inserted = this.#database
@@ -78,7 +78,7 @@ export class SqliteWorkflowExecutionStore implements WorkflowExecutionStore {
       ? {
           operationId: input.operationId,
           fingerprint: row.fingerprint,
-          state: decodeState(row.state_json),
+          state: decodeWorkflowExecutionState(row.state_json),
         }
       : null;
   }
@@ -102,7 +102,7 @@ export class SqliteWorkflowExecutionStore implements WorkflowExecutionStore {
       if (replay) {
         if (replay.fingerprint !== input.receipt.fingerprint)
           throw new RunStoreError("workflow_execution_idempotency_conflict");
-        const state = decodeState(replay.state_json);
+        const state = decodeWorkflowExecutionState(replay.state_json);
         this.#database.exec("COMMIT");
         return { disposition: "replayed" as const, state };
       }
@@ -177,7 +177,7 @@ export class PostgresWorkflowExecutionStore implements WorkflowExecutionStore {
   }
 
   async createWorkflowExecution(state: WorkflowExecutionState) {
-    validateState(state);
+    validateWorkflowExecutionState(state);
     const client = await this.#pool.connect();
     try {
       await client.query("BEGIN");
@@ -244,7 +244,7 @@ export class PostgresWorkflowExecutionStore implements WorkflowExecutionStore {
       ? {
           operationId: input.operationId,
           fingerprint: row.fingerprint,
-          state: decodeState(row.state_json),
+          state: decodeWorkflowExecutionState(row.state_json),
         }
       : null;
   }
@@ -270,7 +270,7 @@ export class PostgresWorkflowExecutionStore implements WorkflowExecutionStore {
       if (replay) {
         if (replay.fingerprint !== input.receipt.fingerprint)
           throw new RunStoreError("workflow_execution_idempotency_conflict");
-        const state = decodeState(replay.state_json);
+        const state = decodeWorkflowExecutionState(replay.state_json);
         await client.query("COMMIT");
         return { disposition: "replayed" as const, state };
       }
@@ -331,7 +331,7 @@ function loadSqlite(database: DatabaseSync, tenantId: string, runId: string) {
       `SELECT state_json FROM workflow_executions WHERE tenant_id=? AND run_id=?`,
     )
     .get(tenantId, runId) as { state_json: string } | undefined;
-  return row ? decodeState(row.state_json) : null;
+  return row ? decodeWorkflowExecutionState(row.state_json) : null;
 }
 
 async function loadPostgres(
@@ -346,10 +346,14 @@ async function loadPostgres(
      WHERE tenant_id=$1 AND run_id=$2${forUpdate ? " FOR UPDATE" : ""}`,
     [tenantId, runId],
   );
-  return result.rows[0] ? decodeState(result.rows[0].state_json) : null;
+  return result.rows[0]
+    ? decodeWorkflowExecutionState(result.rows[0].state_json)
+    : null;
 }
 
-function decodeState(input: unknown): WorkflowExecutionState {
+export function decodeWorkflowExecutionState(
+  input: unknown,
+): WorkflowExecutionState {
   let value: unknown = input;
   if (typeof input === "string") {
     try {
@@ -360,11 +364,11 @@ function decodeState(input: unknown): WorkflowExecutionState {
       });
     }
   }
-  validateState(value);
+  validateWorkflowExecutionState(value);
   return structuredClone(value);
 }
 
-function validateState(
+export function validateWorkflowExecutionState(
   input: unknown,
 ): asserts input is WorkflowExecutionState {
   if (!plain(input))
@@ -405,7 +409,10 @@ function validateState(
     throw new RunStoreError("workflow_execution_state_invalid");
   for (const node of state.nodes) validateNode(node);
   const active = state.nodes.some(
-    (node) => node.status === "running" || node.status === "unknown",
+    (node) =>
+      node.status === "queued" ||
+      node.status === "running" ||
+      node.status === "unknown",
   );
   const projected =
     state.cancelRequested && !active
@@ -446,6 +453,7 @@ function validateNode(node: unknown): void {
     (value.kind === "humanGate") !== (value.agentVersionId === null) ||
     ![
       "pending",
+      "queued",
       "running",
       "waitingHuman",
       "completed",
@@ -468,6 +476,7 @@ function validateNode(node: unknown): void {
     throw new RunStoreError("workflow_execution_state_invalid");
   const unclaimed = value.status === "pending";
   const active =
+    value.status === "queued" ||
     value.status === "running" ||
     value.status === "waitingHuman" ||
     value.status === "unknown";
@@ -499,7 +508,7 @@ function validateCas(
   >[0],
 ): void {
   validateLocator(input);
-  validateState(input.next);
+  validateWorkflowExecutionState(input.next);
   if (
     !Number.isSafeInteger(input.expectedRevision) ||
     input.expectedRevision < 1 ||
@@ -546,15 +555,41 @@ function validNodeTransition(
   if (stableJson(current) === stableJson(next)) return true;
   if (current.status === "pending")
     return (
-      next.status === "running" ||
+      next.status === "queued" ||
+      (next.status === "running" && !next.claimId?.startsWith("wf1:claim:")) ||
       next.status === "waitingHuman" ||
       next.status === "canceled"
     );
+  if (current.status === "queued")
+    return (
+      (next.status === "running" || next.status === "canceled") &&
+      sameClaimAuthority(current, next)
+    );
   if (current.status === "running")
-    return ["completed", "failed", "canceled", "unknown"].includes(next.status);
+    return (
+      ["completed", "failed", "canceled", "unknown"].includes(next.status) &&
+      sameClaimAuthority(current, next)
+    );
   if (current.status === "waitingHuman" || current.status === "unknown")
-    return ["completed", "failed", "canceled", "unknown"].includes(next.status);
+    return (
+      ["completed", "failed", "canceled", "unknown"].includes(next.status) &&
+      sameClaimAuthority(current, next)
+    );
   return false;
+}
+
+function sameClaimAuthority(
+  current: WorkflowExecutionState["nodes"][number],
+  next: WorkflowExecutionState["nodes"][number],
+): boolean {
+  return (
+    current.claimId === next.claimId &&
+    current.claimOperationId === next.claimOperationId &&
+    current.claimEpoch === next.claimEpoch &&
+    current.inputDigest === next.inputDigest &&
+    current.gateRequestId === next.gateRequestId &&
+    current.agentVersionId === next.agentVersionId
+  );
 }
 
 function assertCreateReplay(

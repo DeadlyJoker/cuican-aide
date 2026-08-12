@@ -6,6 +6,7 @@ export type WorkflowExecutionNodeState = Readonly<{
   agentVersionId: string | null;
   status:
     | "pending"
+    | "queued"
     | "running"
     | "waitingHuman"
     | "completed"

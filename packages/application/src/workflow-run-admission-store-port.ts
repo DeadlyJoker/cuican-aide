@@ -1,12 +1,12 @@
 import type { JsonValue } from "@crewon/contracts";
 
+import type { WorkflowRunInputAuthority } from "./durable-queue-port.ts";
 import type { RunRoute } from "./run-commands.ts";
 import type {
   CommitRunInput,
   CommitRunResult,
   IdempotencyDescriptor,
 } from "./run-store-port.ts";
-import type { WorkflowRunInputAuthority } from "./durable-queue-port.ts";
 import type { WorkflowVersionAsset } from "./workflow-version-store-port.ts";
 
 export type WorkflowRunAdmissionAuthority = Readonly<{
