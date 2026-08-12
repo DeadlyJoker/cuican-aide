@@ -286,7 +286,11 @@ export async function schedulePostgresWorkflowNodes(
         nodeId: claim.node.nodeId,
         claimId: claim.claimId,
         claimEpoch: claim.claimEpoch,
-        reconciliationOperationId: input.schedulerOperationId,
+        reconciliationOperationId: reconciliationOperationId(
+          input,
+          claim,
+          digester,
+        ),
       },
       now,
     );
@@ -749,7 +753,11 @@ async function validateScheduleReplay(
           nodeId: claim.node.nodeId,
           claimId: claim.claimId,
           claimEpoch: claim.claimEpoch,
-          reconciliationOperationId: input.schedulerOperationId,
+          reconciliationOperationId: reconciliationOperationId(
+            input,
+            claim,
+            digester,
+          ),
         })
       )
         replayCorrupt();
@@ -882,7 +890,27 @@ function reconciliationWorkItemId(
       tenantId: input.tenantId,
       runId: input.runId,
       binding: input.binding,
-      operationId: input.schedulerOperationId,
+      operationId: reconciliationOperationId(input, claim, digester),
+      nodeId: claim.node.nodeId,
+      claimId: claim.claimId,
+      claimEpoch: claim.claimEpoch,
+    },
+    digester,
+  );
+}
+
+function reconciliationOperationId(
+  input: ScheduleInput,
+  claim: import("@crewon/application").WorkflowNodeClaim,
+  digester: WorkflowContentDigester,
+): string {
+  return workflowAuthorityId(
+    "reconcile",
+    {
+      tenantId: input.tenantId,
+      runId: input.runId,
+      binding: input.binding,
+      schedulerOperationId: input.schedulerOperationId,
       nodeId: claim.node.nodeId,
       claimId: claim.claimId,
       claimEpoch: claim.claimEpoch,

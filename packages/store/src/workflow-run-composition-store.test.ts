@@ -406,12 +406,41 @@ if (postgresUrl === undefined) {
       assert.equal(recovered.disposition, "reconcileRequired");
       assert.equal(recovered.reconciliationClaims.length, 2);
       const recoveryRows = await pool.query<{
-        work_item_json: { payload: { trigger: string } };
+        work_item_json: {
+          payload: {
+            trigger: string;
+            nodeId: string;
+            claimId: string;
+            claimEpoch: number;
+            reconciliationOperationId: string;
+          };
+        };
       }>(
         `SELECT work_item_json FROM ${schema}.work_items
          WHERE work_item_json->'payload'->>'trigger'='workflowReconcile'`,
       );
       assert.equal(recoveryRows.rowCount, 2);
+      const recoveryPayloads = recoveryRows.rows.map(
+        (row) => row.work_item_json.payload,
+      );
+      assert.equal(
+        new Set(
+          recoveryPayloads.map((payload) => payload.reconciliationOperationId),
+        ).size,
+        2,
+      );
+      assert.ok(
+        recoveryPayloads.every(
+          (payload) =>
+            payload.reconciliationOperationId !== "schedule-recover" &&
+            recovered.reconciliationClaims.some(
+              (claim) =>
+                claim.node.nodeId === payload.nodeId &&
+                claim.claimId === payload.claimId &&
+                claim.claimEpoch === payload.claimEpoch,
+            ),
+        ),
+      );
 
       await pool.query(`UPDATE ${schema}.workflow_composition_receipts
         SET result_json=jsonb_set(result_json,'{execution,tenantId}','"tampered"')
