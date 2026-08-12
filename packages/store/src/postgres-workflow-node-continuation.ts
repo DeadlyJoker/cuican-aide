@@ -185,7 +185,7 @@ export async function commitPostgresWorkflowToolContinuation(
     schema,
     input.authority,
     input.expectedContinuationRevision,
-    input.next,
+    { ...input.next, terminalCandidate: null },
     input.committedAt,
   );
   return { receipt, continuation };
