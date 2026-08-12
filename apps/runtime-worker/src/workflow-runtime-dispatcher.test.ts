@@ -223,13 +223,13 @@ test("uses unknown only when node side effects may have been sent", async () => 
   assert.deepEqual(fixture.outcomes, [{ status: "unknown" }]);
 });
 
-test("fails closed instead of recursively scheduling reconcile work", async () => {
+test("propagates an unavailable reconciliation authority without recursive scheduling", async () => {
   const fixture = composition();
   await assert.rejects(
     create(fixture.store, async () => ({ status: "unknown" })).dispatch(
       input("reconcile"),
     ),
-    /workflow_reconciliation_contract_incomplete/,
+    /reconciliation evidence provider is not composed/,
   );
   assert.equal(fixture.reconciliations, 0);
 });

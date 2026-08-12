@@ -162,21 +162,13 @@ export class ProductionWorkflowRuntimeDispatcher
       if (payload.nodeId === null || payload.claimId === null ||
           payload.claimEpoch === null)
         throw new Error("workflow_reconciliation_scope_incomplete");
-      let reconciled;
-      try {
-        reconciled = await this.#store.reconcileWorkflowNode({
-          tenantId: input.run.tenantId, runId: input.run.runId,
-          lease: leaseInput(input.claim), binding,
-          nodeId: payload.nodeId, claimId: payload.claimId,
-          claimEpoch: payload.claimEpoch,
-          reconciliationOperationId: payload.reconciliationOperationId,
-        });
-      } catch (error) {
-        if (error instanceof Error &&
-            error.message === "reconciliation evidence provider is not composed")
-          throw new Error("workflow_reconciliation_contract_incomplete", { cause: error });
-        throw error;
-      }
+      const reconciled = await this.#store.reconcileWorkflowNode({
+        tenantId: input.run.tenantId, runId: input.run.runId,
+        lease: leaseInput(input.claim), binding,
+        nodeId: payload.nodeId, claimId: payload.claimId,
+        claimEpoch: payload.claimEpoch,
+        reconciliationOperationId: payload.reconciliationOperationId,
+      });
       switch (reconciled.disposition) {
         case "evidenceInsufficient":
           assertCompletedHandoff(reconciled.handoff);
