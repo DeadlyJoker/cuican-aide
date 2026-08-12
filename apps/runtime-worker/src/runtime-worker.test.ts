@@ -6202,6 +6202,8 @@ if (postgresConnectionString === undefined) {
       databaseTime: {
         expireWorkItem: (store, workItemId) =>
           (store as RuntimePostgresStore).expireWorkItem(workItemId),
+        makeWorkItemAvailable: (store, workItemId) =>
+          (store as RuntimePostgresStore).makeWorkItemAvailable(workItemId),
       },
     },
   );
@@ -8279,7 +8281,7 @@ function registerRuntimeWorkerConformance(
       const recovered = fixture.worker({
         transport,
         toolRuntime,
-        approvalRecheckMs: 1,
+        approvalRecheckMs: 10_000,
       });
       const adopted = await recovered.wake();
       assert.equal(adopted.kind, "waitingApproval");
@@ -8313,7 +8315,14 @@ function registerRuntimeWorkerConformance(
       );
       assert.equal(requiredEvents.length, 2);
 
-      fixture.leaseClock.advance(1);
+      if (options.databaseTime === undefined) {
+        fixture.leaseClock.advance(10_000);
+      } else {
+        await options.databaseTime.makeWorkItemAvailable(
+          fixture.store,
+          fixture.workItemId,
+        );
+      }
       assert.deepEqual(await recovered.wake(), {
         kind: "waitingApproval",
         runId: fixture.runId,
@@ -8431,7 +8440,14 @@ function registerRuntimeWorkerConformance(
       const lost = fixture.worker({
         transport,
         afterProviderResponseCheckpointed: async () => {
-          fixture.leaseClock.advance(10_000);
+          if (options.databaseTime === undefined) {
+            fixture.leaseClock.advance(10_000);
+          } else {
+            await options.databaseTime.expireWorkItem(
+              fixture.store,
+              fixture.workItemId,
+            );
+          }
           throw new Error("simulated_worker_loss");
         },
       });
@@ -8791,6 +8807,7 @@ async function createFixture(
 type RuntimeWorkerConformanceOptions = Readonly<{
   databaseTime?: Readonly<{
     expireWorkItem(store: DomainStore, workItemId: string): Promise<void>;
+    makeWorkItemAvailable(store: DomainStore, workItemId: string): Promise<void>;
   }>;
 }>;
 
@@ -8814,6 +8831,15 @@ class RuntimePostgresStore extends PostgresDomainStore {
     await this.#admin.query(
       `UPDATE ${this.#schemaSql}.work_items
        SET lease_expires_at=clock_timestamp()-interval '1 millisecond'
+       WHERE work_item_id=$1`,
+      [workItemId],
+    );
+  }
+
+  async makeWorkItemAvailable(workItemId: string): Promise<void> {
+    await this.#admin.query(
+      `UPDATE ${this.#schemaSql}.work_items
+       SET available_at=clock_timestamp()-interval '1 millisecond'
        WHERE work_item_id=$1`,
       [workItemId],
     );
