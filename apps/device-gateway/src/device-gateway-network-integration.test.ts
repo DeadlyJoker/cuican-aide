@@ -927,7 +927,7 @@ function rawReadArguments() {
     workspaceIncarnationId: "workspace-incarnation-1",
     relativePathSegments: ["notes", "plan.txt"],
     encoding: "utf8",
-  } as const;
+  };
 }
 
 function actor(): ActorContext {
