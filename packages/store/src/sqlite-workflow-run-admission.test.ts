@@ -100,7 +100,13 @@ test("SQLite Workflow admission rejects a release switch after route resolution 
 test("SQLite Workflow admission replay fails closed on receipt and durable authority tamper", async (context) => {
   for (const mutation of [
     "UPDATE workflow_run_admission_receipts SET result_json='{}'",
+    "UPDATE workflow_run_admission_receipts SET run_id='other-run'",
     "UPDATE run_snapshots SET state_json='{}'",
+    `UPDATE workflow_run_admission_receipts SET result_json=json_set(result_json,
+      '$.authority.route.authorityId','tampered')`,
+    `UPDATE workflow_run_admission_receipts SET result_json=json_set(result_json,
+      '$.authority.workflowVersion.contentDigest','sha256:${"f".repeat(64)}')`,
+    "UPDATE run_events SET event_json='{}'",
     "UPDATE workflow_execution_values SET value_json='[]'",
     "UPDATE work_items SET work_item_json='{}'",
     "UPDATE outbox SET topic='tampered'",
@@ -111,6 +117,7 @@ test("SQLite Workflow admission replay fails closed on receipt and durable autho
     const input = admissionInput();
     await store.commitWorkflowRunStart(input);
     const database = new DatabaseSync(path);
+    database.exec("PRAGMA foreign_keys=OFF");
     database.exec(mutation);
     database.close();
     await assert.rejects(

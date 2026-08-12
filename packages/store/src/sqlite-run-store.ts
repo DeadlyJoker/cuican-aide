@@ -6,6 +6,7 @@ import {
 import {
   MAX_WORKFLOW_VALUE_BYTES,
   parseCompiledWorkflowVersion,
+  validateWorkflowSchemaValue,
   type WorkflowContentDigester,
 } from "@crewon/domain";
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
@@ -5419,9 +5420,39 @@ export class SqliteRunStore implements DomainStore {
     return row ?? null;
   }
 
-  #validateWorkflowAdmissionReplay(result: CommitWorkflowRunStartResult): void {
+  #validateWorkflowAdmissionReplay(
+    input: CommitWorkflowRunStartInput,
+    receiptRunId: string,
+    result: CommitWorkflowRunStartResult,
+  ): void {
+    if (result.run.disposition !== "committed" ||
+        receiptRunId !== result.run.state.runId ||
+        result.run.state.tenantId !== input.tenantId ||
+        result.run.state.spaceId !== input.spaceId ||
+        result.run.state.threadId !== input.threadId ||
+        result.authority.workflowVersion.tenantId !== input.tenantId ||
+        result.authority.workflowVersion.workflowVersionId !== input.workflowVersionId)
+      throw new RunStoreError("workflow_run_admission_receipt_corrupt");
     const run = this.#loadRun({ tenantId: result.run.state.tenantId,
       runId: result.run.state.runId });
+    const versionRow = this.#database.prepare(
+      `SELECT tenant_id,workflow_id,workflow_version_id,content_digest,
+              definition_json,created_at FROM workflow_versions
+       WHERE tenant_id=? AND workflow_version_id=?`,
+    ).get(input.tenantId, input.workflowVersionId) as
+      | { tenant_id: string; workflow_id: string; workflow_version_id: string;
+          content_digest: string; definition_json: string; created_at: string }
+      | undefined;
+    const durableVersion = versionRow === undefined ? null : {
+      schemaVersion: "crewon.workflow-version-asset.v0" as const,
+      tenantId: versionRow.tenant_id, workflowId: versionRow.workflow_id,
+      workflowVersionId: versionRow.workflow_version_id,
+      contentDigest: versionRow.content_digest,
+      definitionJson: versionRow.definition_json, createdAt: versionRow.created_at,
+    };
+    const compiled = durableVersion === null || this.#workflowDigester === null
+      ? null : parseCompiledWorkflowVersion(
+          durableVersion.definitionJson, this.#workflowDigester);
     const root = this.#database.prepare(
       `SELECT value_id,value_digest,value_json FROM workflow_execution_values
        WHERE tenant_id=? AND run_id=? AND role='rootInput' AND node_id IS NULL`,
@@ -5432,29 +5463,60 @@ export class SqliteRunStore implements DomainStore {
     const event = result.run.events[0];
     const outbox = result.run.outbox[0];
     const storedEvent = event === undefined ? undefined : this.#database.prepare(
-      "SELECT event_json FROM run_events WHERE tenant_id=? AND event_id=?",
+      `SELECT tenant_id,run_id,sequence,event_id,event_json FROM run_events
+       WHERE tenant_id=? AND event_id=?`,
     ).get(result.run.state.tenantId, event.eventId) as
-      | { event_json: string } | undefined;
+      | EventRow | undefined;
     const storedOutbox = outbox === undefined ? undefined : this.#database.prepare(
-      "SELECT topic,message_json FROM outbox WHERE tenant_id=? AND message_id=?",
+      `SELECT message_id,tenant_id,run_id,topic,created_at,message_json FROM outbox
+       WHERE tenant_id=? AND message_id=?`,
     ).get(result.run.state.tenantId, outbox.messageId) as
-      | { topic: string; message_json: string } | undefined;
+      | OutboxRow | undefined;
     const storedWork = work === undefined ? undefined : this.#database.prepare(
-      "SELECT work_item_json FROM work_items WHERE tenant_id=? AND work_item_id=?",
+      `SELECT work_item_id,tenant_id,run_id,kind,created_at,work_item_json
+       FROM work_items WHERE tenant_id=? AND work_item_id=?`,
     ).get(result.run.state.tenantId, work.workItemId) as
-      | { work_item_json: string } | undefined;
+      | WorkItemRow | undefined;
     const ref = work?.payload.workflowInput as
       | { valueId?: unknown; valueDigest?: unknown }
       | undefined;
-    if (run === null || stableJson(run) !== stableJson(result.run.state) ||
+    if (run === null || durableVersion === null || compiled === null ||
+        stableJson(durableVersion) !== stableJson(result.authority.workflowVersion) ||
+        compiled.contentDigest !== durableVersion.contentDigest ||
+        compiled.workflowId !== durableVersion.workflowId ||
+        result.run.events.length !== 1 || result.run.outbox.length !== 1 ||
+        result.run.workItems.length !== 1 || event?.type !== "run.created" ||
+        event.sequence !== 1 || stableJson(run) !== stableJson(result.run.state) ||
+        run.agentVersionId !== result.authority.route.agentVersionId ||
+        run.authorityId !== result.authority.route.authorityId ||
+        run.runtimeGeneration !== result.authority.route.runtimeGeneration ||
+        run.policySnapshotId !== result.authority.route.policySnapshotId ||
+        run.workspaceBindingId !== result.authority.route.workspaceBindingId ||
         root === undefined || ref?.valueId !== root.value_id ||
         ref.valueDigest !== root.value_digest ||
         this.#workflowDigester === null ||
         canonicalJson(JSON.parse(root.value_json)) !== root.value_json ||
         this.#workflowDigester.sha256(root.value_json) !== root.value_digest ||
-        storedEvent?.event_json !== stableJson(event) ||
+        stableJson(validateWorkflowSchemaValue(
+          JSON.parse(root.value_json), compiled.inputSchema)) !== root.value_json ||
+        stableJson(event?.data.workflowVersionBinding) !== stableJson({
+          workflowId: durableVersion.workflowId,
+          workflowVersionId: durableVersion.workflowVersionId,
+          contentDigest: durableVersion.contentDigest }) ||
+        storedEvent?.tenant_id !== input.tenantId ||
+        storedEvent.run_id !== receiptRunId || storedEvent.sequence !== 1 ||
+        storedEvent.event_id !== event.eventId ||
+        storedEvent.event_json !== stableJson(event) ||
+        storedOutbox?.tenant_id !== input.tenantId ||
+        storedOutbox.run_id !== receiptRunId ||
+        storedOutbox.message_id !== outbox.messageId ||
         storedOutbox?.topic !== outbox?.topic ||
+        storedOutbox.created_at !== outbox.createdAt ||
         storedOutbox?.message_json !== stableJson(outbox) ||
+        storedWork?.tenant_id !== input.tenantId ||
+        storedWork.run_id !== receiptRunId || storedWork.kind !== work.kind ||
+        storedWork.work_item_id !== work.workItemId ||
+        storedWork.created_at !== work.createdAt ||
         storedWork?.work_item_json !== stableJson(work))
       throw new RunStoreError("workflow_run_admission_receipt_corrupt");
   }
@@ -5477,10 +5539,10 @@ export class SqliteRunStore implements DomainStore {
     input: CommitWorkflowRunStartInput,
   ): CommitWorkflowRunStartResult | null {
     const prior = this.#database.prepare(
-      `SELECT tenant_id,fingerprint,result_json FROM workflow_run_admission_receipts
+      `SELECT tenant_id,run_id,fingerprint,result_json FROM workflow_run_admission_receipts
        WHERE scope=? AND idempotency_key=?`,
     ).get(input.idempotency.scope, input.idempotency.key) as
-      | { tenant_id: string; fingerprint: string; result_json: string }
+      | { tenant_id: string; run_id: string; fingerprint: string; result_json: string }
       | undefined;
     if (prior === undefined) return null;
     if (prior.tenant_id !== input.tenantId ||
@@ -5488,7 +5550,7 @@ export class SqliteRunStore implements DomainStore {
       throw new RunStoreError("idempotency_conflict");
     const result = parseStoredJson<CommitWorkflowRunStartResult>(
       prior.result_json, "workflow_run_admission_receipt_invalid");
-    this.#validateWorkflowAdmissionReplay(result);
+    this.#validateWorkflowAdmissionReplay(input, prior.run_id, result);
     return clone({ ...result, run: { ...result.run, disposition: "replayed" } });
   }
 
