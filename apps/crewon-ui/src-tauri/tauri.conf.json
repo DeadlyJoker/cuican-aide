@@ -31,7 +31,6 @@
   "bundle": {
     "active": true,
     "externalBin": [
-      "binaries/crewon-device-runtime",
       "binaries/crewon-process-guardian",
       "binaries/crewon-node"
     ],

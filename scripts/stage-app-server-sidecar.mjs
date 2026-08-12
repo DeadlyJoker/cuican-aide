@@ -124,6 +124,20 @@ function pnpmExecutable() {
   return process.platform === "win32" ? "pnpm.cmd" : "pnpm";
 }
 
+function stageGuardian(target) {
+  const exeSuffix = target.includes("windows") ? ".exe" : "";
+  const configuredPath = process.env.CREWON_GUARDIAN_BINARY?.trim();
+  if (!configuredPath) {
+    throw new Error("CREWON_GUARDIAN_BINARY is required for desktop staging");
+  }
+  const binary = realpathSync(configuredPath);
+  if (!statSync(binary).isFile()) {
+    throw new Error("CREWON_GUARDIAN_BINARY must resolve to a regular file");
+  }
+  copyExecutable(binary,
+    join(outDir, `crewon-process-guardian-${target}${exeSuffix}`));
+}
+
 function bundleRuntime(entry, outfile) {
   run(
     pnpmExecutable(),
@@ -161,6 +175,14 @@ function stageControlRuntime(target) {
     join(runtimeOutDir, "control-api.mjs"),
   );
   bundleRuntime(
+    join(repoRoot, "apps", "device-gateway", "src", "main.ts"),
+    join(runtimeOutDir, "device-gateway.mjs"),
+  );
+  bundleRuntime(
+    join(repoRoot, "apps", "runtime-worker", "src", "provider-settings-coordinator-main.ts"),
+    join(runtimeOutDir, "provider-settings-coordinator.mjs"),
+  );
+  bundleRuntime(
     join(
       repoRoot,
       "apps",
@@ -182,6 +204,7 @@ function stageControlRuntime(target) {
 
 function main() {
   const target = process.env.CREWON_SIDECAR_TARGET || hostTriple();
+  stageGuardian(target);
   stageControlRuntime(target);
 }
 

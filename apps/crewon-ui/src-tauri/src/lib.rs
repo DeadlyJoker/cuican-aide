@@ -1,6 +1,5 @@
 mod control_runtime;
 mod provider_credentials;
-mod sidecar;
 // N5b2 deliberately keeps this authority private until the supervisor wiring
 // lands in the next slice.
 #[allow(dead_code)]
@@ -39,12 +38,6 @@ pub fn run() {
             provider_credentials::provider_credential_upsert,
         ])
         .setup(|app| {
-            // A packaged build has no dev server to start the backend, so the
-            // shell owns it. Failing to spawn is not fatal: the window still opens
-            // and reports its connection state instead of dying silently.
-            if let Err(error) = sidecar::spawn(app.handle()) {
-                eprintln!("failed to start the bundled app-server: {}", error.code());
-            }
             if let Err(error) = provider_credentials::install(app.handle()) {
                 eprintln!(
                     "failed to initialize the Provider credential store: {}",
@@ -63,6 +56,5 @@ pub fn run() {
         .expect("error while building Crewon desktop client")
         .run(|app, event| {
             control_runtime::handle_run_event(app, &event);
-            sidecar::handle_run_event(app, event);
         });
 }
