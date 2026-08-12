@@ -8,17 +8,17 @@ import type { WorkItemLeaseInput } from "./durable-queue-port.ts";
 import type { WorkflowExecutionState } from "./workflow-execution-store-port.ts";
 import type { WorkflowNodeClaim } from "./workflow-execution-service.ts";
 
-export type WorkflowNodeAttemptAdmission = Readonly<{
-  claim: WorkflowNodeClaim;
-  step: RunStepState;
-  attempt: RunAttemptState | null;
-}>;
-
 export type WorkflowAtomicNodeOutcome =
   | Readonly<{ status: "completed"; resultDigest: string }>
   | Readonly<{ status: "failed"; failureCode: string }>
   | Readonly<{ status: "canceled" }>
   | Readonly<{ status: "unknown" }>;
+
+export type WorkflowNodeAttemptAdmission = Readonly<{
+  claim: WorkflowNodeClaim;
+  step: RunStepState;
+  attempt: RunAttemptState | null;
+}>;
 
 /**
  * Atomic composition boundary required before Workflow execution is routable.
@@ -37,26 +37,17 @@ export interface WorkflowRunCompositionStore {
     schedulerOperationId: string;
     leaseDurationMs: number;
   }): Promise<
-    | Readonly<{
-        disposition: "fresh";
-        execution: WorkflowExecutionState;
-        admissions: readonly WorkflowNodeAttemptAdmission[];
-        reconciliationClaims: readonly [];
-      }>
-    | Readonly<{
-        disposition: "replay";
-        execution: WorkflowExecutionState;
-        admissions: readonly [];
-        reconciliationClaims: readonly [];
-      }>
-    | Readonly<{
-        disposition: "reconcileRequired";
-        execution: WorkflowExecutionState;
-        admissions: readonly [];
-        reconciliationClaims: readonly WorkflowNodeClaim[];
-      }>
+    Readonly<{
+      disposition: "fresh" | "replay" | "reconcileRequired";
+      execution: WorkflowExecutionState;
+      /** Non-empty execution authority is legal only for `fresh`. */
+      admissions: readonly WorkflowNodeAttemptAdmission[];
+      /** Stable identities are legal only for `reconcileRequired`. */
+      reconciliationClaims: readonly WorkflowNodeClaim[];
+    }>
   >;
 
+  /** Atomically settles DAG claim plus exact RunAttempt/RunStep authority. */
   settleWorkflowNode(input: {
     tenantId: string;
     runId: string;
@@ -77,6 +68,7 @@ export interface WorkflowRunCompositionStore {
     }>
   >;
 
+  /** Atomically publishes durable gate authority and releases current WorkItem. */
   publishWorkflowHumanGate(input: {
     tenantId: string;
     runId: string;
@@ -94,6 +86,7 @@ export interface WorkflowRunCompositionStore {
     operationId: string;
   }): Promise<Readonly<{ disposition: "published" | "replay" }>>;
 
+  /** Settles approved/rejected gate state under its durable resume WorkItem. */
   settleWorkflowHumanGate(input: {
     tenantId: string;
     runId: string;
@@ -116,6 +109,7 @@ export interface WorkflowRunCompositionStore {
     }>
   >;
 
+  /** Durably creates reconciliation work before completing unsafe old work. */
   scheduleWorkflowReconciliation(input: {
     tenantId: string;
     runId: string;
