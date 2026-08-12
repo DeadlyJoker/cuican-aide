@@ -1,5 +1,31 @@
 import type { JsonValue } from "@crewon/contracts";
-import type { AutomationInvocationBinding } from "@crewon/domain";
+import type {
+  AutomationInvocationBinding,
+  FrozenWorkflowVersionBinding,
+} from "@crewon/domain";
+
+export type WorkflowExecutionValue = Readonly<{
+  schemaVersion: "crewon.workflow-execution-value.v0";
+  valueId: string;
+  value: JsonValue;
+  valueDigest: string;
+}>;
+
+/** Root Workflow input authority persisted exactly once with start admission. */
+export type WorkflowRunInputAuthority = WorkflowExecutionValue;
+
+export type WorkflowRunInputRef = Readonly<{
+  valueId: string;
+  valueDigest: string;
+}>;
+
+export type WorkflowSchedulerWorkItemPayload = Readonly<{
+  schemaVersion: "crewon.workflow-scheduler-work-item.v1";
+  trigger: "workflowScheduler";
+  binding: FrozenWorkflowVersionBinding;
+  schedulerOperationId: string;
+  workflowInput: WorkflowRunInputRef;
+}>;
 
 export type AutomationInvocationWorkItemPayload = Readonly<{
   schemaVersion: "crewon.automation-invocation-work-item.v0";
