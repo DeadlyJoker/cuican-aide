@@ -1,6 +1,6 @@
 import type {
   WorkItemClaim,
-  WorkflowRunCompositionStore,
+  WorkflowRuntimeStore,
   WorkflowVersionStore,
 } from "@crewon/application";
 import { canonicalJson, MAX_WORKFLOW_VALUE_BYTES } from "@crewon/application";
@@ -64,14 +64,14 @@ export class ProductionWorkflowRuntimeDispatcher
   implements WorkflowRuntimeDispatcherPort
 {
   readonly #versions: WorkflowVersionStore;
-  readonly #composition: WorkflowRunCompositionStore;
+  readonly #composition: WorkflowRuntimeStore;
   readonly #digester: WorkflowContentDigester;
   readonly #agent: WorkflowAgentNodePort;
   readonly #leaseDurationMs: number;
 
   constructor(dependencies: {
     versions: WorkflowVersionStore;
-    composition: WorkflowRunCompositionStore;
+    composition: WorkflowRuntimeStore;
     digester: WorkflowContentDigester;
     agent: WorkflowAgentNodePort;
     leaseDurationMs: number;

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import type { WorkflowRunCompositionStore } from "@crewon/application";
+import type { WorkflowRuntimeStore } from "@crewon/application";
 import {
   compileWorkflowVersion,
   serializeCompiledWorkflowVersion,
@@ -200,7 +200,7 @@ function composition() {
     workflowInputs: [] as unknown[],
     nodeDisposition: "fresh" as "fresh" | "replay",
     failSettlement: false,
-    store: null as unknown as WorkflowRunCompositionStore,
+    store: null as unknown as WorkflowRuntimeStore,
   };
   fixture.store = {
     async scheduleWorkflowNodes(input) {
@@ -313,12 +313,16 @@ function composition() {
         runDisposition: "terminalConverged",
       };
     },
+    async loadWorkflowNodeContinuation() { return null; },
+    async commitWorkflowToolContinuation() { throw new Error("unused"); },
+    async commitWorkflowAssistantContinuation() { throw new Error("unused"); },
+    async settleWorkflowNodeModelTerminal() { throw new Error("unused"); },
   };
   return fixture;
 }
 
 function create(
-  store: WorkflowRunCompositionStore,
+  store: WorkflowRuntimeStore,
   execute: ConstructorParameters<
     typeof ProductionWorkflowRuntimeDispatcher
   >[0]["agent"]["execute"],
