@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcess } from "node:child_process";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { Pool } from "pg";
 
 import { PostgresQueueStore } from "./postgres-queue-store.ts";
+import { PostgresWorkflowRunCompositionStore } from "./postgres-workflow-run-composition-store.ts";
 
 const connectionString = process.env.CREWON_TEST_POSTGRES_URL;
 const fixturePath = fileURLToPath(
@@ -28,6 +29,21 @@ test(
     const queue = new PostgresQueueStore({ connectionString, schema });
     try {
       await queue.migrate();
+      const composition = await PostgresWorkflowRunCompositionStore.open({
+        connectionString,
+        schema,
+        digester: {
+          sha256(value) {
+            return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+          },
+        },
+      });
+      await composition.close();
+      await pool.query(
+        `INSERT INTO "${schema}".run_snapshots
+         (tenant_id,space_id,run_id,revision,last_sequence,state_json,updated_at)
+         VALUES ('tenant-process','space-process','run-process',1,1,'{}',clock_timestamp())`,
+      );
       await seedSibling(pool, schema, "node-left");
       await seedSibling(pool, schema, "node-right");
 

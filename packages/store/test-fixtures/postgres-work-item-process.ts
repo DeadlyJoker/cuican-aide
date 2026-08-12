@@ -1,10 +1,17 @@
-import { PostgresQueueStore } from "../src/postgres-queue-store.ts";
+import { createHash } from "node:crypto";
 
-const store = new PostgresQueueStore({
+import { PostgresWorkflowRunCompositionStore } from "../src/postgres-workflow-run-composition-store.ts";
+
+const store = await PostgresWorkflowRunCompositionStore.open({
   connectionString: required("CREWON_TEST_POSTGRES_URL"),
   schema: required("CREWON_TEST_POSTGRES_SCHEMA"),
   maxPoolSize: 2,
   statementTimeoutMs: 5_000,
+  digester: {
+    sha256(value) {
+      return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+    },
+  },
 });
 const ownerId = required("CREWON_TEST_WORKER_ID");
 const leaseId = required("CREWON_TEST_LEASE_ID");
