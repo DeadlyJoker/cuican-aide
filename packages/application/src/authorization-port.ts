@@ -68,6 +68,18 @@ export type AgentVersionAuthorizationResource = Readonly<{
   agentVersionId: string | null;
 }>;
 
+export type WorkflowVersionAuthorizationAction =
+  | "workflowVersion:publish"
+  | "workflowVersion:read"
+  | "workflowVersion:list";
+
+export type WorkflowVersionAuthorizationResource = Readonly<{
+  kind: "workflowVersion";
+  tenantId: string;
+  spaceId: string;
+  workflowVersionId: string | null;
+}>;
+
 export type ArtifactAuthorizationAction = "artifact:read";
 
 export type ArtifactAuthorizationResource = Readonly<{
@@ -95,6 +107,7 @@ export type AuthorizationAction =
   | ThreadAuthorizationAction
   | ToolApprovalAuthorizationAction
   | AgentVersionAuthorizationAction
+  | WorkflowVersionAuthorizationAction
   | ArtifactAuthorizationAction
   | ModelProviderSettingsAuthorizationAction;
 
@@ -103,6 +116,7 @@ export type AuthorizationResource =
   | ThreadAuthorizationResource
   | ToolApprovalAuthorizationResource
   | AgentVersionAuthorizationResource
+  | WorkflowVersionAuthorizationResource
   | ArtifactAuthorizationResource
   | ModelProviderSettingsAuthorizationResource;
 

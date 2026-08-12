@@ -8,6 +8,7 @@ export * from "./agent-version-release-composition.ts";
 export * from "./runtime-binding-config.ts";
 export * from "./remote-mcp-runtime-config.ts";
 export * from "./runtime-worker.ts";
+export * from "./workflow-version-runtime.ts";
 export * from "./standalone-adapters.ts";
 export * from "./standalone-composition.ts";
 export * from "./provider-connectivity-probe.ts";

@@ -44,6 +44,8 @@ export * from "./workspace-delivery-store-port.ts";
 export * from "./workspace-operation-store-port.ts";
 export * from "./workspace-read-file-application-service.ts";
 export * from "./workspace-read-file-store-port.ts";
+export * from "./workflow-version-application-service.ts";
+export * from "./workflow-version-store-port.ts";
 export * from "./tool-approval-store-port.ts";
 export * from "./tool-approval-replacement.ts";
 export * from "./tool-approval-application-service.ts";
