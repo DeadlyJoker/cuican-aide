@@ -40,7 +40,12 @@ export type CommitWorkflowRunStartResult = Readonly<{
  * authority and Run; a fingerprint mismatch conflicts. Otherwise, in one
  * transaction, implementations must validate the tenant/space Thread, load
  * the immutable tenant WorkflowVersion, resolve the server-owned execution
- * route, invoke `prepare` exactly once while the transaction remains open,
+ * route, and revalidate that every AgentVersion referenced by the Workflow is
+ * present in the tenant's currently active release with an exact immutable
+ * deployment content digest, authority, and workspace binding. This release
+ * and deployment check must use the same transaction snapshot as admission;
+ * a route resolved before the transaction is not sufficient. Implementations
+ * then invoke `prepare` exactly once while the transaction remains open,
  * and atomically persist the returned immutable root input value with the
  * receipt, Run event, outbox message, and `run.execute` WorkItem. The Store
  * must verify the scheduler payload's exact `{valueId,valueDigest}` reference

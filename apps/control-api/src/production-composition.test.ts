@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 
 import {
@@ -53,4 +54,14 @@ test("production composition rejects missing security authorities before opening
     } as unknown as ProductionPostgresControlApiConfig),
     /production_provider_probe_registry_invalid/u,
   );
+});
+
+test("production keeps Workflow start disabled without compound Store admission", () => {
+  const source = readFileSync(
+    new URL("./production-composition.ts", import.meta.url),
+    "utf8",
+  );
+  assert.match(source, /workflowRuns: null/u);
+  assert.doesNotMatch(source, /new WorkflowRunApplicationService/u);
+  assert.match(source, /await workflowVersionStore\.migrate\(\)/u);
 });

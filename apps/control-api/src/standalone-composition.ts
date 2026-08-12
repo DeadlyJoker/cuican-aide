@@ -256,6 +256,9 @@ function composeControlApi(
       approvals,
       agentVersions,
       workflowVersions,
+      // Keep parity with production: no two-step WorkflowVersion load plus Run
+      // commit may masquerade as atomic Workflow start admission.
+      workflowRuns: null,
       agentVersionCatalogs,
       artifacts,
       automations,
