@@ -41,6 +41,7 @@ test("rejects an invalid replacement approval expiry before Store access", async
 
 test("workflow Tool authority creates a distinct child Attempt bound to the current Agent Attempt", async () => {
   const started: unknown[] = [];
+  let expectedNodeKind: "agent" | "verification" = "agent";
   const store = {
     async loadRun() {
       return {
@@ -63,7 +64,7 @@ test("workflow Tool authority creates a distinct child Attempt bound to the curr
     async loadRunStep(input: { stepId: string }) {
       assert.equal(input.stepId, "agent-step-1");
       return {
-        kind: "model",
+        kind: expectedNodeKind,
         status: "running",
         currentAttemptId: "agent-attempt-1",
       };
@@ -92,6 +93,23 @@ test("workflow Tool authority creates a distinct child Attempt bound to the curr
     clock: { now: () => "2026-08-11T00:00:00Z" },
     ids: { nextId: (kind) => `${kind}-1` },
     digester: { sha256: () => `sha256:${"a".repeat(64)}` },
+    workflowExecutions: {
+      async loadWorkflowExecution() {
+        return {
+          status: "running",
+          nodes: [
+            {
+              nodeId: "node-1",
+              kind: expectedNodeKind,
+              status: "running",
+              claimId: "claim-1",
+              claimEpoch: 2,
+              agentVersionId: "agent-version-1",
+            },
+          ],
+        } as never;
+      },
+    } as never,
   });
   const result = await service.beginToolExecution(
     claim(),
@@ -122,6 +140,11 @@ test("workflow Tool authority creates a distinct child Attempt bound to the curr
         stepId: "agent-step-1",
         attemptId: "agent-attempt-1",
       },
+      nodeId: "node-1",
+      nodeKind: "agent",
+      claimId: "claim-1",
+      claimEpoch: 2,
+      agentVersionId: "agent-version-1",
     },
   );
   assert.equal(started.length, 1);
@@ -142,7 +165,163 @@ test("workflow Tool authority creates a distinct child Attempt bound to the curr
   assert.equal(result.attempt?.attempt.attemptId, "tool-attempt-1");
   assert.equal(result.receipt.attemptId, "tool-attempt-1");
   assert.notEqual(result.receipt.attemptId, "agent-attempt-1");
+  expectedNodeKind = "verification";
+  const verification = await service.beginToolExecution(
+    claim(),
+    {
+      segmentId: "segment:agent-attempt-1:round:2",
+      callId: "call-2",
+      kind: "function",
+      name: "read_file",
+      input: "{}",
+    },
+    {
+      effect: "readOnly",
+      recovery: "replaySafe",
+      resourceBindingId: null,
+      credentialBindingId: null,
+      executionTarget: { kind: "control", bindingId: "tool-binding-1" },
+      capability: "workspace.read",
+      approvalRequirement: "none",
+      limits: {
+        timeoutMs: 1_000,
+        maxOutputBytes: 1_024,
+        maxArtifactBytes: 1_024,
+      },
+    },
+    {
+      kind: "workflowAgentAttempt",
+      attempt: {
+        stepId: "agent-step-1",
+        attemptId: "agent-attempt-1",
+      },
+      nodeId: "node-1",
+      nodeKind: "verification",
+      claimId: "claim-1",
+      claimEpoch: 2,
+      agentVersionId: "agent-version-1",
+    },
+  );
+  assert.equal(started.length, 2);
+  assert.notEqual(verification.receipt.attemptId, "agent-attempt-1");
 });
+
+test("workflow Tool parent authority rejects model, node, claim, lease, and segment substitution", async () => {
+  let stepKind: "model" | "agent" = "agent";
+  let claimId = "claim-1";
+  let nodeId = "node-1";
+  let leaseEpoch = 1;
+  let segmentId = "segment:agent-attempt-1";
+  let beginCalls = 0;
+  const service = new RunExecutionService({
+    store: {
+      async loadRun() {
+        return {
+          tenantId: "tenant-1",
+          runId: "run-1",
+          status: "running",
+          cancelRequested: false,
+          policySnapshotId: "policy-1",
+          workspaceBindingId: null,
+        };
+      },
+      async loadRunAttempt() {
+        return {
+          status: "running",
+          workItemId: "work-item-1",
+          leaseEpoch,
+        };
+      },
+      async loadRunStep() {
+        return {
+          kind: stepKind,
+          status: "running",
+          currentAttemptId: "agent-attempt-1",
+        };
+      },
+      async beginRunAttempt() {
+        beginCalls += 1;
+        throw new Error("must not begin");
+      },
+    } as never,
+    workflowExecutions: {
+      async loadWorkflowExecution() {
+        return {
+          status: "running",
+          nodes: [
+            {
+              nodeId,
+              kind: "agent",
+              status: "running",
+              claimId,
+              claimEpoch: 2,
+              agentVersionId: "agent-version-1",
+            },
+          ],
+        } as never;
+      },
+    } as never,
+    clock: { now: () => "2026-08-11T00:00:00Z" },
+    ids: { nextId: (kind) => `${kind}-1` },
+    digester: { sha256: () => `sha256:${"a".repeat(64)}` },
+  });
+  const invoke = () =>
+    service.beginToolExecution(
+      claim(),
+      {
+        segmentId,
+        callId: "call-1",
+        kind: "function",
+        name: "read_file",
+        input: "{}",
+      },
+      toolPolicy(),
+      {
+        kind: "workflowAgentAttempt",
+        attempt: {
+          stepId: "agent-step-1",
+          attemptId: "agent-attempt-1",
+        },
+        nodeId: "node-1",
+        nodeKind: "agent",
+        claimId: "claim-1",
+        claimEpoch: 2,
+        agentVersionId: "agent-version-1",
+      },
+    );
+  stepKind = "model";
+  await assert.rejects(invoke(), /tool_parent_agent_attempt_not_current/);
+  stepKind = "agent";
+  nodeId = "other-node";
+  await assert.rejects(invoke(), /tool_parent_agent_attempt_not_current/);
+  nodeId = "node-1";
+  claimId = "other-claim";
+  await assert.rejects(invoke(), /tool_parent_agent_attempt_not_current/);
+  claimId = "claim-1";
+  leaseEpoch = 9;
+  await assert.rejects(invoke(), /tool_parent_agent_attempt_not_current/);
+  leaseEpoch = 1;
+  segmentId = "segment:other-attempt";
+  await assert.rejects(invoke(), /tool_parent_agent_attempt_not_current/);
+  assert.equal(beginCalls, 0);
+});
+
+function toolPolicy() {
+  return {
+    effect: "readOnly" as const,
+    recovery: "replaySafe" as const,
+    resourceBindingId: null,
+    credentialBindingId: null,
+    executionTarget: { kind: "control" as const, bindingId: "tool-binding-1" },
+    capability: "workspace.read",
+    approvalRequirement: "none" as const,
+    limits: {
+      timeoutMs: 1_000,
+      maxOutputBytes: 1_024,
+      maxArtifactBytes: 1_024,
+    },
+  };
+}
 
 function claim(): WorkItemClaim {
   return {

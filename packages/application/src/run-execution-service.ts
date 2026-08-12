@@ -71,6 +71,7 @@ import type { ModelHistoryAppend } from "./model-history-store-port.ts";
 import type { TurnStartGoalMutation } from "./thread-goal-store-port.ts";
 import type { ToolExecutionTransition } from "./tool-execution-store-port.ts";
 import type { CommitToolExecutionCompletionResult } from "./tool-execution-store-port.ts";
+import type { WorkflowExecutionStore } from "./workflow-execution-store-port.ts";
 import {
   executionIdempotency,
   leaseInput,
@@ -126,6 +127,11 @@ export type ToolExecutionParentAuthority =
   | Readonly<{
       kind: "workflowAgentAttempt";
       attempt: RunAttemptIdentity;
+      nodeId: string;
+      nodeKind: "agent" | "verification";
+      claimId: string;
+      claimEpoch: number;
+      agentVersionId: string;
     }>;
 
 export type RequireToolApprovalResult = Readonly<{
@@ -169,17 +175,20 @@ export class RunExecutionService {
   readonly #clock: ApplicationClock;
   readonly #ids: ApplicationIdGenerator;
   readonly #digester: ContentDigester;
+  readonly #workflowExecutions: WorkflowExecutionStore | null;
 
   constructor(dependencies: {
     store: DomainStore;
     clock: ApplicationClock;
     ids: ApplicationIdGenerator;
     digester: ContentDigester;
+    workflowExecutions?: WorkflowExecutionStore;
   }) {
     this.#store = dependencies.store;
     this.#clock = dependencies.clock;
     this.#ids = dependencies.ids;
     this.#digester = dependencies.digester;
+    this.#workflowExecutions = dependencies.workflowExecutions ?? null;
   }
 
   async loadRun(claim: WorkItemClaim): Promise<RunState> {
@@ -573,6 +582,12 @@ export class RunExecutionService {
     );
     try {
       if (parent.kind === "workflowAgentAttempt") {
+        if (this.#workflowExecutions === null) {
+          throw new ApplicationError(
+            "internal",
+            "workflow_tool_parent_authority_unavailable",
+          );
+        }
         const parentAttempt = await this.#store.loadRunAttempt({
           tenantId: state.tenantId,
           runId: state.runId,
@@ -583,14 +598,30 @@ export class RunExecutionService {
           runId: state.runId,
           stepId: parent.attempt.stepId,
         });
+        const workflow = await this.#workflowExecutions.loadWorkflowExecution({
+          tenantId: state.tenantId,
+          runId: state.runId,
+        });
+        const node = workflow?.nodes.find(
+          (candidate) => candidate.nodeId === parent.nodeId,
+        );
         if (
           parentAttempt?.status !== "running" ||
           parentAttempt.workItemId !== claim.workItem.workItemId ||
           parentAttempt.leaseEpoch !== claim.lease.epoch ||
-          parentStep?.kind !== "model" ||
+          parentStep?.kind !== parent.nodeKind ||
           parentStep.status !== "running" ||
           parentStep.currentAttemptId !== parent.attempt.attemptId ||
-          call.segmentId !== `segment:${parent.attempt.attemptId}`
+          workflow?.status !== "running" ||
+          node?.kind !== parent.nodeKind ||
+          node.status !== "running" ||
+          node.claimId !== parent.claimId ||
+          node.claimEpoch !== parent.claimEpoch ||
+          node.agentVersionId !== parent.agentVersionId ||
+          !workflowToolSegmentMatchesParent(
+            call.segmentId,
+            parent.attempt.attemptId,
+          )
         ) {
           throw new ApplicationError(
             "conflict",
@@ -3011,6 +3042,16 @@ export class RunExecutionService {
     }
     return digest;
   }
+}
+
+function workflowToolSegmentMatchesParent(
+  segmentId: string,
+  attemptId: string,
+): boolean {
+  const prefix = `segment:${attemptId}`;
+  if (segmentId === prefix) return true;
+  const suffix = segmentId.slice(prefix.length);
+  return /^:round:[1-9][0-9]{0,3}$/.test(suffix);
 }
 
 function retainedCompactionUserMessages(
