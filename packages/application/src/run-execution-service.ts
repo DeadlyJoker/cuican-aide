@@ -1589,6 +1589,11 @@ export class RunExecutionService {
     claim: WorkItemClaim,
     attempt: RunAttemptIdentity,
     checkpoint: import("@crewon/contracts").ProviderCheckpoint,
+    modelDispatch?: Readonly<{
+      operationId: string;
+      requestSequence: number;
+      expectedRevision: number;
+    }>,
   ): Promise<RunAttemptState> {
     const state = await this.loadRun(claim);
     const parsed = parseProviderCheckpoint(checkpoint);
@@ -1601,6 +1606,7 @@ export class RunExecutionService {
         checkpoint: parsed,
         checkpointDigest: this.#digest(canonicalJson(parsed)),
         checkpointedAt: this.#now(),
+        ...(modelDispatch === undefined ? {} : { modelDispatch }),
       });
     } catch (error) {
       throw mapExecutionError(error);

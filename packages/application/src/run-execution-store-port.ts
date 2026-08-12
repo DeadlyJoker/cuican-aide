@@ -72,6 +72,11 @@ export type CheckpointRunAttemptInput = Readonly<{
   checkpoint: ProviderCheckpoint;
   checkpointDigest: string;
   checkpointedAt: string;
+  modelDispatch?: Readonly<{
+    operationId: string;
+    requestSequence: number;
+    expectedRevision: number;
+  }>;
 }>;
 
 export type RecordRunAttemptProviderTurnStateInput = Readonly<{

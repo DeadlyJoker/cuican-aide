@@ -10,6 +10,7 @@ import {
 import {
   ApplicationError,
   type DomainStore,
+  type ModelDispatchEvidenceStore,
   type RunExecutionPolicyPort,
   type RunExecutionService,
   type RunAttemptIdentity,
@@ -35,6 +36,7 @@ import {
 } from "@crewon/context";
 import type {
   ModelHistoryItem,
+  ModelDispatchReceipt,
   RunLifecycleEvent,
   RunState,
   ToolApprovalState,
@@ -821,6 +823,10 @@ export class RuntimeWorker {
     );
     const attempt = attemptIdentity(attemptResult);
     await this.#afterAttemptStarted?.();
+    const dispatchEvidenceStore =
+      runtime.kernel.supportsModelDispatchEvidence === true
+        ? modelDispatchEvidenceStore(this.#store)
+        : null;
 
     const modelIdentity = {
       agentVersionId: run.agentVersionId,
@@ -868,6 +874,7 @@ export class RuntimeWorker {
       KernelAgentEvent,
       { type: "segment.checkpointed" }
     > | null = null;
+    let activeDispatchReceipt: ModelDispatchReceipt | null = null;
     const requestedTools: Extract<
       KernelAgentEvent,
       { type: "tool.requested" }
@@ -917,6 +924,48 @@ export class RuntimeWorker {
         controller.signal,
         {
           controlSink: {
+            modelRequestPrepared: async (evidence) => {
+              if (dispatchEvidenceStore === null) return;
+              activeDispatchReceipt =
+                await dispatchEvidenceStore.prepareModelDispatch({
+                  tenantId: run.tenantId,
+                  runId: run.runId,
+                  lease: leaseInput(claim),
+                  attempt,
+                  operationId: evidence.operationId,
+                  requestSequence: evidence.requestSequence,
+                  operation: evidence.operation,
+                  requestDigest: evidence.requestDigest,
+                  provider: evidence.provider,
+                  preparedAt: new Date().toISOString(),
+                });
+            },
+            dispatchBoundaryCrossed: async (evidence) => {
+              if (dispatchEvidenceStore === null) return;
+              if (
+                activeDispatchReceipt === null ||
+                activeDispatchReceipt.requestSequence !==
+                  evidence.requestSequence ||
+                activeDispatchReceipt.operationId !== evidence.operationId ||
+                activeDispatchReceipt.requestDigest !== evidence.requestDigest
+              ) {
+                throw new AgentKernelError(
+                  "model_dispatch_preparation_missing",
+                  false,
+                );
+              }
+              activeDispatchReceipt =
+                await dispatchEvidenceStore.markModelDispatchPossiblySent({
+                  tenantId: run.tenantId,
+                  runId: run.runId,
+                  lease: leaseInput(claim),
+                  attempt,
+                  operationId: evidence.operationId,
+                  requestSequence: evidence.requestSequence,
+                  expectedRevision: activeDispatchReceipt.revision,
+                  transitionedAt: new Date().toISOString(),
+                });
+            },
             providerTurnStateObserved: async (observedProviderTurnState) => {
               await this.#execution.recordProviderTurnState(
                 claim,
@@ -937,11 +986,36 @@ export class RuntimeWorker {
         lastAgentSequence = event.sequence;
         if (event.type === "segment.provider_response_created") {
           providerCheckpoint = event.data.checkpoint;
+          if (
+            dispatchEvidenceStore !== null &&
+            activeDispatchReceipt === null
+          ) {
+            throw new AgentKernelError(
+              "model_dispatch_preparation_missing",
+              false,
+            );
+          }
           await this.#execution.checkpointModelAttempt(
             claim,
             attempt,
             event.data.checkpoint,
+            activeDispatchReceipt === null
+              ? undefined
+              : {
+                  requestSequence: activeDispatchReceipt.requestSequence,
+                  operationId: activeDispatchReceipt.operationId,
+                  expectedRevision: activeDispatchReceipt.revision,
+                },
           );
+          if (activeDispatchReceipt !== null) {
+            activeDispatchReceipt =
+              await dispatchEvidenceStore!.loadModelDispatchReceipt({
+                tenantId: run.tenantId,
+                runId: run.runId,
+                ...attempt,
+                operationId: activeDispatchReceipt.operationId,
+              });
+          }
           await this.#afterProviderResponseCheckpointed?.();
           continue;
         }
@@ -2406,6 +2480,17 @@ function attemptIdentity(
     stepId: result.step.stepId,
     attemptId: result.attempt.attemptId,
   };
+}
+
+function modelDispatchEvidenceStore(
+  store: DomainStore,
+): ModelDispatchEvidenceStore | null {
+  const candidate = store as DomainStore & Partial<ModelDispatchEvidenceStore>;
+  return typeof candidate.prepareModelDispatch === "function" &&
+    typeof candidate.markModelDispatchPossiblySent === "function" &&
+    typeof candidate.loadModelDispatchReceipt === "function"
+    ? (candidate as ModelDispatchEvidenceStore)
+    : null;
 }
 
 function utf8ByteLength(value: string): number {

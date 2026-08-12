@@ -26,6 +26,9 @@ type ReceiptRow = Readonly<{
   run_id: string;
   step_id: string;
   attempt_id: string;
+  operation_id: string;
+  request_sequence: number;
+  operation: string;
   work_item_id: string;
   lease_epoch: number;
   request_digest: string;
@@ -36,7 +39,7 @@ type ReceiptRow = Readonly<{
   updated_at: string;
 }>;
 
-const COLUMNS = `tenant_id, run_id, step_id, attempt_id, work_item_id,
+const COLUMNS = `tenant_id, run_id, step_id, attempt_id, operation_id, request_sequence, operation, work_item_id,
   lease_epoch, request_digest, status, revision, state_json, prepared_at, updated_at`;
 
 export function sqliteModelDispatchEvidenceTableSql(): string {
@@ -45,7 +48,10 @@ export function sqliteModelDispatchEvidenceTableSql(): string {
       tenant_id TEXT NOT NULL,
       run_id TEXT NOT NULL,
       step_id TEXT NOT NULL,
-      attempt_id TEXT PRIMARY KEY,
+      attempt_id TEXT NOT NULL,
+      operation_id TEXT NOT NULL,
+      request_sequence INTEGER NOT NULL CHECK (request_sequence >= 1),
+      operation TEXT NOT NULL CHECK (operation IN ('dispatch', 'retrieve')),
       work_item_id TEXT NOT NULL,
       lease_epoch INTEGER NOT NULL CHECK (lease_epoch >= 1),
       request_digest TEXT NOT NULL,
@@ -54,14 +60,14 @@ export function sqliteModelDispatchEvidenceTableSql(): string {
       state_json TEXT NOT NULL CHECK (json_valid(state_json)),
       prepared_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
-      UNIQUE (tenant_id, run_id, step_id, attempt_id),
+      PRIMARY KEY (tenant_id, run_id, step_id, attempt_id, operation_id),
       FOREIGN KEY (tenant_id, run_id, step_id, attempt_id)
         REFERENCES run_attempts(tenant_id, run_id, step_id, attempt_id) ON DELETE RESTRICT,
       FOREIGN KEY (work_item_id)
         REFERENCES work_items(work_item_id) ON DELETE RESTRICT
     ) STRICT;
     CREATE INDEX IF NOT EXISTS model_dispatch_receipts_run_idx
-      ON model_dispatch_receipts(tenant_id, run_id, status, attempt_id);`;
+      ON model_dispatch_receipts(tenant_id, run_id, status, attempt_id, request_sequence);`;
 }
 
 export function migrateSqliteModelDispatchEvidence(
@@ -98,6 +104,9 @@ export function assertSqliteModelDispatchEvidenceSchema(
         "run_id",
         "step_id",
         "attempt_id",
+        "operation_id",
+        "request_sequence",
+        "operation",
         "work_item_id",
         "lease_epoch",
         "request_digest",
@@ -107,7 +116,9 @@ export function assertSqliteModelDispatchEvidenceSchema(
         "prepared_at",
         "updated_at",
       ]) ||
-    index?.sql?.includes("tenant_id, run_id, status, attempt_id") !== true
+    index?.sql?.includes(
+      "tenant_id, run_id, status, attempt_id, request_sequence",
+    ) !== true
   ) {
     throw new RunStoreError("sqlite_schema_version_unsupported");
   }
@@ -124,16 +135,21 @@ export function assertSqliteModelDispatchEvidenceSchema(
 
 export function loadSqliteModelDispatchReceipt(
   database: DatabaseSync,
-  locator: RunAttemptLocator,
+  locator: RunAttemptLocator & Readonly<{ operationId: string }>,
 ): ModelDispatchReceipt | null {
   const row = database
     .prepare(
       `SELECT ${COLUMNS} FROM model_dispatch_receipts
-       WHERE tenant_id = ? AND run_id = ? AND step_id = ? AND attempt_id = ?`,
+       WHERE tenant_id = ? AND run_id = ? AND step_id = ? AND attempt_id = ?
+         AND operation_id = ?`,
     )
-    .get(locator.tenantId, locator.runId, locator.stepId, locator.attemptId) as
-    | ReceiptRow
-    | undefined;
+    .get(
+      locator.tenantId,
+      locator.runId,
+      locator.stepId,
+      locator.attemptId,
+      locator.operationId,
+    ) as ReceiptRow | undefined;
   return row === undefined ? null : decode(row, locator);
 }
 
@@ -145,12 +161,15 @@ export function prepareSqliteModelDispatch(
     tenantId: input.tenantId,
     runId: input.runId,
     ...input.attempt,
+    operationId: input.operationId,
+    requestSequence: input.requestSequence,
   };
   const attempt = requireFencedAttempt(database, locator, input.lease);
   const current = loadSqliteModelDispatchReceipt(database, locator);
   const next = normalize(() =>
     prepareModelDispatchReceipt(current, {
       ...locator,
+      operation: input.operation,
       workItemId: attempt.workItemId,
       leaseEpoch: attempt.leaseEpoch,
       requestDigest: input.requestDigest,
@@ -204,6 +223,8 @@ function transition(
     tenantId: input.tenantId,
     runId: input.runId,
     ...input.attempt,
+    operationId: input.operationId,
+    requestSequence: input.requestSequence,
   };
   requireFencedAttempt(database, locator, input.lease);
   const current = loadSqliteModelDispatchReceipt(database, locator);
@@ -224,7 +245,8 @@ function transition(
     .prepare(
       `UPDATE model_dispatch_receipts
        SET status = ?, revision = ?, state_json = ?, updated_at = ?
-       WHERE tenant_id = ? AND run_id = ? AND step_id = ? AND attempt_id = ? AND revision = ?`,
+       WHERE tenant_id = ? AND run_id = ? AND step_id = ? AND attempt_id = ?
+         AND operation_id = ? AND revision = ?`,
     )
     .run(
       next.status,
@@ -235,6 +257,7 @@ function transition(
       next.runId,
       next.stepId,
       next.attemptId,
+      next.operationId,
       current.revision,
     );
   if (result.changes !== 1)
@@ -263,13 +286,16 @@ function insert(database: DatabaseSync, receipt: ModelDispatchReceipt): void {
   database
     .prepare(
       `INSERT INTO model_dispatch_receipts (${COLUMNS})
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
       receipt.tenantId,
       receipt.runId,
       receipt.stepId,
       receipt.attemptId,
+      receipt.operationId,
+      receipt.requestSequence,
+      receipt.operation,
       receipt.workItemId,
       receipt.leaseEpoch,
       receipt.requestDigest,
@@ -283,7 +309,7 @@ function insert(database: DatabaseSync, receipt: ModelDispatchReceipt): void {
 
 function decode(
   row: ReceiptRow,
-  locator: RunAttemptLocator,
+  locator: RunAttemptLocator & Readonly<{ operationId: string }>,
 ): ModelDispatchReceipt {
   let parsed: ModelDispatchReceipt;
   try {
@@ -299,6 +325,10 @@ function decode(
     parsed.runId !== locator.runId ||
     parsed.stepId !== locator.stepId ||
     parsed.attemptId !== locator.attemptId ||
+    parsed.operationId !== locator.operationId ||
+    parsed.operationId !== row.operation_id ||
+    parsed.requestSequence !== row.request_sequence ||
+    parsed.operation !== row.operation ||
     parsed.workItemId !== row.work_item_id ||
     parsed.leaseEpoch !== row.lease_epoch ||
     parsed.requestDigest !== row.request_digest ||

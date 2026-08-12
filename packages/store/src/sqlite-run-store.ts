@@ -2683,6 +2683,19 @@ export class SqliteRunStore implements DomainStore {
         input.checkpointDigest,
         input.checkpointedAt,
       );
+      if (input.modelDispatch !== undefined) {
+        observeSqliteModelDispatchResponse(this.#database, {
+          tenantId: input.tenantId,
+          runId: input.runId,
+          lease: input.lease,
+          attempt: input.attempt,
+          operationId: input.modelDispatch.operationId,
+          requestSequence: input.modelDispatch.requestSequence,
+          expectedRevision: input.modelDispatch.expectedRevision,
+          checkpointDigest: input.checkpointDigest,
+          transitionedAt: input.checkpointedAt,
+        });
+      }
       this.#validateExecutionLease(
         input.tenantId,
         input.runId,
@@ -2697,7 +2710,9 @@ export class SqliteRunStore implements DomainStore {
     }
   }
 
-  async loadModelDispatchReceipt(locator: RunAttemptLocator) {
+  async loadModelDispatchReceipt(
+    locator: RunAttemptLocator & Readonly<{ operationId: string }>,
+  ) {
     this.#assertOpen();
     try {
       return clone(loadSqliteModelDispatchReceipt(this.#database, locator));

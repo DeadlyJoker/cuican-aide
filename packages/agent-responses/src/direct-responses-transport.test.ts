@@ -60,6 +60,51 @@ test("streams through a real self-hosted Responses-compatible HTTP server withou
   });
 });
 
+test("awaits durable dispatch evidence immediately before Direct POST", async () => {
+  let fetched = false;
+  const request = manualRequest();
+  const evidence = {
+    requestSequence: 1,
+    operationId: "segment-1:request:1",
+    operation: "dispatch",
+    requestDigest: `sha256:${"a".repeat(64)}`,
+    provider: {
+      agentVersionId: request.agentVersionId,
+      adapterName: "responses",
+      adapterVersion: "v0",
+      modelId: "provider-model",
+    },
+  } as const;
+  const transport = new DirectResponsesTransport(
+    {
+      endpoint: "https://provider.example/v1/responses",
+      model: "provider-model",
+    },
+    {
+      fetch: async () => {
+        fetched = true;
+        return responseStream([]);
+      },
+    },
+  );
+  await assert.rejects(
+    collect(
+      transport.stream(request, signal(), {
+        dispatchEvidence: evidence,
+        controlSink: {
+          providerTurnStateObserved: async () => undefined,
+          dispatchBoundaryCrossed: async (actual) => {
+            assert.deepEqual(actual, evidence);
+            throw new Error("durable_mark_failed");
+          },
+        },
+      }),
+    ),
+    { message: "durable_mark_failed" },
+  );
+  assert.equal(fetched, false);
+});
+
 test("ignores shared AR-041 unknown events and completes the HTTP stream", async () => {
   const reference = JSON.parse(
     readFileSync(

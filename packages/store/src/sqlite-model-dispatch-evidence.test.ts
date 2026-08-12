@@ -39,6 +39,8 @@ test("SQLite model dispatch evidence is fenced, CAS-idempotent, and durable", as
     runId: fixture.prepare.runId,
     lease: fixture.prepare.lease,
     attempt: fixture.prepare.attempt,
+    operationId: fixture.prepare.operationId,
+    requestSequence: fixture.prepare.requestSequence,
     expectedRevision: prepared.revision,
     transitionedAt: "2026-08-08T00:01:02Z",
   } as const;
@@ -57,11 +59,16 @@ test("SQLite model dispatch evidence is fenced, CAS-idempotent, and durable", as
     fixture.store.terminateModelDispatch({
       ...sentInput,
       expectedRevision: 1,
-      outcome: { kind: "failed", code: "stale" },
+      outcome: {
+        kind: "failed",
+        code: "stale",
+        certainty: "responseObserved",
+      },
       transitionedAt: "2026-08-08T00:01:04Z",
     }),
     storeCode("model_dispatch_revision_conflict"),
   );
+  fixture.clock.advance(60_001);
 
   await fixture.store.close();
   const reopened = new SqliteRunStore(fixture.path, { clock: fixture.clock });
@@ -71,6 +78,7 @@ test("SQLite model dispatch evidence is fenced, CAS-idempotent, and durable", as
       tenantId: fixture.prepare.tenantId,
       runId: fixture.prepare.runId,
       ...fixture.prepare.attempt,
+      operationId: fixture.prepare.operationId,
     }),
     observed,
   );
@@ -85,6 +93,8 @@ test("SQLite model dispatch evidence rejects stale leases and stored tampering",
       runId: fixture.prepare.runId,
       lease: { ...fixture.prepare.lease, leaseEpoch: 99 },
       attempt: fixture.prepare.attempt,
+      operationId: fixture.prepare.operationId,
+      requestSequence: fixture.prepare.requestSequence,
       expectedRevision: prepared.revision,
       transitionedAt: "2026-08-08T00:01:02Z",
     }),
@@ -105,8 +115,71 @@ test("SQLite model dispatch evidence rejects stale leases and stored tampering",
       tenantId: fixture.prepare.tenantId,
       runId: fixture.prepare.runId,
       ...fixture.prepare.attempt,
+      operationId: fixture.prepare.operationId,
     }),
     storeCode("stored_model_dispatch_receipt_invalid"),
+  );
+});
+
+test("SQLite rolls back provider checkpoint when response evidence cannot commit", async (context) => {
+  const fixture = await receiptFixture(context);
+  const prepared = await fixture.store.prepareModelDispatch(fixture.prepare);
+  const sent = await fixture.store.markModelDispatchPossiblySent({
+    tenantId: fixture.prepare.tenantId,
+    runId: fixture.prepare.runId,
+    lease: fixture.prepare.lease,
+    attempt: fixture.prepare.attempt,
+    operationId: fixture.prepare.operationId,
+    requestSequence: fixture.prepare.requestSequence,
+    expectedRevision: prepared.revision,
+    transitionedAt: "2026-08-08T00:01:02Z",
+  });
+  const database = new DatabaseSync(fixture.path);
+  database
+    .prepare(
+      `UPDATE model_dispatch_receipts
+       SET state_json = json_set(state_json, '$.requestDigest', ?)
+       WHERE attempt_id = ? AND request_sequence = ?`,
+    )
+    .run(
+      `sha256:${"d".repeat(64)}`,
+      fixture.prepare.attempt.attemptId,
+      fixture.prepare.requestSequence,
+    );
+  database.close();
+
+  await assert.rejects(
+    fixture.store.checkpointRunAttempt({
+      tenantId: fixture.prepare.tenantId,
+      runId: fixture.prepare.runId,
+      lease: fixture.prepare.lease,
+      attempt: fixture.prepare.attempt,
+      checkpoint: {
+        schemaVersion: "crewon.provider-checkpoint.v0",
+        adapterName: "responses",
+        adapterVersion: "1",
+        modelId: "gpt-test",
+        opaquePayload: { responseId: "response-1" },
+      },
+      checkpointDigest: CHECKPOINT_DIGEST,
+      checkpointedAt: "2026-08-08T00:01:03Z",
+      modelDispatch: {
+        requestSequence: fixture.prepare.requestSequence,
+        operationId: fixture.prepare.operationId,
+        expectedRevision: sent.revision,
+      },
+    }),
+    storeCode("stored_model_dispatch_receipt_invalid"),
+  );
+  assert.equal(
+    (
+      await fixture.store.loadRunAttempt({
+        tenantId: fixture.prepare.tenantId,
+        runId: fixture.prepare.runId,
+        ...fixture.prepare.attempt,
+      })
+    )?.providerCheckpoint,
+    null,
   );
 });
 
@@ -132,6 +205,7 @@ test("SQLite migrates v23 and physically gates a forged current receipt table", 
     ALTER TABLE model_dispatch_receipts RENAME TO valid_model_dispatch_receipts;
     CREATE TABLE model_dispatch_receipts (
       tenant_id TEXT, run_id TEXT, step_id TEXT, attempt_id TEXT,
+      operation_id TEXT, request_sequence INTEGER, operation TEXT,
       work_item_id TEXT, lease_epoch INTEGER, request_digest TEXT,
       status TEXT, revision INTEGER, state_json TEXT, prepared_at TEXT,
       updated_at TEXT
@@ -181,6 +255,9 @@ async function receiptFixture(context: TestContext) {
       runId: "run-store-1",
       lease,
       attempt,
+      operationId: "segment:attempt-dispatch-1:request:1",
+      requestSequence: 1,
+      operation: "dispatch",
       requestDigest: REQUEST_DIGEST,
       provider: {
         agentVersionId: "agent-version-1",

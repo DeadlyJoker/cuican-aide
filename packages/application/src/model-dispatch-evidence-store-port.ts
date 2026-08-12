@@ -15,6 +15,9 @@ export type PrepareModelDispatchInput = Readonly<{
   runId: string;
   lease: WorkItemLeaseInput;
   attempt: RunAttemptIdentity;
+  operationId: string;
+  requestSequence: number;
+  operation: import("@crewon/domain").ModelDispatchOperation;
   requestDigest: string;
   provider: ModelDispatchProviderIdentity;
   preparedAt: string;
@@ -25,6 +28,8 @@ export type TransitionModelDispatchInput = Readonly<{
   runId: string;
   lease: WorkItemLeaseInput;
   attempt: RunAttemptIdentity;
+  operationId: string;
+  requestSequence: number;
   expectedRevision: number;
   transitionedAt: string;
 }>;
@@ -44,7 +49,7 @@ export type TerminateModelDispatchInput = TransitionModelDispatchInput &
  */
 export interface ModelDispatchEvidenceStore {
   loadModelDispatchReceipt(
-    locator: RunAttemptLocator,
+    locator: RunAttemptLocator & Readonly<{ operationId: string }>,
   ): Promise<ModelDispatchReceipt | null>;
   prepareModelDispatch(
     input: PrepareModelDispatchInput,

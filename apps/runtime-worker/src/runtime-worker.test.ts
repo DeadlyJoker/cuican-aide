@@ -88,12 +88,13 @@ registerRuntimeWorkerConformance(
 test("completes a durable Run through the Direct Responses transport", async (context) => {
   const fixture = await createFixture(
     context,
-    (clock) => new InMemoryRunStore({ clock }),
+    (clock) => new SqliteRunStore(":memory:", { clock }),
   );
   const transport = new DirectResponsesTransport(
     {
       endpoint: "https://provider.example/v1/responses",
       model: "provider-model",
+      storeResponses: true,
     },
     {
       fetch: async () =>
@@ -116,6 +117,19 @@ test("completes a durable Run through the Direct Responses transport", async (co
       { role: "assistant", content: "done" },
     ],
   );
+  const [attempt] = await fixture.attempts();
+  assert.ok(attempt !== undefined);
+  const receipt = await (
+    fixture.store as SqliteRunStore
+  ).loadModelDispatchReceipt({
+    tenantId: actor().tenantId,
+    runId: fixture.runId,
+    stepId: attempt.stepId,
+    attemptId: attempt.attemptId,
+    operationId: `segment:${attempt.attemptId}:request:1`,
+  });
+  assert.equal(receipt?.status, "responseObserved");
+  assert.equal(receipt?.operation, "dispatch");
   await worker.close();
 });
 

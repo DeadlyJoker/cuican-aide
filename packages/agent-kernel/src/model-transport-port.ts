@@ -1,6 +1,7 @@
 import type { ProviderCheckpoint, RateLimitSnapshot } from "@crewon/contracts";
 import type { ToolCallKind, ToolDefinition } from "@crewon/tool-broker";
 import type { AgentHistoryItem } from "./agent-kernel-port.ts";
+import type { ModelRequestDispatchEvidence } from "./model-request-evidence.ts";
 
 export type ModelInputItem = AgentHistoryItem;
 
@@ -31,9 +32,13 @@ export type ModelRequest = Readonly<{
 }>;
 
 export type ModelTransportStreamOptions = Readonly<{
+  dispatchEvidence?: ModelRequestDispatchEvidence;
   /** Persists newly observed Run-private control state before body events flow. */
   controlSink?: Readonly<{
     providerTurnStateObserved(providerTurnState: string): Promise<void>;
+    dispatchBoundaryCrossed?(
+      evidence: ModelRequestDispatchEvidence,
+    ): Promise<void>;
   }>;
 }>;
 
@@ -90,6 +95,7 @@ export interface ModelTransportPort {
   readonly adapterVersion: string;
   readonly modelId: string;
   readonly supportsResponseRetrieve?: boolean;
+  readonly supportsModelDispatchEvidence?: boolean;
   prewarm?(signal: AbortSignal): Promise<void>;
   stream(
     request: ModelRequest,

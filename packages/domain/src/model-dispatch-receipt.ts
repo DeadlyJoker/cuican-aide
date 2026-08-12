@@ -11,9 +11,12 @@ export type ModelDispatchProviderIdentity = Readonly<{
   modelId: string;
 }>;
 
+export type ModelDispatchOperation = "dispatch" | "retrieve";
+
 export type ModelDispatchTerminalOutcome = Readonly<{
   kind: "completed" | "failed" | "canceled";
   code: string | null;
+  certainty: "notSent" | "responseObserved";
 }>;
 
 /** Durable evidence for one model request owned by a Run Step Attempt. */
@@ -23,6 +26,9 @@ export type ModelDispatchReceipt = Readonly<{
   runId: string;
   stepId: string;
   attemptId: string;
+  operationId: string;
+  requestSequence: number;
+  operation: ModelDispatchOperation;
   workItemId: string;
   leaseEpoch: number;
   requestDigest: string;
@@ -55,6 +61,9 @@ export function prepareModelDispatchReceipt(
     runId: string;
     stepId: string;
     attemptId: string;
+    operationId: string;
+    requestSequence: number;
+    operation: ModelDispatchOperation;
     workItemId: string;
     leaseEpoch: number;
     requestDigest: string;
@@ -93,6 +102,9 @@ export function markModelDispatchPossiblySent(
 ): ModelDispatchReceipt {
   validateModelDispatchReceipt(current);
   requireTimestamp(sentAt, "model_dispatch_sent_at_invalid");
+  if (current.operation !== "dispatch") {
+    throw new ModelDispatchReceiptError("model_dispatch_transition_conflict");
+  }
   if (current.possiblySentAt !== null) return current;
   if (current.status !== "prepared") {
     throw new ModelDispatchReceiptError("model_dispatch_transition_conflict");
@@ -122,7 +134,10 @@ export function observeModelDispatchResponse(
     }
     return current;
   }
-  if (current.status !== "possiblySent") {
+  if (
+    (current.operation === "dispatch" && current.status !== "possiblySent") ||
+    (current.operation === "retrieve" && current.status !== "prepared")
+  ) {
     throw new ModelDispatchReceiptError("model_dispatch_transition_conflict");
   }
   return {
@@ -150,6 +165,15 @@ export function terminateModelDispatchReceipt(
       throw new ModelDispatchReceiptError("model_dispatch_terminal_conflict");
     }
     return current;
+  }
+  if (
+    (input.outcome.certainty === "notSent" && current.status !== "prepared") ||
+    (input.outcome.certainty === "responseObserved" &&
+      current.status !== "responseObserved") ||
+    (input.outcome.kind === "completed" &&
+      input.outcome.certainty !== "responseObserved")
+  ) {
+    throw new ModelDispatchReceiptError("model_dispatch_transition_conflict");
   }
   return {
     ...current,
@@ -180,7 +204,12 @@ export function validateModelDispatchReceipt(
       receipt.responseObservedAt!,
       "model_dispatch_observed_at_invalid",
     );
-    if (!sent || receipt.responseCheckpointDigest === null) invalidStored();
+    if (
+      (receipt.operation === "dispatch" && !sent) ||
+      receipt.responseCheckpointDigest === null
+    ) {
+      invalidStored();
+    }
     requireDigest(
       receipt.responseCheckpointDigest,
       "model_dispatch_checkpoint_digest_invalid",
@@ -210,6 +239,8 @@ function validateIdentity(input: {
   runId: string;
   stepId: string;
   attemptId: string;
+  operationId: string;
+  requestSequence: number;
   workItemId: string;
   leaseEpoch: number;
   provider: ModelDispatchProviderIdentity;
@@ -219,6 +250,7 @@ function validateIdentity(input: {
     input.runId,
     input.stepId,
     input.attemptId,
+    input.operationId,
     input.workItemId,
     input.provider.agentVersionId,
     input.provider.adapterName,
@@ -232,6 +264,12 @@ function validateIdentity(input: {
   if (!Number.isSafeInteger(input.leaseEpoch) || input.leaseEpoch < 1) {
     throw new ModelDispatchReceiptError("model_dispatch_identity_invalid");
   }
+  if (
+    !Number.isSafeInteger(input.requestSequence) ||
+    input.requestSequence < 1
+  ) {
+    throw new ModelDispatchReceiptError("model_dispatch_identity_invalid");
+  }
 }
 
 function sameAuthority(
@@ -243,6 +281,9 @@ function sameAuthority(
     receipt.runId === input.runId &&
     receipt.stepId === input.stepId &&
     receipt.attemptId === input.attemptId &&
+    receipt.operationId === input.operationId &&
+    receipt.requestSequence === input.requestSequence &&
+    receipt.operation === input.operation &&
     receipt.workItemId === input.workItemId &&
     receipt.leaseEpoch === input.leaseEpoch &&
     receipt.requestDigest === input.requestDigest &&
@@ -266,7 +307,11 @@ function sameOutcome(
   left: ModelDispatchTerminalOutcome,
   right: ModelDispatchTerminalOutcome,
 ): boolean {
-  return left.kind === right.kind && left.code === right.code;
+  return (
+    left.kind === right.kind &&
+    left.code === right.code &&
+    left.certainty === right.certainty
+  );
 }
 
 function requireDigest(value: string, code: string): void {

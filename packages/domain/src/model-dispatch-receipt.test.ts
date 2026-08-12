@@ -15,6 +15,9 @@ const PREPARE = {
   runId: "run-1",
   stepId: "step-1",
   attemptId: "attempt-1",
+  operationId: "segment:attempt-1:request:1",
+  requestSequence: 1,
+  operation: "dispatch",
   workItemId: "step-1",
   leaseEpoch: 4,
   requestDigest: DIGEST,
@@ -35,7 +38,11 @@ test("model dispatch evidence advances monotonically and retains certainty at te
     observedAt: "2026-08-12T00:00:02Z",
   });
   const terminal = terminateModelDispatchReceipt(observed, {
-    outcome: { kind: "failed", code: "worker_crashed" },
+    outcome: {
+      kind: "failed",
+      code: "worker_crashed",
+      certainty: "responseObserved",
+    },
     terminalAt: "2026-08-12T00:00:03Z",
   });
 
@@ -44,11 +51,30 @@ test("model dispatch evidence advances monotonically and retains certainty at te
     status: "terminal",
     revision: 4,
     terminalAt: "2026-08-12T00:00:03Z",
-    terminalOutcome: { kind: "failed", code: "worker_crashed" },
+    terminalOutcome: {
+      kind: "failed",
+      code: "worker_crashed",
+      certainty: "responseObserved",
+    },
     updatedAt: "2026-08-12T00:00:03Z",
   });
   assert.equal(terminal.possiblySentAt, "2026-08-12T00:00:01Z");
   assert.equal(terminal.responseCheckpointDigest, CHECKPOINT_DIGEST);
+});
+
+test("possibly-sent uncertainty cannot be erased by terminalization", () => {
+  const sent = markModelDispatchPossiblySent(
+    prepareModelDispatchReceipt(null, PREPARE),
+    "2026-08-12T00:00:01Z",
+  );
+  assert.throws(
+    () =>
+      terminateModelDispatchReceipt(sent, {
+        outcome: { kind: "failed", code: "timeout", certainty: "notSent" },
+        terminalAt: "2026-08-12T00:00:02Z",
+      }),
+    { message: "model_dispatch_transition_conflict" },
+  );
 });
 
 test("model dispatch mutations replay exactly and reject immutable conflicts", () => {
