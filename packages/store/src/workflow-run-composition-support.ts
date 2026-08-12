@@ -385,6 +385,133 @@ export function attemptId(
   return `workflow-attempt:${stripDigest(digester.sha256(`${operationId}\0${nodeId}\0attempt`))}`;
 }
 
+export function workflowAuthorityId(
+  role:
+    | "claim"
+    | "gate"
+    | "node"
+    | "attempt"
+    | "gate-outbox"
+    | "gate-resume"
+    | "scheduler"
+    | "reconcile",
+  authority: unknown,
+  digester: WorkflowContentDigester,
+): string {
+  const digest = stripDigest(
+    digester.sha256(
+      JSON.stringify({
+        schemaVersion: "crewon.workflow-authority-id.v1",
+        role,
+        authority,
+      }),
+    ),
+  );
+  if (!/^[a-f0-9]{64}$/u.test(digest))
+    throw new RunStoreError("workflow_composition_digest_invalid");
+  return `wf1:${role}:${digest}`;
+}
+
+export function scheduleReadyNodes(input: {
+  execution: WorkflowExecutionState;
+  workflow: CompiledWorkflowVersion;
+  operationId: string;
+  now: string;
+  digester: WorkflowContentDigester;
+}): Readonly<{
+  execution: WorkflowExecutionState;
+  claims: readonly import("@crewon/application").WorkflowNodeClaim[];
+}> {
+  if (input.execution.nodes.some((node) => node.status === "unknown"))
+    return { execution: input.execution, claims: [] };
+  const readyIds = input.workflow.executionOrder.filter((nodeId) => {
+    const state = input.execution.nodes.find((node) => node.nodeId === nodeId)!;
+    const definition = input.workflow.nodes.find(
+      (node) => node.nodeId === nodeId,
+    )!;
+    return (
+      state.status === "pending" &&
+      definition.dependsOn.every(
+        (dependency) =>
+          input.execution.nodes.find((node) => node.nodeId === dependency)
+            ?.status === "completed",
+      )
+    );
+  });
+  if (readyIds.length === 0) return { execution: input.execution, claims: [] };
+  const claims: import("@crewon/application").WorkflowNodeClaim[] = [];
+  const nodes = input.execution.nodes.map((state) => {
+    if (!readyIds.includes(state.nodeId)) return state;
+    const node = input.workflow.nodes.find(
+      (candidate) => candidate.nodeId === state.nodeId,
+    )!;
+    const identity = {
+      tenantId: input.execution.tenantId,
+      runId: input.execution.runId,
+      workflowVersionId: input.execution.workflowVersionId,
+      nodeId: state.nodeId,
+      claimEpoch: state.claimEpoch + 1,
+      operationId: input.operationId,
+    };
+    const claimId = workflowAuthorityId("claim", identity, input.digester);
+    const gateRequestId =
+      node.kind === "humanGate"
+        ? workflowAuthorityId("gate", identity, input.digester)
+        : null;
+    const inputDigest = input.digester.sha256(
+      JSON.stringify({
+        nodeId: node.nodeId,
+        contentDigest: input.workflow.contentDigest,
+        dependencies: node.dependsOn.map((dependency) => ({
+          nodeId: dependency,
+          resultDigest: input.execution.nodes.find(
+            (item) => item.nodeId === dependency,
+          )!.resultDigest,
+        })),
+      }),
+    );
+    claims.push({
+      node,
+      claimId,
+      claimEpoch: state.claimEpoch + 1,
+      gateRequestId,
+      inputDigest,
+    });
+    return {
+      ...state,
+      status:
+        node.kind === "humanGate"
+          ? ("waitingHuman" as const)
+          : ("queued" as const),
+      claimId,
+      claimOperationId: input.operationId,
+      claimEpoch: state.claimEpoch + 1,
+      leaseExpiresAt: null,
+      gateRequestId,
+      inputDigest,
+    };
+  });
+  return {
+    execution: {
+      ...input.execution,
+      revision: input.execution.revision + 1,
+      nodes,
+      status:
+        nodes.some((node) => node.status === "waitingHuman") &&
+        !nodes.some(
+          (node) =>
+            node.status === "queued" ||
+            node.status === "running" ||
+            node.status === "unknown",
+        )
+          ? "waitingHuman"
+          : "running",
+      updatedAt: input.now,
+    },
+    claims,
+  };
+}
+
 function derivedId(
   input: { operationId: string; digester: WorkflowContentDigester },
   nodeId: string,
