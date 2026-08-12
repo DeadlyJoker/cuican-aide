@@ -240,12 +240,21 @@ async function loadReplay(
     row.fingerprint !== input.idempotency.requestFingerprint
   )
     throw new RunStoreError("idempotency_conflict");
-  const result = row.result_json as CommitWorkflowRunStartResult;
-  await validateReplay(client, schema, row, result, digester);
-  return structuredClone({
-    ...result,
-    run: { ...result.run, disposition: "replayed" },
-  });
+  try {
+    const result = row.result_json as CommitWorkflowRunStartResult;
+    await validateReplay(client, schema, row, result, digester);
+    return structuredClone({
+      ...result,
+      run: { ...result.run, disposition: "replayed" },
+    });
+  } catch (error) {
+    if (
+      error instanceof RunStoreError &&
+      error.code === "workflow_run_admission_receipt_corrupt"
+    )
+      throw error;
+    replayCorrupt();
+  }
 }
 
 async function validateReplay(
