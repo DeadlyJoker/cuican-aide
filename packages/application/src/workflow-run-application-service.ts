@@ -2,9 +2,9 @@ import type { JsonValue } from "@crewon/contracts";
 import {
   WorkflowVersionError,
   parseCompiledWorkflowVersion,
+  validateWorkflowSchemaValue,
   type RunLifecycleEvent,
   type WorkflowContentDigester,
-  type WorkflowValueSchema,
 } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
@@ -118,7 +118,25 @@ export class WorkflowRunApplicationService {
     ) {
       throw new ApplicationError("internal", "workflow_run_authority_invalid");
     }
-    validateAgainstWorkflowSchema(workflowInput, workflow.inputSchema);
+    let validatedWorkflowInput: JsonValue;
+    try {
+      validatedWorkflowInput = validateWorkflowSchemaValue(
+        workflowInput,
+        workflow.inputSchema,
+      ) as JsonValue;
+    } catch (error) {
+      if (
+        error instanceof WorkflowVersionError &&
+        error.code === "workflow_value_schema_mismatch"
+      ) {
+        throw new ApplicationError(
+          "validation",
+          "workflow_input_schema_mismatch",
+          { cause: error },
+        );
+      }
+      throw error;
+    }
     const occurredAt = this.#now();
     const runId = this.#nextId("run");
     const event: Extract<RunLifecycleEvent, { type: "run.created" }> = {
@@ -169,7 +187,10 @@ export class WorkflowRunApplicationService {
           tenantId: actor.tenantId,
           runId,
           kind: "run.execute",
-          payload: { throughSequence: 1, workflowInput },
+          payload: {
+            throughSequence: 1,
+            workflowInput: validatedWorkflowInput,
+          },
           createdAt: occurredAt,
         },
       ],
@@ -212,60 +233,6 @@ export class WorkflowRunApplicationService {
       throw new ApplicationError("internal", "clock_timestamp_invalid");
     return value;
   }
-}
-
-function validateAgainstWorkflowSchema(
-  value: JsonValue,
-  schema: WorkflowValueSchema,
-): void {
-  switch (schema.type) {
-    case "string":
-      if (
-        typeof value !== "string" ||
-        new TextEncoder().encode(value).byteLength > schema.maxLength ||
-        (schema.enum !== null && !schema.enum.includes(value))
-      )
-        invalidSemanticInput();
-      return;
-    case "number":
-    case "integer":
-      if (
-        typeof value !== "number" ||
-        !Number.isFinite(value) ||
-        (schema.type === "integer" && !Number.isSafeInteger(value)) ||
-        (schema.minimum !== null && value < schema.minimum) ||
-        (schema.maximum !== null && value > schema.maximum)
-      )
-        invalidSemanticInput();
-      return;
-    case "boolean":
-      if (typeof value !== "boolean") invalidSemanticInput();
-      return;
-    case "array":
-      if (!Array.isArray(value) || value.length > schema.maxItems)
-        invalidSemanticInput();
-      for (const item of value)
-        validateAgainstWorkflowSchema(item, schema.items);
-      return;
-    case "object": {
-      if (value === null || Array.isArray(value) || typeof value !== "object")
-        invalidSemanticInput();
-      const record = value as Readonly<Record<string, JsonValue>>;
-      const keys = Object.keys(record);
-      if (
-        schema.required.some((key) => !Object.hasOwn(record, key)) ||
-        keys.some((key) => !Object.hasOwn(schema.properties, key))
-      )
-        invalidSemanticInput();
-      for (const key of keys)
-        validateAgainstWorkflowSchema(record[key]!, schema.properties[key]!);
-      return;
-    }
-  }
-}
-
-function invalidSemanticInput(): never {
-  throw new ApplicationError("validation", "workflow_input_schema_mismatch");
 }
 
 function validateWorkflowInput(input: JsonValue): JsonValue {
