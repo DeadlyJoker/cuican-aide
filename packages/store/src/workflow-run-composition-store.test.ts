@@ -260,6 +260,119 @@ test("SQLite rejects expired lease and frozen binding drift without partial DAG 
   );
 });
 
+test("SQLite fanout atomically queues agent work and publishes a sibling gate", async () => {
+  const database = new DatabaseSync(":memory:");
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  const store = new SqliteWorkflowRunCompositionStore(database, {
+    digester,
+    clock,
+  });
+  await seed(database, clock.nowEpochMilliseconds() + 60_000);
+
+  const scheduled = await store.scheduleWorkflowNodes({
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease,
+    binding,
+    schedulerOperationId: "schedule-fanout-1",
+  });
+  assert.equal(scheduled.disposition, "scheduled");
+  assert.equal(scheduled.nodeWorkItems.length, 1);
+  assert.equal(scheduled.gatePublications.length, 1);
+  assert.deepEqual(
+    scheduled.execution.nodes.map((node) => [node.nodeId, node.status]),
+    [
+      ["agent", "queued"],
+      ["gate", "waitingHuman"],
+      ["verify", "pending"],
+    ],
+  );
+  assert.match(
+    scheduled.nodeWorkItems[0]!.workItemId,
+    /^wf1:node:[a-f0-9]{64}$/u,
+  );
+  assert.equal(
+    database.prepare("SELECT count(*) AS count FROM run_attempts").get()?.count,
+    0,
+  );
+  assert.equal(
+    database
+      .prepare("SELECT count(*) AS count FROM workflow_gate_requests")
+      .get()?.count,
+    1,
+  );
+  assert.equal(
+    database
+      .prepare(
+        "SELECT count(*) AS count FROM outbox WHERE topic='workflow.gate.requested'",
+      )
+      .get()?.count,
+    1,
+  );
+  assert.equal(
+    database
+      .prepare("SELECT status FROM work_items WHERE work_item_id='work-1'")
+      .get()?.status,
+    "completed",
+  );
+
+  const replayDatabase = new DatabaseSync(":memory:");
+  replayDatabase.close();
+  const work = scheduled.nodeWorkItems[0]!;
+  database
+    .prepare(
+      `UPDATE work_items SET status='leased',lease_owner_id='node-worker',lease_id='node-lease',
+     lease_epoch=1,lease_expires_at_ms=? WHERE work_item_id=?`,
+    )
+    .run(clock.nowEpochMilliseconds() + 60_000, work.workItemId);
+  const admitted = await store.admitWorkflowNodeWork({
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease: {
+      workItemId: work.workItemId,
+      ownerId: "node-worker",
+      leaseId: "node-lease",
+      leaseEpoch: 1,
+    },
+    binding,
+    nodeId: work.nodeId,
+    claimId: work.claimId,
+    claimEpoch: work.claimEpoch,
+    schedulerOperationId: "schedule-fanout-1",
+    admissionOperationId: "admit-agent-1",
+    attemptLeaseDurationMs: 5_000,
+  });
+  assert.equal(admitted.disposition, "fresh");
+  assert.equal(admitted.execution.nodes[0]?.status, "running");
+  assert.equal(
+    database.prepare("SELECT count(*) AS count FROM run_attempts").get()?.count,
+    1,
+  );
+  const replay = await store.admitWorkflowNodeWork({
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease: {
+      workItemId: work.workItemId,
+      ownerId: "node-worker",
+      leaseId: "node-lease",
+      leaseEpoch: 1,
+    },
+    binding,
+    nodeId: work.nodeId,
+    claimId: work.claimId,
+    claimEpoch: work.claimEpoch,
+    schedulerOperationId: "schedule-fanout-1",
+    admissionOperationId: "admit-agent-1",
+    attemptLeaseDurationMs: 5_000,
+  });
+  assert.equal(replay.disposition, "replay");
+  assert.equal(replay.admission, null);
+  assert.equal(
+    database.prepare("SELECT count(*) AS count FROM run_attempts").get()?.count,
+    1,
+  );
+});
+
 const postgresUrl = process.env.CREWON_TEST_POSTGRES_URL;
 if (postgresUrl === undefined) {
   test.skip("PostgreSQL workflow composition requires CREWON_TEST_POSTGRES_URL", () => {});
