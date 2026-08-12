@@ -384,7 +384,7 @@ function postgresCompositionTables(schema: string): string {
 }
 
 function postgresAdmissionTable(schema: string): string {
-  return `CREATE TABLE ${schema}.workflow_run_admission_receipts (
+  return `CREATE TABLE IF NOT EXISTS ${schema}.workflow_run_admission_receipts (
     tenant_id text NOT NULL, scope text NOT NULL, idempotency_key text NOT NULL,
     fingerprint text NOT NULL, run_id text NOT NULL, result_json jsonb NOT NULL,
     PRIMARY KEY(scope,idempotency_key),
