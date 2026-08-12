@@ -41,6 +41,22 @@ const workflow = compileWorkflowVersion({
       dependsOn: ["agent"], inputSchema: schema, outputSchema: schema },
   ],
 }, digester);
+const parallelWorkflow = compileWorkflowVersion({
+  schemaVersion: "crewon.workflow-version-source.v0", workflowId: "wf-parallel",
+  workflowVersionId: "wf-parallel-v1", name: "slice two", description: "parallel",
+  inputSchema: schema, outputSchema: schema, entryNodeIds: ["left", "right"],
+  outputNodeIds: ["verification"], nodes: [
+    { nodeId: "left", title: "left", instruction: "left", kind: "agent",
+      agentVersionId: "left-v1", dependsOn: [], inputSchema: schema, outputSchema: schema },
+    { nodeId: "right", title: "right", instruction: "right", kind: "agent",
+      agentVersionId: "right-v1", dependsOn: [], inputSchema: schema, outputSchema: schema },
+    { nodeId: "verification", title: "verification", instruction: "verify",
+      kind: "verification", verifierAgentVersionId: "parallel-verification-v1",
+      dependsOn: ["left", "right"], inputSchema: {
+        type: "object", properties: { left: schema, right: schema },
+        required: ["left", "right"], additionalProperties: false }, outputSchema: schema },
+  ],
+}, digester);
 test("certified standalone SQLite Slice 1 converges real shared Agent to Verification", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-slice-one-"));
   const path = join(directory, "runtime.sqlite");
@@ -160,6 +176,172 @@ test("certified standalone SQLite Slice 1 converges real shared Agent to Verific
   assert.equal(closes, 1);
 });
 
+test("certified SQLite Slice 2 preserves parallel sibling authority and frozen ordering", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-slice-two-"));
+  const path = join(directory, "runtime.sqlite");
+  const runtimes: Array<Awaited<ReturnType<typeof createStandaloneRuntimeWorker>>> = [];
+  t.after(async () => {
+    await Promise.all(runtimes.map((runtime) => runtime.close()));
+    await rm(directory, { recursive: true, force: true });
+  });
+  const versions = ["left-v1", "right-v1", "parallel-verification-v1"].map(agentVersion);
+  const config = { ...baseConfig(), agentVersionDeployments: versions.map(
+    (version) => ({ schemaVersion: "crewon.agent-version-deployment.v0" as const,
+      tenantId: "tenant-1", agentVersionId: version.agentVersionId,
+      contentDigest: version.contentDigest,
+      materializationDigest: digester.sha256(`materialization:${version.agentVersionId}`),
+      authorityId: `authority-${version.agentVersionId}`, workspaceBindingId: null })),
+    agentVersionRuntimeFactory: { create: ({ version }: {
+      version: { agentVersionId: string } }) => nodeRuntime(version.agentVersionId, new Map()) },
+  };
+  const setup = new SqliteRunStore(path, { workflowDigester: digester });
+  for (const version of versions) await setup.registerAgentVersion(createAgentVersionAsset({
+    tenantId: "tenant-1", version, createdAt: "2026-08-12T00:00:00.000Z" }));
+  await activateStandaloneRuntimeAgentVersionRelease({ ...config, databasePath: path,
+    actor: { principalId: "principal", actorId: "actor", tenantId: "tenant-1", spaceId: "space-1" },
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:00.000Z" }, activationId: "activate-slice-two" });
+  await new ThreadApplicationService({ store: setup,
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    ids: { nextId: () => "parallel-thread" }, digester,
+  }).createThread({ principalId: "principal", actorId: "actor", tenantId: "tenant-1", spaceId: "space-1" },
+    { kind: "thread.create", idempotencyKey: "parallel-thread", title: "Parallel" });
+  await setup.workflowVersionStore(digester).registerWorkflowVersion({
+    schemaVersion: "crewon.workflow-version-asset.v0", tenantId: "tenant-1",
+    workflowId: parallelWorkflow.workflowId, workflowVersionId: parallelWorkflow.workflowVersionId,
+    contentDigest: parallelWorkflow.contentDigest,
+    definitionJson: serializeCompiledWorkflowVersion(parallelWorkflow),
+    createdAt: "2026-08-12T00:00:00.000Z" });
+  let id = 0;
+  const started = await new WorkflowRunApplicationService({ store: setup,
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:01.000Z" }, workflowDigester: digester,
+    ids: { nextId: (kind) => `${kind}-${++id}` },
+    routeResolver: { resolveRoute: async () => config.route },
+  }).startWorkflowRun({ principalId: "principal", actorId: "actor",
+    tenantId: "tenant-1", spaceId: "space-1" }, {
+    kind: "workflowRun.start", idempotencyKey: "parallel-start",
+    workflowVersionId: parallelWorkflow.workflowVersionId,
+    threadId: "parallel-thread", input: {} });
+  const runId = started.run.state.runId;
+  await setup.close();
+
+  const samples = new Map<string, number>();
+  const completionOrder: string[] = [];
+  let releaseLeft!: () => void;
+  const leftGate = new Promise<void>((resolve) => { releaseLeft = resolve; });
+  let releaseRight!: () => void;
+  const rightGate = new Promise<void>((resolve) => { releaseRight = resolve; });
+  const entered = new Set<string>();
+  let bothEntered!: () => void;
+  const bothEnteredGate = new Promise<void>((resolve) => { bothEntered = resolve; });
+  const makeRuntime = async (ownerId: string) => {
+    const store = new SqliteRunStore(path, { workflowDigester: digester });
+    const runtime = await createStandaloneRuntimeWorker({ ...config, databasePath: path,
+      scanIntervalMs: null, ownerId,
+      additionalAgentVersionRuntimes: versions.map(({ agentVersionId }) => ({
+        tenantId: "tenant-1", runtime: nodeRuntime(agentVersionId, samples,
+          agentVersionId === "left-v1" ? leftGate : agentVersionId === "right-v1" ? rightGate : null,
+          completionOrder, () => {
+            entered.add(agentVersionId);
+            if (entered.has("left-v1") && entered.has("right-v1")) bothEntered();
+          }) })),
+      workflowComposition: { certification: {
+        schemaVersion: "crewon.workflow-runtime-certification.v0",
+        capabilities: WORKFLOW_RUNTIME_CAPABILITIES }, versions: store.workflowVersionStore(digester),
+        store: store as never, close: () => store.close() },
+    });
+    runtimes.push(runtime);
+    return runtime;
+  };
+  const first = await makeRuntime("parallel-worker-1");
+  const second = await makeRuntime("parallel-worker-2");
+  await first.worker.wake();
+  const afterFanout = inspectParallel(path, runId);
+  assert.equal(afterFanout.schedulerAttempts, 0);
+  assert.deepEqual(afterFanout.nodes.map((node) => node.nodeId), ["left", "right"]);
+  assert.equal(new Set(afterFanout.nodes.map((node) => node.workItemId)).size, 2);
+  assert.equal(new Set(afterFanout.nodes.map((node) => node.claimId)).size, 2);
+  assert.deepEqual(afterFanout.nodes.map((node) => node.claimEpoch), [1, 1]);
+
+  const leftWake = first.worker.wake();
+  const rightWake = second.worker.wake();
+  await bothEnteredGate;
+  const concurrentlyRunning = inspectParallel(path, runId);
+  assert.deepEqual(concurrentlyRunning.attempts.map(({ status }) => status),
+    ["running", "running"]);
+  assert.deepEqual(concurrentlyRunning.nodes.map(({ status }) => status),
+    ["leased", "leased"]);
+  assert.equal(new Set(concurrentlyRunning.nodes.map(({ leaseId }) => leaseId)).size, 2);
+  assert.deepEqual(concurrentlyRunning.steps.map(({ status }) => status),
+    ["running", "running"]);
+  releaseRight();
+  await rightWake;
+  assert.deepEqual(completionOrder, ["right-v1"]);
+  const rightCompleted = inspectParallel(path, runId);
+  assert.deepEqual(rightCompleted.attempts.map(({ status }) => status),
+    ["running", "completed"]);
+  assert.equal(rightCompleted.verificationWorkItems, 0);
+  releaseLeft();
+  await leftWake;
+  assert.deepEqual(completionOrder.slice(0, 2), ["right-v1", "left-v1"]);
+  const afterSiblings = inspectParallel(path, runId);
+  assert.equal(new Set(afterSiblings.attempts.map((attempt) => attempt.attemptId)).size, 2);
+  assert.equal(new Set(afterSiblings.attempts.map((attempt) => attempt.workItemId)).size, 2);
+  assert.equal(afterSiblings.verificationWorkItems, 0);
+  assert.deepEqual(afterSiblings.outputNodeOrder, ["left", "right"]);
+  await first.worker.wake();
+  assert.equal(inspectParallel(path, runId).verificationWorkItems, 1);
+
+  for (let wake = 0; wake < 3; wake += 1) {
+    const outcome = await first.worker.wake();
+    if (outcome.kind === "completed") break;
+  }
+  const final = inspectParallel(path, runId);
+  assert.equal(final.runStatus, "completed");
+  assert.equal(final.verificationInput, '{"left":{},"right":{}}');
+  assert.deepEqual(samples, new Map([
+    ["left-v1", 1], ["right-v1", 1], ["parallel-verification-v1", 1],
+  ]));
+  await Promise.all([first.worker.wake(), second.worker.wake()]);
+  assert.deepEqual(samples, new Map([
+    ["left-v1", 1], ["right-v1", 1], ["parallel-verification-v1", 1],
+  ]));
+});
+
+function inspectParallel(path: string, runId: string) {
+  const database = new DatabaseSync(path);
+  try {
+    const executionRow = database.prepare(
+      "SELECT state_json FROM workflow_executions WHERE run_id=?").get(runId);
+    const execution = executionRow === undefined ? { nodes: [] } :
+      JSON.parse(executionRow.state_json as string);
+    const nodeRows = database.prepare(`SELECT json_extract(work_item_json,'$.payload.nodeId') node_id,
+      json_extract(work_item_json,'$.payload.claimId') claim_id,
+      json_extract(work_item_json,'$.payload.claimEpoch') claim_epoch,work_item_id,status,lease_id
+      FROM work_items WHERE run_id=? AND json_extract(work_item_json,'$.payload.trigger')='workflowNode'
+      AND json_extract(work_item_json,'$.payload.nodeId') IN ('left','right') ORDER BY node_id`).all(runId);
+    return { schedulerAttempts: database.prepare(`SELECT count(*) count FROM run_attempts a
+        JOIN work_items w ON w.work_item_id=a.work_item_id
+        WHERE w.run_id=? AND json_extract(w.work_item_json,'$.payload.trigger')='workflowScheduler'`).get(runId)!.count,
+      nodes: nodeRows.map((row) => ({ nodeId: row.node_id, claimId: row.claim_id,
+        claimEpoch: row.claim_epoch, status: row.status, leaseId: row.lease_id,
+        workItemId: row.work_item_id })), attempts: database.prepare(
+        "SELECT attempt_id attemptId,work_item_id workItemId,status FROM run_attempts WHERE run_id=? AND step_id IN ('left','right') ORDER BY step_id").all(runId).map((row) => ({ ...row })),
+      steps: database.prepare(
+        "SELECT step_id stepId,status FROM run_steps WHERE run_id=? AND step_id IN ('left','right') ORDER BY step_id").all(runId).map((row) => ({ ...row })),
+      verificationWorkItems: database.prepare(`SELECT count(*) count FROM work_items WHERE run_id=?
+        AND json_extract(work_item_json,'$.payload.nodeId')='verification'`).get(runId)!.count,
+      outputNodeOrder: execution.nodes.filter((node: { nodeId: string }) =>
+        node.nodeId === "left" || node.nodeId === "right").map((node: { nodeId: string }) => node.nodeId),
+      verificationInput: database.prepare(`SELECT value_json FROM workflow_execution_values
+        WHERE run_id=? AND role='nodeInput' AND node_id='verification'`).get(runId)?.value_json,
+      runStatus: JSON.parse(database.prepare(
+        "SELECT state_json FROM run_snapshots WHERE run_id=?").get(runId)!.state_json as string).status };
+  } finally { database.close(); }
+}
+
 function baseConfig() {
   return { runtimeTenantId: "tenant-1", route: { authorityId: "authority",
     runtimeGeneration: "ts-v0", agentVersionId: "root-agent",
@@ -170,7 +352,9 @@ function baseConfig() {
   } as const;
 }
 
-function nodeRuntime(agentVersionId: string, samples: Map<string, number>) {
+function nodeRuntime(agentVersionId: string, samples: Map<string, number>,
+  gate: Promise<void> | null = null, completionOrder: string[] | null = null,
+  onEntered: (() => void) | null = null) {
   const version = agentVersion(agentVersionId);
   return { version, policy: {} as never, toolRuntime: {
     definitions: () => [], executionPolicy: () => null,
@@ -180,6 +364,8 @@ function nodeRuntime(agentVersionId: string, samples: Map<string, number>) {
       modelIdentity: { adapterName: "test", adapterVersion: "1", modelId: "model" },
       async *runSegment(contract: { runId: string; segmentId: string }, _signal: AbortSignal,
         options: { controlSink?: Record<string, (value: unknown) => Promise<void>> }) {
+        onEntered?.();
+        if (gate !== null) await gate;
         samples.set(agentVersionId, (samples.get(agentVersionId) ?? 0) + 1);
         const evidence = { operationId: `${contract.segmentId}:dispatch`, requestSequence: 1,
           operation: "dispatch", requestDigest: digester.sha256(agentVersionId),
@@ -196,6 +382,7 @@ function nodeRuntime(agentVersionId: string, samples: Map<string, number>) {
             opaquePayload: { responseId: `${agentVersionId}-response` } } } };
         yield { ...base, sequence: 3, type: "model.output.delta", data: { delta: "{}" } };
         yield { ...base, sequence: 4, type: "segment.completed", data: { output: "{}" } };
+        completionOrder?.push(agentVersionId);
       } },
   } as never;
 }
