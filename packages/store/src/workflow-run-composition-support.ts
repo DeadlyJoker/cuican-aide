@@ -409,7 +409,7 @@ export function settleWorkflowClaim(input: {
   const active = nodes.some((node) =>
     ["queued", "running", "unknown", "waitingHuman"].includes(node.status),
   );
-  const status = nodes.some((node) => node.status === "failed")
+  const status = nodes.some((node) => node.status === "failed") && !active
     ? "failed"
     : nodes.every((node) => node.status === "completed")
       ? "completed"

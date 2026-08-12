@@ -417,7 +417,7 @@ export function validateWorkflowExecutionState(
   const projected =
     state.cancelRequested && !active
       ? "canceled"
-      : state.nodes.some((node) => node.status === "failed")
+      : state.nodes.some((node) => node.status === "failed") && !active
         ? "failed"
         : state.nodes.every((node) => node.status === "completed")
           ? "completed"

@@ -194,9 +194,17 @@ export class SqliteWorkflowRunCompositionStore
       const gate = this.#loadGate(input);
       if (
         gate.decisionReceiptId !== input.decisionReceiptId ||
-        gate.status === "published"
+        !["completed", "failed"].includes(String(gate.status)) ||
+        gate.tenantId !== input.tenantId || gate.runId !== input.runId ||
+        gate.nodeId !== input.nodeId ||
+        stableJson(gate.binding) !== stableJson(input.binding) ||
+        gate.gateRequestId !== input.gateRequestId ||
+        gate.claimId !== input.claimId || gate.claimEpoch !== input.claimEpoch
       )
         throw new RunStoreError("workflow_gate_decision_mismatch");
+      assertGateDecisionOutcome(gate.outcome as Parameters<
+        WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]
+      >[0]["outcome"]);
       this.#assertGateResumePayload(input, gate);
       const execution = this.#loadExecution(input.tenantId, input.runId);
       const step = loadSqliteRunStep(this.#database, {
@@ -220,7 +228,7 @@ export class SqliteWorkflowRunCompositionStore
         updatedAt: now,
         terminalAt: now,
       };
-      this.#database
+      const stepUpdate = this.#database
         .prepare(
           `UPDATE run_steps SET status=?,revision=?,state_json=?,updated_at=?,terminal_at=?
          WHERE tenant_id=? AND run_id=? AND step_id=? AND revision=?`,
@@ -236,8 +244,16 @@ export class SqliteWorkflowRunCompositionStore
           input.nodeId,
           step.revision,
         );
+      if (stepUpdate.changes !== 1)
+        throw new RunStoreError("workflow_composition_gate_mismatch");
       const node = execution.nodes.find((candidate) => candidate.nodeId === input.nodeId);
-      if (node === undefined) throw new RunStoreError("workflow_composition_gate_mismatch");
+      if (
+        node === undefined || node.kind !== "humanGate" ||
+        node.status !== "waitingHuman" || node.claimId !== input.claimId ||
+        node.claimEpoch !== input.claimEpoch ||
+        node.gateRequestId !== input.gateRequestId ||
+        node.inputDigest !== gate.inputDigest
+      ) throw new RunStoreError("workflow_composition_gate_mismatch");
       let gateValue: WorkflowSchemaValue | undefined;
       if (outcome.status === "completed") {
         const inputAuthority = this.#composeNodeInputValue({
@@ -966,6 +982,7 @@ export class SqliteWorkflowRunCompositionStore
         fingerprint,
       );
       if (replay !== null) {
+        this.#validateGateDecisionReplay(input, replay);
         this.#database.exec("COMMIT");
         return structuredClone({
           ...(replay as object),
@@ -980,9 +997,15 @@ export class SqliteWorkflowRunCompositionStore
         this.#loadRun(input.tenantId, input.runId),
         input.binding,
       );
+      assertGateDecisionOutcome(input.outcome);
       const gate = this.#loadGate(input);
       if (
         gate.status !== "published" ||
+        gate.tenantId !== input.tenantId ||
+        gate.runId !== input.runId ||
+        gate.nodeId !== input.nodeId ||
+        stableJson(gate.binding) !== stableJson(input.binding) ||
+        gate.gateRequestId !== input.gateRequestId ||
         gate.claimId !== input.claimId ||
         gate.claimEpoch !== input.claimEpoch
       )
@@ -997,7 +1020,7 @@ export class SqliteWorkflowRunCompositionStore
       const approvalResumeWorkItemId = gate.approvalResumeWorkItemId;
       if (typeof approvalResumeWorkItemId !== "string")
         throw new RunStoreError("workflow_gate_store_corrupt");
-      this.#database
+      const updated = this.#database
         .prepare(
           `UPDATE workflow_gate_requests SET status=?,state_json=?,updated_at=?
          WHERE tenant_id=? AND run_id=? AND node_id=? AND status='published'`,
@@ -1010,6 +1033,8 @@ export class SqliteWorkflowRunCompositionStore
           input.runId,
           input.nodeId,
         );
+      if (updated.changes !== 1)
+        throw new RunStoreError("workflow_gate_decision_mismatch");
       this.#insertWorkflowWorkItem(
         approvalResumeWorkItemId,
         input,
@@ -1042,6 +1067,51 @@ export class SqliteWorkflowRunCompositionStore
       rollback(this.#database);
       throw normalizeCompositionError(error);
     }
+  }
+
+  #validateGateDecisionReplay(
+    input: Parameters<WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]>[0],
+    replay: unknown,
+  ): void {
+    const result = replay as Record<string, unknown>;
+    if (result === null || typeof result !== "object" ||
+        result.disposition !== "recorded" ||
+        typeof result.approvalResumeWorkItemId !== "string" ||
+        Object.keys(result).sort().join(",") !== "approvalResumeWorkItemId,disposition")
+      throw new RunStoreError("workflow_gate_receipt_corrupt");
+    const gate = this.#loadGate(input);
+    const workItemId = result.approvalResumeWorkItemId;
+    const row = this.#database.prepare(
+      `SELECT tenant_id,run_id,kind,status,work_item_json FROM work_items
+       WHERE work_item_id=?`,
+    ).get(workItemId) as Record<string, unknown> | undefined;
+    let item: Record<string, unknown> | null;
+    try {
+      item = row === undefined ? null
+        : JSON.parse(String(row.work_item_json)) as Record<string, unknown>;
+    } catch {
+      throw new RunStoreError("workflow_gate_receipt_corrupt");
+    }
+    const payload = { schemaVersion: "crewon.workflow-gate-resume-work-item.v0",
+      trigger: "workflowGateResume", binding: input.binding,
+      nodeId: input.nodeId, claimId: input.claimId, claimEpoch: input.claimEpoch,
+      gateRequestId: input.gateRequestId, decisionReceiptId: input.decisionReceiptId };
+    if (gate.tenantId !== input.tenantId || gate.runId !== input.runId ||
+        gate.nodeId !== input.nodeId ||
+        stableJson(gate.binding) !== stableJson(input.binding) ||
+        gate.claimId !== input.claimId || gate.claimEpoch !== input.claimEpoch ||
+        gate.gateRequestId !== input.gateRequestId ||
+        gate.decisionReceiptId !== input.decisionReceiptId ||
+        gate.status !== input.outcome.status ||
+        stableJson(gate.outcome) !== stableJson(input.outcome) ||
+        gate.approvalResumeWorkItemId !== workItemId ||
+        row?.tenant_id !== input.tenantId || row.run_id !== input.runId ||
+        row.kind !== "run.execute" ||
+        !["pending", "leased", "completed"].includes(String(row.status)) ||
+        item?.workItemId !== workItemId || item.tenantId !== input.tenantId ||
+        item.runId !== input.runId || item.kind !== "run.execute" ||
+        stableJson(item.payload) !== stableJson(payload))
+      throw new RunStoreError("workflow_gate_receipt_corrupt");
   }
 
   #validateLease(
@@ -1592,6 +1662,23 @@ function executionNode(input: { nodeId: string }, execution: import("@crewon/app
   const node = execution?.nodes.find((candidate) => candidate.nodeId === input.nodeId);
   if (node === undefined) throw new RunStoreError("workflow_execution_not_found");
   return node;
+}
+
+function assertGateDecisionOutcome(
+  outcome: Parameters<
+    WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]
+  >[0]["outcome"],
+): void {
+  const keys = Object.keys(outcome).sort().join(",");
+  if (outcome.status === "completed") {
+    if (keys !== "status")
+      throw new RunStoreError("workflow_gate_decision_invalid");
+    return;
+  }
+  if (outcome.status !== "failed" || keys !== "failureCode,status" ||
+      typeof outcome.failureCode !== "string" ||
+      outcome.failureCode.length < 1 || outcome.failureCode.length > 256)
+    throw new RunStoreError("workflow_gate_decision_invalid");
 }
 
 function assertCanonicalRun(
