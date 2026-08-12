@@ -277,9 +277,9 @@ async fn fails_closed_on_redundant_event_and_ack_corruption() {
         .expect("reopen schema");
     assert_eq!(
         journal
-            .list_tool_acknowledgements()
+            .get_tool(&command.execution_id)
             .await
-            .expect_err("ACK projection must validate authority")
+            .expect_err("tool projection must validate ACK authority")
             .code(),
         "device_journal_authority_corrupt",
     );

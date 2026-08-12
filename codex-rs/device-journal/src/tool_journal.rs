@@ -67,12 +67,6 @@ pub struct ToolJournalPage {
     pub next_cursor: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ToolJournalAcknowledgement {
-    pub execution_id: String,
-    pub through_sequence: u64,
-}
-
 impl DeviceWorkspaceJournal {
     pub async fn get_tool(
         &self,
@@ -85,29 +79,6 @@ impl DeviceWorkspaceJournal {
         let execution = load(&mut tx, execution_id).await?;
         tx.commit().await?;
         Ok(execution)
-    }
-
-    pub async fn list_tool_acknowledgements(
-        &self,
-    ) -> Result<Vec<ToolJournalAcknowledgement>, DeviceJournalError> {
-        let mut tx = self.pool.begin().await?;
-        let ids: Vec<String> = sqlx::query_scalar(
-            "SELECT execution_id FROM tool_executions WHERE acknowledged_through > 0 ORDER BY execution_id",
-        )
-        .fetch_all(&mut *tx)
-        .await?;
-        let mut acknowledgements = Vec::with_capacity(ids.len());
-        for execution_id in ids {
-            let execution = load(&mut tx, &execution_id)
-                .await?
-                .ok_or_else(|| authority("device_journal_authority_corrupt"))?;
-            acknowledgements.push(ToolJournalAcknowledgement {
-                execution_id,
-                through_sequence: execution.acknowledged_through,
-            });
-        }
-        tx.commit().await?;
-        Ok(acknowledgements)
     }
 
     pub async fn prepare_tool_with_admission<T, E>(
