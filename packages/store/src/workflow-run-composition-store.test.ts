@@ -923,13 +923,19 @@ if (postgresUrl === undefined) {
           certainty: "responseObserved" as const,
         },
       };
-      const candidateId = digester.sha256("prepared-terminal-candidate");
-      await pool.query(`UPDATE ${schema}.workflow_node_continuations
-        SET state_json=state_json || $1::jsonb WHERE run_id='run-1' AND node_id=$2`,
-        [{ activeDispatch: settlementInput.dispatch, terminalCandidate: {
-          schemaVersion: "crewon.workflow-node-terminal-candidate.v0", candidateId,
-          segmentId: "segment-1", evidence,
-          dispatchTerminalOutcome: settlementInput.dispatchTerminalOutcome } }, work.nodeId]);
+      const terminalContinuation =
+        await store.commitWorkflowAssistantContinuation({
+          ...continuationInput,
+          expectedContinuationRevision: continuation.revision,
+          next: {
+            ...continuationInput.next,
+            activeDispatch: settlementInput.dispatch,
+          },
+          committedAt: "2026-08-12T00:00:04.000Z",
+          terminalResult: { status: "completed", output: "{}" },
+        });
+      assert.deepEqual(terminalContinuation.terminalCandidate?.evidence, evidence);
+      const candidateId = terminalContinuation.terminalCandidate!.candidateId;
       const preparedTerminalInput = { lease: admitInput.lease, binding,
         authority, candidateId, operationId: settlementInput.operationId };
       const settled = await store.settlePreparedWorkflowNodeTerminal(preparedTerminalInput);

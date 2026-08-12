@@ -1,4 +1,5 @@
 import {
+  canonicalJson,
   RunStoreError,
   type CommitWorkflowRunStartInput,
   type CommitWorkflowRunStartResult,
@@ -8,7 +9,10 @@ import {
   type WorkflowRunCompositionStore,
   type WorkflowRuntimeStore,
 } from "@crewon/application";
-import type { WorkflowContentDigester } from "@crewon/domain";
+import {
+  createWorkflowNodeTerminalEvidence,
+  type WorkflowContentDigester,
+} from "@crewon/domain";
 import type { PoolClient } from "pg";
 
 import { PostgresExecutionStore } from "./postgres-execution-store.ts";
@@ -40,14 +44,15 @@ import { reconcilePostgresWorkflowNode } from "./postgres-workflow-reconcile-nod
 import { settlePreparedPostgresWorkflowNodeTerminal } from "./postgres-workflow-terminal-candidate.ts";
 import {
   admitPostgresWorkflowNodeWork,
+  loadPostgresWorkflowExecution,
   schedulePostgresWorkflowNodes,
 } from "./postgres-workflow-run-composition-transactions.ts";
 import { rollbackPostgres } from "./postgres-store-support.ts";
 import type { PostgresThreadStoreOptions } from "./postgres-thread-store.ts";
 import {
   decodeWorkflowExecutionState,
-  validateWorkflowExecutionState,
 } from "./workflow-execution-store.ts";
+import { parseBoundWorkflow } from "./workflow-run-composition-support.ts";
 import { migratePostgresWorkflowExecutions } from "./workflow-execution-schema.ts";
 import { migratePostgresWorkflowVersions } from "./workflow-version-schema.ts";
 
@@ -411,12 +416,67 @@ export class PostgresWorkflowRunCompositionStore
         input.authority.runId,
         input.lease,
       );
+      let terminalCandidate = null;
+      if (input.terminalResult !== null) {
+        if (input.next.activeDispatch?.status !== "responseObserved")
+          throw new RunStoreError("workflow_terminal_candidate_dispatch_mismatch");
+        const execution = await loadPostgresWorkflowExecution(
+          client,
+          this.schemaSql(),
+          input.authority,
+          false,
+        );
+        if (execution === null)
+          throw new RunStoreError("workflow_execution_not_found");
+        const version = await client.query<{ definition_json: string }>(
+          `SELECT definition_json FROM ${this.schemaSql()}.workflow_versions
+           WHERE tenant_id=$1 AND workflow_version_id=$2 AND content_digest=$3`,
+          [input.authority.tenantId, execution.workflowVersionId,
+            execution.contentDigest],
+        );
+        const workflow = parseBoundWorkflow(
+          version.rows[0]?.definition_json ?? "",
+          { workflowId: execution.workflowId,
+            workflowVersionId: execution.workflowVersionId,
+            contentDigest: execution.contentDigest },
+          this.#digester,
+        );
+        let outcome;
+        if (input.terminalResult.status === "completed") {
+          let value: unknown;
+          try { value = JSON.parse(input.terminalResult.output); }
+          catch { throw new RunStoreError("workflow_terminal_candidate_invalid"); }
+          outcome = { status: "completed" as const,
+            value: value as import("@crewon/domain").WorkflowSchemaValue };
+        } else if (input.terminalResult.status === "failed") {
+          outcome = { ...input.terminalResult,
+            certainty: "responseObserved" as const };
+        } else {
+          outcome = { status: "canceled" as const,
+            certainty: "responseObserved" as const };
+        }
+        const evidence = createWorkflowNodeTerminalEvidence({ workflow,
+          nodeId: input.authority.nodeId, outcome, digester: this.#digester });
+        const dispatchTerminalOutcome = { kind: input.terminalResult.status,
+          code: input.terminalResult.status === "failed"
+            ? input.terminalResult.failureCode
+            : input.terminalResult.status === "canceled"
+              ? "workflow_node_canceled" : null,
+          certainty: "responseObserved" as const };
+        terminalCandidate = {
+          schemaVersion: "crewon.workflow-node-terminal-candidate.v0" as const,
+          candidateId: this.#digester.sha256(canonicalJson({
+            authority: input.authority, segmentId: input.next.segmentId,
+            evidence, dispatchTerminalOutcome })),
+          segmentId: input.next.segmentId, evidence, dispatchTerminalOutcome,
+        };
+      }
       return writePostgresWorkflowNodeContinuation(
         client,
         this.schemaSql(),
         input.authority,
         input.expectedContinuationRevision,
-        { ...input.next, terminalCandidate: null },
+        { ...input.next, terminalCandidate },
         input.committedAt,
       );
     });
