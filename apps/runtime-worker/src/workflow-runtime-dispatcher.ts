@@ -6,6 +6,7 @@ import type {
 import { canonicalJson, MAX_WORKFLOW_VALUE_BYTES } from "@crewon/application";
 import type {
   RunState,
+  WorkflowNodeDefinition,
   WorkflowContentDigester,
   WorkflowSchemaValue,
 } from "@crewon/domain";
@@ -24,6 +25,7 @@ export interface WorkflowAgentNodePort {
     runId: string;
     nodeId: string;
     agentVersionId: string;
+    node: WorkflowNodeDefinition;
     inputValue: import("@crewon/application").WorkflowExecutionValue;
     claimId: string;
     claimEpoch: number;
@@ -223,6 +225,7 @@ export class ProductionWorkflowRuntimeDispatcher
       (candidate) => candidate.nodeId === payload.nodeId,
     );
     if (
+      node === undefined ||
       agentVersionId === null ||
       state?.agentVersionId !== agentVersionId ||
       admitted.admission.claim.claimId !== payload.claimId ||
@@ -237,6 +240,7 @@ export class ProductionWorkflowRuntimeDispatcher
         runId: input.run.runId,
         nodeId: payload.nodeId,
         agentVersionId,
+        node,
         inputValue: admitted.admission.inputValue,
         claimId: payload.claimId,
         claimEpoch: payload.claimEpoch,
