@@ -1,5 +1,6 @@
 import {
   WorkflowExecutionService,
+  type WorkflowNodeAttemptAdmission,
   type WorkflowExecutionState,
   type WorkflowNodeClaim,
 } from "@crewon/application";
@@ -23,6 +24,8 @@ export interface WorkflowAgentNodePort {
     inputDigest: string;
     claimId: string;
     claimEpoch: number;
+    stepId: string;
+    attemptId: string;
   }): Promise<WorkflowNodeOutcome>;
 }
 
@@ -36,6 +39,9 @@ export interface WorkflowHumanGatePort {
     inputDigest: string;
   }): Promise<void>;
 }
+
+export type WorkflowNodeDispatchAdmission = WorkflowNodeAttemptAdmission &
+  Readonly<{ agentVersionId: string | null }>;
 
 /** Signals the WorkItem adapter to retain/retry the original claim via reconciliation. */
 export class WorkflowNodeRecoveryRequiredError extends Error {
@@ -66,17 +72,16 @@ export class WorkflowDagExecutor {
     this.#gate = dependencies.gate;
   }
 
-  async tick(input: {
+  async executeAdmissions(input: {
     tenantId: string;
     runId: string;
     binding: FrozenWorkflowVersionBinding;
     workflow: CompiledWorkflowVersion;
-    leaseDurationMs: number;
-    operationId: string;
+    admissions: readonly WorkflowNodeDispatchAdmission[];
   }): Promise<WorkflowExecutionState> {
-    await this.#execution.initialize(input);
-    const claims = await this.#execution.claimReady(input);
-    await Promise.all(claims.map((claim) => this.#execute(input, claim)));
+    await Promise.all(
+      input.admissions.map((admission) => this.#execute(input, admission)),
+    );
     return this.#execution.load(input);
   }
 
@@ -106,32 +111,53 @@ export class WorkflowDagExecutor {
       binding: FrozenWorkflowVersionBinding;
       workflow: CompiledWorkflowVersion;
     },
-    claim: WorkflowNodeClaim,
+    admission: WorkflowNodeDispatchAdmission,
   ): Promise<void> {
+    const { claim } = admission;
     if (claim.node.kind === "humanGate") {
-      await this.#gate.publish({
-        tenantId: input.tenantId,
-        runId: input.runId,
-        nodeId: claim.node.nodeId,
-        approvalPolicyId: claim.node.approvalPolicyId,
-        gateRequestId: claim.gateRequestId!,
-        inputDigest: claim.inputDigest,
-      });
+      try {
+        await this.#gate.publish({
+          tenantId: input.tenantId,
+          runId: input.runId,
+          nodeId: claim.node.nodeId,
+          approvalPolicyId: claim.node.approvalPolicyId,
+          gateRequestId: claim.gateRequestId!,
+          inputDigest: claim.inputDigest,
+        });
+      } catch (error) {
+        try {
+          await this.#execution.settleNode({
+            tenantId: input.tenantId,
+            runId: input.runId,
+            binding: input.binding,
+            workflow: input.workflow,
+            nodeId: claim.node.nodeId,
+            claimId: claim.claimId,
+            operationId: `node:${claim.claimId}:publish-unknown`,
+            outcome: { status: "unknown" },
+          });
+        } catch (settlementError) {
+          throw new WorkflowNodeRecoveryRequiredError(claim, settlementError);
+        }
+        return;
+      }
       return;
     }
     let outcome: WorkflowNodeOutcome;
     try {
+      if (admission.attempt === null) {
+        throw new Error("workflow_node_attempt_admission_missing");
+      }
       outcome = await this.#agent.execute({
         tenantId: input.tenantId,
         runId: input.runId,
         nodeId: claim.node.nodeId,
-        agentVersionId:
-          claim.node.kind === "agent"
-            ? claim.node.agentVersionId
-            : claim.node.verifierAgentVersionId,
+        agentVersionId: admission.agentVersionId!,
         inputDigest: claim.inputDigest,
         claimId: claim.claimId,
         claimEpoch: claim.claimEpoch,
+        stepId: admission.step.stepId,
+        attemptId: admission.attempt.attemptId,
       });
     } catch {
       outcome = { status: "unknown" };

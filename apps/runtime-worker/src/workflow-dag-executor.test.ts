@@ -80,15 +80,43 @@ test("dispatches frozen Agent and verifier identities while releasing a durable 
       },
     },
   });
-  const tick = () =>
-    executor.tick({
+  await execution.initialize({
+    tenantId: "tenant-1",
+    runId: "run-1",
+    binding,
+    workflow,
+  });
+  const tick = async () => {
+    const operationId = `tick-${++sequence}`;
+    const claims = await execution.claimReady({
       tenantId: "tenant-1",
       runId: "run-1",
       binding,
       workflow,
       leaseDurationMs: 1_000,
-      operationId: `tick-${++sequence}`,
+      operationId,
     });
+    return executor.executeAdmissions({
+      tenantId: "tenant-1",
+      runId: "run-1",
+      binding,
+      workflow,
+      admissions: claims.map((claim) => ({
+        claim,
+        step: { stepId: `step:${claim.node.nodeId}` } as never,
+        attempt:
+          claim.node.kind === "humanGate"
+            ? null
+            : ({ attemptId: `attempt:${claim.node.nodeId}` } as never),
+        agentVersionId:
+          claim.node.kind === "agent"
+            ? claim.node.agentVersionId
+            : claim.node.kind === "verification"
+              ? claim.node.verifierAgentVersionId
+              : null,
+      })),
+    });
+  };
 
   assert.equal((await tick()).nodes[0]?.status, "completed");
   const waiting = await tick();

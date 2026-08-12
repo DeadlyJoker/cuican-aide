@@ -3,7 +3,11 @@ import test from "node:test";
 
 import * as productionRuntime from "./index.ts";
 
-test("keeps experimental Workflow execution out of production runtime exports", () => {
+test("exports only the production dispatcher while keeping internal scheduler adapters private", () => {
+  assert.equal(
+    "ProductionWorkflowRuntimeDispatcher" in productionRuntime,
+    true,
+  );
   assert.equal("WorkflowDagExecutor" in productionRuntime, false);
   assert.equal(
     "ExperimentalWorkflowRunCompositionAdapter" in productionRuntime,

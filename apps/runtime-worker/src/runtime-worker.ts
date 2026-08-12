@@ -67,6 +67,7 @@ import type {
 import { PlanOutputError, parseProposedPlan } from "./plan-output.ts";
 import { goalToolsForRun, isGoalToolCall } from "./goal-tools.ts";
 import { replaceChangedToolApproval } from "./tool-approval-replacement.ts";
+import type { WorkflowRuntimeDispatcherPort } from "./workflow-runtime-dispatcher.ts";
 
 export type { RuntimeWorkerScheduler } from "./runtime-worker-watchers.ts";
 
@@ -151,6 +152,7 @@ export type RuntimeWorkerOutcome =
   | Readonly<{ kind: "canceled"; runId: string }>
   | Readonly<{ kind: "failed"; runId: string; code: string }>
   | Readonly<{ kind: "retried"; runId: string; code: string }>
+  | Readonly<{ kind: "workflowRecovery"; runId: string; code: string }>
   | Readonly<{
       kind: "waitingApproval";
       runId: string;
@@ -186,6 +188,7 @@ export class RuntimeWorker {
   readonly #agentVersionRuntimeResolver:
     | AgentVersionRuntimeResolverPort
     | undefined;
+  readonly #workflowDispatcher: WorkflowRuntimeDispatcherPort | undefined;
   readonly #governedContextItems: readonly ContextHistoryItem[];
   readonly #governedContextBytes: number;
   readonly #ownerId: string;
@@ -241,6 +244,7 @@ export class RuntimeWorker {
       governedContext?: GovernedContextBundle;
       modelSwitchCompactionResolver?: PriorModelCompactionResolverPort;
       agentVersionRuntimeResolver?: AgentVersionRuntimeResolverPort;
+      workflowDispatcher?: WorkflowRuntimeDispatcherPort;
     },
     config: RuntimeWorkerConfig,
   ) {
@@ -259,6 +263,7 @@ export class RuntimeWorker {
       dependencies.modelSwitchCompactionResolver;
     this.#agentVersionRuntimeResolver =
       dependencies.agentVersionRuntimeResolver;
+    this.#workflowDispatcher = dependencies.workflowDispatcher;
     this.#governedContextItems =
       dependencies.governedContext?.modelItems() ?? [];
     this.#governedContextBytes = this.#governedContextItems.reduce(
@@ -571,6 +576,29 @@ export class RuntimeWorker {
 
   async #executeClaim(claim: WorkItemClaim): Promise<RuntimeWorkerOutcome> {
     let run = await this.#execution.loadRun(claim);
+    if (run.purpose === "workflow") {
+      if (
+        run.workflowVersionBinding === undefined ||
+        this.#workflowDispatcher === undefined
+      ) {
+        throw new PermanentWorkerError("workflow_runtime_not_configured");
+      }
+      const outcome = await this.#workflowDispatcher.dispatch({ claim, run });
+      if (outcome.kind === "completed") {
+        await this.#completeWorkItem(claim);
+        return outcome;
+      }
+      if (outcome.kind === "waitingApproval") return outcome;
+      // Admission may already have crossed a model/Tool side-effect boundary.
+      // Retrying this WorkItem could execute the same node again; durable DAG
+      // unknown/recovery state is resumed only by a receipt-aware reconciler.
+      await this.#completeWorkItem(claim);
+      return {
+        kind: "workflowRecovery",
+        runId: outcome.runId,
+        code: outcome.code,
+      };
+    }
     if (isTerminal(run)) {
       await this.#completeWorkItem(claim);
       return terminalOutcome(run);
