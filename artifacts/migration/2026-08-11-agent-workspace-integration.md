@@ -583,3 +583,23 @@ Gate 报告为通过。
 - 最新 packaged recovery 证明加入 frozen binding、Control projection 与内部 DAG 代码后，没有破坏既有四进程 Workspace 纵切；smoke 发起的仍是
   Workspace list，而不是 Workflow start。Control Workflow start admission、production Worker dispatcher、Agent node runtime adapter、Human approval
   恢复入口和真实 Workflow packaged crash-replay 仍是下一阶段纵切，不能由现有 Workspace smoke 外推。
+
+## Workflow fan-out production review 与 value authority Gate
+
+- production composition 采用 per-node durable fan-out，而不是让一个 scheduler WorkItem/lease 顺序执行多个 ready sibling。scheduler 事务只冻结
+  ready claims、为每个 Agent/Verification 创建独立 node WorkItem、为 Human Gate 写 durable request/publication outbox，并完成 scheduler WorkItem；
+  node WorkItem claim 后才允许创建一个 exact Step/Attempt。receipt replay 不返回副作用执行许可，running lease 过期进入 `unknown` 而不是回退到
+  `pending`。所有派生 WorkItem、claim、gate、outbox 与 reconcile ID 使用版本化 SHA-256 有界标识，避免 raw ID 拼接越界。
+- 代码审查确认内部 DAG CAS 测试不能证明 production Workflow 可执行。当前 Workflow start WorkItem 仍是普通
+  `{throughSequence, workflowInput}`，与 Worker 的 `workflowScheduler` payload 不一致；DAG 状态只持久化 `inputDigest/resultDigest`，没有 root input、
+  node output 或聚合 input 的 canonical value/reference authority。`WorkflowAgentNodePort` 也只收到 digest，基础 Agent 无法读取实际输入，Verification
+  无法校验真实输出。因此 production composition/export 继续 fail closed，真实 Workflow smoke 尚不能开始。
+- `ARCHITECTURE_FINAL.md` 要求聚合节点只消费已提交的 canonical output refs，Workflow output 还必须通过 schema 和独立 Verification Step。后续
+  Store schema 必须保存有界 canonical Workflow input/output value 或专用 reference，node settlement 由 Store 校验 output schema 并服务端派生 digest，
+  下游 input 组合规则必须在 immutable WorkflowVersion 中显式定义，不能把依赖 digest 列表误当作可执行输入。
+- legacy Rust `crewon_domain_workflow.rs` / `crewon_domain_workflow_control.rs` 的兼容语义是严格串行：第一个节点消费用户文本，完成后把上一个节点的
+  文本 output 直接复制为下一个节点 input，最后一个 output 成为 Workflow output。它没有并行 fan-in、schema 或 canonical output-ref authority；
+  该行为只能用于 bounded legacy importer/compatibility，不能成为新 TS DAG 的隐式聚合协议。
+- canonical Run 终态必须与 DAG terminal、Step/Attempt、当前 WorkItem、run event、snapshot 和 outbox 在同一事务收敛。Worker 只有在 Store 明确返回
+  `terminalConverged` 时才能报告 completed；`workflow_execution.status=completed` 不能单独证明 canonical Run 已完成。unknown outcome 的 reconcile
+  handoff 也必须由同一 Store 事务明确完成当前 WorkItem并创建/reuse下一 durable reconcile WorkItem，Worker不得对可能已完成的 lease做第二次写入。
