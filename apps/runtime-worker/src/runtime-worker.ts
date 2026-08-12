@@ -584,7 +584,9 @@ export class RuntimeWorker {
       ) {
         throw new PermanentWorkerError("workflow_runtime_not_configured");
       }
-      const outcome = await this.#workflowDispatcher.dispatch({ claim, run });
+      const outcome = run.cancelRequested
+        ? await this.#workflowDispatcher.cancel({ claim, run })
+        : await this.#workflowDispatcher.dispatch({ claim, run });
       return outcome.kind === "recovery"
         ? {
             kind: "workflowRecovery",

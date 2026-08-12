@@ -43,6 +43,17 @@ export interface WorkflowRuntimeDispatcherPort {
     claim: WorkItemClaim;
     run: RunState;
   }): Promise<WorkflowRuntimeDispatchOutcome>;
+  cancel(input: {
+    claim: WorkItemClaim;
+    run: RunState;
+  }): Promise<WorkflowRuntimeDispatchOutcome>;
+}
+
+/** Marks only an execution whose external side effect may already have occurred. */
+export class WorkflowNodeSideEffectUncertainError extends Error {
+  constructor() {
+    super("workflow_node_side_effect_uncertain");
+  }
 }
 
 /** Internal candidate; production composition remains disabled until every Store transaction exists. */
@@ -132,24 +143,32 @@ export class ProductionWorkflowRuntimeDispatcher
                 : "workflow_gate_settled",
           };
     }
-    const reconciliation =
-      await this.#composition.scheduleWorkflowReconciliation({
-        tenantId: input.run.tenantId,
-        runId: input.run.runId,
-        lease: leaseInput(input.claim),
-        binding,
-        operationId: payload.reconciliationOperationId,
-        reasonCode: "workflow_reconciliation_claimed",
-        nodeId: payload.nodeId,
-        claimId: payload.claimId,
-        claimEpoch: payload.claimEpoch,
-      });
-    assertCompletedHandoff(reconciliation.handoff, "reconcile");
-    return {
-      kind: "recovery",
+    throw new Error("workflow_reconciliation_contract_incomplete");
+  }
+
+  async cancel(input: {
+    claim: WorkItemClaim;
+    run: RunState;
+  }): Promise<WorkflowRuntimeDispatchOutcome> {
+    const binding = input.run.workflowVersionBinding;
+    if (input.run.purpose !== "workflow" || binding === undefined)
+      throw new Error("workflow_runtime_cancel_invalid");
+    const canceled = await this.#composition.cancelWorkflowExecution({
+      tenantId: input.run.tenantId,
       runId: input.run.runId,
-      code: "workflow_reconciliation_rescheduled",
-    };
+      lease: leaseInput(input.claim),
+      binding,
+      operationId: `workflow-cancel:${input.claim.workItem.workItemId}`,
+      reasonCode: "user_requested",
+    });
+    assertCompletedHandoff(canceled.handoff);
+    return canceled.runDisposition === "terminalConverged"
+      ? { kind: "completed", runId: input.run.runId }
+      : {
+          kind: "recovery",
+          runId: input.run.runId,
+          code: "workflow_cancellation_reconcile_required",
+        };
   }
 
   async #executeNode(
@@ -230,8 +249,14 @@ export class ProductionWorkflowRuntimeDispatcher
           MAX_WORKFLOW_VALUE_BYTES
       )
         throw new Error("workflow_node_output_too_large");
-    } catch {
-      outcome = { status: "unknown" };
+    } catch (error) {
+      outcome =
+        error instanceof WorkflowNodeSideEffectUncertainError
+          ? { status: "unknown" }
+          : {
+              status: "failed",
+              failureCode: deterministicNodeFailureCode(error),
+            };
     }
     try {
       const settled = await this.#composition.settleWorkflowNode({
@@ -263,6 +288,12 @@ export class ProductionWorkflowRuntimeDispatcher
       };
     }
   }
+}
+
+function deterministicNodeFailureCode(error: unknown): string {
+  if (error instanceof Error && /^[a-z][a-z0-9_]{0,127}$/.test(error.message))
+    return error.message;
+  return "workflow_node_execution_failed";
 }
 
 function assertCompletedHandoff(

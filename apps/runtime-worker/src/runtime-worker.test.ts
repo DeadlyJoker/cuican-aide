@@ -133,6 +133,10 @@ test("keeps an ordinary Run isolated from an injected Workflow dispatcher", asyn
         dispatches += 1;
         throw new Error("ordinary_run_was_misrouted");
       },
+      async cancel() {
+        dispatches += 1;
+        throw new Error("ordinary_run_was_misrouted");
+      },
     },
   });
 

@@ -6,7 +6,10 @@ import {
   compileWorkflowVersion,
   serializeCompiledWorkflowVersion,
 } from "@crewon/domain";
-import { ProductionWorkflowRuntimeDispatcher } from "./workflow-runtime-dispatcher.ts";
+import {
+  ProductionWorkflowRuntimeDispatcher,
+  WorkflowNodeSideEffectUncertainError,
+} from "./workflow-runtime-dispatcher.ts";
 
 const schema = {
   type: "object" as const,
@@ -105,6 +108,44 @@ test("fresh sibling admissions pass actual values and settle independently", asy
   assert.equal(right.settlements, 1);
 });
 
+test("settles deterministic execution errors as nonretryable failures", async () => {
+  const fixture = composition();
+  await create(fixture.store, async () => {
+    throw new Error("workflow_node_output_json_invalid");
+  }).dispatch(input("node"));
+  assert.deepEqual(fixture.outcomes, [
+    { status: "failed", failureCode: "workflow_node_output_json_invalid" },
+  ]);
+});
+
+test("uses unknown only when node side effects may have been sent", async () => {
+  const fixture = composition();
+  await create(fixture.store, async () => {
+    throw new WorkflowNodeSideEffectUncertainError();
+  }).dispatch(input("node"));
+  assert.deepEqual(fixture.outcomes, [{ status: "unknown" }]);
+});
+
+test("fails closed instead of recursively scheduling reconcile work", async () => {
+  const fixture = composition();
+  await assert.rejects(
+    create(fixture.store, async () => ({ status: "unknown" })).dispatch(
+      input("reconcile"),
+    ),
+    /workflow_reconciliation_contract_incomplete/,
+  );
+  assert.equal(fixture.reconciliations, 0);
+});
+
+test("routes cancellation through composition authority", async () => {
+  const fixture = composition();
+  const outcome = await create(fixture.store, async () => ({
+    status: "unknown",
+  })).cancel(input("scheduler"));
+  assert.deepEqual(outcome, { kind: "completed", runId: "r" });
+  assert.equal(fixture.cancellations, 1);
+});
+
 function composition() {
   const state = (status: "running" | "completed" = "running") => ({
     schemaVersion: "crewon.workflow-execution.v0" as const,
@@ -138,6 +179,8 @@ function composition() {
     schedules: 0,
     settlements: 0,
     reconciliations: 0,
+    cancellations: 0,
+    outcomes: [] as unknown[],
     nodeDisposition: "fresh" as "fresh" | "replay",
     failSettlement: false,
     store: null as unknown as WorkflowRunCompositionStore,
@@ -202,8 +245,9 @@ function composition() {
         },
       };
     },
-    async settleWorkflowNode() {
+    async settleWorkflowNode(input) {
       fixture.settlements += 1;
+      fixture.outcomes.push(input.outcome);
       if (fixture.failSettlement) throw new Error("commit unknown");
       return {
         disposition: "settled",
@@ -236,7 +280,17 @@ function composition() {
       };
     },
     async cancelWorkflowExecution() {
-      throw new Error("not used");
+      fixture.cancellations += 1;
+      return {
+        disposition: "canceled",
+        execution: state("completed"),
+        handoff: {
+          currentWorkItem: "completed",
+          nextWorkItemId: null,
+          kind: "none",
+        },
+        runDisposition: "terminalConverged",
+      };
     },
   };
   return fixture;
@@ -274,7 +328,7 @@ function create(
     leaseDurationMs: 30_000,
   });
 }
-function input(kind: "scheduler" | "node", claimId = "claim-1") {
+function input(kind: "scheduler" | "node" | "reconcile", claimId = "claim-1") {
   const payload =
     kind === "scheduler"
       ? {
@@ -284,7 +338,8 @@ function input(kind: "scheduler" | "node", claimId = "claim-1") {
           schedulerOperationId: "schedule-1",
           workflowInput: { valueId: "value-1", valueDigest: digest("input") },
         }
-      : {
+      : kind === "node"
+        ? {
           schemaVersion: "crewon.workflow-node-work-item.v0",
           trigger: "workflowNode",
           binding,
@@ -292,7 +347,16 @@ function input(kind: "scheduler" | "node", claimId = "claim-1") {
           claimId,
           claimEpoch: 1,
           schedulerOperationId: "schedule-1",
-        };
+          }
+        : {
+            schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+            trigger: "workflowReconcile",
+            binding,
+            reconciliationOperationId: "reconcile-1",
+            nodeId: "a",
+            claimId,
+            claimEpoch: 1,
+          };
   return {
     run: {
       purpose: "workflow",
