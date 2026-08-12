@@ -70,7 +70,7 @@ import { PlanOutputError, parseProposedPlan } from "./plan-output.ts";
 import { goalToolsForRun, isGoalToolCall } from "./goal-tools.ts";
 import { replaceChangedToolApproval } from "./tool-approval-replacement.ts";
 import { AgentSegmentExecutionEngine } from "./agent-segment-execution-engine.ts";
-import type { AgentSegmentStateMachine } from "./agent-segment-state-machine.ts";
+import { AgentSegmentStateMachine } from "./agent-segment-state-machine.ts";
 import type { WorkflowRuntimeDispatcherPort } from "./workflow-runtime-dispatcher.ts";
 
 export type { RuntimeWorkerScheduler } from "./runtime-worker-watchers.ts";
@@ -887,7 +887,7 @@ export class RuntimeWorker {
     heartbeat.start();
     cancellationWatcher.start();
     const segmentEngine = new AgentSegmentExecutionEngine();
-    let segment: AgentSegmentStateMachine | null = null;
+    const segment = new AgentSegmentStateMachine(providerTurnState);
     let activeDispatchReceipt: ModelDispatchReceipt | null = null;
     let toolBoundaryCompleted = false;
     let toolBoundaryOutcome: RuntimeWorkerOutcome | null = null;
@@ -926,6 +926,7 @@ export class RuntimeWorker {
         },
         signal: controller.signal,
         providerTurnState,
+        state: segment,
         authority: {
           renewLease: () => this.#renew(claim),
           cancellationRequested: async () => {
@@ -1026,7 +1027,6 @@ export class RuntimeWorker {
           },
         },
       });
-      segment = executed.segment;
       providerTurnState = segment.providerTurnState;
       if (executed.canceled) {
         controller.abort("user_requested");
@@ -1148,7 +1148,7 @@ export class RuntimeWorker {
           schemaVersion: "crewon.agent-event.v0",
           runId: run.runId,
           segmentId,
-          sequence: (segment?.lastAgentSequence ?? 0) + 1,
+          sequence: segment.lastAgentSequence + 1,
           type: "segment.failed",
           data: { code: error.code, retryable: false },
         };
@@ -1171,7 +1171,7 @@ export class RuntimeWorker {
         claim,
         attempt,
         error,
-        segment?.providerCheckpoint ?? null,
+        segment.providerCheckpoint,
       );
     } finally {
       await cancellationWatcher.close();
@@ -1182,9 +1182,6 @@ export class RuntimeWorker {
     }
     if (heartbeat.failure() !== null) {
       throw heartbeat.failure();
-    }
-    if (segment === null) {
-      throw new PermanentWorkerError("segment_execution_missing");
     }
     if (toolBoundaryOutcome !== null) {
       return toolBoundaryOutcome;

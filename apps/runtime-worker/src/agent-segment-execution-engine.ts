@@ -40,13 +40,15 @@ export class AgentSegmentExecutionEngine {
     contract: AgentSegmentContract;
     signal: AbortSignal;
     providerTurnState: string | null;
+    state?: AgentSegmentStateMachine;
     authority: AgentSegmentExecutionAuthority;
     controlSink?: Pick<
       AgentSegmentControlSink,
       "modelRequestPrepared" | "dispatchBoundaryCrossed"
     >;
   }): Promise<AgentSegmentExecutionResult> {
-    const segment = new AgentSegmentStateMachine(input.providerTurnState);
+    const segment =
+      input.state ?? new AgentSegmentStateMachine(input.providerTurnState);
     for await (const event of input.kernel.runSegment(
       input.contract,
       input.signal,
