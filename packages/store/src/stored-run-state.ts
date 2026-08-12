@@ -1,6 +1,7 @@
 import {
   validateRunGoalAccountingCursor,
   validateRunGoalBinding,
+  parseFrozenWorkflowVersionBinding,
   type RunState,
   type RunUsage,
 } from "@crewon/domain";
@@ -20,11 +21,28 @@ export function normalizeStoredRunState(
   const hasGoalAccounting = Object.hasOwn(value, "goalAccounting");
   const hasUsage = Object.hasOwn(value, "usage");
   const hasPurpose = Object.hasOwn(value, "purpose");
+  const hasWorkflowBinding = Object.hasOwn(value, "workflowVersionBinding");
   let normalized = state;
+  if (hasWorkflowBinding) {
+    const binding = value.workflowVersionBinding;
+    try {
+      parseFrozenWorkflowVersionBinding(binding);
+    } catch (error) {
+      throw new RunStoreError(code, { cause: error });
+    }
+  }
   if (
     hasPurpose &&
     value.purpose !== "turn" &&
-    value.purpose !== "manualCompaction"
+    value.purpose !== "manualCompaction" &&
+    value.purpose !== "workflow"
+  ) {
+    throw new RunStoreError(code);
+  }
+  const effectivePurpose = value.purpose ?? "turn";
+  if (
+    (effectivePurpose === "workflow") !==
+      ((hasWorkflowBinding ? value.workflowVersionBinding : null) != null)
   ) {
     throw new RunStoreError(code);
   }

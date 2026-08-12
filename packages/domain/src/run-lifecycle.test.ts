@@ -507,6 +507,39 @@ test("rejects cross-run events, sequence gaps, unrequested cancel and terminal m
   );
 });
 
+test("binds Workflow purpose to one exact immutable version provenance", () => {
+  const base = created();
+  assert.equal(base.type, "run.created");
+  const binding = {
+    workflowId: "workflow-1",
+    workflowVersionId: "workflow-version-1",
+    contentDigest: `sha256:${"a".repeat(64)}`,
+  } as const;
+  const state = reduceRunLifecycleEvent(null, {
+    ...base,
+    data: { ...base.data, purpose: "workflow", workflowVersionBinding: binding },
+  });
+  assert.deepEqual(state.workflowVersionBinding, binding);
+  assert.equal(state.agentVersionId, "agent-version-1");
+
+  assert.throws(
+    () =>
+      reduceRunLifecycleEvent(null, {
+        ...base,
+        data: { ...base.data, purpose: "workflow" },
+      }),
+    hasCode("run_execution_binding_invalid"),
+  );
+  assert.throws(
+    () =>
+      reduceRunLifecycleEvent(null, {
+        ...base,
+        data: { ...base.data, workflowVersionBinding: binding },
+      }),
+    hasCode("run_execution_binding_invalid"),
+  );
+});
+
 function stableState(state: RunState): TraceObject {
   return {
     runId: state.runId,

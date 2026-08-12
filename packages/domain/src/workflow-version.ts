@@ -321,6 +321,14 @@ function requireId(value: unknown, code: string): string {
   return value;
 }
 
+/** Parses an identifier using the immutable WorkflowVersion wire grammar. */
+export function parseWorkflowVersionIdentityId(
+  value: unknown,
+  code: string,
+): string {
+  return requireId(value, code);
+}
+
 function requireNodeId(value: unknown, code: string): string {
   if (
     typeof value !== "string" ||

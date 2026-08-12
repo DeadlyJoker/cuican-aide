@@ -107,6 +107,29 @@ test("rejects partial or impossible stored Run mode state", () => {
   );
 });
 
+test("normalizes legacy absence and fails closed on malformed Workflow binding", () => {
+  assert.equal(
+    Object.hasOwn(normalizeStoredRunState(runState(), "corrupt"), "workflowVersionBinding"),
+    false,
+  );
+  assert.throws(
+    () =>
+      normalizeStoredRunState(
+        {
+          ...runState(),
+          purpose: "workflow",
+          workflowVersionBinding: {
+            workflowId: " ",
+            workflowVersionId: "version-1",
+            contentDigest: `sha256:${"a".repeat(64)}`,
+          },
+        },
+        "corrupt",
+      ),
+    hasCode("corrupt"),
+  );
+});
+
 function runState(): RunState {
   return {
     runId: "run-1",

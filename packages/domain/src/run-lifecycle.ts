@@ -19,6 +19,7 @@ import {
   startRunGoalAccounting,
   type RunGoalAccountingCursor,
 } from "./run-goal-accounting.ts";
+import { parseWorkflowVersionIdentityId } from "./workflow-version.ts";
 
 export const RUN_STATUSES = [
   "queued",
@@ -33,7 +34,7 @@ export const RUN_STATUSES = [
 
 export type RunStatus = (typeof RUN_STATUSES)[number];
 
-export type RunPurpose = "turn" | "manualCompaction";
+export type RunPurpose = "turn" | "manualCompaction" | "workflow";
 
 export type RunUsage = Readonly<{
   inputTokens: number;
@@ -63,6 +64,8 @@ export type RunLifecycleEvent =
         agentVersionId: string;
         policySnapshotId: string;
         workspaceBindingId: string | null;
+        /** Absent only on legacy events created before Workflow freezing. */
+        workflowVersionBinding?: FrozenWorkflowVersionBinding | null;
         collaborationMode: RunCollaborationMode;
         goalBinding: RunGoalBinding | null;
         /** Absent on legacy events and normalized to a normal user Turn. */
@@ -285,6 +288,8 @@ export type RunState = Readonly<{
   agentVersionId: string;
   policySnapshotId: string;
   workspaceBindingId: string | null;
+  /** Present only for Workflow Runs; absence remains the compatible non-Workflow shape. */
+  workflowVersionBinding?: FrozenWorkflowVersionBinding | null;
   collaborationMode: RunCollaborationMode;
   /** Absent only on legacy snapshots created before Run purpose was durable. */
   purpose?: RunPurpose;
@@ -308,6 +313,12 @@ export type RunState = Readonly<{
   createdAt: string;
   updatedAt: string;
   terminalAt: string | null;
+}>;
+
+export type FrozenWorkflowVersionBinding = Readonly<{
+  workflowId: string;
+  workflowVersionId: string;
+  contentDigest: string;
 }>;
 
 export class RunLifecycleError extends Error {
@@ -705,6 +716,9 @@ function createRun(event: RunLifecycleEvent): RunState {
     event.data.workspaceBindingId,
     "workspace_binding_id_invalid",
   );
+  if (event.data.workflowVersionBinding !== undefined) {
+    parseFrozenWorkflowVersionBinding(event.data.workflowVersionBinding);
+  }
   if (
     event.data.collaborationMode !== "default" &&
     event.data.collaborationMode !== "plan"
@@ -729,7 +743,8 @@ function createRun(event: RunLifecycleEvent): RunState {
   if (
     event.data.purpose !== undefined &&
     event.data.purpose !== "turn" &&
-    event.data.purpose !== "manualCompaction"
+    event.data.purpose !== "manualCompaction" &&
+    event.data.purpose !== "workflow"
   ) {
     throw new RunLifecycleError("run_purpose_invalid");
   }
@@ -749,6 +764,13 @@ function createRun(event: RunLifecycleEvent): RunState {
   ) {
     throw new RunLifecycleError("maintenance_run_shape_invalid");
   }
+  const isWorkflow = event.data.purpose === "workflow";
+  if (
+    isWorkflow !== (event.data.workflowVersionBinding != null) ||
+    (isWorkflow && event.data.goalBinding !== null)
+  ) {
+    throw new RunLifecycleError("run_execution_binding_invalid");
+  }
 
   return {
     runId: event.identity.runId,
@@ -761,6 +783,9 @@ function createRun(event: RunLifecycleEvent): RunState {
     agentVersionId: event.data.agentVersionId,
     policySnapshotId: event.data.policySnapshotId,
     workspaceBindingId: event.data.workspaceBindingId,
+    ...(event.data.workflowVersionBinding === undefined
+      ? {}
+      : { workflowVersionBinding: event.data.workflowVersionBinding }),
     collaborationMode: event.data.collaborationMode,
     ...(event.data.purpose === undefined
       ? {}
@@ -811,7 +836,12 @@ function validateRunCreatedDataShape(
     "threadId",
     "workspaceBindingId",
   ] as const;
-  const allowed = new Set<string>([...required, "origin", "purpose"]);
+  const allowed = new Set<string>([
+    ...required,
+    "origin",
+    "purpose",
+    "workflowVersionBinding",
+  ]);
   if (
     !isPlainObject(data) ||
     required.some((key) => !Object.hasOwn(data, key)) ||
@@ -819,6 +849,49 @@ function validateRunCreatedDataShape(
   ) {
     throw new RunLifecycleError("run_created_fields_invalid");
   }
+}
+
+export function parseFrozenWorkflowVersionBinding(
+  value: unknown,
+): FrozenWorkflowVersionBinding | null {
+  if (value === null) return null;
+  if (
+    !isPlainObject(value) ||
+    Object.keys(value).sort().join(",") !==
+      "contentDigest,workflowId,workflowVersionId"
+  ) {
+    throw new RunLifecycleError("workflow_version_binding_invalid");
+  }
+  const binding = value as Record<string, unknown>;
+  if (
+    typeof binding.workflowId !== "string" ||
+    typeof binding.workflowVersionId !== "string" ||
+    typeof binding.contentDigest !== "string"
+  ) {
+    throw new RunLifecycleError("workflow_version_binding_invalid");
+  }
+  let workflowId: string;
+  let workflowVersionId: string;
+  try {
+    workflowId = parseWorkflowVersionIdentityId(
+      binding.workflowId,
+      "workflow_id_invalid",
+    );
+    workflowVersionId = parseWorkflowVersionIdentityId(
+      binding.workflowVersionId,
+      "workflow_version_id_invalid",
+    );
+  } catch (error) {
+    throw new RunLifecycleError(
+      error instanceof Error ? error.message : "workflow_version_binding_invalid",
+    );
+  }
+  requireDigest(binding.contentDigest);
+  return {
+    workflowId,
+    workflowVersionId,
+    contentDigest: binding.contentDigest,
+  };
 }
 
 function parseRunOrigin(value: unknown): AutomationInvocationOrigin | null {

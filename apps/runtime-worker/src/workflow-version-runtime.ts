@@ -2,19 +2,15 @@ import type { WorkflowVersionStore } from "@crewon/application";
 import {
   parseCompiledWorkflowVersion,
   type CompiledWorkflowVersion,
+  type FrozenWorkflowVersionBinding,
   type WorkflowContentDigester,
   type WorkflowNodeDefinition,
 } from "@crewon/domain";
 
-export type FrozenWorkflowRunBinding = Readonly<{
-  workflowVersionId: string;
-  workflowVersionDigest: string;
-}>;
-
 /** Resolves the exact tenant-scoped immutable workflow frozen by a Run. */
 export async function loadFrozenWorkflowVersion(input: {
   tenantId: string;
-  binding: FrozenWorkflowRunBinding;
+  binding: FrozenWorkflowVersionBinding;
   store: WorkflowVersionStore;
   digester: WorkflowContentDigester;
 }): Promise<CompiledWorkflowVersion> {
@@ -24,7 +20,8 @@ export async function loadFrozenWorkflowVersion(input: {
   });
   if (
     asset === null ||
-    asset.contentDigest !== input.binding.workflowVersionDigest
+    asset.workflowId !== input.binding.workflowId ||
+    asset.contentDigest !== input.binding.contentDigest
   ) {
     throw new Error("workflow_version_binding_unresolvable");
   }
