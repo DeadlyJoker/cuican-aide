@@ -258,7 +258,7 @@ function projectEscapedContent(
   let content = "";
   let escaped = "";
   for (const character of value) {
-    const projected = escapeXml(character);
+    const projected = escapeContextXmlText(character);
     const characterBytes = byteLength(projected);
     if (bytes + characterBytes > maxBytes) {
       break;
@@ -274,7 +274,8 @@ function estimateTokens(value: string): number {
   return Math.max(1, Math.ceil(byteLength(value) / BYTES_PER_TOKEN_ESTIMATE));
 }
 
-function escapeXml(value: string): string {
+/** Escapes untrusted text before placing it inside a model-visible XML envelope. */
+export function escapeContextXmlText(value: string): string {
   return value
     .replaceAll("&", "&amp;")
     .replaceAll("<", "&lt;")

@@ -3,6 +3,7 @@ import type {
   WorkflowRunCompositionStore,
   WorkflowVersionStore,
 } from "@crewon/application";
+import { canonicalJson, MAX_WORKFLOW_VALUE_BYTES } from "@crewon/application";
 import type {
   RunState,
   WorkflowContentDigester,
@@ -225,8 +226,8 @@ export class ProductionWorkflowRuntimeDispatcher
       });
       if (
         outcome.status === "completed" &&
-        new TextEncoder().encode(JSON.stringify(outcome.value)).length >
-          256 * 1024
+        new TextEncoder().encode(canonicalJson(outcome.value)).length >
+          MAX_WORKFLOW_VALUE_BYTES
       )
         throw new Error("workflow_node_output_too_large");
     } catch {
