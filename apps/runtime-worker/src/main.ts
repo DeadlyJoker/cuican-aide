@@ -6,8 +6,11 @@ import {
 import {
   createPostgresRuntimeWorker,
   createStandaloneRuntimeWorker,
+  WORKFLOW_RUNTIME_CAPABILITIES,
   type StandaloneRuntimeWorker,
 } from "./standalone-composition.ts";
+import { SqliteRunStore } from "@crewon/store";
+import { NodeSha256ContentDigester } from "./standalone-adapters.ts";
 import {
   loadAgentVersionRuntimeFactory,
   loadRemoteMcpManifestBindings,
@@ -275,10 +278,26 @@ try {
           ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
           : {}),
       })
-    : await createStandaloneRuntimeWorker({
-        ...config,
-        databasePath: requiredEnvironment("CREWON_CONTROL_DB_PATH"),
-      });
+    : await (async () => {
+        const databasePath = requiredEnvironment("CREWON_CONTROL_DB_PATH");
+        const workflowDigester = new NodeSha256ContentDigester();
+        const workflowStore = new SqliteRunStore(databasePath, {
+          workflowDigester,
+        });
+        return createStandaloneRuntimeWorker({
+          ...config,
+          databasePath,
+          workflowComposition: {
+            certification: {
+              schemaVersion: "crewon.workflow-runtime-certification.v0",
+              capabilities: WORKFLOW_RUNTIME_CAPABILITIES,
+            },
+            versions: workflowStore.workflowVersionStore(workflowDigester),
+            store: workflowStore,
+            close: () => workflowStore.close(),
+          },
+        });
+      })();
 } catch (error) {
   await Promise.allSettled([
     nativeWorkspaceResources?.gateway.close(),

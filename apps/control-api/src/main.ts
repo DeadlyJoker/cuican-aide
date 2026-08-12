@@ -25,6 +25,7 @@ import {
   watchActivationInput,
 } from "./paused-admission.ts";
 import { resolveStandaloneProviderProbeWorkers } from "./standalone-provider-probe-environment.ts";
+import { WORKFLOW_PRODUCTION_STORE_CAPABILITIES } from "./workflow-production-composition-gate.ts";
 
 const securityMode = parseSecurityMode(
   process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
@@ -137,6 +138,13 @@ try {
       ),
       ...(activationGate === null ? {} : { activationGate }),
       ...(providerProbeWorkers === undefined ? {} : { providerProbeWorkers }),
+      workflowComposition: {
+        certification: {
+          storeCapabilities: WORKFLOW_PRODUCTION_STORE_CAPABILITIES,
+          modelDispatchEvidence: "durable" as const,
+          agentRuntime: "WorkflowAgentRuntimeAdapter" as const,
+        },
+      },
     };
     runtime = connectionString
       ? await createPostgresControlApi({
