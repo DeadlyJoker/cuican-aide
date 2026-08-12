@@ -1,26 +1,52 @@
-import { canonicalJson, RunStoreError, type WorkflowRunCompositionStore } from "@crewon/application";
-import { composeWorkflowOutput, reduceRunLifecycleEvent, validateWorkflowSchemaValue,
-  MAX_WORKFLOW_VALUE_BYTES, type RunState, type WorkflowContentDigester } from "@crewon/domain";
+import {
+  canonicalJson,
+  RunStoreError,
+  type WorkflowRunCompositionStore,
+} from "@crewon/application";
+import {
+  composeWorkflowOutput,
+  reduceRunLifecycleEvent,
+  validateWorkflowSchemaValue,
+  MAX_WORKFLOW_VALUE_BYTES,
+  type RunState,
+  type WorkflowContentDigester,
+} from "@crewon/domain";
 import type { PoolClient } from "pg";
-import { finishPostgresRunAttempt, loadPostgresRunAttempt,
-  loadPostgresRunStep } from "./postgres-execution-authority.ts";
+import {
+  finishPostgresRunAttempt,
+  loadPostgresRunAttempt,
+  loadPostgresRunStep,
+} from "./postgres-execution-authority.ts";
 import { stableJson } from "./store-invariants.ts";
 import { normalizeStoredRunState } from "./stored-run-state.ts";
 import { validateWorkflowExecutionState } from "./workflow-execution-store.ts";
-import { assertExecutionBinding, settleWorkflowClaim,
-  workflowAuthorityId } from "./workflow-run-composition-support.ts";
-import { completePostgresWorkflowLease, insertPostgresWorkflowReceipt,
-  insertPostgresWorkflowWorkItem, loadPostgresWorkflowAuthorities,
-  loadPostgresWorkflowExecution, loadPostgresWorkflowReceipt,
-  loadPostgresWorkflowValue, postgresWorkflowFingerprint,
-  validatePostgresWorkflowLease, writePostgresWorkflowExecution } from
-  "./postgres-workflow-run-composition-transactions.ts";
+import {
+  assertExecutionBinding,
+  settleWorkflowClaim,
+  workflowAuthorityId,
+} from "./workflow-run-composition-support.ts";
+import {
+  completePostgresWorkflowLease,
+  insertPostgresWorkflowReceipt,
+  insertPostgresWorkflowWorkItem,
+  loadPostgresWorkflowAuthorities,
+  loadPostgresWorkflowExecution,
+  loadPostgresWorkflowReceipt,
+  loadPostgresWorkflowValue,
+  postgresWorkflowFingerprint,
+  validatePostgresWorkflowLease,
+  writePostgresWorkflowExecution,
+} from "./postgres-workflow-run-composition-transactions.ts";
 type Input = Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0];
 type Result = Awaited<
   ReturnType<WorkflowRunCompositionStore["settleWorkflowNode"]>
 >;
-export async function settlePostgresWorkflowNode(client: PoolClient, schema: string,
-  input: Input, digester: WorkflowContentDigester): Promise<Result> {
+export async function settlePostgresWorkflowNode(
+  client: PoolClient,
+  schema: string,
+  input: Input,
+  digester: WorkflowContentDigester,
+): Promise<Result> {
   const fingerprint = postgresWorkflowFingerprint(
     "settleNode",
     input,
@@ -66,6 +92,24 @@ export async function settlePostgresWorkflowNode(client: PoolClient, schema: str
   );
   if (definition === undefined)
     throw new RunStoreError("workflow_composition_claim_mismatch");
+  const node = execution.nodes.find(
+    (candidate) => candidate.nodeId === input.nodeId,
+  );
+  const expectedKind =
+    definition.kind === "verification" ? "verification" : "agent";
+  if (
+    node === undefined ||
+    definition.kind === "humanGate" ||
+    step.kind !== expectedKind ||
+    step.status !== "running" ||
+    node.status !== "running" ||
+    node.claimId !== input.claimId ||
+    node.claimEpoch !== input.claimEpoch ||
+    attempt.tenantId !== input.tenantId ||
+    attempt.runId !== input.runId ||
+    attempt.stepId !== input.stepId
+  )
+    throw new RunStoreError("workflow_composition_attempt_mismatch");
   let resultDigest: string | undefined;
   if (input.outcome.status === "completed") {
     const value = validateWorkflowSchemaValue(
@@ -219,8 +263,13 @@ export async function settlePostgresWorkflowNode(client: PoolClient, schema: str
   await completePostgresWorkflowLease(client, schema, input, now);
   return structuredClone(result);
 }
-async function validateReplay(client: PoolClient, schema: string, input: Input,
-  stored: unknown, digester: WorkflowContentDigester): Promise<Result> {
+async function validateReplay(
+  client: PoolClient,
+  schema: string,
+  input: Input,
+  stored: unknown,
+  digester: WorkflowContentDigester,
+): Promise<Result> {
   const result = stored as Result;
   const workflow = await loadPostgresWorkflowAuthorities(
     client,
@@ -255,6 +304,8 @@ async function validateReplay(client: PoolClient, schema: string, input: Input,
     result.handoff?.currentWorkItem !== "completed"
   )
     replayCorrupt();
+  await validateCompletedWork(client, schema, input);
+  await validateReplayHandoff(client, schema, input, result, digester);
   if (input.outcome.status === "completed") {
     const value = await loadPostgresWorkflowValue(
       client,
@@ -419,22 +470,199 @@ async function validateTerminalRun(
   result: Result,
   digester: WorkflowContentDigester,
 ) {
-  const run = await client.query<{ state_json: RunState }>(
-    `SELECT state_json FROM ${schema}.run_snapshots WHERE tenant_id=$1 AND run_id=$2`,
+  const run = await client.query<{
+    last_sequence: number | string;
+    state_json: RunState;
+  }>(
+    `SELECT last_sequence,state_json FROM ${schema}.run_snapshots WHERE tenant_id=$1 AND run_id=$2`,
     [input.tenantId, input.runId],
   );
   const eventId = workflowAuthorityId("run-event", input, digester);
   const messageId = workflowAuthorityId("run-outbox", input, digester);
-  const evidence = await client.query(
-    `SELECT
-    EXISTS(SELECT 1 FROM ${schema}.run_events WHERE event_id=$1) AS event,
-    EXISTS(SELECT 1 FROM ${schema}.outbox WHERE message_id=$2) AS outbox`,
-    [eventId, messageId],
+  const event = await client.query<{
+    tenant_id: string;
+    run_id: string;
+    sequence: number | string;
+    event_id: string;
+    event_json: Record<string, unknown>;
+  }>(
+    `SELECT tenant_id,run_id,
+    sequence,event_id,event_json FROM ${schema}.run_events
+    WHERE tenant_id=$1 AND run_id=$2 AND event_id=$3`,
+    [input.tenantId, input.runId, eventId],
   );
+  const outbox = await client.query<{
+    tenant_id: string;
+    run_id: string;
+    topic: string;
+    message_json: Record<string, unknown>;
+  }>(
+    `SELECT tenant_id,run_id,topic,message_json
+    FROM ${schema}.outbox WHERE tenant_id=$1 AND run_id=$2 AND message_id=$3`,
+    [input.tenantId, input.runId, messageId],
+  );
+  const runState = run.rows[0]?.state_json;
+  const eventRow = event.rows[0];
+  const outboxRow = outbox.rows[0];
+  const expectedType =
+    result.execution.status === "completed"
+      ? "run.completed"
+      : result.execution.status === "failed"
+        ? "run.failed"
+        : "run.canceled";
   if (
-    run.rows[0]?.state_json.status !== result.execution.status ||
-    evidence.rows[0]?.event !== true ||
-    evidence.rows[0]?.outbox !== true
+    runState?.status !== result.execution.status ||
+    eventRow === undefined ||
+    outboxRow === undefined ||
+    Number(run.rows[0]!.last_sequence) !== Number(eventRow.sequence) ||
+    eventRow.tenant_id !== input.tenantId ||
+    eventRow.run_id !== input.runId ||
+    eventRow.event_id !== eventId ||
+    eventRow.event_json.eventId !== eventId ||
+    eventRow.event_json.sequence !== Number(eventRow.sequence) ||
+    eventRow.event_json.type !== expectedType ||
+    outboxRow.tenant_id !== input.tenantId ||
+    outboxRow.run_id !== input.runId ||
+    outboxRow.topic !== "run.updated" ||
+    outboxRow.message_json.messageId !== messageId ||
+    outboxRow.message_json.topic !== "run.updated" ||
+    (outboxRow.message_json.payload as Record<string, unknown> | undefined)
+      ?.eventId !== eventId ||
+    (outboxRow.message_json.payload as Record<string, unknown> | undefined)
+      ?.throughSequence !== Number(eventRow.sequence) ||
+    runState.outputRef !==
+      (result.execution.status === "completed"
+        ? (eventRow.event_json.data as Record<string, unknown> | undefined)
+            ?.outputRef
+        : null)
+  )
+    replayCorrupt();
+}
+
+async function validateCompletedWork(
+  client: PoolClient,
+  schema: string,
+  input: Input,
+) {
+  const work = await client.query<{
+    tenant_id: string;
+    run_id: string;
+    status: string;
+    lease_owner_id: string | null;
+    lease_id: string | null;
+    lease_epoch: number | string;
+    lease_expires_at: unknown;
+    completed_at: unknown;
+  }>(
+    `SELECT tenant_id,run_id,status,
+    lease_owner_id,lease_id,lease_epoch,lease_expires_at,completed_at
+    FROM ${schema}.work_items WHERE work_item_id=$1 FOR UPDATE`,
+    [input.lease.workItemId],
+  );
+  const row = work.rows[0];
+  if (
+    row === undefined ||
+    row.tenant_id !== input.tenantId ||
+    row.run_id !== input.runId ||
+    row.status !== "completed" ||
+    Number(row.lease_epoch) !== input.lease.leaseEpoch ||
+    row.lease_owner_id !== null ||
+    row.lease_id !== null ||
+    row.lease_expires_at !== null ||
+    row.completed_at === null
+  )
+    replayCorrupt();
+}
+
+async function validateReplayHandoff(
+  client: PoolClient,
+  schema: string,
+  input: Input,
+  result: Result,
+  digester: WorkflowContentDigester,
+) {
+  const kind =
+    input.outcome.status === "unknown"
+      ? "reconcile"
+      : result.schedulerContinuationWorkItemId === null
+        ? "none"
+        : "scheduler";
+  if (
+    result.handoff.kind !== kind ||
+    (kind === "scheduler" &&
+      result.handoff.nextWorkItemId !==
+        result.schedulerContinuationWorkItemId) ||
+    (kind === "none" && result.handoff.nextWorkItemId !== null)
+  )
+    replayCorrupt();
+  if (kind === "none") return;
+  const expectedId =
+    kind === "reconcile"
+      ? workflowAuthorityId(
+          "reconcile",
+          {
+            tenantId: input.tenantId,
+            runId: input.runId,
+            binding: input.binding,
+            operationId: input.operationId,
+            nodeId: input.nodeId,
+            claimId: input.claimId,
+            claimEpoch: input.claimEpoch,
+          },
+          digester,
+        )
+      : workflowAuthorityId(
+          "scheduler",
+          {
+            tenantId: input.tenantId,
+            runId: input.runId,
+            binding: input.binding,
+            settledNodeId: input.nodeId,
+            claimId: input.claimId,
+            claimEpoch: input.claimEpoch,
+          },
+          digester,
+        );
+  const work = await client.query<{
+    tenant_id: string;
+    run_id: string;
+    status: string;
+    work_item_json: { payload?: unknown };
+  }>(
+    `SELECT tenant_id,run_id,status,work_item_json
+    FROM ${schema}.work_items WHERE work_item_id=$1`,
+    [expectedId],
+  );
+  const row = work.rows[0];
+  if (
+    result.handoff.nextWorkItemId !== expectedId ||
+    row === undefined ||
+    row.tenant_id !== input.tenantId ||
+    row.run_id !== input.runId ||
+    row.status !== "pending"
+  )
+    replayCorrupt();
+  const payload =
+    kind === "reconcile"
+      ? {
+          schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+          trigger: "workflowReconcile",
+          binding: input.binding,
+          nodeId: input.nodeId,
+          claimId: input.claimId,
+          claimEpoch: input.claimEpoch,
+          reconciliationOperationId: input.operationId,
+        }
+      : row.work_item_json.payload;
+  if (
+    kind === "reconcile" &&
+    stableJson(row.work_item_json.payload) !== stableJson(payload)
+  )
+    replayCorrupt();
+  if (
+    kind === "scheduler" &&
+    (row.work_item_json.payload as { schedulerOperationId?: unknown })
+      ?.schedulerOperationId !== expectedId
   )
     replayCorrupt();
 }

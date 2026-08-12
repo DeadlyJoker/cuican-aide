@@ -81,8 +81,11 @@ const lease = {
 };
 
 test("SQLite composition prototype exposes only the current Store contract", () => {
-  const prototype = SqliteWorkflowRunCompositionStore.prototype as unknown as
-    Record<string, unknown>;
+  const prototype =
+    SqliteWorkflowRunCompositionStore.prototype as unknown as Record<
+      string,
+      unknown
+    >;
   assert.equal(prototype.admitWorkflowNodes, undefined);
   for (const method of [
     "scheduleWorkflowNodes",
@@ -319,6 +322,44 @@ if (postgresUrl === undefined) {
       assert.equal(
         (await second.admitWorkflowNodeWork(admitInput)).disposition,
         "replay",
+      );
+      const settlementInput = {
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: admitInput.lease,
+        binding,
+        nodeId: work.nodeId,
+        claimId: work.claimId,
+        claimEpoch: work.claimEpoch,
+        stepId: work.nodeId,
+        attemptId: admitted.admission!.attempt.attemptId,
+        operationId: "settle-agent-1",
+        outcome: { status: "completed" as const, value: {} },
+      };
+      const settled = await store.settleWorkflowNode(settlementInput);
+      assert.equal(settled.disposition, "settled");
+      assert.equal(
+        (await second.settleWorkflowNode(settlementInput)).disposition,
+        "replay",
+      );
+      const completedLease = await pool.query(
+        `SELECT status,lease_owner_id,lease_id,
+        lease_expires_at,completed_at FROM ${schema}.work_items WHERE work_item_id=$1`,
+        [work.workItemId],
+      );
+      assert.deepEqual(completedLease.rows[0], {
+        status: "completed",
+        lease_owner_id: null,
+        lease_id: null,
+        lease_expires_at: null,
+        completed_at: completedLease.rows[0].completed_at,
+      });
+      await pool.query(`UPDATE ${schema}.workflow_composition_receipts
+        SET result_json=jsonb_set(result_json,'{handoff,nextWorkItemId}','"forged"')
+        WHERE operation_id='settle-agent-1'`);
+      await assert.rejects(
+        second.settleWorkflowNode(settlementInput),
+        /receipt_corrupt/u,
       );
 
       const executionRow = await pool.query<{
