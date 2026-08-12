@@ -3407,6 +3407,49 @@ test("persists the AR-030 typed policy failure and releases the Run without retr
   assert.deepEqual(candidate, reference);
 });
 
+test("allows the final model sample at the max Tool round boundary", async (context) => {
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  let samples = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "tool-round-boundary-adapter",
+    adapterVersion: "1",
+    modelId: "tool-round-boundary-model",
+    async *stream() {
+      samples += 1;
+      if (samples === 1) {
+        yield {
+          type: "tool.call",
+          kind: "custom",
+          callId: "boundary-call",
+          name: "unsupported_tool",
+          input: '"payload"',
+        };
+        yield { type: "completed", checkpoint: null };
+        return;
+      }
+      yield { type: "output.delta", delta: "done" };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const worker = fixture.worker({ transport, maxToolRounds: 1 });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  assert.equal(samples, 2);
+  assert.equal((await fixture.loadRun()).status, "completed");
+  assert.equal(
+    (await fixture.events()).filter(({ type }) => type === "tool.completed")
+      .length,
+    1,
+  );
+  await worker.close();
+});
+
 test("routes a claimed Run through its registered AgentVersion runtime", async (context) => {
   const fixture = await createFixture(
     context,
@@ -8632,6 +8675,7 @@ async function createFixture(
       retryAfterMs?: number;
       approvalRecheckMs?: number;
       streamMaxRetries?: number;
+      maxToolRounds?: number;
       retryScheduler?: SamplingRetryScheduler;
       toolRuntime?: ToolRuntimePort;
       artifacts?: ToolOutputArtifactPort;
@@ -8688,6 +8732,7 @@ async function createFixture(
           nextLeaseId: () => ids.nextId("outboxLease"),
           leaseDurationMs: 10_000,
           retryAfterMs: options.retryAfterMs,
+          maxToolRounds: options.maxToolRounds,
           approvalRecheckMs: options.approvalRecheckMs,
           scanIntervalMs: null,
           cancellationScheduler: options.cancellationScheduler,

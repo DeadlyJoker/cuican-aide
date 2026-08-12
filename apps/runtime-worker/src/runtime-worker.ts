@@ -780,9 +780,6 @@ export class RuntimeWorker {
     }
     const completedToolRounds = pendingTools.completedToolRounds;
     const completedAssistantSamples = pendingTools.providerContinuationSamples;
-    if (completedToolRounds >= runtime.maxToolRounds) {
-      throw new PermanentWorkerError("model_tool_round_limit_exceeded");
-    }
     if ((await this.#execution.consumeGoalSteering(claim)) !== null) {
       run = await this.#execution.loadRun(claim);
     }
@@ -1059,6 +1056,11 @@ export class RuntimeWorker {
         );
         await this.#afterAssistantSampleCommitted?.();
         if (segment.requestedTools.length > 0) {
+          if (completedToolRounds >= runtime.maxToolRounds) {
+            throw new PermanentWorkerError(
+              "model_tool_round_limit_exceeded",
+            );
+          }
           toolBoundaryOutcome = await this.#executeToolCalls(
             claim,
             run,
@@ -1106,6 +1108,9 @@ export class RuntimeWorker {
         }
         if (segment.checkpointEvent !== null) {
           await this.#execution.recordAgentEvent(claim, segment.checkpointEvent);
+        }
+        if (completedToolRounds >= runtime.maxToolRounds) {
+          throw new PermanentWorkerError("model_tool_round_limit_exceeded");
         }
         segment.lastAgentSequence += 1;
         await this.#execution.recordAgentEvent(claim, {
