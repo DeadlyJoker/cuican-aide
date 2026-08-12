@@ -923,12 +923,19 @@ if (postgresUrl === undefined) {
           certainty: "responseObserved" as const,
         },
       };
-      const settled =
-        await store.settleWorkflowNodeModelTerminal(settlementInput);
+      const candidateId = digester.sha256("prepared-terminal-candidate");
+      await pool.query(`UPDATE ${schema}.workflow_node_continuations
+        SET state_json=state_json || $1::jsonb WHERE run_id='run-1' AND node_id=$2`,
+        [{ activeDispatch: settlementInput.dispatch, terminalCandidate: {
+          schemaVersion: "crewon.workflow-node-terminal-candidate.v0", candidateId,
+          segmentId: "segment-1", evidence,
+          dispatchTerminalOutcome: settlementInput.dispatchTerminalOutcome } }, work.nodeId]);
+      const preparedTerminalInput = { lease: admitInput.lease, binding,
+        authority, candidateId, operationId: settlementInput.operationId };
+      const settled = await store.settlePreparedWorkflowNodeTerminal(preparedTerminalInput);
       assert.equal(settled.disposition, "settled");
       assert.equal(
-        (await second.settleWorkflowNodeModelTerminal(settlementInput))
-          .disposition,
+        (await second.settlePreparedWorkflowNodeTerminal(preparedTerminalInput)).disposition,
         "replay",
       );
       const completedLease = await pool.query(
