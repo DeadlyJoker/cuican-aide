@@ -317,6 +317,11 @@ function composition() {
     async commitWorkflowToolContinuation() { throw new Error("unused"); },
     async commitWorkflowAssistantContinuation() { throw new Error("unused"); },
     async settleWorkflowNodeModelTerminal() { throw new Error("unused"); },
+    async loadModelDispatchReceipt() { return null; },
+    async prepareModelDispatch() { throw new Error("unused"); },
+    async markModelDispatchPossiblySent() { throw new Error("unused"); },
+    async observeModelDispatchResponse() { throw new Error("unused"); },
+    async terminateModelDispatch() { throw new Error("unused"); },
   };
   return fixture;
 }

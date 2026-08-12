@@ -1,3 +1,4 @@
+import type { ModelDispatchEvidenceStore } from "./model-dispatch-evidence-store-port.ts";
 import type { WorkflowNodeContinuationStore } from "./workflow-node-continuation-store-port.ts";
 import type { WorkflowRunCompositionStore } from "./workflow-run-composition-port.ts";
 
@@ -9,4 +10,6 @@ import type { WorkflowRunCompositionStore } from "./workflow-run-composition-por
  * transaction authority and cannot be injected as separate instances.
  */
 export interface WorkflowRuntimeStore
-  extends WorkflowRunCompositionStore, WorkflowNodeContinuationStore {}
+  extends WorkflowRunCompositionStore,
+    WorkflowNodeContinuationStore,
+    ModelDispatchEvidenceStore {}
