@@ -763,13 +763,19 @@ export class ControlApiClient {
   }
 
   listWorkflowVersions(
-    workflowId: string,
-    query: { cursor?: string | null; limit?: number } = {},
+    query: {
+      workflowId?: string;
+      cursor?: string | null;
+      limit?: number;
+    } = {},
     options: ControlApiRequestOptions = {},
   ): Promise<ListWorkflowVersionsResponse> {
     return this.#json(
       "GET",
-      withQuery("/api/v1/workflow-versions", { workflowId, ...query }),
+      withQuery("/api/v1/workflow-versions", {
+        ...query,
+        workflowId: query.workflowId,
+      }),
       null,
       { ...options, expectedStatuses: [200] },
     );

@@ -69,7 +69,7 @@ export class WorkflowNodeSideEffectUncertainError extends Error {
   }
 }
 
-/** Internal candidate; production composition remains disabled until every Store transaction exists. */
+/** Production dispatcher backed by one fail-closed Workflow transaction authority. */
 export class ProductionWorkflowRuntimeDispatcher
   implements WorkflowRuntimeDispatcherPort
 {

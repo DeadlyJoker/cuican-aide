@@ -24,7 +24,8 @@ export interface WorkflowVersionStore {
   }): Promise<WorkflowVersionAsset | null>;
   listWorkflowVersions(input: {
     tenantId: string;
-    workflowId: string;
+    /** Null lists the tenant catalog ordered by workflowId then workflowVersionId. */
+    workflowId: string | null;
     after: WorkflowVersionListCursor | null;
     limit: number;
   }): Promise<readonly WorkflowVersionAsset[]>;

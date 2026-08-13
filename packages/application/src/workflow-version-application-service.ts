@@ -105,7 +105,7 @@ export class WorkflowVersionApplicationService {
   async list(
     actor: ActorContext,
     input: {
-      workflowId: string;
+      workflowId: string | null;
       after: WorkflowVersionListCursor | null;
       limit: number;
     },

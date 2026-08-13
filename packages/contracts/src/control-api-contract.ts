@@ -244,8 +244,8 @@ export type CapabilityListQuery = Readonly<{
 }>;
 
 export type WorkflowVersionListQuery = Readonly<{
-  workflowId: string;
-  afterWorkflowVersionId: string | null;
+  workflowId: string | null;
+  after: Readonly<{ workflowId: string; workflowVersionId: string }> | null;
   limit: number;
 }>;
 
@@ -953,18 +953,21 @@ export function parseWorkflowVersionListQuery(
   ) {
     throw new ContractValidationError("workflow_version_list_query_invalid");
   }
-  const workflowId = requireBoundedString(
-    input.workflowId,
-    512,
-    "workflow_id_invalid",
-  );
+  const workflowId =
+    input.workflowId === undefined
+      ? null
+      : requireBoundedString(input.workflowId, 512, "workflow_id_invalid");
   const cursor = parseWorkflowVersionCursor(input.cursor);
-  if (cursor !== null && cursor.workflowId !== workflowId) {
+  if (
+    workflowId !== null &&
+    cursor !== null &&
+    cursor.workflowId !== workflowId
+  ) {
     throw new ContractValidationError("workflow_version_cursor_invalid");
   }
   return {
     workflowId,
-    afterWorkflowVersionId: cursor?.workflowVersionId ?? null,
+    after: cursor,
     limit: parseUnsignedQueryInteger(
       input.limit,
       100,

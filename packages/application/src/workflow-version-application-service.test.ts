@@ -194,14 +194,20 @@ class FakeWorkflowVersions implements WorkflowVersionStore {
       this.assets.get(`${input.tenantId}:${input.workflowVersionId}`) ?? null,
     );
   }
-  async listWorkflowVersions(input: { tenantId: string; workflowId: string }) {
+  async listWorkflowVersions(input: {
+    tenantId: string;
+    workflowId: string | null;
+    after: import("./workflow-version-store-port.ts").WorkflowVersionListCursor | null;
+    limit: number;
+  }) {
     if (this.error) throw this.error;
     return [...this.assets.values()]
       .filter(
         (asset) =>
           asset.tenantId === input.tenantId &&
-          asset.workflowId === input.workflowId,
+          (input.workflowId === null || asset.workflowId === input.workflowId),
       )
+      .slice(0, input.limit)
       .map((asset) => structuredClone(asset));
   }
 }

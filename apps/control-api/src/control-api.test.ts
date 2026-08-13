@@ -2313,6 +2313,13 @@ test("publishes, replays and pages tenant WorkflowVersions without exposing auth
     replay.json<WorkflowVersionMutationResponse>().disposition,
     "existing",
   );
+  const secondWorkflow = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/workflow-versions",
+    headers: mutationHeaders("ignored-workflow-key-3"),
+    payload: workflowVersionSource("workflow-2-version-1", "workflow-2"),
+  });
+  assert.equal(secondWorkflow.statusCode, 201, secondWorkflow.body);
 
   const fetched = await runtime.app.inject({
     method: "GET",
@@ -2361,6 +2368,24 @@ test("publishes, replays and pages tenant WorkflowVersions without exposing auth
     400,
     "validation",
     "workflow_version_cursor_invalid",
+  );
+  const catalog = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/workflow-versions?limit=100",
+    headers: readHeaders(),
+  });
+  assert.equal(catalog.statusCode, 200, catalog.body);
+  assert.deepEqual(
+    catalog
+      .json<ListWorkflowVersionsResponse>()
+      .data.map(({ workflowId, workflowVersionId }) => ({
+        workflowId,
+        workflowVersionId,
+      })),
+    [
+      { workflowId: "workflow-1", workflowVersionId: "workflow-version-1" },
+      { workflowId: "workflow-2", workflowVersionId: "workflow-2-version-1" },
+    ],
   );
 });
 
@@ -3414,6 +3439,7 @@ function standaloneActor(): ActorContext {
 
 function workflowVersionSource(
   workflowVersionId: string,
+  workflowId = "workflow-1",
 ): WorkflowVersionSource {
   const schema = {
     type: "object" as const,
@@ -3423,7 +3449,7 @@ function workflowVersionSource(
   };
   return {
     schemaVersion: "crewon.workflow-version-source.v0",
-    workflowId: "workflow-1",
+    workflowId,
     workflowVersionId,
     name: "Production workflow",
     description: "A compiled immutable workflow",

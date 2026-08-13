@@ -233,6 +233,9 @@ function registerConformance(
     await store.registerWorkflowVersion(asset("tenant-1", "version-2"));
     for (const id of ["Z", "a"])
       await store.registerWorkflowVersion(asset("tenant-1", id));
+    await store.registerWorkflowVersion(
+      asset("tenant-1", "catalog-version-1", "workflow-2"),
+    );
     await store.registerWorkflowVersion(asset("tenant-2", "version-3"));
     assert.deepEqual(
       (
@@ -262,6 +265,41 @@ function registerConformance(
         })
       ).map((item) => item.workflowVersionId),
       ["Z", "a", "version-1", "version-2"],
+    );
+    const catalogPage = await store.listWorkflowVersions({
+      tenantId: "tenant-1",
+      workflowId: null,
+      after: null,
+      limit: 4,
+    });
+    assert.deepEqual(
+      catalogPage.map(({ workflowId, workflowVersionId }) => ({
+        workflowId,
+        workflowVersionId,
+      })),
+      [
+        { workflowId: "workflow-1", workflowVersionId: "Z" },
+        { workflowId: "workflow-1", workflowVersionId: "a" },
+        { workflowId: "workflow-1", workflowVersionId: "version-1" },
+        { workflowId: "workflow-1", workflowVersionId: "version-2" },
+      ],
+    );
+    assert.deepEqual(
+      (
+        await store.listWorkflowVersions({
+          tenantId: "tenant-1",
+          workflowId: null,
+          after: {
+            workflowId: catalogPage.at(-1)!.workflowId,
+            workflowVersionId: catalogPage.at(-1)!.workflowVersionId,
+          },
+          limit: 4,
+        })
+      ).map(({ workflowId, workflowVersionId }) => ({
+        workflowId,
+        workflowVersionId,
+      })),
+      [{ workflowId: "workflow-2", workflowVersionId: "catalog-version-1" }],
     );
     await assert.rejects(
       store.listWorkflowVersions({
@@ -316,8 +354,15 @@ function postgresAuthoritySql(schema: string, version: number) {
       PRIMARY KEY(tenant_id,workflow_version_id))`;
 }
 
-function asset(tenantId: string, workflowVersionId: string) {
-  const version = compileWorkflowVersion(source(workflowVersionId), digester);
+function asset(
+  tenantId: string,
+  workflowVersionId: string,
+  workflowId = "workflow-1",
+) {
+  const version = compileWorkflowVersion(
+    source(workflowVersionId, workflowId),
+    digester,
+  );
   return {
     schemaVersion: "crewon.workflow-version-asset.v0" as const,
     tenantId,
@@ -328,7 +373,10 @@ function asset(tenantId: string, workflowVersionId: string) {
     createdAt: "2026-08-12T00:00:00.000Z",
   };
 }
-function source(workflowVersionId: string): WorkflowVersionSource {
+function source(
+  workflowVersionId: string,
+  workflowId = "workflow-1",
+): WorkflowVersionSource {
   const schema = {
     type: "object" as const,
     properties: {},
@@ -337,7 +385,7 @@ function source(workflowVersionId: string): WorkflowVersionSource {
   };
   return {
     schemaVersion: "crewon.workflow-version-source.v0",
-    workflowId: "workflow-1",
+    workflowId,
     workflowVersionId,
     name: "workflow",
     description: "workflow",

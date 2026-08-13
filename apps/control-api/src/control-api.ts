@@ -1500,13 +1500,7 @@ export function buildControlApi(
       const query = parseWorkflowVersionListQuery({ ...request.query });
       const assets = await dependencies.workflowVersions.list(actor, {
         workflowId: query.workflowId,
-        after:
-          query.afterWorkflowVersionId === null
-            ? null
-            : {
-                workflowId: query.workflowId,
-                workflowVersionId: query.afterWorkflowVersionId,
-              },
+        after: query.after,
         limit: query.limit,
       });
       const data = assets.map((asset) =>
@@ -1520,7 +1514,7 @@ export function buildControlApi(
         nextCursor:
           data.length === query.limit && data.at(-1) !== undefined
             ? formatWorkflowVersionCursor(
-                query.workflowId,
+                data.at(-1)!.workflowId,
                 data.at(-1)!.workflowVersionId,
               )
             : null,

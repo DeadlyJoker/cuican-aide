@@ -10,6 +10,7 @@ import {
   formatMessageCursor,
   formatThreadCursor,
   formatThreadRunCursor,
+  formatWorkflowVersionCursor,
   parseAgentVersionId,
   parseAgentVersionListQuery,
   parseCapabilityListQuery,
@@ -48,6 +49,7 @@ import {
   parseThreadListQuery,
   parseThreadRunListQuery,
   parseUnarchiveThreadRequest,
+  parseWorkflowVersionListQuery,
   type GetThreadGoalResponse,
   type RunMutationResponse,
   type ThreadEventView,
@@ -698,6 +700,36 @@ test("bounds WorkflowVersion lists to metadata-only summaries", () => {
   ]) {
     assert.equal(JSON.stringify(summary).includes(forbidden), false, forbidden);
   }
+});
+
+test("parses tenant WorkflowVersion catalog and scoped pagination", () => {
+  assert.deepEqual(parseWorkflowVersionListQuery({ limit: "2" }), {
+    workflowId: null,
+    after: null,
+    limit: 2,
+  });
+  const cursor = formatWorkflowVersionCursor("workflow-1", "version-2");
+  assert.deepEqual(parseWorkflowVersionListQuery({ cursor }), {
+    workflowId: null,
+    after: { workflowId: "workflow-1", workflowVersionId: "version-2" },
+    limit: 100,
+  });
+  assert.deepEqual(
+    parseWorkflowVersionListQuery({ workflowId: "workflow-1", cursor }),
+    {
+      workflowId: "workflow-1",
+      after: { workflowId: "workflow-1", workflowVersionId: "version-2" },
+      limit: 100,
+    },
+  );
+  assert.throws(
+    () =>
+      parseWorkflowVersionListQuery({
+        workflowId: "workflow-2",
+        cursor,
+      }),
+    isContractError,
+  );
 });
 
 test("freezes strict Thread and text Message authority without client scope fields", () => {

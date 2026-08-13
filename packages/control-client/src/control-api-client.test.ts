@@ -485,12 +485,17 @@ test("lists bounded WorkflowVersion summaries without definition fields", async 
     },
   });
   assert.deepEqual(
-    await client.listWorkflowVersions("workflow-1", { limit: 100 }),
+    await client.listWorkflowVersions({ workflowId: "workflow-1", limit: 100 }),
     response,
   );
   assert.equal(
     requestedUrl,
     "https://control.example/api/v1/workflow-versions?workflowId=workflow-1&limit=100",
+  );
+  await client.listWorkflowVersions({ limit: 100 });
+  assert.equal(
+    requestedUrl,
+    "https://control.example/api/v1/workflow-versions?limit=100",
   );
   for (const forbidden of [
     "definitionJson",

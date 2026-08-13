@@ -3889,8 +3889,9 @@ export interface operations {
   };
   listWorkflowVersions: {
     parameters: {
-      query: {
-        workflowId: string;
+      query?: {
+        /** @description Optional exact workflow filter; omit to browse the tenant catalog */
+        workflowId?: string;
         cursor?: string;
         limit?: components["parameters"]["Limit"];
       };
@@ -3900,7 +3901,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Tenant- and workflow-scoped immutable WorkflowVersions */
+      /** @description Tenant WorkflowVersion catalog, optionally scoped to one workflow */
       200: {
         headers: {
           [name: string]: unknown;

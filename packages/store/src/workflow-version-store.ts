@@ -45,14 +45,13 @@ export class InMemoryWorkflowVersionStore implements WorkflowVersionStore {
       .filter(
         (asset) =>
           asset.tenantId === input.tenantId &&
-          asset.workflowId === input.workflowId,
+          (input.workflowId === null || asset.workflowId === input.workflowId),
       )
-      .sort((a, b) => compareUtf8(a.workflowVersionId, b.workflowVersionId))
+      .sort(compareAssets)
       .filter(
         (asset) =>
           input.after === null ||
-          compareUtf8(asset.workflowVersionId, input.after.workflowVersionId) >
-            0,
+          compareAssetCursor(asset, input.after) > 0,
       )
       .slice(0, input.limit)
       .map((asset) => structuredClone(asset));
@@ -108,18 +107,33 @@ export class SqliteWorkflowVersionStore implements WorkflowVersionStore {
   }
   async listWorkflowVersions(input: ListInput) {
     listInput(input);
-    const rows = this.#database
-      .prepare(
-        `SELECT * FROM workflow_versions WHERE tenant_id=? AND workflow_id=?
-      AND CAST(workflow_version_id AS BLOB)>CAST(? AS BLOB)
-      ORDER BY CAST(workflow_version_id AS BLOB) LIMIT ?`,
-      )
-      .all(
-        input.tenantId,
-        input.workflowId,
-        input.after?.workflowVersionId ?? "",
-        input.limit,
-      ) as unknown as Row[];
+    const rows = (input.workflowId === null
+      ? this.#database
+          .prepare(
+            `SELECT * FROM workflow_versions WHERE tenant_id=? AND
+          (CAST(workflow_id AS BLOB)>CAST(? AS BLOB) OR
+           (workflow_id=? AND CAST(workflow_version_id AS BLOB)>CAST(? AS BLOB)))
+          ORDER BY CAST(workflow_id AS BLOB),CAST(workflow_version_id AS BLOB) LIMIT ?`,
+          )
+          .all(
+            input.tenantId,
+            input.after?.workflowId ?? "",
+            input.after?.workflowId ?? "",
+            input.after?.workflowVersionId ?? "",
+            input.limit,
+          )
+      : this.#database
+          .prepare(
+            `SELECT * FROM workflow_versions WHERE tenant_id=? AND workflow_id=?
+          AND CAST(workflow_version_id AS BLOB)>CAST(? AS BLOB)
+          ORDER BY CAST(workflow_version_id AS BLOB) LIMIT ?`,
+          )
+          .all(
+            input.tenantId,
+            input.workflowId,
+            input.after?.workflowVersionId ?? "",
+            input.limit,
+          )) as unknown as Row[];
     try {
       return rows.map((row) => decode(row, this.#digester));
     } catch (error) {
@@ -187,18 +201,32 @@ export class PostgresWorkflowVersionStore implements WorkflowVersionStore {
   }
   async listWorkflowVersions(input: ListInput) {
     listInput(input);
-    const result = await this.#pool.query<Row>(
-      `SELECT tenant_id, workflow_id, workflow_version_id, content_digest,
-      definition_json, created_at::text FROM ${this.#schema}.workflow_versions WHERE tenant_id=$1 AND workflow_id=$2
-      AND workflow_version_id COLLATE "C">$3 COLLATE "C"
-      ORDER BY workflow_version_id COLLATE "C" LIMIT $4`,
-      [
-        input.tenantId,
-        input.workflowId,
-        input.after?.workflowVersionId ?? "",
-        input.limit,
-      ],
-    );
+    const result = input.workflowId === null
+      ? await this.#pool.query<Row>(
+          `SELECT tenant_id, workflow_id, workflow_version_id, content_digest,
+          definition_json, created_at::text FROM ${this.#schema}.workflow_versions WHERE tenant_id=$1 AND
+          (workflow_id COLLATE "C">$2 COLLATE "C" OR
+           (workflow_id=$2 AND workflow_version_id COLLATE "C">$3 COLLATE "C"))
+          ORDER BY workflow_id COLLATE "C",workflow_version_id COLLATE "C" LIMIT $4`,
+          [
+            input.tenantId,
+            input.after?.workflowId ?? "",
+            input.after?.workflowVersionId ?? "",
+            input.limit,
+          ],
+        )
+      : await this.#pool.query<Row>(
+          `SELECT tenant_id, workflow_id, workflow_version_id, content_digest,
+          definition_json, created_at::text FROM ${this.#schema}.workflow_versions WHERE tenant_id=$1 AND workflow_id=$2
+          AND workflow_version_id COLLATE "C">$3 COLLATE "C"
+          ORDER BY workflow_version_id COLLATE "C" LIMIT $4`,
+          [
+            input.tenantId,
+            input.workflowId,
+            input.after?.workflowVersionId ?? "",
+            input.limit,
+          ],
+        );
     try {
       return result.rows.map((row) => decode(row, this.#digester));
     } catch (error) {
@@ -290,11 +318,14 @@ function listInput(input: ListInput) {
     !Number.isSafeInteger(input.limit) ||
     input.limit < 1 ||
     input.limit > 100 ||
-    (input.after !== null && input.after.workflowId !== input.workflowId)
+    (input.workflowId !== null &&
+      input.after !== null &&
+      input.after.workflowId !== input.workflowId)
   )
     throw new RunStoreError("workflow_version_list_invalid");
   boundedId(input.tenantId, "workflow_version_list_invalid");
-  boundedId(input.workflowId, "workflow_version_list_invalid");
+  if (input.workflowId !== null)
+    boundedId(input.workflowId, "workflow_version_list_invalid");
   if (input.after !== null) {
     if (
       !isPlainObject(input.after) ||
@@ -307,6 +338,21 @@ function listInput(input: ListInput) {
 }
 function compareUtf8(left: string, right: string) {
   return Buffer.compare(Buffer.from(left), Buffer.from(right));
+}
+function compareAssets(left: WorkflowVersionAsset, right: WorkflowVersionAsset) {
+  return (
+    compareUtf8(left.workflowId, right.workflowId) ||
+    compareUtf8(left.workflowVersionId, right.workflowVersionId)
+  );
+}
+function compareAssetCursor(
+  asset: WorkflowVersionAsset,
+  cursor: import("@crewon/application").WorkflowVersionListCursor,
+) {
+  return (
+    compareUtf8(asset.workflowId, cursor.workflowId) ||
+    compareUtf8(asset.workflowVersionId, cursor.workflowVersionId)
+  );
 }
 function boundedId(value: unknown, code: string) {
   if (

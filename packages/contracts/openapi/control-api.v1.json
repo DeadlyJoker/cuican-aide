@@ -1836,7 +1836,7 @@
           {
             "name": "workflowId",
             "in": "query",
-            "required": true,
+            "description": "Optional exact workflow filter; omit to browse the tenant catalog",
             "schema": { "type": "string", "minLength": 1, "maxLength": 512 }
           },
           {
@@ -1848,7 +1848,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Tenant- and workflow-scoped immutable WorkflowVersions",
+            "description": "Tenant WorkflowVersion catalog, optionally scoped to one workflow",
             "content": {
               "application/json": {
                 "schema": {
