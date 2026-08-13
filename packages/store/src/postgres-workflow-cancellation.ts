@@ -98,8 +98,13 @@ export async function cancelPostgresWorkflowExecution(
     const canceled = await cancelRunningNode(
       client, schema, input, execution, node, now, digester);
     execution = canceled.execution;
+    const canceledNodeIds = canceled.reconciliationWorkItemId === null
+      ? [node.nodeId] : [];
+    const reconciliationWorkItemIds = canceled.reconciliationWorkItemId === null
+      ? [] : [canceled.reconciliationWorkItemId];
     const result = { disposition: canceled.reconciliationWorkItemId === null
         ? "cancellationPending" as const : "reconciliationScheduled" as const,
+      canceledNodeIds, canceledGateRequestNodeIds: [], reconciliationWorkItemIds,
       execution: projectCancellationStatus(execution),
       handoff: { currentWorkItem: "completed" as const,
         nextWorkItemId: canceled.reconciliationWorkItemId,
@@ -116,6 +121,8 @@ export async function cancelPostgresWorkflowExecution(
   const reconciliationWorkItemIds = await loadCancellationReconciliationWorkItems(
     client, schema, input, execution, digester);
   let retryRequired = execution.nodes.some((node) => node.status === "running");
+  const canceledNodeIds: string[] = [];
+  const canceledGateRequestNodeIds: string[] = [];
   const nodes = [];
   for (const node of execution.nodes) {
     if (node.status === "pending") {
@@ -127,13 +134,17 @@ export async function cancelPostgresWorkflowExecution(
         node.kind,
         now,
       );
+      canceledNodeIds.push(node.nodeId);
       nodes.push({ ...node, status: "canceled" as const });
     } else if (node.status === "queued") {
-      if (await cancelQueuedNode(client, schema, input, node, now))
+      if (await cancelQueuedNode(client, schema, input, node, now)) {
+        canceledNodeIds.push(node.nodeId);
         nodes.push({ ...node, status: "canceled" as const });
-      else { retryRequired = true; nodes.push(node); }
+      } else { retryRequired = true; nodes.push(node); }
     } else if (node.status === "waitingHuman") {
       await cancelGate(client, schema, input, node.nodeId, now);
+      canceledNodeIds.push(node.nodeId);
+      canceledGateRequestNodeIds.push(node.nodeId);
       nodes.push({ ...node, status: "canceled" as const });
     } else {
       nodes.push(node);
@@ -149,7 +160,10 @@ export async function cancelPostgresWorkflowExecution(
   };
   const projected = projectCancellationStatus(next);
   await writePostgresWorkflowExecution(client, schema, projected, now);
+  canceledNodeIds.sort();
+  canceledGateRequestNodeIds.sort();
   if (retryRequired) return structuredClone({ disposition: "retryRequired" as const,
+    canceledNodeIds, canceledGateRequestNodeIds, reconciliationWorkItemIds,
     execution: projected, handoff: { currentWorkItem: "retained" as const,
       nextWorkItemId: null, kind: "none" as const }, runDisposition: "nonTerminal" as const });
   const reconciliationWorkItemId = reconciliationWorkItemIds[0] ?? null;
@@ -170,6 +184,7 @@ export async function cancelPostgresWorkflowExecution(
       reconciliationWorkItemId === null
         ? ("canceled" as const)
         : ("reconciliationScheduled" as const),
+    canceledNodeIds, canceledGateRequestNodeIds, reconciliationWorkItemIds,
     execution: projected,
     handoff: {
       currentWorkItem: "completed" as const,
@@ -533,6 +548,7 @@ async function loadCancellationReconciliationWorkItems(
       throw new RunStoreError("workflow_cancellation_reconciliation_required");
     ids.push(row.work_item_id);
   }
+  ids.sort();
   return ids;
 }
 
@@ -546,6 +562,7 @@ async function validateReplay(
   const terminal = result.disposition === "canceled";
   const pending = result.disposition === "cancellationPending";
   if (
+    !validCancellationProof(result) ||
     result.handoff.currentWorkItem !== "completed" ||
     (terminal &&
       (result.runDisposition !== "terminalConverged" ||
@@ -581,4 +598,18 @@ async function validateReplay(
       digester,
     );
   return { ...structuredClone(result), disposition: "replay" };
+}
+
+function validCancellationProof(result: Result): boolean {
+  const proofLists = [result.canceledNodeIds,
+    result.canceledGateRequestNodeIds, result.reconciliationWorkItemIds];
+  return proofLists.every((ids) => ids.every((id, index) =>
+    id.length > 0 && (index === 0 || ids[index - 1]! < id))) &&
+    result.canceledGateRequestNodeIds.every((nodeId) =>
+      result.canceledNodeIds.includes(nodeId)) &&
+    result.canceledNodeIds.every((nodeId) => result.execution.nodes.find(
+      (node) => node.nodeId === nodeId)?.status === "canceled") &&
+    (result.handoff.kind === "reconcile"
+      ? result.reconciliationWorkItemIds[0] === result.handoff.nextWorkItemId
+      : result.reconciliationWorkItemIds.length === 0);
 }

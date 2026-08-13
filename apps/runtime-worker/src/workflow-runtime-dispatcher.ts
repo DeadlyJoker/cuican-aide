@@ -1,5 +1,6 @@
 import type {
   WorkItemClaim,
+  WorkflowCancellationResult,
   WorkflowRuntimeStore,
   WorkflowVersionStore,
 } from "@crewon/application";
@@ -49,6 +50,7 @@ export interface WorkflowAgentNodePort {
 export type WorkflowRuntimeDispatchOutcome =
   | Readonly<{ kind: "completed"; runId: string }>
   | Readonly<{ kind: "waitingApproval"; runId: string; approvalId: string }>
+  | Readonly<{ kind: "retry"; runId: string; code: string }>
   | Readonly<{ kind: "recovery"; runId: string; code: string }>;
 
 export interface WorkflowRuntimeDispatcherPort {
@@ -185,9 +187,7 @@ export class ProductionWorkflowRuntimeDispatcher
           return { kind: "recovery", runId: input.run.runId,
             code: "workflow_reconciliation_evidence_insufficient" };
         case "retryRequired":
-          if (reconciled.handoff.currentWorkItem !== "retained")
-            throw new Error("workflow_reconciliation_retry_handoff_invalid");
-          return { kind: "recovery", runId: input.run.runId,
+          return { kind: "retry", runId: input.run.runId,
             code: "workflow_reconciliation_retry_required" };
         case "settled":
         case "replay":
@@ -223,11 +223,9 @@ export class ProductionWorkflowRuntimeDispatcher
       operationId: cancelOperationId,
       reasonCode: "user_requested",
     });
+    assertCancellationProof(canceled);
     if (canceled.disposition === "retryRequired") {
-      if (canceled.handoff.currentWorkItem !== "retained" ||
-          canceled.handoff.nextWorkItemId !== null || canceled.handoff.kind !== "none")
-        throw new Error("workflow_cancellation_retry_handoff_invalid");
-      return { kind: "recovery", runId: input.run.runId,
+      return { kind: "retry", runId: input.run.runId,
         code: "workflow_cancellation_retry_required" };
     }
     assertCompletedHandoff(canceled.handoff);
@@ -412,6 +410,27 @@ function assertNonFreshAdmissionHandoff(
     assertCompletedHandoff(handoff, "reconcile");
   else if (handoff.currentWorkItem === "retained")
     throw new Error("workflow_replay_handoff_ambiguous");
+}
+
+function assertCancellationProof(result: WorkflowCancellationResult): void {
+  const proofLists = [result.canceledNodeIds,
+    result.canceledGateRequestNodeIds, result.reconciliationWorkItemIds];
+  if (proofLists.some((ids) => !canonicalProofIds(ids)) ||
+      result.canceledGateRequestNodeIds.some(
+        (nodeId) => !result.canceledNodeIds.includes(nodeId)) ||
+      result.canceledNodeIds.some((nodeId) =>
+        result.execution.nodes.find((node) => node.nodeId === nodeId)?.status !==
+          "canceled") ||
+      (result.handoff.kind === "reconcile"
+        ? result.reconciliationWorkItemIds[0] !== result.handoff.nextWorkItemId
+        : result.handoff.currentWorkItem === "completed" &&
+          result.reconciliationWorkItemIds.length !== 0))
+    throw new Error("workflow_cancellation_proof_invalid");
+}
+
+function canonicalProofIds(ids: readonly string[]): boolean {
+  return ids.every((id, index) =>
+    id.length > 0 && (index === 0 || ids[index - 1]! < id));
 }
 
 function leaseInput(claim: WorkItemClaim) {

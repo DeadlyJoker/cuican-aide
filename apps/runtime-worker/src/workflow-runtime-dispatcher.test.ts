@@ -243,14 +243,33 @@ test("retains a dedicated cancellation coordinator until sibling leases settle",
   const fixture = composition();
   fixture.store.cancelWorkflowExecution = async () => ({
     disposition: "retryRequired", execution: {} as never,
+    canceledNodeIds: [], canceledGateRequestNodeIds: [],
+    reconciliationWorkItemIds: [],
     handoff: { currentWorkItem: "retained", nextWorkItemId: null, kind: "none" },
     runDisposition: "nonTerminal",
   });
   const outcome = await create(fixture.store, async () => {
     throw new Error("agent must not execute");
   }).cancel(input("scheduler"));
-  assert.deepEqual(outcome, { kind: "recovery", runId: "r",
+  assert.deepEqual(outcome, { kind: "retry", runId: "r",
     code: "workflow_cancellation_retry_required" });
+});
+
+test("rejects non-canonical cancellation proof from composition authority", async () => {
+  const fixture = composition();
+  fixture.store.cancelWorkflowExecution = async () => ({
+    disposition: "cancellationPending", execution: { nodes: [
+      { nodeId: "a", status: "canceled" },
+      { nodeId: "b", status: "canceled" },
+    ] } as never,
+    canceledNodeIds: ["b", "a"],
+    canceledGateRequestNodeIds: [], reconciliationWorkItemIds: [],
+    handoff: { currentWorkItem: "completed", nextWorkItemId: null, kind: "none" },
+    runDisposition: "nonTerminal",
+  });
+  await assert.rejects(create(fixture.store, async () => {
+    throw new Error("agent must not execute");
+  }).cancel(input("scheduler")), /workflow_cancellation_proof_invalid/u);
 });
 
 test("routes cancel-requested reconciliation without invoking cancellation", async () => {
@@ -263,7 +282,7 @@ test("routes cancel-requested reconciliation without invoking cancellation", asy
   const outcome = await create(fixture.store, async () => {
     throw new Error("agent must not execute");
   }).cancel(input("reconcile"));
-  assert.deepEqual(outcome, { kind: "recovery", runId: "r",
+  assert.deepEqual(outcome, { kind: "retry", runId: "r",
     code: "workflow_reconciliation_retry_required" });
   assert.equal(fixture.cancellations, 0);
 });
@@ -438,6 +457,9 @@ function composition() {
       return {
         disposition: "canceled",
         execution: state("completed"),
+        canceledNodeIds: [],
+        canceledGateRequestNodeIds: [],
+        reconciliationWorkItemIds: [],
         handoff: {
           currentWorkItem: "completed",
           nextWorkItemId: null,

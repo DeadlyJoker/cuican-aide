@@ -633,10 +633,13 @@ export class SqliteWorkflowRunCompositionStore
         cancelRequested: true, nodes,
         status: active ? "running" as const : "canceled" as const, updatedAt: now };
       this.#writeExecution(next, now);
+      canceledNodeIds.sort();
+      canceledGateRequestNodeIds.sort();
       if (nodes.some((node) => node.status === "running" || node.status === "queued")) {
         this.#database.exec("COMMIT");
         return structuredClone({ disposition: "retryRequired" as const,
-          canceledNodeIds, canceledGateRequestNodeIds, execution: next,
+          canceledNodeIds, canceledGateRequestNodeIds, reconciliationWorkItemIds,
+          execution: next,
           handoff: { currentWorkItem: "retained" as const, nextWorkItemId: null,
             kind: "none" as const }, runDisposition: "nonTerminal" as const });
       }
@@ -645,7 +648,7 @@ export class SqliteWorkflowRunCompositionStore
       this.#completePendingCancellationWake(input, nowMs);
       const result = { disposition: reconciliationWorkItemIds.length === 0
           ? "canceled" as const : "reconciliationScheduled" as const,
-        canceledNodeIds, canceledGateRequestNodeIds,
+        canceledNodeIds, canceledGateRequestNodeIds, reconciliationWorkItemIds,
         execution: next, handoff: { currentWorkItem: "completed" as const,
           nextWorkItemId: reconciliationWorkItemIds[0] ?? null,
           kind: reconciliationWorkItemIds.length === 0 ? "none" as const : "reconcile" as const },
@@ -1514,8 +1517,10 @@ export class SqliteWorkflowRunCompositionStore
       const next = { ...execution, revision: execution.revision + 1, nodes, status,
         updatedAt: now };
       this.#writeExecution(next, now);
+      canceledNodeIds.sort();
       const result = { disposition: "cancellationPending" as const,
-        canceledNodeIds, canceledGateRequestNodeIds: [], execution: next,
+        canceledNodeIds, canceledGateRequestNodeIds: [],
+        reconciliationWorkItemIds: [], execution: next,
         handoff: { currentWorkItem: "completed" as const, nextWorkItemId: null,
           kind: "none" as const }, runDisposition: "nonTerminal" as const };
       this.#insertReceipt(input, "cancelExecution", fingerprint, result);
@@ -1581,6 +1586,8 @@ export class SqliteWorkflowRunCompositionStore
     const result = { disposition: uncertain
         ? "reconciliationScheduled" as const : "cancellationPending" as const,
       canceledNodeIds: uncertain ? [] : [node.nodeId], canceledGateRequestNodeIds: [],
+      reconciliationWorkItemIds: reconciliationWorkItemId === null
+        ? [] : [reconciliationWorkItemId],
       execution: settled.execution, handoff: { currentWorkItem: "completed" as const,
         nextWorkItemId: reconciliationWorkItemId,
         kind: uncertain ? "reconcile" as const : "none" as const },
@@ -1639,8 +1646,7 @@ export class SqliteWorkflowRunCompositionStore
   ): void {
     try {
       const result = replay as Awaited<ReturnType<
-        WorkflowRunCompositionStore["cancelWorkflowExecution"]>> & {
-          canceledNodeIds: string[]; canceledGateRequestNodeIds: string[] };
+        WorkflowRunCompositionStore["cancelWorkflowExecution"]>>;
       const execution = this.#loadExecution(input.tenantId, input.runId);
       const run = this.#loadRun(input.tenantId, input.runId);
       const eventRows = this.#database.prepare(
@@ -1650,7 +1656,7 @@ export class SqliteWorkflowRunCompositionStore
         import("@crewon/domain").RunLifecycleEvent[];
       const nodeEvents = events.filter((event) => event.type === "workflow.node.terminal");
       const resultKeys = ["canceledGateRequestNodeIds", "canceledNodeIds", "disposition",
-        "execution", "handoff", "runDisposition"];
+        "execution", "handoff", "reconciliationWorkItemIds", "runDisposition"];
       const terminal = result.disposition === "canceled";
       const pending = result.disposition === "cancellationPending";
       const reconciliation = result.disposition === "reconciliationScheduled";
@@ -1669,9 +1675,20 @@ export class SqliteWorkflowRunCompositionStore
             : !["running", "waitingHuman", "canceled"].includes(execution.status)) ||
           !Array.isArray(result.canceledNodeIds) ||
           !Array.isArray(result.canceledGateRequestNodeIds) ||
+          !Array.isArray(result.reconciliationWorkItemIds) ||
           new Set(result.canceledNodeIds).size !== result.canceledNodeIds.length ||
           new Set(result.canceledGateRequestNodeIds).size !==
             result.canceledGateRequestNodeIds.length ||
+          new Set(result.reconciliationWorkItemIds).size !==
+            result.reconciliationWorkItemIds.length ||
+          stableJson([...result.canceledNodeIds].sort()) !==
+            stableJson(result.canceledNodeIds) ||
+          stableJson([...result.canceledGateRequestNodeIds].sort()) !==
+            stableJson(result.canceledGateRequestNodeIds) ||
+          stableJson([...result.reconciliationWorkItemIds].sort()) !==
+            stableJson(result.reconciliationWorkItemIds) ||
+          result.canceledGateRequestNodeIds.some((nodeId) =>
+            !result.canceledNodeIds.includes(nodeId)) ||
           result.canceledNodeIds.length > execution.nodes.length ||
           result.canceledGateRequestNodeIds.length > execution.nodes.length ||
           (terminal ? run.status !== "canceled" : !["running", "canceled"].includes(run.status)) ||
@@ -1750,8 +1767,11 @@ export class SqliteWorkflowRunCompositionStore
           expectedIds.push(rows[0]!.work_item_id);
         }
         expectedIds.sort();
-        if (result.handoff.nextWorkItemId !== expectedIds[0])
+        if (stableJson(result.reconciliationWorkItemIds) !== stableJson(expectedIds) ||
+            result.handoff.nextWorkItemId !== expectedIds[0])
           throw new Error("cancel reconcile handoff mismatch");
+      } else if (result.reconciliationWorkItemIds.length !== 0) {
+        throw new Error("cancel reconcile proof mismatch");
       }
       const currentWork = this.#database.prepare(
         "SELECT status FROM work_items WHERE work_item_id=?").get(input.lease.workItemId) as

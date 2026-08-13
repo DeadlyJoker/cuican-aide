@@ -50,6 +50,12 @@ export type WorkflowAtomicHandoff = Readonly<{
   kind: "none" | "scheduler" | "reconcile" | "node";
 }>;
 
+export type WorkflowRetainedHandoff = Readonly<{
+  currentWorkItem: "retained";
+  nextWorkItemId: null;
+  kind: "none";
+}>;
+
 export type WorkflowRunDisposition = "nonTerminal" | "terminalConverged";
 
 export type WorkflowDispatchEvidenceStatus =
@@ -57,6 +63,57 @@ export type WorkflowDispatchEvidenceStatus =
   | "possiblySent"
   | "responseObserved"
   | "terminal";
+
+/** Durable evidence committed by one Workflow cancellation transaction. */
+export type WorkflowCancellationProof = Readonly<{
+  /**
+   * Exact node IDs transitioned to `canceled` by this transaction. IDs are
+   * non-empty, unique, and ordered by ascending ECMAScript string comparison.
+   */
+  canceledNodeIds: readonly string[];
+  /**
+   * Exact canceled gate-request node IDs. This is an ordered subset of
+   * `canceledNodeIds` with the same non-empty, unique ordering invariant.
+   */
+  canceledGateRequestNodeIds: readonly string[];
+  /**
+   * Exact reconciliation Work Item IDs created or durably verified by this
+   * transaction. IDs are non-empty, unique, and use the same canonical order.
+   * A reconciliation handoff points to the first ID.
+   */
+  reconciliationWorkItemIds: readonly string[];
+}>;
+
+export type WorkflowCancellationResult =
+  | (Readonly<{
+      disposition: "retryRequired";
+      execution: WorkflowExecutionState;
+      handoff: WorkflowRetainedHandoff;
+      runDisposition: "nonTerminal";
+    }> & WorkflowCancellationProof)
+  | (Readonly<{
+      disposition: "canceled" | "cancellationPending" | "replay" |
+        "reconciliationScheduled";
+      execution: WorkflowExecutionState;
+      handoff: WorkflowAtomicHandoff;
+      runDisposition: WorkflowRunDisposition;
+    }> & WorkflowCancellationProof);
+
+export type WorkflowReconciliationResult =
+  | Readonly<{
+      disposition: "retryRequired";
+      evidenceStatus: WorkflowDispatchEvidenceStatus;
+      execution: WorkflowExecutionState;
+      handoff: WorkflowRetainedHandoff;
+      runDisposition: "nonTerminal";
+    }>
+  | Readonly<{
+      disposition: "retryScheduled" | "evidenceInsufficient" | "settled" | "replay";
+      evidenceStatus: WorkflowDispatchEvidenceStatus;
+      execution: WorkflowExecutionState;
+      handoff: WorkflowAtomicHandoff;
+      runDisposition: WorkflowRunDisposition;
+    }>;
 
 export interface WorkflowRunCompositionStore {
   scheduleWorkflowNodes(input: {
@@ -220,15 +277,7 @@ export interface WorkflowRunCompositionStore {
     claimId: string;
     claimEpoch: number;
     reconciliationOperationId: string;
-  }): Promise<
-    Readonly<{
-      disposition: "retryScheduled" | "retryRequired" | "evidenceInsufficient" | "settled" | "replay";
-      evidenceStatus: WorkflowDispatchEvidenceStatus;
-      execution: WorkflowExecutionState;
-      handoff: WorkflowAtomicHandoff;
-      runDisposition: WorkflowRunDisposition;
-    }>
-  >;
+  }): Promise<WorkflowReconciliationResult>;
 
   cancelWorkflowExecution(input: {
     tenantId: string;
@@ -237,13 +286,5 @@ export interface WorkflowRunCompositionStore {
     binding: FrozenWorkflowVersionBinding;
     operationId: string;
     reasonCode: string;
-  }): Promise<
-    Readonly<{
-      disposition: "canceled" | "cancellationPending" | "retryRequired" |
-        "replay" | "reconciliationScheduled";
-      execution: WorkflowExecutionState;
-      handoff: WorkflowAtomicHandoff;
-      runDisposition: WorkflowRunDisposition;
-    }>
-  >;
+  }): Promise<WorkflowCancellationResult>;
 }

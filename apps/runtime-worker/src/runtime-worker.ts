@@ -599,12 +599,10 @@ export class RuntimeWorker {
       const outcome = run.cancelRequested
         ? await this.#workflowDispatcher.cancel({ claim, run })
         : await this.#workflowDispatcher.dispatch({ claim, run });
-      if (outcome.kind === "recovery" &&
-          ["workflow_reconciliation_retry_required",
-            "workflow_cancellation_retry_required"].includes(outcome.code))
+      if (outcome.kind === "retry")
         await this.#store.retryWorkItem({ ...leaseInput(claim),
           retryAfterMs: this.#retryAfterMs, reasonCode: outcome.code });
-      return outcome.kind === "recovery"
+      return outcome.kind === "recovery" || outcome.kind === "retry"
         ? {
             kind: "workflowRecovery",
             runId: outcome.runId,
