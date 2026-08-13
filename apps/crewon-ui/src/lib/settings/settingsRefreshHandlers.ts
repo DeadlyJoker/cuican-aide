@@ -190,12 +190,10 @@ export function createAppSettingsRefreshHandlers(params: {
       }),
     refreshAccountPanel: () =>
       refreshAccountPanelAction({
-        ...baseParams,
         controlClient: params.controlClient,
-        connectionState: params.connectionState,
-        fallbackAccount: params.accountStatus,
+        locale: params.locale,
         platformUser: params.platformUser,
-        setAccountStatus: params.setAccountStatus,
+        setCapabilityPanel: params.setCapabilityPanel,
       }),
     openThreadSettingsPanel: () =>
       openThreadSettingsPanelAction({

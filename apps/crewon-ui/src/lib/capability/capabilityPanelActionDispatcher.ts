@@ -4,7 +4,6 @@ import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
 import {
   accountActionForActionId,
   createAccountActionHandlers,
-  type AccountActionHandlersParams,
 } from "../account/accountActions";
 import type { AccountStatus } from "../shared/statusTypes";
 import type {
@@ -95,8 +94,9 @@ import {
   type WorktreeSessionActionHandlersParams,
 } from "../worktree/worktreeSessionActions";
 
-type DispatcherClient = NonNullable<AccountActionHandlersParams["client"]> &
-  NonNullable<BackgroundTerminalActionHandlersParams["client"]> &
+type DispatcherClient = NonNullable<
+  BackgroundTerminalActionHandlersParams["client"]
+> &
   NonNullable<ContextThreadActionHandlersParams["client"]> &
   NonNullable<FilePanelActionHandlersParams["client"]> &
   NonNullable<ModelProviderActionParams["client"]> &
@@ -483,12 +483,7 @@ export function handleCapabilityPanelActionDispatch(
   const accountAction = accountActionForActionId(actionId);
   if (accountAction) {
     createAccountActionHandlers({
-      client,
-      isConnected,
-      locale,
       refreshAccountPanel,
-      setAccountStatus,
-      setCapabilityPanel,
     })[accountAction]();
     return true;
   }

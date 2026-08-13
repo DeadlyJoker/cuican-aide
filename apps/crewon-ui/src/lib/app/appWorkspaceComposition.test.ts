@@ -29,6 +29,19 @@ describe("App Workspace Control composition", () => {
     expect(source).toContain("controlExecutionCatalog={");
   });
 
+  it("keeps account settings Control-only", () => {
+    const source = readFileSync(
+      new URL("../account/accountActions.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('"getAccountSnapshot" | "getLocalSettings"');
+    expect(source).toContain("Control account unavailable");
+    expect(source).not.toMatch(
+      /AppServerClient|App Server|app-server|loginAccount|logoutAccount|getAccountRateLimits|getAccountUsage/u,
+    );
+  });
+
   it("derives the visible slot only from Control and native authority", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),

@@ -1,7 +1,7 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
-import { describe, expect, it } from "vitest";
+import type { ControlApiClient } from "@crewon/control-client";
+import { describe, expect, it, vi } from "vitest";
 
-import type { AppServerClient } from "../app-server/appServer";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import {
   createAppSettingsRefreshHandlers,
@@ -13,13 +13,11 @@ type SetCapabilityPanel = Parameters<
   typeof createAppSettingsRefreshHandlers
 >[0]["setCapabilityPanel"];
 
-function client(overrides: Partial<AppServerClient> = {}): AppServerClient {
-  return overrides as AppServerClient;
-}
-
 function baseParams(
   overrides: {
-    client?: AppServerClient | null;
+    controlClient?: Parameters<
+      typeof createAppSettingsRefreshHandlers
+    >[0]["controlClient"];
     isConnected?: boolean;
     isDemoPreview?: boolean;
     selectedThreadId?: string | null;
@@ -30,7 +28,8 @@ function baseParams(
   return {
     accountStatus: null,
     platformUser: null,
-    client: overrides.client ?? null,
+    client: null,
+    controlClient: overrides.controlClient,
     connectionHint: "Disconnected",
     connectionState: "demo" as const,
     conversationSummary: null,
@@ -118,65 +117,25 @@ describe("settings refresh handlers", () => {
     expect((panel as CapabilityPanel | null)?.error).toBeUndefined();
   });
 
-  it("passes connected account refresh through to the backend client", async () => {
-    const calls: string[] = [];
+  it("passes account refresh through to Control", async () => {
+    const getLocalSettings = vi.fn(async () => ({
+      settings: {
+        locale: "en" as const,
+        theme: "dark" as const,
+        revision: 1,
+        updatedAt: null,
+      },
+    }));
     const handlers = createAppSettingsRefreshHandlers(
       baseParams({
-        client: client({
-          async getAccount() {
-            calls.push("account");
-            return null as unknown as Awaited<
-              ReturnType<AppServerClient["getAccount"]>
-            >;
-          },
-          async getAccountRateLimits() {
-            calls.push("rateLimits");
-            return null as unknown as Awaited<
-              ReturnType<AppServerClient["getAccountRateLimits"]>
-            >;
-          },
-          async getAccountUsage() {
-            calls.push("usage");
-            return null as unknown as Awaited<
-              ReturnType<AppServerClient["getAccountUsage"]>
-            >;
-          },
-          async getAuthStatus() {
-            calls.push("auth");
-            return null as unknown as Awaited<
-              ReturnType<AppServerClient["getAuthStatus"]>
-            >;
-          },
-          async getModelProviderCapabilities() {
-            calls.push("providerCapabilities");
-            return null as unknown as Awaited<
-              ReturnType<AppServerClient["getModelProviderCapabilities"]>
-            >;
-          },
-          async listModels() {
-            calls.push("models");
-            return { data: [], nextCursor: null };
-          },
-          async listPermissionProfiles(cwd) {
-            calls.push(`permissions:${cwd}`);
-            return { data: [], nextCursor: null };
-          },
-        }),
+        controlClient: { getLocalSettings } as unknown as ControlApiClient,
         isConnected: true,
       }),
     );
 
     await handlers.refreshAccountPanel();
 
-    expect(calls).toEqual([
-      "account",
-      "auth",
-      "rateLimits",
-      "usage",
-      "models",
-      "permissions:/repo",
-      "providerCapabilities",
-    ]);
+    expect(getLocalSettings).toHaveBeenCalledOnce();
   });
 
   it("derives section and action refresh adapters from the same handler bundle", async () => {

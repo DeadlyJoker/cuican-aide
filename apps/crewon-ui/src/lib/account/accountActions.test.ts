@@ -1,388 +1,79 @@
-import type { Account } from "@crewon-protocol/v2/Account";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import type { AccountStatus } from "../shared/statusTypes";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import {
   accountActionForActionId,
   createAccountActionHandlers,
   refreshAccountPanelAction,
-  type AccountActionHandlersParams,
-  type RefreshAccountPanelActionParams,
 } from "./accountActions";
 
-async function flushAsyncAction() {
-  await Promise.resolve();
-  await Promise.resolve();
-  await Promise.resolve();
-}
-
-function account(overrides: Partial<Account> = {}): Account {
+function controlClient() {
   return {
-    email: "user@example.com",
-    planType: "pro",
-    ...overrides,
-  } as Account;
-}
-
-function accountStatus(overrides: Partial<AccountStatus> = {}): AccountStatus {
-  return {
-    account: account(),
-    requiresOpenaiAuth: false,
-    ...overrides,
-  };
-}
-
-function baseParams(
-  overrides: Partial<AccountActionHandlersParams> = {},
-): AccountActionHandlersParams {
-  let panel: CapabilityPanel | null = null;
-  let status: AccountStatus | null = null;
-  return {
-    client: {
-      async getAccount() {
-        return accountStatus();
-      },
-      async loginAccount() {
-        return { type: "chatgptAuthTokens" };
-      },
-      async logoutAccount() {},
-    },
-    isConnected: true,
-    locale: "en",
-    refreshAccountPanel: () => {},
-    setAccountStatus: (account) => {
-      status = account;
-    },
-    setCapabilityPanel: (nextPanel) => {
-      panel = nextPanel;
-    },
-    ...overrides,
-  };
-}
-
-type RefreshClient = NonNullable<RefreshAccountPanelActionParams["client"]>;
-
-function refreshClient(overrides: Partial<RefreshClient> = {}): RefreshClient {
-  return {
-    async getAccount() {
-      return accountStatus();
-    },
-    async getAccountRateLimits() {
-      return { rateLimits: null } as unknown as Awaited<
-        ReturnType<RefreshClient["getAccountRateLimits"]>
-      >;
-    },
-    async getAccountUsage() {
+    async getAccountSnapshot() {
       return {
-        dailyUsageBuckets: [],
-        summary: {
-          currentStreakDays: 0,
-          lifetimeTokens: 1200,
-          peakDailyTokens: 300,
+        account: {
+          identity: {
+            principalId: "principal-1",
+            actorId: "actor-1",
+            tenantId: "tenant-1",
+            spaceId: "space-1",
+          },
+          authentication: {
+            status: "authenticated" as const,
+            authority: "control" as const,
+          },
+          usage: { status: "unavailable" as const, reason: "notOwned" as const },
+          rateLimits: {
+            status: "unavailable" as const,
+            reason: "notOwned" as const,
+          },
         },
-      } as unknown as Awaited<ReturnType<RefreshClient["getAccountUsage"]>>;
-    },
-    async getAuthStatus() {
-      return {
-        authMethod: "chatgpt",
-        requiresOpenaiAuth: false,
-      } as unknown as Awaited<ReturnType<RefreshClient["getAuthStatus"]>>;
-    },
-    async getModelProviderCapabilities() {
-      return {
-        imageGeneration: true,
-        namespaceTools: false,
-        webSearch: true,
       };
     },
-    async listModels() {
+    async getLocalSettings() {
       return {
-        data: [
-          {
-            displayName: "GPT Test",
-            id: "gpt-test",
-            isDefault: true,
-            model: "gpt-test",
-          },
-        ],
-        nextCursor: null,
-      } as Awaited<ReturnType<RefreshClient["listModels"]>>;
+        settings: {
+          locale: "en" as const,
+          theme: "dark" as const,
+          revision: 1,
+          updatedAt: null,
+        },
+      };
     },
-    async listPermissionProfiles() {
-      return {
-        data: [{ description: "Default profile", id: "default" }],
-        nextCursor: null,
-      } as Awaited<ReturnType<RefreshClient["listPermissionProfiles"]>>;
-    },
-    ...overrides,
-  };
-}
-
-function baseRefreshParams(
-  overrides: Partial<RefreshAccountPanelActionParams> = {},
-): RefreshAccountPanelActionParams {
-  return {
-    client: refreshClient(),
-    connectionHint: "Offline",
-    connectionState: "connected",
-    fallbackAccount: null,
-    isConnected: true,
-    locale: "en",
-    platformUser: null,
-    resolveBackendCwd: async () => "/repo",
-    setAccountStatus: () => {},
-    setCapabilityPanel: () => {},
-    ...overrides,
   };
 }
 
 describe("account actions", () => {
-  it("maps account action ids", () => {
+  it("exposes only the Control-backed refresh action", () => {
     expect(accountActionForActionId("refresh-account")).toBe("refresh");
-    expect(accountActionForActionId("login-chatgpt")).toBe("loginChatGpt");
-    expect(accountActionForActionId("login-device-code")).toBe(
-      "loginDeviceCode",
-    );
-    expect(accountActionForActionId("logout-account")).toBe("logout");
-    expect(accountActionForActionId("search-files")).toBeNull();
+    expect(accountActionForActionId("login-chatgpt")).toBeNull();
+    expect(accountActionForActionId("login-device-code")).toBeNull();
+    expect(accountActionForActionId("logout-account")).toBeNull();
   });
 
   it("delegates refresh to the supplied refresh handler", () => {
-    let refreshed = false;
-    const handlers = createAccountActionHandlers(
-      baseParams({
-        refreshAccountPanel: () => {
-          refreshed = true;
-        },
-      }),
-    );
-
-    handlers.refresh();
-
-    expect(refreshed).toBe(true);
+    const refreshAccountPanel = vi.fn();
+    createAccountActionHandlers({ refreshAccountPanel }).refresh();
+    expect(refreshAccountPanel).toHaveBeenCalledOnce();
   });
 
-  it("starts ChatGPT browser login", async () => {
+  it("renders authenticated Control identity and unavailable telemetry", async () => {
     let panel: CapabilityPanel | null = null;
-    const loginParams: unknown[] = [];
-    const handlers = createAccountActionHandlers(
-      baseParams({
-        client: {
-          async getAccount() {
-            return accountStatus();
-          },
-          async loginAccount(params) {
-            loginParams.push(params);
-            return {
-              type: "chatgpt",
-              authUrl: "https://login.example",
-              loginId: "login-1",
-            };
-          },
-          async logoutAccount() {},
-        },
-        setCapabilityPanel: (nextPanel) => {
-          panel = nextPanel;
-        },
-      }),
-    );
-
-    handlers.loginChatGpt();
-    await flushAsyncAction();
-
-    expect(loginParams).toEqual([{ type: "chatgpt" }]);
-    expect(panel).toMatchObject({
-      body: "Open this URL to finish login\nhttps://login.example\nloginId: login-1",
-      subtitle: "Model login",
+    await refreshAccountPanelAction({
+      controlClient: controlClient(),
+      locale: "en",
+      platformUser: {
+        id: 1,
+        username: "crew-user",
+        email: "user@example.com",
+        display_name: "Crew User",
+        role: "member",
+      },
+      setCapabilityPanel: (nextPanel) => {
+        panel = nextPanel;
+      },
     });
-  });
 
-  it("starts device code login", async () => {
-    let panel: CapabilityPanel | null = null;
-    const loginParams: unknown[] = [];
-    const handlers = createAccountActionHandlers(
-      baseParams({
-        client: {
-          async getAccount() {
-            return accountStatus();
-          },
-          async loginAccount(params) {
-            loginParams.push(params);
-            return {
-              type: "chatgptDeviceCode",
-              verificationUrl: "https://device.example",
-              userCode: "ABCD",
-              loginId: "login-2",
-            };
-          },
-          async logoutAccount() {},
-        },
-        setCapabilityPanel: (nextPanel) => {
-          panel = nextPanel;
-        },
-      }),
-    );
-
-    handlers.loginDeviceCode();
-    await flushAsyncAction();
-
-    expect(loginParams).toEqual([{ type: "chatgptDeviceCode" }]);
-    expect(panel).toMatchObject({
-      body: "Open the URL and enter the code\nhttps://device.example\nABCD\nloginId: login-2",
-      subtitle: "Device code login",
-    });
-  });
-
-  it("updates account status after completed login", async () => {
-    let panel: CapabilityPanel | null = null;
-    const statuses: AccountStatus[] = [];
-    const handlers = createAccountActionHandlers(
-      baseParams({
-        client: {
-          async getAccount() {
-            return accountStatus({
-              account: account({ email: "new@example.com" }),
-            });
-          },
-          async loginAccount() {
-            return { type: "chatgptAuthTokens" };
-          },
-          async logoutAccount() {},
-        },
-        setAccountStatus: (account) => {
-          if (account) {
-            statuses.push(account);
-          }
-        },
-        setCapabilityPanel: (nextPanel) => {
-          panel = nextPanel;
-        },
-      }),
-    );
-
-    handlers.loginChatGpt();
-    await flushAsyncAction();
-
-    expect(statuses[0]).toMatchObject({
-      account: { email: "new@example.com" },
-    });
-    expect(panel).toMatchObject({ subtitle: "Logged in" });
-  });
-
-  it("logs out and refreshes account status", async () => {
-    let panel: CapabilityPanel | null = null;
-    let status: AccountStatus | null = null;
-    let loggedOut = false;
-    const handlers = createAccountActionHandlers(
-      baseParams({
-        client: {
-          async getAccount() {
-            return accountStatus({ account: null });
-          },
-          async loginAccount() {
-            return { type: "chatgptAuthTokens" };
-          },
-          async logoutAccount() {
-            loggedOut = true;
-          },
-        },
-        setAccountStatus: (account) => {
-          status = account;
-        },
-        setCapabilityPanel: (nextPanel) => {
-          panel = nextPanel;
-        },
-      }),
-    );
-
-    handlers.logout();
-    await flushAsyncAction();
-
-    expect(loggedOut).toBe(true);
-    expect(status).toEqual(accountStatus({ account: null }));
-    expect(panel).toMatchObject({ subtitle: "Logged out" });
-  });
-
-  it("shows auth errors", async () => {
-    let panel: CapabilityPanel | null = null;
-    const handlers = createAccountActionHandlers(
-      baseParams({
-        client: {
-          async getAccount() {
-            return accountStatus();
-          },
-          async loginAccount() {
-            throw new Error("denied");
-          },
-          async logoutAccount() {},
-        },
-        setCapabilityPanel: (nextPanel) => {
-          panel = nextPanel;
-        },
-      }),
-    );
-
-    handlers.loginChatGpt();
-    await flushAsyncAction();
-
-    expect(panel).toMatchObject({
-      error: "denied",
-      subtitle: "Auth action",
-    });
-  });
-
-  it("renders authenticated Control identity and explicit unavailable telemetry", async () => {
-    let panel: CapabilityPanel | null = null;
-    await refreshAccountPanelAction(
-      baseRefreshParams({
-        controlClient: {
-          async getAccountSnapshot() {
-            return {
-              account: {
-                identity: {
-                  principalId: "principal-1",
-                  actorId: "actor-1",
-                  tenantId: "tenant-1",
-                  spaceId: "space-1",
-                },
-                authentication: {
-                  status: "authenticated",
-                  authority: "control",
-                },
-                usage: { status: "unavailable", reason: "notOwned" },
-                rateLimits: { status: "unavailable", reason: "notOwned" },
-              },
-            };
-          },
-          async getLocalSettings() {
-            return {
-              settings: {
-                locale: "en",
-                theme: "dark",
-                revision: 1,
-                updatedAt: null,
-              },
-            };
-          },
-        },
-        setCapabilityPanel: (nextPanel) => {
-          panel = nextPanel;
-        },
-      }),
-    );
-
-    expect(panel).toMatchObject({
-      title: "Account",
-      actions: [{ id: "refresh-account", label: "Refresh" }],
-    });
-    const body = (panel as CapabilityPanel | null)?.body ?? "";
-    expect(body).toContain("Control identity: principal-1");
-    expect(body).toContain("Authentication: authenticated (control)");
-    expect(body).toContain("Account usage: unavailable (not owned by Control)");
-    expect(body).toContain(
-      "Account rate limits: unavailable (not owned by Control)",
-    );
     expect(panel).toMatchInlineSnapshot(`
       {
         "actions": [
@@ -395,124 +86,55 @@ describe("account actions", () => {
       Actor: actor-1
       Tenant / space: tenant-1 / space-1
       Authentication: authenticated (control)
+      Enterprise profile: Crew User
+      Email: user@example.com
       Language: en
       Theme: dark
       Account usage: unavailable (not owned by Control)
       Account rate limits: unavailable (not owned by Control)
-      This page no longer connects to App Server; model credentials are managed under Model access.",
+      Model credentials are managed under Model access.",
         "subtitle": "CrewON identity and local preferences",
         "title": "Account",
       }
     `);
   });
 
-  it("shows a disconnected refresh panel without backend reads", async () => {
+  it("fails closed when the Control account is unavailable", async () => {
     let panel: CapabilityPanel | null = null;
-    let read = false;
-
-    await refreshAccountPanelAction(
-      baseRefreshParams({
-        client: refreshClient({
-          async getAccount() {
-            read = true;
-            return accountStatus();
-          },
-        }),
-        connectionState: "connecting",
-        isConnected: false,
-        setCapabilityPanel: (nextPanel) => {
-          panel = nextPanel;
-        },
-      }),
-    );
-
-    expect(read).toBe(false);
+    await refreshAccountPanelAction({
+      controlClient: null,
+      locale: "en",
+      platformUser: null,
+      setCapabilityPanel: (nextPanel) => {
+        panel = nextPanel;
+      },
+    });
     expect(panel).toEqual({
       title: "Account",
-      subtitle: "Enterprise identity, model account, and usage",
-      body: "Connecting to local app-server...",
-    });
-  });
-
-  it("loads account overview data and updates account status", async () => {
-    let panel: CapabilityPanel | null = null;
-    let status: AccountStatus | null = null;
-    const permissionCwds: Array<string | undefined> = [];
-
-    await refreshAccountPanelAction(
-      baseRefreshParams({
-        client: refreshClient({
-          async listPermissionProfiles(cwd) {
-            permissionCwds.push(cwd);
-            return {
-              data: [{ description: "Default profile", id: "default" }],
-              nextCursor: null,
-            } as Awaited<ReturnType<RefreshClient["listPermissionProfiles"]>>;
-          },
-        }),
-        setAccountStatus: (account) => {
-          status = account;
-        },
-        setCapabilityPanel: (nextPanel) => {
-          panel = nextPanel;
-        },
-      }),
-    );
-
-    expect(permissionCwds).toEqual(["/repo"]);
-    expect(status).toEqual(accountStatus());
-    expect(panel).toMatchObject({
-      title: "Account",
-      subtitle: "Enterprise identity, model account, and usage",
-      body: expect.stringContaining("GPT Test"),
-    });
-    const panelBody = (panel as CapabilityPanel | null)?.body ?? "";
-    expect(panelBody).toContain("Permission profiles: default");
-    expect(panelBody).toContain("Lifetime tokens: 1200");
-  });
-
-  it("keeps partial account overview data when one refresh read fails", async () => {
-    let panel: CapabilityPanel | null = null;
-
-    await refreshAccountPanelAction(
-      baseRefreshParams({
-        client: refreshClient({
-          async listModels() {
-            throw new Error("models unavailable");
-          },
-        }),
-        setCapabilityPanel: (nextPanel) => {
-          panel = nextPanel;
-        },
-      }),
-    );
-
-    expect(panel).toMatchObject({
-      title: "Account",
-      body: expect.stringContaining("Some reads failed\nmodels unavailable"),
-    });
-    const panelBody = (panel as CapabilityPanel | null)?.body ?? "";
-    expect(panelBody).toContain("Permission profiles: default");
-  });
-
-  it("shows account read errors when preparing refresh fails", async () => {
-    let panel: CapabilityPanel | null = null;
-
-    await refreshAccountPanelAction(
-      baseRefreshParams({
-        resolveBackendCwd: async () => {
-          throw new Error("cwd failed");
-        },
-        setCapabilityPanel: (nextPanel) => {
-          panel = nextPanel;
-        },
-      }),
-    );
-
-    expect(panel).toMatchObject({
-      error: "cwd failed",
       subtitle: "Auth status",
+      error: "Control account unavailable",
+    });
+  });
+
+  it("surfaces Control read failures without a legacy retry", async () => {
+    let panel: CapabilityPanel | null = null;
+    await refreshAccountPanelAction({
+      controlClient: {
+        ...controlClient(),
+        async getAccountSnapshot() {
+          throw new Error("identity unavailable");
+        },
+      },
+      locale: "en",
+      platformUser: null,
+      setCapabilityPanel: (nextPanel) => {
+        panel = nextPanel;
+      },
+    });
+    expect(panel).toEqual({
       title: "Account",
+      subtitle: "Auth status",
+      error: "identity unavailable",
     });
   });
 });
