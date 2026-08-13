@@ -12,6 +12,8 @@ import type {
 } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";
 import { listControlKnowledge } from "../knowledge/controlKnowledgeLibrary";
+import { listControlAutomationLibraryItems } from "../automation/controlAutomationLibrary";
+import { controlAutomationCollectionContent } from "./libraryCollectionPanels";
 import { libraryTitle } from "./libraryPanelFormatters";
 
 type SetLibraryPanel = (
@@ -24,6 +26,9 @@ type SetLibraryPanel = (
 const CONTROL_CAPABILITY_PAGE_SIZE = 100;
 const CONTROL_CAPABILITY_MAX_PAGES = 5;
 const CONTROL_CAPABILITY_MAX_ITEMS = 500;
+const CONTROL_OFFICE_PAGE_SIZE = 100;
+const CONTROL_OFFICE_MAX_PAGES = 5;
+const CONTROL_OFFICE_MAX_ITEMS = 500;
 
 export async function openControlLibraryAction(params: {
   client: ControlApiClient;
@@ -31,8 +36,13 @@ export async function openControlLibraryAction(params: {
   locale: Locale;
   selectedThreadId: string | null;
   setLibraryPanel: SetLibraryPanel;
+  isCurrent?: () => boolean;
 }): Promise<void> {
-  const { kind, locale, setLibraryPanel } = params;
+  const { kind, locale } = params;
+  const setLibraryPanel: SetLibraryPanel = (next) => {
+    if (params.isCurrent?.() ?? true) params.setLibraryPanel(next);
+  };
+  const guardedParams = { ...params, setLibraryPanel };
   setLibraryPanel({
     kind,
     title: libraryTitle(kind, locale),
@@ -42,17 +52,22 @@ export async function openControlLibraryAction(params: {
   });
 
   if (kind === "tools") {
-    await openControlCapabilityCatalog(params);
+    await openControlCapabilityCatalog(guardedParams);
     return;
   }
 
   if (kind === "knowledge") {
-    await openControlKnowledge(params);
+    await openControlKnowledge(guardedParams);
     return;
   }
 
   if (kind === "office") {
-    await openControlOffices(params);
+    await openControlOffices(guardedParams);
+    return;
+  }
+
+  if (kind === "automation") {
+    await openControlAutomations(guardedParams);
     return;
   }
 
@@ -74,6 +89,31 @@ export async function openControlLibraryAction(params: {
       catalogMode: "controlKnowledge",
       error: error instanceof Error ? error.message : String(error),
     });
+  }
+}
+
+async function openControlAutomations(params: {
+  client: ControlApiClient;
+  locale: Locale;
+  setLibraryPanel: SetLibraryPanel;
+}): Promise<void> {
+  try {
+    const content = controlAutomationCollectionContent({
+      items: await listControlAutomationLibraryItems(
+        params.client,
+        params.locale,
+      ),
+      locale: params.locale,
+    });
+    params.setLibraryPanel({
+      ...content,
+      kind: "automation",
+      title: libraryTitle("automation", params.locale),
+    });
+  } catch (error) {
+    params.setLibraryPanel(
+      controlReadFailure("automation", error, params.locale),
+    );
   }
 }
 
@@ -137,20 +177,46 @@ async function openControlOffices(params: {
   setLibraryPanel: SetLibraryPanel;
 }): Promise<void> {
   try {
-    const response = await params.client.listOffices({ limit: 100 });
+    const offices: ControlOffice[] = [];
+    const seenCursors = new Set<string>();
+    let before: string | null = null;
+    let truncated = false;
+    for (let page = 0; page < CONTROL_OFFICE_MAX_PAGES; page += 1) {
+      const response = await params.client.listOffices(
+        before === null
+          ? { limit: CONTROL_OFFICE_PAGE_SIZE }
+          : { before, limit: CONTROL_OFFICE_PAGE_SIZE },
+      );
+      const remaining = CONTROL_OFFICE_MAX_ITEMS - offices.length;
+      offices.push(...response.data.slice(0, remaining));
+      truncated = response.data.length > remaining;
+      if (response.nextCursor === null) break;
+      if (seenCursors.has(response.nextCursor)) {
+        throw new Error("Control Office cursor repeated during pagination");
+      }
+      seenCursors.add(response.nextCursor);
+      before = response.nextCursor;
+      if (
+        offices.length === CONTROL_OFFICE_MAX_ITEMS ||
+        page === CONTROL_OFFICE_MAX_PAGES - 1
+      ) {
+        truncated = true;
+        break;
+      }
+    }
     params.setLibraryPanel({
       kind: "office",
       title: libraryTitle("office", params.locale),
       subtitle:
         params.locale === "zh"
-          ? `${response.data.length} 个办公室`
-          : `${response.data.length} offices`,
+          ? `${offices.length} 个办公室${truncated ? "（已截断）" : ""}`
+          : `${offices.length} offices${truncated ? " (truncated)" : ""}`,
       body:
         params.locale === "zh"
           ? "办公室定义来自 Control authority。创建办公室需先选择已发布 AgentVersion；当前 UI 未提供创建。旧版消息投递、自动调度与内存交接未启用。"
           : "Office definitions come from Control authority. Creating one requires a published AgentVersion selection, which this UI does not yet provide. Legacy message delivery, auto-dispatch, and memory handoff are disabled.",
       actions: [],
-      items: response.data.map((office, index) =>
+      items: offices.map((office, index) =>
         controlOfficeItem(office, index, params.locale),
       ),
     });

@@ -392,4 +392,122 @@ describe("openControlLibraryAction", () => {
       "requires a published AgentVersion selection",
     );
   });
+
+  it("loads bounded Control Office pages without silently dropping later definitions", async () => {
+    let panel: LibraryPanel | null = null;
+    const office = (officeVersionId: string) => ({
+      schemaVersion: "crewon.office-definition.v0" as const,
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      officeId: `office-${officeVersionId}`,
+      officeVersionId,
+      revision: 1,
+      title: officeVersionId,
+      members: [],
+      executionTargets: [
+        { targetId: "default", agentVersionId: "agent-v1" },
+      ],
+      createdByActorId: "actor-1",
+      createdAt: "2026-08-13T00:00:00.000Z",
+    });
+    const listOffices = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: [office("office-v1")],
+        nextCursor: "page-2",
+      })
+      .mockResolvedValueOnce({
+        data: [office("office-v2")],
+        nextCursor: null,
+      });
+
+    await openControlLibraryAction({
+      client: { listOffices } as unknown as ControlApiClient,
+      kind: "office",
+      locale: "en",
+      selectedThreadId: null,
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+    });
+
+    expect(listOffices.mock.calls).toEqual([
+      [{ limit: 100 }],
+      [{ before: "page-2", limit: 100 }],
+    ]);
+    expect((panel as LibraryPanel | null)?.items.map((item) => item.title)).toEqual([
+      "office-v1",
+      "office-v2",
+    ]);
+  });
+
+  it("does not let an obsolete Library request replace the current panel", async () => {
+    const panels: LibraryPanel[] = [];
+
+    await openControlLibraryAction({
+      client: {
+        getActiveAgentVersionCatalog: vi.fn(async () => ({
+          releaseId: "release-1",
+          defaultAgentVersionId: "agent-v1",
+          data: [],
+        })),
+      } as unknown as ControlApiClient,
+      isCurrent: () => false,
+      kind: "agents",
+      locale: "en",
+      selectedThreadId: null,
+      setLibraryPanel: (next) => {
+        if (typeof next !== "function" && next !== null) panels.push(next);
+      },
+    });
+
+    expect(panels).toEqual([]);
+  });
+
+  it("loads Control automations with runnable detail actions", async () => {
+    let panel: LibraryPanel | null = null;
+    const listAutomations = vi.fn(async () => ({
+      data: [
+        {
+          schemaVersion: "crewon.automation.v0" as const,
+          automationId: "automation-1",
+          revision: 1 as const,
+          threadId: "thread-1",
+          agentVersionId: null,
+          title: "Daily summary",
+          prompt: "Summarize the current task",
+          createdAt: "2026-08-13T00:00:00.000Z",
+          updatedAt: "2026-08-13T00:00:00.000Z",
+        },
+      ],
+      nextCursor: null,
+    }));
+
+    await openControlLibraryAction({
+      client: { listAutomations } as unknown as ControlApiClient,
+      kind: "automation",
+      locale: "en",
+      selectedThreadId: null,
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+    });
+
+    expect(listAutomations).toHaveBeenCalledWith({ limit: 100 });
+    expect(panel).toMatchObject({
+      kind: "automation",
+      actions: [{ id: "prepare-control-automation" }],
+      items: [
+        { section: true },
+        {
+          title: "Daily summary",
+          action: {
+            type: "automation-detail",
+            controlAutomationId: "automation-1",
+            controlAutomationRevision: 1,
+          },
+        },
+      ],
+    });
+  });
 });
