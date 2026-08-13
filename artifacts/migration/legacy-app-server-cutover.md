@@ -28,7 +28,8 @@ actually requires it.
 | Thread transcript rollback                                   | append-only Thread event, Model History marker and invalidation read model | settings action uses `ControlThreadRuntime.rollbackThread`; Thread SSE refreshes standard view   | receipt-first CAS command, active-Run/Work fences, audit-preserving projection and SQLite/PostgreSQL conformance                     |
 | desktop Provider secret                                      | operating-system credential store through the open-source `keyring` crate  | typed Tauri credential catalog; secret is injected only into the supervised Worker environment   | catalog/keyring compensation, real macOS Keychain round trip, active-Run admission fence                                             |
 | Provider settings and probe                                  | Control API + Provider coordinator/Worker                                  | Settings reads the redacted Control snapshot; probe uses the typed Control client                | non-secret contract, runtime availability, idempotent bounded probe and production egress fence                                      |
-| active Agent catalog                                         | immutable AgentVersion release authority                                   | Agent Library reads the active Control catalog                                                   | release/digest admission, active default selection and bounded public projection                                                     |
+| active Agent catalog                                         | immutable AgentVersion release authority                                   | Agent Library and command target/model selector read the active Control catalog                   | release/digest admission, active default selection, exact AgentVersion target binding and bounded public projection                  |
+| released Tool capability catalog                             | immutable AgentVersion release projection                                  | typed Control client exposes bounded read-only capability metadata; no mutable legacy Skill owner | release-bound cursor, tenant/space scope, stable ordering and no schema, instructions, credentials or secret projection               |
 | manual-only Automation                                       | Control API + Automation Application/Store                                 | Automation Library lists immutable definitions and `run-now` uses Automation/Thread revision CAS | receipt-first create/run, idempotency, canonical Run binding and explicit absence of scheduling/toggle compatibility                 |
 | Tool output resources                                        | encrypted Artifact authority                                               | Tool Library validates current-Thread Run `outputRef` values through Control before display      | digest, source Run/Step, scan/sensitivity projection and bounded 50-Run/20-reference lookup                                          |
 | selected Workspace list/read                                 | local TypeScript Runtime Worker                                            | authenticated Control/Worker path; renderer uses typed Workspace client                          | root/symlink/UTF-8 bounds, durable receipts, restart and packaged smoke                                                              |
@@ -57,6 +58,13 @@ application completed the real packaged Workflow crash/restart smoke with one
 Agent sample before the kill, one Verification sample after restart, one
 canonical terminal event, and complete guardian cleanup. The updater artifact
 was generated before the expected missing-signing-key failure.
+
+The packaged home composer now derives execution targets and model choices only
+from the active Control AgentVersion release. CrewON means the release default
+single Agent; each additional target carries its exact `agentVersionId` and
+immutable bound model. Empty or unavailable catalogs disable submission instead
+of falling back to a fabricated model, Team, Agent Platform target, or legacy
+App Server client.
 
 ## Not migrated and deliberately unavailable under Control
 
