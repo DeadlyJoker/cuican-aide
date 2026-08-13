@@ -4,6 +4,18 @@ import type { ControlApiClient } from "@crewon/control-client";
 import type { LibraryPanel } from "../domain/crewonDomain";
 import { openControlLibraryAction } from "./controlLibraryActions";
 
+function capability(name: string) {
+  return {
+    agentVersionId: "agent-v1",
+    agentVersionDigest: "sha256:agent",
+    kind: "function" as const,
+    name,
+    description: `Capability ${name}`,
+    execution: "parallel" as const,
+    inputFormat: "jsonSchema" as const,
+  };
+}
+
 describe("openControlLibraryAction", () => {
   it("loads active Agent versions from Control API", async () => {
     let panel: LibraryPanel | null = null;
@@ -120,6 +132,111 @@ describe("openControlLibraryAction", () => {
       ],
     });
     expect(JSON.stringify(panel)).not.toContain("sha256:agent");
+  });
+
+  it("fails closed when Control repeats a capability cursor", async () => {
+    let panel: LibraryPanel | null = null;
+    const listActiveCapabilities = vi
+      .fn()
+      .mockResolvedValueOnce({
+        releaseId: "release-1",
+        activatedAt: "2026-08-13T00:00:00.000Z",
+        data: [capability("first")],
+        nextCursor: "repeat",
+      })
+      .mockResolvedValueOnce({
+        releaseId: "release-1",
+        activatedAt: "2026-08-13T00:00:00.000Z",
+        data: [capability("second")],
+        nextCursor: "repeat",
+      });
+
+    await openControlLibraryAction({
+      client: { listActiveCapabilities } as unknown as ControlApiClient,
+      kind: "tools",
+      locale: "en",
+      selectedThreadId: null,
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+    });
+
+    expect(listActiveCapabilities).toHaveBeenCalledTimes(2);
+    expect(panel).toMatchObject({
+      kind: "tools",
+      items: [],
+      error: "Control capability cursor repeated during pagination",
+    });
+  });
+
+  it("fails closed when the capability release changes between pages", async () => {
+    let panel: LibraryPanel | null = null;
+    const listActiveCapabilities = vi
+      .fn()
+      .mockResolvedValueOnce({
+        releaseId: "release-1",
+        activatedAt: "2026-08-13T00:00:00.000Z",
+        data: [capability("first")],
+        nextCursor: "page-2",
+      })
+      .mockResolvedValueOnce({
+        releaseId: "release-2",
+        activatedAt: "2026-08-13T00:01:00.000Z",
+        data: [capability("second")],
+        nextCursor: null,
+      });
+
+    await openControlLibraryAction({
+      client: { listActiveCapabilities } as unknown as ControlApiClient,
+      kind: "tools",
+      locale: "en",
+      selectedThreadId: null,
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+    });
+
+    expect(panel).toMatchObject({
+      kind: "tools",
+      items: [],
+      error: "Control capability release changed during pagination",
+    });
+  });
+
+  it("stops after five pages and labels the bounded catalog as truncated", async () => {
+    let panel: LibraryPanel | null = null;
+    const listActiveCapabilities = vi.fn(
+      async ({ cursor }: { cursor?: string | null }) => {
+        const pageNumber = cursor == null ? 1 : Number(cursor.slice(5));
+        return {
+          releaseId: "release-1",
+          activatedAt: "2026-08-13T00:00:00.000Z",
+          data: Array.from({ length: 100 }, (_, index) =>
+            capability(`page-${pageNumber}-item-${index}`),
+          ),
+          nextCursor: `page-${pageNumber + 1}`,
+        };
+      },
+    );
+
+    await openControlLibraryAction({
+      client: { listActiveCapabilities } as unknown as ControlApiClient,
+      kind: "tools",
+      locale: "en",
+      selectedThreadId: null,
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+    });
+
+    expect(listActiveCapabilities).toHaveBeenCalledTimes(5);
+    expect(panel).toMatchObject({
+      kind: "tools",
+      subtitle:
+        "500 released capabilities (truncated) · Control release release-1",
+      body: expect.stringContaining("first 500 entries"),
+    });
+    expect((panel as LibraryPanel | null)?.items).toHaveLength(500);
   });
 
   it("maps Control Knowledge memory and source records into the existing Knowledge view", async () => {

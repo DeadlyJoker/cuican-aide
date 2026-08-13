@@ -1,6 +1,7 @@
 import type { ControlApiClient } from "@crewon/control-client";
 import type {
   ActiveAgentVersionCatalogResponse,
+  CapabilitySummaryView,
   KnowledgeView,
 } from "@crewon/contracts";
 
@@ -18,6 +19,10 @@ type SetLibraryPanel = (
     | null
     | ((current: LibraryPanel | null) => LibraryPanel | null),
 ) => void;
+
+const CONTROL_CAPABILITY_PAGE_SIZE = 100;
+const CONTROL_CAPABILITY_MAX_PAGES = 5;
+const CONTROL_CAPABILITY_MAX_ITEMS = 500;
 
 export async function openControlLibraryAction(params: {
   client: ControlApiClient;
@@ -196,13 +201,43 @@ async function openControlCapabilityCatalog(params: {
 }): Promise<void> {
   const { client, locale, setLibraryPanel } = params;
   try {
-    const firstPage = await client.listActiveCapabilities({ limit: 100 });
-    const capabilities = [...firstPage.data];
-    let cursor = firstPage.nextCursor;
-    while (cursor !== null) {
-      const page = await client.listActiveCapabilities({ cursor, limit: 100 });
-      capabilities.push(...page.data);
+    const capabilities: CapabilitySummaryView[] = [];
+    const seenCursors = new Set<string>();
+    let cursor: string | null = null;
+    let releaseId: string | null = null;
+    let truncated = false;
+    for (
+      let pageIndex = 0;
+      pageIndex < CONTROL_CAPABILITY_MAX_PAGES;
+      pageIndex += 1
+    ) {
+      const page = await client.listActiveCapabilities(
+        cursor === null
+          ? { limit: CONTROL_CAPABILITY_PAGE_SIZE }
+          : { cursor, limit: CONTROL_CAPABILITY_PAGE_SIZE },
+      );
+      if (releaseId !== null && page.releaseId !== releaseId) {
+        throw new Error("Control capability release changed during pagination");
+      }
+      releaseId = page.releaseId;
+      const remaining = CONTROL_CAPABILITY_MAX_ITEMS - capabilities.length;
+      capabilities.push(...page.data.slice(0, remaining));
+      truncated = page.data.length > remaining;
+      if (page.nextCursor === null) {
+        break;
+      }
+      if (seenCursors.has(page.nextCursor)) {
+        throw new Error("Control capability cursor repeated during pagination");
+      }
+      seenCursors.add(page.nextCursor);
       cursor = page.nextCursor;
+      if (
+        capabilities.length === CONTROL_CAPABILITY_MAX_ITEMS ||
+        pageIndex === CONTROL_CAPABILITY_MAX_PAGES - 1
+      ) {
+        truncated = true;
+        break;
+      }
     }
     setLibraryPanel({
       kind: "tools",
@@ -210,12 +245,12 @@ async function openControlCapabilityCatalog(params: {
       catalogMode: "controlCapabilities",
       subtitle:
         locale === "zh"
-          ? `${capabilities.length} 个已发布能力 · Control release ${firstPage.releaseId}`
-          : `${capabilities.length} released capabilities · Control release ${firstPage.releaseId}`,
+          ? `${capabilities.length} 个已发布能力${truncated ? "（已截断）" : ""} · Control release ${releaseId}`
+          : `${capabilities.length} released capabilities${truncated ? " (truncated)" : ""} · Control release ${releaseId}`,
       body:
         locale === "zh"
-          ? "只读目录来自当前 active AgentVersion release 的 Tool metadata；不包含输入 schema、instructions、凭据或密钥。"
-          : "This read-only catalog contains Tool metadata from the active AgentVersion release; input schemas, instructions, credentials, and secrets are not exposed.",
+          ? `只读目录来自当前 active AgentVersion release 的 Tool metadata；不包含输入 schema、instructions、凭据或密钥。${truncated ? "为限制 renderer 资源占用，仅展示前 500 条。" : ""}`
+          : `This read-only catalog contains Tool metadata from the active AgentVersion release; input schemas, instructions, credentials, and secrets are not exposed.${truncated ? " Renderer resource limits restrict this view to the first 500 entries." : ""}`,
       actions: [
         {
           id: "create-skill",
