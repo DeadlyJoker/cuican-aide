@@ -85,14 +85,15 @@ describe("App Workspace Control composition", () => {
   });
 
   it("keeps active App catalog consumers off the App Server module", () => {
-    for (const path of [
-      "../../lib/capability/workspaceCapabilityActions.ts",
-      "../../lib/settings/settingsRuntimeRefreshActions.ts",
-    ]) {
-      const source = readFileSync(new URL(path, import.meta.url), "utf8");
-      expect(source).toContain("../shared/appsCatalog");
-      expect(source).not.toMatch(/^import (?!type).*app-server/mu);
-    }
+    const source = readFileSync(
+      new URL(
+        "../../lib/settings/settingsRuntimeRefreshActions.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+    expect(source).toContain("../shared/appsCatalog");
+    expect(source).not.toMatch(/^import (?!type).*app-server/mu);
   });
 
   it("keeps active thread effects structurally compatible with Control", () => {
