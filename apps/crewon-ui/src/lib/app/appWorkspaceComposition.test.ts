@@ -67,6 +67,17 @@ describe("App Workspace Control composition", () => {
     }
   });
 
+  it("does not compose null-client Workspace and Terminal handlers", () => {
+    const source = readFileSync(
+      new URL("../../App.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("const unavailableWorkspaceCapability");
+    expect(source).not.toContain("createAppWorkspaceCapabilityHandlers");
+    expect(source).not.toContain("workspaceCapabilityHandlersForAuthority");
+  });
+
   it("sources the packaged command target and model catalogs only from Control", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),

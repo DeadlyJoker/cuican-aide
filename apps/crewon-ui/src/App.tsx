@@ -25,7 +25,6 @@ import {
   createAppSettingsCoordinator,
   createAppShellActionHandlers,
   createAppThreadRuntimeHandlers,
-  createAppWorkspaceCapabilityHandlers,
   shouldAutoCloseSidebar,
   shouldAutoCloseInspector,
   useAppChromeEffects,
@@ -59,7 +58,6 @@ import {
   withPlatformResourceMention,
   useAppDraftWorkspaceState,
   useProviderResourceComposer,
-  workspaceCapabilityHandlersForAuthority,
   workspaceCwdForAuthority,
   showDemoThreadsAction,
 } from "./lib/app";
@@ -189,9 +187,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
    */
   const pendingRequests = useAppPendingServerRequests();
   const {
-    appendTerminalOutputLine,
     setTerminalCommand,
-    setTerminalProcessId,
     terminalCommand,
     terminalOutput,
     terminalProcessId,
@@ -617,51 +613,24 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         workspaceCwdForAuthority(workspaceUiAuthority, cwd),
       ),
   });
-  const {
-    attachWorkspaceContext: legacyAttachWorkspaceContext,
-    loadBrowserApps,
-    readWorkspaceDiff: legacyReadWorkspaceDiff,
-    readWorkspaceFiles: legacyReadWorkspaceFiles,
-    resizeWorkbenchTerminal,
-    runTerminalStatus,
-    startWorkbenchTerminal,
-    stopWorkbenchTerminal,
-    writeWorkbenchTerminalInput,
-  } = createAppWorkspaceCapabilityHandlers({
-    ...workspaceStatus,
-    appendTerminalOutputLine,
-    client: null,
-    getTerminalProcessId: () => terminalProcessIdRef.current,
-    isConnected,
-    isDemo,
-    isDemoPreview,
-    locale,
-    resolveBackendCwd,
-    ...threadState,
-    ...chromeState,
-    setCapabilityPanel,
-    setTerminalProcessId,
-    terminalCommand,
-  });
-
-  const { attachWorkspaceContext, readWorkspaceDiff, readWorkspaceFiles } =
-    workspaceCapabilityHandlersForAuthority({
-      authority: workspaceUiAuthority,
-      legacy: {
-        attachWorkspaceContext: legacyAttachWorkspaceContext,
-        readWorkspaceDiff: legacyReadWorkspaceDiff,
-        readWorkspaceFiles: legacyReadWorkspaceFiles,
-      },
-      onUnavailable: () => {
-        setNotice({
-          text:
-            locale === "zh"
-              ? "Control 模式下旧本地工作空间入口不可用，请使用工作空间操作面板。"
-              : "Legacy local workspace actions are unavailable in Control mode. Use the Workspace operations panel.",
-          tone: "warning",
-        });
-      },
+  const unavailableWorkspaceCapability = () => {
+    setNotice({
+      text:
+        locale === "zh"
+          ? "此入口尚未接入 CrewON Control，请使用工作空间操作面板。"
+          : "This action is not available from CrewON Control. Use the Workspace operations panel.",
+      tone: "warning",
     });
+  };
+  const attachWorkspaceContext = async () => unavailableWorkspaceCapability();
+  const loadBrowserApps = unavailableWorkspaceCapability;
+  const readWorkspaceDiff = async () => unavailableWorkspaceCapability();
+  const readWorkspaceFiles = async () => unavailableWorkspaceCapability();
+  const resizeWorkbenchTerminal = () => undefined;
+  const runTerminalStatus = unavailableWorkspaceCapability;
+  const startWorkbenchTerminal = unavailableWorkspaceCapability;
+  const stopWorkbenchTerminal = () => undefined;
+  const writeWorkbenchTerminalInput = () => undefined;
 
   const {
     openThreadSettingsPanel,
