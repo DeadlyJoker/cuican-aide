@@ -8,6 +8,7 @@ import {
   type WorkflowRunAdmissionStore,
   type WorkflowRunCompositionStore,
   type WorkflowRuntimeStore,
+  type WorkflowToolApprovalStore,
 } from "@crewon/application";
 import {
   createWorkflowNodeTerminalEvidence,
@@ -55,6 +56,11 @@ import {
 import { parseBoundWorkflow } from "./workflow-run-composition-support.ts";
 import { migratePostgresWorkflowExecutions } from "./workflow-execution-schema.ts";
 import { migratePostgresWorkflowVersions } from "./workflow-version-schema.ts";
+import {
+  consumePostgresWorkflowToolApproval,
+  migratePostgresWorkflowToolApprovals,
+  publishPostgresWorkflowToolApproval,
+} from "./postgres-workflow-tool-approval.ts";
 
 export type PostgresWorkflowRunCompositionStoreOptions =
   PostgresThreadStoreOptions & Readonly<{ digester: WorkflowContentDigester }>;
@@ -66,7 +72,8 @@ export class PostgresWorkflowRunCompositionStore
     WorkflowRuntimeStore,
     WorkflowRunCompositionStore,
     WorkflowRunAdmissionStore,
-    ModelDispatchEvidenceStore
+    ModelDispatchEvidenceStore,
+    WorkflowToolApprovalStore
 {
   readonly #digester: WorkflowContentDigester;
 
@@ -101,6 +108,7 @@ export class PostgresWorkflowRunCompositionStore
       await migratePostgresWorkflowExecutions(client, this.schema);
       await migratePostgresModelDispatchEvidence(client, this.schemaSql());
       await migratePostgresWorkflowNodeContinuations(client, this.schemaSql());
+      await migratePostgresWorkflowToolApprovals(client, this.schemaSql());
       await client.query("COMMIT");
     } catch (error) {
       await rollbackPostgres(client);
@@ -121,6 +129,50 @@ export class PostgresWorkflowRunCompositionStore
     return row === undefined
       ? null
       : decodeWorkflowExecutionState(row.state_json);
+  }
+
+  async publishWorkflowToolApproval(
+    input: Parameters<WorkflowToolApprovalStore["publishWorkflowToolApproval"]>[0],
+  ): ReturnType<WorkflowToolApprovalStore["publishWorkflowToolApproval"]> {
+    return this.#transaction(input.authority, async (client) => {
+      const run = await this.loadRunWithin(client, input.authority, true);
+      if (run === null) throw new RunStoreError("run_not_found");
+      const result = await publishPostgresWorkflowToolApproval(
+        client,
+        this.schemaSql(),
+        input,
+        run,
+        this.#digester,
+      );
+      if (result.disposition === "published") {
+        await this.completeWorkItemWithin(
+          client,
+          input.authority.tenantId,
+          input.authority.runId,
+          input.lease,
+        );
+      }
+      return result;
+    });
+  }
+
+  async consumeWorkflowToolApproval(
+    input: Parameters<WorkflowToolApprovalStore["consumeWorkflowToolApproval"]>[0],
+  ): ReturnType<WorkflowToolApprovalStore["consumeWorkflowToolApproval"]> {
+    return this.#transaction(input.authority, async (client) => {
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.authority.tenantId,
+        input.authority.runId,
+        input.lease,
+      );
+      return consumePostgresWorkflowToolApproval(
+        client,
+        this.schemaSql(),
+        input,
+        this.#digester,
+      );
+    });
   }
 
   async scheduleWorkflowNodes(
