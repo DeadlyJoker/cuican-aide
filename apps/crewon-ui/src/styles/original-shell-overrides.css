@@ -2640,7 +2640,6 @@
   :is(
     .office-top,
     .office-room-body,
-    .office-workspace > .activity-board,
     .office-memory-panel
   ) {
   max-width: none;

@@ -517,7 +517,6 @@ exports[`command Office room style > snapshots the canonical Office workspace em
   :is(
     .office-top,
     .office-room-body,
-    .office-workspace > .activity-board,
     .office-memory-panel
   ) {
   max-width: none;
