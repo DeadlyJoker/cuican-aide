@@ -91,6 +91,19 @@ async function conformance(store: KnowledgeStore): Promise<void> {
     }),
     /knowledge_idempotency_conflict/,
   );
+  await assert.rejects(
+    store.commitKnowledge({
+      tenantId: "tenant-1",
+      spaceId: "other-space",
+      idempotency: {
+        ...descriptor,
+        key: "scope-mismatch",
+        requestFingerprint: "sha256:scope-mismatch",
+      },
+      record: record("scope-mismatch", "2026-08-13T00:00:03.000Z"),
+    }),
+    /knowledge_scope_mismatch/,
+  );
   assert.equal(
     await store.loadKnowledge({
       tenantId: "tenant-1",

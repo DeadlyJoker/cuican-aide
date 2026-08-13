@@ -35,6 +35,23 @@ export function parseOfficeDefinition(value: unknown): OfficeDefinition {
   if (value === null || typeof value !== "object" || Array.isArray(value))
     throw new Error("office_definition_invalid");
   const item = value as Record<string, unknown>;
+  if (
+    Object.keys(item).sort().join("\0") !==
+    [
+      "createdAt",
+      "createdByActorId",
+      "executionTargets",
+      "members",
+      "officeId",
+      "officeVersionId",
+      "revision",
+      "schemaVersion",
+      "spaceId",
+      "tenantId",
+      "title",
+    ].sort().join("\0")
+  )
+    throw new Error("office_definition_invalid");
   const strings = [
     "tenantId",
     "spaceId",
@@ -46,14 +63,11 @@ export function parseOfficeDefinition(value: unknown): OfficeDefinition {
   ] as const;
   if (
     item.schemaVersion !== "crewon.office-definition.v0" ||
-    strings.some(
-      (key) =>
-        typeof item[key] !== "string" || (item[key] as string).length < 1,
-    ) ||
+    strings.some((key) => !validText(item[key], key === "title" ? OFFICE_LIMITS.title : 128)) ||
     !Number.isSafeInteger(item.revision) ||
     (item.revision as number) < 1 ||
-    typeof item.title !== "string" ||
-    item.title.length > OFFICE_LIMITS.title ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(item.createdAt as string) ||
+    new Date(item.createdAt as string).toISOString() !== item.createdAt ||
     !Array.isArray(item.members) ||
     item.members.length > OFFICE_LIMITS.members ||
     !Array.isArray(item.executionTargets) ||
@@ -62,20 +76,31 @@ export function parseOfficeDefinition(value: unknown): OfficeDefinition {
   )
     throw new Error("office_definition_invalid");
   for (const member of item.members)
-    if (!validFields(member, ["memberId", "displayName", "agentVersionId"]))
+    if (!validFields(member, { memberId: 128, displayName: 160, agentVersionId: 128 }))
       throw new Error("office_definition_invalid");
   for (const target of item.executionTargets)
-    if (!validFields(target, ["targetId", "agentVersionId"]))
+    if (!validFields(target, { targetId: 128, agentVersionId: 128 }))
       throw new Error("office_definition_invalid");
   return structuredClone(value) as OfficeDefinition;
 }
 
-function validFields(value: unknown, fields: readonly string[]) {
+function validFields(value: unknown, fields: Readonly<Record<string, number>>) {
   if (value === null || typeof value !== "object" || Array.isArray(value))
     return false;
   const item = value as Record<string, unknown>;
-  return fields.every(
-    (field) =>
-      typeof item[field] === "string" && (item[field] as string).length > 0,
+  const expected = Object.keys(fields).sort();
+  return (
+    Object.keys(item).sort().join("\0") === expected.join("\0") &&
+    expected.every((field) => validText(item[field], fields[field] ?? 0))
+  );
+}
+
+function validText(value: unknown, maximumBytes: number): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.trim() === value &&
+    value.normalize("NFC") === value &&
+    Buffer.byteLength(value, "utf8") <= maximumBytes
   );
 }

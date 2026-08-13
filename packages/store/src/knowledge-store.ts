@@ -56,6 +56,7 @@ export class SqliteKnowledgeStore implements KnowledgeStore {
         return prior;
       }
       const record = parseKnowledgeRecord(input.record);
+      validateRecordScope(input, record);
       const result = { disposition: "committed", record } as const;
       this.#database
         .prepare(
@@ -185,6 +186,7 @@ export class PostgresKnowledgeStore implements KnowledgeStore {
         return result!;
       }
       const record = parseKnowledgeRecord(input.record);
+      validateRecordScope(input, record);
       const result = { disposition: "committed", record } as const;
       await client.query(
         `INSERT INTO ${this.#schema}.knowledge_records VALUES($1,$2,$3,$4,$5::jsonb)`,
@@ -280,6 +282,16 @@ function page(data: readonly KnowledgeRecord[], limit: number): KnowledgePage {
         ? { createdAt: last.createdAt, knowledgeId: last.knowledgeId }
         : null,
   };
+}
+function validateRecordScope(
+  input: CommitKnowledgeInput,
+  record: KnowledgeRecord,
+): void {
+  if (
+    record.tenantId !== input.tenantId ||
+    record.spaceId !== input.spaceId
+  )
+    throw new RunStoreError("knowledge_scope_mismatch");
 }
 function validateList(query: KnowledgeListQuery): void {
   if (
