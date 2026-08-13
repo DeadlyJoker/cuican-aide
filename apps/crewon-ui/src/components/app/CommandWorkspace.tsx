@@ -69,7 +69,6 @@ import {
   agentPlatformExecutionTargetOptions,
   platformAgentForExecutionTarget,
 } from "../../lib/agent-platform/agentPlatformExecutionTargets";
-import { isLegacyGeneratedAgentPlaceholder } from "../../lib/agent-config/legacyAgentPlaceholder";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
 import type { PlatformKind } from "../../lib/platform";
@@ -789,11 +788,7 @@ export function CommandWorkspace({
         const agentsAvailable = agents.status === "fulfilled";
         const officesAvailable = offices.status === "fulfilled";
         setExecutionTargetCatalog({
-          agents: agentsAvailable
-            ? agents.value.data.filter(
-                (record) => !isLegacyGeneratedAgentPlaceholder(record.config),
-              )
-            : [],
+          agents: agentsAvailable ? agents.value.data : [],
           offices: officesAvailable
             ? offices.value.data
                 .filter(
@@ -862,11 +857,7 @@ export function CommandWorkspace({
       const agentsAvailable = agents.status === "fulfilled";
       const officesAvailable = offices.status === "fulfilled";
       setTeamCatalog({
-        agents: agentsAvailable
-          ? agents.value.data.filter(
-              (record) => !isLegacyGeneratedAgentPlaceholder(record.config),
-            )
-          : [],
+        agents: agentsAvailable ? agents.value.data : [],
         offices: officesAvailable
           ? offices.value.data
               .filter(

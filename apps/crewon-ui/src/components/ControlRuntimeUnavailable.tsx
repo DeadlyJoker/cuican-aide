@@ -20,8 +20,8 @@ export function ControlRuntimeUnavailable() {
             <span className="crewon-auth-mobile-brand">CrewON</span>
             <h2>Control 运行时不可用</h2>
             <p>
-              无法建立安全的 Control 会话。CrewON 已停止启动，不会连接旧 App
-              Server。请确认桌面运行时或 Web BFF 已启动，然后重新加载。
+              无法建立安全的 Control 会话。CrewON 已停止启动。请确认桌面运行时或
+              Web BFF 已启动，然后重新加载。
             </p>
           </header>
           <button

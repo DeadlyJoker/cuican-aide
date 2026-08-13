@@ -9,7 +9,7 @@ describe("ControlRuntimeUnavailable", () => {
 
     expect(markup).toContain('role="alert"');
     expect(markup).toContain("Control 运行时不可用");
-    expect(markup).toContain("不会连接旧 App Server");
+    expect(markup).toContain("CrewON 已停止启动");
     expect(markup).toContain("重新加载");
   });
 });

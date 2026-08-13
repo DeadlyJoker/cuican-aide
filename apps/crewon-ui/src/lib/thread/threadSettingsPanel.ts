@@ -298,8 +298,8 @@ export type ThreadMemoryMode = "disabled" | "enabled";
 
 export function threadCompactDemoBody(locale: Locale): string {
   return locale === "zh"
-    ? "上下文压缩已启动（演示）。连接 app-server 后会调用 thread/compact/start。"
-    : "Context compaction started (demo). With app-server connected this calls thread/compact/start.";
+    ? "上下文压缩已启动（演示）。连接 CrewON Control 后会执行真实压缩。"
+    : "Context compaction started (demo). Connect to CrewON Control to run a real compaction.";
 }
 
 export function threadCompactDemoPanel(
@@ -367,8 +367,8 @@ export function threadCompactFailurePanel(
 
 export function threadRollbackDemoBody(locale: Locale): string {
   return locale === "zh"
-    ? "已回滚上一轮（演示）。连接 app-server 后会调用 thread/rollback。"
-    : "Rolled back the last turn (demo). With app-server connected this calls thread/rollback.";
+    ? "已回滚上一轮（演示）。连接 CrewON Control 后会执行真实回滚。"
+    : "Rolled back the last turn (demo). Connect to CrewON Control to run a real rollback.";
 }
 
 export function threadRollbackDemoPanel(
@@ -388,7 +388,9 @@ export function threadRollbackConfirmMessage(locale: Locale): string {
 }
 
 export function threadRollbackProgressBody(locale: Locale): string {
-  return locale === "zh" ? "正在回滚上一轮..." : "Rolling back the last turn...";
+  return locale === "zh"
+    ? "正在回滚上一轮..."
+    : "Rolling back the last turn...";
 }
 
 export function threadRollbackProgressPanel(
@@ -443,8 +445,8 @@ export function threadMemoryDemoBody(
   locale: Locale,
 ): string {
   return locale === "zh"
-    ? `记忆模式已${mode === "enabled" ? "启用" : "禁用"}（演示）。连接 app-server 后会调用 thread/memoryMode/set。`
-    : `Memory mode ${mode} (demo). With app-server connected this calls thread/memoryMode/set.`;
+    ? `记忆模式已${mode === "enabled" ? "启用" : "禁用"}（演示）。连接 CrewON Control 后会保存真实设置。`
+    : `Memory mode ${mode} (demo). Connect to CrewON Control to save the real setting.`;
 }
 
 export function threadMemoryDemoPanel(

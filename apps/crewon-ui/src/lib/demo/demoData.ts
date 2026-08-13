@@ -21,13 +21,13 @@ const demoCopy: Record<Locale, DemoCopy> = {
     firstUserMessage:
       "开发一个跨平台 Crewon 前端，先适配 macOS、Windows 和 web。",
     firstPlan:
-      "### 执行计划\n1. 搭建共享 React 工作台\n2. 接入本地 `app-server` WebSocket\n3. 校验桌面与 web 响应式布局",
+      "### 执行计划\n1. 搭建共享 React 工作台\n2. 接入 CrewON Control HTTP/SSE\n3. 校验桌面与 web 响应式布局",
     firstCommandOutput:
       "apps/crewon-ui/src/App.tsx\napps/crewon-ui/src/components/Transcript.tsx\napps/crewon-ui/src/styles/app.css",
     firstAgentMessage:
       "### 当前结论\n已把 Crewon 前端收敛为一套 **command center**：\n\n- 左侧管理项目、会话、工具、智能体和办公室\n- 中间保留 Markdown 对话流与任务执行记录\n- 右侧承载审查、终端、浏览器和文件能力\n\n下一步可以继续接入办公室编排后端。",
     secondName: "协议事件映射",
-    secondPreview: "审查 app-server 协议事件",
+    secondPreview: "审查 Control 协议事件",
   },
   en: {
     firstName: "Desktop UI architecture",
@@ -35,13 +35,13 @@ const demoCopy: Record<Locale, DemoCopy> = {
     firstUserMessage:
       "Build a cross-platform Crewon front end for macOS, Windows, and web.",
     firstPlan:
-      "### Plan\n1. Build a shared React workbench\n2. Connect the local `app-server` WebSocket\n3. Validate desktop and web responsive layouts",
+      "### Plan\n1. Build a shared React workbench\n2. Connect CrewON Control over HTTP/SSE\n3. Validate desktop and web responsive layouts",
     firstCommandOutput:
       "apps/crewon-ui/src/App.tsx\napps/crewon-ui/src/components/Transcript.tsx\napps/crewon-ui/src/styles/app.css",
     firstAgentMessage:
       "### Current result\nCrewon is shaped as a **command center**:\n\n- Sidebar for projects, sessions, tools, agents, and office\n- Markdown conversation flow with execution records in the center\n- Review, terminal, browser, and file capabilities on the right\n\nNext we can wire the office orchestration backend.",
     secondName: "Protocol mapping",
-    secondPreview: "Review app-server protocol events",
+    secondPreview: "Review Control protocol events",
   },
 };
 

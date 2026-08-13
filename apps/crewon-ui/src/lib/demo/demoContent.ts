@@ -1470,17 +1470,7 @@ export function demoSettingsPanel(
           value: "workspace-write",
         },
       ],
-      actions: [
-        {
-          id: "save-config",
-          label: zh(locale) ? "保存配置" : "Save config",
-          tone: "primary",
-        },
-        {
-          id: "refresh-config",
-          label: zh(locale) ? "刷新配置" : "Refresh config",
-        },
-      ],
+      actions: [],
     };
   }
   if (section === "appearance") {
@@ -1577,17 +1567,7 @@ export function demoSettingsPanel(
               ],
         },
       ],
-      actions: [
-        {
-          id: "save-personalization",
-          label: zh(locale) ? "保存助理设置" : "Save assistant settings",
-          tone: "primary",
-        },
-        {
-          id: "refresh-personalization",
-          label: zh(locale) ? "刷新助理设置" : "Refresh assistant settings",
-        },
-      ],
+      actions: [],
     };
   }
   if (section === "keyboard") {

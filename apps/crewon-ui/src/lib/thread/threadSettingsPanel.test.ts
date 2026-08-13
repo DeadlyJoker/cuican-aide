@@ -299,7 +299,7 @@ describe("thread settings panel helpers", () => {
 
   it("builds compact action feedback", () => {
     expect(threadCompactDemoBody("en")).toBe(
-      "Context compaction started (demo). With app-server connected this calls thread/compact/start.",
+      "Context compaction started (demo). Connect to CrewON Control to run a real compaction.",
     );
     expect(threadCompactProgressBody("zh")).toBe("正在启动上下文压缩...");
     expect(threadCompactSuccessBody("en")).toBe(
@@ -313,7 +313,7 @@ describe("thread settings panel helpers", () => {
     );
     expect(threadCompactDemoPanel(panel(), "en")).toEqual({
       ...panel(),
-      body: "Context compaction started (demo). With app-server connected this calls thread/compact/start.",
+      body: "Context compaction started (demo). Connect to CrewON Control to run a real compaction.",
       error: undefined,
     });
     expect(threadCompactProgressPanel(panel(), "zh")).toEqual({
@@ -335,7 +335,7 @@ describe("thread settings panel helpers", () => {
 
   it("builds rollback action feedback", () => {
     expect(threadRollbackDemoBody("zh")).toBe(
-      "已回滚上一轮（演示）。连接 app-server 后会调用 thread/rollback。",
+      "已回滚上一轮（演示）。连接 CrewON Control 后会执行真实回滚。",
     );
     expect(threadRollbackConfirmMessage("en")).toBe(
       "Rollback removes the last turn from this session history, but does not revert file changes. Continue?",
@@ -352,7 +352,7 @@ describe("thread settings panel helpers", () => {
     );
     expect(threadRollbackDemoPanel(panel(), "zh")).toEqual({
       ...panel(),
-      body: "已回滚上一轮（演示）。连接 app-server 后会调用 thread/rollback。",
+      body: "已回滚上一轮（演示）。连接 CrewON Control 后会执行真实回滚。",
       error: undefined,
     });
     expect(threadRollbackProgressPanel(panel(), "en")).toEqual({
@@ -374,10 +374,10 @@ describe("thread settings panel helpers", () => {
 
   it("builds memory action feedback", () => {
     expect(threadMemoryDemoBody("enabled", "zh")).toBe(
-      "记忆模式已启用（演示）。连接 app-server 后会调用 thread/memoryMode/set。",
+      "记忆模式已启用（演示）。连接 CrewON Control 后会保存真实设置。",
     );
     expect(threadMemoryDemoBody("disabled", "en")).toBe(
-      "Memory mode disabled (demo). With app-server connected this calls thread/memoryMode/set.",
+      "Memory mode disabled (demo). Connect to CrewON Control to save the real setting.",
     );
     expect(threadMemoryProgressBody("en")).toBe("Updating memory mode...");
     expect(threadMemorySuccessBody("disabled", "zh")).toBe("记忆模式已禁用。");
@@ -387,7 +387,7 @@ describe("thread settings panel helpers", () => {
     );
     expect(threadMemoryDemoPanel(panel(), "enabled", "zh")).toEqual({
       ...panel(),
-      body: "记忆模式已启用（演示）。连接 app-server 后会调用 thread/memoryMode/set。",
+      body: "记忆模式已启用（演示）。连接 CrewON Control 后会保存真实设置。",
       error: undefined,
     });
     expect(threadMemoryProgressPanel(panel(), "en")).toEqual({
