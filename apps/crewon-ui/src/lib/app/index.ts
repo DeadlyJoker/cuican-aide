@@ -39,7 +39,6 @@ export { useAppPendingServerRequests } from "./useAppPendingServerRequests";
 export { useAppRunTrackingRefs } from "./useAppRunTrackingRefs";
 export { useAppShellRuntimeState } from "./useAppShellRuntimeState";
 export { useAppSlashCommands } from "./useAppSlashCommands";
-export { useAppTerminalState } from "./useAppTerminalState";
 export { useAppThreadSelection } from "./useAppThreadSelection";
 export { useAppThreadState } from "./useAppThreadState";
 export { useAppWorkspaceStatusState } from "./useAppWorkspaceStatusState";

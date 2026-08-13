@@ -13,10 +13,6 @@ import type {
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { ActiveFileWatch } from "../file/filePanelActions";
 import { handleLocalAppNotification } from "./appLocalNotificationHandler";
-import {
-  appendTerminalOutputChunk,
-  type TerminalOutputStream,
-} from "../terminal/terminalOutputStream";
 
 beforeEach(() => {
   vi.stubGlobal("window", { atob });
@@ -38,7 +34,7 @@ type CapturedLocalNotificationState = {
   pendingUserInputRequest: PendingUserInputRequest | null;
   selectedThreadId: string | null;
   streamingTextByThread: Record<string, string>;
-  terminalOutput: TerminalOutputStream;
+  terminalOutput: string;
   threads: Thread[];
 };
 
@@ -63,11 +59,7 @@ function handleNotification(
     pendingUserInputRequest: null,
     selectedThreadId: "thread-1",
     streamingTextByThread: {},
-    terminalOutput: {
-      generation: 1,
-      processId: "process-1",
-      text: "",
-    },
+    terminalOutput: "",
     threads: [],
     ...stateOverrides,
   };
@@ -75,11 +67,9 @@ function handleNotification(
   const handled = handleLocalAppNotification({
     appendStreamingTextDelta,
     appendTerminalOutputDelta: (processId, chunk) => {
-      state.terminalOutput = appendTerminalOutputChunk(
-        state.terminalOutput,
-        processId,
-        chunk,
-      );
+      if (processId === "process-1") {
+        state.terminalOutput += chunk;
+      }
     },
     locale: "en",
     notification,
@@ -143,11 +133,7 @@ describe("local app notification handler", () => {
     } as AppServerNotification);
 
     expect(handled).toBe(true);
-    expect(state.terminalOutput).toEqual({
-      generation: 1,
-      processId: "process-1",
-      text: "done",
-    });
+    expect(state.terminalOutput).toBe("done");
   });
 
   /*
@@ -173,7 +159,7 @@ describe("local app notification handler", () => {
       title: "Current changes",
       body: "diff --git",
     });
-    expect(state.terminalOutput.text).toBe("done");
+    expect(state.terminalOutput).toBe("done");
   });
 
   it("ignores terminal output from another process after marking it handled", () => {
@@ -188,7 +174,7 @@ describe("local app notification handler", () => {
     } as AppServerNotification);
 
     expect(handled).toBe(true);
-    expect(state.terminalOutput.text).toBe("");
+    expect(state.terminalOutput).toBe("");
   });
 
   it("appends command execution output deltas into the active thread state", () => {
