@@ -10,7 +10,13 @@ import {
   RefreshCw,
   Search,
 } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type FormEvent,
+} from "react";
 
 import type { Locale } from "../../lib/i18n";
 
@@ -29,6 +35,51 @@ export type WorkspaceReadonlyState<T> =
   | { status: "loading" }
   | { status: "ready"; result: T }
   | { status: "error"; message: string };
+
+export type WorkspaceReadonlyRequest = Readonly<{
+  controller: AbortController;
+  identity: number;
+}>;
+
+export class WorkspaceReadonlyRequestGuard {
+  #current: WorkspaceReadonlyRequest | null = null;
+  #identity = 0;
+  #mounted = true;
+
+  begin(): WorkspaceReadonlyRequest {
+    this.cancel();
+    const request = {
+      controller: new AbortController(),
+      identity: ++this.#identity,
+    };
+    this.#current = request;
+    return request;
+  }
+
+  cancel(): void {
+    this.#current?.controller.abort();
+    this.#current = null;
+    this.#identity += 1;
+  }
+
+  isCurrent(request: WorkspaceReadonlyRequest): boolean {
+    return (
+      this.#mounted &&
+      !request.controller.signal.aborted &&
+      this.#current === request &&
+      this.#identity === request.identity
+    );
+  }
+
+  mount(): void {
+    this.#mounted = true;
+  }
+
+  dispose(): void {
+    this.#mounted = false;
+    this.cancel();
+  }
+}
 
 function safeError(locale: Locale): string {
   return locale === "zh"
@@ -110,41 +161,44 @@ export function CommandWorkspaceSearch({
       ? { status: "idle" }
       : { status: "error", message: safeError(locale) },
   );
-  const controllerRef = useRef<AbortController | null>(null);
+  const requestGuardRef = useRef<WorkspaceReadonlyRequestGuard | null>(null);
+  requestGuardRef.current ??= new WorkspaceReadonlyRequestGuard();
+  const requestGuard = requestGuardRef.current;
 
   useEffect(() => {
-    controllerRef.current?.abort();
+    requestGuard.mount();
+    return () => requestGuard.dispose();
+  }, [requestGuard]);
+
+  useEffect(() => {
+    requestGuard.cancel();
     setState(
       client && threadId
         ? { status: "idle" }
         : { status: "error", message: safeError(locale) },
     );
-    return () => controllerRef.current?.abort();
-  }, [client, locale, threadId]);
+  }, [client, locale, requestGuard, threadId]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     const nextQuery = query.trim();
     if (!nextQuery || state.status === "loading") return;
-    controllerRef.current?.abort();
-    const controller = new AbortController();
-    controllerRef.current = controller;
+    const request = requestGuard.begin();
     setState({ status: "loading" });
-    setState(
-      await executeWorkspaceReadonly<SearchResponse>(
-        client,
-        threadId,
-        {
-          schemaVersion: "crewon.workspace-native-readonly-request.v0",
-          operation: "contentSearch",
-          query: nextQuery,
-          pathSegments: [],
-          maxMatches: 100,
-        },
-        locale,
-        controller.signal,
-      ),
+    const nextState = await executeWorkspaceReadonly<SearchResponse>(
+      client,
+      threadId,
+      {
+        schemaVersion: "crewon.workspace-native-readonly-request.v0",
+        operation: "contentSearch",
+        query: nextQuery,
+        pathSegments: [],
+        maxMatches: 100,
+      },
+      locale,
+      request.controller.signal,
     );
+    if (requestGuard.isCurrent(request)) setState(nextState);
   }
 
   const result = state.status === "ready" ? state.result : null;
@@ -251,25 +305,35 @@ export function CommandWorkspaceGitStatus({
       ? { status: "loading" }
       : { status: "error", message: safeError(locale) },
   );
+  const requestGuardRef = useRef<WorkspaceReadonlyRequestGuard | null>(null);
+  requestGuardRef.current ??= new WorkspaceReadonlyRequestGuard();
+  const requestGuard = requestGuardRef.current;
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
+    const request = requestGuard.begin();
     setState({ status: "loading" });
-    setState(
-      await executeWorkspaceReadonly<StatusResponse>(
-        client,
-        threadId,
-        {
-          schemaVersion: "crewon.workspace-native-readonly-request.v0",
-          operation: "gitStatus",
-        },
-        locale,
-      ),
+    const nextState = await executeWorkspaceReadonly<StatusResponse>(
+      client,
+      threadId,
+      {
+        schemaVersion: "crewon.workspace-native-readonly-request.v0",
+        operation: "gitStatus",
+      },
+      locale,
+      request.controller.signal,
     );
-  }
+    if (requestGuard.isCurrent(request)) setState(nextState);
+  }, [client, locale, requestGuard, threadId]);
+
+  useEffect(() => {
+    requestGuard.mount();
+    return () => requestGuard.dispose();
+  }, [requestGuard]);
 
   useEffect(() => {
     void refresh();
-  }, [client, threadId]);
+    return () => requestGuard.cancel();
+  }, [refresh, requestGuard]);
   const result = state.status === "ready" ? state.result : null;
   return (
     <div className="command-readonly-workbench">

@@ -6,9 +6,37 @@ import {
   CommandWorkspaceGitStatus,
   CommandWorkspaceSearch,
   executeWorkspaceReadonly,
+  WorkspaceReadonlyRequestGuard,
+  type WorkspaceReadonlyState,
 } from "./CommandWorkspaceReadonly";
 
 type ReadonlyClient = Pick<ControlApiClient, "executeWorkspaceReadonly">;
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, reject, resolve };
+}
+
+const gitRequest = {
+  schemaVersion: "crewon.workspace-native-readonly-request.v0" as const,
+  operation: "gitStatus" as const,
+};
+
+function gitResponse(branch: string) {
+  return {
+    schemaVersion: "crewon.workspace-native-readonly-response.v0" as const,
+    operation: "gitStatus" as const,
+    branch,
+    head: null,
+    entries: [],
+    truncated: false,
+  };
+}
 
 describe("workspace native readonly workbench", () => {
   it("sends content search through the authoritative thread without binding input", async () => {
@@ -94,6 +122,83 @@ describe("workspace native readonly workbench", () => {
       message: "The current workspace could not be read. Try again.",
     });
     expect(JSON.stringify(state)).not.toContain("secret backend path");
+  });
+
+  it("does not let an old thread response overwrite the current Git status request", async () => {
+    const oldResponse = deferred<ReturnType<typeof gitResponse>>();
+    const currentResponse = deferred<ReturnType<typeof gitResponse>>();
+    const client = {
+      executeWorkspaceReadonly: vi
+        .fn()
+        .mockReturnValueOnce(oldResponse.promise)
+        .mockReturnValueOnce(currentResponse.promise),
+    } as unknown as ReadonlyClient;
+    const guard = new WorkspaceReadonlyRequestGuard();
+    let committed: WorkspaceReadonlyState<ReturnType<typeof gitResponse>> = {
+      status: "loading",
+    };
+
+    const oldRequest = guard.begin();
+    const oldState = executeWorkspaceReadonly<ReturnType<typeof gitResponse>>(
+      client,
+      "thread-old",
+      gitRequest,
+      "zh",
+      oldRequest.controller.signal,
+    );
+    const currentRequest = guard.begin();
+    expect(oldRequest.controller.signal.aborted).toBe(true);
+    const currentState = executeWorkspaceReadonly<
+      ReturnType<typeof gitResponse>
+    >(
+      client,
+      "thread-current",
+      gitRequest,
+      "en",
+      currentRequest.controller.signal,
+    );
+
+    currentResponse.resolve(gitResponse("current"));
+    const currentResult = await currentState;
+    if (guard.isCurrent(currentRequest)) committed = currentResult;
+    oldResponse.resolve(gitResponse("old"));
+    const oldResult = await oldState;
+    if (guard.isCurrent(oldRequest)) committed = oldResult;
+
+    expect(committed).toEqual({
+      status: "ready",
+      result: gitResponse("current"),
+    });
+    expect(client.executeWorkspaceReadonly).toHaveBeenNthCalledWith(
+      2,
+      "thread-current",
+      gitRequest,
+      { signal: currentRequest.controller.signal },
+    );
+  });
+
+  it("does not commit a deferred error after the component request is disposed", async () => {
+    const response = deferred<ReturnType<typeof gitResponse>>();
+    const client = {
+      executeWorkspaceReadonly: vi.fn().mockReturnValue(response.promise),
+    } as unknown as ReadonlyClient;
+    const guard = new WorkspaceReadonlyRequestGuard();
+    const request = guard.begin();
+    let committed: WorkspaceReadonlyState<ReturnType<typeof gitResponse>> = {
+      status: "loading",
+    };
+    const pendingState = executeWorkspaceReadonly<
+      ReturnType<typeof gitResponse>
+    >(client, "thread-unmounted", gitRequest, "zh", request.controller.signal);
+
+    guard.dispose();
+    response.reject(new Error("late failure"));
+    const nextState = await pendingState;
+    if (guard.isCurrent(request)) committed = nextState;
+
+    expect(request.controller.signal.aborted).toBe(true);
+    expect(nextState.status).toBe("error");
+    expect(committed).toEqual({ status: "loading" });
   });
 
   it("snapshots the search and Git status entry states", () => {
