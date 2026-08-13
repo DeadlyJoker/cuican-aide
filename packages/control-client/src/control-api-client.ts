@@ -33,6 +33,7 @@ import type {
   GetThreadGoalResponse,
   GetToolApprovalResponse,
   ListAgentVersionsResponse,
+  ListActiveCapabilitiesResponse,
   ListAutomationsResponse,
   ListThreadRunsResponse,
   ListThreadsResponse,
@@ -741,6 +742,16 @@ export class ControlApiClient {
     options: ControlApiRequestOptions = {},
   ): Promise<ActiveAgentVersionCatalogResponse> {
     return this.#json("GET", "/api/v1/agent-versions/active", null, {
+      ...options,
+      expectedStatuses: [200],
+    });
+  }
+
+  listActiveCapabilities(
+    query: { cursor?: string | null; limit?: number } = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<ListActiveCapabilitiesResponse> {
+    return this.#json("GET", withQuery("/api/v1/capabilities", query), null, {
       ...options,
       expectedStatuses: [200],
     });

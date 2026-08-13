@@ -1,6 +1,7 @@
 export * from "./control-api.ts";
 export * from "./control-api-ports.ts";
 export * from "./control-api-errors.ts";
+export * from "./capability-projection.ts";
 export * from "./artifact-projection.ts";
 export * from "./outbox-dispatcher.ts";
 export * from "./production-adapters.ts";

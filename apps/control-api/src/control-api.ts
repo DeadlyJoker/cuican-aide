@@ -31,6 +31,7 @@ import {
 } from "@crewon/agent-version";
 import {
   ContractValidationError,
+  formatCapabilityCursor,
   formatAgentVersionCursor,
   formatAutomationCursor,
   formatMessageCursor,
@@ -39,6 +40,7 @@ import {
   formatWorkflowVersionCursor,
   parseAgentVersionId,
   parseAgentVersionListQuery,
+  parseCapabilityListQuery,
   parseArchiveThreadRequest,
   parseAppendThreadMessageRequest,
   parseApprovalId,
@@ -106,6 +108,7 @@ import {
   type ListThreadsResponse,
   type ListThreadMessagesResponse,
   type ListAgentVersionsResponse,
+  type ListActiveCapabilitiesResponse,
   type ListAutomationsResponse,
   type ProbeModelProviderResponse,
   type RunMutationResponse,
@@ -129,6 +132,8 @@ import {
   type ListOfficesResponse,
 } from "@crewon/contracts";
 import Fastify, { type FastifyInstance } from "fastify";
+
+import { projectCapabilities } from "./capability-projection.ts";
 
 import {
   errorResponse,
@@ -1515,6 +1520,46 @@ export function buildControlApi(
     };
     return response;
   });
+
+  app.get<{ Querystring: Record<string, unknown> }>(
+    "/api/v1/capabilities",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const query = parseCapabilityListQuery({ ...request.query });
+      const catalog = await dependencies.agentVersionCatalogs.getActive(actor);
+      if (query.releaseId !== null && query.releaseId !== catalog.releaseId) {
+        throw new ContractValidationError("capability_catalog_changed");
+      }
+      const projected = projectCapabilities(
+        catalog.assets,
+        dependencies.agentVersionDigester,
+      );
+      const start =
+        query.afterKey === null
+          ? 0
+          : projected.findIndex((item) => item.key > query.afterKey!);
+      const pageStart = start < 0 ? projected.length : start;
+      const page = projected.slice(pageStart, pageStart + query.limit);
+      const last = page.at(-1);
+      const hasMore =
+        last !== undefined && projected.some((item) => item.key > last.key);
+      const response: ListActiveCapabilitiesResponse = {
+        releaseId: catalog.releaseId,
+        activatedAt: catalog.activatedAt,
+        data: page.map((item) => item.value),
+        nextCursor:
+          hasMore && last !== undefined
+            ? formatCapabilityCursor({
+                releaseId: catalog.releaseId,
+                afterKey: last.key,
+              })
+            : null,
+      };
+      return response;
+    },
+  );
 
   app.get<{ Params: { agentVersionId: string } }>(
     "/api/v1/agent-versions/:agentVersionId",

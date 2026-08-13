@@ -119,6 +119,10 @@ export type ListWorkflowVersionsResponse =
   components["schemas"]["ListWorkflowVersionsResponse"];
 export type ActiveAgentVersionCatalogResponse =
   components["schemas"]["ActiveAgentVersionCatalogResponse"];
+export type CapabilitySummaryView =
+  components["schemas"]["CapabilitySummaryView"];
+export type ListActiveCapabilitiesResponse =
+  components["schemas"]["ListActiveCapabilitiesResponse"];
 export type ArtifactView = components["schemas"]["ArtifactView"];
 export type GetArtifactResponse = components["schemas"]["GetArtifactResponse"];
 export type ControlApiWorkspaceOperations = Pick<
@@ -149,6 +153,7 @@ const MAX_ROLLBACK_TURNS = 0xffff_ffff;
 const MAX_MESSAGE_PAGE_SIZE = 100;
 const MESSAGE_CURSOR_PREFIX = "crewon.message.cursor.v1:";
 const AGENT_VERSION_CURSOR_PREFIX = "crewon.agent-version.cursor.v1:";
+const CAPABILITY_CURSOR_PREFIX = "crewon.capability.cursor.v1:";
 const WORKFLOW_VERSION_CURSOR_PREFIX = "crewon.workflow-version.cursor.v1:";
 const THREAD_CURSOR_PREFIX = "crewon.thread.cursor.v1:";
 const THREAD_RUN_CURSOR_PREFIX = "crewon.thread-run.cursor.v1:";
@@ -221,6 +226,12 @@ export type MessageListQuery = Readonly<{
 
 export type AgentVersionListQuery = Readonly<{
   afterAgentVersionId: string | null;
+  limit: number;
+}>;
+
+export type CapabilityListQuery = Readonly<{
+  releaseId: string | null;
+  afterKey: string | null;
   limit: number;
 }>;
 
@@ -836,6 +847,47 @@ export function formatAgentVersionCursor(agentVersionId: string): string {
   return base64UrlEncode(`${AGENT_VERSION_CURSOR_PREFIX}${id}`);
 }
 
+export function parseCapabilityListQuery(input: unknown): CapabilityListQuery {
+  if (!isPlainObject(input)) {
+    throw new ContractValidationError("capability_list_query_invalid");
+  }
+  const keys = Object.keys(input);
+  if (keys.some((key) => key !== "cursor" && key !== "limit")) {
+    throw new ContractValidationError("capability_list_query_invalid");
+  }
+  const cursor = parseCapabilityCursor(input.cursor);
+  return {
+    releaseId: cursor?.releaseId ?? null,
+    afterKey: cursor?.afterKey ?? null,
+    limit: parseUnsignedQueryInteger(
+      input.limit,
+      100,
+      100,
+      "page_limit_invalid",
+      1,
+    ),
+  };
+}
+
+export function formatCapabilityCursor(input: {
+  releaseId: string;
+  afterKey: string;
+}): string {
+  const releaseId = requireBoundedString(
+    input.releaseId,
+    128,
+    "capability_cursor_invalid",
+  );
+  const afterKey = requireBoundedString(
+    input.afterKey,
+    2048,
+    "capability_cursor_invalid",
+  );
+  return base64UrlEncode(
+    `${CAPABILITY_CURSOR_PREFIX}${JSON.stringify([releaseId, afterKey])}`,
+  );
+}
+
 export function parsePublishWorkflowVersionRequest(
   input: unknown,
 ): PublishWorkflowVersionRequest {
@@ -1149,6 +1201,45 @@ function parseWorkflowVersionCursor(input: unknown): Readonly<{
     return { workflowId, workflowVersionId };
   } catch {
     throw new ContractValidationError("workflow_version_cursor_invalid");
+  }
+}
+
+function parseCapabilityCursor(input: unknown): Readonly<{
+  releaseId: string;
+  afterKey: string;
+}> | null {
+  if (input === undefined) return null;
+  if (
+    typeof input !== "string" ||
+    input.length === 0 ||
+    input.length > 4096 ||
+    !/^[A-Za-z0-9_-]+$/u.test(input)
+  ) {
+    throw new ContractValidationError("capability_cursor_invalid");
+  }
+  try {
+    const decoded = base64UrlDecode(input);
+    if (!decoded.startsWith(CAPABILITY_CURSOR_PREFIX)) throw new Error();
+    const parsed: unknown = JSON.parse(
+      decoded.slice(CAPABILITY_CURSOR_PREFIX.length),
+    );
+    if (!Array.isArray(parsed) || parsed.length !== 2) throw new Error();
+    const releaseId = requireBoundedString(
+      parsed[0],
+      128,
+      "capability_cursor_invalid",
+    );
+    const afterKey = requireBoundedString(
+      parsed[1],
+      2048,
+      "capability_cursor_invalid",
+    );
+    if (formatCapabilityCursor({ releaseId, afterKey }) !== input) {
+      throw new Error();
+    }
+    return { releaseId, afterKey };
+  } catch {
+    throw new ContractValidationError("capability_cursor_invalid");
   }
 }
 
