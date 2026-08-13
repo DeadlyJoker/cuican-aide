@@ -1,8 +1,8 @@
 import {
-  isUnsupportedRpcError,
   type AppServerClient,
   type DomainConfigListResponse,
 } from "../app-server/appServer";
+import { isUnsupportedRpcError } from "../shared/rpcErrors";
 import type {
   AgentConfig,
   AutomationConfig,

@@ -4,7 +4,7 @@ import type {
   AppServerClient,
   OfficeDelegationDispatchResponse,
 } from "../app-server/appServer";
-import { isUnsupportedRpcError } from "../app-server/appServer";
+import { isUnsupportedRpcError } from "../shared/rpcErrors";
 import type { OfficeConfig } from "../domain/crewonDomain";
 import {
   syncOfficeRun as syncBackendOfficeRun,

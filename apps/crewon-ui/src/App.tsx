@@ -13,7 +13,7 @@ import { CommandSettingsLazyRoute } from "./components/app/CommandSettingsLazyRo
 import {
   isMissingThreadError,
   isUnsupportedRpcError,
-} from "./lib/app-server/appServer";
+} from "./lib/shared/rpcErrors";
 import {
   createAppCapabilityPanelHandlers,
   createAppDomainActionCoordinator,

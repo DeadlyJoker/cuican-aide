@@ -1,10 +1,10 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
 import {
-  isUnsupportedRpcError,
   type AppServerClient,
   type OfficeMessageSubmitMention,
 } from "../../app-server/appServer";
+import { isUnsupportedRpcError } from "../../shared/rpcErrors";
 import type {
   LibraryPanel,
   OfficeMember,

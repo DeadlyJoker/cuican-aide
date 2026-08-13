@@ -184,17 +184,10 @@ export class AppServerRpcError extends Error {
   }
 }
 
-export function isMissingThreadError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    (error.message.includes("thread not found") ||
-      error.message.includes("invalid thread id"))
-  );
-}
-
-export function isUnsupportedRpcError(error: unknown): boolean {
-  return error instanceof AppServerRpcError && error.code === -32601;
-}
+export {
+  isMissingThreadError,
+  isUnsupportedRpcError,
+} from "../shared/rpcErrors";
 
 type JsonRpcNotification = {
   method: string;

@@ -1,5 +1,4 @@
 import {
-  isUnsupportedRpcError,
   type AppServerClient,
   type AutomationRunRecord,
   type DomainConfigListResponse,
@@ -10,6 +9,7 @@ import { automationConfigRecordToLibraryItem } from "./domainLibraryItems";
 import { writeAutomationConfigFile as writeStoredAutomationConfigFile } from "./domainPersistence";
 import type { Locale } from "../i18n";
 import { formatThreadTimestamp } from "../shared/text";
+import { isUnsupportedRpcError } from "../shared/rpcErrors";
 
 type AutomationConfigRecord = Pick<
   DomainConfigListResponse<AutomationConfig>["data"][number],

@@ -1,7 +1,6 @@
 import type { Turn } from "@crewon-protocol/v2/Turn";
 
 import {
-  isUnsupportedRpcError,
   type AppServerClient,
   type OfficeDelegationCancelResponse,
   type OfficeDelegationDispatchResponse,
@@ -17,6 +16,7 @@ import {
   type OfficeVerificationDispatchResponse,
   type OfficeVerificationRetryResponse,
 } from "../app-server/appServer";
+import { isUnsupportedRpcError } from "../shared/rpcErrors";
 import { withBackendWorkspace } from "../backend/backendWorkspace";
 import {
   officeConfigForThread,

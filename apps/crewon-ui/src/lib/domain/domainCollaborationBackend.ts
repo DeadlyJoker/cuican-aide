@@ -1,10 +1,11 @@
 import type { McpServerConfigRecord } from "@crewon-protocol/v2/McpServerConfigRecord";
 import type { McpServerStatus } from "@crewon-protocol/v2/McpServerStatus";
 
-import { isUnsupportedRpcError, type AppServerClient } from "../app-server/appServer";
+import type { AppServerClient } from "../app-server/appServer";
 import { isLegacyGeneratedAgentPlaceholder } from "../agent-config/legacyAgentPlaceholder";
 import { withBackendWorkspace } from "../backend/backendWorkspace";
 import type { AgentConfig, OfficeConfig, OfficeMember } from "./crewonDomain";
+import { isUnsupportedRpcError } from "../shared/rpcErrors";
 
 export type McpInventoryServer = {
   config?: McpServerConfigRecord;

@@ -1,4 +1,4 @@
-import { isUnsupportedRpcError, type AppServerClient } from "../app-server/appServer";
+import type { AppServerClient } from "../app-server/appServer";
 import type {
   LibraryItem,
   LibraryPanelAction,
@@ -9,6 +9,7 @@ import type {
 import { toolConfigRecordsToLibraryItems } from "./domainLibraryItems";
 import type { Locale } from "../i18n";
 import { pathBaseName } from "../shared/pathUtils";
+import { isUnsupportedRpcError } from "../shared/rpcErrors";
 
 export type ToolConfigWriteResult = {
   filePath: string;

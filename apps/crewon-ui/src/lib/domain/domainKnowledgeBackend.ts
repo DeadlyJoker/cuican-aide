@@ -1,8 +1,9 @@
-import { isUnsupportedRpcError, type AppServerClient } from "../app-server/appServer";
+import type { AppServerClient } from "../app-server/appServer";
 import { withBackendWorkspace } from "../backend/backendWorkspace";
 import type { KnowledgeData } from "./crewonDomain";
 import { normalizeKnowledgeData } from "./domainKnowledgeData";
 import type { Locale } from "../i18n";
+import { isUnsupportedRpcError } from "../shared/rpcErrors";
 
 const EMPTY_KNOWLEDGE_DATA: KnowledgeData = { memories: [], sources: [] };
 

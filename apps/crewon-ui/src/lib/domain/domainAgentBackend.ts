@@ -1,4 +1,4 @@
-import { isUnsupportedRpcError, type AppServerClient } from "../app-server/appServer";
+import type { AppServerClient } from "../app-server/appServer";
 import { withBackendWorkspace } from "../backend/backendWorkspace";
 import type { AgentConfig, LibraryItem } from "./crewonDomain";
 import {
@@ -13,6 +13,7 @@ import {
   writeAgentConfigFile as writeStoredAgentConfigFile,
 } from "./domainPersistence";
 import type { Locale } from "../i18n";
+import { isUnsupportedRpcError } from "../shared/rpcErrors";
 
 export async function writeAgentConfig(
   client: AppServerClient,
