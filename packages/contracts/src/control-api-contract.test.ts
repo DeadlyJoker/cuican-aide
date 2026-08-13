@@ -6,11 +6,13 @@ import { ContractValidationError } from "./contract-validation-error.ts";
 import {
   formatAutomationCursor,
   formatAgentVersionCursor,
+  formatCapabilityCursor,
   formatMessageCursor,
   formatThreadCursor,
   formatThreadRunCursor,
   parseAgentVersionId,
   parseAgentVersionListQuery,
+  parseCapabilityListQuery,
   parseArchiveThreadRequest,
   parseAutomationId,
   parseAutomationListQuery,
@@ -71,6 +73,7 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/automations",
     "/api/v1/automations/{automationId}",
     "/api/v1/automations/{automationId}:run-now",
+    "/api/v1/capabilities",
     "/api/v1/health/live",
     "/api/v1/health/ready",
     "/api/v1/knowledge",
@@ -552,6 +555,22 @@ test("freezes strict immutable AgentVersion publication and pagination", () => {
     afterAgentVersionId: "agent-version-1",
     limit: 25,
   });
+  const capabilityCursor = formatCapabilityCursor({
+    releaseId: `sha256:${"a".repeat(64)}`,
+    afterKey: '["agent-version-1","function","read_file"]',
+  });
+  assert.deepEqual(
+    parseCapabilityListQuery({ cursor: capabilityCursor, limit: "10" }),
+    {
+      releaseId: `sha256:${"a".repeat(64)}`,
+      afterKey: '["agent-version-1","function","read_file"]',
+      limit: 10,
+    },
+  );
+  assert.throws(
+    () => parseCapabilityListQuery({ cursor: `${capabilityCursor}x` }),
+    isContractError,
+  );
   for (const input of [
     { ...source, tenantId: "tenant-attacker" },
     { ...source, contentDigest: `sha256:${"a".repeat(64)}` },

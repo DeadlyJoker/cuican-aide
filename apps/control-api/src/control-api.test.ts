@@ -47,6 +47,7 @@ import type {
   GetThreadGoalResponse,
   ListThreadMessagesResponse,
   ListAgentVersionsResponse,
+  ListActiveCapabilitiesResponse,
   ListAutomationsResponse,
   WorkflowVersionMutationResponse,
   GetWorkflowVersionResponse,
@@ -66,6 +67,7 @@ import type {
   ToolApprovalMutationResponse,
 } from "@crewon/contracts";
 import {
+  formatCapabilityCursor,
   formatMessageCursor,
   formatThreadCursor,
   formatThreadRunCursor,
@@ -1874,6 +1876,58 @@ test("publishes, replays and discovers immutable tenant AgentVersions", async (c
     assert.equal(serializedCatalog.includes(forbidden), false);
   }
 
+  const firstCapabilityPage = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/capabilities?limit=1",
+    headers: readHeaders(),
+  });
+  assert.equal(firstCapabilityPage.statusCode, 200, firstCapabilityPage.body);
+  const firstCapabilityBody =
+    firstCapabilityPage.json<ListActiveCapabilitiesResponse>();
+  assert.equal(firstCapabilityBody.releaseId, selectedBundle.releaseId);
+  assert.equal(firstCapabilityBody.data.length, 1);
+  assert.ok(firstCapabilityBody.nextCursor !== null);
+  const secondCapabilityPage = await runtime.app.inject({
+    method: "GET",
+    url: `/api/v1/capabilities?limit=1&cursor=${firstCapabilityBody.nextCursor}`,
+    headers: readHeaders(),
+  });
+  assert.equal(secondCapabilityPage.statusCode, 200, secondCapabilityPage.body);
+  const secondCapabilityBody =
+    secondCapabilityPage.json<ListActiveCapabilitiesResponse>();
+  assert.equal(secondCapabilityBody.nextCursor, null);
+  assert.deepEqual(
+    [...firstCapabilityBody.data, ...secondCapabilityBody.data].map(
+      ({ kind, name, inputFormat }) => ({ kind, name, inputFormat }),
+    ),
+    [
+      { kind: "custom", name: "search_docs", inputFormat: "text" },
+      { kind: "function", name: "read_file", inputFormat: "jsonSchema" },
+    ],
+  );
+  const serializedCapabilities = JSON.stringify([
+    firstCapabilityBody,
+    secondCapabilityBody,
+  ]);
+  for (const forbidden of [
+    "inputSchema",
+    "instructions",
+    "credential",
+    "secret",
+  ]) {
+    assert.equal(serializedCapabilities.includes(forbidden), false);
+  }
+  const staleCursor = formatCapabilityCursor({
+    releaseId: `sha256:${"f".repeat(64)}`,
+    afterKey: '["agent-version-api-1","custom","search_docs"]',
+  });
+  const stalePage = await runtime.app.inject({
+    method: "GET",
+    url: `/api/v1/capabilities?cursor=${staleCursor}`,
+    headers: readHeaders(),
+  });
+  assertError(stalePage, 400, "validation", "capability_catalog_changed");
+
   const replayed = await runtime.app.inject({
     method: "POST",
     url: "/api/v1/agent-versions",
@@ -3191,6 +3245,14 @@ function agentVersionSource() {
       governedContextDigest: null,
     },
     tools: [
+      {
+        schemaVersion: "crewon.tool-definition.v0" as const,
+        kind: "custom" as const,
+        name: "search_docs",
+        description: "Search approved documentation.",
+        execution: "serial" as const,
+        inputFormat: "text" as const,
+      },
       {
         schemaVersion: "crewon.tool-definition.v0" as const,
         kind: "function" as const,

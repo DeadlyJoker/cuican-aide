@@ -8,6 +8,31 @@ import {
   ControlApiProtocolError,
 } from "./control-api-client.ts";
 
+test("lists the active capability catalog with an opaque cursor", async () => {
+  let requested = "";
+  const response = {
+    releaseId: `sha256:${"a".repeat(64)}`,
+    activatedAt: "2026-08-13T00:00:00Z",
+    data: [],
+    nextCursor: null,
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async (input) => {
+      requested = String(input);
+      return jsonResponse(200, response);
+    },
+  });
+  assert.deepEqual(
+    await client.listActiveCapabilities({ cursor: "opaque", limit: 25 }),
+    response,
+  );
+  assert.equal(
+    requested,
+    "https://control.example/api/v1/capabilities?cursor=opaque&limit=25",
+  );
+});
+
 test("uses typed Knowledge create, read and pagination routes", async () => {
   const requests: { input: string; init: RequestInit }[] = [];
   const knowledge = {
