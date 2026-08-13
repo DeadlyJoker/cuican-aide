@@ -232,7 +232,6 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
             kind,
             name,
           })),
-          runtimeTools: runtime.version.tools,
           history: continuationState?.history ?? [
             ...(runtime.governedContext?.modelItems() ?? []),
             ...prepared.history,
@@ -618,7 +617,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
     const index = pending.events.findIndex(
       (event) => event.data.callId === currentReceipt.call.callId,
     );
-    if (index < 0)
+    if (currentReceipt.status !== "completed" && index < 0)
       throw new Error("workflow_tool_approval_pending_call_missing");
     const base = {
       runtime: input.runtime,
@@ -636,6 +635,28 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       },
       node: input.node,
     };
+    const continuationState = {
+      modelSampleIndex: checkpoint.modelSampleIndex + 1,
+      toolRoundsConsumed: checkpoint.toolRoundsConsumed,
+      history: checkpoint.history,
+      continuation:
+        checkpoint.providerCheckpoint === null
+          ? ({ kind: "manual" } as const)
+          : ({
+              kind: "providerCheckpoint" as const,
+              checkpoint: checkpoint.providerCheckpoint,
+              newHistoryStartIndex: workflowContinuationHistoryStart(
+                checkpoint.history,
+                pending.requestedCallIds,
+              ),
+            } as const),
+      revision: checkpoint.revision,
+    };
+    if (currentReceipt.status === "completed") {
+      if (!pending.completedCallIds.includes(currentReceipt.call.callId))
+        throw new Error("workflow_tool_approval_completed_event_missing");
+      return this.#execute({ ...base, continuationState });
+    }
     try {
       const tool = await executeWorkflowTools(
         {
@@ -666,20 +687,9 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       return this.#execute({
         ...base,
         continuationState: {
-          modelSampleIndex: checkpoint.modelSampleIndex + 1,
+          ...continuationState,
           toolRoundsConsumed: tool.toolRoundsConsumed,
           history: tool.history,
-          continuation:
-            checkpoint.providerCheckpoint === null
-              ? { kind: "manual" }
-              : {
-                  kind: "providerCheckpoint",
-                  checkpoint: checkpoint.providerCheckpoint,
-                  newHistoryStartIndex: workflowContinuationHistoryStart(
-                    checkpoint.history,
-                    pending.requestedCallIds,
-                  ),
-                },
           revision: tool.revision,
         },
       });
