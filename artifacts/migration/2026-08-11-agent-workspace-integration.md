@@ -658,7 +658,8 @@ Gate 报告为通过。
   unsupported，不用 legacy fallback 掩盖。
 - Command Workspace 的正常产品组合现在强制 `workspaceAuthority="control"`；空任务页只展示 Control `Tasks`，不再从 cwd 合成 legacy Workspace，旧
   `teamCwd` authority 与 attach-context callback 已从该路径删除。三条 renderer cutover 合并后 UI 完整套件为 `286/286` files、`1798/1798`
-  tests，lint 与 production build 均通过；build 只保留既有 chunk-size warning。
+  tests，lint 与 production build 均通过；build 只保留既有 chunk-size warning。Control shell 也不再暴露只会尝试旧 App Server 的 Schedule 页面；
+  历史 `#view-schedule` 在 Control authority 下确定性回到 New task，直到纯 TypeScript scheduler contract 真正存在。
 - PostgreSQL 真实主机的更强完整回归也已通过：Store `558 pass + 1 probe placeholder skip`、Control API `116/116`；Runtime Worker 的 focused
   PostgreSQL production suite 为 `134/134`。这些结果与上面的 W01 定向矩阵共同证明单一 PG authority 的 transaction/replay/recovery 路径，不把
   未配置 provider 或发布凭据的能力外推为完成。
