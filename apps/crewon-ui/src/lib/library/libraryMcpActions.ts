@@ -1,5 +1,5 @@
-import type { JsonValue } from "@crewon-protocol/serde_json/JsonValue";
-import type { ResourceContent } from "@crewon-protocol/ResourceContent";
+import type { JsonValue } from "@crewon-ui-model/serde_json/JsonValue";
+import type { ResourceContent } from "@crewon-ui-model/ResourceContent";
 
 import type { LibraryPanel, LibraryPanelAction } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";

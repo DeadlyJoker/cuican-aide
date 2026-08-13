@@ -1,4 +1,4 @@
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 
 import { AppWorkspaceConversationContent } from "./AppWorkspaceConversationContent";
 import { AppWorkspaceLibraryContent } from "./AppWorkspaceLibraryContent";

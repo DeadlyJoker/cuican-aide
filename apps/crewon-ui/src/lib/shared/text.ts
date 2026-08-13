@@ -1,5 +1,5 @@
-import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
-import type { UserInput } from "@crewon-protocol/v2/UserInput";
+import type { ThreadItem } from "@crewon-ui-model/v2/ThreadItem";
+import type { UserInput } from "@crewon-ui-model/v2/UserInput";
 import type { Locale } from "../i18n";
 
 export function slugifySkillName(name: string): string {

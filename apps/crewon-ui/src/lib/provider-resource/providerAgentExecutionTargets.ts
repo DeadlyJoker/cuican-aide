@@ -1,4 +1,4 @@
-import type { ResourceRef } from "@crewon-platform-protocol/v2/ResourceRef";
+import type { ResourceRef } from "@crewon-platform-model/v2/ResourceRef";
 
 import type { ExecutionTargetOption } from "../scene/sceneCatalog";
 

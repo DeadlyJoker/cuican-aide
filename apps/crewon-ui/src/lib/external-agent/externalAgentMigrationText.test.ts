@@ -1,4 +1,4 @@
-import type { ExternalAgentConfigMigrationItem } from "@crewon-protocol/v2/ExternalAgentConfigMigrationItem";
+import type { ExternalAgentConfigMigrationItem } from "@crewon-ui-model/v2/ExternalAgentConfigMigrationItem";
 import { describe, expect, it } from "vitest";
 
 import type { AgentConfig } from "../domain/crewonDomain";

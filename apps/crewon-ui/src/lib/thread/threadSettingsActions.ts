@@ -1,7 +1,7 @@
-import type { AskForApproval } from "@crewon-protocol/v2/AskForApproval";
-import type { SandboxMode } from "@crewon-protocol/v2/SandboxMode";
-import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { Turn } from "@crewon-protocol/v2/Turn";
+import type { AskForApproval } from "@crewon-ui-model/v2/AskForApproval";
+import type { SandboxMode } from "@crewon-ui-model/v2/SandboxMode";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
+import type { Turn } from "@crewon-ui-model/v2/Turn";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";

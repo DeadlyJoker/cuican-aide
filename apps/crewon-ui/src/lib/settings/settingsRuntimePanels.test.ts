@@ -1,5 +1,5 @@
-import type { AppInfo } from "@crewon-protocol/v2/AppInfo";
-import type { ConfigRequirementsReadResponse } from "@crewon-protocol/v2/ConfigRequirementsReadResponse";
+import type { AppInfo } from "@crewon-ui-model/v2/AppInfo";
+import type { ConfigRequirementsReadResponse } from "@crewon-ui-model/v2/ConfigRequirementsReadResponse";
 import { describe, expect, it } from "vitest";
 
 import {

@@ -1,5 +1,5 @@
-import type { McpServerConfigRecord } from "@crewon-protocol/v2/McpServerConfigRecord";
-import type { McpServerStatus } from "@crewon-protocol/v2/McpServerStatus";
+import type { McpServerConfigRecord } from "@crewon-ui-model/v2/McpServerConfigRecord";
+import type { McpServerStatus } from "@crewon-ui-model/v2/McpServerStatus";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";

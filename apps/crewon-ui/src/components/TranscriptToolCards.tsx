@@ -1,5 +1,5 @@
-import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
-import type { JsonValue } from "@crewon-protocol/serde_json/JsonValue";
+import type { ThreadItem } from "@crewon-ui-model/v2/ThreadItem";
+import type { JsonValue } from "@crewon-ui-model/serde_json/JsonValue";
 import { Copy } from "lucide-react";
 
 import type { Locale } from "../lib/i18n";

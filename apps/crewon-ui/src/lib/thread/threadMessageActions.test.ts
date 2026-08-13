@@ -1,7 +1,7 @@
-import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { Turn } from "@crewon-protocol/v2/Turn";
-import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
-import type { ThreadExecutionContext } from "@crewon-platform-protocol/v2/ThreadExecutionContext";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
+import type { Turn } from "@crewon-ui-model/v2/Turn";
+import type { TurnStartResponse } from "@crewon-ui-model/v2/TurnStartResponse";
+import type { ThreadExecutionContext } from "@crewon-platform-model/v2/ThreadExecutionContext";
 import { describe, expect, it, vi } from "vitest";
 
 import type { PendingComposerMention } from "../shared/composerMentions";

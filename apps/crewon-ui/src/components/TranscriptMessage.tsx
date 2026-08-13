@@ -9,8 +9,8 @@ import {
   Sparkles,
   Terminal,
 } from "lucide-react";
-import type { Turn } from "@crewon-protocol/v2/Turn";
-import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
+import type { Turn } from "@crewon-ui-model/v2/Turn";
+import type { ThreadItem } from "@crewon-ui-model/v2/ThreadItem";
 
 import type { Locale } from "../lib/i18n";
 import { itemPreview, userInputToText } from "../lib/shared/text";

@@ -1,4 +1,4 @@
-import type { ResourceContent } from "@crewon-protocol/ResourceContent";
+import type { ResourceContent } from "@crewon-ui-model/ResourceContent";
 import { describe, expect, it } from "vitest";
 
 import type { LibraryPanel, LibraryPanelAction } from "../domain/crewonDomain";

@@ -1,7 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { ConversationSummary } from "@crewon-ui-model/ConversationSummary";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
 
 import { Inspector } from "./Inspector";

@@ -1,4 +1,4 @@
-import type { FsGetMetadataResponse } from "@crewon-protocol/v2/FsGetMetadataResponse";
+import type { FsGetMetadataResponse } from "@crewon-ui-model/v2/FsGetMetadataResponse";
 
 import type { NoticeState } from "../shared/noticeState";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";

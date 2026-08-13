@@ -1,5 +1,5 @@
-import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
+import type { ThreadItem } from "@crewon-ui-model/v2/ThreadItem";
 
 /**
  * Step progress derived from the latest plan item of a thread. `current` is the

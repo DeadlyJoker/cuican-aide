@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { ProviderConnectionProjection } from "@crewon-platform-protocol/v2/ProviderConnectionProjection";
-import type { ResourceBindingProjection } from "@crewon-platform-protocol/v2/ResourceBindingProjection";
-import type { ResourceRef } from "@crewon-platform-protocol/v2/ResourceRef";
-import type { WorkspaceRef } from "@crewon-platform-protocol/v2/WorkspaceRef";
+import type { ProviderConnectionProjection } from "@crewon-platform-model/v2/ProviderConnectionProjection";
+import type { ResourceBindingProjection } from "@crewon-platform-model/v2/ResourceBindingProjection";
+import type { ResourceRef } from "@crewon-platform-model/v2/ResourceRef";
+import type { WorkspaceRef } from "@crewon-platform-model/v2/WorkspaceRef";
 
 import {
   ProviderResourceSession,

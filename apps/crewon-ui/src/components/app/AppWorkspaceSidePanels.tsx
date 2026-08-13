@@ -1,5 +1,5 @@
-import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { ConversationSummary } from "@crewon-ui-model/ConversationSummary";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
 
 import { CapabilityDock } from "../CapabilityDock";

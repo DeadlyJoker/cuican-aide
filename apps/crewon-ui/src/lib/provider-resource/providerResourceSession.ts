@@ -1,15 +1,15 @@
-import type { ProviderConnectionProjection } from "@crewon-platform-protocol/v2/ProviderConnectionProjection";
-import type { ResourceBindingMode } from "@crewon-platform-protocol/v2/ResourceBindingMode";
-import type { ResourceBindingProjection } from "@crewon-platform-protocol/v2/ResourceBindingProjection";
-import type { ResourceBindingUpdatedNotification } from "@crewon-platform-protocol/v2/ResourceBindingUpdatedNotification";
-import type { ResourceListParams } from "@crewon-platform-protocol/v2/ResourceListParams";
-import type { ResourceListResponse } from "@crewon-platform-protocol/v2/ResourceListResponse";
-import type { ResourceRef } from "@crewon-platform-protocol/v2/ResourceRef";
-import type { ResourceType } from "@crewon-platform-protocol/v2/ResourceType";
-import type { WorkspaceRef } from "@crewon-platform-protocol/v2/WorkspaceRef";
-import type { WorkspaceScope } from "@crewon-platform-protocol/v2/WorkspaceScope";
-import type { WorkspaceListResponse } from "@crewon-platform-protocol/v2/WorkspaceListResponse";
-import type { WorkspaceSummary } from "@crewon-platform-protocol/v2/WorkspaceSummary";
+import type { ProviderConnectionProjection } from "@crewon-platform-model/v2/ProviderConnectionProjection";
+import type { ResourceBindingMode } from "@crewon-platform-model/v2/ResourceBindingMode";
+import type { ResourceBindingProjection } from "@crewon-platform-model/v2/ResourceBindingProjection";
+import type { ResourceBindingUpdatedNotification } from "@crewon-platform-model/v2/ResourceBindingUpdatedNotification";
+import type { ResourceListParams } from "@crewon-platform-model/v2/ResourceListParams";
+import type { ResourceListResponse } from "@crewon-platform-model/v2/ResourceListResponse";
+import type { ResourceRef } from "@crewon-platform-model/v2/ResourceRef";
+import type { ResourceType } from "@crewon-platform-model/v2/ResourceType";
+import type { WorkspaceRef } from "@crewon-platform-model/v2/WorkspaceRef";
+import type { WorkspaceScope } from "@crewon-platform-model/v2/WorkspaceScope";
+import type { WorkspaceListResponse } from "@crewon-platform-model/v2/WorkspaceListResponse";
+import type { WorkspaceSummary } from "@crewon-platform-model/v2/WorkspaceSummary";
 
 import type { ProviderResourceClient } from "./providerResourceClient";
 import {

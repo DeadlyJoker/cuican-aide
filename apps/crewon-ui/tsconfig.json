@@ -19,12 +19,8 @@
     "paths": {
       "node:fs": ["src/type-roots/node/index.d.ts"],
       "node:fs/promises": ["src/type-roots/node/index.d.ts"],
-      "@crewon-protocol/*": [
-        "../../codex-rs/app-server-protocol/schema/typescript/*"
-      ],
-      "@crewon-platform-protocol/*": [
-        "../../codex-rs/app-server-protocol/schema/typescript-experimental-platform/*"
-      ]
+      "@crewon-ui-model/*": ["src/ui-model/typescript/*"],
+      "@crewon-platform-model/*": ["src/ui-model/platform/*"]
     },
     "resolveJsonModule": true,
     "isolatedModules": true,
@@ -33,8 +29,6 @@
   },
   "include": [
     "src",
-    "vite.config.ts",
-    "../../codex-rs/app-server-protocol/schema/typescript/**/*.ts",
-    "../../codex-rs/app-server-protocol/schema/typescript-experimental-platform/**/*.ts"
+    "vite.config.ts"
   ]
 }

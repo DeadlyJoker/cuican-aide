@@ -1,21 +1,21 @@
-import type { ProviderConnectParams } from "@crewon-platform-protocol/v2/ProviderConnectParams";
-import type { ProviderConnectResponse } from "@crewon-platform-protocol/v2/ProviderConnectResponse";
-import type { ProviderReadParams } from "@crewon-platform-protocol/v2/ProviderReadParams";
-import type { ProviderReadResponse } from "@crewon-platform-protocol/v2/ProviderReadResponse";
-import type { ResourceBindParams } from "@crewon-platform-protocol/v2/ResourceBindParams";
-import type { ResourceBindResponse } from "@crewon-platform-protocol/v2/ResourceBindResponse";
-import type { ResourceListParams } from "@crewon-platform-protocol/v2/ResourceListParams";
-import type { ResourceListResponse } from "@crewon-platform-protocol/v2/ResourceListResponse";
-import type { ResourceReadParams } from "@crewon-platform-protocol/v2/ResourceReadParams";
-import type { ResourceReadResponse } from "@crewon-platform-protocol/v2/ResourceReadResponse";
-import type { ResourceUnbindParams } from "@crewon-platform-protocol/v2/ResourceUnbindParams";
-import type { ResourceUnbindResponse } from "@crewon-platform-protocol/v2/ResourceUnbindResponse";
-import type { WorkspaceBindParams } from "@crewon-platform-protocol/v2/WorkspaceBindParams";
-import type { WorkspaceBindResponse } from "@crewon-platform-protocol/v2/WorkspaceBindResponse";
-import type { WorkspaceListParams } from "@crewon-platform-protocol/v2/WorkspaceListParams";
-import type { WorkspaceListResponse } from "@crewon-platform-protocol/v2/WorkspaceListResponse";
-import type { ThreadExecutionContextUpdateParams } from "@crewon-platform-protocol/v2/ThreadExecutionContextUpdateParams";
-import type { ThreadExecutionContextUpdateResponse } from "@crewon-platform-protocol/v2/ThreadExecutionContextUpdateResponse";
+import type { ProviderConnectParams } from "@crewon-platform-model/v2/ProviderConnectParams";
+import type { ProviderConnectResponse } from "@crewon-platform-model/v2/ProviderConnectResponse";
+import type { ProviderReadParams } from "@crewon-platform-model/v2/ProviderReadParams";
+import type { ProviderReadResponse } from "@crewon-platform-model/v2/ProviderReadResponse";
+import type { ResourceBindParams } from "@crewon-platform-model/v2/ResourceBindParams";
+import type { ResourceBindResponse } from "@crewon-platform-model/v2/ResourceBindResponse";
+import type { ResourceListParams } from "@crewon-platform-model/v2/ResourceListParams";
+import type { ResourceListResponse } from "@crewon-platform-model/v2/ResourceListResponse";
+import type { ResourceReadParams } from "@crewon-platform-model/v2/ResourceReadParams";
+import type { ResourceReadResponse } from "@crewon-platform-model/v2/ResourceReadResponse";
+import type { ResourceUnbindParams } from "@crewon-platform-model/v2/ResourceUnbindParams";
+import type { ResourceUnbindResponse } from "@crewon-platform-model/v2/ResourceUnbindResponse";
+import type { WorkspaceBindParams } from "@crewon-platform-model/v2/WorkspaceBindParams";
+import type { WorkspaceBindResponse } from "@crewon-platform-model/v2/WorkspaceBindResponse";
+import type { WorkspaceListParams } from "@crewon-platform-model/v2/WorkspaceListParams";
+import type { WorkspaceListResponse } from "@crewon-platform-model/v2/WorkspaceListResponse";
+import type { ThreadExecutionContextUpdateParams } from "@crewon-platform-model/v2/ThreadExecutionContextUpdateParams";
+import type { ThreadExecutionContextUpdateResponse } from "@crewon-platform-model/v2/ThreadExecutionContextUpdateResponse";
 
 export type ProviderResourceRpc = {
   "workspace/list": {

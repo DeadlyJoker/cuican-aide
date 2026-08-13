@@ -1,6 +1,6 @@
-import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
-import type { Turn } from "@crewon-protocol/v2/Turn";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
+import type { ThreadItem } from "@crewon-ui-model/v2/ThreadItem";
+import type { Turn } from "@crewon-ui-model/v2/Turn";
 
 export type EmptyThreadSelectionBehavior = "preserve" | "selectFirst";
 

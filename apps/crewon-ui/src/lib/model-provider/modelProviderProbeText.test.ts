@@ -1,4 +1,4 @@
-import type { ModelProviderProbeResponse } from "@crewon-protocol/v2/ModelProviderProbeResponse";
+import type { ModelProviderProbeResponse } from "@crewon-ui-model/v2/ModelProviderProbeResponse";
 import { describe, expect, it } from "vitest";
 
 import {

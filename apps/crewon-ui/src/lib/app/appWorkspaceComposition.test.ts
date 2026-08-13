@@ -34,6 +34,19 @@ describe("App Workspace Control composition", () => {
     expect(webManifest).not.toMatch(/app.server|device.gateway|6176/iu);
   });
 
+  it("owns its TypeScript view model without Rust schema inputs", () => {
+    const tsconfig = readFileSync(
+      new URL("../../../tsconfig.json", import.meta.url),
+      "utf8",
+    );
+
+    expect(tsconfig).toContain("@crewon-ui-model/*");
+    expect(tsconfig).toContain("@crewon-platform-model/*");
+    expect(tsconfig).not.toMatch(
+      /codex-rs|app-server-protocol|@crewon-protocol|@crewon-platform-protocol/u,
+    );
+  });
+
   it("does not compose the legacy App Server connection or authorities", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),

@@ -1,5 +1,5 @@
-import type { GitDiffToRemoteResponse } from "@crewon-protocol/GitDiffToRemoteResponse";
-import type { Account } from "@crewon-protocol/v2/Account";
+import type { GitDiffToRemoteResponse } from "@crewon-ui-model/GitDiffToRemoteResponse";
+import type { Account } from "@crewon-ui-model/v2/Account";
 
 export type AccountStatus = {
   account: Account | null;

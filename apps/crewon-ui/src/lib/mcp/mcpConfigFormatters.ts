@@ -1,5 +1,5 @@
-import type { JsonValue } from "@crewon-protocol/serde_json/JsonValue";
-import type { McpServerConfigRecord } from "@crewon-protocol/v2/McpServerConfigRecord";
+import type { JsonValue } from "@crewon-ui-model/serde_json/JsonValue";
+import type { McpServerConfigRecord } from "@crewon-ui-model/v2/McpServerConfigRecord";
 
 import type { Locale } from "../i18n";
 

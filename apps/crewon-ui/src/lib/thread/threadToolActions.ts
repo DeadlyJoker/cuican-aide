@@ -1,6 +1,6 @@
-import type { ReviewStartResponse } from "@crewon-protocol/v2/ReviewStartResponse";
-import type { ReviewTarget } from "@crewon-protocol/v2/ReviewTarget";
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { ReviewStartResponse } from "@crewon-ui-model/v2/ReviewStartResponse";
+import type { ReviewTarget } from "@crewon-ui-model/v2/ReviewTarget";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 
 import type { NoticeState } from "../shared/noticeState";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";

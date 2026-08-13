@@ -1,5 +1,5 @@
 import { ListChecks, Plus, ShieldCheck, Target } from "lucide-react";
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
 import {
   type ChangeEvent,
@@ -151,7 +151,7 @@ import {
   providerAgentExecutionTargetOptions,
   providerAgentResourceForTarget,
 } from "../../lib/provider-resource/providerAgentExecutionTargets";
-import type { ResourceRef } from "@crewon-platform-protocol/v2/ResourceRef";
+import type { ResourceRef } from "@crewon-platform-model/v2/ResourceRef";
 
 export {
   activateDesignPanelTab,

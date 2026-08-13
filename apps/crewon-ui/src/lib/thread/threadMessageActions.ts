@@ -1,8 +1,8 @@
-import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { Turn } from "@crewon-protocol/v2/Turn";
-import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
-import type { ReviewStartResponse } from "@crewon-protocol/v2/ReviewStartResponse";
-import type { ReviewTarget } from "@crewon-protocol/v2/ReviewTarget";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
+import type { Turn } from "@crewon-ui-model/v2/Turn";
+import type { TurnStartResponse } from "@crewon-ui-model/v2/TurnStartResponse";
+import type { ReviewStartResponse } from "@crewon-ui-model/v2/ReviewStartResponse";
+import type { ReviewTarget } from "@crewon-ui-model/v2/ReviewTarget";
 
 import type { PendingComposerMention } from "../shared/composerMentions";
 import {
@@ -27,7 +27,7 @@ import {
   threadSendFailureNotice,
 } from "./threadActionPresentation";
 import type { ThreadRuntimeSettings } from "./threadRuntimeSettings";
-import type { ThreadExecutionContext } from "@crewon-platform-protocol/v2/ThreadExecutionContext";
+import type { ThreadExecutionContext } from "@crewon-platform-model/v2/ThreadExecutionContext";
 import { promptPreview } from "../shared/text";
 import type { ComposerImageInput } from "../shared/composerImages";
 

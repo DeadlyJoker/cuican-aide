@@ -1,4 +1,4 @@
-import type { ExternalAgentConfigMigrationItem } from "@crewon-protocol/v2/ExternalAgentConfigMigrationItem";
+import type { ExternalAgentConfigMigrationItem } from "@crewon-ui-model/v2/ExternalAgentConfigMigrationItem";
 
 export type LibraryKind =
   | "plugins"
@@ -738,7 +738,7 @@ export type LibraryItem = {
         configName?: string;
         config?: Record<
           string,
-          import("@crewon-protocol/serde_json/JsonValue").JsonValue
+          import("@crewon-ui-model/serde_json/JsonValue").JsonValue
         >;
         resource?: {
           server: string;

@@ -1,10 +1,10 @@
-import type { ProviderConnectionProjection } from "@crewon-platform-protocol/v2/ProviderConnectionProjection";
-import type { ResourceBindResponse } from "@crewon-platform-protocol/v2/ResourceBindResponse";
-import type { ResourceBindingMode } from "@crewon-platform-protocol/v2/ResourceBindingMode";
-import type { ExecutionLocation } from "@crewon-platform-protocol/v2/ExecutionLocation";
-import type { ResourceRef } from "@crewon-platform-protocol/v2/ResourceRef";
-import type { WorkspaceRef } from "@crewon-platform-protocol/v2/WorkspaceRef";
-import type { WorkspaceScope } from "@crewon-platform-protocol/v2/WorkspaceScope";
+import type { ProviderConnectionProjection } from "@crewon-platform-model/v2/ProviderConnectionProjection";
+import type { ResourceBindResponse } from "@crewon-platform-model/v2/ResourceBindResponse";
+import type { ResourceBindingMode } from "@crewon-platform-model/v2/ResourceBindingMode";
+import type { ExecutionLocation } from "@crewon-platform-model/v2/ExecutionLocation";
+import type { ResourceRef } from "@crewon-platform-model/v2/ResourceRef";
+import type { WorkspaceRef } from "@crewon-platform-model/v2/WorkspaceRef";
+import type { WorkspaceScope } from "@crewon-platform-model/v2/WorkspaceScope";
 
 const MAX_PAGES = 20;
 const MAX_ITEMS = 1_000;

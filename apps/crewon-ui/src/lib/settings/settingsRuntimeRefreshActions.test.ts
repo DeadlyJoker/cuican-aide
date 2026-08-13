@@ -1,10 +1,10 @@
-import type { AppsListResponse } from "@crewon-protocol/v2/AppsListResponse";
-import type { ConfigRequirementsReadResponse } from "@crewon-protocol/v2/ConfigRequirementsReadResponse";
-import type { GetAccountResponse } from "@crewon-protocol/v2/GetAccountResponse";
-import type { GetAuthStatusResponse } from "@crewon-protocol/GetAuthStatusResponse";
-import type { ModelProviderCapabilitiesReadResponse } from "@crewon-protocol/v2/ModelProviderCapabilitiesReadResponse";
-import type { PluginListResponse } from "@crewon-protocol/v2/PluginListResponse";
-import type { WindowsSandboxReadinessResponse } from "@crewon-protocol/v2/WindowsSandboxReadinessResponse";
+import type { AppsListResponse } from "@crewon-ui-model/v2/AppsListResponse";
+import type { ConfigRequirementsReadResponse } from "@crewon-ui-model/v2/ConfigRequirementsReadResponse";
+import type { GetAccountResponse } from "@crewon-ui-model/v2/GetAccountResponse";
+import type { GetAuthStatusResponse } from "@crewon-ui-model/GetAuthStatusResponse";
+import type { ModelProviderCapabilitiesReadResponse } from "@crewon-ui-model/v2/ModelProviderCapabilitiesReadResponse";
+import type { PluginListResponse } from "@crewon-ui-model/v2/PluginListResponse";
+import type { WindowsSandboxReadinessResponse } from "@crewon-ui-model/v2/WindowsSandboxReadinessResponse";
 import { describe, expect, it } from "vitest";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";

@@ -9,9 +9,9 @@ import {
   Unlink,
 } from "lucide-react";
 
-import type { ResourceBindingProjection } from "@crewon-platform-protocol/v2/ResourceBindingProjection";
-import type { ResourceRef } from "@crewon-platform-protocol/v2/ResourceRef";
-import type { ResourceType } from "@crewon-platform-protocol/v2/ResourceType";
+import type { ResourceBindingProjection } from "@crewon-platform-model/v2/ResourceBindingProjection";
+import type { ResourceRef } from "@crewon-platform-model/v2/ResourceRef";
+import type { ResourceType } from "@crewon-platform-model/v2/ResourceType";
 
 import type { ComposerResourceTag } from "../composer/ComposerResourceTags";
 import type { ProviderResourceSnapshot } from "../../lib/provider-resource/providerResourceSession";

@@ -1,6 +1,6 @@
-import type { ConfigReadResponse } from "@crewon-protocol/v2/ConfigReadResponse";
-import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { ConfigReadResponse } from "@crewon-ui-model/v2/ConfigReadResponse";
+import type { ConversationSummary } from "@crewon-ui-model/ConversationSummary";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 
 import type { GitRemoteDiffSummary } from "../shared/statusTypes";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";

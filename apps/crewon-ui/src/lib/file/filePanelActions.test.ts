@@ -1,4 +1,4 @@
-import type { FsGetMetadataResponse } from "@crewon-protocol/v2/FsGetMetadataResponse";
+import type { FsGetMetadataResponse } from "@crewon-ui-model/v2/FsGetMetadataResponse";
 import { describe, expect, it } from "vitest";
 
 import type { NoticeState } from "../shared/noticeState";

@@ -8,7 +8,7 @@
  * themselves.
  */
 
-import type { ConfigReadResponse } from "@crewon-protocol/v2/ConfigReadResponse";
+import type { ConfigReadResponse } from "@crewon-ui-model/v2/ConfigReadResponse";
 
 import type { ProviderCredentialCatalog } from "./providerCredentialStore";
 

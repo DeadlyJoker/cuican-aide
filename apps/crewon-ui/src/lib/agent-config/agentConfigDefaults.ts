@@ -1,7 +1,7 @@
-import type { JsonValue } from "@crewon-protocol/serde_json/JsonValue";
-import type { McpServerConfigRecord } from "@crewon-protocol/v2/McpServerConfigRecord";
-import type { McpServerStatus } from "@crewon-protocol/v2/McpServerStatus";
-import type { SkillMetadata } from "@crewon-protocol/v2/SkillMetadata";
+import type { JsonValue } from "@crewon-ui-model/serde_json/JsonValue";
+import type { McpServerConfigRecord } from "@crewon-ui-model/v2/McpServerConfigRecord";
+import type { McpServerStatus } from "@crewon-ui-model/v2/McpServerStatus";
+import type { SkillMetadata } from "@crewon-ui-model/v2/SkillMetadata";
 
 import type { Locale } from "../i18n";
 import type {

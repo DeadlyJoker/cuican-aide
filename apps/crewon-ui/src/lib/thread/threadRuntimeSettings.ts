@@ -1,5 +1,5 @@
-import type { AskForApproval } from "@crewon-protocol/v2/AskForApproval";
-import type { SandboxMode } from "@crewon-protocol/v2/SandboxMode";
+import type { AskForApproval } from "@crewon-ui-model/v2/AskForApproval";
+import type { SandboxMode } from "@crewon-ui-model/v2/SandboxMode";
 
 export type RuntimeDynamicTool = {
   namespace: string;

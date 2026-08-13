@@ -1,6 +1,6 @@
-import type { AskForApproval } from "@crewon-protocol/v2/AskForApproval";
-import type { SandboxMode } from "@crewon-protocol/v2/SandboxMode";
-import type { JsonValue } from "@crewon-protocol/serde_json/JsonValue";
+import type { AskForApproval } from "@crewon-ui-model/v2/AskForApproval";
+import type { SandboxMode } from "@crewon-ui-model/v2/SandboxMode";
+import type { JsonValue } from "@crewon-ui-model/serde_json/JsonValue";
 
 import {
   DESKTOP_LOCALE_KEY_PATH,

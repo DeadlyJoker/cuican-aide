@@ -1,6 +1,6 @@
 import { Archive, Pencil, RotateCcw, Trash2 } from "lucide-react";
 import clsx from "clsx";
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 
 import type { Locale } from "../lib/i18n";
 import { formatRelativeTime, formatThreadTimestamp } from "../lib/shared/text";

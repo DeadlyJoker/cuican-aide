@@ -1,4 +1,4 @@
-import type { JsonValue } from "@crewon-protocol/serde_json/JsonValue";
+import type { JsonValue } from "@crewon-ui-model/serde_json/JsonValue";
 
 import type { NoticeState } from "../shared/noticeState";
 import type {

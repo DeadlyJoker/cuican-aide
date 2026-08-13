@@ -1,5 +1,5 @@
-import type { FsReadFileResponse } from "@crewon-protocol/v2/FsReadFileResponse";
-import type { PluginSkillReadResponse } from "@crewon-protocol/v2/PluginSkillReadResponse";
+import type { FsReadFileResponse } from "@crewon-ui-model/v2/FsReadFileResponse";
+import type { PluginSkillReadResponse } from "@crewon-ui-model/v2/PluginSkillReadResponse";
 
 import type { LibraryItemAction, LibraryPanel } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";

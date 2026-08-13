@@ -1,7 +1,7 @@
-import type { ExternalAgentConfigImportResponse } from "@crewon-protocol/v2/ExternalAgentConfigImportResponse";
-import type { ExternalAgentConfigMigrationItem } from "@crewon-protocol/v2/ExternalAgentConfigMigrationItem";
-import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
+import type { ExternalAgentConfigImportResponse } from "@crewon-ui-model/v2/ExternalAgentConfigImportResponse";
+import type { ExternalAgentConfigMigrationItem } from "@crewon-ui-model/v2/ExternalAgentConfigMigrationItem";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
+import type { TurnStartResponse } from "@crewon-ui-model/v2/TurnStartResponse";
 
 import type { AgentConfig, LibraryPanel } from "../domain/crewonDomain";
 import {

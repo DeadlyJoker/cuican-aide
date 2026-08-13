@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 
 import type { AppThreadRuntimeHandlersParams } from "./appThreadRuntimeHandlers";
 import type {

@@ -6,7 +6,7 @@ import {
   type MutableRefObject,
 } from "react";
 import type { ControlApiClient } from "@crewon/control-client";
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
 
 import {

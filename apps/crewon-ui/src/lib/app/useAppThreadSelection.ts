@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 
 import type { ConnectionState } from "./appRuntimeState";
 import { threadTitle } from "../thread/threadModel";

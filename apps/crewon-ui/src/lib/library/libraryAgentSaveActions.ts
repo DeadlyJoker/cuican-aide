@@ -1,5 +1,5 @@
-import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
+import type { TurnStartResponse } from "@crewon-ui-model/v2/TurnStartResponse";
 
 import type { NoticeState } from "../shared/noticeState";
 import {

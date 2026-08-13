@@ -1,4 +1,4 @@
-import type { PluginReadResponse } from "@crewon-protocol/v2/PluginReadResponse";
+import type { PluginReadResponse } from "@crewon-ui-model/v2/PluginReadResponse";
 import { describe, expect, it } from "vitest";
 
 import type { LibraryPanel } from "../domain/crewonDomain";

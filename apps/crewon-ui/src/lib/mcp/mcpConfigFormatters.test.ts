@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { McpServerConfigRecord } from "@crewon-protocol/v2/McpServerConfigRecord";
+import type { McpServerConfigRecord } from "@crewon-ui-model/v2/McpServerConfigRecord";
 
 import {
   mcpConfigDetailText,

@@ -1,6 +1,6 @@
-import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { Turn } from "@crewon-protocol/v2/Turn";
-import type { TurnStartResponse } from "@crewon-protocol/v2/TurnStartResponse";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
+import type { Turn } from "@crewon-ui-model/v2/Turn";
+import type { TurnStartResponse } from "@crewon-ui-model/v2/TurnStartResponse";
 import { describe, expect, it } from "vitest";
 
 import type { NoticeState } from "../shared/noticeState";

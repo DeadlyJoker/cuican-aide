@@ -1,4 +1,4 @@
-import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
+import type { ConversationSummary } from "@crewon-ui-model/ConversationSummary";
 import type { ThreadGoalView } from "@crewon/contracts";
 import type {
   AccountStatus,

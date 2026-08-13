@@ -1,4 +1,4 @@
-import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
+import type { ThreadItem } from "@crewon-ui-model/v2/ThreadItem";
 
 import type { Locale } from "../lib/i18n";
 

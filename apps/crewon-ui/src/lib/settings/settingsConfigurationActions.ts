@@ -1,6 +1,6 @@
-import type { ConfigReadResponse } from "@crewon-protocol/v2/ConfigReadResponse";
-import type { ConfigRequirementsReadResponse } from "@crewon-protocol/v2/ConfigRequirementsReadResponse";
-import type { ModelListResponse } from "@crewon-protocol/v2/ModelListResponse";
+import type { ConfigReadResponse } from "@crewon-ui-model/v2/ConfigReadResponse";
+import type { ConfigRequirementsReadResponse } from "@crewon-ui-model/v2/ConfigRequirementsReadResponse";
+import type { ModelListResponse } from "@crewon-ui-model/v2/ModelListResponse";
 
 import { settledErrorMessages, settledValue } from "../shared/settledResults";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
@@ -151,7 +151,7 @@ export async function refreshAppearanceSettingsPanelAction(
       },
       layers: [],
       origins: {},
-    } as unknown as import("@crewon-protocol/v2/ConfigReadResponse").ConfigReadResponse;
+    } as unknown as import("@crewon-ui-model/v2/ConfigReadResponse").ConfigReadResponse;
     setCapabilityPanel(
       appearancePanel({
         configRead,

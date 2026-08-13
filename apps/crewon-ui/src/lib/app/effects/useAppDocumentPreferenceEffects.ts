@@ -1,5 +1,5 @@
 import { useEffect, type MutableRefObject } from "react";
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 import type { ControlApiClient } from "@crewon/control-client";
 
 import { appDocumentTitle } from "../appDocumentActions";

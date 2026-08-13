@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { ArrowDown, Code2, ListTree, Sparkles, Terminal } from "lucide-react";
-import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
-import type { Turn } from "@crewon-protocol/v2/Turn";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
+import type { ThreadItem } from "@crewon-ui-model/v2/ThreadItem";
+import type { Turn } from "@crewon-ui-model/v2/Turn";
 import type { Locale } from "../lib/i18n";
 import { formatRelativeTime } from "../lib/shared/text";
 import type { WorkMode } from "../lib/workMode";

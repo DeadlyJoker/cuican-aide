@@ -1,4 +1,4 @@
-import type { JsonValue } from "@crewon-protocol/serde_json/JsonValue";
+import type { JsonValue } from "@crewon-ui-model/serde_json/JsonValue";
 
 import type { LibraryAccent, LibraryItem } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";

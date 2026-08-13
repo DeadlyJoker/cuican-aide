@@ -14,8 +14,8 @@ import {
   Settings2,
   Terminal,
 } from "lucide-react";
-import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { ConversationSummary } from "@crewon-ui-model/ConversationSummary";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
 
 import type { inspectorPresentation } from "./InspectorPresentation";

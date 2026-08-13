@@ -6,7 +6,7 @@
  * endpoint that speaks the wrong protocol all look identical otherwise.
  */
 
-import type { ModelProviderProbeResponse } from "@crewon-protocol/v2/ModelProviderProbeResponse";
+import type { ModelProviderProbeResponse } from "@crewon-ui-model/v2/ModelProviderProbeResponse";
 
 import type { Locale } from "../i18n";
 

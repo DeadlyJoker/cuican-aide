@@ -1,4 +1,4 @@
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 
 import { AppWorkspaceNavigation } from "./AppWorkspaceNavigation";
 import type { AppView } from "../../lib/shared/appView";

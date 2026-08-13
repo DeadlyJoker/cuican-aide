@@ -1,5 +1,5 @@
-import type { ConfigReadResponse } from "@crewon-protocol/v2/ConfigReadResponse";
-import type { ModelProviderProbeResponse } from "@crewon-protocol/v2/ModelProviderProbeResponse";
+import type { ConfigReadResponse } from "@crewon-ui-model/v2/ConfigReadResponse";
+import type { ModelProviderProbeResponse } from "@crewon-ui-model/v2/ModelProviderProbeResponse";
 import { describe, expect, it, vi } from "vitest";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";

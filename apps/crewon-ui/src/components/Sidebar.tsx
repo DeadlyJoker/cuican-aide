@@ -1,6 +1,6 @@
 import { Settings2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 import type { Locale } from "../lib/i18n";
 import {
   filterSidebarThreads,

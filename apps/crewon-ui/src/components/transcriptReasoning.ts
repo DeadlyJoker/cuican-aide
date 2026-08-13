@@ -1,4 +1,4 @@
-import type { ThreadItem } from "@crewon-protocol/v2/ThreadItem";
+import type { ThreadItem } from "@crewon-ui-model/v2/ThreadItem";
 
 type ReasoningItem = Extract<ThreadItem, { type: "reasoning" }>;
 

@@ -1,4 +1,4 @@
-import type { PluginInstallResponse } from "@crewon-protocol/v2/PluginInstallResponse";
+import type { PluginInstallResponse } from "@crewon-ui-model/v2/PluginInstallResponse";
 
 import type { LibraryKind, LibraryPanel, LibraryPanelAction } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";

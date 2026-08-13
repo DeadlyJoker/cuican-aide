@@ -5,7 +5,7 @@ import {
   type MutableRefObject,
   type SetStateAction,
 } from "react";
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 
 import { pollLoadedThreadIdsAction } from "../appConnectionActions";
 import type { NoticeState } from "../appRuntimeState";

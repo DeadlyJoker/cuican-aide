@@ -1,5 +1,5 @@
-import type { FsGetMetadataResponse } from "@crewon-protocol/v2/FsGetMetadataResponse";
-import type { PluginReadResponse } from "@crewon-protocol/v2/PluginReadResponse";
+import type { FsGetMetadataResponse } from "@crewon-ui-model/v2/FsGetMetadataResponse";
+import type { PluginReadResponse } from "@crewon-ui-model/v2/PluginReadResponse";
 
 import type {
   CapabilityPanel,

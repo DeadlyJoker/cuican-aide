@@ -1,8 +1,8 @@
-import type { PluginMarketplaceEntry } from "@crewon-protocol/v2/PluginMarketplaceEntry";
-import type { PluginInstallResponse } from "@crewon-protocol/v2/PluginInstallResponse";
-import type { PluginReadResponse } from "@crewon-protocol/v2/PluginReadResponse";
-import type { PluginSource } from "@crewon-protocol/v2/PluginSource";
-import type { PluginSummary } from "@crewon-protocol/v2/PluginSummary";
+import type { PluginMarketplaceEntry } from "@crewon-ui-model/v2/PluginMarketplaceEntry";
+import type { PluginInstallResponse } from "@crewon-ui-model/v2/PluginInstallResponse";
+import type { PluginReadResponse } from "@crewon-ui-model/v2/PluginReadResponse";
+import type { PluginSource } from "@crewon-ui-model/v2/PluginSource";
+import type { PluginSummary } from "@crewon-ui-model/v2/PluginSummary";
 
 import { pluginDetailText } from "../capability/capabilityPanelText";
 import type { NoticeState } from "../shared/noticeState";

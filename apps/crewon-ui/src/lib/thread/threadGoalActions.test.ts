@@ -1,5 +1,5 @@
-import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
+import type { ThreadGoal } from "@crewon-ui-model/v2/ThreadGoal";
 import { describe, expect, it } from "vitest";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";

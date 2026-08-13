@@ -1,4 +1,4 @@
-import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
 import { MessageSquare, UsersRound } from "lucide-react";
 
 import { Composer } from "../Composer";

@@ -6,9 +6,9 @@
  * best-effort compatibility only and never define desktop mutation success.
  */
 
-import type { ConfigReadResponse } from "@crewon-protocol/v2/ConfigReadResponse";
-import type { ModelProviderProbeResponse } from "@crewon-protocol/v2/ModelProviderProbeResponse";
-import type { JsonValue } from "@crewon-protocol/serde_json/JsonValue";
+import type { ConfigReadResponse } from "@crewon-ui-model/v2/ConfigReadResponse";
+import type { ModelProviderProbeResponse } from "@crewon-ui-model/v2/ModelProviderProbeResponse";
+import type { JsonValue } from "@crewon-ui-model/serde_json/JsonValue";
 import type { ControlApiClient } from "@crewon/control-client";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";

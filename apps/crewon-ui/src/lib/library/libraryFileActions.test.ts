@@ -1,5 +1,5 @@
-import type { FsGetMetadataResponse } from "@crewon-protocol/v2/FsGetMetadataResponse";
-import type { FsReadFileResponse } from "@crewon-protocol/v2/FsReadFileResponse";
+import type { FsGetMetadataResponse } from "@crewon-ui-model/v2/FsGetMetadataResponse";
+import type { FsReadFileResponse } from "@crewon-ui-model/v2/FsReadFileResponse";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CapabilityPanelItem } from "../capability/capabilityPanelTypes";

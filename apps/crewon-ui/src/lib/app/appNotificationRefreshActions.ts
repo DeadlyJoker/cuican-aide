@@ -1,5 +1,5 @@
-import type { Thread } from "@crewon-protocol/v2/Thread";
-import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
+import type { Thread } from "@crewon-ui-model/v2/Thread";
+import type { ThreadGoal } from "@crewon-ui-model/v2/ThreadGoal";
 
 import type { AppView } from "./appRouting";
 import type { AccountStatus } from "./appStatusTypes";

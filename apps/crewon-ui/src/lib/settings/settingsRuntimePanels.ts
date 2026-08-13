@@ -1,9 +1,9 @@
-import type { AppsListResponse } from "@crewon-protocol/v2/AppsListResponse";
-import type { ConfigRequirementsReadResponse } from "@crewon-protocol/v2/ConfigRequirementsReadResponse";
-import type { GetAccountResponse } from "@crewon-protocol/v2/GetAccountResponse";
-import type { GetAuthStatusResponse } from "@crewon-protocol/GetAuthStatusResponse";
-import type { ModelProviderCapabilitiesReadResponse } from "@crewon-protocol/v2/ModelProviderCapabilitiesReadResponse";
-import type { PluginListResponse } from "@crewon-protocol/v2/PluginListResponse";
+import type { AppsListResponse } from "@crewon-ui-model/v2/AppsListResponse";
+import type { ConfigRequirementsReadResponse } from "@crewon-ui-model/v2/ConfigRequirementsReadResponse";
+import type { GetAccountResponse } from "@crewon-ui-model/v2/GetAccountResponse";
+import type { GetAuthStatusResponse } from "@crewon-ui-model/GetAuthStatusResponse";
+import type { ModelProviderCapabilitiesReadResponse } from "@crewon-ui-model/v2/ModelProviderCapabilitiesReadResponse";
+import type { PluginListResponse } from "@crewon-ui-model/v2/PluginListResponse";
 
 import { accountStatusText } from "../account/accountSummaryText";
 import type { NoticeState } from "../shared/noticeState";

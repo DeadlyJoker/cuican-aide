@@ -1,4 +1,4 @@
-import type { AppsListResponse } from "@crewon-protocol/v2/AppsListResponse";
+import type { AppsListResponse } from "@crewon-ui-model/v2/AppsListResponse";
 
 import { isMissingThreadError } from "./rpcErrors";
 

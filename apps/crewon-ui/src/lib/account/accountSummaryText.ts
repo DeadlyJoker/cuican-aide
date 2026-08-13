@@ -1,4 +1,4 @@
-import type { RateLimitSnapshot } from "@crewon-protocol/v2/RateLimitSnapshot";
+import type { RateLimitSnapshot } from "@crewon-ui-model/v2/RateLimitSnapshot";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
