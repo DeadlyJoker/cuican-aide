@@ -239,6 +239,186 @@ for (const decision of ["approve", "reject"] as const)
     );
   });
 
+for (const outcome of ["approved", "rejected", "expired", "canceled"] as const)
+  test(`resumes a SQLite Workflow per-action Tool approval to ${outcome} after Worker restart`, async (context) => {
+    const databasePath = temporaryDatabasePath(context);
+    await activateSqliteReleaseProcess(databasePath);
+    const controlConfig = config(databasePath, new InMemoryArtifactStore());
+    const control = createStandaloneControlApi(controlConfig);
+    context.after(() => closeIfListening(control.app));
+    await control.app.listen({ host: "127.0.0.1", port: 0 });
+    const client = new ControlApiClient({
+      baseUrl: serverBaseUrl(control.app),
+      accessToken: SESSION_TOKEN,
+      csrfToken: CSRF_TOKEN,
+      origin: ORIGIN,
+    });
+    const counters = { agentSamples: 0, toolExecutions: 0 };
+    const toolSource = workflowToolAgentVersionSource();
+    const verifierSource = {
+      ...selectedAgentVersionSource(),
+      agentVersionId: `workflow-tool-verifier-${outcome}`,
+      instructions: "Verify empty JSON after the approved Tool completes.",
+    };
+    const toolVersion = compileAgentVersion(toolSource, digest);
+    const verifierVersion = compileAgentVersion(verifierSource, digest);
+    await client.publishAgentVersion(toolSource);
+    await client.publishAgentVersion(verifierSource);
+    const runtimeFactory = new ConfiguredAgentVersionRuntimeFactory([
+      {
+        tenantId: "tenant-e2e-1",
+        agentVersionId: toolVersion.agentVersionId,
+        contentDigest: toolVersion.contentDigest,
+        authorityId: `workflow-tool-agent-authority-${outcome}`,
+        workspaceBindingId: null,
+        materializationDigest: digest.sha256(
+          `workflow-tool-agent-materialization:${outcome}`,
+        ),
+        createTransport: () => workflowApprovalAgentTransport(counters),
+        createToolRuntime: (version) =>
+          workflowApprovalToolRuntime(counters, version.tools),
+      },
+      {
+        tenantId: "tenant-e2e-1",
+        agentVersionId: verifierVersion.agentVersionId,
+        contentDigest: verifierVersion.contentDigest,
+        authorityId: `workflow-tool-verifier-authority-${outcome}`,
+        workspaceBindingId: null,
+        materializationDigest: digest.sha256(
+          `workflow-tool-verifier-materialization:${outcome}`,
+        ),
+        createTransport: workflowModelTransport,
+        createToolRuntime: () => new InMemoryToolBroker(),
+      },
+    ]);
+    await activateStandaloneRelease({
+      databasePath,
+      route: controlConfig.route,
+      transport: workflowModelTransport(),
+      agentVersionDeployments:
+        runtimeFactory.deploymentBindings("tenant-e2e-1"),
+      activationId: `workflow-tool-${outcome}-activation`,
+    });
+    const thread = await client.createThread(
+      { title: `Workflow Tool approval ${outcome}` },
+      `workflow-tool-${outcome}-thread`,
+    );
+    await client.publishWorkflowVersion(workflowToolApprovalSource(outcome));
+    const started = await client.startWorkflowRun(
+      {
+        workflowVersionId: `workflow-tool-${outcome}-v1`,
+        threadId: thread.thread.threadId,
+        input: {},
+      },
+      `workflow-tool-${outcome}-start`,
+    );
+    const workerConfig = {
+      databasePath,
+      runtimeTenantId: "tenant-e2e-1",
+      route: controlConfig.route,
+      transport: workflowModelTransport(),
+      agentVersionRuntimeFactory: runtimeFactory,
+      agentVersionDeployments:
+        runtimeFactory.deploymentBindings("tenant-e2e-1"),
+      approvalRecheckMs: 1,
+      retryAfterMs: 1,
+      ...(outcome === "expired" ? { approvalTtlMs: 1 } : {}),
+      scanIntervalMs: null,
+    };
+    let worker: Awaited<
+      ReturnType<typeof createStandaloneRuntimeWorker>
+    > | null = await createStandaloneRuntimeWorker(workerConfig);
+    context.after(async () => worker?.close());
+    await wakeUntil(worker.worker, async () => {
+      const run = (await client.getRun(started.run.runId)).run;
+      return (
+        run.status === "waitingApproval" ||
+        run.status === "completed" ||
+        run.status === "failed" ||
+        run.status === "canceled"
+      );
+    });
+    const waiting = (await client.getRun(started.run.runId)).run;
+    assert.equal(waiting.status, "waitingApproval", JSON.stringify(waiting));
+    assert.ok(waiting.waitingApproval !== null);
+    assert.deepEqual(counters, { agentSamples: 1, toolExecutions: 0 });
+    const approvalId = waiting.waitingApproval.approvalId;
+    const required = (await client.getToolApproval(approvalId)).approval;
+    assert.equal(required.status, "required");
+
+    await worker.close();
+    worker = null;
+    if (outcome === "approved" || outcome === "rejected") {
+      const decided = await client.decideToolApproval(
+        approvalId,
+        {
+          expectedRevision: required.revision,
+          decision: outcome,
+          comment: `Control HTTP ${outcome}`,
+        },
+        `workflow-tool-${outcome}-decision`,
+      );
+      assert.equal(decided.approval.status, outcome);
+    } else if (outcome === "canceled") {
+      const canceled = await client.cancelRun(
+        waiting.runId,
+        { expectedRevision: waiting.revision },
+        "workflow-tool-cancel-request",
+      );
+      assert.equal(canceled.run.cancelRequested, true);
+    } else {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    }
+
+    worker = await createStandaloneRuntimeWorker(workerConfig);
+    await wakeUntil(worker.worker, async () => {
+      const status = (await client.getRun(started.run.runId)).run.status;
+      return (
+        status === "completed" || status === "failed" || status === "canceled"
+      );
+    });
+    const terminal = (await client.getRun(started.run.runId)).run;
+    assert.equal(
+      terminal.status,
+      outcome === "approved"
+        ? "completed"
+        : outcome === "canceled"
+          ? "canceled"
+          : "failed",
+      JSON.stringify({ terminal, counters }),
+    );
+    assert.equal(
+      terminal.failure?.code ?? null,
+      outcome === "rejected" || outcome === "expired"
+        ? "workflow_node_failed"
+        : null,
+    );
+    assert.deepEqual(counters, {
+      agentSamples: outcome === "approved" ? 2 : 1,
+      toolExecutions: outcome === "approved" ? 1 : 0,
+    });
+    assert.equal(
+      (await client.getToolApproval(approvalId)).approval.status,
+      outcome === "canceled" ? "superseded" : outcome,
+    );
+    const eventResponse = await client.openRunEventStream({
+      runId: terminal.runId,
+      afterSequence: 0,
+      view: "audit",
+    });
+    const events = await eventResponse.text();
+    assert.equal(eventCount(events, "tool.requested"), 1);
+    assert.equal(
+      eventCount(events, "tool.completed"),
+      outcome === "approved" ? 1 : 0,
+    );
+    if (outcome === "rejected" || outcome === "expired")
+      assert.match(
+        events,
+        new RegExp(`"reasonCode":"tool_approval_${outcome}"`, "u"),
+      );
+  });
+
 test("streams durable SQLite Run events over real loopback HTTP and resumes after restart", async (context) => {
   const databasePath = temporaryDatabasePath(context);
   await activateSqliteReleaseProcess(databasePath);
@@ -1414,6 +1594,151 @@ function config(
   };
 }
 
+const WORKFLOW_APPROVAL_TOOL = {
+  schemaVersion: "crewon.tool-definition.v0" as const,
+  kind: "function" as const,
+  name: "commit_workflow_result",
+  description: "Commit the approved Workflow result.",
+  execution: "serial" as const,
+  inputSchema: {
+    type: "object" as const,
+    properties: {},
+    required: [],
+    additionalProperties: false as const,
+  },
+};
+
+function workflowToolAgentVersionSource() {
+  return {
+    ...selectedAgentVersionSource(),
+    agentVersionId: "workflow-tool-agent-e2e",
+    instructions: "Request the result Tool, then return empty JSON.",
+    tools: [WORKFLOW_APPROVAL_TOOL],
+  };
+}
+
+function workflowApprovalToolRuntime(
+  counters: { toolExecutions: number },
+  definitions: ConstructorParameters<typeof InMemoryToolBroker>[0],
+): ToolRuntimePort {
+  return new InMemoryToolBroker(
+    definitions,
+    new Map([
+      [
+        "function:commit_workflow_result",
+        async () => {
+          counters.toolExecutions += 1;
+          return { output: "{}" };
+        },
+      ],
+    ]),
+    new Map([
+      [
+        "function:commit_workflow_result",
+        {
+          effect: "mutation",
+          recovery: "reconcilable",
+          resourceBindingId: null,
+          credentialBindingId: null,
+          executionTarget: {
+            kind: "control",
+            bindingId: "workflow-tool-approval-e2e",
+          },
+          capability: "workflow.result.commit",
+          approvalRequirement: "perAction",
+          limits: {
+            timeoutMs: 30_000,
+            maxOutputBytes: 64 * 1024,
+            maxArtifactBytes: 1024 * 1024,
+          },
+        },
+      ],
+    ]),
+  );
+}
+
+function workflowApprovalAgentTransport(counters: {
+  agentSamples: number;
+}): ModelTransportPort {
+  return {
+    adapterName: "deterministic-fake",
+    adapterVersion: "1",
+    modelId: "fake-model",
+    supportsModelDispatchEvidence: true,
+    async *stream(_request, _signal, options) {
+      counters.agentSamples += 1;
+      if (options?.dispatchEvidence !== undefined)
+        await options.controlSink?.dispatchBoundaryCrossed?.(
+          options.dispatchEvidence,
+        );
+      const checkpoint = {
+        schemaVersion: "crewon.provider-checkpoint.v0" as const,
+        adapterName: "deterministic-fake",
+        adapterVersion: "1",
+        modelId: "fake-model",
+        opaquePayload: { responseId: randomUUID() },
+      };
+      yield { type: "response.created" as const, checkpoint };
+      if (counters.agentSamples === 1) {
+        yield {
+          type: "tool.call" as const,
+          kind: "function" as const,
+          callId: "workflow-tool-call-1",
+          name: WORKFLOW_APPROVAL_TOOL.name,
+          input: "{}",
+        };
+      } else {
+        yield { type: "output.delta" as const, delta: "{}" };
+      }
+      yield { type: "completed" as const, checkpoint };
+    },
+  };
+}
+
+function workflowToolApprovalSource(
+  outcome: "approved" | "rejected" | "expired" | "canceled",
+) {
+  const empty = {
+    type: "object" as const,
+    properties: {},
+    required: [],
+    additionalProperties: false as const,
+  };
+  return {
+    schemaVersion: "crewon.workflow-version-source.v0" as const,
+    workflowId: `workflow-tool-${outcome}`,
+    workflowVersionId: `workflow-tool-${outcome}-v1`,
+    name: `Tool approval ${outcome}`,
+    description: "Control-to-Worker per-action Tool approval acceptance",
+    inputSchema: empty,
+    outputSchema: empty,
+    entryNodeIds: ["agent"],
+    outputNodeIds: ["verification"],
+    nodes: [
+      {
+        nodeId: "agent",
+        title: "Agent",
+        instruction: "Commit the approved result.",
+        kind: "agent" as const,
+        agentVersionId: "workflow-tool-agent-e2e",
+        dependsOn: [],
+        inputSchema: empty,
+        outputSchema: empty,
+      },
+      {
+        nodeId: "verification",
+        title: "Verification",
+        instruction: "Verify the result.",
+        kind: "verification" as const,
+        verifierAgentVersionId: `workflow-tool-verifier-${outcome}`,
+        dependsOn: ["agent"],
+        inputSchema: empty,
+        outputSchema: empty,
+      },
+    ],
+  };
+}
+
 function workflowGateSource(decision: "approve" | "reject") {
   const empty = {
     type: "object" as const,
@@ -1861,6 +2186,10 @@ function serverBaseUrl(app: FastifyInstance): string {
     throw new Error("control API address unavailable");
   }
   return `http://127.0.0.1:${address.port}`;
+}
+
+function eventCount(events: string, type: string): number {
+  return events.match(new RegExp(`^event: ${type}$`, "gmu"))?.length ?? 0;
 }
 
 async function closeIfListening(app: FastifyInstance): Promise<void> {
