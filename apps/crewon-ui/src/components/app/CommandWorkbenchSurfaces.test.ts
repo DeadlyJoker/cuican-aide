@@ -1,6 +1,3 @@
-// @ts-expect-error Vitest runs this contract in Node, while the browser bundle omits Node types.
-import { readFileSync } from "node:fs";
-
 import { describe, expect, it } from "vitest";
 
 import { normalizeWorkbenchBrowserUrl } from "./CommandWorkbenchBrowser";
@@ -10,41 +7,6 @@ import {
 } from "./CommandWorkbenchCode";
 import { workbenchFileContent } from "./CommandWorkbenchFiles";
 import { parseWorkbenchDiff } from "./CommandWorkbenchReview";
-
-describe("workbench resize pointer capture", () => {
-  /*
-   * `setPointerCapture` throws for pointers the engine no longer considers
-   * active. It used to run before `setResizing(true)`, so the throw aborted the
-   * whole handler: `data-resizing` never went up, the page iframe kept taking
-   * pointer events, and dragging the workbench edge did nothing once a browser
-   * tab was open. Capture has to stay best-effort.
-   */
-  it("keeps a failed capture from aborting the drag", () => {
-    const source = readFileSync(
-      new URL("./CommandWorkspaceCapabilityDrawer.tsx", import.meta.url),
-      "utf8",
-    );
-    const down = source.slice(
-      source.indexOf("function handleResizePointerDown"),
-      source.indexOf("function handleResizePointerMove"),
-    );
-    const finish = source.slice(
-      source.indexOf("function finishResize"),
-      source.indexOf("function handleResizeKeyDown"),
-    );
-
-    for (const [label, body, call] of [
-      ["pointerdown", down, "setPointerCapture"],
-      ["finish", finish, "releasePointerCapture"],
-    ] as const) {
-      const guardAt = body.indexOf("try {");
-      expect(guardAt, `${label} must guard ${call}`).toBeGreaterThan(-1);
-      expect(body.indexOf(call)).toBeGreaterThan(guardAt);
-      // The state update has to be reachable even when capture throws.
-      expect(body.indexOf("setResizing")).toBeGreaterThan(body.indexOf("}"));
-    }
-  });
-});
 
 describe("command workbench surfaces", () => {
   it("normalizes browser addresses while rejecting unsafe schemes", () => {

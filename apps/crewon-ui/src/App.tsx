@@ -39,7 +39,6 @@ import {
   useAppComposerState,
   useAppWorkspaceStatusState,
   useAppShellRuntimeState,
-  useAppTerminalState,
   useAppThreadSelection,
   useAppThreadListEffects,
   useAppViewSyncEffects,
@@ -166,12 +165,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     rehydrateThreadAuthority: rehydrateControlThreadAuthority,
     selectedThreadId,
   });
-  const {
-    setTerminalCommand,
-    terminalCommand,
-    terminalOutput,
-    terminalProcessId,
-  } = useAppTerminalState();
   const composerState = useAppComposerState();
   const {
     committedExecutionIntent,
@@ -377,7 +370,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     sendMessageInNewThread,
     sendMessageToThread,
     startDraftThread,
-    startSideChat,
     toggleArchivedThreads,
   } = createAppThreadRuntimeHandlers({
     ...threadState,
@@ -439,14 +431,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     });
   };
   const attachWorkspaceContext = async () => unavailableWorkspaceCapability();
-  const loadBrowserApps = unavailableWorkspaceCapability;
-  const readWorkspaceDiff = async () => unavailableWorkspaceCapability();
-  const readWorkspaceFiles = async () => unavailableWorkspaceCapability();
-  const resizeWorkbenchTerminal = () => undefined;
-  const runTerminalStatus = unavailableWorkspaceCapability;
-  const startWorkbenchTerminal = unavailableWorkspaceCapability;
-  const stopWorkbenchTerminal = () => undefined;
-  const writeWorkbenchTerminalInput = () => undefined;
 
   const settingsCoordinator = createAppSettingsCoordinator({
     client: controlClient,
@@ -646,33 +630,12 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
               : undefined,
         }}
         capabilityDrawer={{
-          busyToolId,
-          commandValue: terminalCommand,
-          disabled: !isConnected && !isDemo,
           locale,
           open: capabilityDockOpen,
-          panel: capabilityPanel,
           onClose: () => setCapabilityDockOpen(false),
-          onCommandChange: setTerminalCommand,
-          onCommandSubmit: runTerminalStatus,
-          onFiles: readWorkspaceFiles,
           onOpen: () => setCapabilityDockOpen(true),
-          onPanelAction: handleCapabilityPanelAction,
-          onPanelFieldChange: handleCapabilityPanelFieldChange,
-          onPanelItem: handleComposerCapabilityPanelItem,
-          onReview: readWorkspaceDiff,
-          onSideChat: startSideChat,
-          onTerminal: runTerminalStatus,
-          onTerminalResize: resizeWorkbenchTerminal,
-          onTerminalStart: startWorkbenchTerminal,
-          onTerminalStop: stopWorkbenchTerminal,
-          onTerminalWrite: writeWorkbenchTerminalInput,
-          terminalCwd: null,
-          terminalOutput,
-          terminalProcessId,
           readonlyClient: controlRuntimeConnected ? controlClient : null,
           readonlyThreadId: commandShellRuntime.selectedThreadId,
-          onWeb: loadBrowserApps,
         }}
         officeRoomAdapter={commandOfficeRoomAdapter}
         pendingComposerMentions={pendingComposerMentions}
@@ -830,19 +793,11 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         loadedThreadIds={loadedThreadIds}
         locale={locale}
         serverUrl=""
-        terminalCommand={terminalCommand}
         thread={selectedThread}
         threadGoal={threadGoal}
-        onCommandChange={setTerminalCommand}
-        onCommandSubmit={runTerminalStatus}
-        onFiles={readWorkspaceFiles}
         onPanelAction={handleCapabilityPanelAction}
         onPanelFieldChange={handleCapabilityPanelFieldChange}
         onPanelItem={handleComposerCapabilityPanelItem}
-        onReview={readWorkspaceDiff}
-        onSideChat={startSideChat}
-        onTerminal={runTerminalStatus}
-        onWeb={loadBrowserApps}
       />
       <AppConfirmDialog
         locale={locale}

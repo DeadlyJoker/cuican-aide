@@ -28,19 +28,11 @@ type AppWorkspaceSidePanelsProps = {
   loadedThreadIds: string[];
   locale: Locale;
   serverUrl: string;
-  terminalCommand: string;
   thread: Thread | null;
   threadGoal: ThreadGoalView | null;
-  onCommandChange: (value: string) => void;
-  onCommandSubmit: () => void;
-  onFiles: () => void;
   onPanelAction: (actionId: string) => void;
   onPanelFieldChange: (fieldId: string, value: string) => void;
   onPanelItem: (item: CapabilityPanelItem) => void;
-  onReview: () => void;
-  onSideChat: () => void;
-  onTerminal: () => void;
-  onWeb: () => void;
 };
 
 export function AppWorkspaceSidePanels({
@@ -56,19 +48,11 @@ export function AppWorkspaceSidePanels({
   loadedThreadIds,
   locale,
   serverUrl,
-  terminalCommand,
   thread,
   threadGoal,
-  onCommandChange,
-  onCommandSubmit,
-  onFiles,
   onPanelAction,
   onPanelFieldChange,
   onPanelItem,
-  onReview,
-  onSideChat,
-  onTerminal,
-  onWeb,
 }: AppWorkspaceSidePanelsProps) {
   const showCapabilityDock =
     capabilityDockOpen && capabilityPanel && appView !== "settings";
@@ -84,18 +68,10 @@ export function AppWorkspaceSidePanels({
             locale={locale}
             disabled={disabled}
             busyToolId={busyToolId}
-            commandValue={terminalCommand}
             panel={capabilityPanel}
-            onCommandChange={onCommandChange}
-            onCommandSubmit={onCommandSubmit}
-            onFiles={onFiles}
             onPanelAction={onPanelAction}
             onPanelFieldChange={onPanelFieldChange}
             onPanelItem={onPanelItem}
-            onReview={onReview}
-            onSideChat={onSideChat}
-            onTerminal={onTerminal}
-            onWeb={onWeb}
           />
         </aside>
       ) : null}
