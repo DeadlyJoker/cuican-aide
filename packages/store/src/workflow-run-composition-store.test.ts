@@ -1777,8 +1777,9 @@ if (postgresUrl === undefined) {
       const coordinated = await store.cancelWorkflowExecution(cancelInput);
       const typed = coordinated as typeof coordinated & { canceledNodeIds: string[];
         reconciliationWorkItemIds: string[] };
-      assert.deepEqual([typed.disposition, typed.runDisposition, typed.canceledNodeIds],
-        ["reconciliationScheduled", "nonTerminal", ["join"]]);
+      assert.deepEqual([typed.disposition, typed.runDisposition, typed.canceledNodeIds,
+        typed.handoff], ["retryRequired", "nonTerminal", ["join"], {
+          currentWorkItem: "retained", nextWorkItemId: null, kind: "none" }]);
       assert.deepEqual(typed.reconciliationWorkItemIds,
         [...typed.reconciliationWorkItemIds].sort());
       const reconciliations = await pool.query<{ work_item_id: string; node_id: string }>(`SELECT
@@ -1788,7 +1789,11 @@ if (postgresUrl === undefined) {
       assert.deepEqual(reconciliations.rows.map((row) => row.node_id), ["left", "right"]);
       assert.ok(typed.reconciliationWorkItemIds.includes(priorReconcile.rows[0]!.work_item_id));
       assert.equal(reconciliations.rows.length, 2);
-      assert.equal((await store.cancelWorkflowExecution(cancelInput)).disposition, "replay");
+      assert.equal((await store.cancelWorkflowExecution(cancelInput)).disposition,
+        "retryRequired");
+      const receipt = await pool.query(`SELECT count(*)::int count FROM
+        ${schema}.workflow_composition_receipts WHERE operation_id='cancel-uncertain'`);
+      assert.equal(receipt.rows[0]?.count, 0);
     } finally {
       await pool.query(`DROP SCHEMA ${schema} CASCADE`);
       await store.close();

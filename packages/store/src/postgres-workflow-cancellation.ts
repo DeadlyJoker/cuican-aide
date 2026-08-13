@@ -122,7 +122,6 @@ export async function cancelPostgresWorkflowExecution(
   }
   if (payload?.trigger !== "workflowCancel")
     throw new RunStoreError("workflow_composition_work_item_mismatch");
-  let retryRequired = execution.nodes.some((node) => node.status === "running");
   const canceledNodeIds: string[] = [];
   const canceledGateRequestNodeIds: string[] = [];
   const nodes = [];
@@ -151,7 +150,9 @@ export async function cancelPostgresWorkflowExecution(
         }, now, digester);
         canceledNodeIds.push(node.nodeId);
         nodes.push({ ...node, status: "canceled" as const });
-      } else { retryRequired = true; nodes.push(node); }
+      } else {
+        nodes.push(node);
+      }
     } else if (node.status === "waitingHuman") {
       await cancelGate(client, schema, input, node.nodeId, now);
       await appendPostgresCanceledWorkflowNodeEvent(client, schema, {
@@ -180,23 +181,15 @@ export async function cancelPostgresWorkflowExecution(
     client, schema, input, projected, workflow.executionOrder, now, digester);
   canceledNodeIds.sort();
   canceledGateRequestNodeIds.sort();
-  if (retryRequired) return structuredClone({ disposition: "retryRequired" as const,
+  const active = projected.nodes.some((node) =>
+    ["queued", "running", "unknown", "waitingHuman"].includes(node.status));
+  if (active) return structuredClone({ disposition: "retryRequired" as const,
     canceledNodeIds, canceledGateRequestNodeIds, reconciliationWorkItemIds,
     execution: projected, handoff: { currentWorkItem: "retained" as const,
       nextWorkItemId: null, kind: "none" as const }, runDisposition: "nonTerminal" as const });
   const reconciliationWorkItemId = reconciliationWorkItemIds[0] ?? null;
-  const runDisposition =
-    reconciliationWorkItemId === null
-      ? await convergePostgresWorkflowRun(
-          client,
-          schema,
-          input as never,
-          workflow,
-          projected,
-          now,
-          digester,
-        )
-      : ("nonTerminal" as const);
+  const runDisposition = await convergePostgresWorkflowRun(
+    client, schema, input as never, workflow, projected, now, digester);
   const result = {
     disposition:
       reconciliationWorkItemId === null
@@ -554,7 +547,6 @@ async function ensureCancellationReconciliationWorkItems(
     const node = execution.nodes.find((candidate) => candidate.nodeId === nodeId);
     if (node === undefined)
       throw new RunStoreError("workflow_composition_authority_mismatch");
-    if (node.status !== "unknown") continue;
     const work = await client.query<{ work_item_id: string; status: string;
       work_item_json: { payload?: Record<string, unknown> } }>(
       `SELECT work_item_id,status,work_item_json FROM ${schema}.work_items
@@ -562,15 +554,35 @@ async function ensureCancellationReconciliationWorkItems(
          AND work_item_json->'payload'->>'trigger'='workflowReconcile'
          AND work_item_json->'payload'->>'nodeId'=$3
          AND work_item_json->'payload'->>'claimId'=$4
-         AND (work_item_json->'payload'->>'claimEpoch')::integer=$5 FOR UPDATE`,
+         AND (work_item_json->'payload'->>'claimEpoch')::integer=$5
+       ORDER BY created_at,work_item_id FOR UPDATE`,
       [input.tenantId, input.runId, node.nodeId, node.claimId, node.claimEpoch]);
-    if (work.rows.length > 1)
+    const validated = work.rows.map((row) => {
+      const payload = row.work_item_json.payload;
+      if (payload === undefined ||
+          typeof payload.reconciliationOperationId !== "string" ||
+          !["pending", "leased", "completed"].includes(row.status) ||
+          row.work_item_id !== workflowAuthorityId("reconcile", {
+            tenantId: input.tenantId, runId: input.runId, binding: input.binding,
+            operationId: payload.reconciliationOperationId, nodeId: node.nodeId,
+            claimId: node.claimId, claimEpoch: node.claimEpoch }, digester) ||
+          stableJson(payload) !== stableJson({
+            schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+            trigger: "workflowReconcile", binding: input.binding,
+            nodeId: node.nodeId, claimId: node.claimId, claimEpoch: node.claimEpoch,
+            reconciliationOperationId: payload.reconciliationOperationId }))
+        throw new RunStoreError("workflow_cancellation_reconciliation_required");
+      return row;
+    });
+    const active = validated.filter((row) =>
+      row.status === "pending" || row.status === "leased");
+    if (active.length > 1)
       throw new RunStoreError("workflow_cancellation_reconciliation_required");
-    const row = work.rows[0];
-    if (row === undefined) {
+    if (node.status === "unknown" && active.length === 0) {
       if (node.claimId === null)
         throw new RunStoreError("workflow_cancellation_reconciliation_required");
-      const reconciliationOperationId = `${input.operationId}:${node.nodeId}`;
+      const reconciliationOperationId =
+        `${input.operationId}:${node.nodeId}:reconcile:${validated.length + 1}`;
       const workItemId = workflowAuthorityId("reconcile", {
         tenantId: input.tenantId, runId: input.runId, binding: input.binding,
         operationId: reconciliationOperationId, nodeId: node.nodeId,
@@ -583,21 +595,8 @@ async function ensureCancellationReconciliationWorkItems(
       ids.push(workItemId);
       continue;
     }
-    const payload = row.work_item_json.payload;
-    if (payload === undefined ||
-        typeof payload.reconciliationOperationId !== "string" ||
-        !["pending", "leased", "completed"].includes(row.status) ||
-        row.work_item_id !== workflowAuthorityId("reconcile", {
-          tenantId: input.tenantId, runId: input.runId, binding: input.binding,
-          operationId: payload.reconciliationOperationId, nodeId: node.nodeId,
-          claimId: node.claimId, claimEpoch: node.claimEpoch }, digester) ||
-        stableJson(payload) !== stableJson({
-          schemaVersion: "crewon.workflow-reconcile-work-item.v0",
-          trigger: "workflowReconcile", binding: input.binding,
-          nodeId: node.nodeId, claimId: node.claimId, claimEpoch: node.claimEpoch,
-          reconciliationOperationId: payload.reconciliationOperationId }))
-      throw new RunStoreError("workflow_cancellation_reconciliation_required");
-    ids.push(row.work_item_id);
+    const proof = active[0] ?? validated.at(-1);
+    if (proof !== undefined) ids.push(proof.work_item_id);
   }
   ids.sort();
   return ids;
@@ -610,24 +609,24 @@ async function validateReplay(
   result: Result,
   digester: WorkflowContentDigester,
 ): Promise<Result> {
-  const terminal = result.disposition === "canceled";
+  const terminal = result.runDisposition === "terminalConverged";
   const pending = result.disposition === "cancellationPending";
   const reconciliation = result.disposition === "reconciliationScheduled";
   if (
     !validCancellationProof(result) ||
     result.handoff.currentWorkItem !== "completed" ||
-    (terminal &&
-      (result.runDisposition !== "terminalConverged" ||
-        result.execution.status !== "canceled" ||
-        result.handoff.nextWorkItemId !== null ||
+    (terminal && result.execution.status !== "canceled") ||
+    (result.disposition === "canceled" &&
+      (!terminal || result.handoff.nextWorkItemId !== null ||
         result.handoff.kind !== "none")) ||
     (pending && (result.runDisposition !== "nonTerminal" ||
       result.handoff.nextWorkItemId !== null || result.handoff.kind !== "none")) ||
-    (!terminal && !pending &&
-      (result.runDisposition !== "nonTerminal" ||
-        result.execution.status !== "running" ||
+    (reconciliation &&
+      ((!terminal && (result.runDisposition !== "nonTerminal" ||
+        result.execution.status !== "running")) ||
         result.handoff.nextWorkItemId === null ||
-        result.handoff.kind !== "reconcile"))
+        result.handoff.kind !== "reconcile")) ||
+    (!terminal && !pending && !reconciliation)
   )
     throw new RunStoreError("workflow_composition_receipt_corrupt");
   const current = await loadPostgresWorkflowExecution(
@@ -741,7 +740,8 @@ async function validateReconciliationReplayWorkItem(
   const row = work.rows[0];
   const payload = row?.work_item_json.payload;
   const node = receiptExecution.nodes.find((candidate) => candidate.nodeId === payload?.nodeId);
-  if (work.rows.length !== 1 || payload === undefined || node?.status !== "unknown" ||
+  if (work.rows.length !== 1 || payload === undefined || node === undefined ||
+      !["unknown", "canceled"].includes(node.status) ||
       typeof payload.reconciliationOperationId !== "string" ||
       !["pending", "leased", "completed"].includes(row!.status) ||
       workItemId !== workflowAuthorityId("reconcile", {
