@@ -1231,7 +1231,7 @@ describe("CommandWorkspace", () => {
 
     expect(markup).toContain('class="connection-indicator"');
     expect(markup).toContain('data-state="connected"');
-    expect(markup).toContain('aria-label="App Server 已连接"');
+    expect(markup).toContain('aria-label="CrewON Control 已连接"');
     expect(markup).not.toContain('class="composer-state connection-state"');
   });
 

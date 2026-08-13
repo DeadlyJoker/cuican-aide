@@ -27,9 +27,7 @@ type OfficeRecruitCapabilitySummary = {
 type OfficeApprovalDecision = "approved" | "denied";
 
 export function officeCreateTitle(timeLabel: string, locale: Locale): string {
-  return locale === "zh"
-    ? `新办公室 ${timeLabel}`
-    : `New office ${timeLabel}`;
+  return locale === "zh" ? `新办公室 ${timeLabel}` : `New office ${timeLabel}`;
 }
 
 export function officeCreateSubtitle(locale: Locale): string {
@@ -127,8 +125,8 @@ export function officeRecruitUnavailableNoticeState(
   return {
     text:
       locale === "zh"
-        ? "连接 App Server 后才能招募真实智能体；当前办公室不会创建演示成员。"
-        : "Connect to the App Server to recruit a real agent; the Office will not create demo members.",
+        ? "连接 CrewON Control 后才能招募真实智能体；当前办公室不会创建演示成员。"
+        : "Connect to CrewON Control to recruit a real agent; the Office will not create demo members.",
     tone: "warning",
   };
 }
@@ -169,7 +167,9 @@ export function officeRecruitFailureNotice(
 ): NoticeState {
   return {
     text:
-      error instanceof Error ? error.message : officeRecruitFallbackError(locale),
+      error instanceof Error
+        ? error.message
+        : officeRecruitFallbackError(locale),
     tone: "warning",
   };
 }
@@ -254,7 +254,10 @@ export function officeRecruitSavedPanel(
     ? {
         ...panel,
         ...(params.threadId
-          ? officeWorkspaceConnectedPatch(params.config.workspace, params.threadId)
+          ? officeWorkspaceConnectedPatch(
+              params.config.workspace,
+              params.threadId,
+            )
           : { workspace: params.config.workspace }),
       }
     : panel;
@@ -269,14 +272,8 @@ export function officeRecruitTurnPrompt(params: {
   officeTitle: string;
   threadId: string;
 }): string {
-  const {
-    agent,
-    enabledMcp,
-    enabledSkills,
-    locale,
-    member,
-    officeTitle,
-  } = params;
+  const { agent, enabledMcp, enabledSkills, locale, member, officeTitle } =
+    params;
   return [
     locale === "zh"
       ? `办公室「${officeTitle}」招募智能体：${member.name}，角色：${member.role}。模型：${agent.model}。MCP：${enabledMcp}。Skill：${enabledSkills}。请把它纳入后续协作。`
@@ -478,12 +475,12 @@ export function officeWorkspaceWithApprovalDecision(params: {
 }): OfficeWorkspace {
   const { decision, message, requestId, workspace } = params;
   const activity = workspace.activity
-      ? {
-          ...workspace.activity,
-          approvals: (workspace.activity.approvals ?? []).map((request) =>
-            request.id === requestId ? { ...request, decision } : request,
-          ),
-        }
+    ? {
+        ...workspace.activity,
+        approvals: (workspace.activity.approvals ?? []).map((request) =>
+          request.id === requestId ? { ...request, decision } : request,
+        ),
+      }
     : undefined;
   return {
     ...workspace,
@@ -504,7 +501,9 @@ export function officeApprovalFailureNotice(
 ): NoticeState {
   return {
     text:
-      error instanceof Error ? error.message : officeApprovalFallbackError(locale),
+      error instanceof Error
+        ? error.message
+        : officeApprovalFallbackError(locale),
     tone: "warning",
   };
 }
@@ -566,7 +565,10 @@ export function officeApprovalSavedPanel(
   return panel?.workspace
     ? {
         ...panel,
-        workspace: officeWorkspaceConnected(params.config.workspace, params.threadId),
+        workspace: officeWorkspaceConnected(
+          params.config.workspace,
+          params.threadId,
+        ),
       }
     : panel;
 }
@@ -592,7 +594,9 @@ export function buildOfficeDetailPanel(
   };
 }
 
-export function officeDetailPanelPatch(panel: LibraryPanel): Partial<LibraryPanel> {
+export function officeDetailPanelPatch(
+  panel: LibraryPanel,
+): Partial<LibraryPanel> {
   return {
     ...panel,
     error: undefined,
@@ -712,11 +716,13 @@ function officeDetailActions(
   action: OfficeDetailAction,
   locale: Locale,
 ): LibraryPanelAction[] {
-  const actions: LibraryPanelAction[] = [{
-    id: "recruit-agent",
-    label: locale === "zh" ? "招募智能体" : "Recruit agent",
-    tone: "primary",
-  }];
+  const actions: LibraryPanelAction[] = [
+    {
+      id: "recruit-agent",
+      label: locale === "zh" ? "招募智能体" : "Recruit agent",
+      tone: "primary",
+    },
+  ];
 
   if (action.configPath) {
     actions.push({

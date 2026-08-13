@@ -411,8 +411,8 @@ export function controlAgentCatalogPanel(
         : `${items.length} active Control Agent versions`,
     body:
       locale === "zh"
-        ? `发布目录 ${catalog.releaseId}；版本来自 Control authority，不读取本地 app-server。`
-        : `Release catalog ${catalog.releaseId}; versions come from Control authority without the local app-server.`,
+        ? `发布目录 ${catalog.releaseId}；版本来自 Control authority。`
+        : `Release catalog ${catalog.releaseId}; versions come from Control authority.`,
     items,
   };
 }
@@ -428,7 +428,7 @@ function controlLibraryUnavailablePanel(
     items: [],
     error:
       locale === "zh"
-        ? "此资源类别尚未接入 Control API；已阻止 legacy app-server 回退。"
-        : "This resource category is not available from Control API; legacy app-server fallback is blocked.",
+        ? "此资源类别尚未接入 Control API，未执行任何操作。"
+        : "This resource category is not available from Control API. No action was taken.",
   };
 }

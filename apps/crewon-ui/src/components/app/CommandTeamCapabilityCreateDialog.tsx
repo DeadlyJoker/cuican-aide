@@ -16,16 +16,18 @@ export type WorkflowAgentOption = {
   systemPrompt: string;
 };
 
-export type WorkflowAgentNodeInput = {
-  type: "agent";
-  agentId: string;
-  instruction: string;
-  title: string;
-} | {
-  type: "humanGate";
-  instruction: string;
-  title: string;
-};
+export type WorkflowAgentNodeInput =
+  | {
+      type: "agent";
+      agentId: string;
+      instruction: string;
+      title: string;
+    }
+  | {
+      type: "humanGate";
+      instruction: string;
+      title: string;
+    };
 
 export type CommandTeamCapabilityCreateInput =
   | {
@@ -96,11 +98,13 @@ export function CommandTeamCapabilityCreateDialog({
     EMPTY_EXPERT,
     { ...EMPTY_EXPERT, agentType: "worker" },
   ]);
-  const [workflowNodes, setWorkflowNodes] = useState<WorkflowNodeDraft[]>(() => [
-    workflowAgents.length > 0
-      ? EMPTY_WORKFLOW_NODE
-      : { ...EMPTY_WORKFLOW_NODE, type: "humanGate" },
-  ]);
+  const [workflowNodes, setWorkflowNodes] = useState<WorkflowNodeDraft[]>(
+    () => [
+      workflowAgents.length > 0
+        ? EMPTY_WORKFLOW_NODE
+        : { ...EMPTY_WORKFLOW_NODE, type: "humanGate" },
+    ],
+  );
   const workflow = kind === "workflow";
 
   useEffect(() => {
@@ -116,11 +120,7 @@ export function CommandTeamCapabilityCreateDialog({
     const normalizedGoal = goal.trim();
     const normalizedLead = lead.trim();
     const normalizedTitle = title.trim();
-    if (
-      !normalizedGoal ||
-      (!workflow && !normalizedLead) ||
-      !normalizedTitle
-    ) {
+    if (!normalizedGoal || (!workflow && !normalizedLead) || !normalizedTitle) {
       setFormError("请完整填写名称、目标和负责人信息。");
       return;
     }
@@ -290,7 +290,10 @@ export function CommandTeamCapabilityCreateDialog({
             <div className="workflow-node-builder-head">
               <div>
                 <strong id="workflow-node-builder-title">执行节点</strong>
-                <p>Agent 节点自动执行；Human Gate 会持久等待批准或驳回，再决定是否继续。</p>
+                <p>
+                  Agent 节点自动执行；Human Gate
+                  会持久等待批准或驳回，再决定是否继续。
+                </p>
               </div>
               <button
                 className="button compact"
@@ -300,8 +303,7 @@ export function CommandTeamCapabilityCreateDialog({
                     ...current,
                     {
                       ...EMPTY_WORKFLOW_NODE,
-                      type:
-                        workflowAgents.length > 0 ? "agent" : "humanGate",
+                      type: workflowAgents.length > 0 ? "agent" : "humanGate",
                     },
                   ])
                 }
@@ -312,7 +314,8 @@ export function CommandTeamCapabilityCreateDialog({
             </div>
             {workflowAgents.length === 0 ? (
               <p className="team-office-create-error" role="alert">
-                当前工作空间还没有本地智能体；仍可配置 Human Gate，Agent 节点需先创建或导入本地智能体。
+                当前工作空间还没有本地智能体；仍可配置 Human Gate，Agent
+                节点需先创建或导入本地智能体。
               </p>
             ) : null}
             <div className="workflow-node-list">
@@ -349,7 +352,9 @@ export function CommandTeamCapabilityCreateDialog({
                         disabled={workflowNodes.length === 1}
                         onClick={() =>
                           setWorkflowNodes((current) =>
-                            current.filter((_, nodeIndex) => nodeIndex !== index),
+                            current.filter(
+                              (_, nodeIndex) => nodeIndex !== index,
+                            ),
                           )
                         }
                       >
@@ -365,9 +370,7 @@ export function CommandTeamCapabilityCreateDialog({
                         value={node.type}
                         onChange={(event) => {
                           updateWorkflowNode(index, {
-                            type: event.target.value as
-                              | "agent"
-                              | "humanGate",
+                            type: event.target.value as "agent" | "humanGate",
                             agentId:
                               event.target.value === "agent"
                                 ? node.agentId
@@ -473,9 +476,7 @@ export function CommandTeamCapabilityCreateDialog({
                   />
                 </label>
               </div>
-              <em>
-                用户只和团长保持一个连续会话，后台专家不会直接插入消息。
-              </em>
+              <em>用户只和团长保持一个连续会话，后台专家不会直接插入消息。</em>
             </section>
             {experts.map((expert, index) => {
               const expertIndex = index as 0 | 1;
@@ -485,7 +486,9 @@ export function CommandTeamCapabilityCreateDialog({
                   aria-labelledby={`expert-member-${index}-title`}
                   key={index}
                 >
-                  <strong id={`expert-member-${index}-title`}>后台专家 {index + 1}</strong>
+                  <strong id={`expert-member-${index}-title`}>
+                    后台专家 {index + 1}
+                  </strong>
                   <div className="modal-form-grid">
                     <label className="form-field">
                       <span>专家名称</span>
@@ -499,7 +502,9 @@ export function CommandTeamCapabilityCreateDialog({
                         }
                         value={expert.name}
                         onChange={(event) =>
-                          updateExpert(expertIndex, { name: event.target.value })
+                          updateExpert(expertIndex, {
+                            name: event.target.value,
+                          })
                         }
                       />
                     </label>
@@ -515,7 +520,9 @@ export function CommandTeamCapabilityCreateDialog({
                         }
                         value={expert.role}
                         onChange={(event) =>
-                          updateExpert(expertIndex, { role: event.target.value })
+                          updateExpert(expertIndex, {
+                            role: event.target.value,
+                          })
                         }
                       />
                     </label>
@@ -548,7 +555,7 @@ export function CommandTeamCapabilityCreateDialog({
           </span>
           <em>
             {workflow
-              ? "定义、节点 Agent 和运行状态由本地 App Server 管理"
+              ? "定义、节点 Agent 和运行状态由 CrewON Control 管理"
               : "后台专家不直接进入用户会话"}
           </em>
         </div>
@@ -571,11 +578,7 @@ export function CommandTeamCapabilityCreateDialog({
             disabled={busy || (workflow && workflowAgents.length === 0)}
             type="submit"
           >
-            {busy
-              ? "创建中…"
-              : workflow
-                ? "创建协作流"
-                : "创建并进入团长单聊"}
+            {busy ? "创建中…" : workflow ? "创建协作流" : "创建并进入团长单聊"}
           </button>
         </footer>
       </form>

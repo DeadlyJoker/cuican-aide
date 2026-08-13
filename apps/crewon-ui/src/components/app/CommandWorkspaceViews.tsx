@@ -851,7 +851,7 @@ export function AgentsView({
     setDownloadError(null);
     try {
       if (!onSaveCapability) {
-        throw new Error("App Server 未连接，无法安装技能到当前工作区");
+        throw new Error("CrewON Control 未提供技能安装能力");
       }
       await installCatalogSkill(resource, onSaveCapability);
       await onReload();
@@ -873,7 +873,7 @@ export function AgentsView({
       return;
     }
     if (!onAddAgent) {
-      setDownloadError("App Server 或当前工作区不可用，无法加入智能体");
+      setDownloadError("CrewON Control 或当前工作区不可用，无法加入智能体");
       return;
     }
     const key = `${resource.type}:${resource.id}`;
@@ -1346,7 +1346,7 @@ function TeamCapabilityUnavailable({
         <article className="team-office-capability">
           <div>
             <strong>真实运行态</strong>
-            <p>创建、执行、恢复和状态更新全部经过 App Server。</p>
+            <p>创建、执行、恢复和状态更新全部经过 CrewON Control。</p>
           </div>
         </article>
         <article className="team-office-capability">
@@ -1549,9 +1549,9 @@ export function TeamView({
           data-workflow-shell=""
           hidden={teamMode !== "workflow"}
         >
-            <CommandWorkflowPanel
-              status={workflowStatus}
-              workflows={workflows}
+          <CommandWorkflowPanel
+            status={workflowStatus}
+            workflows={workflows}
             onCancel={onCancelWorkflow}
             onReload={onReloadWorkflows}
             onResolveGate={onResolveWorkflowGate}

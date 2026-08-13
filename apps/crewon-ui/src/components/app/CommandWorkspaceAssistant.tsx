@@ -45,8 +45,8 @@ export function CommandWorkspaceAssistant({
       : "Stop the current response first"
     : !clearAvailable
       ? locale === "zh"
-        ? "连接 App Server 后可清理会话"
-        : "Connect to the App Server to clear the conversation"
+        ? "连接 CrewON Control 后可清理会话"
+        : "Connect to CrewON Control to clear the conversation"
       : clearLabel;
 
   const handleClear = async () => {

@@ -2021,7 +2021,7 @@ export function CommandWorkspace({
 
   async function addPlatformAgentToWorkspace(agentId: number) {
     if (!executionTargetClient?.saveAgentConfig || !cwd) {
-      throw new Error("App Server 或当前工作区不可用，无法加入智能体");
+      throw new Error("CrewON Control 或当前工作区不可用，无法加入智能体");
     }
     const index = platformSnapshot.agents.findIndex(
       (agent) => agent.id === agentId,
@@ -2198,19 +2198,19 @@ export function CommandWorkspace({
   const connectionStatusLabel =
     connectionState === "connected"
       ? locale === "zh"
-        ? "App Server 已连接"
-        : "App Server connected"
+        ? "CrewON Control 已连接"
+        : "CrewON Control connected"
       : connectionState === "connecting"
         ? locale === "zh"
-          ? "正在连接 App Server"
-          : "Connecting to App Server"
+          ? "正在连接 CrewON Control"
+          : "Connecting to CrewON Control"
         : connectionState === "demo"
           ? locale === "zh"
             ? "演示模式"
             : "Demo mode"
           : locale === "zh"
-            ? "App Server 已断开"
-            : "App Server disconnected";
+            ? "CrewON Control 已断开"
+            : "CrewON Control disconnected";
   const composerActivityLabel = isSending
     ? locale === "zh"
       ? "发送中"
@@ -2714,9 +2714,7 @@ export function CommandWorkspace({
                         type="button"
                         onClick={onRetryConnection}
                       >
-                        {locale === "zh"
-                          ? "重试 Control"
-                          : "Retry Control"}
+                        {locale === "zh" ? "重试 Control" : "Retry Control"}
                       </button>
                     ) : null}
                     <span
@@ -3076,7 +3074,7 @@ export function CommandWorkspace({
             onReloadWorkflows={reloadWorkflowDefinitions}
             onRunWorkflow={async (workflow, input) => {
               if (!cwd || !executionTargetClient?.runWorkflowConfig) {
-                throw new Error("App Server 尚未提供协作流执行能力");
+                throw new Error("CrewON Control 尚未提供协作流执行能力");
               }
               return executionTargetClient.runWorkflowConfig(
                 cwd,
@@ -3086,7 +3084,7 @@ export function CommandWorkspace({
             }}
             onCancelWorkflow={async (workflow, executionId) => {
               if (!cwd || !executionTargetClient?.cancelWorkflowRun) {
-                throw new Error("App Server 尚未提供协作流取消能力");
+                throw new Error("CrewON Control 尚未提供协作流取消能力");
               }
               return executionTargetClient.cancelWorkflowRun(
                 cwd,
@@ -3102,7 +3100,7 @@ export function CommandWorkspace({
               comment,
             ) => {
               if (!cwd || !executionTargetClient?.resolveWorkflowGate) {
-                throw new Error("App Server 尚未提供 Human Gate 处理能力");
+                throw new Error("CrewON Control 尚未提供 Human Gate 处理能力");
               }
               return executionTargetClient.resolveWorkflowGate(
                 cwd,

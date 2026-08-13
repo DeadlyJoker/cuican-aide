@@ -57,7 +57,8 @@ export function threadDeletedNotice(
   locale: Locale,
 ): NoticeState {
   return {
-    text: locale === "zh" ? `已删除会话：${title}` : `Deleted session: ${title}`,
+    text:
+      locale === "zh" ? `已删除会话：${title}` : `Deleted session: ${title}`,
     tone: "success",
   };
 }
@@ -80,10 +81,7 @@ export function assistantThreadClearConfirmMessage(locale: Locale): string {
 
 export function assistantThreadClearedNotice(locale: Locale): NoticeState {
   return {
-    text:
-      locale === "zh"
-        ? "助理会话已清理"
-        : "Assistant conversation cleared",
+    text: locale === "zh" ? "助理会话已清理" : "Assistant conversation cleared",
     tone: "success",
   };
 }
@@ -106,8 +104,8 @@ export function assistantThreadClearUnavailableNotice(
   return {
     text:
       locale === "zh"
-        ? "连接 App Server 后才能清理助理会话"
-        : "Connect to the App Server before clearing the assistant conversation",
+        ? "连接 CrewON Control 后才能清理助理会话"
+        : "Connect to CrewON Control before clearing the assistant conversation",
     tone: "warning",
   };
 }
@@ -140,7 +138,10 @@ export function threadCreateFailureNotice(
 
 export function threadGuidanceAppendedNotice(locale: Locale): NoticeState {
   return {
-    text: locale === "zh" ? "已追加到当前任务" : "Added guidance to the current turn",
+    text:
+      locale === "zh"
+        ? "已追加到当前任务"
+        : "Added guidance to the current turn",
     tone: "success",
   };
 }

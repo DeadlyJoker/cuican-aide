@@ -33,7 +33,6 @@ import {
   useAppEnvironment,
   useAppKeyboardShortcutEffects,
   useAppPanelState,
-  useAppPendingServerRequests,
   useAppChromeState,
   useAppThreadState,
   useAppStateRefsEffect,
@@ -43,16 +42,13 @@ import {
   useAppTerminalState,
   useAppThreadSelection,
   useAppThreadListEffects,
-  useAppThreadMetadataEffects,
   useAppViewSyncEffects,
   useAppModelResponseTimeoutEffect,
   shouldRenderCommandShellView,
-  addLocalComposerResources,
   assistantThreadRuntimeState,
   commandShellRuntimeState,
   isLegacyWorkspacePanelItem,
   platformResourceMentionPath,
-  saveCapabilityDraftAction,
   withPlatformResourceMention,
   useAppDraftWorkspaceState,
   workspaceCwdForAuthority,
@@ -76,7 +72,6 @@ import {
   latestAssistantThread,
 } from "./lib/thread/assistantThread";
 import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate";
-import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
 import type { LibraryKind } from "./lib/domain/crewonDomain";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
 import { useControlCommandCatalog } from "./lib/control-runtime/useControlCommandCatalog";
@@ -173,18 +168,11 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     rehydrateThreadAuthority: rehydrateControlThreadAuthority,
     selectedThreadId,
   });
-  /*
-   * Pending server requests are only ever forwarded to coordinators, never read
-   * here, so the group is kept intact and spread at each callsite. Destructuring
-   * it would name ten values twice: once to unpack, once to pass along.
-   */
-  const pendingRequests = useAppPendingServerRequests();
   const {
     setTerminalCommand,
     terminalCommand,
     terminalOutput,
     terminalProcessId,
-    terminalProcessIdRef,
   } = useAppTerminalState();
   const composerState = useAppComposerState();
   const {
@@ -322,16 +310,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     setSettingsSection,
   });
 
-  useAppThreadMetadataEffects({
-    client: null,
-    cwd,
-    isConnected,
-    isDemo,
-    isDemoPreview,
-    ...threadState,
-    ...workspaceStatus,
-  });
-
   useAppModelResponseTimeoutEffect({
     activeTurnId,
     client: threadRuntimeClient,
@@ -374,15 +352,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       setNotice,
     });
   };
-  const saveCapability = (draft: CapabilityEditorDraft) =>
-    saveCapabilityDraftAction({
-      client: null,
-      draft,
-      locale,
-      resolveBackendCwd,
-      setNotice,
-    });
-
   const handleLibraryPanelAction = createControlLibraryPanelActionHandler({
     client: controlClient,
     libraryPanel,
@@ -733,24 +702,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           onCancel: () => resolveConfirm(false),
           onConfirm: () => resolveConfirm(true),
         }}
-        onAddLocalResources={(files, kind) =>
-          addLocalComposerResources({
-            client: null,
-            connected: isConnected,
-            cwd,
-            files,
-            kind,
-            resolveBackendCwd,
-            setNotice,
-            onStaged: (mentions) => {
-              setPendingComposerMentions((current) => [
-                ...current,
-                ...mentions,
-              ]);
-              setComposerFocusSignal((signal) => signal + 1);
-            },
-          })
-        }
+        onAddLocalResources={async () => unavailableWorkspaceCapability()}
         onChangeComposerValue={setComposerValue}
         onComposerResourceSelect={({ kind, name, platformResource }) => {
           setPendingComposerMentions((current) =>
@@ -767,7 +719,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           }
         }}
         onModeChange={setWorkMode}
-        onSaveCapability={saveCapability}
         onOpenSettings={openSettings}
         onRemoveComposerMention={(path) => {
           setPendingComposerMentions((mentions) =>
@@ -882,7 +833,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         onItemAction={openLibraryItem}
         onLibraryPanelAction={handleLibraryPanelAction}
         onModeChange={setWorkMode}
-        onSaveCapability={saveCapability}
         onPanelAction={handleCapabilityPanelAction}
         onPanelFieldCommit={handleSettingsFieldCommit}
         onPanelFieldChange={handleCapabilityPanelFieldChange}

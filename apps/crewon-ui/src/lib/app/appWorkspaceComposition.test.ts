@@ -16,7 +16,7 @@ describe("App Workspace Control composition", () => {
     expect(source).not.toContain("./lib/app-server/");
     expect(source).not.toContain("AppServerClient");
     expect(source).toContain("export function App({ controlClient }");
-    expect(source).toContain("client: null");
+    expect(source).not.toContain("client: null");
     expect(source).toContain("scheduleClient={null}");
   });
 
@@ -132,6 +132,17 @@ describe("App Workspace Control composition", () => {
     expect(source).toContain("threadLifecycleActionForActionId");
     expect(source).toContain("params.handleSettingsAction(actionId)");
     expect(source).toContain("params.onUnavailable()");
+  });
+
+  it("does not compose null-client metadata, attachments, or capability saves", () => {
+    const source = readFileSync(
+      new URL("../../App.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).not.toMatch(
+      /useAppThreadMetadataEffects|useAppPendingServerRequests|addLocalComposerResources|saveCapabilityDraftAction/u,
+    );
   });
 
   it("sources the packaged command target and model catalogs only from Control", () => {

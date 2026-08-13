@@ -202,9 +202,7 @@ describe("office detail panel content", () => {
 
     expect(officeCreateTitle("14:30", "en")).toBe("New office 14:30");
     expect(officeCreateTitle("14:30", "zh")).toBe("新办公室 14:30");
-    expect(officeCreateSubtitle("en")).toBe(
-      "New office · configuration stage",
-    );
+    expect(officeCreateSubtitle("en")).toBe("New office · configuration stage");
     expect(officeCreateSubtitle("zh")).toBe("新建办公室 · 配置阶段");
     expect(
       officeCreateTurnPrompt({
@@ -349,29 +347,25 @@ describe("office detail panel content", () => {
       ],
     });
     expect(
-      officeDetailHydratedThreadPanel(
-        panel,
-        "thread-1",
-        {
-          latestPanel: panel,
-          locale: "en",
-          thread: thread({
-            turns: [
-              turn({
-                items: [
-                  {
-                    type: "agentMessage",
-                    id: "item-1",
-                    text: "Backend update",
-                    phase: null,
-                    memoryCitation: null,
-                  },
-                ],
-              }),
-            ],
-          }),
-        },
-      )?.workspace,
+      officeDetailHydratedThreadPanel(panel, "thread-1", {
+        latestPanel: panel,
+        locale: "en",
+        thread: thread({
+          turns: [
+            turn({
+              items: [
+                {
+                  type: "agentMessage",
+                  id: "item-1",
+                  text: "Backend update",
+                  phase: null,
+                  memoryCitation: null,
+                },
+              ],
+            }),
+          ],
+        }),
+      })?.workspace,
     ).toMatchObject({
       threadId: "thread-1",
       messages: [
@@ -401,7 +395,11 @@ describe("office detail panel content", () => {
       workspace: { backendStatus: "error" },
     });
     expect(
-      officeDetailBindFailurePanel({ ...panel, workspace: undefined }, null, "zh"),
+      officeDetailBindFailurePanel(
+        { ...panel, workspace: undefined },
+        null,
+        "zh",
+      ),
     ).toEqual({ ...panel, workspace: undefined });
   });
 
@@ -497,9 +495,11 @@ describe("office detail panel content", () => {
         panel: { title: "前端办公室" },
       }),
     ).toBe(
-      ["绑定办公室：前端办公室", "状态：办公室已保存", "目标：协调前端重构。"].join(
-        "\n",
-      ),
+      [
+        "绑定办公室：前端办公室",
+        "状态：办公室已保存",
+        "目标：协调前端重构。",
+      ].join("\n"),
     );
   });
 
@@ -520,7 +520,7 @@ describe("office detail panel content", () => {
       tone: "warning",
     });
     expect(officeRecruitUnavailableNoticeState("zh")).toEqual({
-      text: "连接 App Server 后才能招募真实智能体；当前办公室不会创建演示成员。",
+      text: "连接 CrewON Control 后才能招募真实智能体；当前办公室不会创建演示成员。",
       tone: "warning",
     });
     expect(officeRecruitPersistenceWarning("zh")).toBe(

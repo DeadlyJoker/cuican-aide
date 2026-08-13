@@ -454,7 +454,7 @@ export function ScheduleView({
             ) : null}
             {!client ? (
               <div className="schedule-alert" role="status">
-                App Server 未连接，连接后可管理个人日程。
+                CrewON Control 未连接，连接后可管理个人日程。
               </div>
             ) : null}
 

@@ -646,7 +646,7 @@ export function CatalogResourceDialog({
 
   async function addAgent() {
     if (!onAddAgent || activeResource.type !== "agents") {
-      setError("App Server 或当前工作区不可用，无法加入智能体");
+      setError("CrewON Control 或当前工作区不可用，无法加入智能体");
       return;
     }
     setUpdating(true);

@@ -62,7 +62,7 @@ export async function addLocalComposerResources(params: {
 }): Promise<void> {
   if (!params.client || !params.connected) {
     params.setNotice({
-      text: "App Server 未连接，暂时无法添加本地文件",
+      text: "CrewON Control 尚未提供本地文件添加能力",
       tone: "warning",
     });
     return;

@@ -126,10 +126,10 @@ function unavailableDemoOfficePanel(
   return {
     kind: "office",
     title,
-    subtitle: zh(locale) ? "需要真实 App Server" : "Real App Server required",
+    subtitle: zh(locale) ? "需要 CrewON Control" : "CrewON Control required",
     body: zh(locale)
-      ? "办公室只展示当前工作空间中由 App Server 返回的真实配置、成员、消息和运行状态。演示模式不会创建或展示虚构办公室。"
-      : "Office only shows real configurations, members, messages, and runtime state returned by the App Server for the current workspace. Demo mode does not create or display fictional offices.",
+      ? "办公室只展示当前工作空间中由 CrewON Control 返回的真实配置、成员、消息和运行状态。演示模式不会创建或展示虚构办公室。"
+      : "Office only shows real configurations, members, messages, and runtime state returned by CrewON Control for the current workspace. Demo mode does not create or display fictional offices.",
     actions: [],
     items: [],
   };
@@ -564,7 +564,7 @@ function demoOfficePanel(title: string, locale: Locale): LibraryPanel {
           title: "后端能力办公室",
           meta: "群聊协作 · 5 名成员",
           description:
-            "准备接入 app-server、MCP、自动化和多智能体编排，产物进入协作日志。",
+            "准备接入 Control、MCP、自动化和多智能体编排，产物进入协作日志。",
           glyph: "⌥",
           accent: "cyan",
           badge: { label: "规划中", tone: "planning" },
@@ -621,7 +621,7 @@ function demoOfficePanel(title: string, locale: Locale): LibraryPanel {
           title: "Backend capability office",
           meta: "Group chat · 5 members",
           description:
-            "Prepares app-server, MCP, automation, and multi-agent orchestration work.",
+            "Prepares Control, MCP, automation, and multi-agent orchestration work.",
           glyph: "⌥",
           accent: "cyan",
           badge: { label: "Planning", tone: "planning" },
@@ -1428,8 +1428,8 @@ function demoModelProvidersSettingsPanel(locale: Locale): CapabilityPanel {
     title: zh(locale) ? "模型接入" : "Model access",
     subtitle: zh(locale) ? "演示模式" : "Demo mode",
     body: zh(locale)
-      ? "已配置的模型服务\n- 我的模型网关 (my-gateway) · https://api.example.com/v1 · 已保存密钥 · 当前使用\n- 本地模型 (local-llm) · http://127.0.0.1:11434/v1 · 无需密钥\n\n说明\n- 只支持 Responses 兼容接口，不支持 Chat Completions 格式的服务。\n- 直接填写的 API Key 会以明文保存在本机 ~/.crewon/config.toml（权限 600）。\n- 连接本地 app-server 后，这里可以新增、编辑、删除并测试模型服务。"
-      : "Configured model services\n- My model gateway (my-gateway) · https://api.example.com/v1 · key stored · in use\n- Local model (local-llm) · http://127.0.0.1:11434/v1 · no credential\n\nNotes\n- Responses-compatible APIs only; Chat Completions endpoints are not supported.\n- An API key entered here is stored in cleartext in ~/.crewon/config.toml on this machine (mode 600).\n- Connect the local app-server to add, edit, delete, and test model services here.",
+      ? "已配置的模型服务\n- 我的模型网关 (my-gateway) · https://api.example.com/v1 · 已保存密钥 · 当前使用\n- 本地模型 (local-llm) · http://127.0.0.1:11434/v1 · 无需密钥\n\n说明\n- 只支持 Responses 兼容接口，不支持 Chat Completions 格式的服务。\n- API Key 仅保存到操作系统密钥库，不写入 config.toml、SQLite 或浏览器存储。\n- 连接 CrewON Control 后，这里可以新增、编辑、删除并测试模型服务。"
+      : "Configured model services\n- My model gateway (my-gateway) · https://api.example.com/v1 · key stored · in use\n- Local model (local-llm) · http://127.0.0.1:11434/v1 · no credential\n\nNotes\n- Responses-compatible APIs only; Chat Completions endpoints are not supported.\n- API keys are stored only in the operating system credential store, never config.toml, SQLite, or browser storage.\n- Connect to CrewON Control to add, edit, delete, and test model services here.",
     actions: [
       {
         id: "refresh-model-providers",
@@ -1528,8 +1528,8 @@ export function demoSettingsPanel(
       title: zh(locale) ? "助理人格与记忆" : "Assistant profile & memory",
       subtitle: "/Users/me/work/crewon",
       body: zh(locale)
-        ? "助理人格与记忆\n角色定位: 已配置\n灵魂与原则: 已配置\n长期记忆: 生成并使用（推荐）\n配置层: 2\n保存后由 app-server 热重载。角色和灵魂影响新会话；长期记忆会在对话空闲后异步沉淀，并按相关性有限检索。"
-        : "Assistant profile & memory\nRole: configured\nSoul & principles: configured\nLong-term memory: Learn and use (recommended)\nConfig layers: 2\nThe app-server hot-reloads these settings. Role and soul affect new sessions; long-term memory is consolidated asynchronously after conversations become idle and retrieved with bounded relevance.",
+        ? "助理人格与记忆\n角色定位: 已配置\n灵魂与原则: 已配置\n长期记忆: 生成并使用（推荐）\n配置层: 2\n保存后由 CrewON Control 热重载。角色和灵魂影响新会话；长期记忆会在对话空闲后异步沉淀，并按相关性有限检索。"
+        : "Assistant profile & memory\nRole: configured\nSoul & principles: configured\nLong-term memory: Learn and use (recommended)\nConfig layers: 2\nCrewON Control hot-reloads these settings. Role and soul affect new sessions; long-term memory is consolidated asynchronously after conversations become idle and retrieved with bounded relevance.",
       fields: [
         {
           id: "personalization-instructions",
@@ -1595,8 +1595,8 @@ export function demoSettingsPanel(
       title: zh(locale) ? "键盘快捷键" : "Keyboard shortcuts",
       subtitle: "/Users/me/work/crewon",
       body: zh(locale)
-        ? "键盘快捷键\n- 新对话: ⌘N / Ctrl N\n- 搜索: ⌘K / Ctrl K\n- 发送: ⌘ Enter / Ctrl Enter\n- 审查: ⌃⇧G\n- 浏览器: ⌘T\n- 文件: ⌘P\n- 侧边聊天: ⌥⌘S\n配置层: 2\n当前 app-server 协议尚未暴露快捷键写入 API；此页读取配置状态并展示当前桌面端绑定。"
-        : "Keyboard shortcuts\n- New chat: ⌘N / Ctrl N\n- Search: ⌘K / Ctrl K\n- Send: ⌘ Enter / Ctrl Enter\n- Review: ⌃⇧G\n- Browser: ⌘T\n- Files: ⌘P\n- Side chat: ⌥⌘S\nConfig layers: 2\nThe current app-server protocol does not expose shortcut-write APIs yet. This page reads config state and shows the active desktop bindings.",
+        ? "键盘快捷键\n- 新对话: ⌘N / Ctrl N\n- 搜索: ⌘K / Ctrl K\n- 发送: ⌘ Enter / Ctrl Enter\n- 审查: ⌃⇧G\n- 浏览器: ⌘T\n- 文件: ⌘P\n- 侧边聊天: ⌥⌘S\n配置层: 2\nCrewON Control 尚未暴露快捷键写入 API；此页只展示当前桌面端绑定。"
+        : "Keyboard shortcuts\n- New chat: ⌘N / Ctrl N\n- Search: ⌘K / Ctrl K\n- Send: ⌘ Enter / Ctrl Enter\n- Review: ⌃⇧G\n- Browser: ⌘T\n- Files: ⌘P\n- Side chat: ⌥⌘S\nConfig layers: 2\nCrewON Control does not expose shortcut-write APIs yet. This page only shows the active desktop bindings.",
       actions: [
         {
           id: "refresh-keyboard",
@@ -1822,7 +1822,7 @@ export function demoCapabilityPanel(
       title: zh(locale) ? "终端" : "Terminal",
       subtitle: "/Users/me/work/crewon · exit 0",
       commandInput: true,
-      body: "$ just test -p crewon-app-server\n   Compiling crewon-app-server v0.1.0\n    Finished test profile\n     Running 42 tests\ntest result: ok. 42 passed; 0 failed",
+      body: "$ pnpm --filter @crewon/runtime-worker test\n\n Test Files  12 passed (12)\n      Tests  84 passed (84)",
     };
   }
   if (tool === "files") {
@@ -1932,7 +1932,7 @@ function demoActivityData(locale: Locale): ActivityData {
           glyph: "⚙",
           accent: "violet" as const,
           action: "运行命令",
-          detail: "just test -p crewon-app-server · exit 0",
+          detail: "pnpm --filter @crewon/runtime-worker test · exit 0",
           tokens: 880,
           status: "done" as const,
         },
@@ -1983,7 +1983,7 @@ function demoActivityData(locale: Locale): ActivityData {
           glyph: "⚙",
           accent: "violet" as const,
           action: "Run command",
-          detail: "just test -p crewon-app-server · exit 0",
+          detail: "pnpm --filter @crewon/runtime-worker test · exit 0",
           tokens: 880,
           status: "done" as const,
         },

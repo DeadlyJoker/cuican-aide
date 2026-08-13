@@ -57,7 +57,10 @@ function threadState(initialThreads: Thread[] = [thread()]) {
       notice = nextNotice;
     },
     setSelectedThreadId: (
-      updater: string | null | ((currentThreadId: string | null) => string | null),
+      updater:
+        | string
+        | null
+        | ((currentThreadId: string | null) => string | null),
     ) => {
       selectedThreadId =
         typeof updater === "function" ? updater(selectedThreadId) : updater;
@@ -395,7 +398,7 @@ describe("thread list actions", () => {
     expect(confirmed).toBe(false);
     expect(state.threads).toEqual([assistant]);
     expect(state.notice).toEqual({
-      text: "连接 App Server 后才能清理助理会话",
+      text: "连接 CrewON Control 后才能清理助理会话",
       tone: "warning",
     });
   });

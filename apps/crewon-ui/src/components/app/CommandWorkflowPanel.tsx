@@ -60,7 +60,9 @@ export function CommandWorkflowPanel({
     : null;
   const latestRun = selected?.config.runs?.[0] ?? null;
   const pendingGate = (
-    latestRun?.executedNodes ?? execution?.executedNodes ?? []
+    latestRun?.executedNodes ??
+    execution?.executedNodes ??
+    []
   ).find((node) => node.status === "waitingForApproval");
   const currentExecutionId = latestRun?.executionId ?? execution?.executionId;
   const runActive = matchesActiveWorkflowStatus(
@@ -148,9 +150,13 @@ export function CommandWorkflowPanel({
         <p>
           {status === "loading"
             ? "正在从当前工作空间读取 CrewON 协作流定义。"
-            : "当前只读取本地 CrewON 协作流，请检查 App Server 连接后重试。"}
+            : "当前只读取 CrewON Control 协作流，请检查 Control 连接后重试。"}
         </p>
-        <button className="button" type="button" onClick={() => void onReload()}>
+        <button
+          className="button"
+          type="button"
+          onClick={() => void onReload()}
+        >
           <RotateCw aria-hidden="true" />
           重新同步
         </button>
@@ -505,9 +511,7 @@ function WorkflowExecutionStrip({ stages }: { stages: WorkflowStage[] }) {
                 : stage.owner || "本地 Agent"}
             </p>
           </div>
-          <em
-            className={workflowStageStatusClassName(stage.status)}
-          >
+          <em className={workflowStageStatusClassName(stage.status)}>
             {workflowStageStatusLabel(stage.status)}
           </em>
         </article>
@@ -561,7 +565,9 @@ function workflowExecutionFromLatestRun(
   };
 }
 
-function matchesActiveWorkflowStatus(status: string | null | undefined): boolean {
+function matchesActiveWorkflowStatus(
+  status: string | null | undefined,
+): boolean {
   return ["canceling", "queued", "running", "waitingForApproval"].includes(
     status || "",
   );
@@ -622,9 +628,8 @@ function workflowListSummary(
   stages: WorkflowStage[],
 ): string {
   const running =
-    stages.find((stage) =>
-      ["running", "waiting"].includes(stage.status),
-    ) ?? stages[0];
+    stages.find((stage) => ["running", "waiting"].includes(stage.status)) ??
+    stages[0];
   if (running) {
     return `当前阶段：${running.name}${running.owner ? ` · ${running.owner}` : ""}`;
   }
@@ -635,7 +640,8 @@ function workflowRoomSummary(
   _workflow: CrewonWorkflowRecord,
   stages: WorkflowStage[],
 ): string {
-  const running = stages.find((stage) => stage.status === "running") ?? stages[0];
+  const running =
+    stages.find((stage) => stage.status === "running") ?? stages[0];
   const current =
     stages.find((stage) => ["running", "waiting"].includes(stage.status)) ??
     running;
