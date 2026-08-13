@@ -1,4 +1,3 @@
-import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
 import { describe, expect, it, vi } from "vitest";
@@ -13,7 +12,6 @@ import {
   refreshVisibleSettingsAction,
   reloadThreadsFromClientAction,
   runSelectedThreadGoalEffectAction,
-  runSelectedThreadSummaryEffectAction,
 } from "./appNotificationRefreshActions";
 
 function thread(id: string, name = id): Thread {
@@ -38,21 +36,6 @@ function thread(id: string, name = id): Thread {
     gitInfo: null,
     name,
     turns: [],
-  };
-}
-
-function conversationSummary(): ConversationSummary {
-  return {
-    cliVersion: "test",
-    conversationId: "thread-1",
-    cwd: "/repo",
-    gitInfo: null,
-    modelProvider: "openai",
-    path: "/thread",
-    preview: "Summary",
-    source: "unknown",
-    timestamp: null,
-    updatedAt: null,
   };
 }
 
@@ -151,117 +134,6 @@ describe("app notification refresh actions", () => {
     await settlePromises();
 
     expect(refreshedGoal).toEqual(goal);
-  });
-
-  it("clears selected thread summary when there is no backend thread", () => {
-    let summary: ConversationSummary | null = conversationSummary();
-
-    const cleanup = runSelectedThreadSummaryEffectAction({
-      client: null,
-      isConnected: false,
-      isDemo: false,
-      isDemoThreadSelected: false,
-      selectedThreadId: "thread-1",
-      setConversationSummary: (nextSummary) => {
-        summary = nextSummary;
-      },
-    });
-
-    expect(cleanup).toBeUndefined();
-    expect(summary).toBeNull();
-  });
-
-  it("preserves selected thread summary while showing demo state", () => {
-    let summary: ConversationSummary | null = conversationSummary();
-
-    const cleanup = runSelectedThreadSummaryEffectAction({
-      client: null,
-      isConnected: false,
-      isDemo: true,
-      isDemoThreadSelected: true,
-      selectedThreadId: "demo-thread",
-      setConversationSummary: (nextSummary) => {
-        summary = nextSummary;
-      },
-    });
-
-    expect(cleanup).toBeUndefined();
-    expect(summary).toEqual(conversationSummary());
-  });
-
-  it("refreshes selected thread summary from the client", async () => {
-    const summary = conversationSummary();
-    let refreshedSummary: ConversationSummary | null = null;
-
-    runSelectedThreadSummaryEffectAction({
-      client: {
-        async getConversationSummary(threadId) {
-          expect(threadId).toBe("thread-1");
-          return { summary };
-        },
-      },
-      isConnected: true,
-      isDemo: false,
-      isDemoThreadSelected: false,
-      selectedThreadId: "thread-1",
-      setConversationSummary: (nextSummary) => {
-        refreshedSummary = nextSummary;
-      },
-    });
-    await settlePromises();
-
-    expect(refreshedSummary).toEqual(summary);
-  });
-
-  it("clears selected thread summary on refresh failure", async () => {
-    let summary: ConversationSummary | null = conversationSummary();
-
-    runSelectedThreadSummaryEffectAction({
-      client: {
-        async getConversationSummary() {
-          throw new Error("offline");
-        },
-      },
-      isConnected: true,
-      isDemo: false,
-      isDemoThreadSelected: false,
-      selectedThreadId: "thread-1",
-      setConversationSummary: (nextSummary) => {
-        summary = nextSummary;
-      },
-    });
-    await settlePromises();
-
-    expect(summary).toBeNull();
-  });
-
-  it("ignores selected thread summary refreshes after cleanup", async () => {
-    let resolveSummary: (summary: { summary: ConversationSummary | null }) => void =
-      () => {};
-    let summary: ConversationSummary | null = null;
-
-    const cleanup = runSelectedThreadSummaryEffectAction({
-      client: {
-        getConversationSummary() {
-          return new Promise<{ summary: ConversationSummary | null }>((resolve) => {
-            resolveSummary = resolve;
-          });
-        },
-      },
-      isConnected: true,
-      isDemo: false,
-      isDemoThreadSelected: false,
-      selectedThreadId: "thread-1",
-      setConversationSummary: (nextSummary) => {
-        summary = nextSummary;
-      },
-    });
-
-    cleanup?.();
-    resolveSummary({ summary: conversationSummary() });
-    await settlePromises();
-
-    expect(summary).toBeNull();
   });
 
   it("refreshes selected thread goal from the client", async () => {

@@ -1,5 +1,4 @@
 import type { AskForApproval } from "@crewon-protocol/v2/AskForApproval";
-import type { Model } from "@crewon-protocol/v2/Model";
 import type { SandboxMode } from "@crewon-protocol/v2/SandboxMode";
 
 export type RuntimeDynamicTool = {
@@ -78,56 +77,6 @@ export const fallbackCommandModelOptions: CommandModelOption[] = [
   { label: "gpt-5-codex", value: "gpt-5-codex" },
   { label: "gpt-5", value: "gpt-5" },
 ];
-
-export function commandModelOptionsFromModels(
-  models: Model[],
-): CommandModelOption[] {
-  const seen = new Set<string>();
-  return models
-    .filter((model) => !model.hidden && model.model)
-    .sort((left, right) => Number(right.isDefault) - Number(left.isDefault))
-    .flatMap((model) => {
-      if (seen.has(model.model)) {
-        return [];
-      }
-      seen.add(model.model);
-      const reasoningEfforts = model.supportedReasoningEfforts.map(
-        (effort) => ({
-          ...(effort.description ? { description: effort.description } : {}),
-          value: effort.reasoningEffort,
-        }),
-      );
-      return [
-        {
-          ...(model.defaultReasoningEffort
-            ? { defaultReasoningEffort: model.defaultReasoningEffort }
-            : {}),
-          detail:
-            model.displayName && model.displayName !== model.model
-              ? model.displayName
-              : undefined,
-          isDefault: model.isDefault,
-          label: model.model,
-          ...(reasoningEfforts.length ? { reasoningEfforts } : {}),
-          value: model.model,
-        },
-      ];
-    });
-}
-
-export function mergeCommandModelOptions(
-  backendOptions: CommandModelOption[],
-  additionalOptions: CommandModelOption[] = fallbackCommandModelOptions,
-): CommandModelOption[] {
-  const seen = new Set<string>();
-  return [...backendOptions, ...additionalOptions].filter((option) => {
-    if (!option.value || seen.has(option.value)) {
-      return false;
-    }
-    seen.add(option.value);
-    return true;
-  });
-}
 
 export function commandPermissionRuntimeSettings(
   permission: CommandComposerPermission,

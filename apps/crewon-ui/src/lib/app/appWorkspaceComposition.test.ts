@@ -87,7 +87,6 @@ describe("App Workspace Control composition", () => {
   it("keeps active App catalog consumers off the App Server module", () => {
     for (const path of [
       "../../lib/capability/workspaceCapabilityActions.ts",
-      "../../lib/composer/composerSlashCommands.ts",
       "../../lib/settings/settingsCapabilityRefreshActions.ts",
       "../../lib/settings/settingsRuntimeRefreshActions.ts",
     ]) {
@@ -188,15 +187,13 @@ describe("App Workspace Control composition", () => {
     expect(source).toContain("params.onUnavailable()");
   });
 
-  it("does not compose null-client metadata, attachments, or capability saves", () => {
+  it("does not compose null-client attachments", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),
       "utf8",
     );
 
-    expect(source).not.toMatch(
-      /useAppThreadMetadataEffects|useAppPendingServerRequests|addLocalComposerResources|saveCapabilityDraftAction/u,
-    );
+    expect(source).not.toContain("addLocalComposerResources");
   });
 
   it("sources the packaged command target and model catalogs only from Control", () => {

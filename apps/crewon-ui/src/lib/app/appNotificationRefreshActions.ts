@@ -1,4 +1,3 @@
-import type { ConversationSummary } from "@crewon-protocol/ConversationSummary";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
 
@@ -13,9 +12,6 @@ type ThreadListReplaceSetter = (threads: Thread[]) => void;
 
 type NotificationRefreshClient = {
   getAccount(): Promise<AccountStatus>;
-  getConversationSummary(
-    threadId: string,
-  ): Promise<{ summary: ConversationSummary | null }>;
   getThreadGoal(threadId: string): Promise<{ goal: ThreadGoal | null }>;
   listThreads(archived: boolean): Promise<Thread[]>;
   readThread(threadId: string): Promise<Thread>;
@@ -64,47 +60,6 @@ export function refreshSelectedThreadGoalFromClientAction(params: {
     ?.getThreadGoal(params.threadId)
     .then((response) => params.setThreadGoal(response.goal))
     .catch(() => undefined);
-}
-
-export function runSelectedThreadSummaryEffectAction(params: {
-  client:
-    | Pick<NotificationRefreshClient, "getConversationSummary">
-    | null
-    | undefined;
-  isConnected: boolean;
-  isDemo: boolean;
-  isDemoThreadSelected: boolean;
-  selectedThreadId: string | null;
-  setConversationSummary: (summary: ConversationSummary | null) => void;
-}): (() => void) | undefined {
-  if (
-    !params.isConnected ||
-    !params.selectedThreadId ||
-    params.isDemoThreadSelected
-  ) {
-    if (!params.isDemo) {
-      params.setConversationSummary(null);
-    }
-    return undefined;
-  }
-
-  let cancelled = false;
-  void params.client
-    ?.getConversationSummary(params.selectedThreadId)
-    .then((response) => {
-      if (!cancelled) {
-        params.setConversationSummary(response.summary);
-      }
-    })
-    .catch(() => {
-      if (!cancelled) {
-        params.setConversationSummary(null);
-      }
-    });
-
-  return () => {
-    cancelled = true;
-  };
 }
 
 export function runSelectedThreadGoalEffectAction(params: {

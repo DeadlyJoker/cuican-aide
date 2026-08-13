@@ -8,7 +8,6 @@ export {
   useAppModelResponseTimeoutEffect,
   useAppStateRefsEffect,
   useAppThreadListEffects,
-  useAppThreadMetadataEffects,
   useAppViewSyncEffects,
 } from "./effects";
 export { shouldAutoCloseInspector, shouldAutoCloseSidebar } from "./appUiState";
@@ -18,7 +17,6 @@ export {
   assistantThreadRuntimeState,
   commandShellRuntimeState,
 } from "./appCommandShellRuntime";
-export { saveCapabilityDraftAction } from "./appCapabilitySaveAction";
 export { showDemoThreadsAction } from "./appConnectionActions";
 export {
   addLocalComposerResources,
@@ -27,7 +25,6 @@ export {
 } from "./appComposerAttachmentActions";
 export { createAppSettingsCoordinator } from "./appSettingsCoordinator";
 export { useAppChromeState } from "./useAppChromeState";
-export { useAppCommandModelOptions } from "./useAppCommandModelOptions";
 export { useAppCommandShellRoute } from "./useAppCommandShellRoute";
 export { useAppComposerState } from "./useAppComposerState";
 export { useAppConfirmDialog } from "./useAppConfirmDialog";
@@ -35,9 +32,7 @@ export { useAppCoordinatorRefs } from "./useAppCoordinatorRefs";
 export { useAppDraftWorkspaceState } from "./useAppDraftWorkspaceState";
 export { useAppEnvironment } from "./useAppEnvironment";
 export { useAppPanelState } from "./useAppPanelState";
-export { useAppPendingServerRequests } from "./useAppPendingServerRequests";
 export { useAppShellRuntimeState } from "./useAppShellRuntimeState";
-export { useAppSlashCommands } from "./useAppSlashCommands";
 export { useAppThreadSelection } from "./useAppThreadSelection";
 export { useAppThreadState } from "./useAppThreadState";
 export { useAppWorkspaceStatusState } from "./useAppWorkspaceStatusState";
