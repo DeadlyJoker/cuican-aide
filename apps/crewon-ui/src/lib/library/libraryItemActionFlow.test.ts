@@ -51,9 +51,7 @@ function pluginSkillAction(): Extract<
 
 function handlers(): LibraryItemOpenHandlers {
   return {
-    agentConfig: vi.fn(async () => {}),
     capabilityPreset: vi.fn(async () => {}),
-    automationDetail: vi.fn(async () => {}),
     externalAgentImport: vi.fn(async () => {}),
     mcpDetail: vi.fn(async () => {}),
     officeDetail: vi.fn(async () => {}),

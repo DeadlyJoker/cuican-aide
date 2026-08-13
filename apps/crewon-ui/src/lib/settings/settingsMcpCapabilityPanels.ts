@@ -71,7 +71,6 @@ export function mcpSettingsText(
     .filter(Boolean)
     .join("\n");
 }
-
 function mcpSettingsTitle(locale: Locale): string {
   return locale === "zh" ? "MCP 服务器" : "MCP servers";
 }
@@ -98,8 +97,7 @@ export function mcpSettingsLoadingPanel(locale: Locale): CapabilityPanel {
   return {
     title: mcpSettingsTitle(locale),
     subtitle: mcpSettingsSubtitle(locale),
-    body:
-      locale === "zh" ? "正在读取 MCP 服务器..." : "Reading MCP servers...",
+    body: locale === "zh" ? "正在读取 MCP 服务器..." : "Reading MCP servers...",
   };
 }
 
@@ -119,7 +117,8 @@ export function mcpSettingsPanel(
     (total, server) =>
       total +
       (server.status
-        ? server.status.resources.length + server.status.resourceTemplates.length
+        ? server.status.resources.length +
+          server.status.resourceTemplates.length
         : 0),
     0,
   );
@@ -190,7 +189,10 @@ export function mcpReloadProgressPanel(
     : panel;
 }
 
-export function mcpReloadFailureMessage(error: unknown, locale: Locale): string {
+export function mcpReloadFailureMessage(
+  error: unknown,
+  locale: Locale,
+): string {
   return error instanceof Error
     ? error.message
     : locale === "zh"

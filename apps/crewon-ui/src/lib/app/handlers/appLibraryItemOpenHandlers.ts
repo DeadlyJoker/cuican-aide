@@ -12,12 +12,7 @@ import type {
 } from "../../domain/crewonDomain";
 import type { Locale } from "../../i18n";
 import type { OfficeThreadResolution } from "../../office/officeThreadActions";
-import {
-  listBackendAutomationRuns,
-  readBackendAgentConfig,
-  readBackendAutomationConfig,
-  readBackendOfficeConfig,
-} from "../../library/libraryBackendConfigAccess";
+import { readBackendOfficeConfig } from "../../library/libraryBackendConfigAccess";
 import {
   createLibraryItemOpenHandlers,
   type LibraryItemOpenHandlersParams,
@@ -25,7 +20,7 @@ import {
 import type { LibraryItemOpenHandlers } from "../../library/libraryItemActionFlow";
 
 type LibraryPanelSetter =
-  LibraryItemOpenHandlersParams["agentConfig"]["setLibraryPanel"];
+  LibraryItemOpenHandlersParams["capabilityPreset"]["setLibraryPanel"];
 type ThreadSetter = (updater: (currentThreads: Thread[]) => Thread[]) => void;
 
 export function createAppLibraryItemOpenHandlers(params: {
@@ -41,9 +36,6 @@ export function createAppLibraryItemOpenHandlers(params: {
   locale: Locale;
   openAgentsLibrary: () => Promise<void>;
   optionalBackendWorkspace: () => Promise<BackendWorkspace | null>;
-  readAutomationRunItems: (
-    threadId: string | null | undefined,
-  ) => Promise<LibraryPanel["items"]>;
   refreshToolActionFromBackend: (
     action: McpDetailAction | SkillFileAction,
   ) => Promise<McpDetailAction | SkillFileAction>;
@@ -65,29 +57,8 @@ export function createAppLibraryItemOpenHandlers(params: {
     params.client?.startTurn(threadId, text) ?? Promise.resolve(null);
 
   return createLibraryItemOpenHandlers({
-    agentConfig: {
-      isConnected: params.isConnected,
-      locale: params.locale,
-      readAgentConfig: (requestParams) =>
-        readBackendAgentConfig(params.optionalBackendWorkspace, requestParams),
-      readThread,
-      setLibraryPanel: params.setLibraryPanel,
-    },
     capabilityPreset: {
       locale: params.locale,
-      setLibraryPanel: params.setLibraryPanel,
-    },
-    automationDetail: {
-      isConnected: params.isConnected,
-      listAutomationRuns: (threadId) =>
-        listBackendAutomationRuns(params.optionalBackendWorkspace, threadId),
-      locale: params.locale,
-      readAutomationConfig: (requestParams) =>
-        readBackendAutomationConfig(
-          params.optionalBackendWorkspace,
-          requestParams,
-        ),
-      readAutomationRunItems: params.readAutomationRunItems,
       setLibraryPanel: params.setLibraryPanel,
     },
     externalAgentImport: {

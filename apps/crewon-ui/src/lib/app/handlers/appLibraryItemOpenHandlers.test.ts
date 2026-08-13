@@ -56,7 +56,11 @@ describe("app library item open handlers", () => {
             ReturnType<AppServerClient["readPlugin"]>
           >;
         },
-        async readPluginSkill(remoteMarketplaceName, remotePluginId, skillName) {
+        async readPluginSkill(
+          remoteMarketplaceName,
+          remotePluginId,
+          skillName,
+        ) {
           calls.push({
             method: "readPluginSkill",
             remoteMarketplaceName,
@@ -77,7 +81,6 @@ describe("app library item open handlers", () => {
       locale: "en",
       openAgentsLibrary: async () => {},
       optionalBackendWorkspace: async () => null,
-      readAutomationRunItems: async () => [],
       refreshToolActionFromBackend: async (action) => action,
       setLibraryPanel: () => {},
       setNotice: () => {},
@@ -111,18 +114,6 @@ describe("app library item open handlers", () => {
   it("wires backend config readers through the optional workspace provider", async () => {
     const calls: unknown[] = [];
     const backendClient = client({
-      async listAutomationRuns(cwd, threadId) {
-        calls.push({ cwd, method: "listAutomationRuns", threadId });
-        return { data: [], nextCursor: null };
-      },
-      async readAgentConfig(cwd, params) {
-        calls.push({ cwd, method: "readAgentConfig", params });
-        return { record: null };
-      },
-      async readAutomationConfig(cwd, params) {
-        calls.push({ cwd, method: "readAutomationConfig", params });
-        return { record: null };
-      },
       async readOfficeConfig(cwd, params) {
         calls.push({ cwd, method: "readOfficeConfig", params });
         return { record: null };
@@ -144,7 +135,6 @@ describe("app library item open handlers", () => {
       locale: "en",
       openAgentsLibrary: async () => {},
       optionalBackendWorkspace: async () => workspace,
-      readAutomationRunItems: async () => [],
       refreshToolActionFromBackend: async (action) => action,
       setLibraryPanel: () => {},
       setNotice: () => {},
@@ -154,29 +144,9 @@ describe("app library item open handlers", () => {
     });
 
     const params = capturedParams();
-    await params.agentConfig.readAgentConfig({ agentId: "agent-1" });
-    await params.automationDetail.readAutomationConfig({
-      filePath: "automation.json",
-    });
-    await params.automationDetail.listAutomationRuns("thread-1");
     await params.officeDetail.readOfficeConfig({ title: "Office" });
 
     expect(calls).toEqual([
-      {
-        cwd: "/repo",
-        method: "readAgentConfig",
-        params: { agentId: "agent-1" },
-      },
-      {
-        cwd: "/repo",
-        method: "readAutomationConfig",
-        params: { filePath: "automation.json" },
-      },
-      {
-        cwd: "/repo",
-        method: "listAutomationRuns",
-        threadId: "thread-1",
-      },
       {
         cwd: "/repo",
         method: "readOfficeConfig",
@@ -220,12 +190,16 @@ describe("app library item open handlers", () => {
       locale: "en",
       openAgentsLibrary: async () => {},
       optionalBackendWorkspace: async () => null,
-      readAutomationRunItems: async () => [],
       refreshToolActionFromBackend: async (action) => action,
       setLibraryPanel: () => {},
       setNotice: () => {},
       setThreadGoal: async (threadId, goal, tokenBudget) => {
-        calls.push({ goal, method: "factorySetThreadGoal", threadId, tokenBudget });
+        calls.push({
+          goal,
+          method: "factorySetThreadGoal",
+          threadId,
+          tokenBudget,
+        });
       },
       setThreads: () => {},
       writeAgentConfig: async () => null,

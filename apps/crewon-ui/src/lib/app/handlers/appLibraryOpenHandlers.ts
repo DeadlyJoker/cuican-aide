@@ -224,7 +224,6 @@ export function createAppLibraryOpenHandlers(
         locale: params.locale,
         openAgentsLibrary: () => openLibrary("agents"),
         optionalBackendWorkspace: params.optionalBackendWorkspace,
-        readAutomationRunItems: params.readAutomationRunItems,
         refreshToolActionFromBackend: params.refreshToolActionFromBackend,
         setLibraryPanel: params.setLibraryPanel,
         setNotice: params.setNotice,

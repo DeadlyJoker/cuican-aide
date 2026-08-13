@@ -1,14 +1,6 @@
 import type { LibraryItem } from "../domain/crewonDomain";
 import { openCapabilityPresetAction } from "../capability/capabilityPresetActions";
 import {
-  openAgentConfigAction,
-  type OpenAgentConfigActionParams,
-} from "../agent-config/agentConfigActions";
-import {
-  openAutomationDetailAction,
-  type OpenAutomationDetailActionParams,
-} from "../automation/automationDetailActions";
-import {
   openExternalAgentImportAction,
   type OpenExternalAgentImportActionParams,
 } from "../external-agent/externalAgentImportActions";
@@ -35,12 +27,10 @@ import {
 type WithoutAction<TParams> = Omit<TParams, "action">;
 
 export type LibraryItemOpenHandlersParams = {
-  agentConfig: WithoutAction<OpenAgentConfigActionParams>;
   capabilityPreset: Omit<
     Parameters<typeof openCapabilityPresetAction>[0],
     "action"
   >;
-  automationDetail: WithoutAction<OpenAutomationDetailActionParams>;
   externalAgentImport: Omit<OpenExternalAgentImportActionParams, "item">;
   mcpDetail: WithoutAction<OpenMcpDetailActionParams>;
   officeDetail: WithoutAction<OpenOfficeDetailActionParams>;
@@ -58,9 +48,7 @@ export type LibraryItemOpenHandlersParams = {
 };
 
 export function createLibraryItemOpenHandlers({
-  agentConfig,
   capabilityPreset,
-  automationDetail,
   externalAgentImport,
   mcpDetail,
   officeDetail,
@@ -69,11 +57,8 @@ export function createLibraryItemOpenHandlers({
   skillFile,
 }: LibraryItemOpenHandlersParams): LibraryItemOpenHandlers {
   return {
-    agentConfig: (action) => openAgentConfigAction({ action, ...agentConfig }),
     capabilityPreset: (action) =>
       openCapabilityPresetAction({ action, ...capabilityPreset }),
-    automationDetail: (action) =>
-      openAutomationDetailAction({ action, ...automationDetail }),
     externalAgentImport: (action) =>
       openExternalAgentImportAction({
         item: action.item,

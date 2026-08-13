@@ -5,8 +5,6 @@ import { createLibraryItemOpenHandlers } from "./libraryItemOpenHandlers";
 import type { LibraryItemOpenHandlersParams } from "./libraryItemOpenHandlers";
 
 const actionSpies = vi.hoisted(() => ({
-  agentConfig: vi.fn(async () => true),
-  automationDetail: vi.fn(async () => true),
   externalAgentImport: vi.fn(async () => true),
   mcpDetail: vi.fn(async () => true),
   officeDetail: vi.fn(async () => true),
@@ -15,12 +13,6 @@ const actionSpies = vi.hoisted(() => ({
   skillFile: vi.fn(async () => true),
 }));
 
-vi.mock("../agent-config/agentConfigActions", () => ({
-  openAgentConfigAction: actionSpies.agentConfig,
-}));
-vi.mock("../automation/automationDetailActions", () => ({
-  openAutomationDetailAction: actionSpies.automationDetail,
-}));
 vi.mock("../external-agent/externalAgentImportActions", () => ({
   openExternalAgentImportAction: actionSpies.externalAgentImport,
 }));
@@ -78,7 +70,11 @@ describe("library item open handler factory", () => {
     Object.values(actionSpies).forEach((spy) => spy.mockClear());
     const action = pluginAction();
     const handlers = createLibraryItemOpenHandlers({
-      plugin: { locale: "en", readPlugin: async () => null, setLibraryPanel: vi.fn() },
+      plugin: {
+        locale: "en",
+        readPlugin: async () => null,
+        setLibraryPanel: vi.fn(),
+      },
     } as unknown as LibraryItemOpenHandlersParams);
 
     await handlers.plugin(action);

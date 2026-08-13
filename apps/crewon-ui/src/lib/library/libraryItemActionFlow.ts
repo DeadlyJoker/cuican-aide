@@ -1,13 +1,8 @@
 import type { LibraryItem, LibraryItemAction } from "../domain/crewonDomain";
 
-type AgentConfigAction = Extract<LibraryItemAction, { type: "agent-config" }>;
 type CapabilityPresetAction = Extract<
   LibraryItemAction,
   { type: "capability-preset" }
->;
-type AutomationDetailAction = Extract<
-  LibraryItemAction,
-  { type: "automation-detail" }
 >;
 type ExternalAgentImportAction = Extract<
   LibraryItemAction,
@@ -28,12 +23,8 @@ export type LibraryItemActionGateParams = {
 };
 
 export type LibraryItemOpenHandlers = {
-  agentConfig: (action: AgentConfigAction) => unknown | Promise<unknown>;
   capabilityPreset: (
     action: CapabilityPresetAction,
-  ) => unknown | Promise<unknown>;
-  automationDetail: (
-    action: AutomationDetailAction,
   ) => unknown | Promise<unknown>;
   externalAgentImport: (
     action: ExternalAgentImportAction,
@@ -109,11 +100,8 @@ export async function openLibraryItemAction({
       await handlers.capabilityPreset(action);
       return true;
     case "agent-config":
-      await handlers.agentConfig(action);
-      return true;
     case "automation-detail":
-      await handlers.automationDetail(action);
-      return true;
+      return false;
     case "external-agent-import":
       await handlers.externalAgentImport(action);
       return true;
