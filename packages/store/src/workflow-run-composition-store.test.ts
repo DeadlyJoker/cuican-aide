@@ -150,7 +150,7 @@ test("SQLite cancellation atomically closes queued, pending and waiting gate nod
   database.close();
 });
 
-test("SQLite cancellation terminalizes a running not-dispatched node", async (t) => {
+test("SQLite cancellation terminalizes a reclaimed running not-dispatched node", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-workflow-cancel-prepared-"));
   const path = join(directory, "cancel.sqlite");
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -205,6 +205,13 @@ test("SQLite cancellation terminalizes a running not-dispatched node", async (t)
       agentVersionId: "agent-v1", adapterName: "responses", adapterVersion: "1", modelId: "model" },
     preparedAt: "2026-08-12T00:00:00.000Z" });
   dispatchDatabase.close();
+  clock.set(Date.parse("2026-08-12T00:01:01.000Z"));
+  const reclaimed = await store.claimNextWorkItem({ ownerId: "reclaimed-node-worker",
+    leaseId: "reclaimed-node-lease", leaseDurationMs: 60_000 });
+  assert.equal(reclaimed?.workItem.workItemId, work.workItemId);
+  assert.equal(reclaimed?.lease.epoch, 2);
+  const cancellationLease = { workItemId: work.workItemId, ownerId: "reclaimed-node-worker",
+    leaseId: "reclaimed-node-lease", leaseEpoch: reclaimed!.lease.epoch };
   await new RunApplicationService({ store,
     authorization: { authorize: async () => ({ outcome: "allow" }) },
     clock: { now: () => "2026-08-12T00:00:01.000Z" },
@@ -212,9 +219,10 @@ test("SQLite cancellation terminalizes a running not-dispatched node", async (t)
       principalId: "principal-1", spaceId: "space-1", actorId: "actor-1" }, {
       kind: "run.requestCancel", runId: "run-1", expectedRevision: 2,
       idempotencyKey: "request-prepared-cancel" });
-  clock.set(Date.parse("2026-08-12T00:00:02.000Z"));
+  clock.set(Date.parse("2026-08-12T00:01:02.000Z"));
   const cancelInput = { tenantId: "tenant-1", runId: "run-1",
-    binding, operationId: "cancel-prepared", reasonCode: "user_requested", lease: nodeLease };
+    binding, operationId: "cancel-prepared", reasonCode: "user_requested",
+    lease: cancellationLease };
   const canceled = await store.cancelWorkflowExecution(cancelInput);
   assert.deepEqual([canceled.disposition, canceled.runDisposition],
     ["cancellationPending", "nonTerminal"]);

@@ -1553,7 +1553,7 @@ export class SqliteWorkflowRunCompositionStore
           runId: input.runId, stepId: node.nodeId, attemptId: step.currentAttemptId });
     if (step === null || attempt === null || attempt.status !== "running" ||
         attempt.workItemId !== input.lease.workItemId ||
-        attempt.leaseEpoch !== input.lease.leaseEpoch || node.claimId === null)
+        attempt.leaseEpoch > input.lease.leaseEpoch || node.claimId === null)
       throw new RunStoreError("workflow_cancellation_reconciliation_required");
     const dispatchRows = this.#database.prepare(
       `SELECT operation_id FROM model_dispatch_receipts WHERE tenant_id=? AND run_id=?
@@ -1571,11 +1571,12 @@ export class SqliteWorkflowRunCompositionStore
         dispatch.leaseEpoch !== attempt.leaseEpoch))
       throw new RunStoreError("workflow_cancellation_reconciliation_required");
     if (dispatch?.status === "prepared") {
-      const terminal = terminateSqliteModelDispatch(this.#database, {
+      const terminal = terminateSqliteModelDispatchForAttempt(this.#database, {
         tenantId: input.tenantId, runId: input.runId,
         attempt: { stepId: node.nodeId, attemptId: attempt.attemptId },
+        attemptWorkItemId: attempt.workItemId, attemptLeaseEpoch: attempt.leaseEpoch,
         operationId: dispatch.operationId, requestSequence: dispatch.requestSequence,
-        expectedRevision: dispatch.revision, transitionedAt: now, lease: input.lease,
+        expectedRevision: dispatch.revision, transitionedAt: now,
         outcome: { kind: "canceled", code: "user_requested", certainty: "notSent" },
       });
       if (terminal.status !== "terminal")
@@ -1591,7 +1592,9 @@ export class SqliteWorkflowRunCompositionStore
       { ...this.#nodeSettlementContext(), receipt: () => null,
         insertReceipt: () => undefined, completeLease: () => undefined },
       settlementInput, this.#fingerprint("cancelNode", settlementInput), now, nowMs,
-      { deferOuterSettlement: true });
+      { deferOuterSettlement: true,
+        attemptAuthority: { workItemId: attempt.workItemId,
+          leaseEpoch: attempt.leaseEpoch } });
     let reconciliationWorkItemId: string | null = null;
     if (uncertain) {
       reconciliationWorkItemId = workflowAuthorityId("reconcile", {

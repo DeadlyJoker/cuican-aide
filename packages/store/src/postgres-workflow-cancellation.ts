@@ -12,7 +12,7 @@ import {
 } from "./postgres-execution-authority.ts";
 import {
   loadPostgresModelDispatchReceipt,
-  transitionPostgresModelDispatch,
+  terminatePostgresModelDispatchForAttempt,
 } from "./postgres-model-dispatch-evidence.ts";
 import {
   convergePostgresWorkflowRun,
@@ -284,7 +284,7 @@ async function cancelRunningNode(
     attempt === null ||
     attempt.status !== "running" ||
     attempt.workItemId !== input.lease.workItemId ||
-    attempt.leaseEpoch !== input.lease.leaseEpoch ||
+    attempt.leaseEpoch > input.lease.leaseEpoch ||
     (dispatch !== null &&
       (!["prepared", "possiblySent", "responseObserved"].includes(dispatch.status) ||
         (dispatch.status === "responseObserved"
@@ -337,12 +337,14 @@ async function cancelRunningNode(
       reconciliationWorkItemId,
     };
   }
-  if (dispatch !== null) await transitionPostgresModelDispatch(
+  if (dispatch !== null) await terminatePostgresModelDispatchForAttempt(
     client, schema, {
       tenantId: input.tenantId,
       runId: input.runId,
       lease: input.lease,
       attempt: { stepId: node.nodeId, attemptId: attempt.attemptId },
+      attemptWorkItemId: attempt.workItemId,
+      attemptLeaseEpoch: attempt.leaseEpoch,
       operationId: dispatch.operationId,
       requestSequence: dispatch.requestSequence,
       expectedRevision: dispatch.revision,
@@ -352,7 +354,7 @@ async function cancelRunningNode(
         code: "user_requested",
         certainty: "notSent",
       },
-    }, "terminal");
+    });
   await finishPostgresRunAttempt(client, schema, {
     tenantId: input.tenantId,
     runId: input.runId,
