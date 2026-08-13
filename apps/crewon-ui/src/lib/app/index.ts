@@ -36,7 +36,6 @@ export { useAppDraftWorkspaceState } from "./useAppDraftWorkspaceState";
 export { useAppEnvironment } from "./useAppEnvironment";
 export { useAppPanelState } from "./useAppPanelState";
 export { useAppPendingServerRequests } from "./useAppPendingServerRequests";
-export { useAppRunTrackingRefs } from "./useAppRunTrackingRefs";
 export { useAppShellRuntimeState } from "./useAppShellRuntimeState";
 export { useAppSlashCommands } from "./useAppSlashCommands";
 export { useAppThreadSelection } from "./useAppThreadSelection";
