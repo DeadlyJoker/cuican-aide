@@ -49,6 +49,7 @@ import type {
   ListAgentVersionsResponse,
   ListActiveCapabilitiesResponse,
   ListAutomationsResponse,
+  ListOfficesResponse,
   WorkflowVersionMutationResponse,
   GetWorkflowVersionResponse,
   ListWorkflowVersionsResponse,
@@ -520,6 +521,56 @@ test("Office receipt replay is stable and selected target starts a canonical Run
     )?.agentVersionId,
     "agent-version-1",
   );
+});
+
+test("Office list follows the canonical cursor to a second page", async (context) => {
+  const runtime = await testRuntime(context);
+  for (const [index, title] of ["First office", "Second office"].entries()) {
+    const response = await runtime.app.inject({
+      method: "POST",
+      url: "/api/v1/offices",
+      headers: jsonMutationHeaders(`office-page-${index}`),
+      payload: {
+        expectedRevision: 0,
+        title,
+        members: [],
+        executionTargets: [
+          { targetId: "primary", agentVersionId: "agent-version-1" },
+        ],
+      },
+    });
+    assert.equal(response.statusCode, 201, response.body);
+  }
+
+  const firstPageResponse = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/offices?limit=1",
+    headers: readHeaders(),
+  });
+  assert.equal(firstPageResponse.statusCode, 200, firstPageResponse.body);
+  const firstPage = firstPageResponse.json<ListOfficesResponse>();
+  assert.equal(firstPage.data.length, 1);
+  assert.notEqual(firstPage.nextCursor, null);
+
+  const secondPageResponse = await runtime.app.inject({
+    method: "GET",
+    url: `/api/v1/offices?limit=1&cursor=${encodeURIComponent(firstPage.nextCursor ?? "")}`,
+    headers: readHeaders(),
+  });
+  assert.equal(secondPageResponse.statusCode, 200, secondPageResponse.body);
+  const secondPage = secondPageResponse.json<ListOfficesResponse>();
+  assert.equal(secondPage.data.length, 1);
+  assert.notEqual(
+    secondPage.data[0]?.officeVersionId,
+    firstPage.data[0]?.officeVersionId,
+  );
+
+  const legacyQueryResponse = await runtime.app.inject({
+    method: "GET",
+    url: `/api/v1/offices?limit=1&before=${encodeURIComponent(firstPage.nextCursor ?? "")}`,
+    headers: readHeaders(),
+  });
+  assertError(legacyQueryResponse, 400, "validation", "unknown_field");
 });
 
 test("exposes a safe Provider snapshot and replays one bounded probe", async (context) => {

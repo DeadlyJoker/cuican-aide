@@ -179,13 +179,13 @@ async function openControlOffices(params: {
   try {
     const offices: ControlOffice[] = [];
     const seenCursors = new Set<string>();
-    let before: string | null = null;
+    let cursor: string | null = null;
     let truncated = false;
     for (let page = 0; page < CONTROL_OFFICE_MAX_PAGES; page += 1) {
       const response = await params.client.listOffices(
-        before === null
+        cursor === null
           ? { limit: CONTROL_OFFICE_PAGE_SIZE }
-          : { before, limit: CONTROL_OFFICE_PAGE_SIZE },
+          : { cursor, limit: CONTROL_OFFICE_PAGE_SIZE },
       );
       const remaining = CONTROL_OFFICE_MAX_ITEMS - offices.length;
       offices.push(...response.data.slice(0, remaining));
@@ -195,7 +195,7 @@ async function openControlOffices(params: {
         throw new Error("Control Office cursor repeated during pagination");
       }
       seenCursors.add(response.nextCursor);
-      before = response.nextCursor;
+      cursor = response.nextCursor;
       if (
         offices.length === CONTROL_OFFICE_MAX_ITEMS ||
         page === CONTROL_OFFICE_MAX_PAGES - 1

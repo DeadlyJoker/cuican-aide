@@ -13,13 +13,17 @@ test("round-trips a browser-safe canonical Office cursor", () => {
     officeVersionId: "office-version-1",
   };
   const cursor = formatOfficeCursor(before);
-  assert.deepEqual(parseOfficeListQuery({ before: cursor, limit: "25" }), {
+  assert.deepEqual(parseOfficeListQuery({ cursor, limit: "25" }), {
     before,
     limit: 25,
   });
   assert.throws(
-    () => parseOfficeListQuery({ before: `${cursor}x`, limit: "25" }),
+    () => parseOfficeListQuery({ cursor: `${cursor}x`, limit: "25" }),
     /office_cursor_invalid/,
+  );
+  assert.throws(
+    () => parseOfficeListQuery({ before: cursor, limit: "25" }),
+    /unknown_field/,
   );
 });
 

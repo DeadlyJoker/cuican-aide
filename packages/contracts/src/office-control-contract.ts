@@ -86,14 +86,14 @@ export function parseOfficeVersionId(value: unknown) {
 }
 export function parseOfficeListQuery(value: unknown) {
   const object = record(value, "office_list_query_invalid");
-  exact(object, ["limit", "before"]);
+  exact(object, ["limit", "cursor"]);
   const limit = object.limit === undefined ? 50 : Number(object.limit);
   if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
     fail("office_list_limit_invalid");
   let before = null;
-  if (object.before !== undefined) {
+  if (object.cursor !== undefined) {
     try {
-      const input = text(object.before, 1024, "office_cursor_invalid");
+      const input = text(object.cursor, 1024, "office_cursor_invalid");
       const decoded = decodeBase64Url(input);
       if (!decoded.startsWith(OFFICE_CURSOR_PREFIX))
         fail("office_cursor_invalid");

@@ -431,11 +431,60 @@ describe("openControlLibraryAction", () => {
 
     expect(listOffices.mock.calls).toEqual([
       [{ limit: 100 }],
-      [{ before: "page-2", limit: 100 }],
+      [{ cursor: "page-2", limit: 100 }],
     ]);
     expect(
       (panel as LibraryPanel | null)?.items.map((item) => item.title),
     ).toEqual(["office-v1", "office-v2"]);
+  });
+
+  it("fails closed when Control repeats an Office cursor", async () => {
+    let panel: LibraryPanel | null = null;
+    const listOffices = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [], nextCursor: "repeat" })
+      .mockResolvedValueOnce({ data: [], nextCursor: "repeat" });
+
+    await openControlLibraryAction({
+      client: { listOffices } as unknown as ControlApiClient,
+      kind: "office",
+      locale: "en",
+      selectedThreadId: null,
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+    });
+
+    expect(listOffices).toHaveBeenCalledTimes(2);
+    expect(panel).toMatchObject({
+      kind: "office",
+      items: [],
+      error: "Control Office cursor repeated during pagination",
+    });
+  });
+
+  it("labels the Office catalog when its five-page read bound is reached", async () => {
+    let panel: LibraryPanel | null = null;
+    const listOffices = vi.fn(async ({ cursor }: { cursor?: string }) => ({
+      data: [],
+      nextCursor: `page-${cursor ? Number(cursor.slice(5)) + 1 : 2}`,
+    }));
+
+    await openControlLibraryAction({
+      client: { listOffices } as unknown as ControlApiClient,
+      kind: "office",
+      locale: "en",
+      selectedThreadId: null,
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+    });
+
+    expect(listOffices).toHaveBeenCalledTimes(5);
+    expect(panel).toMatchObject({
+      kind: "office",
+      subtitle: "0 offices (truncated)",
+    });
   });
 
   it("does not let an obsolete Library request replace the current panel", async () => {
@@ -459,6 +508,51 @@ describe("openControlLibraryAction", () => {
     });
 
     expect(panels).toEqual([]);
+  });
+
+  it("keeps the newer Library result when an older request finishes last", async () => {
+    let currentRequest = 1;
+    let finishOlderRequest!: (value: unknown) => void;
+    let panel: LibraryPanel | null = null;
+    const olderRequest = openControlLibraryAction({
+      client: {
+        getActiveAgentVersionCatalog: vi.fn(
+          () =>
+            new Promise((resolve) => {
+              finishOlderRequest = resolve;
+            }),
+        ),
+      } as unknown as ControlApiClient,
+      isCurrent: () => currentRequest === 1,
+      kind: "agents",
+      locale: "en",
+      selectedThreadId: null,
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+    });
+
+    currentRequest = 2;
+    await openControlLibraryAction({
+      client: {
+        listOffices: vi.fn(async () => ({ data: [], nextCursor: null })),
+      } as unknown as ControlApiClient,
+      isCurrent: () => currentRequest === 2,
+      kind: "office",
+      locale: "en",
+      selectedThreadId: null,
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+    });
+    finishOlderRequest({
+      releaseId: "release-1",
+      defaultAgentVersionId: null,
+      data: [],
+    });
+    await olderRequest;
+
+    expect(panel).toMatchObject({ kind: "office", subtitle: "0 offices" });
   });
 
   it("loads Control automations with runnable detail actions", async () => {

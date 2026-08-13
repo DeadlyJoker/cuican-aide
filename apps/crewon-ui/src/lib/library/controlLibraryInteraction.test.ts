@@ -68,6 +68,143 @@ describe("Control Library interactions", () => {
     });
   });
 
+  it("fails closed when the fresh Automation detail has no thread identity", async () => {
+    let panel: LibraryPanel | null = null;
+    const setNotice = vi.fn();
+
+    await openControlLibraryItem({
+      client: {
+        getAutomation: vi.fn(async () => ({
+          automation: automation({ threadId: "" }),
+        })),
+      } as unknown as ControlApiClient,
+      item: {
+        title: "Listed automation",
+        meta: "Control",
+        action: {
+          type: "automation-detail",
+          title: "Listed automation",
+          subtitle: "Control",
+          body: "Listed body",
+          prompt: "Listed prompt",
+          threadId: "thread-listed",
+          controlAutomationId: "automation-1",
+          controlAutomationRevision: 1,
+        },
+      },
+      locale: "en",
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+      setNotice,
+    });
+
+    expect(panel).toBeNull();
+    expect(setNotice).toHaveBeenCalledWith({
+      text: "control_automation_detail_response_invalid",
+      tone: "warning",
+    });
+  });
+
+  it("fails closed when the fresh Automation detail has an unsupported revision", async () => {
+    let panel: LibraryPanel | null = null;
+    const setNotice = vi.fn();
+
+    await openControlLibraryItem({
+      client: {
+        getAutomation: vi.fn(async () => ({
+          automation: automation({ revision: 2 as 1 }),
+        })),
+      } as unknown as ControlApiClient,
+      item: {
+        title: "Listed automation",
+        meta: "Control",
+        action: {
+          type: "automation-detail",
+          title: "Listed automation",
+          subtitle: "Control",
+          body: "Listed body",
+          prompt: "Listed prompt",
+          threadId: "thread-listed",
+          controlAutomationId: "automation-1",
+          controlAutomationRevision: 1,
+        },
+      },
+      locale: "en",
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+      setNotice,
+    });
+
+    expect(panel).toBeNull();
+    expect(setNotice).toHaveBeenCalledWith({
+      text: "control_automation_detail_response_invalid",
+      tone: "warning",
+    });
+  });
+
+  it("does not let an obsolete Automation detail replace a newer panel", async () => {
+    let currentRequest = 1;
+    let finishOlderRequest!: (value: unknown) => void;
+    let panel: LibraryPanel | null = null;
+    const setNotice = vi.fn();
+    const olderRequest = openControlLibraryItem({
+      client: {
+        getAutomation: vi.fn(
+          () =>
+            new Promise((resolve) => {
+              finishOlderRequest = resolve;
+            }),
+        ),
+      } as unknown as ControlApiClient,
+      item: {
+        title: "Older",
+        meta: "Control",
+        action: {
+          type: "automation-detail",
+          title: "Older",
+          subtitle: "Control",
+          body: "Older body",
+          prompt: "Older prompt",
+          threadId: "thread-older",
+          controlAutomationId: "automation-older",
+          controlAutomationRevision: 1,
+        },
+      },
+      isCurrent: () => currentRequest === 1,
+      locale: "en",
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+      setNotice,
+    });
+
+    currentRequest = 2;
+    panel = {
+      kind: "office",
+      title: "Newer panel",
+      subtitle: "Newer subtitle",
+      items: [],
+    };
+    finishOlderRequest({
+      automation: automation({
+        automationId: "automation-older",
+        threadId: "thread-older",
+        title: "Older",
+      }),
+    });
+    await olderRequest;
+
+    expect(panel).toEqual({
+      kind: "office",
+      title: "Newer panel",
+      subtitle: "Newer subtitle",
+      items: [],
+    });
+    expect(setNotice).not.toHaveBeenCalled();
+  });
+
   it("prepares Automation creation only from Control Threads and AgentVersions", async () => {
     const setLibraryPanel = vi.fn();
     const handler = createControlLibraryPanelActionHandler({

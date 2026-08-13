@@ -655,12 +655,12 @@ export class ControlApiClient {
   }
 
   listOffices(
-    query: { limit?: number; before?: string } = {},
+    query: { limit?: number; cursor?: string } = {},
     options: ControlApiRequestOptions = {},
   ): Promise<ListOfficesResponse> {
     const search = new URLSearchParams();
     if (query.limit !== undefined) search.set("limit", String(query.limit));
-    if (query.before !== undefined) search.set("before", query.before);
+    if (query.cursor !== undefined) search.set("cursor", query.cursor);
     const suffix = search.size === 0 ? "" : `?${search}`;
     return this.#json("GET", `/api/v1/offices${suffix}`, null, {
       ...options,
