@@ -5,6 +5,12 @@ import {
   WorkflowAgentRuntimeAdapter,
 } from "./workflow-agent-runtime-adapter.ts";
 
+const binding = {
+  workflowId: "workflow-1",
+  workflowVersionId: "workflow-version-1",
+  contentDigest: `sha256:${"a".repeat(64)}`,
+} as const;
+
 test("resolves the frozen node runtime and preserves admitted authority and actual input", async () => {
   const runtime = { version: { agentVersionId: "node-agent" } } as never;
   let received:
@@ -26,6 +32,9 @@ test("resolves the frozen node runtime and preserves admitted authority and actu
     },
     engine: {
       workflowStore: {} as never,
+      async resumeToolApproval() {
+        throw new Error("not used");
+      },
       async execute(input) {
         received = input;
         return { status: "completed", value: { answer: 42 } };
@@ -52,6 +61,7 @@ test("resolves the frozen node runtime and preserves admitted authority and actu
       stepId: "step-1",
       attemptId: "attempt-1",
       workItemClaim,
+      binding,
     }),
     { status: "completed", value: { answer: 42 } },
   );
@@ -69,6 +79,9 @@ test("fails closed instead of substituting the root Agent runtime", async () => 
     },
     engine: {
       workflowStore: {} as never,
+      async resumeToolApproval() {
+        throw new Error("not used");
+      },
       async execute() {
         throw new Error("must not execute");
       },
@@ -92,6 +105,7 @@ test("fails closed instead of substituting the root Agent runtime", async () => 
       stepId: "s",
       attemptId: "a",
       workItemClaim: {} as never,
+      binding,
     }),
     /workflow_node_agent_runtime_unavailable/,
   );
@@ -222,6 +236,7 @@ test("shared engine consumes the supplied attempt and actual value without begin
       stepId: "step-admitted",
       attemptId: "attempt-admitted",
       workItemClaim: claim,
+      binding,
     },
     node,
     inputValue: {
@@ -232,13 +247,7 @@ test("shared engine consumes the supplied attempt and actual value without begin
     },
   });
   assert.deepEqual(outcome, { status: "unknown" });
-  assert.deepEqual(calls, [
-    "renew",
-    "event",
-    "renew",
-    "renew",
-    "event",
-  ]);
+  assert.deepEqual(calls, ["renew", "event", "renew", "renew", "event"]);
 });
 
 test("workflow lifecycle renews a stalled segment and aborts it on durable cancel", async () => {
@@ -341,6 +350,191 @@ test("workflow Direct dispatch fails closed before a kernel without evidence cap
   assert.equal(kernelCalls, 0);
 });
 
+test("workflow approval retry reloads unknown receipt and reconciles without executing", async () => {
+  let executes = 0;
+  let reconciles = 0;
+  let transitions = 0;
+  const approval = {
+    approvalId: "approval-1",
+    status: "approved",
+    actionDigest: `sha256:${"a".repeat(64)}`,
+    policySnapshotId: "node-policy",
+    revision: 2,
+    decision: {
+      decidedAt: "2026-08-12T00:00:01.000Z",
+    },
+  } as never;
+  const adoptedReceipt = {
+    ...(toolReceipt("prepared") as unknown as Record<string, unknown>),
+    workItemId: "approval-resume",
+  };
+  const currentReceipt = {
+    ...adoptedReceipt,
+    status: "unknownOutcome",
+    revision: 2,
+  };
+  const authority = {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    workItemId: "approval-resume",
+    leaseEpoch: 2,
+    nodeId: "node-1",
+    nodeKind: "agent",
+    claimId: "claim-1",
+    claimEpoch: 1,
+    agentVersionId: "node-agent",
+    attempt: { stepId: "step-admitted", attemptId: "attempt-admitted" },
+  } as const;
+  const run = {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lastSequence: 1,
+    cancelRequested: false,
+  } as never;
+  const store = {
+    async loadToolApproval() {
+      return approval;
+    },
+    async consumeWorkflowToolApproval() {
+      return {
+        disposition: "replay",
+        outcome: {
+          kind: "approved",
+          approval,
+          authority,
+          receipt: adoptedReceipt,
+        },
+      };
+    },
+    async loadToolExecutionReceipt() {
+      return currentReceipt;
+    },
+    async loadWorkflowNodeContinuation() {
+      return {
+        schemaVersion: "crewon.workflow-node-continuation.v0",
+        authority,
+        segmentId: "segment:attempt-admitted",
+        modelSampleIndex: 0,
+        toolRoundsConsumed: 0,
+        providerCheckpoint: null,
+        providerTurnState: null,
+        activeDispatch: null,
+        history: [
+          {
+            type: "tool_call",
+            callId: "call-1",
+            kind: "function",
+            name: "read_file",
+            input: "{}",
+          },
+        ],
+        terminalCandidate: null,
+        revision: 2,
+        updatedAt: "2026-08-12T00:00:00.000Z",
+      };
+    },
+    async listRunEvents() {
+      return [
+        {
+          schemaVersion: "crewon.run-event.v0",
+          identity: { runId: "run-1" },
+          eventId: "requested-1",
+          sequence: 1,
+          occurredAt: "2026-08-12T00:00:00.000Z",
+          type: "tool.requested",
+          data: {
+            segmentId: "segment:attempt-admitted",
+            segmentSequence: 1,
+            callId: "call-1",
+            kind: "function",
+            name: "read_file",
+            input: "{}",
+          },
+        },
+      ];
+    },
+  } as never;
+  const execution = {
+    async loadRun() {
+      return run;
+    },
+    async beginToolRecovery() {
+      return {
+        attempt: { stepId: "tool-step-1", attemptId: "tool-attempt-1" },
+      };
+    },
+    async transitionToolExecution() {
+      transitions += 1;
+      return currentReceipt;
+    },
+  } as never;
+  const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
+    execution,
+    store,
+    leaseDurationMs: 30_000,
+  });
+  const outcome = await engine.resumeToolApproval({
+    runtime: {
+      version: {
+        agentVersionId: "node-agent",
+        policySnapshotId: "node-policy",
+        execution: { maxToolRounds: 4 },
+        tools: [
+          {
+            kind: "function",
+            name: "read_file",
+          },
+        ],
+      },
+      toolRuntime: {
+        executionPolicy: () => ({
+          approvalRequirement: "perAction",
+        }),
+        async execute() {
+          executes += 1;
+          throw new Error("must not execute");
+        },
+        async reconcile() {
+          reconciles += 1;
+          return { status: "unknownOutcome", providerReceiptId: null };
+        },
+      },
+    } as never,
+    claim: {
+      workItem: {
+        workItemId: "approval-resume",
+        tenantId: "tenant-1",
+        runId: "run-1",
+      },
+      lease: { ownerId: "worker", leaseId: "lease-2", epoch: 2 },
+    } as never,
+    binding,
+    node: agentNode(),
+    payload: {
+      schemaVersion: "crewon.workflow-tool-approval-resume-work-item.v0",
+      trigger: "workflowToolApprovalResume",
+      binding,
+      nodeId: "node-1",
+      claimId: "claim-1",
+      claimEpoch: 1,
+      stepId: "step-admitted",
+      attemptId: "attempt-admitted",
+      agentVersionId: "node-agent",
+      agentWorkItemId: "node-work",
+      agentLeaseEpoch: 1,
+      approvalId: "approval-1",
+      receiptId: "receipt-1",
+      actionDigest: `sha256:${"a".repeat(64)}`,
+    },
+  });
+  assert.deepEqual(outcome, { status: "unknown" });
+  assert.deepEqual({ executes, reconciles, transitions }, {
+    executes: 0,
+    reconciles: 1,
+    transitions: 0,
+  });
+});
+
 test("workflow executes a durable Tool sub-attempt and continues the same Agent node", async () => {
   let kernelRound = 0;
   let toolExecutions = 0;
@@ -350,7 +544,7 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
     renew: async () => undefined,
   });
   const execution = {
-    ...((dependencies.execution as unknown) as Record<string, unknown>),
+    ...(dependencies.execution as unknown as Record<string, unknown>),
     async beginToolExecution() {
       return {
         disposition: "prepared",
@@ -370,7 +564,7 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
     },
   } as never;
   const store = {
-    ...((dependencies.store as unknown) as Record<string, unknown>),
+    ...(dependencies.store as unknown as Record<string, unknown>),
     async commitWorkflowToolContinuation(input: {
       toolAttempt: { attemptId: string };
       receipt: Record<string, unknown>;
@@ -379,8 +573,11 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
       committedToolAttempt = input.toolAttempt.attemptId;
       return {
         receipt: { ...input.receipt, status: "completed" },
-        continuation: { ...input.next, revision: 2,
-          updatedAt: "2026-08-12T00:00:00.000Z" },
+        continuation: {
+          ...input.next,
+          revision: 2,
+          updatedAt: "2026-08-12T00:00:00.000Z",
+        },
       };
     },
   } as never;
@@ -597,29 +794,40 @@ function workflowEngineDependencies(input: {
       async markModelDispatchPossiblySent() {},
       async loadModelDispatchReceipt() {},
       async commitWorkflowAssistantContinuation(input: {
-        next: object; terminalResult: null | { status: string };
+        next: object;
+        terminalResult: null | { status: string };
       }) {
-        return { ...input.next, revision: 1,
-          terminalCandidate: input.terminalResult === null ? null : {
-            candidateId: `sha256:${"c".repeat(64)}` },
-          updatedAt: "2026-08-12T00:00:00.000Z" };
+        return {
+          ...input.next,
+          revision: 1,
+          terminalCandidate:
+            input.terminalResult === null
+              ? null
+              : {
+                  candidateId: `sha256:${"c".repeat(64)}`,
+                },
+          updatedAt: "2026-08-12T00:00:00.000Z",
+        };
       },
       async commitWorkflowToolContinuation(input: {
-        receipt: object; next: object;
+        receipt: object;
+        next: object;
       }) {
-        return { receipt: { ...input.receipt, status: "completed" },
-          continuation: { ...input.next, revision: 2,
-            updatedAt: "2026-08-12T00:00:00.000Z" } };
+        return {
+          receipt: { ...input.receipt, status: "completed" },
+          continuation: {
+            ...input.next,
+            revision: 2,
+            updatedAt: "2026-08-12T00:00:00.000Z",
+          },
+        };
       },
     } as never,
   };
 }
 
 function workflowEngineInput(
-  runSegment: (
-    contract: unknown,
-    signal: AbortSignal,
-  ) => AsyncIterable<never>,
+  runSegment: (contract: unknown, signal: AbortSignal) => AsyncIterable<never>,
 ) {
   return {
     runtime: {
@@ -656,6 +864,7 @@ function workflowEngineInput(
         },
         lease: { ownerId: "worker", leaseId: "lease-1", epoch: 3 },
       } as never,
+      binding,
     },
     node: agentNode(),
     inputValue: {
@@ -733,7 +942,7 @@ async function runToolLimitScenario(
     renew: async () => undefined,
   });
   const completed = {
-    ...((toolReceipt("dispatched") as unknown) as Record<string, unknown>),
+    ...(toolReceipt("dispatched") as unknown as Record<string, unknown>),
     status: "completed",
     providerReceiptId: "provider-receipt-1",
     result: {
@@ -743,7 +952,7 @@ async function runToolLimitScenario(
     },
   } as never;
   const execution = {
-    ...((dependencies.execution as unknown) as Record<string, unknown>),
+    ...(dependencies.execution as unknown as Record<string, unknown>),
     async beginToolExecution() {
       if (options?.completedReplay) {
         return {

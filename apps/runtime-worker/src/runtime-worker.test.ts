@@ -160,11 +160,31 @@ test("keeps an ordinary Run isolated from an injected Workflow dispatcher", asyn
 });
 
 test("backs off an explicit Workflow retry and preserves recovery projection", async () => {
-  const claim = { workItem: { workItemId: "workflow-cancel-work",
-    tenantId: "tenant-1", runId: "workflow-run-1", kind: "run.execute",
-    payload: {}, createdAt: "2026-08-13T00:00:00.000Z" },
-    lease: { ownerId: "workflow-worker", leaseId: "workflow-lease", epoch: 7,
-      expiresAt: "2026-08-13T00:01:00.000Z" } } as WorkItemClaim;
+  const claim = {
+    workItem: {
+      workItemId: "workflow-cancel-work",
+      tenantId: "tenant-1",
+      runId: "workflow-run-1",
+      kind: "run.execute",
+      payload: {
+        schemaVersion: "crewon.workflow-cancel-work-item.v0",
+        trigger: "workflowCancel",
+        binding: {
+          workflowId: "workflow-1",
+          workflowVersionId: "workflow-version-1",
+          contentDigest: "sha256:workflow",
+        },
+        cancellationOperationId: "cancel-1",
+      },
+      createdAt: "2026-08-13T00:00:00.000Z",
+    },
+    lease: {
+      ownerId: "workflow-worker",
+      leaseId: "workflow-lease",
+      epoch: 7,
+      expiresAt: "2026-08-13T00:01:00.000Z",
+    },
+  } as WorkItemClaim;
   const retries: unknown[] = [];
   let claimed = false;
   const store = {
@@ -174,35 +194,71 @@ test("backs off an explicit Workflow retry and preserves recovery projection", a
       return claim;
     },
     async loadRun() {
-      return { tenantId: "tenant-1", runId: "workflow-run-1",
-        purpose: "workflow", status: "running", cancelRequested: true,
-        workflowVersionBinding: { workflowId: "workflow-1",
+      return {
+        tenantId: "tenant-1",
+        runId: "workflow-run-1",
+        purpose: "workflow",
+        status: "running",
+        cancelRequested: true,
+        workflowVersionBinding: {
+          workflowId: "workflow-1",
           workflowVersionId: "workflow-version-1",
-          contentDigest: "sha256:workflow" } } as never;
+          contentDigest: "sha256:workflow",
+        },
+      } as never;
     },
-    async retryWorkItem(input: unknown) { retries.push(input); },
+    async retryWorkItem(input: unknown) {
+      retries.push(input);
+    },
   } as unknown as DomainStore;
   const digester = new Sha256Digester();
-  const worker = new RuntimeWorker({ store,
-    execution: new RunExecutionService({ store,
-      clock: { now: () => "2026-08-13T00:00:00.000Z" },
-      ids: { nextId: (kind) => `${kind}-1` }, digester }),
-    kernel: new CrewONAgentKernel({ transport: successfulTransport() }),
-    policy: new PinnedRunExecutionPolicy(ROUTE),
-    workflowDispatcher: {
-      async dispatch() { throw new Error(
-        "workflow dispatch must not run during cancellation"); },
-      async cancel() { return { kind: "retry", runId: "workflow-run-1",
-        code: "workflow_cancellation_retry_required" }; },
+  const worker = new RuntimeWorker(
+    {
+      store,
+      execution: new RunExecutionService({
+        store,
+        clock: { now: () => "2026-08-13T00:00:00.000Z" },
+        ids: { nextId: (kind) => `${kind}-1` },
+        digester,
+      }),
+      kernel: new CrewONAgentKernel({ transport: successfulTransport() }),
+      policy: new PinnedRunExecutionPolicy(ROUTE),
+      workflowDispatcher: {
+        async dispatch() {
+          throw new Error("workflow dispatch must not run during cancellation");
+        },
+        async cancel() {
+          return {
+            kind: "retry",
+            runId: "workflow-run-1",
+            code: "workflow_cancellation_retry_required",
+          };
+        },
+      },
     },
-  }, { ownerId: "workflow-worker", nextLeaseId: () => "workflow-lease",
-    retryAfterMs: 4_321, scanIntervalMs: null });
+    {
+      ownerId: "workflow-worker",
+      nextLeaseId: () => "workflow-lease",
+      retryAfterMs: 4_321,
+      scanIntervalMs: null,
+    },
+  );
 
-  assert.deepEqual(await worker.wake(), { kind: "workflowRecovery",
-    runId: "workflow-run-1", code: "workflow_cancellation_retry_required" });
-  assert.deepEqual(retries, [{ workItemId: "workflow-cancel-work",
-    ownerId: "workflow-worker", leaseId: "workflow-lease", leaseEpoch: 7,
-    retryAfterMs: 4_321, reasonCode: "workflow_cancellation_retry_required" }]);
+  assert.deepEqual(await worker.wake(), {
+    kind: "workflowRecovery",
+    runId: "workflow-run-1",
+    code: "workflow_cancellation_retry_required",
+  });
+  assert.deepEqual(retries, [
+    {
+      workItemId: "workflow-cancel-work",
+      ownerId: "workflow-worker",
+      leaseId: "workflow-lease",
+      leaseEpoch: 7,
+      retryAfterMs: 4_321,
+      reasonCode: "workflow_cancellation_retry_required",
+    },
+  ]);
   await worker.close();
 });
 
@@ -8854,7 +8910,10 @@ async function createFixture(
 type RuntimeWorkerConformanceOptions = Readonly<{
   databaseTime?: Readonly<{
     expireWorkItem(store: DomainStore, workItemId: string): Promise<void>;
-    makeWorkItemAvailable(store: DomainStore, workItemId: string): Promise<void>;
+    makeWorkItemAvailable(
+      store: DomainStore,
+      workItemId: string,
+    ): Promise<void>;
   }>;
 }>;
 

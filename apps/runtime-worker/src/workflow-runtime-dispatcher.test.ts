@@ -130,8 +130,12 @@ test("node reconcileRequired admission performs zero execution", async () => {
 test("rejects a split Workflow Store identity", () => {
   const fixture = composition();
   assert.throws(
-    () => create(fixture.store, async () => ({ status: "unknown" }),
-      {} as WorkflowRuntimeStore),
+    () =>
+      create(
+        fixture.store,
+        async () => ({ status: "unknown" }),
+        {} as WorkflowRuntimeStore,
+      ),
     /workflow_runtime_store_identity_mismatch/u,
   );
 });
@@ -155,8 +159,10 @@ test("fresh sibling admissions pass actual values and settle independently", asy
   assert.equal(right.atomicSettlements, 1);
   const exact = left.atomicInputs[0] as Record<string, unknown>;
   assert.equal((exact.authority as { nodeId: string }).nodeId, "a");
-  assert.equal((exact.authority as { workItemId: string }).workItemId,
-    "work-claim-left");
+  assert.equal(
+    (exact.authority as { workItemId: string }).workItemId,
+    "work-claim-left",
+  );
   assert.equal(exact.candidateId, "candidate-1");
 });
 
@@ -179,13 +185,16 @@ test("reports completed only for terminalConverged Store authority", async () =>
   const fixture = composition();
   fixture.atomicRunDisposition = "nonTerminal";
   const dispatcher = create(fixture.store, async () =>
-    terminal({ status: "completed", value: {} }));
+    terminal({ status: "completed", value: {} }),
+  );
   assert.equal((await dispatcher.dispatch(input("node"))).kind, "recovery");
   fixture.nodeDisposition = "fresh";
   fixture.settlementCommitted = false;
   fixture.atomicRunDisposition = "terminalConverged";
-  assert.equal((await dispatcher.dispatch(input("node", "claim-2"))).kind,
-    "completed");
+  assert.equal(
+    (await dispatcher.dispatch(input("node", "claim-2"))).kind,
+    "completed",
+  );
 });
 
 test("deterministic local execution errors use ordinary settlement", async () => {
@@ -198,15 +207,16 @@ test("deterministic local execution errors use ordinary settlement", async () =>
   assert.equal(fixture.atomicSettlements, 0);
 });
 
-test("approval handoff remains non-settling until durable composition support exists", async () => {
+test("approval publication returns a typed waiting outcome without settlement", async () => {
   const fixture = composition();
   const outcome = await create(fixture.store, async () => ({
-    status: "approvalHandoffRequired",
+    status: "waitingApproval",
+    approvalId: "approval-1",
   })).dispatch(input("node"));
   assert.deepEqual(outcome, {
-    kind: "recovery",
+    kind: "waitingApproval",
     runId: "r",
-    code: "workflow_tool_approval_handoff_required",
+    approvalId: "approval-1",
   });
   assert.equal(fixture.settlements, 0);
 });
@@ -242,48 +252,77 @@ test("routes cancellation through composition authority", async () => {
 test("retains a dedicated cancellation coordinator until sibling leases settle", async () => {
   const fixture = composition();
   fixture.store.cancelWorkflowExecution = async () => ({
-    disposition: "retryRequired", execution: {} as never,
-    canceledNodeIds: [], canceledGateRequestNodeIds: [],
+    disposition: "retryRequired",
+    execution: {} as never,
+    canceledNodeIds: [],
+    canceledGateRequestNodeIds: [],
     reconciliationWorkItemIds: [],
-    handoff: { currentWorkItem: "retained", nextWorkItemId: null, kind: "none" },
+    handoff: {
+      currentWorkItem: "retained",
+      nextWorkItemId: null,
+      kind: "none",
+    },
     runDisposition: "nonTerminal",
   });
   const outcome = await create(fixture.store, async () => {
     throw new Error("agent must not execute");
   }).cancel(input("scheduler"));
-  assert.deepEqual(outcome, { kind: "retry", runId: "r",
-    code: "workflow_cancellation_retry_required" });
+  assert.deepEqual(outcome, {
+    kind: "retry",
+    runId: "r",
+    code: "workflow_cancellation_retry_required",
+  });
 });
 
 test("rejects non-canonical cancellation proof from composition authority", async () => {
   const fixture = composition();
   fixture.store.cancelWorkflowExecution = async () => ({
-    disposition: "cancellationPending", execution: { nodes: [
-      { nodeId: "a", status: "canceled" },
-      { nodeId: "b", status: "canceled" },
-    ] } as never,
+    disposition: "cancellationPending",
+    execution: {
+      nodes: [
+        { nodeId: "a", status: "canceled" },
+        { nodeId: "b", status: "canceled" },
+      ],
+    } as never,
     canceledNodeIds: ["b", "a"],
-    canceledGateRequestNodeIds: [], reconciliationWorkItemIds: [],
-    handoff: { currentWorkItem: "completed", nextWorkItemId: null, kind: "none" },
+    canceledGateRequestNodeIds: [],
+    reconciliationWorkItemIds: [],
+    handoff: {
+      currentWorkItem: "completed",
+      nextWorkItemId: null,
+      kind: "none",
+    },
     runDisposition: "nonTerminal",
   });
-  await assert.rejects(create(fixture.store, async () => {
-    throw new Error("agent must not execute");
-  }).cancel(input("scheduler")), /workflow_cancellation_proof_invalid/u);
+  await assert.rejects(
+    create(fixture.store, async () => {
+      throw new Error("agent must not execute");
+    }).cancel(input("scheduler")),
+    /workflow_cancellation_proof_invalid/u,
+  );
 });
 
 test("routes cancel-requested reconciliation without invoking cancellation", async () => {
   const fixture = composition();
   fixture.store.reconcileWorkflowNode = async () => ({
-    disposition: "retryRequired", evidenceStatus: "possiblySent",
-    execution: {} as never, handoff: { currentWorkItem: "retained",
-      nextWorkItemId: null, kind: "none" }, runDisposition: "nonTerminal",
+    disposition: "retryRequired",
+    evidenceStatus: "possiblySent",
+    execution: {} as never,
+    handoff: {
+      currentWorkItem: "retained",
+      nextWorkItemId: null,
+      kind: "none",
+    },
+    runDisposition: "nonTerminal",
   });
   const outcome = await create(fixture.store, async () => {
     throw new Error("agent must not execute");
   }).cancel(input("reconcile"));
-  assert.deepEqual(outcome, { kind: "retry", runId: "r",
-    code: "workflow_reconciliation_retry_required" });
+  assert.deepEqual(outcome, {
+    kind: "retry",
+    runId: "r",
+    code: "workflow_reconciliation_retry_required",
+  });
   assert.equal(fixture.cancellations, 0);
 });
 
@@ -330,12 +369,19 @@ function composition() {
     loseFirstSettlementResponse: false,
     settlementCommitted: false,
     atomicRunDisposition: "terminalConverged" as
-      "terminalConverged" | "nonTerminal",
+      | "terminalConverged"
+      | "nonTerminal",
     store: null as unknown as WorkflowRuntimeStore,
   };
   fixture.store = {
     async loadWorkflowExecution() {
       return state();
+    },
+    async publishWorkflowToolApproval() {
+      throw new Error("unused");
+    },
+    async consumeWorkflowToolApproval() {
+      throw new Error("unused");
     },
     async commitWorkflowRunStart() {
       throw new Error("unused");
@@ -364,8 +410,10 @@ function composition() {
           execution: state(),
           admission: null,
           reconciliationClaim: {
-            node: workflow.nodes[0]!, claimId: input.claimId,
-            claimEpoch: input.claimEpoch, gateRequestId: null,
+            node: workflow.nodes[0]!,
+            claimId: input.claimId,
+            claimEpoch: input.claimEpoch,
+            gateRequestId: null,
             inputDigest: digest("input"),
           },
           handoff: {
@@ -377,9 +425,13 @@ function composition() {
       if (fixture.nodeDisposition === "replay" || fixture.settlementCommitted)
         return {
           disposition: "replay" as const,
-          execution: state(), admission: null,
-          handoff: { currentWorkItem: "completed" as const,
-            nextWorkItemId: null, kind: "none" as const },
+          execution: state(),
+          admission: null,
+          handoff: {
+            currentWorkItem: "completed" as const,
+            nextWorkItemId: null,
+            kind: "none" as const,
+          },
         };
       const claim = {
         node: workflow.nodes[0]!,
@@ -468,9 +520,15 @@ function composition() {
         runDisposition: "terminalConverged",
       };
     },
-    async loadWorkflowNodeContinuation() { return null; },
-    async commitWorkflowToolContinuation() { throw new Error("unused"); },
-    async commitWorkflowAssistantContinuation() { throw new Error("unused"); },
+    async loadWorkflowNodeContinuation() {
+      return null;
+    },
+    async commitWorkflowToolContinuation() {
+      throw new Error("unused");
+    },
+    async commitWorkflowAssistantContinuation() {
+      throw new Error("unused");
+    },
     async settleWorkflowNodeModelTerminal(input) {
       fixture.atomicSettlements += 1;
       fixture.atomicInputs.push(input);
@@ -478,10 +536,17 @@ function composition() {
       fixture.settlementCommitted = true;
       if (fixture.loseFirstSettlementResponse)
         throw new Error("response lost after commit");
-      return { disposition: "settled", continuation: null,
-        handoff: { currentWorkItem: "completed", nextWorkItemId: null,
-        kind: "none" }, runDisposition: fixture.atomicRunDisposition,
-        evidence: input.evidence };
+      return {
+        disposition: "settled",
+        continuation: null,
+        handoff: {
+          currentWorkItem: "completed",
+          nextWorkItemId: null,
+          kind: "none",
+        },
+        runDisposition: fixture.atomicRunDisposition,
+        evidence: input.evidence,
+      };
     },
     async settlePreparedWorkflowNodeTerminal(input) {
       fixture.atomicSettlements += 1;
@@ -490,24 +555,43 @@ function composition() {
       fixture.settlementCommitted = true;
       if (fixture.loseFirstSettlementResponse)
         throw new Error("response lost after commit");
-      return { disposition: "settled", continuation: null,
-        handoff: { currentWorkItem: "completed", nextWorkItemId: null,
-          kind: "none" }, runDisposition: fixture.atomicRunDisposition,
-        evidence: {} as never };
+      return {
+        disposition: "settled",
+        continuation: null,
+        handoff: {
+          currentWorkItem: "completed",
+          nextWorkItemId: null,
+          kind: "none",
+        },
+        runDisposition: fixture.atomicRunDisposition,
+        evidence: {} as never,
+      };
     },
-    async loadModelDispatchReceipt() { return null; },
-    async prepareModelDispatch() { throw new Error("unused"); },
-    async markModelDispatchPossiblySent() { throw new Error("unused"); },
-    async observeModelDispatchResponse() { throw new Error("unused"); },
-    async terminateModelDispatch() { throw new Error("unused"); },
+    async loadModelDispatchReceipt() {
+      return null;
+    },
+    async prepareModelDispatch() {
+      throw new Error("unused");
+    },
+    async markModelDispatchPossiblySent() {
+      throw new Error("unused");
+    },
+    async observeModelDispatchResponse() {
+      throw new Error("unused");
+    },
+    async terminateModelDispatch() {
+      throw new Error("unused");
+    },
   };
   return fixture;
 }
 
-function terminal<T extends
-  | { status: "completed"; value: unknown }
-  | { status: "failed"; failureCode: string }
-  | { status: "canceled" }>(outcome: T) {
+function terminal<
+  T extends
+    | { status: "completed"; value: unknown }
+    | { status: "failed"; failureCode: string }
+    | { status: "canceled" },
+>(outcome: T) {
   return {
     status: "terminalCandidate" as const,
     terminalStatus: outcome.status,
@@ -544,7 +628,13 @@ function create(
     },
     store,
     digester: { sha256: digest },
-    agent: { workflowStore: agentStore, execute },
+    agent: {
+      workflowStore: agentStore,
+      execute,
+      async resumeToolApproval() {
+        throw new Error("not used");
+      },
+    },
     leaseDurationMs: 30_000,
   });
 }
