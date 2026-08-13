@@ -6,7 +6,7 @@ import type { ModelProviderCapabilitiesReadResponse } from "@crewon-protocol/v2/
 import type { PluginListResponse } from "@crewon-protocol/v2/PluginListResponse";
 import type { WindowsSandboxReadinessResponse } from "@crewon-protocol/v2/WindowsSandboxReadinessResponse";
 
-import { listAppsForThreadOrGlobal } from "../app-server/appServerRequests";
+import { listAppsForThreadOrGlobal } from "../shared/appsCatalog";
 import {
   settledErrorMessages,
   settledMappedValue,

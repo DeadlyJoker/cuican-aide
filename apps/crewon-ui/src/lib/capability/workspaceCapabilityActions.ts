@@ -2,7 +2,7 @@ import type { AppsListResponse } from "@crewon-protocol/v2/AppsListResponse";
 import type { FsGetMetadataResponse } from "@crewon-protocol/v2/FsGetMetadataResponse";
 import type { PluginSource } from "@crewon-protocol/v2/PluginSource";
 
-import { listAppsForThreadOrGlobal } from "../app-server/appServerRequests";
+import { listAppsForThreadOrGlobal } from "../shared/appsCatalog";
 import type { CapabilityPanel } from "./capabilityPanelTypes";
 import {
   browserCapabilityErrorPanel,

@@ -1,9 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import { AppServerRpcError } from "./appServer";
-import { listAppsForThreadOrGlobal } from "./appServerRequests";
+import { listAppsForThreadOrGlobal } from "./appsCatalog";
 
-describe("app server request helpers", () => {
+describe("apps catalog requests", () => {
   it("lists apps for the provided thread", async () => {
     const calls: Array<string | undefined> = [];
     const response = { data: [], nextCursor: null };
@@ -27,7 +26,7 @@ describe("app server request helpers", () => {
       async listApps(threadId?: string) {
         calls.push(threadId);
         if (threadId) {
-          throw new AppServerRpcError("thread not found", -32000);
+          throw new Error("thread not found");
         }
         return response;
       },

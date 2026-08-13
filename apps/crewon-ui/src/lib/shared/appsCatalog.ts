@@ -1,6 +1,6 @@
 import type { AppsListResponse } from "@crewon-protocol/v2/AppsListResponse";
 
-import { isMissingThreadError } from "../shared/rpcErrors";
+import { isMissingThreadError } from "./rpcErrors";
 
 type AppsClient = {
   listApps(threadId?: string): Promise<AppsListResponse>;

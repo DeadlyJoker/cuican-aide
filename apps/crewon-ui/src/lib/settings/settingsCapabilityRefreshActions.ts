@@ -6,7 +6,7 @@ import type {
   RemoteControlClient,
   RemoteControlStatusResponse,
 } from "../app-server/appServer";
-import { listAppsForThreadOrGlobal } from "../app-server/appServerRequests";
+import { listAppsForThreadOrGlobal } from "../shared/appsCatalog";
 import {
   settledErrorMessages,
   settledMappedValue,

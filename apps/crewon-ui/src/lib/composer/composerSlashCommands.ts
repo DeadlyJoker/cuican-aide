@@ -2,7 +2,7 @@ import type { AppsListResponse } from "@crewon-protocol/v2/AppsListResponse";
 import type { ListMcpServerStatusResponse } from "@crewon-protocol/v2/ListMcpServerStatusResponse";
 import type { SkillsListResponse } from "@crewon-protocol/v2/SkillsListResponse";
 
-import { listAppsForThreadOrGlobal } from "../app-server/appServerRequests";
+import { listAppsForThreadOrGlobal } from "../shared/appsCatalog";
 import type { PendingComposerMention } from "../shared/composerMentions";
 import {
   appMentionInfo,

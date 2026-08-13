@@ -54,6 +54,19 @@ describe("App Workspace Control composition", () => {
     );
   });
 
+  it("keeps active App catalog consumers off the App Server module", () => {
+    for (const path of [
+      "../../lib/capability/workspaceCapabilityActions.ts",
+      "../../lib/composer/composerSlashCommands.ts",
+      "../../lib/settings/settingsCapabilityRefreshActions.ts",
+      "../../lib/settings/settingsRuntimeRefreshActions.ts",
+    ]) {
+      const source = readFileSync(new URL(path, import.meta.url), "utf8");
+      expect(source).toContain("../shared/appsCatalog");
+      expect(source).not.toMatch(/^import (?!type).*app-server/mu);
+    }
+  });
+
   it("sources the packaged command target and model catalogs only from Control", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),
