@@ -36,9 +36,7 @@ pub(super) fn detach_current(
             .workspace
             .as_ref()
             .is_some_and(|context| !context.matches_authority(authority))
-        || (authority.current_snapshot().is_some()
-            && (lifecycle.workspace.is_none()
-                || lifecycle.gateway.is_none()))
+        || (authority.current_snapshot().is_some() && lifecycle.workspace.is_none())
     {
         return Err(ControlRuntimeStartError::RuntimeUnavailable);
     }

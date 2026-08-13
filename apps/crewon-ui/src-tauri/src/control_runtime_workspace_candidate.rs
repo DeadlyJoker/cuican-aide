@@ -12,10 +12,7 @@ impl StagedWorkspaceCandidate {
     pub(super) fn into_complete(
         mut self,
     ) -> Result<CompleteWorkspaceRuntime, DesktopWorkspaceError> {
-        let context = self
-            .foundation
-            .take()
-            .map(|foundation| foundation.context);
+        let context = self.foundation.take().map(|foundation| foundation.context);
         let worker = self
             .worker
             .take()

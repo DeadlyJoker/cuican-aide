@@ -40,7 +40,8 @@ fn fixture() -> MaterialFixture {
     let root = tempfile::tempdir().unwrap();
     let workspace = root.path().join("workspace");
     std::fs::create_dir(&workspace).unwrap();
-    let mut manager = DesktopWorkspaceAuthorityManager::open(root.path().join("authority")).unwrap();
+    let mut manager =
+        DesktopWorkspaceAuthorityManager::open(root.path().join("authority")).unwrap();
     match manager.prepare("operation-1", 0, workspace).unwrap() {
         WorkspaceAuthorityPrepareResult::Pending(_) => {}
         WorkspaceAuthorityPrepareResult::Committed(_)

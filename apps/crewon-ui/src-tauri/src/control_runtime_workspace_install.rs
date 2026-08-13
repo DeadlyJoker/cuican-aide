@@ -249,8 +249,7 @@ pub(super) fn commit_workspace_install(
                 .workspace
                 .as_ref()
                 .is_none_or(|workspace| !workspace.matches_authority(authority)))
-        || (authority.current_snapshot().is_none()
-            && lifecycle.workspace.is_some())
+        || (authority.current_snapshot().is_none() && lifecycle.workspace.is_some())
     {
         return Err(fence);
     }

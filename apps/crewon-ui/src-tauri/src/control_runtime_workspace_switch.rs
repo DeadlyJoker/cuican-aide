@@ -69,9 +69,7 @@ pub(super) fn switch_workspace_runtime(
     let old_private_credentials = resolve_workspace_private_credentials(&old_authority)?;
     let candidate_private_credentials =
         resolve_workspace_private_credentials(&candidate_authority)?;
-    if stage_pre_fence_foundation(supervisor, &old_authority, &candidate_authority)
-        .is_err()
-    {
+    if stage_pre_fence_foundation(supervisor, &old_authority, &candidate_authority).is_err() {
         return match abort_pending(manager, operation_id) {
             Ok(()) => Err(DesktopWorkspaceError::internal_not_sent(
                 "desktop_workspace_candidate_failed",
