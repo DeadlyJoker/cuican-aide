@@ -296,7 +296,7 @@ describe("thread lifecycle actions", () => {
 
     expect(called).toBe(false);
     expect(panel).toMatchObject({
-      body: "Context compaction started (demo). With app-server connected this calls thread/compact/start.",
+      body: "Context compaction started (demo). Connect to CrewON Control to run a real compaction.",
       error: undefined,
     });
   });

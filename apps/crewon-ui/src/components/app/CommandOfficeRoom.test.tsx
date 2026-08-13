@@ -239,7 +239,7 @@ describe("CommandOfficeRoom", () => {
     );
 
     expect(markup).toContain("协作流服务暂不可用");
-    expect(markup).toContain("只读取本地 CrewON 协作流");
+    expect(markup).toContain("只读取 CrewON Control 协作流");
     expect(markup).toContain("创建协作流");
     expect(markup).not.toContain("页面交付协作流");
     expect(markup).not.toContain("产品交付专家团");

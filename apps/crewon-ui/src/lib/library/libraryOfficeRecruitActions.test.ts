@@ -251,7 +251,7 @@ describe("library office recruit actions", () => {
     expect(handled).toBe(true);
     expect(state.libraryPanel).toEqual(panel());
     expect(state.notice).toEqual({
-      text: "Connect to the App Server to recruit a real agent; the Office will not create demo members.",
+      text: "Connect to CrewON Control to recruit a real agent; the Office will not create demo members.",
       tone: "warning",
     });
     expect(state.startedTurns).toEqual([]);

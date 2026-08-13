@@ -36,7 +36,7 @@ describe("CommandTeamCapabilityCreateDialog", () => {
 
       if (kind === "workflow") {
         expect(markup).toContain("本地执行边界");
-        expect(markup).toContain("本地 App Server");
+        expect(markup).toContain("CrewON Control");
         expect(markup).toContain("执行节点");
         expect(markup).toContain("Human Gate · 人工确认");
         expect(markup).toContain("产品审阅智能体");
