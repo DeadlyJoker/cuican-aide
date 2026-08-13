@@ -156,7 +156,6 @@ function baseSendParams(
     isSending: false,
     locale: "en",
     pendingComposerMentions: state.pendingMentions,
-    preserveThreadsAfterConnectionLoss: () => {},
     selectedThread: thread(),
     selectedThreadId: "thread-1",
     setActiveTurnByThread: state.setActiveTurnByThread,
@@ -240,7 +239,6 @@ describe("thread message actions", () => {
       initialPrompt: "Build",
       isConnected: true,
       locale: "en",
-      preserveThreadsAfterConnectionLoss: () => {},
       resolveBackendCwd: async () => "/repo",
       setNotice: state.setNotice,
       setSelectedThreadId: state.setSelectedThreadId,
@@ -302,7 +300,6 @@ describe("thread message actions", () => {
       },
       isConnected: true,
       locale: "en",
-      preserveThreadsAfterConnectionLoss: () => {},
       resolveBackendCwd: async () => "/repo",
       setNotice: state.setNotice,
       setSelectedThreadId: state.setSelectedThreadId,
@@ -358,7 +355,6 @@ describe("thread message actions", () => {
       },
       isConnected: true,
       locale: "en",
-      preserveThreadsAfterConnectionLoss: () => {},
       resolveBackendCwd: async () => "/repo",
       setNotice: state.setNotice,
       setSelectedThreadId: state.setSelectedThreadId,
@@ -387,7 +383,6 @@ describe("thread message actions", () => {
       createDemoThread: () => thread({ id: "demo-thread" }),
       isConnected: true,
       locale: "en",
-      preserveThreadsAfterConnectionLoss: () => {},
       resolveBackendCwd,
       setNotice: state.setNotice,
       setSelectedThreadId: state.setSelectedThreadId,
@@ -417,7 +412,6 @@ describe("thread message actions", () => {
       createDemoThread: () => thread({ id: "demo-thread" }),
       isConnected: true,
       locale: "en",
-      preserveThreadsAfterConnectionLoss: () => {},
       resolveBackendCwd,
       setNotice: state.setNotice,
       setSelectedThreadId: state.setSelectedThreadId,
@@ -431,9 +425,8 @@ describe("thread message actions", () => {
     expect(starts).toEqual([undefined]);
   });
 
-  it("keeps the connection state when Provider preparation fails", async () => {
+  it("reports a thread creation failure", async () => {
     const state = threadState();
-    let preserved = false;
 
     const createdThread = await createThreadAction({
       client: {
@@ -444,9 +437,6 @@ describe("thread message actions", () => {
       createDemoThread: () => thread({ id: "demo-thread" }),
       isConnected: true,
       locale: "en",
-      preserveThreadsAfterConnectionLoss: () => {
-        preserved = true;
-      },
       resolveBackendCwd: async () => "/repo",
       setNotice: state.setNotice,
       setSelectedThreadId: state.setSelectedThreadId,
@@ -456,39 +446,7 @@ describe("thread message actions", () => {
     });
 
     expect(createdThread).toBeNull();
-    expect(preserved).toBe(false);
     expect(state.notice).toEqual({ text: "create failed", tone: "warning" });
-  });
-
-  it("marks a real connection close during thread creation", async () => {
-    const state = threadState();
-    let preserved = false;
-
-    await createThreadAction({
-      client: {
-        async startThread() {
-          throw new Error("App-server connection closed");
-        },
-      },
-      createDemoThread: () => thread({ id: "demo-thread" }),
-      isConnected: true,
-      locale: "en",
-      preserveThreadsAfterConnectionLoss: () => {
-        preserved = true;
-      },
-      resolveBackendCwd: async () => "/repo",
-      setNotice: state.setNotice,
-      setSelectedThreadId: state.setSelectedThreadId,
-      setSidebarOpen: () => {},
-      setThreads: state.setThreads,
-      shouldAutoCloseSidebar: () => false,
-    });
-
-    expect(preserved).toBe(true);
-    expect(state.notice).toEqual({
-      text: "App-server connection closed",
-      tone: "warning",
-    });
   });
 
   it("steers an active turn instead of starting a new one", async () => {
@@ -913,7 +871,6 @@ describe("thread message actions", () => {
 
   it("restores composer text without faking a disconnect after send failure", async () => {
     const state = threadState();
-    let preserved = false;
 
     await sendMessageAction(
       baseSendParams({
@@ -928,9 +885,6 @@ describe("thread message actions", () => {
             throw new Error("should not steer");
           },
         },
-        preserveThreadsAfterConnectionLoss: () => {
-          preserved = true;
-        },
         setComposerFocusSignal: state.setComposerFocusSignal,
         setComposerValue: state.setComposerValue,
         setIsSending: state.setIsSending,
@@ -941,7 +895,6 @@ describe("thread message actions", () => {
       }),
     );
 
-    expect(preserved).toBe(false);
     expect(state.pendingMentions).toEqual([]);
     expect(state.composerValue).toBe("Keep this text");
     expect(state.focusSignal).toBe(1);

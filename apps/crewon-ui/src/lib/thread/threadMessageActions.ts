@@ -29,7 +29,6 @@ import {
 import type { ThreadRuntimeSettings } from "./threadRuntimeSettings";
 import type { ThreadExecutionContext } from "@crewon-platform-protocol/v2/ThreadExecutionContext";
 import { promptPreview } from "../shared/text";
-import { AppServerRpcError } from "../app-server/appServer";
 import type { ComposerImageInput } from "../shared/composerImages";
 
 type ThreadSource = string;
@@ -111,7 +110,6 @@ export type CreateThreadActionParams = {
   initialPrompt?: string;
   isConnected: boolean;
   locale: Locale;
-  preserveThreadsAfterConnectionLoss: () => void;
   resolveBackendCwd: () => Promise<string | undefined>;
   setNotice: (notice: NoticeState | null) => void;
   setSelectedThreadId: (threadId: string | null) => void;
@@ -150,7 +148,6 @@ export type SendMessageActionParams = {
    */
   onExecutionIntentCommitted?: (intent: "goal" | "plan") => void;
   pendingComposerMentions: PendingComposerMention[];
-  preserveThreadsAfterConnectionLoss: () => void;
   selectedThread: Thread | null;
   selectedThreadId: string | null;
   setActiveTurnByThread: ActiveTurnByThreadSetter;
@@ -231,7 +228,6 @@ export async function createThreadAction({
   initialPrompt,
   isConnected,
   locale,
-  preserveThreadsAfterConnectionLoss,
   resolveBackendCwd,
   setNotice,
   setSelectedThreadId,
@@ -239,7 +235,7 @@ export async function createThreadAction({
   setThreads,
   shouldAutoCloseSidebar,
   threadSettings,
-  threadSource = "app_server",
+  threadSource = "control-api",
   workspaceCwd,
   executionContextPreparation,
 }: CreateThreadActionParams): Promise<Thread | null> {
@@ -289,9 +285,6 @@ export async function createThreadAction({
       return thread;
     }
   } catch (error) {
-    if (isAppServerConnectionLoss(error)) {
-      preserveThreadsAfterConnectionLoss();
-    }
     setNotice(threadCreateFailureNotice(error, locale));
     return null;
   }
@@ -310,7 +303,6 @@ export async function sendMessageAction({
   locale,
   onExecutionIntentCommitted,
   pendingComposerMentions,
-  preserveThreadsAfterConnectionLoss,
   selectedThread,
   selectedThreadId,
   setActiveTurnByThread,
@@ -454,9 +446,6 @@ export async function sendMessageAction({
     }
   } catch (error) {
     setPendingComposerMentions([]);
-    if (isConnected && isAppServerConnectionLoss(error)) {
-      preserveThreadsAfterConnectionLoss();
-    }
     setComposerValue(text);
     setComposerFocusSignal((signal) => signal + 1);
     const targetThreadId = failedThreadId;
@@ -503,17 +492,6 @@ export async function sendMessageAction({
   } finally {
     setIsSending(false);
   }
-}
-
-function isAppServerConnectionLoss(error: unknown): boolean {
-  if (!(error instanceof Error) || error instanceof AppServerRpcError) {
-    return false;
-  }
-  return (
-    error.message === "App-server is not connected" ||
-    error.message === "App-server connection closed" ||
-    error.message.startsWith("Unable to connect to ")
-  );
 }
 
 async function refreshThreadAfterTurnStart({

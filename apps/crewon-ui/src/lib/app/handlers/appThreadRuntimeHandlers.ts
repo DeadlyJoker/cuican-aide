@@ -172,7 +172,7 @@ export function createAppThreadRuntimeHandlers(
 
   const createThread = (
     initialPrompt?: string,
-    threadSource = "app_server",
+    threadSource = "control-api",
     threadSettings?: ThreadRuntimeSettings,
     workspaceCwd?: string | null,
   ) =>
@@ -182,8 +182,6 @@ export function createAppThreadRuntimeHandlers(
       initialPrompt,
       isConnected: params.isConnected,
       locale: params.locale,
-      preserveThreadsAfterConnectionLoss:
-        params.preserveThreadsAfterConnectionLoss,
       resolveBackendCwd: params.resolveBackendCwd,
       setNotice: params.setNotice,
       setSelectedThreadId: (threadId) => params.setSelectedThreadId(threadId),
@@ -214,7 +212,7 @@ export function createAppThreadRuntimeHandlers(
       createThread: (initialPrompt) =>
         createThread(
           initialPrompt,
-          threadSettings?.threadSource ?? "app_server",
+          threadSettings?.threadSource ?? "control-api",
           threadSettings,
           workspaceCwd,
         ),
@@ -225,8 +223,6 @@ export function createAppThreadRuntimeHandlers(
       locale: params.locale,
       onExecutionIntentCommitted: params.onExecutionIntentCommitted,
       pendingComposerMentions: params.pendingComposerMentions,
-      preserveThreadsAfterConnectionLoss:
-        params.preserveThreadsAfterConnectionLoss,
       selectedThread: threadContext.selectedThread,
       selectedThreadId: threadContext.selectedThreadId,
       setActiveTurnByThread: params.setActiveTurnByThread,

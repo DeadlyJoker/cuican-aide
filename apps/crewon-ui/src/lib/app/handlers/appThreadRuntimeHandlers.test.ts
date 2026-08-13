@@ -238,7 +238,7 @@ describe("app thread runtime handlers", () => {
     });
     expect(threadMessageSpy.create.mock.calls[1]?.[0]).toMatchObject({
       initialPrompt: "from-send",
-      threadSource: "app_server",
+      threadSource: "control-api",
     });
     expect(threadMessageSpy.sendParams).toMatchObject({
       activeTurnId: "turn-1",
@@ -264,7 +264,7 @@ describe("app thread runtime handlers", () => {
 
     expect(threadMessageSpy.createParams).toMatchObject({
       executionContextPreparation: preparation,
-      threadSource: "app_server",
+      threadSource: "control-api",
     });
   });
 

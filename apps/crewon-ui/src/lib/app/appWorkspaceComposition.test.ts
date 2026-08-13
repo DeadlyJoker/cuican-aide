@@ -37,6 +37,23 @@ describe("App Workspace Control composition", () => {
     expect(reconnect).not.toMatch(/restart|app-server/iu);
   });
 
+  it("keeps Control thread creation free of App Server transport semantics", () => {
+    const actions = readFileSync(
+      new URL("../thread/threadMessageActions.ts", import.meta.url),
+      "utf8",
+    );
+    const handlers = readFileSync(
+      new URL("./handlers/appThreadRuntimeHandlers.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(actions).toContain('threadSource = "control-api"');
+    expect(handlers).toContain('threadSource = "control-api"');
+    expect(actions).not.toMatch(
+      /AppServerRpcError|isAppServerConnectionLoss|app-server\/appServer/iu,
+    );
+  });
+
   it("sources the packaged command target and model catalogs only from Control", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),
