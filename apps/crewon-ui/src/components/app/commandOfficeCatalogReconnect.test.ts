@@ -1,10 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
-  OFFICE_CATALOG_BACKEND_RESTART_AFTER_ATTEMPTS,
   officeCatalogReconnectDelayMs,
   scheduleOfficeCatalogReconnect,
-  shouldRestartBackendAfterOfficeCatalogFailures,
 } from "./commandOfficeCatalogReconnect";
 
 describe("command Office catalog reconnect", () => {
@@ -14,7 +12,7 @@ describe("command Office catalog reconnect", () => {
     ]);
   });
 
-  it("retries an unavailable visible Office catalog without reconnecting the app server", () => {
+  it("retries an unavailable visible Control Office catalog", () => {
     const scheduledHandlers: Array<() => void> = [];
     const onReconnect = vi.fn();
     const clearTimeout = vi.fn();
@@ -41,7 +39,7 @@ describe("command Office catalog reconnect", () => {
     expect(clearTimeout).toHaveBeenCalledWith(42);
   });
 
-  it("does not poll while hidden, loading, ready, or app-server disconnected", () => {
+  it("does not poll while hidden, loading, ready, or Control disconnected", () => {
     const setTimeout = vi.fn();
     const base = {
       attempt: 0,
@@ -83,27 +81,5 @@ describe("command Office catalog reconnect", () => {
       }),
     ).toBeUndefined();
     expect(setTimeout).not.toHaveBeenCalled();
-  });
-
-  it("requests one backend restart after repeated catalog failures", () => {
-    expect(OFFICE_CATALOG_BACKEND_RESTART_AFTER_ATTEMPTS).toBe(4);
-    expect(
-      shouldRestartBackendAfterOfficeCatalogFailures({
-        attempt: 3,
-        restartRequested: false,
-      }),
-    ).toBe(false);
-    expect(
-      shouldRestartBackendAfterOfficeCatalogFailures({
-        attempt: 4,
-        restartRequested: false,
-      }),
-    ).toBe(true);
-    expect(
-      shouldRestartBackendAfterOfficeCatalogFailures({
-        attempt: 8,
-        restartRequested: true,
-      }),
-    ).toBe(false);
   });
 });
