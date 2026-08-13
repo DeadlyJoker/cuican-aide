@@ -25,10 +25,10 @@ export type ControlWorkflowAdapter = Readonly<{
     workflowVersionId: string;
     threadId: string;
     value: StartWorkflowRunRequest["input"];
+    idempotencyKey: string;
     signal?: AbortSignal;
   }): Promise<RunView>;
   readRun(runId: string, signal?: AbortSignal): Promise<RunView>;
-  cancel(run: RunView, signal?: AbortSignal): Promise<RunView>;
   events(input: {
     runId: string;
     afterSequence: number;
@@ -38,8 +38,6 @@ export type ControlWorkflowAdapter = Readonly<{
 
 export function createControlWorkflowAdapter(
   client: ControlApiClient,
-  idempotencyKey: (operation: string) => string = (operation) =>
-    `${operation}:${globalThis.crypto.randomUUID()}`,
 ): ControlWorkflowAdapter {
   return {
     discover: (input) =>
@@ -59,7 +57,7 @@ export function createControlWorkflowAdapter(
             threadId: input.threadId,
             input: input.value,
           },
-          idempotencyKey("workflow.start"),
+          input.idempotencyKey,
           { signal: input.signal },
         )
       ).run;
@@ -68,21 +66,6 @@ export function createControlWorkflowAdapter(
     },
     async readRun(runId, signal) {
       return (await client.getRun(runId, { signal })).run;
-    },
-    async cancel(run, signal) {
-      const canceled = (
-        await client.cancelRun(
-          run.runId,
-          { expectedRevision: run.revision },
-          idempotencyKey("workflow.cancel"),
-          { signal },
-        )
-      ).run;
-      assertWorkflowRun(
-        canceled,
-        run.workflowVersionBinding?.workflowVersionId ?? "",
-      );
-      return canceled;
     },
     events: (input) =>
       streamRunEvents(client, {

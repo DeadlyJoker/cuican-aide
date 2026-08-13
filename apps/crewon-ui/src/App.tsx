@@ -603,7 +603,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
             targets: [],
           }
         }
-        executionTargetClient={null}
         controlWorkflowAdapter={controlWorkflowAdapter}
         scheduleClient={null}
         workspaceAuthority="control"

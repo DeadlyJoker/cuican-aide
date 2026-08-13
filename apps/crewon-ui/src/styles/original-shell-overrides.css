@@ -2898,6 +2898,16 @@
   font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.35;
 }
+.workflow-step-node div > small {
+  display: block;
+  margin-top: 5px;
+  overflow: hidden;
+  color: var(--n-600);
+  font-family: var(--font-mono);
+  font-size: calc(10px + var(--user-ui-font-delta));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .workflow-step-node em {
   grid-column: 2;
   justify-self: start;
@@ -2965,6 +2975,16 @@
 .workflow-room-thread .office-room-message.is-error > div {
   border-color: color-mix(in oklch, var(--danger) 22%, var(--n-250));
   background: color-mix(in oklch, var(--danger) 4%, var(--n-0));
+}
+.workflow-control-error {
+  width: min(680px, 100%);
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--danger) 22%, var(--n-250));
+  border-radius: var(--radius-lg);
+  background: color-mix(in oklch, var(--danger) 4%, var(--n-0));
+  color: var(--danger);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.45;
 }
 .workflow-gate-card {
   display: grid;

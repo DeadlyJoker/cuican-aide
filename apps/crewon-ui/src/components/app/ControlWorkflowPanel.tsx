@@ -1,17 +1,27 @@
-import { ArrowLeft, RotateCw, Square } from "lucide-react";
 import type {
-  RunEventView,
   RunView,
-  StartWorkflowRunRequest,
   WorkflowVersionSummaryView,
   WorkflowVersionView,
 } from "@crewon/contracts";
 import { useEffect, useRef, useState } from "react";
 
 import type { ControlWorkflowAdapter } from "../../lib/workflow/controlWorkflowAdapter";
+import {
+  ControlWorkflowInputError,
+  followControlWorkflowRun,
+  startControlWorkflowRun,
+  type WorkflowStreamState,
+} from "../../lib/workflow/controlWorkflowRun";
+import {
+  ControlWorkflowPanelView,
+  type ControlWorkflowPanelViewState,
+} from "./ControlWorkflowPanelView";
 
 const PAGE_SIZE = 100;
 const MAX_PAGES = 16;
+
+type CatalogState = "loading" | "ready" | "unavailable";
+type PanelStreamState = WorkflowStreamState | Readonly<{ kind: "idle" }>;
 
 export function ControlWorkflowPanel({
   adapter,
@@ -23,20 +33,25 @@ export function ControlWorkflowPanel({
   onRoomOpenChange?: (open: boolean) => void;
 }) {
   const [catalog, setCatalog] = useState<WorkflowVersionSummaryView[]>([]);
-  const [catalogState, setCatalogState] = useState<
-    "loading" | "ready" | "unavailable"
-  >("loading");
+  const [catalogState, setCatalogState] = useState<CatalogState>("loading");
   const [selected, setSelected] = useState<WorkflowVersionView | null>(null);
   const [input, setInput] = useState("{}");
   const [run, setRun] = useState<RunView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [streamState, setStreamState] = useState<PanelStreamState>({
+    kind: "idle",
+  });
   const requestRef = useRef(0);
+  const catalogAbortRef = useRef<AbortController | null>(null);
+  const detailAbortRef = useRef<AbortController | null>(null);
   const runAbortRef = useRef<AbortController | null>(null);
+  const threadRef = useRef(selectedThreadId);
 
-  async function reload(signal?: AbortSignal) {
+  async function reload(signal: AbortSignal) {
     const request = ++requestRef.current;
     setCatalogState("loading");
+    setError(null);
     try {
       const items: WorkflowVersionSummaryView[] = [];
       let cursor: string | null = null;
@@ -48,75 +63,112 @@ export function ControlWorkflowPanel({
         });
         items.push(...response.data);
         if (response.nextCursor === null) break;
-        if (response.nextCursor === cursor || page === MAX_PAGES - 1)
+        if (response.nextCursor === cursor || page === MAX_PAGES - 1) {
           throw new Error("workflow_catalog_pagination_invalid");
+        }
         cursor = response.nextCursor;
       }
-      if (request !== requestRef.current || signal?.aborted) return;
+      if (request !== requestRef.current || signal.aborted) return;
       setCatalog(items);
       setCatalogState("ready");
     } catch (loadError) {
-      if (signal?.aborted || request !== requestRef.current) return;
+      if (signal.aborted || request !== requestRef.current) return;
       setCatalog([]);
       setCatalogState("unavailable");
-      setError(message(loadError, "无法读取协作流目录"));
+      setError(errorMessage(loadError, "无法读取协作流目录"));
     }
+  }
+
+  function beginReload() {
+    catalogAbortRef.current?.abort();
+    const abort = new AbortController();
+    catalogAbortRef.current = abort;
+    void reload(abort.signal);
   }
 
   useEffect(() => {
     const abort = new AbortController();
+    catalogAbortRef.current = abort;
     void reload(abort.signal);
     return () => {
       requestRef.current += 1;
       abort.abort();
+      detailAbortRef.current?.abort();
       runAbortRef.current?.abort();
     };
   }, [adapter]);
 
+  useEffect(() => {
+    if (threadRef.current === selectedThreadId) return;
+    threadRef.current = selectedThreadId;
+    runAbortRef.current?.abort();
+    runAbortRef.current = null;
+    setRun(null);
+    setBusy(false);
+    setError(null);
+    setStreamState({ kind: "idle" });
+  }, [selectedThreadId]);
+
   async function open(summary: WorkflowVersionSummaryView) {
     const request = ++requestRef.current;
+    detailAbortRef.current?.abort();
+    runAbortRef.current?.abort();
+    const abort = new AbortController();
+    detailAbortRef.current = abort;
     setBusy(true);
     setError(null);
     try {
-      const version = await adapter.readVersion(summary.workflowVersionId);
-      if (request !== requestRef.current) return;
+      const version = await adapter.readVersion(
+        summary.workflowVersionId,
+        abort.signal,
+      );
+      if (request !== requestRef.current || abort.signal.aborted) return;
       setSelected(version);
       setRun(null);
+      setStreamState({ kind: "idle" });
       onRoomOpenChange?.(true);
     } catch (readError) {
-      if (request === requestRef.current)
-        setError(message(readError, "无法读取协作流定义"));
+      if (request === requestRef.current && !abort.signal.aborted) {
+        setError(errorMessage(readError, "无法读取协作流定义"));
+      }
     } finally {
       if (request === requestRef.current) setBusy(false);
+      if (detailAbortRef.current === abort) detailAbortRef.current = null;
     }
   }
 
   async function start() {
     if (selected === null || selectedThreadId === null || busy) return;
-    let value: StartWorkflowRunRequest["input"];
-    try {
-      value = JSON.parse(input) as StartWorkflowRunRequest["input"];
-    } catch {
-      setError("输入必须是有效 JSON，并符合当前协作流的输入 Schema。");
-      return;
-    }
-    const abort = new AbortController();
     runAbortRef.current?.abort();
+    const abort = new AbortController();
     runAbortRef.current = abort;
     setBusy(true);
     setError(null);
+    setStreamState({ kind: "connecting" });
     try {
-      const started = await adapter.start({
+      const started = await startControlWorkflowRun(adapter, {
+        raw: input,
         workflowVersionId: selected.workflowVersionId,
         threadId: selectedThreadId,
-        value,
         signal: abort.signal,
       });
+      if (runAbortRef.current !== abort || abort.signal.aborted) return;
       setRun(started);
       setBusy(false);
-      await followRun(adapter, started, abort.signal, setRun);
+      await followControlWorkflowRun(adapter, started, {
+        signal: abort.signal,
+        onRun: (next) => {
+          if (runAbortRef.current === abort) setRun(next);
+        },
+        onStreamState: (next) => {
+          if (runAbortRef.current === abort) setStreamState(next);
+        },
+      });
     } catch (runError) {
-      if (!abort.signal.aborted) setError(message(runError, "协作流执行失败"));
+      if (!abort.signal.aborted && runAbortRef.current === abort) {
+        setError(errorMessage(runError, "协作流执行失败"));
+        setStreamState({ kind: "idle" });
+      }
     } finally {
       if (runAbortRef.current === abort) {
         runAbortRef.current = null;
@@ -125,226 +177,46 @@ export function ControlWorkflowPanel({
     }
   }
 
-  async function cancel() {
-    if (run === null || terminal(run.status) || busy) return;
-    setBusy(true);
+  function close() {
+    requestRef.current += 1;
+    detailAbortRef.current?.abort();
+    runAbortRef.current?.abort();
+    setSelected(null);
+    setRun(null);
+    setBusy(false);
     setError(null);
-    try {
-      setRun(await adapter.cancel(run));
-    } catch (cancelError) {
-      setError(message(cancelError, "无法取消协作流"));
-    } finally {
-      setBusy(false);
-    }
+    setStreamState({ kind: "idle" });
+    onRoomOpenChange?.(false);
   }
 
-  if (selected === null) {
-    if (catalogState !== "ready")
-      return <EmptyState state={catalogState} reload={() => void reload()} />;
-    if (catalog.length === 0)
-      return <EmptyState state="empty" reload={() => void reload()} />;
-    return (
-      <div className="workflow-list" aria-label="Control 协作流版本目录">
-        {catalog.map((workflow) => (
-          <button
-            className="workflow-list-item"
-            key={workflow.workflowVersionId}
-            type="button"
-            disabled={busy}
-            onClick={() => void open(workflow)}
-          >
-            <span className="workflow-list-main">
-              <strong>{workflow.name}</strong>
-              <em className="status success">已发布</em>
-            </span>
-            <span className="workflow-list-meta">
-              <span className="workflow-list-copy">{workflow.description}</span>
-              <span className="workflow-member-strip">
-                <small>流</small>
-                <em>{workflow.workflowVersionId}</em>
-              </span>
-            </span>
-            <span className="workflow-list-foot">
-              <b>查看定义</b>
-            </span>
-          </button>
-        ))}
-        {error ? <p role="alert">{error}</p> : null}
-      </div>
-    );
-  }
-
+  const state: ControlWorkflowPanelViewState = {
+    busy,
+    catalog,
+    catalogState,
+    error,
+    input,
+    run,
+    selected,
+    selectedThreadId,
+    streamState,
+  };
   return (
-    <section className="workflow-room-inline workflow-runtime-room">
-      <header className="workflow-room-top">
-        <button
-          className="button compact"
-          type="button"
-          onClick={() => {
-            runAbortRef.current?.abort();
-            setSelected(null);
-            setRun(null);
-            setError(null);
-            onRoomOpenChange?.(false);
-          }}
-        >
-          <ArrowLeft aria-hidden="true" /> 返回
-        </button>
-        <div className="workflow-room-title-block">
-          <span>Control Workflow</span>
-          <h3>{selected.name}</h3>
-          <p>{selected.description}</p>
-        </div>
-        {run !== null && !terminal(run.status) ? (
-          <button
-            className="button compact workflow-cancel-button"
-            type="button"
-            disabled={busy}
-            onClick={() => void cancel()}
-          >
-            <Square aria-hidden="true" /> 取消运行
-          </button>
-        ) : null}
-      </header>
-      <main className="workflow-room-stage">
-        <section className="workflow-execution-strip" aria-label="静态节点定义">
-          {selected.nodes.map((node, index) => (
-            <article className="workflow-step-node" key={node.nodeId}>
-              <span>{String(index + 1).padStart(2, "0")}</span>
-              <div>
-                <strong>{node.title}</strong>
-                <p>
-                  {node.kind === "humanGate"
-                    ? "人工确认（当前 UI 只读）"
-                    : node.kind}
-                </p>
-              </div>
-              <em className="status">定义节点</em>
-            </article>
-          ))}
-        </section>
-        <section className="workflow-chat-panel">
-          <div className="workflow-room-thread" role="log">
-            <article className="office-room-message">
-              <span className="team-avatar">流</span>
-              <div>
-                <strong>不可变版本 {selected.workflowVersionId}</strong>
-                <p>节点状态不做推断；运行进度仅来自 canonical Run。</p>
-              </div>
-            </article>
-            {run ? <RunMessage run={run} /> : null}
-            {error ? <p role="alert">{error}</p> : null}
-          </div>
-          <label className="form-field workflow-global-composer">
-            <span>Workflow JSON 输入</span>
-            <textarea
-              aria-label="Workflow JSON 输入"
-              disabled={busy || (run !== null && !terminal(run.status))}
-              value={input}
-              onChange={(event) => setInput(event.target.value)}
-            />
-            <button
-              className="button primary"
-              type="button"
-              disabled={
-                busy ||
-                selectedThreadId === null ||
-                (run !== null && !terminal(run.status))
-              }
-              onClick={() => void start()}
-            >
-              {busy ? "执行中…" : "启动协作流"}
-            </button>
-            {selectedThreadId === null ? (
-              <small>请先打开一个 Control 会话。</small>
-            ) : null}
-          </label>
-        </section>
-      </main>
-    </section>
+    <ControlWorkflowPanelView
+      state={state}
+      onClose={close}
+      onInputChange={setInput}
+      onOpen={(summary) => void open(summary)}
+      onReload={beginReload}
+      onStart={() => void start()}
+    />
   );
 }
 
-async function followRun(
-  adapter: ControlWorkflowAdapter,
-  started: RunView,
-  signal: AbortSignal,
-  setRun: (run: RunView) => void,
-) {
-  let cursor = started.lastSequence;
-  let current = started;
-  for (
-    let reconnect = 0;
-    reconnect < 3 && !terminal(current.status);
-    reconnect += 1
-  ) {
-    for await (const event of adapter.events({
-      runId: started.runId,
-      afterSequence: cursor,
-      signal,
-    })) {
-      cursor = event.sequence;
-      if (runLifecycle(event)) {
-        current = await adapter.readRun(started.runId, signal);
-        setRun(current);
-        if (terminal(current.status)) return;
-      }
-    }
-    current = await adapter.readRun(started.runId, signal);
-    setRun(current);
+function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ControlWorkflowInputError) {
+    return error.code === "invalid_json"
+      ? "输入必须是有效的严格 JSON。"
+      : "输入 JSON 不符合 Control Workflow 输入约束。";
   }
-  if (!terminal(current.status)) throw new Error("workflow_event_stream_ended");
-}
-
-function runLifecycle(event: RunEventView) {
-  return event.type.startsWith("run.");
-}
-
-function terminal(status: RunView["status"]) {
-  return status === "completed" || status === "failed" || status === "canceled";
-}
-
-function RunMessage({ run }: { run: RunView }) {
-  return (
-    <article className="office-room-message">
-      <span className="team-avatar">流</span>
-      <div>
-        <strong>Run #{run.runId}</strong>
-        <p>
-          状态：{run.status}
-          {run.outputRef ? ` · 输出引用：${run.outputRef}` : ""}
-          {run.failure ? ` · ${run.failure.code}` : ""}
-        </p>
-      </div>
-    </article>
-  );
-}
-
-function EmptyState({
-  state,
-  reload,
-}: {
-  state: "loading" | "unavailable" | "empty";
-  reload: () => void;
-}) {
-  const copy =
-    state === "loading"
-      ? ["正在读取协作流", "正在从 CrewON Control 读取不可变版本目录。"]
-      : state === "empty"
-        ? ["还没有已发布的协作流", "发布 WorkflowVersion 后即可在这里启动。"]
-        : ["协作流服务暂不可用", "请检查 CrewON Control 连接后重试。"];
-  return (
-    <section className="team-office-empty team-capability-live-empty">
-      <span className="team-office-empty-kicker">CrewON Workflow</span>
-      <h2>{copy[0]}</h2>
-      <p>{copy[1]}</p>
-      <button className="button" type="button" onClick={reload}>
-        <RotateCw aria-hidden="true" /> 重新同步
-      </button>
-    </section>
-  );
-}
-
-function message(error: unknown, fallback: string) {
   return error instanceof Error ? error.message : fallback;
 }

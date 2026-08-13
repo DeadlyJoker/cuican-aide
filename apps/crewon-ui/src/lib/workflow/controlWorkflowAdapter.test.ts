@@ -11,7 +11,7 @@ describe("ControlWorkflowAdapter", () => {
       listWorkflowVersions: vi.fn(async () => ({ data: [], nextCursor: null })),
       startWorkflowRun: vi.fn(async () => ({ disposition: "committed", run })),
     } as unknown as ControlApiClient;
-    const adapter = createControlWorkflowAdapter(client, () => "workflow-key");
+    const adapter = createControlWorkflowAdapter(client);
 
     await expect(adapter.discover({ limit: 100 })).resolves.toEqual({
       data: [],
@@ -26,6 +26,7 @@ describe("ControlWorkflowAdapter", () => {
         workflowVersionId: "workflow-version-1",
         threadId: "thread-1",
         value: { prompt: "ship" },
+        idempotencyKey: "workflow-key",
       }),
     ).resolves.toEqual(run);
     expect(client.startWorkflowRun).toHaveBeenCalledWith(
@@ -53,12 +54,13 @@ describe("ControlWorkflowAdapter", () => {
         },
       })),
     } as unknown as ControlApiClient;
-    const adapter = createControlWorkflowAdapter(client, () => "workflow-key");
+    const adapter = createControlWorkflowAdapter(client);
     await expect(
       adapter.start({
         workflowVersionId: "workflow-version-1",
         threadId: "thread-1",
         value: {},
+        idempotencyKey: "workflow-key",
       }),
     ).rejects.toThrow("control_workflow_binding_invalid");
   });
