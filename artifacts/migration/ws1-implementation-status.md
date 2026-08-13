@@ -1,9 +1,31 @@
 # WS1 实施状态
 
-日期：2026-08-09  
+日期：2026-08-13
 状态：In progress
 
 本文件记录当前 source tree 已验证的事实，不把局部测试外推为 WS1 或完整迁移完成。
+
+## 2026-08-13 执行方向覆盖：纯 TypeScript 快速切换
+
+以下规则覆盖本文后续较早的 Rust parity、Device/Gateway、legacy App Server 和多轨兼容计划：
+
+- Agent Runtime、Workflow、Workspace、Control 和持久化生产 authority 只继续落在 TypeScript；不再实现 Rust Runtime/App
+  Server 兼容、回退、双写、行为对齐或共享 fixture 扩展。Rust 只保留 Tauri 桌面壳与
+  `crewon-process-guardian`。历史 Rust/Device/Gateway foundation 不再是迁移完成条件，也不得重新接入 production composition。
+- packaged bundle 当前只有 guardian、Node 与 Control API、Provider coordinator、Runtime Release、Runtime Worker 四个 TS
+  bundle；不包含或启动 Rust Device、Rust App Server 或 Gateway sidecar。
+- W01 production transaction protocol、Workflow Start、scheduler fan-out、node admission、node settlement、Human Gate、
+  reconciliation、terminal convergence、真实 PostgreSQL 双连接和 packaged crash recovery 均已有纵向证据，状态为通过。
+  这不代表整个产品迁移完成。
+- Renderer 已改为 Control-only bootstrap。Library 与 Settings 不再构造 App Server client：Library 的 Automation/Knowledge/
+  Agent/Office/Tool 读取和允许的 mutation 走 Control；Settings 只公开 Account、Appearance、Model access 三个具有真实 Control
+  authority 的页面。语言/主题使用 revision CAS，成功提交后才更新本地状态；旧 Config、Personalization、Thread Settings 和
+  Library Office/Agent coordinator 已从 production composition 及源码删除。
+- 2026-08-13 当前 UI 证据：Node 24 TypeScript lint 通过；完整 Vitest `285/285` files、`1814/1814` tests；production build
+  通过。签名、notarization、updater 凭据和 Windows 实包仍是外部发布边界。
+
+本文下方涉及“下一步接 Rust Device/Gateway/Native dispatcher”或“Rust compatibility 未完成”的段落只保留为历史记录，
+不再驱动当前迁移。
 
 ## 已落地
 
