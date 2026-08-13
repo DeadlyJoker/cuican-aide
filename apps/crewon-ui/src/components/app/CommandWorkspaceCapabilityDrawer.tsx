@@ -1,16 +1,19 @@
 import {
   Blocks,
   FolderOpen,
+  GitBranch,
   Globe2,
   Maximize2,
   Minimize2,
   PanelRight,
   Plus,
   ScanSearch,
+  SearchCode,
   SlidersHorizontal,
   Terminal,
   X,
 } from "lucide-react";
+import type { ControlApiClient } from "@crewon/control-client";
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type PointerEvent as ReactPointerEvent,
@@ -24,6 +27,10 @@ import { CommandWorkbenchFiles } from "./CommandWorkbenchFiles";
 import { CommandWorkbenchPanel } from "./CommandWorkbenchPanel";
 import { CommandWorkbenchReview } from "./CommandWorkbenchReview";
 import { CommandWorkbenchTerminal } from "./CommandWorkbenchTerminal";
+import {
+  CommandWorkspaceGitStatus,
+  CommandWorkspaceSearch,
+} from "./CommandWorkspaceReadonly";
 import type {
   CapabilityPanel,
   CapabilityPanelItem,
@@ -35,7 +42,11 @@ import type { TerminalOutputStream } from "../../lib/terminal/terminalOutputStre
  * "panel" is workbench-only: it hosts capability panels that no dedicated tool
  * owns (approvals, thread settings, goals, account, providers, MCP details).
  */
-type WorkbenchToolId = Exclude<ToolId, "sidechat"> | "panel";
+type WorkbenchToolId =
+  | Exclude<ToolId, "sidechat">
+  | "panel"
+  | "search"
+  | "git-status";
 
 type WorkbenchTab = {
   explorerPanel?: CapabilityPanel | null;
@@ -121,6 +132,8 @@ export type CommandWorkspaceCapabilityDrawerProps = {
   terminalCwd: string | null;
   terminalOutput: TerminalOutputStream;
   terminalProcessId: string | null;
+  readonlyClient?: Pick<ControlApiClient, "executeWorkspaceReadonly"> | null;
+  readonlyThreadId?: string | null;
   onClose: () => void;
   onCommandChange: (value: string) => void;
   onCommandSubmit: () => void;
@@ -146,12 +159,16 @@ function workbenchTools(locale: Locale): WorkbenchTool[] {
         { id: "terminal", label: "终端" },
         { id: "web", label: "浏览器", shortcut: "⌘T" },
         { id: "files", label: "文件", shortcut: "⌘P" },
+        { id: "search", label: "搜索" },
+        { id: "git-status", label: "Git 状态" },
       ]
     : [
         { id: "review", label: "Review", shortcut: "⌃⇧G" },
         { id: "terminal", label: "Terminal" },
         { id: "web", label: "Browser", shortcut: "⌘T" },
         { id: "files", label: "Files", shortcut: "⌘P" },
+        { id: "search", label: "Search" },
+        { id: "git-status", label: "Git status" },
       ];
 }
 
@@ -162,6 +179,9 @@ function toolLabel(toolId: WorkbenchToolId, locale: Locale): string {
   if (toolId === "files") {
     return locale === "zh" ? "文件" : "Files";
   }
+  if (toolId === "search") return locale === "zh" ? "搜索" : "Search";
+  if (toolId === "git-status")
+    return locale === "zh" ? "Git 状态" : "Git status";
   if (toolId === "web") {
     return locale === "zh" ? "新标签页" : "New tab";
   }
@@ -177,6 +197,8 @@ function toolIcon(toolId: WorkbenchToolId) {
   if (toolId === "review") {
     return <ScanSearch aria-hidden="true" />;
   }
+  if (toolId === "search") return <SearchCode aria-hidden="true" />;
+  if (toolId === "git-status") return <GitBranch aria-hidden="true" />;
   if (toolId === "terminal") {
     return <Terminal aria-hidden="true" />;
   }
@@ -338,6 +360,8 @@ function WorkbenchSurface({
   terminalCwd,
   terminalOutput,
   terminalProcessId,
+  readonlyClient,
+  readonlyThreadId,
 }: {
   active: boolean;
   busyToolId: ToolId | null;
@@ -360,7 +384,25 @@ function WorkbenchSurface({
   terminalCwd: string | null;
   terminalOutput: TerminalOutputStream;
   terminalProcessId: string | null;
+  readonlyClient: Pick<ControlApiClient, "executeWorkspaceReadonly"> | null;
+  readonlyThreadId: string | null;
 }) {
+  if (tab.toolId === "search")
+    return (
+      <CommandWorkspaceSearch
+        client={readonlyClient}
+        locale={locale}
+        threadId={readonlyThreadId}
+      />
+    );
+  if (tab.toolId === "git-status")
+    return (
+      <CommandWorkspaceGitStatus
+        client={readonlyClient}
+        locale={locale}
+        threadId={readonlyThreadId}
+      />
+    );
   if (tab.toolId === "files") {
     return (
       <CommandWorkbenchFiles
@@ -450,6 +492,8 @@ export function CommandWorkspaceCapabilityDrawer({
   terminalCwd,
   terminalOutput,
   terminalProcessId,
+  readonlyClient = null,
+  readonlyThreadId = null,
 }: CommandWorkspaceCapabilityDrawerProps) {
   const initialWorkbenchTabs = initialTabs(panel);
   const [tabs, setTabs] = useState<WorkbenchTab[]>(() => initialWorkbenchTabs);
@@ -509,7 +553,10 @@ export function CommandWorkspaceCapabilityDrawer({
      */
     if (inferredToolId === "panel") {
       dismissedToolIdsRef.current.delete("panel");
-    } else if (inferredToolId && dismissedToolIdsRef.current.has(inferredToolId)) {
+    } else if (
+      inferredToolId &&
+      dismissedToolIdsRef.current.has(inferredToolId)
+    ) {
       return;
     }
     setTabs((currentTabs) => {
@@ -736,10 +783,7 @@ export function CommandWorkspaceCapabilityDrawer({
   }
 
   function updateWorkbenchWidth(nextWidth: number) {
-    const clampedWidth = clampWorkbenchWidth(
-      nextWidth,
-      currentViewportWidth(),
-    );
+    const clampedWidth = clampWorkbenchWidth(nextWidth, currentViewportWidth());
     workbenchWidthRef.current = clampedWidth;
     setWorkbenchWidth(clampedWidth);
   }
@@ -841,9 +885,7 @@ export function CommandWorkspaceCapabilityDrawer({
       >
         {!maximized ? (
           <div
-            aria-label={
-              locale === "zh" ? "调整工作台宽度" : "Resize workbench"
-            }
+            aria-label={locale === "zh" ? "调整工作台宽度" : "Resize workbench"}
             aria-orientation="vertical"
             aria-valuemax={maximumWidth}
             aria-valuemin={MIN_WORKBENCH_WIDTH}
@@ -999,6 +1041,8 @@ export function CommandWorkspaceCapabilityDrawer({
                   terminalCwd={terminalCwd}
                   terminalOutput={terminalOutput}
                   terminalProcessId={terminalProcessId}
+                  readonlyClient={readonlyClient}
+                  readonlyThreadId={readonlyThreadId}
                 />
               </div>
             ))

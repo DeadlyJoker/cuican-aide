@@ -2278,6 +2278,13 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   padding: 4px 8px 4px 10px;
   border-bottom: 1px solid var(--workbench-border);
   background: var(--workbench-surface);
+  /*
+   * Flex defaults to \`min-width: auto\`, so this bar refused to shrink below the
+   * combined width of its tabs. Four tabs at their 128px floor overflowed the
+   * workbench and pushed the collapse control past the viewport edge, where it
+   * could not be clicked at all. The tab strip scrolls instead.
+   */
+  min-width: 0;
 }
 
 .command-workbench-tabs,
@@ -2288,16 +2295,31 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   gap: 4px;
 }
 
+/*
+ * The tab strip absorbs all the shrinking; the window actions never do. Letting
+ * them compress hid the fullscreen and collapse controls once several tabs were
+ * open, which left no way to put the workbench away.
+ */
 .command-workbench-tabs {
+  flex: 1 1 auto;
   overflow-x: auto;
   scrollbar-width: none;
+}
+
+.command-workbench-window-actions {
+  flex: 0 0 auto;
 }
 
 .command-workbench-tab {
   display: grid;
   /* Second column holds the 28px close button; a narrower track clipped it. */
   grid-template-columns: minmax(0, 1fr) 30px;
-  min-width: 128px;
+  /*
+   * Shrinks under pressure rather than forcing the strip wider than the
+   * workbench. The label ellipsizes; the close button keeps its full track.
+   */
+  flex: 0 1 auto;
+  min-width: 92px;
   max-width: 220px;
   height: 32px;
   align-items: center;

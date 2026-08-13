@@ -100,7 +100,7 @@ describe("CommandWorkspaceCapabilityDrawer", () => {
     expect(markup).toContain("command-workbench-trigger");
   });
 
-  it("renders the four real workbench tools without side chat", () => {
+  it("renders the real workbench tools without side chat", () => {
     const markup = renderToStaticMarkup(
       <CommandWorkspaceCapabilityDrawer
         busyToolId={null}
@@ -135,6 +135,8 @@ describe("CommandWorkspaceCapabilityDrawer", () => {
     expect(markup).toContain("终端");
     expect(markup).toContain("浏览器");
     expect(markup).toContain("文件");
+    expect(markup).toContain("搜索");
+    expect(markup).toContain("Git 状态");
     expect(markup).not.toContain("侧边聊天");
   });
 

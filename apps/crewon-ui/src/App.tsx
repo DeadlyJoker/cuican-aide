@@ -999,6 +999,8 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           terminalCwd: workspaceCwdForAuthority(workspaceUiAuthority, cwd),
           terminalOutput,
           terminalProcessId,
+          readonlyClient: controlRuntimeConnected ? controlClient : null,
+          readonlyThreadId: commandShellRuntime.selectedThreadId,
           onWeb: loadBrowserApps,
         }}
         officeRoomAdapter={commandOfficeRoomAdapter}
