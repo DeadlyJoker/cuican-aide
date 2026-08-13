@@ -19,7 +19,6 @@ export {
 } from "./effects";
 export { shouldAutoCloseInspector, shouldAutoCloseSidebar } from "./appUiState";
 export { isCommandShellHash, shouldRenderCommandShellView } from "./appRouting";
-export { createAppDomainActionCoordinator } from "./appDomainActionCoordinator";
 export { createAppDomainBackendCoordinator } from "./appDomainBackendCoordinator";
 export { createAppCommandShellHandlers } from "./appCommandShellHandlers";
 export {
@@ -33,9 +32,6 @@ export {
   platformResourceMentionPath,
   withPlatformResourceMention,
 } from "./appComposerAttachmentActions";
-export { createAppLibraryOpenCoordinator } from "./appLibraryOpenCoordinator";
-export { createAppLibraryPanelDispatchCoordinator } from "./appLibraryPanelDispatchCoordinator";
-export { createAppOfficeRuntimeCoordinator } from "./appOfficeRuntimeCoordinator";
 export { createAppSettingsCoordinator } from "./appSettingsCoordinator";
 export { useAppChromeState } from "./useAppChromeState";
 export { useAppCommandModelOptions } from "./useAppCommandModelOptions";
