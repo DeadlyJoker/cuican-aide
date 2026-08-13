@@ -503,6 +503,7 @@ export function App({
       client: controlClient,
       kind,
       locale,
+      selectedThreadId,
       setLibraryPanel,
     });
   };
