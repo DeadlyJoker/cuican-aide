@@ -51,7 +51,7 @@ function baseParams(
 }
 
 describe("settings refresh handlers", () => {
-  it("refreshes config settings with the current connection hint", async () => {
+  it("marks settings outside the Control contract unavailable", async () => {
     let panel: CapabilityPanel | null = null;
     const handlers = createAppSettingsRefreshHandlers(
       baseParams({
@@ -66,8 +66,8 @@ describe("settings refresh handlers", () => {
 
     expect(panel).toMatchObject({
       title: "Config",
-      subtitle: "Disconnected",
-      error: "Local app-server is not connected",
+      subtitle: "Control settings",
+      body: "Unavailable: this setting is not owned by the current Control contract.",
     });
   });
 

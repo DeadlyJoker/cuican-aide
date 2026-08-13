@@ -18,6 +18,10 @@ import {
   type RuntimeSurface,
 } from "../platform";
 import type { Theme } from "../theme";
+import {
+  controlSettingsAvailability,
+  controlSettingsUnavailablePanel,
+} from "./controlSettingsAdapter";
 import { previewAwareBackendThreadId } from "../thread/threadIds";
 import { openThreadSettingsPanelAction } from "../thread/threadSettingsPanelActions";
 import type {
@@ -101,6 +105,22 @@ export function createAppSettingsRefreshHandlers(params: {
   threadGoal: ThreadGoalView | null;
   threads: Thread[];
 }): AppSettingsRefreshHandlers {
+  const controlOnlyRefresh = (
+    section: import("./settingsCatalog").SettingsSection,
+    refresh: () => Promise<void>,
+  ) => {
+    if (
+      params.client === null &&
+      controlSettingsAvailability(section).status === "unavailable"
+    ) {
+      return async () => {
+        params.setCapabilityPanel(
+          controlSettingsUnavailablePanel(section, params.locale),
+        );
+      };
+    }
+    return refresh;
+  };
   const baseParams = {
     client: params.client,
     controlClient: params.controlClient,
@@ -112,8 +132,12 @@ export function createAppSettingsRefreshHandlers(params: {
   };
 
   return {
-    refreshConfigPanel: () => refreshConfigPanelAction(baseParams),
-    refreshHooksPanel: () => refreshHooksSettingsPanelAction(baseParams),
+    refreshConfigPanel: controlOnlyRefresh("config", () =>
+      refreshConfigPanelAction(baseParams),
+    ),
+    refreshHooksPanel: controlOnlyRefresh("hooks", () =>
+      refreshHooksSettingsPanelAction(baseParams),
+    ),
     refreshAppearanceSettingsPanel: () =>
       refreshAppearanceSettingsPanelAction({
         ...baseParams,
@@ -122,19 +146,23 @@ export function createAppSettingsRefreshHandlers(params: {
         os: params.os ?? detectOperatingSystem(),
         surface: params.surface ?? detectRuntimeSurface(),
       }),
-    refreshPersonalizationSettingsPanel: () =>
-      refreshPersonalizationSettingsPanelAction(baseParams),
-    refreshKeyboardSettingsPanel: () =>
+    refreshPersonalizationSettingsPanel: controlOnlyRefresh(
+      "personalization",
+      () => refreshPersonalizationSettingsPanelAction(baseParams),
+    ),
+    refreshKeyboardSettingsPanel: controlOnlyRefresh("keyboard", () =>
       refreshKeyboardSettingsPanelAction(baseParams),
-    refreshMcpSettingsPanel: () =>
+    ),
+    refreshMcpSettingsPanel: controlOnlyRefresh("mcp-servers", () =>
       refreshMcpSettingsPanelAction({
         ...baseParams,
         isDemoPreview: params.isDemoPreview,
         selectedThreadId: params.selectedThreadId,
       }),
+    ),
     refreshModelProvidersPanel: () =>
       refreshModelProvidersPanelAction(baseParams),
-    refreshBrowserSettingsPanel: () =>
+    refreshBrowserSettingsPanel: controlOnlyRefresh("browser", () =>
       refreshBrowserSettingsPanelAction({
         client: params.client,
         connectionHint: params.connectionHint,
@@ -144,17 +172,22 @@ export function createAppSettingsRefreshHandlers(params: {
         selectedThreadId: params.selectedThreadId,
         setCapabilityPanel: params.setCapabilityPanel,
       }),
-    refreshEnvironmentSettingsPanel: () =>
+    ),
+    refreshEnvironmentSettingsPanel: controlOnlyRefresh("environment", () =>
       refreshEnvironmentSettingsPanelAction(baseParams),
-    refreshComputerControlSettingsPanel: () =>
-      refreshComputerControlSettingsPanelAction({
-        client: params.client,
-        connectionHint: params.connectionHint,
-        isConnected: params.isConnected,
-        locale: params.locale,
-        setCapabilityPanel: params.setCapabilityPanel,
-      }),
-    refreshAppSnapshotsSettingsPanel: () =>
+    ),
+    refreshComputerControlSettingsPanel: controlOnlyRefresh(
+      "computer-control",
+      () =>
+        refreshComputerControlSettingsPanelAction({
+          client: params.client,
+          connectionHint: params.connectionHint,
+          isConnected: params.isConnected,
+          locale: params.locale,
+          setCapabilityPanel: params.setCapabilityPanel,
+        }),
+    ),
+    refreshAppSnapshotsSettingsPanel: controlOnlyRefresh("app-snapshots", () =>
       refreshAppSnapshotsSettingsPanelAction({
         client: params.client,
         connectionHint: params.connectionHint,
@@ -162,19 +195,22 @@ export function createAppSettingsRefreshHandlers(params: {
         locale: params.locale,
         setCapabilityPanel: params.setCapabilityPanel,
       }),
-    refreshConnectionsSettingsPanel: () =>
+    ),
+    refreshConnectionsSettingsPanel: controlOnlyRefresh("connections", () =>
       refreshConnectionsSettingsPanelAction({
         ...baseParams,
         isDemoPreview: params.isDemoPreview,
         selectedThreadId: params.selectedThreadId,
       }),
-    refreshGitSettingsPanel: () =>
+    ),
+    refreshGitSettingsPanel: controlOnlyRefresh("git", () =>
       refreshGitSettingsPanelAction({
         ...baseParams,
         conversationSummary: params.conversationSummary,
         selectedThread: params.selectedThread,
       }),
-    refreshWorktreesSettingsPanel: () =>
+    ),
+    refreshWorktreesSettingsPanel: controlOnlyRefresh("worktrees", () =>
       refreshWorktreesSettingsPanelAction({
         ...baseParams,
         conversationSummary: params.conversationSummary,
@@ -182,12 +218,14 @@ export function createAppSettingsRefreshHandlers(params: {
         selectedThread: params.selectedThread,
         setThreads: params.setThreads,
       }),
-    refreshIntegrationsPanel: () =>
+    ),
+    refreshIntegrationsPanel: controlOnlyRefresh("mcp-servers", () =>
       refreshIntegrationsPanelAction({
         ...baseParams,
         isDemoPreview: params.isDemoPreview,
         selectedThreadId: params.selectedThreadId,
       }),
+    ),
     refreshAccountPanel: () =>
       refreshAccountPanelAction({
         controlClient: params.controlClient,

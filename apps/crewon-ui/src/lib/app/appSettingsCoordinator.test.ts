@@ -60,7 +60,7 @@ describe("app settings coordinator", () => {
     coordinator.settingsRefreshHandlers.config();
     expect(panel).toMatchObject({
       title: "Config",
-      error: "Local app-server is not connected",
+      body: "Unavailable: this setting is not owned by the current Control contract.",
     });
 
     await coordinator.openThreadSettingsPanel();
@@ -69,9 +69,15 @@ describe("app settings coordinator", () => {
       title: "Session settings",
       error: "Select a session first",
     });
-    expect(coordinator.settingsSaveHandlers.config).toEqual(expect.any(Function));
+    expect(coordinator.settingsSaveHandlers.config).toEqual(
+      expect.any(Function),
+    );
     expect(coordinator.settingsSectionRefreshHandlers.config).toEqual(
       expect.any(Function),
     );
+    expect(coordinator.controlSettings.availability("appearance")).toEqual({
+      authority: "local-settings",
+      status: "available",
+    });
   });
 });

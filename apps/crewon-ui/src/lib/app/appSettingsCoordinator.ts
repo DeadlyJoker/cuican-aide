@@ -7,6 +7,7 @@ import {
   createSettingsSectionRefreshHandlers,
 } from "../settings/settingsRefreshHandlers";
 import type { Theme } from "../theme";
+import { createControlSettingsAdapter } from "../settings/controlSettingsAdapter";
 
 type SettingsRefreshParams = Parameters<
   typeof createAppSettingsRefreshHandlers
@@ -32,6 +33,7 @@ export function createAppSettingsCoordinator(
 
   return {
     ...settingsRefreshBundle,
+    controlSettings: createControlSettingsAdapter(params.controlClient),
     settingsRefreshHandlers: createSettingsRefreshHandlers(
       settingsRefreshBundle,
     ),
