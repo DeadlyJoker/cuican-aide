@@ -120,6 +120,20 @@ describe("App Workspace Control composition", () => {
     );
   });
 
+  it("does not compose the legacy capability dispatcher or item client", () => {
+    const source = readFileSync(
+      new URL("./handlers/appCapabilityPanelHandlers.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).not.toMatch(
+      /capabilityPanelActionDispatcher|capabilityPanelItemActions|AppServer|app-server/u,
+    );
+    expect(source).toContain("threadLifecycleActionForActionId");
+    expect(source).toContain("params.handleSettingsAction(actionId)");
+    expect(source).toContain("params.onUnavailable()");
+  });
+
   it("sources the packaged command target and model catalogs only from Control", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),

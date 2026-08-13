@@ -2,189 +2,109 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { CapabilityPanel } from "../../capability/capabilityPanelTypes";
 import type { LibraryPanel } from "../../domain/crewonDomain";
-import type { AppCapabilityPanelHandlersParams } from "./appCapabilityPanelHandlers";
-import type { CapabilityPanelActionDispatcherParams } from "../../capability/capabilityPanelActionDispatcher";
-import type { CapabilityPanelItemActionParams } from "../../capability/capabilityPanelItemActions";
-
-const dispatchSpy = vi.hoisted(() => ({
-  lastParams: null as CapabilityPanelActionDispatcherParams | null,
-  dispatch: vi.fn((params: CapabilityPanelActionDispatcherParams) => {
-    dispatchSpy.lastParams = params;
-    return true;
-  }),
-}));
-
-const itemActionSpy = vi.hoisted(() => ({
-  lastParams: null as CapabilityPanelItemActionParams | null,
-  handle: vi.fn(async (params: CapabilityPanelItemActionParams) => {
-    itemActionSpy.lastParams = params;
-  }),
-}));
-
-vi.mock("../../capability/capabilityPanelActionDispatcher", () => ({
-  handleCapabilityPanelActionDispatch: dispatchSpy.dispatch,
-}));
-
-vi.mock("../../capability/capabilityPanelItemActions", () => ({
-  handleCapabilityPanelItemAction: itemActionSpy.handle,
-}));
-
-const { createAppCapabilityPanelHandlers } = await import(
-  "./appCapabilityPanelHandlers"
-);
-
-function capturedDispatchParams(): CapabilityPanelActionDispatcherParams {
-  const params = dispatchSpy.lastParams;
-  if (!params) {
-    throw new Error("dispatcher was not called");
-  }
-  return params;
-}
-
-function capturedItemParams(): CapabilityPanelItemActionParams {
-  const params = itemActionSpy.lastParams;
-  if (!params) {
-    throw new Error("item action was not called");
-  }
-  return params;
-}
+import {
+  createAppCapabilityPanelHandlers,
+  type AppCapabilityPanelHandlersParams,
+} from "./appCapabilityPanelHandlers";
 
 function createParams(
   overrides: Partial<AppCapabilityPanelHandlersParams> = {},
 ): AppCapabilityPanelHandlersParams {
   return {
-    activeFileWatch: null,
     busyToolId: null,
-    capabilityPanel: {
-      title: "Settings",
-      fields: [{ id: "model", label: "Model", value: " gpt-5 " }],
-    },
-    client: null,
+    capabilityPanel: null,
     confirm: () => true,
-    createThread: async () => null,
-    cwd: "/repo",
-    isConnected: true,
-    isDemo: false,
-    isDemoPreview: false,
     handleSettingsAction: () => false,
-    loadBrowserApps: () => {},
     locale: "en",
-    openThreadSettingsPanel: () => {},
-    pendingApprovalRequest: null,
-    pendingContextFile: null,
-    pendingDynamicToolRequest: null,
-    pendingExternalSecretRequest: null,
-    pendingMcpElicitationRequest: null,
-    pendingUserInputRequest: null,
-    readWorkspaceFiles: () => {},
-    resolveBackendCwd: async () => "/repo",
-    selectedThread: null,
+    onUnavailable: vi.fn(),
     selectedThreadId: "thread-1",
-    setAccountStatus: () => {},
-    setActiveFileWatch: () => {},
     setActiveTurnByThread: () => {},
     setBusyToolId: () => {},
     setCapabilityPanel: () => {},
-    setComposerFocusSignal: () => {},
-    setComposerValue: () => {},
     setLibraryPanel: () => {},
-    setNotice: () => {},
-    setPendingApprovalRequest: () => {},
-    setPendingComposerMentions: () => {},
-    setPendingContextFile: () => {},
-    setPendingDynamicToolRequest: () => {},
-    setPendingExternalSecretRequest: () => {},
-    setPendingMcpElicitationRequest: () => {},
-    setPendingUserInputRequest: () => {},
-    setSelectedThreadId: () => {},
     setStreamingTextByThread: () => {},
-    setThreadGoal: () => {},
     setThreads: () => {},
-    terminalCommand: "pwd",
-    terminalProcessId: "process-1",
+    threadLifecycleClient: null,
+    threadLifecycleConnected: false,
     ...overrides,
   };
 }
 
-describe("app capability panel handlers", () => {
-  it("wires action dispatch with derived thread ids and trimmed field values", () => {
-    const confirm = vi.fn(() => true);
+describe("Control capability panel handlers", () => {
+  it("routes Settings actions to the Control Settings coordinator", () => {
+    const handleSettingsAction = vi.fn(() => true);
+    const onUnavailable = vi.fn();
     const handlers = createAppCapabilityPanelHandlers(
-      createParams({ confirm }),
+      createParams({ handleSettingsAction, onUnavailable }),
     );
 
-    handlers.handleCapabilityPanelAction("save-config");
+    handlers.handleCapabilityPanelAction("refresh-account");
 
-    const params = capturedDispatchParams();
-    expect(params.actionId).toBe("save-config");
-    expect(params.confirm).toBe(confirm);
-    expect(params.fieldValue("model")).toBe("gpt-5");
-    expect(params.threadId).toBe("thread-1");
-    expect(params.previewAwareThreadId).toBe("thread-1");
+    expect(handleSettingsAction).toHaveBeenCalledWith("refresh-account");
+    expect(onUnavailable).not.toHaveBeenCalled();
   });
 
-  it("omits preview-aware thread id for demo threads while demo preview is active", () => {
+  it("runs supported thread lifecycle actions through the Control client", async () => {
+    const compactThread = vi.fn(async () => {});
+    const readThread = vi.fn(async () => ({ id: "thread-1" }) as never);
+    const setBusyToolId = vi.fn();
     const handlers = createAppCapabilityPanelHandlers(
-      createParams({ isDemoPreview: true, selectedThreadId: "demo-thread-1" }),
+      createParams({
+        setBusyToolId,
+        threadLifecycleClient: {
+          compactThread,
+          readThread,
+          rollbackThread: vi.fn(),
+        },
+        threadLifecycleConnected: true,
+      }),
     );
 
-    handlers.handleCapabilityPanelAction("open-thread-settings");
+    handlers.handleCapabilityPanelAction("compact-thread");
+    await vi.waitUntil(() => setBusyToolId.mock.calls.at(-1)?.[0] === null);
 
-    const params = capturedDispatchParams();
-    expect(params.threadId).toBeNull();
-    expect(params.previewAwareThreadId).toBeNull();
+    expect(compactThread).toHaveBeenCalledWith("thread-1");
+    expect(readThread).toHaveBeenCalledWith("thread-1");
+    expect(setBusyToolId).toHaveBeenLastCalledWith(null);
   });
 
-  it("opens plugin paths through the item handler", async () => {
-    const handlers = createAppCapabilityPanelHandlers(createParams());
+  it("fails closed for removed App Server actions and panel items", async () => {
+    const onUnavailable = vi.fn();
+    const handlers = createAppCapabilityPanelHandlers(
+      createParams({ onUnavailable }),
+    );
 
-    handlers.handleCapabilityPanelAction("open-plugin-path");
-    capturedDispatchParams().openPluginPath("/repo/plugins/github");
-    await Promise.resolve();
-
-    expect(capturedItemParams().item).toEqual({
-      kind: "directory",
-      label: "github",
-      path: "/repo/plugins/github",
+    handlers.handleCapabilityPanelAction("save-thread-settings");
+    await handlers.handleCapabilityPanelItem({
+      kind: "file",
+      label: "README.md",
+      path: "/repo/README.md",
     });
+
+    expect(onUnavailable).toHaveBeenCalledTimes(2);
   });
 
-  it("forwards capability panel items with shared App state dependencies", async () => {
-    const setComposerValue = vi.fn();
-    const item = { label: "README.md", path: "/repo/README.md" };
-    const handlers = createAppCapabilityPanelHandlers(
-      createParams({ setComposerValue }),
-    );
-
-    await handlers.handleCapabilityPanelItem(item);
-
-    const params = capturedItemParams();
-    expect(params.item).toBe(item);
-    expect(params.setComposerValue).toBe(setComposerValue);
-  });
-
-  it("updates capability and library panel fields together", () => {
+  it("updates capability and Library form fields together", () => {
     let capabilityPanel: CapabilityPanel | null = {
-      title: "Capability",
       fields: [{ id: "shared", label: "Shared", value: "old" }],
+      title: "Capability",
     };
     let libraryPanel: LibraryPanel | null = {
-      kind: "tools",
-      title: "Tools",
-      subtitle: "Library",
-      items: [],
       fields: [{ id: "shared", label: "Shared", value: "old" }],
+      items: [],
+      kind: "tools",
+      subtitle: "Library",
+      title: "Tools",
     };
     const handlers = createAppCapabilityPanelHandlers(
       createParams({
-        setCapabilityPanel: (panelOrUpdater) => {
+        capabilityPanel,
+        setCapabilityPanel: (next) => {
           capabilityPanel =
-            typeof panelOrUpdater === "function"
-              ? panelOrUpdater(capabilityPanel)
-              : panelOrUpdater;
+            typeof next === "function" ? next(capabilityPanel) : next;
         },
-        setLibraryPanel: (updater) => {
-          libraryPanel = updater(libraryPanel);
+        setLibraryPanel: (update) => {
+          libraryPanel = update(libraryPanel);
         },
       }),
     );

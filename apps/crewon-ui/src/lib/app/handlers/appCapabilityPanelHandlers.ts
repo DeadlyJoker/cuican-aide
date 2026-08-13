@@ -1,104 +1,85 @@
-import type { CapabilityPanelItemActionParams } from "../../capability/capabilityPanelItemActions";
+import type { Thread } from "@crewon-protocol/v2/Thread";
+
+import {
+  createThreadLifecycleActionHandlers,
+  threadLifecycleActionForActionId,
+  type ThreadLifecycleClient,
+} from "../../thread/threadLifecycleActions";
+import type {
+  CapabilityPanel,
+  CapabilityPanelItem,
+} from "../../capability/capabilityPanelTypes";
 import type { ConfirmHandler } from "../../shared/confirmHandler";
-import { handleCapabilityPanelItemAction } from "../../capability/capabilityPanelItemActions";
-import type { CapabilityPanelActionDispatcherParams } from "../../capability/capabilityPanelActionDispatcher";
-import { handleCapabilityPanelActionDispatch } from "../../capability/capabilityPanelActionDispatcher";
-import {
-  openPluginPathFromPanelAction,
-  updateCapabilityPanelFieldAction,
-} from "../../capability/appCapabilityPanelActions";
-import {
-  backendThreadId,
-  previewAwareBackendThreadId,
-} from "../appUiState";
-import { trimmedPanelFieldValue } from "../../shared/panelState";
+import type { LibraryPanel } from "../../domain/crewonDomain";
+import type { Locale, ToolId } from "../../i18n";
+import { updateCapabilityPanelFieldAction } from "../../capability/appCapabilityPanelActions";
+import { backendThreadId } from "../appUiState";
 
-type AppCapabilityPanelActionParams = Omit<
-  CapabilityPanelActionDispatcherParams,
-  | "actionId"
-  | "confirm"
-  | "fieldValue"
-  | "openPluginPath"
-  | "previewAwareThreadId"
-  | "threadId"
->;
+type SetCapabilityPanel = (
+  panelOrUpdater:
+    | CapabilityPanel
+    | null
+    | ((currentPanel: CapabilityPanel | null) => CapabilityPanel | null),
+) => void;
 
-type AppCapabilityPanelItemParams = Pick<
-  CapabilityPanelItemActionParams,
-  | "setComposerFocusSignal"
-  | "setComposerValue"
-  | "setPendingComposerMentions"
-  | "setPendingContextFile"
->;
-
-type AppCapabilityPanelClient =
-  NonNullable<AppCapabilityPanelActionParams["client"]> &
-    NonNullable<CapabilityPanelItemActionParams["client"]>;
+export type AppCapabilityPanelHandlersParams = {
+  busyToolId: ToolId | null;
+  capabilityPanel: CapabilityPanel | null;
+  confirm: ConfirmHandler;
+  handleSettingsAction: (actionId: string) => boolean;
+  locale: Locale;
+  onUnavailable: () => void;
+  selectedThreadId: string | null;
+  setActiveTurnByThread: (
+    updater: (current: Record<string, string>) => Record<string, string>,
+  ) => void;
+  setBusyToolId: (toolId: ToolId | null) => void;
+  setCapabilityPanel: SetCapabilityPanel;
+  setLibraryPanel: (
+    updater: (panel: LibraryPanel | null) => LibraryPanel | null,
+  ) => void;
+  setStreamingTextByThread: (
+    updater: (current: Record<string, string>) => Record<string, string>,
+  ) => void;
+  setThreads: (updater: (currentThreads: Thread[]) => Thread[]) => void;
+  threadLifecycleClient: ThreadLifecycleClient | null;
+  threadLifecycleConnected: boolean;
+};
 
 export type AppCapabilityPanelHandlers = {
   handleCapabilityPanelAction: (actionId: string) => void;
   handleCapabilityPanelFieldChange: (fieldId: string, value: string) => void;
-  handleCapabilityPanelItem: (
-    item: CapabilityPanelItemActionParams["item"],
-  ) => Promise<void>;
+  handleCapabilityPanelItem: (item: CapabilityPanelItem) => Promise<void>;
 };
 
-export type AppCapabilityPanelHandlersParams = Omit<
-  AppCapabilityPanelActionParams,
-  "client"
-> &
-  AppCapabilityPanelItemParams & {
-    client: AppCapabilityPanelClient | null | undefined;
-    confirm: ConfirmHandler;
-    setLibraryPanel: Parameters<
-      typeof updateCapabilityPanelFieldAction
-    >[0]["setLibraryPanel"];
-  };
-
+/** Production panel dispatch for the Control-only desktop composition. */
 export function createAppCapabilityPanelHandlers(
   params: AppCapabilityPanelHandlersParams,
 ): AppCapabilityPanelHandlers {
-  const handleCapabilityPanelItem = async (
-    item: CapabilityPanelItemActionParams["item"],
-  ) => {
-    await handleCapabilityPanelItemAction({
-      busyToolId: params.busyToolId,
-      client: params.client,
-      confirm: params.confirm,
-      isConnected: params.isConnected,
-      isDemo: params.isDemo,
-      item,
-      locale: params.locale,
-      setBusyToolId: params.setBusyToolId,
-      setCapabilityPanel: params.setCapabilityPanel,
-      setComposerFocusSignal: params.setComposerFocusSignal,
-      setComposerValue: params.setComposerValue,
-      setNotice: params.setNotice,
-      setPendingComposerMentions: params.setPendingComposerMentions,
-      setPendingContextFile: params.setPendingContextFile,
-    });
-  };
-
   return {
     handleCapabilityPanelAction: (actionId) => {
-      handleCapabilityPanelActionDispatch({
-        ...params,
-        actionId,
-        confirm: params.confirm,
-        fieldValue: (fieldId) =>
-          trimmedPanelFieldValue(params.capabilityPanel, fieldId),
-        openPluginPath: (path) => {
-          openPluginPathFromPanelAction({
-            openCapabilityPanelItem: handleCapabilityPanelItem,
-            path,
-          });
-        },
-        previewAwareThreadId: previewAwareBackendThreadId(
-          params.selectedThreadId,
-          params.isDemoPreview,
-        ),
-        threadId: backendThreadId(params.selectedThreadId),
-      });
+      if (params.handleSettingsAction(actionId)) return;
+
+      const lifecycleAction = threadLifecycleActionForActionId(actionId);
+      if (lifecycleAction) {
+        createThreadLifecycleActionHandlers({
+          busyToolId: params.busyToolId,
+          client: params.threadLifecycleClient,
+          confirm: params.confirm,
+          isConnected: params.threadLifecycleConnected,
+          isDemo: false,
+          locale: params.locale,
+          setActiveTurnByThread: params.setActiveTurnByThread,
+          setBusyToolId: params.setBusyToolId,
+          setCapabilityPanel: params.setCapabilityPanel,
+          setStreamingTextByThread: params.setStreamingTextByThread,
+          setThreads: params.setThreads,
+          threadId: backendThreadId(params.selectedThreadId),
+        })[lifecycleAction]();
+        return;
+      }
+
+      params.onUnavailable();
     },
     handleCapabilityPanelFieldChange: (fieldId, value) => {
       updateCapabilityPanelFieldAction({
@@ -108,6 +89,8 @@ export function createAppCapabilityPanelHandlers(
         value,
       });
     },
-    handleCapabilityPanelItem,
+    handleCapabilityPanelItem: async () => {
+      params.onUnavailable();
+    },
   };
 }
