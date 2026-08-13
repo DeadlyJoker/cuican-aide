@@ -1490,7 +1490,7 @@ if (postgresUrl === undefined) {
       assert.deepEqual([retained.disposition, retained.handoff.currentWorkItem,
         retained.runDisposition], ["retryRequired", "retained", "nonTerminal"]);
       const foreignLeases = await pool.query(`SELECT work_item_json->'payload'->>'nodeId' node_id,
-        status,lease_owner_id,lease_id,lease_epoch FROM ${schema}.work_items
+        status,lease_owner_id,lease_id,lease_epoch::int lease_epoch FROM ${schema}.work_items
         WHERE work_item_json->'payload'->>'trigger'='workflowNode' ORDER BY node_id`);
       assert.deepEqual(foreignLeases.rows, [
         { node_id: "left", status: "leased", lease_owner_id: "node-worker-0",
