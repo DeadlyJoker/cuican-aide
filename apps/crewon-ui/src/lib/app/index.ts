@@ -36,4 +36,3 @@ export { useAppShellRuntimeState } from "./useAppShellRuntimeState";
 export { useAppThreadSelection } from "./useAppThreadSelection";
 export { useAppThreadState } from "./useAppThreadState";
 export { useAppWorkspaceStatusState } from "./useAppWorkspaceStatusState";
-export { useProviderResourceComposer } from "../provider-resource/useProviderResourceComposer";
