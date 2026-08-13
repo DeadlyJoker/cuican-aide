@@ -95,9 +95,13 @@ export function parseOfficeListQuery(value: unknown) {
     try {
       const input = text(object.before, 1024, "office_cursor_invalid");
       const decoded = decodeBase64Url(input);
-      if (!decoded.startsWith(OFFICE_CURSOR_PREFIX)) fail("office_cursor_invalid");
-      const tuple: unknown = JSON.parse(decoded.slice(OFFICE_CURSOR_PREFIX.length));
-      if (!Array.isArray(tuple) || tuple.length !== 2) fail("office_cursor_invalid");
+      if (!decoded.startsWith(OFFICE_CURSOR_PREFIX))
+        fail("office_cursor_invalid");
+      const tuple: unknown = JSON.parse(
+        decoded.slice(OFFICE_CURSOR_PREFIX.length),
+      );
+      if (!Array.isArray(tuple) || tuple.length !== 2)
+        fail("office_cursor_invalid");
       before = {
         createdAt: timestamp(tuple[0], "office_cursor_invalid"),
         officeVersionId: text(tuple[1], 128, "office_cursor_invalid"),

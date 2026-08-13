@@ -49,7 +49,9 @@ export function parseOfficeDefinition(value: unknown): OfficeDefinition {
       "spaceId",
       "tenantId",
       "title",
-    ].sort().join("\0")
+    ]
+      .sort()
+      .join("\0")
   )
     throw new Error("office_definition_invalid");
   const strings = [
@@ -63,10 +65,15 @@ export function parseOfficeDefinition(value: unknown): OfficeDefinition {
   ] as const;
   if (
     item.schemaVersion !== "crewon.office-definition.v0" ||
-    strings.some((key) => !validText(item[key], key === "title" ? OFFICE_LIMITS.title : 128)) ||
+    strings.some(
+      (key) =>
+        !validText(item[key], key === "title" ? OFFICE_LIMITS.title : 128),
+    ) ||
     !Number.isSafeInteger(item.revision) ||
     (item.revision as number) < 1 ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(item.createdAt as string) ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(
+      item.createdAt as string,
+    ) ||
     Number.isNaN(Date.parse(item.createdAt as string)) ||
     !Array.isArray(item.members) ||
     item.members.length > OFFICE_LIMITS.members ||
@@ -77,7 +84,13 @@ export function parseOfficeDefinition(value: unknown): OfficeDefinition {
     throw new Error("office_definition_invalid");
   const memberIds = new Set<string>();
   for (const member of item.members) {
-    if (!validFields(member, { memberId: 128, displayName: 160, agentVersionId: 128 }))
+    if (
+      !validFields(member, {
+        memberId: 128,
+        displayName: 160,
+        agentVersionId: 128,
+      })
+    )
       throw new Error("office_definition_invalid");
     const memberId = (member as Record<string, string>).memberId;
     if (memberIds.has(memberId)) throw new Error("office_definition_invalid");

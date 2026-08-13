@@ -287,10 +287,7 @@ function validateRecordScope(
   input: CommitKnowledgeInput,
   record: KnowledgeRecord,
 ): void {
-  if (
-    record.tenantId !== input.tenantId ||
-    record.spaceId !== input.spaceId
-  )
+  if (record.tenantId !== input.tenantId || record.spaceId !== input.spaceId)
     throw new RunStoreError("knowledge_scope_mismatch");
 }
 function validateList(query: KnowledgeListQuery): void {
