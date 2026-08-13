@@ -10,6 +10,8 @@ export * from "./agent-version-catalog-application-service.ts";
 export * from "./application-runtime-ports.ts";
 export * from "./canonical-json.ts";
 export * from "./automation-application-service.ts";
+export * from "./automation-scheduler-application-service.ts";
+export * from "./automation-scheduler-store-port.ts";
 export * from "./automation-store-port.ts";
 export * from "./authorization-port.ts";
 export * from "./durable-queue-port.ts";
