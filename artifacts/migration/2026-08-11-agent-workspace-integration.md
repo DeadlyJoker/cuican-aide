@@ -565,6 +565,9 @@ Gate 报告为通过。
   Workspace 已无人消费的 Device Gateway 进程、bundle、mTLS/registry/device bootstrap；Worker stdin 只保留 trusted root、authority、签名、私有服务
   与 deadline。当前 bundle 的 `externalBin` 只有 guardian + official Node，resources 只有 Control、Worker、Release、Provider Coordinator 四个
   TypeScript bundle。
+- packaged lifecycle 的迁移期空壳也已收口：`ProcessRole`、generation、candidate monitor、install/repair fence、termination latch 与 shutdown ownership
+  只表达 Control/Worker；不存在 Device/Gateway `Option` 或不可达的 ACK 分支。Workspace stdin 不再携带恒定 `dispatchMode` 标签，Worker 直接构造本地
+  list/read authority，并通过单一 `close` 边界释放两者；staging 不再删除一个从未产出的 `device-gateway.mjs`。
 - packaged renderer 不再静默回退 Rust App Server：桌面 Control bootstrap 失败会中止启动，Control authority 存在时不会构造或重连
   `AppServerClient`，packaged 默认 `ws://127.0.0.1:6176` 与 `CREWON_DESKTOP_SKIP_SIDECAR` 已删除。
 - Control 入口现在显式读取 Tauri 注入的 loopback Workspace Worker route；此前虽然 Worker ready，但 Control 未装配该 route 而以
