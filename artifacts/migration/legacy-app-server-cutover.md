@@ -78,6 +78,26 @@ builds only the permitted process guardian, stages Node 24 and the TypeScript
 runtime bundles, and launches Tauri. The legacy App Server supervisor, its 6176
 restart loop, and the public `crewon:app-server` package script were deleted.
 
+The production Settings composition now advertises only the three surfaces
+with a real Control authority: Account, Appearance (`locale`/`theme`) and Model
+providers. Unknown or historical Settings deep links resolve to Appearance,
+unsupported fields fail closed, and the legacy Thread Settings button and
+coordinator entry point are absent. Appearance changes use revisioned
+`GET -> PUT` and update renderer preferences only after the Control commit.
+
+Control Library reads are generation-fenced so an older request cannot replace
+a newer panel. Automation details are re-read from Control before display, and
+Office pagination uses the OpenAPI `cursor` parameter end to end. The obsolete
+`before` query is rejected instead of accepted as a compatibility alias;
+pagination is bounded to five pages/500 records and visibly reports truncation.
+
+A fresh renderer build and the Tauri bundle manifest are now guarded together:
+the production bundle contains no `AppServerClient`, WebSocket/6176 transport,
+Rust Device/App Server or Device Gateway marker, while the packaged executable
+and resource allowlists contain only the process guardian, Node runtime and the
+four TypeScript runtime bundles. The web manifest no longer describes the
+product as an App Server client.
+
 ## Not migrated and deliberately unavailable under Control
 
 | Capability family                                            | Current Control behavior                                                                                            | Required replacement before enabling                                                                   |
@@ -90,28 +110,27 @@ restart loop, and the public `crewon:app-server` package script were deleted.
 | Office expert delegation and automatic orchestration         | Office definitions are readable, but expert aliases, auto-dispatch, scheduler and memory handoff remain unavailable | an explicit product contract on top of canonical Workflow/Run authority; no legacy compatibility layer |
 | Knowledge retrieval and lifecycle                            | bounded records are readable; delete/reset, ingestion, embedding and RAG remain unavailable                         | explicit retention/deletion receipts and a bounded retrieval authority                                 |
 
-## Hard deletion gate
+## Dead compatibility deletion gate
 
 The legacy Rust app-server and Device binaries have already left the packaged
-desktop runtime. The remaining renderer source and explicit development-only
-legacy path can be deleted when all of the following are true:
+desktop runtime. They are not migration fallbacks or compatibility targets.
+Remaining renderer compatibility source may be deleted as soon as all of the
+following are true for the affected surface:
 
 1. A source scan and production composition test show zero renderer business
    calls to the legacy client. Import-only tooling is a separate executable and
    cannot be selected by normal runtime routing.
-2. Control/Worker/Native Runtime start, execute, recover and upgrade without the
-   legacy process or its database. Killing or removing the old binary cannot
-   reduce an advertised capability silently.
-3. Each mutation family has idempotency, authorization, durable receipt,
-   unknown-outcome reconciliation and crash recovery. Read-only families have
-   bounded pagination/streaming and scope isolation.
-4. Standalone SQLite and Team PostgreSQL each satisfy the canonical TypeScript
-   transaction invariants; rollback is a release/authority pointer operation,
-   not dual-write fallback. A suite skipped because no real PostgreSQL URL is
-   configured remains recorded as unverified.
-5. macOS, Windows and Web production packages pass their signed release gates;
-   real Identity/PIM and at least one live Provider canary are verified.
+2. The replacement Control/Worker path has the required durable semantics, or
+   the product entry point is removed/explicitly unavailable. An unavailable
+   capability does not justify retaining a dormant App Server implementation.
+3. Control/Worker/Native Runtime start and recover without the legacy process or
+   its database. Removing an old binary cannot silently reduce an advertised
+   capability.
+4. Standalone SQLite and Team PostgreSQL satisfy the canonical TypeScript
+   transaction invariants for every enabled mutation. A suite skipped because
+   no real PostgreSQL URL is configured remains recorded as unverified.
 
-Until those gates pass, the residual source is not a compatibility promise:
-packaged Control paths fail closed for unavailable families and never start or
-select the Rust app-server.
+Release signing, notarization and platform canaries remain release gates, but
+they do not block deleting unreachable compatibility source. Until an affected
+source-deletion gate passes, packaged Control paths still fail closed and never
+start or select the Rust app-server.
