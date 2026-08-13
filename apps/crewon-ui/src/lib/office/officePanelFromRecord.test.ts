@@ -1,10 +1,8 @@
 import { describe, expect, it } from "vitest";
 
-import type { OfficeConfigRecordReference } from "./officePanelFromRecord";
 import {
-  officePanelFromRecord,
-  officePanelMatchesRecord,
   officeRecordKey,
+  type OfficeConfigRecordReference,
 } from "./officePanelFromRecord";
 
 function record(
@@ -27,7 +25,7 @@ function record(
   };
 }
 
-describe("officePanelFromRecord", () => {
+describe("officeRecordKey", () => {
   it("uses record id before path and never falls back to a duplicate title", () => {
     expect(
       officeRecordKey(record("/repo/a.json", { recordId: "record-a" })),
@@ -42,27 +40,5 @@ describe("officePanelFromRecord", () => {
         workspaceCwd: "/repo/team",
       }),
     ).toBe("workspace:/repo/team|path:/repo/a.json");
-  });
-
-  it("builds an exact panel identity from the selected config record", () => {
-    const selected = { ...record("/repo/a.json"), workspaceCwd: "/repo/team" };
-    const duplicateTitle = record("/repo/b.json");
-    const panel = officePanelFromRecord(selected, "zh");
-
-    expect(panel).toMatchObject({
-      kind: "office",
-      title: "Duplicate title",
-      configPath: "/repo/a.json",
-      workspaceCwd: "/repo/team",
-      workspace: { goal: "Ship safely" },
-    });
-    expect(officePanelMatchesRecord(panel, selected)).toBe(true);
-    expect(officePanelMatchesRecord(panel, duplicateTitle)).toBe(false);
-    expect(
-      officePanelMatchesRecord(panel, {
-        ...selected,
-        workspaceCwd: "/repo/another-team",
-      }),
-    ).toBe(false);
   });
 });

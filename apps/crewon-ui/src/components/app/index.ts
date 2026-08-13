@@ -1,6 +1,5 @@
 export { AppCommandShellRoute } from "./AppCommandShellRoute";
 export {
-  createAppCommandOfficeRoomAdapter,
   createControlCommandOfficeRoomAdapter,
   useControlCommandOfficeRoomAdapter,
 } from "./AppCommandOfficeRoomAdapter";
