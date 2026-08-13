@@ -17,7 +17,7 @@ export function ComposerContextBar({
   retryConnectionLabel: string;
   threadSettingsLabel: string;
   onRetryConnection: () => void;
-  onThreadSettings: () => void;
+  onThreadSettings: (() => void) | null;
 }) {
   return (
     <div className="composer-context">
@@ -48,15 +48,17 @@ export function ComposerContextBar({
             {retryConnectionLabel}
           </button>
         ) : null}
-        <button
-          className="icon-button"
-          type="button"
-          aria-label={threadSettingsLabel}
-          title={threadSettingsLabel}
-          onClick={onThreadSettings}
-        >
-          <Settings2 size={16} />
-        </button>
+        {onThreadSettings ? (
+          <button
+            className="icon-button"
+            type="button"
+            aria-label={threadSettingsLabel}
+            title={threadSettingsLabel}
+            onClick={onThreadSettings}
+          >
+            <Settings2 size={16} />
+          </button>
+        ) : null}
       </div>
     </div>
   );

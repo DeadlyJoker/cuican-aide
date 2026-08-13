@@ -53,7 +53,7 @@ type AppWorkspaceContentProps = {
   onSend: (text: string, threadSettings?: ThreadRuntimeSettings) => void;
   onSlashCommandSelect: (command: ComposerSlashCommand) => void;
   onStop: () => void;
-  onThreadSettings: () => void;
+  onThreadSettings: (() => void) | null;
 };
 
 export function AppWorkspaceContent({

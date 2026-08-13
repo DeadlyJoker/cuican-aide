@@ -56,8 +56,8 @@ describe("app routing search parsing", () => {
   it("parses settings sections with general settings fallback", () => {
     expect(settingsSectionFromSearch("?section=appearance")).toBe("appearance");
     expect(settingsSectionFromSearch("section=mcp-servers")).toBe("mcp-servers");
-    expect(settingsSectionFromSearch("?section=unknown")).toBe("config");
-    expect(settingsSectionFromSearch("")).toBe("config");
+    expect(settingsSectionFromSearch("?section=unknown")).toBe("appearance");
+    expect(settingsSectionFromSearch("")).toBe("appearance");
   });
 
   it("detects command shell hash routes independently from selected threads", () => {

@@ -148,6 +148,9 @@ describe("App Workspace Control composition", () => {
     expect(composition).not.toMatch(
       /client: null|AppServer|resolveBackendCwd|selectedThread|workspaceStatus/u,
     );
+    expect(composition).not.toContain("openThreadSettingsPanel");
+    expect(source).toContain("onThreadSettings={null}");
+    expect(source).not.toContain("openThreadSettingsPanelRef");
   });
 
   it("does not compose the legacy capability dispatcher or item client", () => {

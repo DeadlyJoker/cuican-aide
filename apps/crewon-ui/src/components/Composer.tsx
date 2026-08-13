@@ -35,7 +35,7 @@ type ComposerProps = {
   onRetryConnection: () => void;
   onSend: (text: string) => void;
   onSlashCommandSelect?: (command: ComposerSlashCommand) => void;
-  onThreadSettings: () => void;
+  onThreadSettings: (() => void) | null;
   onStop: () => void;
 };
 

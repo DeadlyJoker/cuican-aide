@@ -59,7 +59,7 @@ export function AppWorkspaceConversationContent({
   onSend: (text: string, threadSettings?: ThreadRuntimeSettings) => void;
   onSlashCommandSelect: (command: ComposerSlashCommand) => void;
   onStop: () => void;
-  onThreadSettings: () => void;
+  onThreadSettings: (() => void) | null;
 }) {
   const t = translate(locale);
   const sendShortcutLabel = platform === "mac" ? "⌘ Enter" : "Ctrl Enter";

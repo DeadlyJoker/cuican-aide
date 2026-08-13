@@ -56,7 +56,6 @@ type AppSettingsCoordinatorParams = {
 export type AppSettingsCoordinator = {
   commitField: (fieldId: string, value: string) => Promise<void>;
   handleAction: (actionId: string) => boolean;
-  openThreadSettingsPanel: () => Promise<void>;
   refreshSection: (section: SettingsSection) => Promise<void>;
   sectionRefreshHandlers: SettingsSectionRefreshHandlers;
 };
@@ -271,12 +270,6 @@ export function createAppSettingsCoordinator(
         return true;
       }
       return false;
-    },
-    openThreadSettingsPanel: async () => {
-      params.setCapabilityPanel(
-        controlSettingsUnavailablePanel("config", params.locale),
-      );
-      params.setNotice(unavailableNotice(params.locale));
     },
     refreshSection,
     sectionRefreshHandlers,

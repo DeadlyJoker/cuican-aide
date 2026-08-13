@@ -11,14 +11,9 @@ export function useAppCoordinatorRefs() {
   const refreshSettingsSectionRef = useRef<
     (section: SettingsSection) => Promise<void>
   >(async () => undefined);
-  const openThreadSettingsPanelRef = useRef<() => Promise<void>>(
-    async () => undefined,
-  );
-
   return {
     libraryLoadRequestRef,
     openLibraryRef,
-    openThreadSettingsPanelRef,
     refreshSettingsSectionRef,
   };
 }

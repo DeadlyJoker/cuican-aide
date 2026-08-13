@@ -82,6 +82,6 @@ export function settingsSectionFromSearch(search: string): SettingsSection {
     case "worktrees":
       return section;
     default:
-      return "config";
+      return "appearance";
   }
 }

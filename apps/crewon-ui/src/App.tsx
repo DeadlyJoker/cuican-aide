@@ -87,7 +87,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   const {
     libraryLoadRequestRef,
     openLibraryRef,
-    openThreadSettingsPanelRef,
     refreshSettingsSectionRef,
   } = useAppCoordinatorRefs();
   const { locale, localeRef, notice, setLocale, setNotice, setTheme, theme } =
@@ -467,10 +466,8 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     persistLocale,
     persistTheme,
   });
-  const {
-    openThreadSettingsPanel,
-    sectionRefreshHandlers: settingsSectionRefreshHandlers,
-  } = settingsCoordinator;
+  const { sectionRefreshHandlers: settingsSectionRefreshHandlers } =
+    settingsCoordinator;
 
   const {
     changeLocale,
@@ -507,7 +504,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   });
   useAppStateRefsEffect([
     [openLibrary, openLibraryRef],
-    [openThreadSettingsPanel, openThreadSettingsPanelRef],
     [refreshSettingsSection, refreshSettingsSectionRef],
   ]);
 
@@ -843,7 +839,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         onSend={sendMessage}
         onSlashCommandSelect={handleComposerSlashCommand}
         onStop={interruptActiveTurn}
-        onThreadSettings={openThreadSettingsPanel}
+        onThreadSettings={null}
       />
       <AppWorkspaceSidePanels
         {...workspaceStatus}
