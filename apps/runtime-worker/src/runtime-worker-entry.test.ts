@@ -199,7 +199,6 @@ function runtimeBindings(remoteMcpConfigPath: string) {
           endpoint: "https://provider.example/v1/responses",
           apiKeyEnvironment: null,
           storeResponses: false,
-          requestProfile: "standard",
           idleTimeoutMs: 60_000,
           sequencePolicy: "required",
           },

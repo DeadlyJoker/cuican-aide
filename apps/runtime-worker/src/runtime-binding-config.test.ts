@@ -422,7 +422,6 @@ function config(contentDigest: string, apiKeyEnvironment: string | null) {
           endpoint: "https://provider.example/v1/responses",
           apiKeyEnvironment,
           storeResponses: false,
-          requestProfile: "standard" as const,
           idleTimeoutMs: 60_000,
           sequencePolicy: "required" as const,
         },

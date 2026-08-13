@@ -45,7 +45,6 @@ type RuntimeBindingConfig = Readonly<{
       endpoint: string;
       apiKeyEnvironment: string | null;
       storeResponses: boolean;
-      requestProfile: "standard" | "responsesLite";
       idleTimeoutMs: number;
       sequencePolicy: "required" | "whenPresent";
     }>;
@@ -192,14 +191,11 @@ function parseProvider(
       "endpoint",
       "idleTimeoutMs",
       "kind",
-      "requestProfile",
       "sequencePolicy",
       "storeResponses",
     ]) ||
     value.kind !== "directResponses" ||
     typeof value.storeResponses !== "boolean" ||
-    (value.requestProfile !== "standard" &&
-      value.requestProfile !== "responsesLite") ||
     (value.sequencePolicy !== "required" &&
       value.sequencePolicy !== "whenPresent") ||
     !Number.isSafeInteger(value.idleTimeoutMs) ||
@@ -223,7 +219,6 @@ function parseProvider(
     endpoint: bounded(value.endpoint, 2048),
     apiKeyEnvironment,
     storeResponses: value.storeResponses,
-    requestProfile: value.requestProfile,
     idleTimeoutMs: Number(value.idleTimeoutMs),
     sequencePolicy: value.sequencePolicy,
   };
@@ -370,17 +365,13 @@ function directResponsesTransport(
     apiKey,
     model: version.model.modelId,
     storeResponses: provider.storeResponses,
-    requestProfile: provider.requestProfile,
     idleTimeoutMs: provider.idleTimeoutMs,
     sequencePolicy: provider.sequencePolicy,
   };
   return new DirectResponsesTransport(config, {
     identity: {
       adapterName: version.model.adapterName,
-      adapterVersion: baseAdapterVersion(
-        version.model.adapterVersion,
-        provider.requestProfile,
-      ),
+      adapterVersion: version.model.adapterVersion,
     },
   });
 }
@@ -401,20 +392,6 @@ async function createConnectedMcpRuntime(
     await runtime.close();
     throw error;
   }
-}
-
-function baseAdapterVersion(
-  adapterVersion: string,
-  requestProfile: "standard" | "responsesLite",
-): string {
-  if (requestProfile === "standard") {
-    return adapterVersion;
-  }
-  const suffix = "+responses-lite";
-  if (!adapterVersion.endsWith(suffix)) {
-    throw new Error("agent_version_runtime_adapter_profile_mismatch");
-  }
-  return adapterVersion.slice(0, -suffix.length);
 }
 
 function readBoundedJson(

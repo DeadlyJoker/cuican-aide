@@ -66,7 +66,7 @@ writeFileSync(bindingsPath, JSON.stringify({
     tenantId: "standalone-tenant", agentVersionId: version.agentVersionId,
     contentDigest: version.contentDigest, authorityId: `authority-${version.agentVersionId}`,
     workspaceBindingId: null, provider: { kind: "directResponses", endpoint: responsesEndpoint,
-      apiKeyEnvironment: null, storeResponses: true, requestProfile: "standard",
+      apiKeyEnvironment: null, storeResponses: true,
       idleTimeoutMs: 10_000, sequencePolicy: "required" },
     mcpStdioConfigPath: null, remoteMcpConfigPath: null,
   })),

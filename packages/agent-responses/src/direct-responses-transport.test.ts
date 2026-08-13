@@ -185,52 +185,7 @@ test("projects shared AR-042 reasoning through the real Direct transport boundar
   );
 });
 
-test("matches the shared Rust Responses Lite request profile", async () => {
-  const reference = JSON.parse(
-    readFileSync(
-      new URL(
-        "../../test-contracts/fixtures/responses-lite-request.reference.json",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  ) as Readonly<{
-    requestProfile: "responsesLite";
-    expected: Readonly<Record<string, unknown>>;
-  }>;
-  let capturedBody: Record<string, unknown> | undefined;
-  const transport = new DirectResponsesTransport(
-    {
-      endpoint: "https://provider.example/v1/responses",
-      model: "provider-model",
-      requestProfile: reference.requestProfile,
-    },
-    {
-      fetch: async (_input, init) => {
-        capturedBody = JSON.parse(String(init?.body)) as Record<
-          string,
-          unknown
-        >;
-        return responseStream(officialEvents());
-      },
-    },
-  );
-
-  await collect(transport.stream(manualRequest(), signal()));
-
-  assert.equal(transport.adapterVersion, "1+responses-lite");
-  assert.deepEqual(
-    {
-      reasoningContext: (
-        capturedBody?.reasoning as Record<string, unknown> | undefined
-      )?.context,
-      parallelToolCalls: capturedBody?.parallel_tool_calls,
-    },
-    reference.expected,
-  );
-});
-
-test("keeps OpenAI-specific request profile fields off standard endpoints", async () => {
+test("keeps unsupported request fields off Responses-compatible endpoints", async () => {
   let capturedBody: Record<string, unknown> | undefined;
   const transport = new DirectResponsesTransport(
     {
@@ -252,15 +207,6 @@ test("keeps OpenAI-specific request profile fields off standard endpoints", asyn
 
   assert.equal(Object.hasOwn(capturedBody ?? {}, "reasoning"), false);
   assert.equal(Object.hasOwn(capturedBody ?? {}, "parallel_tool_calls"), false);
-  assert.throws(
-    () =>
-      new DirectResponsesTransport({
-        endpoint: "https://provider.example/v1/responses",
-        model: "provider-model",
-        requestProfile: "unsupported" as "standard",
-      }),
-    hasTransportError("protocol", "responses_request_profile_invalid", false),
-  );
 });
 
 test("keeps manual replay and previous_response_id continuation mutually exclusive", async () => {

@@ -37,8 +37,6 @@ import {
 
 export type { ResponsesSequencePolicy } from "./responses-protocol.ts";
 
-export type ResponsesRequestProfile = "standard" | "responsesLite";
-
 const MAX_MODEL_LENGTH = 256;
 const MAX_RESPONSE_ID_LENGTH = 512;
 const MAX_INPUT_ITEMS = 512;
@@ -50,7 +48,6 @@ export type DirectResponsesTransportConfig = Readonly<{
   apiKey?: string | null;
   model: string;
   storeResponses?: boolean;
-  requestProfile?: ResponsesRequestProfile;
   idleTimeoutMs?: number;
   sequencePolicy?: ResponsesSequencePolicy;
 }>;
@@ -80,7 +77,6 @@ export class DirectResponsesTransport implements ModelTransportPort {
   readonly #endpoint: URL;
   readonly #apiKey: string | null;
   readonly #storeResponses: boolean;
-  readonly #requestProfile: ResponsesRequestProfile;
   readonly #idleTimeoutMs: number;
   readonly #sequencePolicy: ResponsesSequencePolicy;
   readonly #fetch: ResponsesFetch;
@@ -96,17 +92,15 @@ export class DirectResponsesTransport implements ModelTransportPort {
       turnStates?: ResponsesTurnStateAuthority;
     } = {},
   ) {
-    const requestProfile = parseResponsesRequestProfile(
-      config.requestProfile ?? "standard",
-    );
     this.adapterName = boundedNonEmpty(
       dependencies.identity?.adapterName ?? "direct-responses",
       128,
       "responses_adapter_name_invalid",
     );
-    this.adapterVersion = profiledAdapterVersion(
+    this.adapterVersion = boundedNonEmpty(
       dependencies.identity?.adapterVersion ?? "1",
-      requestProfile,
+      128,
+      "responses_adapter_version_invalid",
     );
     this.#endpoint = parseResponsesEndpoint(config.endpoint);
     this.modelId = boundedNonEmpty(
@@ -122,7 +116,6 @@ export class DirectResponsesTransport implements ModelTransportPort {
       throw protocolError("responses_store_invalid");
     }
     this.#storeResponses = config.storeResponses ?? false;
-    this.#requestProfile = requestProfile;
     this.#idleTimeoutMs = positiveInteger(
       config.idleTimeoutMs ?? 60_000,
       "responses_idle_timeout_invalid",
@@ -207,7 +200,6 @@ export class DirectResponsesTransport implements ModelTransportPort {
             previousResponseId,
             modelId: this.modelId,
             storeResponses: this.#storeResponses,
-            requestProfile: this.#requestProfile,
           }),
         ),
         signal: idle.signal,
@@ -848,7 +840,6 @@ export function responsesRequestBody(options: {
   previousResponseId: string | null;
   modelId: string;
   storeResponses: boolean;
-  requestProfile?: ResponsesRequestProfile;
   inputItems?: readonly ModelInputItem[];
 }): Readonly<Record<string, unknown>> {
   const inputItems =
@@ -868,34 +859,10 @@ export function responsesRequestBody(options: {
   if (options.request.instructions !== null) {
     body.instructions = options.request.instructions;
   }
-  if ((options.requestProfile ?? "standard") === "responsesLite") {
-    body.reasoning = { context: "all_turns" };
-    body.parallel_tool_calls = false;
-  }
   if (options.previousResponseId !== null) {
     body.previous_response_id = options.previousResponseId;
   }
   return body;
-}
-
-export function parseResponsesRequestProfile(
-  value: unknown,
-): ResponsesRequestProfile {
-  if (value === "standard" || value === "responsesLite") {
-    return value;
-  }
-  throw protocolError("responses_request_profile_invalid");
-}
-
-function profiledAdapterVersion(
-  baseVersion: string,
-  profile: ResponsesRequestProfile,
-): string {
-  return boundedNonEmpty(
-    profile === "standard" ? baseVersion : `${baseVersion}+responses-lite`,
-    128,
-    "responses_adapter_version_invalid",
-  );
 }
 
 function boundedNonEmpty(

@@ -12,7 +12,6 @@
         "endpoint": "https://api.openai.com/v1/responses",
         "apiKeyEnvironment": "CREWON_REVIEWED_AGENT_API_KEY",
         "storeResponses": false,
-        "requestProfile": "standard",
         "idleTimeoutMs": 60000,
         "sequencePolicy": "required"
       },

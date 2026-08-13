@@ -12,13 +12,11 @@ import WebSocket, { type ClientOptions, type RawData } from "ws";
 import {
   DirectResponsesTransport,
   type DirectResponsesTransportConfig,
-  type ResponsesRequestProfile,
   type ResponsesFetch,
   type ResponsesTimerScheduler,
   type ResponsesTransportIdentity,
   parseResponsesApiKey,
   parseResponsesEndpoint,
-  parseResponsesRequestProfile,
   responseIdFromResponsesCheckpoint,
   responsesCheckpoint,
   responsesHeaders,
@@ -56,7 +54,6 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
   readonly #endpoint: URL;
   readonly #apiKey: string | null;
   readonly #storeResponses: boolean;
-  readonly #requestProfile: ResponsesRequestProfile;
   readonly #idleTimeoutMs: number;
   readonly #connectTimeoutMs: number;
   readonly #maxMessageBytes: number;
@@ -78,18 +75,13 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
       turnStates?: ResponsesTurnStateAuthority;
     } = {},
   ) {
-    const requestProfile = parseResponsesRequestProfile(
-      config.requestProfile ?? "standard",
-    );
     const identity = dependencies.identity ?? HYBRID_IDENTITY;
     this.adapterName = requireNonEmpty(
       identity.adapterName,
       "responses_adapter_name_invalid",
     );
     this.adapterVersion = requireNonEmpty(
-      requestProfile === "standard"
-        ? identity.adapterVersion
-        : `${identity.adapterVersion}+responses-lite`,
+      identity.adapterVersion,
       "responses_adapter_version_invalid",
     );
     this.modelId = boundedNonEmpty(
@@ -106,7 +98,6 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
       throw protocolError("responses_store_invalid");
     }
     this.#storeResponses = config.storeResponses ?? false;
-    this.#requestProfile = requestProfile;
     this.#idleTimeoutMs = positiveInteger(
       config.idleTimeoutMs ?? 60_000,
       "responses_idle_timeout_invalid",
@@ -195,7 +186,6 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
               previousResponseId: plan.previousResponseId,
               modelId: this.modelId,
               storeResponses: this.#storeResponses,
-              requestProfile: this.#requestProfile,
               inputItems: plan.inputItems,
             }),
           }),

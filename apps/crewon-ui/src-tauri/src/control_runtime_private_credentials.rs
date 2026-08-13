@@ -69,7 +69,6 @@ struct RuntimeProvider {
     endpoint: String,
     api_key_environment: RequiredNullable,
     store_responses: bool,
-    request_profile: String,
     idle_timeout_ms: u64,
     sequence_policy: String,
 }
@@ -293,7 +292,6 @@ impl RuntimeProvider {
                         })
                 })
             })
-            && matches!(self.request_profile.as_str(), "standard" | "responsesLite")
             && (1..=300_000).contains(&self.idle_timeout_ms)
             && matches!(self.sequence_policy.as_str(), "required" | "whenPresent")
     }

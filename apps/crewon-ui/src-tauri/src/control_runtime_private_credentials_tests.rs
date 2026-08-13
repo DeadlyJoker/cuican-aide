@@ -493,7 +493,6 @@ fn valid_provider() -> serde_json::Value {
         "endpoint": "https://api.openai.com/v1/responses",
         "apiKeyEnvironment": null,
         "storeResponses": false,
-        "requestProfile": "standard",
         "idleTimeoutMs": 30_000,
         "sequencePolicy": "required",
     })

@@ -48,9 +48,6 @@ export function createModelTransport(
         process.env.CREWON_RESPONSES_STORE ?? "false",
         "CREWON_RESPONSES_STORE_invalid",
       ),
-      requestProfile: parseResponsesRequestProfile(
-        process.env.CREWON_RESPONSES_REQUEST_PROFILE ?? "standard",
-      ),
       idleTimeoutMs: parsePositiveInteger(
         process.env.CREWON_RESPONSES_IDLE_TIMEOUT_MS ?? "60000",
         "CREWON_RESPONSES_IDLE_TIMEOUT_MS_invalid",
@@ -181,15 +178,6 @@ function parseSequencePolicy(value: string): "required" | "whenPresent" {
     return value;
   }
   throw new Error("CREWON_RESPONSES_SEQUENCE_POLICY_invalid");
-}
-
-function parseResponsesRequestProfile(
-  value: string,
-): "standard" | "responsesLite" {
-  if (value === "standard" || value === "responsesLite") {
-    return value;
-  }
-  throw new Error("CREWON_RESPONSES_REQUEST_PROFILE_invalid");
 }
 
 export function parsePositiveInteger(value: string, code: string): number {

@@ -296,55 +296,6 @@ test("prewarm discards unscoped state and reacquires it for the first Run", asyn
   assert.equal(handshakes[1]?.headers["x-codex-turn-state"], undefined);
 });
 
-test("matches the shared Rust Responses Lite profile over WebSocket", async (context) => {
-  const reference = JSON.parse(
-    readFileSync(
-      new URL(
-        "../../test-contracts/fixtures/responses-lite-request.reference.json",
-        import.meta.url,
-      ),
-      "utf8",
-    ),
-  ) as Readonly<{
-    requestProfile: "responsesLite";
-    expected: Readonly<Record<string, unknown>>;
-  }>;
-  const fixture = await websocketFixture(context);
-  let frame: Record<string, unknown> | undefined;
-  fixture.webSocketServer.on("connection", (socket) => {
-    socket.once("message", (raw) => {
-      frame = JSON.parse(raw.toString()) as Record<string, unknown>;
-      sendCompleted(socket, "resp-lite", "done");
-    });
-  });
-  const transport = new WebSocketResponsesTransport({
-    endpoint: fixture.endpoint,
-    model: "provider-model",
-    requestProfile: reference.requestProfile,
-  });
-  context.after(() => transport.close());
-
-  await collect(transport.stream(manualRequest("hello"), signal()));
-
-  assert.equal(transport.adapterVersion, "2+responses-lite");
-  assert.deepEqual(
-    {
-      reasoningContext: (
-        frame?.reasoning as Record<string, unknown> | undefined
-      )?.context,
-      parallelToolCalls: frame?.parallel_tool_calls,
-    },
-    reference.expected,
-  );
-  const resilient = new ResilientResponsesTransport({
-    endpoint: fixture.endpoint,
-    model: "provider-model",
-    requestProfile: reference.requestProfile,
-  });
-  context.after(() => resilient.close());
-  assert.equal(resilient.adapterVersion, "2+responses-lite");
-});
-
 test("falls back after the Rust-aligned WebSocket budget and gives HTTP a fresh retry budget", async (context) => {
   let websocketConnections = 0;
   let httpRequests = 0;

@@ -51,12 +51,6 @@ Worker then promotes an SDK-free provider checkpoint in the same fenced transact
 After restart, it verifies the checkpoint identity and Model History boundary, sends only new canonical items, and supplies
 `previous_response_id`. With storage disabled it continues to use complete manual history replay.
 
-`CREWON_RESPONSES_REQUEST_PROFILE=responsesLite` explicitly selects the Rust-compatible Responses Lite request profile. It
-adds `reasoning.context=all_turns` and forces `parallel_tool_calls=false` on every HTTP or WebSocket request. The default
-`standard` profile omits both fields so self-hosted Responses-compatible endpoints are not required to implement an
-OpenAI-specific profile. The profile is part of the transport adapter identity, so a profile change invalidates an older
-Provider checkpoint and forces safe manual replay.
-
 `CREWON_AGENT_INSTRUCTIONS` supplies the bounded instructions source. Before Store open or Provider prewarm, production
 release compilation freezes instructions, transport/model identity, context window, compaction threshold, retry/Tool-round
 policy, governed-context digest and ordered Tool definitions into a deeply immutable AgentVersion. The Kernel and Worker are
@@ -67,7 +61,7 @@ Instructions are limited to 32 KiB of UTF-8 and invalid values fail closed.
 
 An optional `CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH` enables exact multi-version and multi-Provider routing. The bounded JSON
 manifest maps `tenantId + agentVersionId + contentDigest` to an independent Direct Responses endpoint, credential environment
-name, request profile, workspace binding and optional stdio MCP config. Raw API keys are rejected from the manifest. The release
+name, workspace binding and optional stdio MCP config. Raw API keys are rejected from the manifest. The release
 compiler derives immutable `AgentVersionDeployment` candidates and their materialization digests without resolving Provider
 credentials. Only the atomic release-bundle Store operation can create Deployment rows; the prior single-Deployment write API is
 removed. The Worker resolves credentials only when building its runtime factory, reads the registered bundle and Deployment
