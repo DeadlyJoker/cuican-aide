@@ -62,17 +62,9 @@ export type SettingsConfigScope =
   | "source-control"
   | "workspace";
 
-export type SettingsConfigField = {
-  fieldId: string;
-  configPath: string;
-  valueKind: "secret" | "select" | "string";
-  writeActionId?: string;
-};
-
 export type SettingsBackendBinding = {
   refreshTarget: string;
   scope: SettingsConfigScope;
-  fields?: readonly SettingsConfigField[];
 };
 
 export type SettingsCatalogItem = {
@@ -174,21 +166,6 @@ export function settingsSectionLabel(
   return sidebarCopy[locale][labelKeys[section]];
 }
 
-const APPEARANCE_CONFIG_FIELDS = [
-  {
-    fieldId: "appearance-locale",
-    configPath: "desktop.uiLocale",
-    valueKind: "select",
-    writeActionId: "save-appearance",
-  },
-  {
-    fieldId: "appearance-theme",
-    configPath: "desktop.appearanceTheme",
-    valueKind: "select",
-    writeActionId: "save-appearance",
-  },
-] as const satisfies readonly SettingsConfigField[];
-
 export const settingsCatalog = [
   {
     id: "personal",
@@ -220,7 +197,6 @@ export const settingsCatalog = [
         backend: {
           refreshTarget: "appearance-settings",
           scope: "desktop",
-          fields: APPEARANCE_CONFIG_FIELDS,
         },
       },
       {
@@ -248,24 +224,6 @@ export function settingsCatalogItem(
     const item = group.items.find((candidate) => candidate.id === section);
     if (item) {
       return item;
-    }
-  }
-  return null;
-}
-
-export function settingsConfigField(
-  fieldId: string,
-): SettingsConfigField | null {
-  for (const group of settingsCatalog) {
-    for (const item of group.items) {
-      const fields =
-        "fields" in item.backend ? item.backend.fields : undefined;
-      const field = fields?.find(
-        (candidate) => candidate.fieldId === fieldId,
-      );
-      if (field) {
-        return field;
-      }
     }
   }
   return null;
