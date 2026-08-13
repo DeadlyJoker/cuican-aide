@@ -97,6 +97,27 @@ describe("App Workspace Control composition", () => {
     }
   });
 
+  it("keeps active thread effects structurally compatible with Control", () => {
+    const sources = [
+      [
+        "./effects/useAppThreadListEffects.ts",
+        "ThreadListEffectControlPort",
+      ],
+      [
+        "./effects/useAppModelResponseTimeoutEffect.ts",
+        "ModelResponseTimeoutControlPort",
+      ],
+      ["./appConnectionActions.ts", "LoadedThreadClient"],
+      ["../thread/threadSearchActions.ts", "ThreadSearchClient"],
+    ] as const;
+
+    for (const [path, portName] of sources) {
+      const source = readFileSync(new URL(path, import.meta.url), "utf8");
+      expect(source).toContain(portName);
+      expect(source).not.toMatch(/AppServerClient|app-server\/appServer/u);
+    }
+  });
+
   it("does not compose null-client Workspace and Terminal handlers", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),

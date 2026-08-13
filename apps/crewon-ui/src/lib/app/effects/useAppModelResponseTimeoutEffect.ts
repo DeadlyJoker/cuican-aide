@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
-import type { AppServerClient } from "../../app-server/appServer";
 import type { Locale } from "../../i18n";
 import {
   markModelResponseTimedOut,
@@ -10,9 +9,13 @@ import {
 
 type StateSetter<T> = (updater: (current: T) => T) => void;
 
+type ModelResponseTimeoutControlPort = {
+  interruptTurn(threadId: string, turnId: string): Promise<void>;
+};
+
 export type AppModelResponseTimeoutEffectParams = {
   activeTurnId: string | null;
-  client: Pick<AppServerClient, "interruptTurn"> | null;
+  client: ModelResponseTimeoutControlPort | null;
   isConnected: boolean;
   locale: Locale;
   selectedThread: Thread | null;

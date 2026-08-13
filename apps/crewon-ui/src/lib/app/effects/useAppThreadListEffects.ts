@@ -7,7 +7,6 @@ import {
 } from "react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
-import type { AppServerClient } from "../../app-server/appServer";
 import { pollLoadedThreadIdsAction } from "../appConnectionActions";
 import type { NoticeState } from "../appRuntimeState";
 import type { Locale } from "../../i18n";
@@ -18,11 +17,14 @@ type SelectedThreadSetter = (
   updater: (currentThreadId: string | null) => string | null,
 ) => void;
 
+type ThreadListEffectControlPort = {
+  listLoadedThreadIds(): Promise<string[]>;
+  listThreads(showArchived: boolean): Promise<Thread[]>;
+  searchThreads(searchTerm: string, showArchived: boolean): Promise<Thread[]>;
+};
+
 export type AppThreadListEffectsParams = {
-  client: Pick<
-    AppServerClient,
-    "listLoadedThreadIds" | "listThreads" | "searchThreads"
-  > | null;
+  client: ThreadListEffectControlPort | null;
   emptySelectionBehavior: EmptyThreadSelectionBehavior;
   isConnected: boolean;
   isDemoPreview: boolean;
