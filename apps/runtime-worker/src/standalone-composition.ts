@@ -187,7 +187,12 @@ export async function createStandaloneRuntimeWorker(
     throw error;
   }
   try {
-    return await composeRuntimeWorker(store, workspaceReadStore, config, releasePlan);
+    return await composeRuntimeWorker(
+      store,
+      workspaceReadStore,
+      config,
+      releasePlan,
+    );
   } catch (error) {
     await Promise.allSettled([
       workspaceReadStore?.close() ?? Promise.resolve(),
@@ -215,10 +220,9 @@ export async function createPostgresRuntimeWorker(
     workspaceReadStore =
       config.workspaceReadFile === undefined
         ? undefined
-        : await PostgresWorkspaceReadFileStore.open(
-            config.connectionString,
-            { schema: config.schema },
-          );
+        : await PostgresWorkspaceReadFileStore.open(config.connectionString, {
+            schema: config.schema,
+          });
   } catch (error) {
     await Promise.allSettled([
       workspaceReadStore?.close() ?? Promise.resolve(),
@@ -228,7 +232,12 @@ export async function createPostgresRuntimeWorker(
     throw error;
   }
   try {
-    return await composeRuntimeWorker(store, workspaceReadStore, config, releasePlan);
+    return await composeRuntimeWorker(
+      store,
+      workspaceReadStore,
+      config,
+      releasePlan,
+    );
   } catch (error) {
     await Promise.allSettled([
       workspaceReadStore?.close() ?? Promise.resolve(),
@@ -364,6 +373,8 @@ async function composeRuntimeWorker(
       engine: new SharedWorkflowAdmittedAgentExecutionEngine({
         execution,
         store,
+        approvalTtlMs: config.approvalTtlMs,
+        approvalRecheckMs: config.approvalRecheckMs,
         leaseDurationMs: config.leaseDurationMs ?? 30_000,
         afterTerminalCandidateCommitted:
           config.afterWorkflowTerminalCandidateCommitted,

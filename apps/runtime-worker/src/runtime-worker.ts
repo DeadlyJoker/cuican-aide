@@ -69,6 +69,7 @@ import type {
 import { PlanOutputError, parseProposedPlan } from "./plan-output.ts";
 import { goalToolsForRun, isGoalToolCall } from "./goal-tools.ts";
 import { replaceChangedToolApproval } from "./tool-approval-replacement.ts";
+import { parseWorkflowWorkItemPayload } from "./workflow-work-item-payload.ts";
 import { AgentSegmentExecutionEngine } from "./agent-segment-execution-engine.ts";
 import { AgentSegmentStateMachine } from "./agent-segment-state-machine.ts";
 import type { WorkflowRuntimeDispatcherPort } from "./workflow-runtime-dispatcher.ts";
@@ -587,21 +588,33 @@ export class RuntimeWorker {
       ) {
         throw new PermanentWorkerError("workflow_runtime_not_configured");
       }
+      const workflowPayload = parseWorkflowWorkItemPayload(
+        claim.workItem.payload,
+      );
+      const approvalResume =
+        workflowPayload.trigger === "workflowToolApprovalResume";
       if (run.status === "queued") {
         await this.#renew(claim);
         await this.#execution.startRun(claim);
         await this.#afterRunStarted?.();
         run = await this.#execution.loadRun(claim);
       }
-      if (run.status !== "running") {
+      if (
+        run.status !== "running" &&
+        !(approvalResume && run.status === "waitingApproval")
+      ) {
         throw new Error("run_not_executable");
       }
-      const outcome = run.cancelRequested
-        ? await this.#workflowDispatcher.cancel({ claim, run })
-        : await this.#workflowDispatcher.dispatch({ claim, run });
+      const outcome =
+        run.cancelRequested && !approvalResume
+          ? await this.#workflowDispatcher.cancel({ claim, run })
+          : await this.#workflowDispatcher.dispatch({ claim, run });
       if (outcome.kind === "retry")
-        await this.#store.retryWorkItem({ ...leaseInput(claim),
-          retryAfterMs: this.#retryAfterMs, reasonCode: outcome.code });
+        await this.#store.retryWorkItem({
+          ...leaseInput(claim),
+          retryAfterMs: this.#retryAfterMs,
+          reasonCode: outcome.code,
+        });
       return outcome.kind === "recovery" || outcome.kind === "retry"
         ? {
             kind: "workflowRecovery",
@@ -1069,9 +1082,7 @@ export class RuntimeWorker {
         await this.#afterAssistantSampleCommitted?.();
         if (segment.requestedTools.length > 0) {
           if (completedToolRounds >= runtime.maxToolRounds) {
-            throw new PermanentWorkerError(
-              "model_tool_round_limit_exceeded",
-            );
+            throw new PermanentWorkerError("model_tool_round_limit_exceeded");
           }
           toolBoundaryOutcome = await this.#executeToolCalls(
             claim,
@@ -1119,7 +1130,10 @@ export class RuntimeWorker {
           );
         }
         if (segment.checkpointEvent !== null) {
-          await this.#execution.recordAgentEvent(claim, segment.checkpointEvent);
+          await this.#execution.recordAgentEvent(
+            claim,
+            segment.checkpointEvent,
+          );
         }
         if (completedToolRounds >= runtime.maxToolRounds) {
           throw new PermanentWorkerError("model_tool_round_limit_exceeded");
