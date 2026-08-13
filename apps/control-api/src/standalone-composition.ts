@@ -11,6 +11,7 @@ import {
   TurnApplicationService,
   ThreadCompactionApplicationService,
   ModelProviderSettingsApplicationService,
+  KnowledgeApplicationService,
   WorkspaceListApplicationService,
   WorkspaceOperationQueryService,
   WorkflowVersionApplicationService,
@@ -21,6 +22,7 @@ import {
   type AutomationStore,
   type DomainStore,
   type ModelProviderSettingsStore,
+  type KnowledgeStore,
   type WorkflowVersionStore,
   type WorkflowRuntimeStore,
 } from "@crewon/application";
@@ -93,6 +95,7 @@ type ControlDomainStore = DomainStore &
   WorkflowRuntimeStore &
   AutomationStore &
   ModelProviderSettingsStore &
+  KnowledgeStore &
   Readonly<{
     workflowVersionStore(
       digester: WorkflowContentDigester,
@@ -208,6 +211,13 @@ function composeControlApi(
       digester,
       routeResolver,
     });
+    const knowledge = new KnowledgeApplicationService({
+      store,
+      authorization,
+      clock,
+      ids,
+      digester,
+    });
     const goals = new ThreadGoalApplicationService({
       store,
       authorization,
@@ -301,6 +311,7 @@ function composeControlApi(
       agentVersionCatalogs,
       artifacts,
       automations,
+      knowledge,
       workspaceLists,
       workspaceQueries,
       providerSettings,

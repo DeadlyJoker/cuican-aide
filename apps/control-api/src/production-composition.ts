@@ -3,6 +3,7 @@ import {
   AgentVersionCatalogApplicationService,
   ArtifactApplicationService,
   AutomationApplicationService,
+  KnowledgeApplicationService,
   RunApplicationService,
   ThreadApplicationService,
   ThreadGoalApplicationService,
@@ -164,6 +165,13 @@ async function composeProductionControlApi(
       digester,
       routeResolver,
     });
+    const knowledge = new KnowledgeApplicationService({
+      store,
+      authorization: config.authorization,
+      clock,
+      ids,
+      digester,
+    });
     const goals = new ThreadGoalApplicationService({
       store,
       authorization: config.authorization,
@@ -229,8 +237,7 @@ async function composeProductionControlApi(
             return {
               ...run,
               purpose: run.purpose ?? "turn",
-              workflowVersionBinding:
-                run.workflowVersionBinding ?? undefined,
+              workflowVersionBinding: run.workflowVersionBinding ?? undefined,
             };
           },
           recordWorkflowHumanGateDecision: (input) =>
@@ -242,6 +249,7 @@ async function composeProductionControlApi(
       agentVersionCatalogs,
       artifacts,
       automations,
+      knowledge,
       workspaceLists: null,
       workspaceQueries,
       providerSettings,

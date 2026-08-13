@@ -20,6 +20,7 @@ import type {
   WorkflowHumanGateApplicationService,
   CommitThreadResult,
   CommitTurnStartResult,
+  KnowledgeApplicationService,
 } from "@crewon/application";
 import {
   AgentVersionError,
@@ -79,6 +80,10 @@ import {
   parsePublishWorkflowVersionRequest,
   parseWorkflowVersionId,
   parseWorkflowVersionListQuery,
+  parseCreateKnowledgeRequest,
+  parseKnowledgeId,
+  parseKnowledgeListQuery,
+  formatKnowledgeCursor,
   type AgentVersionMutationResponse,
   type ActiveAgentVersionCatalogResponse,
   type AppendThreadMessageResponse,
@@ -110,6 +115,9 @@ import {
   type GetWorkflowVersionResponse,
   type ListWorkflowVersionsResponse,
   type JsonValue,
+  type KnowledgeMutationResponse,
+  type GetKnowledgeResponse,
+  type ListKnowledgeResponse,
 } from "@crewon/contracts";
 import Fastify, { type FastifyInstance } from "fastify";
 
@@ -196,6 +204,7 @@ export type ControlApiDependencies = Readonly<{
   agentVersionCatalogs: AgentVersionCatalogApplicationService;
   artifacts: ArtifactApplicationService;
   automations: AutomationApplicationService;
+  knowledge?: KnowledgeApplicationService;
   providerSettings: Pick<ModelProviderSettingsApplicationService, "get">;
   providerProbes: Pick<ControlProviderProbeService, "probe">;
   providerRuntimeAvailability: ProviderRuntimeRouteAvailability;
@@ -219,6 +228,25 @@ export type ControlApiDependencies = Readonly<{
 export interface OutboxWakeupPort {
   /** Best-effort non-rejecting wake-up; durable scanning remains authoritative. */
   wake(): Promise<void>;
+}
+
+function projectKnowledge(
+  record: Awaited<ReturnType<KnowledgeApplicationService["get"]>>,
+) {
+  const {
+    tenantId: _tenantId,
+    spaceId: _spaceId,
+    ownerActorId: _ownerActorId,
+    ...view
+  } = record;
+  return view;
+}
+
+function requiredKnowledge(
+  service: KnowledgeApplicationService | undefined,
+): KnowledgeApplicationService {
+  if (service === undefined) throw new Error("knowledge_unavailable");
+  return service;
 }
 
 const MANUAL_ONLY_AUTOMATION_SCHEDULE = {
@@ -282,6 +310,69 @@ export function buildControlApi(
   });
 
   app.get("/api/v1/health/live", async () => ({ status: "ok" as const }));
+
+  app.get<{ Querystring: Record<string, unknown> }>(
+    "/api/v1/knowledge",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const query = parseKnowledgeListQuery({ ...request.query });
+      const page = await requiredKnowledge(dependencies.knowledge).list(actor, {
+        before:
+          query.before === null
+            ? null
+            : {
+                createdAt: query.before.updatedAt,
+                knowledgeId: query.before.resourceId,
+              },
+        limit: query.limit,
+      });
+      const response: ListKnowledgeResponse = {
+        data: page.data.map(projectKnowledge),
+        nextCursor:
+          page.next === null ? null : formatKnowledgeCursor(page.next),
+      };
+      return response;
+    },
+  );
+  app.get<{ Params: { knowledgeId: string } }>(
+    "/api/v1/knowledge/:knowledgeId",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const response: GetKnowledgeResponse = {
+        knowledge: projectKnowledge(
+          await requiredKnowledge(dependencies.knowledge).get(
+            actor,
+            parseKnowledgeId(request.params.knowledgeId),
+          ),
+        ),
+      };
+      return response;
+    },
+  );
+  app.post<{ Body: unknown }>("/api/v1/knowledge", async (request, reply) => {
+    const actor = await dependencies.identity.resolveActor(
+      requestContext(request),
+    );
+    const body = parseCreateKnowledgeRequest(request.body);
+    const result = await requiredKnowledge(dependencies.knowledge).create(
+      actor,
+      {
+        ...body,
+        idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
+      },
+    );
+    const response: KnowledgeMutationResponse = {
+      disposition: result.disposition,
+      knowledge: projectKnowledge(result.record),
+    };
+    return reply
+      .code(result.disposition === "committed" ? 201 : 200)
+      .send(response);
+  });
 
   app.get("/api/v1/health/ready", async (request, reply) => {
     try {

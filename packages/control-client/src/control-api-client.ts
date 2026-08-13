@@ -57,6 +57,10 @@ import type {
   ListWorkspaceOperationsResponse,
   WorkspaceOperationActionRequest,
   WorkspaceOperationMutationResponse,
+  CreateKnowledgeRequest,
+  KnowledgeMutationResponse,
+  GetKnowledgeResponse,
+  ListKnowledgeResponse,
 } from "@crewon/contracts";
 import { WorkspaceControlClient } from "./workspace-control-client.ts";
 import { readBoundedWorkspaceJson } from "./workspace-response-reader.ts";
@@ -100,6 +104,40 @@ export class ControlApiClient {
     );
     this.#origin = optionalOrigin(config.origin);
     this.#fetch = config.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  createKnowledge(
+    body: CreateKnowledgeRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<KnowledgeMutationResponse> {
+    return this.#json("POST", "/api/v1/knowledge", body, {
+      ...options,
+      idempotencyKey,
+      requireCsrf: true,
+      requireIdempotency: true,
+      expectedStatuses: [200, 201],
+    });
+  }
+  getKnowledge(
+    knowledgeId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetKnowledgeResponse> {
+    return this.#json(
+      "GET",
+      `/api/v1/knowledge/${resourceId(knowledgeId)}`,
+      null,
+      { ...options, expectedStatuses: [200] },
+    );
+  }
+  listKnowledge(
+    query: { cursor?: string | null; limit?: number } = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<ListKnowledgeResponse> {
+    return this.#json("GET", withQuery("/api/v1/knowledge", query), null, {
+      ...options,
+      expectedStatuses: [200],
+    });
   }
 
   getModelProviderSettings(

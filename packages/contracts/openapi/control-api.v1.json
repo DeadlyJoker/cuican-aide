@@ -86,6 +86,101 @@
         }
       }
     },
+    "/api/v1/knowledge": {
+      "get": {
+        "operationId": "listKnowledge",
+        "parameters": [
+          { "$ref": "#/components/parameters/ResourceCursor" },
+          { "$ref": "#/components/parameters/Limit" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scoped Knowledge page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListKnowledgeResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "post": {
+        "operationId": "createKnowledge",
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/RequiredCsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateKnowledgeRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replayed Knowledge record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeMutationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Committed Knowledge record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/KnowledgeMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/knowledge/{knowledgeId}": {
+      "get": {
+        "operationId": "getKnowledge",
+        "parameters": [
+          {
+            "name": "knowledgeId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "minLength": 1, "maxLength": 128 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Scoped Knowledge record",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetKnowledgeResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/api/v1/automations": {
       "get": {
         "operationId": "listAutomations",
@@ -2202,6 +2297,76 @@
             "type": "integer",
             "minimum": 1
           }
+        }
+      },
+      "CreateKnowledgeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["kind", "sourceId", "title", "content"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["memory", "source"] },
+          "sourceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "content": { "type": "string", "minLength": 1, "maxLength": 32768 }
+        }
+      },
+      "KnowledgeView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "knowledgeId",
+          "kind",
+          "sourceId",
+          "title",
+          "content",
+          "contentDigest",
+          "createdAt"
+        ],
+        "properties": {
+          "schemaVersion": { "type": "string", "const": "crewon.knowledge.v0" },
+          "knowledgeId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "kind": { "type": "string", "enum": ["memory", "source"] },
+          "sourceId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "content": { "type": "string", "minLength": 1, "maxLength": 32768 },
+          "contentDigest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+          },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "KnowledgeMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "knowledge"],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "knowledge": { "$ref": "#/components/schemas/KnowledgeView" }
+        }
+      },
+      "GetKnowledgeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["knowledge"],
+        "properties": {
+          "knowledge": { "$ref": "#/components/schemas/KnowledgeView" }
+        }
+      },
+      "ListKnowledgeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "nextCursor"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/KnowledgeView" }
+          },
+          "nextCursor": { "type": ["string", "null"], "maxLength": 512 }
         }
       },
       "AutomationView": {

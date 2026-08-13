@@ -8,6 +8,55 @@ import {
   ControlApiProtocolError,
 } from "./control-api-client.ts";
 
+test("uses typed Knowledge create, read and pagination routes", async () => {
+  const requests: { input: string; init: RequestInit }[] = [];
+  const knowledge = {
+    schemaVersion: "crewon.knowledge.v0" as const,
+    knowledgeId: "knowledge/1",
+    kind: "memory" as const,
+    sourceId: "capture-1",
+    title: "Memory",
+    content: "Text",
+    contentDigest: `sha256:${"a".repeat(64)}`,
+    createdAt: "2026-08-13T00:00:00.000Z",
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    csrfToken: "csrf",
+    fetch: async (input, init = {}) => {
+      requests.push({ input: String(input), init });
+      return jsonResponse(
+        200,
+        String(input).includes("?")
+          ? { data: [knowledge], nextCursor: null }
+          : String(input).endsWith("knowledge%2F1")
+            ? { knowledge }
+            : { disposition: "replayed", knowledge },
+      );
+    },
+  });
+  await client.createKnowledge(
+    { kind: "memory", sourceId: "capture-1", title: "Memory", content: "Text" },
+    "knowledge-key",
+  );
+  await client.getKnowledge("knowledge/1");
+  await client.listKnowledge({ cursor: "cursor", limit: 10 });
+  assert.deepEqual(
+    requests.map(({ input, init }) => [init.method, input]),
+    [
+      ["POST", "https://control.example/api/v1/knowledge"],
+      ["GET", "https://control.example/api/v1/knowledge/knowledge%2F1"],
+      [
+        "GET",
+        "https://control.example/api/v1/knowledge?cursor=cursor&limit=10",
+      ],
+    ],
+  );
+  const headers = new Headers(requests[0]!.init.headers);
+  assert.equal(headers.get("idempotency-key"), "knowledge-key");
+  assert.equal(headers.get("x-csrf-token"), "csrf");
+});
+
 test("reads and probes model provider settings through Control API", async () => {
   const requests: { input: string; init: RequestInit }[] = [];
   const client = new ControlApiClient({
@@ -115,7 +164,9 @@ test("uses typed Control Automation routes with CAS and idempotency", async () =
     ],
   );
   assert.deepEqual(
-    requests.map(({ init }) => new Headers(init.headers).get("idempotency-key")),
+    requests.map(({ init }) =>
+      new Headers(init.headers).get("idempotency-key"),
+    ),
     ["automation-create-1", "automation-run-1"],
   );
   assert.deepEqual(JSON.parse(String(requests[1]?.init.body)), {

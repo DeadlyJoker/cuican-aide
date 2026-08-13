@@ -25,6 +25,15 @@ export type GetAutomationResponse =
   components["schemas"]["GetAutomationResponse"];
 export type ListAutomationsResponse =
   components["schemas"]["ListAutomationsResponse"];
+export type CreateKnowledgeRequest =
+  components["schemas"]["CreateKnowledgeRequest"];
+export type KnowledgeView = components["schemas"]["KnowledgeView"];
+export type KnowledgeMutationResponse =
+  components["schemas"]["KnowledgeMutationResponse"];
+export type GetKnowledgeResponse =
+  components["schemas"]["GetKnowledgeResponse"];
+export type ListKnowledgeResponse =
+  components["schemas"]["ListKnowledgeResponse"];
 export type AutomationInvocationView =
   components["schemas"]["AutomationInvocationView"];
 export type RunAutomationNowResponse =
@@ -144,6 +153,65 @@ const WORKFLOW_VERSION_CURSOR_PREFIX = "crewon.workflow-version.cursor.v1:";
 const THREAD_CURSOR_PREFIX = "crewon.thread.cursor.v1:";
 const THREAD_RUN_CURSOR_PREFIX = "crewon.thread-run.cursor.v1:";
 const AUTOMATION_CURSOR_PREFIX = "crewon.automation.cursor.v1:";
+const KNOWLEDGE_CURSOR_PREFIX = "crewon.knowledge.cursor.v1:";
+
+export function parseCreateKnowledgeRequest(
+  input: unknown,
+): CreateKnowledgeRequest {
+  if (!hasExactKeys(input, ["content", "kind", "sourceId", "title"]))
+    throw new ContractValidationError("create_knowledge_fields_invalid");
+  if (input.kind !== "memory" && input.kind !== "source")
+    throw new ContractValidationError("knowledge_kind_invalid");
+  const sourceId = requireBoundedString(
+    input.sourceId,
+    128,
+    "knowledge_source_id_invalid",
+  );
+  const title = canonicalUtf8(input.title, 256, "knowledge_title_invalid");
+  const content = canonicalUtf8(
+    input.content,
+    32 * 1024,
+    "knowledge_content_invalid",
+  );
+  return { kind: input.kind, sourceId, title, content };
+}
+export function parseKnowledgeId(input: unknown): string {
+  return requireBoundedString(
+    input,
+    MAX_RESOURCE_ID_LENGTH,
+    "knowledge_id_invalid",
+  );
+}
+export function parseKnowledgeListQuery(input: unknown): ResourceListQuery {
+  return parseResourceListQuery(
+    input,
+    KNOWLEDGE_CURSOR_PREFIX,
+    "knowledge_cursor_invalid",
+  );
+}
+export function formatKnowledgeCursor(input: {
+  createdAt: string;
+  knowledgeId: string;
+}): string {
+  return formatResourceCursor(
+    {
+      updatedAt: input.createdAt,
+      resourceId: parseKnowledgeId(input.knowledgeId),
+    },
+    KNOWLEDGE_CURSOR_PREFIX,
+    "knowledge_cursor_invalid",
+  );
+}
+
+function canonicalUtf8(input: unknown, maximum: number, code: string): string {
+  const value = requireBoundedString(input, maximum, code);
+  if (
+    value.normalize("NFC") !== value ||
+    new TextEncoder().encode(value).byteLength > maximum
+  )
+    throw new ContractValidationError(code);
+  return value;
+}
 
 export type MessageListQuery = Readonly<{
   afterSequence: number;

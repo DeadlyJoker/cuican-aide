@@ -60,6 +60,20 @@ const digest = {
     `sha256:${createHash("sha256").update(value).digest("hex")}`,
 };
 
+test("creates, replays, reads and paginates scoped Knowledge over Control HTTP", async (context) => {
+  const control = createStandaloneControlApi(config(temporaryDatabasePath(context)));
+  context.after(() => closeIfListening(control.app));
+  await control.app.listen({ host: "127.0.0.1", port: 0 });
+  const client = new ControlApiClient({ baseUrl: serverBaseUrl(control.app), accessToken: SESSION_TOKEN, csrfToken: CSRF_TOKEN, origin: ORIGIN });
+  const body = { kind: "memory" as const, sourceId: "capture-1", title: "Bounded memory", content: "Remember this." };
+  const created = await client.createKnowledge(body, "knowledge-create-1");
+  const replayed = await client.createKnowledge(body, "knowledge-create-1");
+  assert.equal(created.disposition, "committed");
+  assert.deepEqual(replayed, { ...created, disposition: "replayed" });
+  assert.deepEqual(await client.getKnowledge(created.knowledge.knowledgeId), { knowledge: created.knowledge });
+  assert.deepEqual(await client.listKnowledge({ limit: 1 }), { data: [created.knowledge], nextCursor: null });
+});
+
 test("routes Workflow admission through the canonical SQLite Store", async (context) => {
   const databasePath = temporaryDatabasePath(context);
   await activateSqliteReleaseProcess(databasePath);
