@@ -1,4 +1,14 @@
-import { BookOpen, Cloud, FolderOpen, ListChecks, Paperclip, Plug, Sparkles, Target } from "lucide-react";
+import {
+  BookOpen,
+  Cloud,
+  FolderOpen,
+  ListChecks,
+  Paperclip,
+  Plug,
+  Sparkles,
+  Target,
+  Wrench,
+} from "lucide-react";
 import type { PaletteItemWithCommand } from "./CommandWorkspaceChrome";
 
 export function Palette({
@@ -46,7 +56,10 @@ export function Palette({
             id: "plugins",
             label: "插件",
             items: items.filter(
-              (item) => item.kind === "skill" || item.kind === "mcp",
+              (item) =>
+                item.kind === "skill" ||
+                item.kind === "mcp" ||
+                item.kind === "tool",
             ),
           },
         ].filter((group) => group.items.length > 0)
@@ -73,6 +86,9 @@ export function Palette({
     }
     if (item.kind === "mcp") {
       return <Plug aria-hidden="true" />;
+    }
+    if (item.kind === "tool") {
+      return <Wrench aria-hidden="true" />;
     }
     return <Sparkles aria-hidden="true" />;
   }

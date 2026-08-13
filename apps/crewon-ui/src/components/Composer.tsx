@@ -97,7 +97,7 @@ export function Composer({
             command.meta,
             command.description,
             command.token,
-            command.mention.path,
+            command.mention?.path ?? "",
           ]
             .join(" ")
             .toLowerCase()

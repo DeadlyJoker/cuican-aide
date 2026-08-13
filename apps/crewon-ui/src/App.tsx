@@ -41,7 +41,6 @@ import {
   useAppStateRefsEffect,
   useAppRunTrackingRefs,
   useAppComposerState,
-  useAppSlashCommands,
   useAppWorkspaceStatusState,
   useAppShellRuntimeState,
   useAppTerminalState,
@@ -68,6 +67,7 @@ import {
   type ComposerSlashCommand,
 } from "./lib/composer/composerSlashCommands";
 import type { CapabilityPanelItem } from "./lib/capability/capabilityPanelTypes";
+import { useControlComposerResourceDiscovery } from "./lib/control-runtime/useControlComposerResourceDiscovery";
 import { demoCapabilityPanel, demoSettingsPanel } from "./lib/demo/demoContent";
 import { getDemoThreads } from "./lib/demo/demoData";
 import { persistLocale, translate } from "./lib/i18n";
@@ -212,7 +212,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     setPendingComposerMentions,
     setPendingContextFile,
     setWorkMode,
-    slashCommandRefreshKey,
     workMode,
   } = composerState;
   const t = translate(locale);
@@ -252,14 +251,11 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     ...threadState,
     onError: (message) => setNotice({ text: message, tone: "warning" }),
   });
-  const slashCommands = useAppSlashCommands({
-    client: null,
-    cwd,
-    isConnected,
-    isDemoPreview,
-    refreshKey: slashCommandRefreshKey,
-    ...threadState,
+  const controlComposerResources = useControlComposerResourceDiscovery({
+    client: controlRuntimeConnected ? controlClient : null,
+    connected: controlRuntimeConnected,
   });
+  const slashCommands = controlComposerResources?.slashCommands ?? [];
   const handleComposerSlashCommand = (command: ComposerSlashCommand) => {
     setPendingComposerMentions((mentions) =>
       mentionsWithSlashCommand(mentions, command),

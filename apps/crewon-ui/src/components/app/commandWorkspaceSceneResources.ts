@@ -226,7 +226,9 @@ export function commandSceneSlashItems(
           ? "mcp"
           : command.kind === "skill"
             ? "skill"
-            : "agent",
+            : command.kind === "tool"
+              ? "tool"
+              : "agent",
       label: command.meta,
       title: command.label,
       token: command.token,

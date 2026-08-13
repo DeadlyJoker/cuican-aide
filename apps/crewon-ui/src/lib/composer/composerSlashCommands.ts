@@ -20,7 +20,7 @@ type ComposerSlashCommandClient = {
   listSkills(cwd?: string): Promise<SkillsListResponse>;
 };
 
-export type ComposerSlashCommandKind = "app" | "mcp" | "skill";
+export type ComposerSlashCommandKind = "app" | "mcp" | "skill" | "tool";
 
 export type ComposerSlashCommand = {
   id: string;
@@ -29,7 +29,8 @@ export type ComposerSlashCommand = {
   meta: string;
   description: string;
   token: string;
-  mention: PendingComposerMention;
+  mention?: PendingComposerMention;
+  selection?: "mention" | "promptToken";
   execution?: {
     kind: "localMcpTool";
     serverName: string;
@@ -200,26 +201,30 @@ export function mentionsWithSlashCommand(
   mentions: PendingComposerMention[],
   command: ComposerSlashCommand,
 ): PendingComposerMention[] {
+  const mention = command.mention;
+  if (!mention || command.kind === "tool") {
+    return mentions;
+  }
   if (command.kind === "app") {
     return upsertPendingComposerMention(
       mentions,
       {
-        kind: command.mention.kind,
-        path: command.mention.path,
+        kind: mention.kind,
+        path: mention.path,
         token: command.token,
       },
-      command.mention.name,
+      mention.name,
     );
   }
-  if (mentions.some((mention) => mention.path === command.mention.path)) {
+  if (mentions.some((current) => current.path === mention.path)) {
     return mentions;
   }
   return [
     ...mentions,
     {
-      kind: command.mention.kind,
-      name: command.mention.name,
-      path: command.mention.path,
+      kind: mention.kind,
+      name: mention.name,
+      path: mention.path,
       resourceKind: command.kind,
     },
   ];

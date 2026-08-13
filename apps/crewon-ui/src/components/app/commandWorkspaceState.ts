@@ -28,6 +28,7 @@ export type CommandPaletteKind =
   | "mcp"
   | "project"
   | "skill"
+  | "tool"
   | "workflow"
   | "workspace";
 

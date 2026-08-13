@@ -1239,7 +1239,8 @@ export function CommandWorkspace({
         : []),
       ...contextPaletteItems.filter((item) => item.kind === "knowledge"),
       ...slashPaletteItems.filter(
-        (item) => item.kind === "skill" || item.kind === "mcp",
+        (item) =>
+          item.kind === "skill" || item.kind === "mcp" || item.kind === "tool",
       ),
     ],
     [
@@ -1820,6 +1821,21 @@ export function CommandWorkspace({
   function insertSlashItem(item: PaletteItemWithCommand) {
     const currentValue =
       activeView === "assist" ? assistantComposerValue : composerValue;
+    if (item.command?.selection === "promptToken") {
+      const nextValue = insertTokenIntoComposerValue({
+        prefix: "/",
+        token: item.command.token,
+        value: currentValue,
+      });
+      if (activeView === "assist") {
+        setAssistantComposerValue(nextValue);
+      } else {
+        onChangeComposerValue(nextValue);
+      }
+      closeComposerPalette();
+      focusActiveComposer();
+      return;
+    }
     if (item.command) {
       onSlashCommandSelect?.(item.command);
       if (item.command.kind !== "app") {
