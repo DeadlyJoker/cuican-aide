@@ -1,10 +1,4 @@
-import type { AppServerClient } from "../../app-server/appServer";
 import type { AppView } from "../appRouting";
-import {
-  changeLocalePreferenceAction,
-  syncDesktopPreferenceAction,
-  toggleThemePreferenceAction,
-} from "../appPreferenceActions";
 import type { NoticeState } from "../appRuntimeState";
 import {
   closeLibraryAction,
@@ -24,7 +18,6 @@ import {
   type SettingsSectionRefreshHandlers,
 } from "../../settings/settingsActions";
 import type { SettingsSection } from "../../settings/settingsCatalog";
-import type { Theme } from "../../theme";
 
 type CapabilityPanelSetter = (
   panelOrUpdater:
@@ -49,13 +42,10 @@ export type AppShellActionHandlersParams = {
   appView: AppView;
   capabilityDockOpen: boolean;
   capabilityPanel: CapabilityPanel | null;
-  client: AppServerClient | null;
-  getLocale: () => Locale;
-  isConnected: boolean;
+  commitLocale: (locale: Locale) => void;
+  commitThemeToggle: () => void;
   isDemo: boolean;
   locale: Locale;
-  persistLocale: (locale: Locale) => void;
-  persistTheme: (theme: Theme) => void;
   refreshSettingsHandlers: SettingsSectionRefreshHandlers;
   setAppView: (view: AppView) => void;
   setCapabilityDockOpen: (
@@ -71,10 +61,8 @@ export type AppShellActionHandlersParams = {
       | null
       | ((panel: LibraryPanel | null) => LibraryPanel | null),
   ) => void;
-  setLocale: (locale: Locale) => void;
   setNotice: (notice: NoticeState | null) => void;
   setSettingsSection: (section: SettingsSection) => void;
-  setTheme: (themeOrUpdater: Theme | ((theme: Theme) => Theme)) => void;
   shouldAutoCloseInspector: (
     sidebarOpen: boolean,
     capabilityDockOpen: boolean,
@@ -85,28 +73,12 @@ export type AppShellActionHandlersParams = {
 export function createAppShellActionHandlers(
   params: AppShellActionHandlersParams,
 ): AppShellActionHandlers {
-  const syncDesktopPreference = (keyPath: string, value: string) => {
-    syncDesktopPreferenceAction({
-      client: params.client,
-      isConnected: params.isConnected,
-      keyPath,
-      locale: params.getLocale(),
-      setNotice: params.setNotice,
-      value,
-    });
-  };
-
   const refreshSettingsSection = (section: SettingsSection) =>
     refreshSettingsSectionAction(section, params.refreshSettingsHandlers);
 
   return {
     changeLocale: (nextLocale) => {
-      changeLocalePreferenceAction({
-        nextLocale,
-        persistLocale: params.persistLocale,
-        setLocale: params.setLocale,
-        syncDesktopPreference,
-      });
+      params.commitLocale(nextLocale);
     },
     closeLibrary: () => {
       closeLibraryAction({
@@ -125,7 +97,7 @@ export function createAppShellActionHandlers(
         demoSettingsPanel,
         isDemo: params.isDemo,
         locale: params.locale,
-        refreshDefaultSettingsPanel: params.refreshSettingsHandlers.config,
+        refreshDefaultSettingsPanel: params.refreshSettingsHandlers.appearance,
         setAppView: params.setAppView,
         setCapabilityDockOpen: params.setCapabilityDockOpen,
         setCapabilityPanel: params.setCapabilityPanel,
@@ -166,11 +138,7 @@ export function createAppShellActionHandlers(
       });
     },
     toggleTheme: () => {
-      toggleThemePreferenceAction({
-        persistTheme: params.persistTheme,
-        setTheme: params.setTheme,
-        syncDesktopPreference,
-      });
+      params.commitThemeToggle();
     },
   };
 }

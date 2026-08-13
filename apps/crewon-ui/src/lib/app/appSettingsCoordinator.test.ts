@@ -1,83 +1,173 @@
-import type { Thread } from "@crewon-protocol/v2/Thread";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import type { AppServerClient } from "../app-server/appServer";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
+import { SETTINGS_SECTIONS } from "../settings/settingsCatalog";
 import { createAppSettingsCoordinator } from "./appSettingsCoordinator";
 
-type SetCapabilityPanel = Parameters<
-  typeof createAppSettingsCoordinator
->[0]["setCapabilityPanel"];
+type Params = Parameters<typeof createAppSettingsCoordinator>[0];
+type Client = Params["client"];
 
-function createCoordinator(
-  overrides: {
-    setCapabilityDockOpen?: (open: boolean) => void;
-    setCapabilityPanel?: SetCapabilityPanel;
-  } = {},
-) {
-  return createAppSettingsCoordinator({
-    accountStatus: null,
-    platformUser: null,
-    capabilityPanel: null,
-    client: null as AppServerClient | null,
-    connectionHint: "Disconnected",
-    connectionState: "demo",
-    conversationSummary: null,
-    currentCwd: "/repo",
-    isConnected: false,
-    isDemoPreview: false,
+function createHarness(overrides: Partial<Client> = {}) {
+  let panel: CapabilityPanel | null = null;
+  const setLocale = vi.fn();
+  const setTheme = vi.fn();
+  const persistLocale = vi.fn();
+  const persistTheme = vi.fn();
+  const setNotice = vi.fn();
+  const client: Client = {
+    getAccountSnapshot: vi.fn(async () => ({
+      account: {
+        identity: {
+          actorId: "actor-1",
+          principalId: "principal-1",
+          spaceId: "space-1",
+          tenantId: "tenant-1",
+        },
+        authentication: {
+          authority: "control" as const,
+          status: "authenticated" as const,
+        },
+        rateLimits: {
+          reason: "notOwned" as const,
+          status: "unavailable" as const,
+        },
+        usage: {
+          reason: "notOwned" as const,
+          status: "unavailable" as const,
+        },
+      },
+    })),
+    getLocalSettings: vi.fn(async () => ({
+      settings: {
+        locale: "en" as const,
+        revision: 7,
+        theme: "dark" as const,
+        updatedAt: null,
+      },
+    })),
+    getModelProviderSettings: vi.fn(async () => ({
+      settings: {
+        activeProviderId: null,
+        providers: [],
+        revision: 1,
+        runtimeAvailability: "unconfigured" as const,
+        updatedAt: null,
+      },
+    })),
+    probeModelProvider: vi.fn(),
+    putLocalSettings: vi.fn(async (input) => ({
+      settings: {
+        locale: input.locale,
+        revision: input.expectedRevision + 1,
+        theme: input.theme,
+        updatedAt: null,
+      },
+    })),
+    ...overrides,
+  };
+  const coordinator = createAppSettingsCoordinator({
+    client,
+    credentialStore: null,
+    getCapabilityPanel: () => panel,
     locale: "en",
-    persistLocale: () => {},
-    persistTheme: () => {},
-    resolveBackendCwd: async () => "/repo",
-    selectedThread: null,
-    selectedThreadId: null,
-    setAccountStatus: () => {},
-    setCapabilityDockOpen: overrides.setCapabilityDockOpen ?? (() => {}),
-    setCapabilityPanel: overrides.setCapabilityPanel ?? (() => {}),
-    setLocale: () => {},
-    setTheme: () => {},
-    setThreads: () => {},
-    theme: "dark",
-    threadGoal: null,
-    threads: [] as Thread[],
+    persistLocale,
+    persistTheme,
+    platformUser: null,
+    setCapabilityPanel: (next) => {
+      panel = typeof next === "function" ? next(panel) : next;
+    },
+    setLocale,
+    setNotice,
+    setTheme,
   });
+  return {
+    client,
+    coordinator,
+    panel: () => panel,
+    persistLocale,
+    persistTheme,
+    setLocale,
+    setNotice,
+    setTheme,
+  };
 }
 
-describe("app settings coordinator", () => {
-  it("builds settings refresh adapters and save handlers together", async () => {
-    let dockOpen = false;
-    let panel: CapabilityPanel | null = null;
-    const coordinator = createCoordinator({
-      setCapabilityDockOpen: (open) => {
-        dockOpen = open;
-      },
-      setCapabilityPanel: (nextPanel) => {
-        panel = typeof nextPanel === "function" ? nextPanel(panel) : nextPanel;
-      },
-    });
+describe("Control settings coordinator", () => {
+  it("routes only three sections to Control authorities", async () => {
+    const harness = createHarness();
 
-    coordinator.settingsRefreshHandlers.config();
-    expect(panel).toMatchObject({
-      title: "Config",
-      body: "Unavailable: this setting is not owned by the current Control contract.",
-    });
+    for (const section of SETTINGS_SECTIONS) {
+      await harness.coordinator.refreshSection(section);
+      if (
+        section !== "account" &&
+        section !== "appearance" &&
+        section !== "model-providers"
+      ) {
+        expect(harness.panel()).toMatchObject({
+          body: "Unavailable: this setting is not owned by the current Control contract.",
+        });
+      }
+    }
 
-    await coordinator.openThreadSettingsPanel();
-    expect(dockOpen).toBe(true);
-    expect(panel).toMatchObject({
-      title: "Session settings",
-      error: "Select a session first",
+    expect(harness.client.getAccountSnapshot).toHaveBeenCalledOnce();
+    expect(harness.client.getLocalSettings).toHaveBeenCalledTimes(2);
+    expect(harness.client.getModelProviderSettings).toHaveBeenCalledOnce();
+  });
+
+  it("renders only locale and theme from the Control snapshot", async () => {
+    const harness = createHarness();
+    await harness.coordinator.refreshSection("appearance");
+
+    expect(harness.panel()?.fields).toEqual([
+      expect.objectContaining({ id: "appearance-locale", value: "en" }),
+      expect.objectContaining({ id: "appearance-theme", value: "dark" }),
+    ]);
+  });
+
+  it("uses revision CAS and applies the returned snapshot only after success", async () => {
+    const harness = createHarness();
+    await harness.coordinator.commitField("appearance-locale", "zh");
+
+    expect(harness.client.putLocalSettings).toHaveBeenCalledWith({
+      expectedRevision: 7,
+      locale: "zh",
+      theme: "dark",
     });
-    expect(coordinator.settingsSaveHandlers.config).toEqual(
-      expect.any(Function),
-    );
-    expect(coordinator.settingsSectionRefreshHandlers.config).toEqual(
-      expect.any(Function),
-    );
-    expect(coordinator.controlSettings.availability("appearance")).toEqual({
-      authority: "local-settings",
-      status: "available",
+    expect(harness.setLocale).toHaveBeenCalledWith("zh");
+    expect(harness.setTheme).toHaveBeenCalledWith("dark");
+    expect(harness.persistLocale).toHaveBeenCalledWith("zh");
+    expect(harness.persistTheme).toHaveBeenCalledWith("dark");
+  });
+
+  it("does not apply local state when the Control CAS fails", async () => {
+    const harness = createHarness({
+      putLocalSettings: vi.fn(async () => {
+        throw new Error("revision_conflict");
+      }),
     });
+    await harness.coordinator.commitField("appearance-theme", "light");
+
+    expect(harness.setLocale).not.toHaveBeenCalled();
+    expect(harness.setTheme).not.toHaveBeenCalled();
+    expect(harness.persistLocale).not.toHaveBeenCalled();
+    expect(harness.persistTheme).not.toHaveBeenCalled();
+    expect(harness.panel()).toBeNull();
+    expect(harness.setNotice).toHaveBeenCalledWith(
+      expect.objectContaining({ tone: "warning" }),
+    );
+  });
+
+  it("fails closed for unsupported fields and stale legacy save actions", async () => {
+    const harness = createHarness();
+    await harness.coordinator.commitField("appearance-accent", "#ff0000");
+
+    expect(harness.client.putLocalSettings).not.toHaveBeenCalled();
+    expect(harness.coordinator.handleAction("save-config")).toBe(true);
+    expect(harness.coordinator.handleAction("save-thread-settings")).toBe(
+      true,
+    );
+    expect(harness.setNotice).toHaveBeenCalledWith(
+      expect.objectContaining({ tone: "warning" }),
+    );
   });
 });

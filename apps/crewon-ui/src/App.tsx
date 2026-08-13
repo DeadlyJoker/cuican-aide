@@ -72,7 +72,6 @@ import { demoCapabilityPanel, demoSettingsPanel } from "./lib/demo/demoContent";
 import { getDemoThreads } from "./lib/demo/demoData";
 import { persistLocale, translate } from "./lib/i18n";
 import { persistTheme } from "./lib/theme";
-import { commitSettingsField } from "./lib/settings/settingsFieldCommitHandler";
 import { isSingleConversationThread } from "./lib/thread/threadSourceFilters";
 import { createThreadGoalComposerHandlers } from "./lib/thread/threadGoalComposerActions";
 import type { CommandModelOption } from "./lib/thread/threadRuntimeSettings";
@@ -558,40 +557,22 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   const stopWorkbenchTerminal = () => undefined;
   const writeWorkbenchTerminalInput = () => undefined;
 
-  const {
-    openThreadSettingsPanel,
-    refreshAccountPanel,
-    refreshComputerControlSettingsPanel,
-    refreshEnvironmentSettingsPanel,
-    refreshMcpSettingsPanel,
-    refreshWorktreesSettingsPanel,
-    settingsRefreshHandlers,
-    settingsSaveHandlers,
-    settingsSectionRefreshHandlers,
-  } = createAppSettingsCoordinator({
-    ...workspaceStatus,
-    capabilityPanel,
-    client: null,
-    controlClient,
-    connectionHint: t.connectionHints[threadConnectionState],
-    connectionState: threadConnectionState,
-    currentCwd: cwd,
-    isConnected,
-    isDemoPreview,
+  const settingsCoordinator = createAppSettingsCoordinator({
+    client: controlClient,
+    getCapabilityPanel: () => capabilityPanelRef.current,
     locale,
     platformUser: platformAccount?.user ?? null,
-    resolveBackendCwd,
-    selectedThread,
-    ...threadState,
-    ...chromeState,
     setCapabilityPanel,
     setLocale,
+    setNotice,
     setTheme,
     persistLocale,
     persistTheme,
-    theme,
-    threadGoal: null,
   });
+  const {
+    openThreadSettingsPanel,
+    sectionRefreshHandlers: settingsSectionRefreshHandlers,
+  } = settingsCoordinator;
 
   const {
     changeLocale,
@@ -607,21 +588,23 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     appView,
     ...chromeState,
     capabilityPanel,
-    client: null,
-    getLocale: () => localeRef.current,
-    isConnected,
+    commitLocale: (nextLocale) => {
+      void settingsCoordinator.commitField("appearance-locale", nextLocale);
+    },
+    commitThemeToggle: () => {
+      void settingsCoordinator.commitField(
+        "appearance-theme",
+        theme === "light" ? "dark" : "light",
+      );
+    },
     isDemo,
     locale,
-    persistLocale,
-    persistTheme,
     refreshSettingsHandlers: settingsSectionRefreshHandlers,
     setAppView,
     setCapabilityPanel,
     setLibraryPanel,
-    setLocale,
     setNotice,
     setSettingsSection,
-    setTheme,
     shouldAutoCloseInspector,
   });
   useAppStateRefsEffect([
@@ -649,15 +632,11 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     isDemoPreview,
     locale,
     loadBrowserApps,
+    handleSettingsAction: settingsCoordinator.handleAction,
     openThreadSettingsPanel,
     ...pendingRequests,
     ...composerState,
     readWorkspaceFiles,
-    refreshAccountPanel,
-    refreshComputerControlSettingsPanel,
-    refreshEnvironmentSettingsPanel,
-    refreshMcpSettingsPanel,
-    refreshWorktreesSettingsPanel,
     resolveBackendCwd,
     selectedThread,
     ...threadState,
@@ -665,8 +644,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     setLibraryPanel,
     setThreadGoal: () => undefined,
     setNotice,
-    settingsRefreshHandlers,
-    settingsSaveHandlers,
     terminalCommand,
     terminalProcessId: terminalProcessIdRef.current,
   });
@@ -679,21 +656,9 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     setThreadGoal: workspaceStatus.setThreadGoal,
     threadGoal,
   });
-  const handleSettingsFieldCommit = (fieldId: string, value: string) =>
-    commitSettingsField({
-      client: null,
-      fieldId,
-      isConnected,
-      locale,
-      refreshSettingsSection: (section) => {
-        void refreshSettingsSectionRef.current(section);
-      },
-      setLocale,
-      setNotice,
-      setTheme,
-      settingsSection: () => settingsSectionRef.current,
-      value,
-    });
+  const handleSettingsFieldCommit = (fieldId: string, value: string) => {
+    void settingsCoordinator.commitField(fieldId, value);
+  };
   const handleComposerCapabilityPanelItem = async (
     item: CapabilityPanelItem,
   ) => {

@@ -101,6 +101,23 @@ describe("App Workspace Control composition", () => {
     expect(source).not.toContain("createAppLibraryPanelDispatchCoordinator");
   });
 
+  it("composes Settings from a non-null Control client", () => {
+    const source = readFileSync(
+      new URL("../../App.tsx", import.meta.url),
+      "utf8",
+    );
+    const start = source.indexOf("createAppSettingsCoordinator({");
+    const end = source.indexOf("const {", start);
+    const composition = source.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(composition).toContain("client: controlClient");
+    expect(composition).not.toMatch(
+      /client: null|AppServer|resolveBackendCwd|selectedThread|workspaceStatus/u,
+    );
+  });
+
   it("sources the packaged command target and model catalogs only from Control", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),

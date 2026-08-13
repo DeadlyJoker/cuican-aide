@@ -1,27 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { AppServerClient } from "../../app-server/appServer";
 import type {
   AppShellActionHandlersParams,
 } from "./appShellActionHandlers";
 import { createAppShellActionHandlers } from "./appShellActionHandlers";
 import type { AppView } from "../appRouting";
-import {
-  DESKTOP_LOCALE_KEY_PATH,
-  DESKTOP_THEME_KEY_PATH,
-  type NoticeState,
-} from "../appRuntimeState";
+import type { NoticeState } from "../appRuntimeState";
 import type { CapabilityPanel } from "../../capability/capabilityPanelTypes";
 import type { LibraryPanel } from "../../domain/crewonDomain";
 import type { Locale } from "../../i18n";
 import type { SettingsSectionRefreshHandlers } from "../../settings/settingsActions";
 import type { SettingsSection } from "../../settings/settingsCatalog";
-import type { Theme } from "../../theme";
-
-async function flushAsyncWork() {
-  await Promise.resolve();
-  await Promise.resolve();
-}
 
 function panel(title = "Panel"): CapabilityPanel {
   return {
@@ -74,19 +63,17 @@ function createParams(
   let libraryState: LibraryPanel | null = libraryPanel();
   let locale: Locale = "en";
   let settingsSection: SettingsSection = "account";
-  let theme: Theme = "light";
 
   return {
     appView,
     capabilityDockOpen,
     capabilityPanel,
-    client: null,
-    getLocale: () => locale,
-    isConnected: true,
+    commitLocale: (nextLocale) => {
+      locale = nextLocale;
+    },
+    commitThemeToggle: vi.fn(),
     isDemo: false,
     locale,
-    persistLocale: vi.fn(),
-    persistTheme: vi.fn(),
     refreshSettingsHandlers: refreshHandlers(),
     setAppView: (nextView) => {
       appView = nextView;
@@ -115,18 +102,9 @@ function createParams(
           ? nextPanelOrUpdater(libraryState)
           : nextPanelOrUpdater;
     },
-    setLocale: (nextLocale) => {
-      locale = nextLocale;
-    },
     setNotice: vi.fn(),
     setSettingsSection: (nextSection) => {
       settingsSection = nextSection;
-    },
-    setTheme: (nextThemeOrUpdater) => {
-      theme =
-        typeof nextThemeOrUpdater === "function"
-          ? nextThemeOrUpdater(theme)
-          : nextThemeOrUpdater;
     },
     shouldAutoCloseInspector: () => true,
     sidebarOpen: false,
@@ -135,55 +113,35 @@ function createParams(
 }
 
 describe("app shell action handlers", () => {
-  it("changes locale and syncs the desktop preference through the current client", async () => {
-    const writeConfigBatch = vi.fn(async () => undefined);
-    const persistLocale = vi.fn();
+  it("routes locale changes through the Control commit", () => {
+    const commitLocale = vi.fn();
     const params = createParams({
-      client: { writeConfigBatch } as unknown as AppServerClient,
-      persistLocale,
+      commitLocale,
     });
 
     createAppShellActionHandlers(params).changeLocale("zh");
-    await flushAsyncWork();
 
-    expect(persistLocale).toHaveBeenCalledWith("zh");
-    expect(writeConfigBatch).toHaveBeenCalledWith([
-      {
-        keyPath: DESKTOP_LOCALE_KEY_PATH,
-        mergeStrategy: "upsert",
-        value: "zh",
-      },
-    ]);
+    expect(commitLocale).toHaveBeenCalledWith("zh");
   });
 
-  it("toggles theme and syncs the desktop preference", async () => {
-    const writeConfigBatch = vi.fn(async () => undefined);
-    const persistTheme = vi.fn();
+  it("routes theme changes through the Control commit", () => {
+    const commitThemeToggle = vi.fn();
     const params = createParams({
-      client: { writeConfigBatch } as unknown as AppServerClient,
-      persistTheme,
+      commitThemeToggle,
     });
 
     createAppShellActionHandlers(params).toggleTheme();
-    await flushAsyncWork();
 
-    expect(persistTheme).toHaveBeenCalledWith("dark");
-    expect(writeConfigBatch).toHaveBeenCalledWith([
-      {
-        keyPath: DESKTOP_THEME_KEY_PATH,
-        mergeStrategy: "upsert",
-        value: "dark",
-      },
-    ]);
+    expect(commitThemeToggle).toHaveBeenCalledOnce();
   });
 
-  it("opens settings on the general panel and refreshes live config", () => {
-    const config = vi.fn();
+  it("opens settings on the appearance panel and refreshes Control preferences", () => {
+    const appearance = vi.fn();
     const calls: unknown[] = [];
 
     const handlers = createAppShellActionHandlers(
       createParams({
-        refreshSettingsHandlers: refreshHandlers({ config }),
+        refreshSettingsHandlers: refreshHandlers({ appearance }),
         setAppView: (view) => calls.push({ method: "setAppView", view }),
         setCapabilityDockOpen: (open) =>
           calls.push({ method: "setCapabilityDockOpen", open }),
@@ -196,9 +154,9 @@ describe("app shell action handlers", () => {
 
     handlers.openSettings();
 
-    expect(config).toHaveBeenCalledTimes(1);
+    expect(appearance).toHaveBeenCalledTimes(1);
     expect(calls).toEqual([
-      { method: "setSettingsSection", section: "config" },
+      { method: "setSettingsSection", section: "appearance" },
       { method: "setAppView", view: "settings" },
       { method: "setCapabilityDockOpen", open: false },
       { method: "setInspectorOpen", open: false },
