@@ -352,6 +352,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/offices": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listOffices"];
+    put?: never;
+    post: operations["createOffice"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/offices/{officeVersionId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getOffice"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/offices/{officeVersionId}:runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["startOfficeRun"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/runs": {
     parameters: {
       query?: never;
@@ -709,6 +757,53 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    OfficeMember: {
+      memberId: string;
+      displayName: string;
+      agentVersionId: string;
+    };
+    OfficeExecutionTarget: {
+      targetId: string;
+      agentVersionId: string;
+    };
+    Office: {
+      /** @constant */
+      schemaVersion: "crewon.office-definition.v0";
+      tenantId: string;
+      spaceId: string;
+      officeId: string;
+      officeVersionId: string;
+      revision: number;
+      title: string;
+      members: components["schemas"]["OfficeMember"][];
+      executionTargets: components["schemas"]["OfficeExecutionTarget"][];
+      createdByActorId: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    CreateOfficeRequest: {
+      officeId?: string;
+      expectedRevision: number;
+      title: string;
+      members: components["schemas"]["OfficeMember"][];
+      executionTargets: components["schemas"]["OfficeExecutionTarget"][];
+    };
+    OfficeMutationResponse: {
+      /** @enum {string} */
+      disposition: "created" | "replayed";
+      office: components["schemas"]["Office"];
+    };
+    GetOfficeResponse: {
+      office: components["schemas"]["Office"];
+    };
+    ListOfficesResponse: {
+      data: components["schemas"]["Office"][];
+      nextCursor: string | null;
+    };
+    StartOfficeRunRequest: {
+      targetId: string;
+      threadId: string;
+    };
     HealthResponse: {
       /** @constant */
       status: "ok";
@@ -2880,6 +2975,146 @@ export interface operations {
       401: components["responses"]["Error"];
       403: components["responses"]["Error"];
       404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  listOffices: {
+    parameters: {
+      query?: {
+        cursor?: components["parameters"]["ResourceCursor"];
+        limit?: components["parameters"]["Limit"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Office versions */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListOfficesResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  createOffice: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateOfficeRequest"];
+      };
+    };
+    responses: {
+      /** @description Replayed Office version */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OfficeMutationResponse"];
+        };
+      };
+      /** @description Created Office version */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["OfficeMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getOffice: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        officeVersionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Office version */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetOfficeResponse"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  startOfficeRun: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        officeVersionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StartOfficeRunRequest"];
+      };
+    };
+    responses: {
+      /** @description Replayed canonical Run */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunMutationResponse"];
+        };
+      };
+      /** @description Created canonical Run */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
       500: components["responses"]["Error"];
     };
   };
