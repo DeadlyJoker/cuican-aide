@@ -35,3 +35,7 @@ last tuple. Cross-tenant or cross-space records are never observable.
 
 SQLite and PostgreSQL implement the same `KnowledgeStore` port and conformance suite. PostgreSQL
 verification requires a real `CREWON_TEST_POSTGRES_URL`; absence is reported as an explicit skip.
+
+The CrewON Knowledge Library now reads these records only through the typed Control client. The
+current UI has no real free-form memory capture or delete/reset contract, so those mutations fail
+closed instead of creating placeholder content or calling the legacy app-server.

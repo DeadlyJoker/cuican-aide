@@ -23,6 +23,8 @@ back to the legacy Rust authority.
 | Tool output resources                                        | encrypted Artifact authority                                               | Tool Library validates current-Thread Run `outputRef` values through Control before display       | digest, source Run/Step, scan/sensitivity projection and bounded 50-Run/20-reference lookup                                           |
 | selected Workspace list/read                                 | local TypeScript Runtime Worker                                             | authenticated Control/Worker path; renderer uses typed Workspace client                           | root/symlink/UTF-8 bounds, durable receipts, restart and packaged smoke                                                               |
 | Workflow including Human Gate                                | Control API + canonical Domain Store + TypeScript Runtime Worker            | Workflow start/gate APIs and Run events                                                           | atomic start/fan-out/admission/settlement/gate/reconcile/cancel/terminal convergence on SQLite/PostgreSQL                             |
+| Knowledge records                                            | Control API + canonical Domain Store                                         | Knowledge Library lists bounded memory/source records through the typed Control client             | receipt-first create, strict UTF-8/NFC/digest validation, tenant/space isolation and stable pagination                               |
+| Office definitions and explicit target Runs                  | Control API + canonical Domain Store + canonical Run service                 | Office Library lists immutable versions; execution remains an ordinary AgentVersion-pinned Run     | receipt-first version CAS, published AgentVersion references, scoped pagination and no Office-specific scheduler/runtime             |
 
 The legacy JSON-RPC Goal notifications and pre-send Goal/Plan writes are not
 part of these paths. When Control is configured but unavailable, Thread
@@ -36,8 +38,8 @@ authority fails closed instead of selecting the legacy client.
 | terminal, shell, search, Git and workspace watch             | no packaged legacy connection; these actions are not advertised as migrated                                         | bounded native TypeScript capability ports, cancellation and durable mutation receipts                                 |
 | MCP, plugins, skills, hooks, apps and external agents        | library shows no fabricated catalog and does not fall back                                                          | versioned catalogs plus reviewed Tool admission; mutation requires durable provider receipt/reconcile                  |
 | Agent Platform resources, expert teams and remote workspaces | external-resource/entitlement surfaces remain unavailable                                                           | scoped provider adapters with PIM identity/resource bindings                                                            |
-| Office and expert delegation                                 | Office receives no legacy client whenever Control is configured                                                     | versioned Office projections on unified Run/Step/Attempt; importer remains separate                                    |
-| Knowledge/memory                                             | Knowledge Library explicitly reports that no Control contract exists                                                | durable memory eligibility/records and bounded knowledge queries                                                        |
+| Office expert delegation and automatic orchestration         | Office definitions are readable, but expert aliases, auto-dispatch, scheduler and memory handoff remain unavailable | an explicit product contract on top of canonical Workflow/Run authority; no legacy compatibility layer                 |
+| Knowledge retrieval and lifecycle                           | bounded records are readable; delete/reset, ingestion, embedding and RAG remain unavailable                         | explicit retention/deletion receipts and a bounded retrieval authority                                                 |
 
 ## Hard deletion gate
 
@@ -56,7 +58,8 @@ legacy path can be deleted when all of the following are true:
    bounded pagination/streaming and scope isolation.
 4. Standalone SQLite and Team PostgreSQL migration counts, digests and
    invariants match; rollback is a release/authority pointer operation, not
-   dual-write fallback.
+   dual-write fallback. A suite skipped because no real PostgreSQL URL is
+   configured remains recorded as unverified.
 5. macOS, Windows and Web production packages pass their signed release gates;
    real Identity/PIM and at least one live Provider canary are verified.
 

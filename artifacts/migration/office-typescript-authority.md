@@ -38,6 +38,9 @@ execution projection and authority.
   durable Office provenance is an explicitly uncovered future contract.
 - All operations resolve the authenticated actor first and authorize an
   Office-scoped action before touching authoritative state.
+- The CrewON Office Library lists these immutable versions through the typed
+  Control client. It does not expose a create button until the UI can select at
+  least one real published `AgentVersion` target.
 
 ## Deliberate exclusions
 
