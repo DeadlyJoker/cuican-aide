@@ -21,7 +21,7 @@
   Agent/Office/Tool 读取和允许的 mutation 走 Control；Settings 只公开 Account、Appearance、Model access 三个具有真实 Control
   authority 的页面。语言/主题使用 revision CAS，成功提交后才更新本地状态；旧 Config、Personalization、Thread Settings 和
   Library Office/Agent coordinator 已从 production composition 及源码删除。
-- 2026-08-13 当前 UI 证据：Node 24 TypeScript lint 通过；完整 Vitest `285/285` files、`1814/1814` tests；production build
+- 2026-08-13 当前 UI 证据：Node 24 TypeScript lint 通过；完整 Vitest `281/281` files、`1799/1799` tests；production build
   通过。签名、notarization、updater 凭据和 Windows 实包仍是外部发布边界。
 
 本文下方涉及“下一步接 Rust Device/Gateway/Native dispatcher”或“Rust compatibility 未完成”的段落只保留为历史记录，
