@@ -17,27 +17,33 @@ back to the legacy Rust authority.
 | manual context compaction                                    | Control API + Runtime Worker maintenance Run                               | settings action uses `ControlThreadRuntime.compactThread`; Run SSE owns progress               | receipt-first command replay, Thread/history/active-Run/Goal admission fence, atomic compaction terminal commit on SQLite/PostgreSQL |
 | Thread transcript rollback                                   | append-only Thread event, Model History marker and invalidation read model | settings action uses `ControlThreadRuntime.rollbackThread`; Thread SSE refreshes standard view | receipt-first CAS command, active-Run/Work fences, audit-preserving projection, SQLite/PostgreSQL conformance and Rust/TS fixture    |
 | desktop Provider secret                                      | operating-system credential store through the open-source `keyring` crate  | typed Tauri credential catalog; secret is injected only into the supervised Worker environment | catalog/keyring compensation, real macOS Keychain round trip, active-Run admission fence                                             |
+| Provider settings and probe                                  | Control API + Provider coordinator/Worker                                  | Settings reads the redacted Control snapshot; probe uses the typed Control client               | non-secret contract, runtime availability, idempotent bounded probe and production egress fence                                      |
+| active Agent catalog                                         | immutable AgentVersion release authority                                   | Agent Library reads the active Control catalog                                                   | release/digest admission, active default selection and bounded public projection                                                     |
+| manual-only Automation                                       | Control API + Automation Application/Store                                 | Automation Library lists immutable definitions and `run-now` uses Automation/Thread revision CAS | receipt-first create/run, idempotency, canonical Run binding and explicit absence of scheduling/toggle compatibility                 |
+| Tool output resources                                        | encrypted Artifact authority                                               | Tool Library validates current-Thread Run `outputRef` values through Control before display       | digest, source Run/Step, scan/sensitivity projection and bounded 50-Run/20-reference lookup                                           |
+| selected Workspace list/read                                 | local TypeScript Runtime Worker                                             | authenticated Control/Worker path; renderer uses typed Workspace client                           | root/symlink/UTF-8 bounds, durable receipts, restart and packaged smoke                                                               |
+| Workflow including Human Gate                                | Control API + canonical Domain Store + TypeScript Runtime Worker            | Workflow start/gate APIs and Run events                                                           | atomic start/fan-out/admission/settlement/gate/reconcile/cancel/terminal convergence on SQLite/PostgreSQL                             |
 
 The legacy JSON-RPC Goal notifications and pre-send Goal/Plan writes are not
 part of these paths. When Control is configured but unavailable, Thread
 authority fails closed instead of selecting the legacy client.
 
-## Still using the compatibility sidecar
+## Not migrated and deliberately unavailable under Control
 
-| Capability family                                            | Why the sidecar is still required                                                                                   | Required replacement before deletion                                                                                   |
+| Capability family                                            | Current Control behavior                                                                                            | Required replacement before enabling                                                                                   |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| account/config/model discovery and account-backed providers  | settings and account metadata still use existing app-server RPCs; only desktop secret ownership has moved           | typed non-secret settings/account ports and an actual Control/Worker provider probe                                    |
-| terminal, shell, filesystem, search, Git and workspace watch | renderer workbench actions still call local app-server process capabilities                                         | Device/Native Runtime capability protocol, bounded streaming, cancellation and durable mutation receipts               |
-| MCP, plugins, skills, hooks, apps and external agents        | discovery/configuration remains on the legacy catalog and some execution paths are not yet reconcilable             | versioned catalogs plus reviewed Tool admission; mutation requires durable provider receipt/reconcile                  |
-| Agent Platform resources, expert teams and remote workspaces | these are external-resource and entitlement integrations, not local Run authority                                   | scoped provider adapters with PIM identity/resource bindings and fail-closed availability                              |
-| Workflow, Office, automation and Human Gate surfaces         | legacy definitions and schedulers still serve product UI outside the new single-Run slice                           | versioned Workflow/Office projections on unified Run/Step/Attempt and a one-time importer; remove duplicate schedulers |
-| memory and remaining Thread settings                         | memory mode and remaining settings still call legacy session/config methods even though main Thread authority moved | durable memory eligibility/records; explicit import-only tools retain provenance                                       |
-| desktop packaging bootstrap                                  | the application bundle still stages and starts `crewon-app-server` for the families above                           | zero renderer production calls, startup without the binary, migration/import tool separated from normal runtime        |
+| account and remaining config                                 | no packaged legacy connection; unsupported panels fail closed                                                       | typed account/config queries with an explicit durable owner                                                             |
+| terminal, shell, search, Git and workspace watch             | no packaged legacy connection; these actions are not advertised as migrated                                         | bounded native TypeScript capability ports, cancellation and durable mutation receipts                                 |
+| MCP, plugins, skills, hooks, apps and external agents        | library shows no fabricated catalog and does not fall back                                                          | versioned catalogs plus reviewed Tool admission; mutation requires durable provider receipt/reconcile                  |
+| Agent Platform resources, expert teams and remote workspaces | external-resource/entitlement surfaces remain unavailable                                                           | scoped provider adapters with PIM identity/resource bindings                                                            |
+| Office and expert delegation                                 | Office receives no legacy client whenever Control is configured                                                     | versioned Office projections on unified Run/Step/Attempt; importer remains separate                                    |
+| Knowledge/memory                                             | Knowledge Library explicitly reports that no Control contract exists                                                | durable memory eligibility/records and bounded knowledge queries                                                        |
 
 ## Hard deletion gate
 
-The legacy app-server can leave the PC/Web product package only when all of the
-following are true:
+The legacy Rust app-server and Device binaries have already left the packaged
+desktop runtime. The remaining renderer source and explicit development-only
+legacy path can be deleted when all of the following are true:
 
 1. A source scan and production composition test show zero renderer business
    calls to the legacy client. Import-only tooling is a separate executable and
@@ -54,6 +60,6 @@ following are true:
 5. macOS, Windows and Web production packages pass their signed release gates;
    real Identity/PIM and at least one live Provider canary are verified.
 
-Until those gates pass, the sidecar is a compatibility dependency for the
-listed peripheral families. It is not the authority for the already-cut-over
-Thread/Run/Goal/Plan path.
+Until those gates pass, the residual source is not a compatibility promise:
+packaged Control paths fail closed for unavailable families and never start or
+select the Rust app-server.
