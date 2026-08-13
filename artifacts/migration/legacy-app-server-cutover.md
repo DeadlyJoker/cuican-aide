@@ -33,7 +33,7 @@ actually requires it.
 | device-local locale and appearance settings                  | standalone Control API + atomic SQLite settings snapshot                   | Account/Appearance panels use the typed Control client; startup hydrates renderer state from Control | strict generated contract, CSRF mutation, revision CAS, cross-connection concurrency and stable 409/503 failures                     |
 | manual-only Automation                                       | Control API + Automation Application/Store                                 | Automation Library lists immutable definitions and `run-now` uses Automation/Thread revision CAS     | receipt-first create/run, idempotency, canonical Run binding and explicit absence of scheduling/toggle compatibility                 |
 | Tool output resources                                        | encrypted Artifact authority                                               | Tool Library validates current-Thread Run `outputRef` values through Control before display          | digest, source Run/Step, scan/sensitivity projection and bounded 50-Run/20-reference lookup                                          |
-| selected Workspace list/read                                 | local TypeScript Runtime Worker                                            | authenticated Control/Worker path; renderer uses typed Workspace client                              | root/symlink/UTF-8 bounds, durable receipts, restart and packaged smoke                                                              |
+| selected Workspace list/read/search/Git status               | local TypeScript Runtime Worker                                            | authenticated Control/Worker path; renderer exposes only bounded Search and Git status tools          | root/symlink/UTF-8 bounds, durable receipts, bounded read-only operations, restart and packaged smoke                                 |
 | Workflow including Human Gate                                | Control API + canonical Domain Store + TypeScript Runtime Worker           | Workflow start/gate APIs and Run events                                                              | atomic start/fan-out/admission/settlement/gate/reconcile/cancel/terminal convergence on SQLite/PostgreSQL                            |
 | Knowledge records                                            | Control API + canonical Domain Store                                       | Knowledge Library lists bounded memory/source records through the typed Control client               | receipt-first create, strict UTF-8/NFC/digest validation, tenant/space isolation and stable pagination                               |
 | Office definitions and explicit target Runs                  | Control API + canonical Domain Store + canonical Run service               | Office Library lists immutable versions; execution remains an ordinary AgentVersion-pinned Run       | receipt-first version CAS, published AgentVersion references, scoped pagination and no Office-specific scheduler/runtime             |
@@ -67,11 +67,13 @@ immutable bound model. Empty or unavailable catalogs disable submission instead
 of falling back to a fabricated model, Team, Agent Platform target, or legacy
 App Server client.
 
-The normal renderer composition no longer constructs, connects or reconnects a
-legacy App Server client. Legacy connection effects, event coordinators and
-runtime-authority selectors were deleted. Residual feature-specific handlers
-that have not yet moved to Control receive no client and fail closed; they are
-source-deletion work, not a fallback path or compatibility commitment.
+The renderer source no longer contains the legacy App Server transport.
+`AppServerClient`, its WebSocket principal-session bootstrap, the Backend
+Workspace bridge, connection effects, event coordinators and runtime-authority
+selectors were deleted. Active thread-list and timeout effects depend on small
+named Control ports instead of borrowing App Server types. Unsupported product
+entries were removed; there is no null-client compatibility composition left to
+keep alive.
 
 The default development entry point is also Control-only. `pnpm crewon:dev`
 builds only the permitted process guardian, stages Node 24 and the TypeScript
@@ -91,6 +93,30 @@ Office pagination uses the OpenAPI `cursor` parameter end to end. The obsolete
 `before` query is rejected instead of accepted as a compatibility alias;
 pagination is bounded to five pages/500 records and visibly reports truncation.
 
+The Command Workspace capability drawer now exposes only two operations with a
+real Control authority: bounded Workspace search and Git status. Review,
+Terminal, Browser, Files, Apps/Plugins and Side Chat launchers were removed
+instead of retaining warning-only or no-op callbacks. The generic pushed-panel
+surface remains available for actionable Control requests, but rejects legacy
+terminal panels and no longer advertises an App Server tool launcher.
+
+The renderer also has one Workspace UI authority rather than a
+`control | legacy` selector. Historical `?view=office` links are no longer
+rewritten into the Team shell, no local `cwd` is injected into new threads, and
+the old Workspace handler, workbench browser/files/review/terminal surfaces,
+terminal action dispatcher and terminal state/output chain have been deleted.
+Three unused Agent Platform App Server RPCs (`auth`, `agent/info` and
+`workflow/execute`) were removed with their compatibility-only tests.
+
+Import-graph deletion then removed the remaining unreachable renderer
+subtrees: legacy notification and server-request handling, provider resources,
+Settings refresh adapters, App Library/Domain handlers, the old Domain and
+Office runtime, Activity Board, browser/file/review/terminal workbench surfaces,
+and their compatibility-only tests. The canonical Control Office room, Control
+Library, Workflow UI and Workspace read-only tools remain. Across this cutover
+stage, roughly 190 files changed and more than 49,000 lines of unreachable
+compatibility source and tests were deleted.
+
 A fresh renderer build and the Tauri bundle manifest are now guarded together:
 the production bundle contains no `AppServerClient`, WebSocket/6176 transport,
 Rust Device/App Server or Device Gateway marker, while the packaged executable
@@ -103,34 +129,28 @@ product as an App Server client.
 | Capability family                                            | Current Control behavior                                                                                            | Required replacement before enabling                                                                   |
 | ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | account identity, usage and remaining config                 | locale/theme settings are migrated; identity, usage and unsupported panels fail closed                              | typed account/config queries with an explicit durable owner                                            |
-| terminal, shell and workspace watch                          | no packaged legacy connection; these actions are not advertised as migrated                                         | bounded native TypeScript capability ports, cancellation and durable mutation receipts                 |
-| workspace content search and Git status UI                   | bounded Control/Worker read-only APIs exist, but no renderer surface is advertised yet                              | wire the typed client into the workspace UI; mutations still require durable receipts                  |
+| terminal, shell and workspace watch                          | no packaged legacy connection or renderer launcher; the old terminal action/workbench source has been deleted       | bounded native TypeScript capability ports, cancellation and durable mutation receipts                 |
 | MCP, plugins, skills, hooks, apps and external agents        | library shows no fabricated catalog and does not fall back                                                          | versioned catalogs plus reviewed Tool admission; mutation requires durable provider receipt/reconcile  |
 | Agent Platform resources, expert teams and remote workspaces | external-resource/entitlement surfaces remain unavailable                                                           | scoped provider adapters with PIM identity/resource bindings                                           |
 | Office expert delegation and automatic orchestration         | Office definitions are readable, but expert aliases, auto-dispatch, scheduler and memory handoff remain unavailable | an explicit product contract on top of canonical Workflow/Run authority; no legacy compatibility layer |
 | Knowledge retrieval and lifecycle                            | bounded records are readable; delete/reset, ingestion, embedding and RAG remain unavailable                         | explicit retention/deletion receipts and a bounded retrieval authority                                 |
 
-## Dead compatibility deletion gate
+## Renderer compatibility deletion result
 
 The legacy Rust app-server and Device binaries have already left the packaged
 desktop runtime. They are not migration fallbacks or compatibility targets.
-Remaining renderer compatibility source may be deleted as soon as all of the
-following are true for the affected surface:
+The renderer deletion gate is now closed:
 
-1. A source scan and production composition test show zero renderer business
-   calls to the legacy client. Import-only tooling is a separate executable and
-   cannot be selected by normal runtime routing.
-2. The replacement Control/Worker path has the required durable semantics, or
-   the product entry point is removed/explicitly unavailable. An unavailable
-   capability does not justify retaining a dormant App Server implementation.
-3. Control/Worker/Native Runtime start and recover without the legacy process or
-   its database. Removing an old binary cannot silently reduce an advertised
-   capability.
-4. Standalone SQLite and Team PostgreSQL satisfy the canonical TypeScript
-   transaction invariants for every enabled mutation. A suite skipped because
-   no real PostgreSQL URL is configured remains recorded as unverified.
+1. Production composition and fresh bundle scans contain no App Server client,
+   WebSocket transport, port 6176, Device or Gateway marker.
+2. `apps/crewon-ui/src` contains no `app-server/appServer` import,
+   `AppServerClient`, principal-session transport or `ws://app-server` endpoint.
+3. Every advertised replacement uses its Control/Worker authority; unavailable
+   capabilities have no launcher rather than a dormant compatibility handler.
+4. Control/Worker/Native Runtime start and recover without the legacy process or
+   database, and W01 transaction acceptance remains the authority for enabled
+   Workflow mutations.
 
 Release signing, notarization and platform canaries remain release gates, but
-they do not block deleting unreachable compatibility source. Until an affected
-source-deletion gate passes, packaged Control paths still fail closed and never
-start or select the Rust app-server.
+they are not Rust Runtime compatibility work and did not block this source
+deletion. Packaged Control paths never start or select the Rust app-server.
