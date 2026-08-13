@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   assertNode24Version,
@@ -41,4 +44,29 @@ test("release staging binds the distributable runtime to target and digest", () 
     () => assertReleaseNodeMetadata({ ...input, distributable: undefined }),
     /CREWON_NODE_DISTRIBUTABLE=1/u,
   );
+});
+
+test("desktop bundle contains only the Tauri shell and TypeScript runtime", () => {
+  const root = dirname(dirname(fileURLToPath(import.meta.url)));
+  const config = JSON.parse(
+    readFileSync(join(root, "apps/crewon-ui/src-tauri/tauri.conf.json"), "utf8"),
+  );
+  assert.deepEqual(config.bundle.externalBin, [
+    "binaries/crewon-process-guardian",
+    "binaries/crewon-node",
+  ]);
+  assert.deepEqual(config.bundle.resources, [
+    "binaries/runtime/control-api.mjs",
+    "binaries/runtime/provider-settings-coordinator.mjs",
+    "binaries/runtime/runtime-release.mjs",
+    "binaries/runtime/runtime-worker.mjs",
+  ]);
+  const manifest = JSON.stringify(config.bundle);
+  for (const removedRuntime of [
+    "crewon-app-server",
+    "crewon-device-runtime",
+    "device-gateway",
+  ]) {
+    assert.equal(manifest.includes(removedRuntime), false);
+  }
 });
