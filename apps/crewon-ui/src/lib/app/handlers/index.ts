@@ -1,6 +1,5 @@
 export * from "./appCapabilityPanelHandlers";
 export * from "./appDomainActionHandlers";
-export * from "./appDomainBackendHandlers";
 export * from "./appLibraryItemOpenHandlers";
 export * from "./appLibraryOpenHandlers";
 export * from "./appLibraryPanelActionHandlers";

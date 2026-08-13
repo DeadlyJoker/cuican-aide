@@ -19,7 +19,6 @@ export {
 } from "./effects";
 export { shouldAutoCloseInspector, shouldAutoCloseSidebar } from "./appUiState";
 export { isCommandShellHash, shouldRenderCommandShellView } from "./appRouting";
-export { createAppDomainBackendCoordinator } from "./appDomainBackendCoordinator";
 export { createAppCommandShellHandlers } from "./appCommandShellHandlers";
 export {
   assistantThreadRuntimeState,

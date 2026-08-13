@@ -20,7 +20,6 @@ import {
 } from "./lib/shared/rpcErrors";
 import {
   createAppCapabilityPanelHandlers,
-  createAppDomainBackendCoordinator,
   createAppCommandShellHandlers,
   createAppSettingsCoordinator,
   createAppShellActionHandlers,
@@ -345,14 +344,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       : "",
   });
 
-  const { resolveBackendCwd } = createAppDomainBackendCoordinator({
-    client: null,
-    currentCwd: cwd,
-    isConnected,
-    isDemoPreview,
-    locale,
-    ...threadState,
-  });
+  const resolveBackendCwd = async () => cwd;
   const openLibrary = async (kind: LibraryKind) => {
     const requestId = libraryLoadRequestRef.current + 1;
     libraryLoadRequestRef.current = requestId;
