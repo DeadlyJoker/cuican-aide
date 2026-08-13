@@ -2,11 +2,11 @@ import { useMemo } from "react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
 import type { ConnectionState } from "./appRuntimeState";
+import { threadTitle } from "../thread/threadModel";
 import {
   isPlaceholderBackendCwd,
   preferredBackendCwd,
-} from "../backend/backendWorkspace";
-import { threadTitle } from "../thread/threadModel";
+} from "../thread/workspaceCwd";
 
 export type AppThreadSelectionParams = {
   activeTurnByThread: Record<string, string>;

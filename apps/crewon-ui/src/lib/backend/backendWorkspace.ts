@@ -2,6 +2,10 @@ import type { Thread } from "@crewon-protocol/v2/Thread";
 
 import type { AppServerClient } from "../app-server/appServer";
 import type { Locale } from "../i18n";
+import {
+  isPlaceholderBackendCwd,
+  preferredBackendCwd,
+} from "../thread/workspaceCwd";
 
 export type BackendWorkspace = {
   client: AppServerClient;
@@ -20,10 +24,6 @@ export type BackendWorkspaceParams<TFallback> = {
 };
 
 export type BackendDomainThreadSource = "agent" | "automation";
-
-export function isPlaceholderBackendCwd(cwd: string | null | undefined): boolean {
-  return Boolean(cwd?.includes("/Users/me/"));
-}
 
 export function localAppServerUnavailableMessage(locale: Locale): string {
   return locale === "zh"
@@ -51,36 +51,6 @@ export function requireAppServerClient(
     throw new Error(localAppServerUnavailableMessage(locale));
   }
   return client;
-}
-
-export function preferredBackendCwd(
-  currentCwd: string | null | undefined,
-  backendThreads: BackendThreadCwd[],
-): string {
-  const trimmedCurrentCwd = currentCwd?.trim() ?? "";
-  if (trimmedCurrentCwd && !isPlaceholderBackendCwd(trimmedCurrentCwd)) {
-    return trimmedCurrentCwd;
-  }
-
-  return (
-    backendThreads
-      .map((thread) => thread.cwd)
-      .find((threadCwd) => threadCwd && !isPlaceholderBackendCwd(threadCwd)) ??
-    configuredBackendCwd() ??
-    ""
-  );
-}
-
-export function configuredBackendCwd(): string | null {
-  const urlCwd =
-    typeof window === "undefined"
-      ? null
-      : new URLSearchParams(window.location.search).get("cwd")?.trim();
-  if (urlCwd) {
-    return urlCwd;
-  }
-
-  return import.meta.env.VITE_CREWON_DEFAULT_CWD?.trim() || null;
 }
 
 export async function resolvePreferredBackendCwd(params: {

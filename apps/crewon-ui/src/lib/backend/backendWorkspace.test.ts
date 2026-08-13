@@ -5,9 +5,7 @@ import {
   automationWorkspaceUnavailableMessage,
   boundThreadWorkspaceUnavailableMessage,
   createBackendWorkspaceAccess,
-  isPlaceholderBackendCwd,
   localAppServerUnavailableMessage,
-  preferredBackendCwd,
   requireAppServerClient,
   requireBackendWorkspace,
   resolveBackendWorkspace,
@@ -21,13 +19,6 @@ function client(overrides: Partial<AppServerClient> = {}): AppServerClient {
 }
 
 describe("backend workspace helpers", () => {
-  it("identifies placeholder demo cwd values", () => {
-    expect(isPlaceholderBackendCwd("/Users/me/work/crewon")).toBe(true);
-    expect(isPlaceholderBackendCwd("/repo")).toBe(false);
-    expect(isPlaceholderBackendCwd("")).toBe(false);
-    expect(isPlaceholderBackendCwd(null)).toBe(false);
-  });
-
   it("formats local app-server unavailable messages", () => {
     expect(localAppServerUnavailableMessage("en")).toBe(
       "Local app-server is not connected",
@@ -60,23 +51,6 @@ describe("backend workspace helpers", () => {
     expect(() => requireAppServerClient(undefined, "zh")).toThrow(
       "未连接本地 app-server",
     );
-  });
-
-  it("prefers a real current cwd over backend thread cwd values", () => {
-    expect(
-      preferredBackendCwd(" /repo/current ", [
-        { cwd: "/repo/other" },
-      ] as Array<{ cwd: string | null }>),
-    ).toBe("/repo/current");
-  });
-
-  it("falls back to the first real backend thread cwd", () => {
-    expect(
-      preferredBackendCwd("/Users/me/work/crewon", [
-        { cwd: "/Users/me/demo" },
-        { cwd: "/repo/backend" },
-      ] as Array<{ cwd: string | null }>),
-    ).toBe("/repo/backend");
   });
 
   it("resolves preferred backend cwd without listing threads when current cwd is real", async () => {
