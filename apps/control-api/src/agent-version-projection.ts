@@ -3,7 +3,7 @@ import {
   type CompiledAgentVersion,
 } from "@crewon/agent-version";
 import type { AgentVersionAsset, ContentDigester } from "@crewon/application";
-import type { AgentVersionView } from "@crewon/contracts";
+import type { AgentVersionView } from "@crewon/contracts/runtime";
 
 export function projectAgentVersion(
   asset: AgentVersionAsset,

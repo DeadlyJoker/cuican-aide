@@ -23,7 +23,7 @@ import {
   type WorkspaceOperationListQuery,
   type WorkspaceOperationMutationResponse,
   type WorkspaceOperationView,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 
 export function projectWorkspaceOperation(
   input: WorkspaceOperationRecord,

@@ -1,9 +1,9 @@
 import {
   WorkspaceReadFileApplicationService,
   type ContentDigester,
+  type WorkspaceReadFileAuthorityPort,
   type WorkspaceReadFileStore,
 } from "@crewon/application";
-import type { DeviceCommandSignerPort } from "@crewon/device-dispatch";
 import {
   CompositeToolRuntime,
   InMemoryToolBroker,
@@ -17,19 +17,19 @@ import {
   type RuntimeWorkspaceReadAuthorityStorePort,
 } from "./runtime-workspace-read-application-adapter.ts";
 import { RuntimeWorkspaceReadFileCommandService } from "./runtime-workspace-read-file-command-service.ts";
-import type { RuntimeWorkspaceReadGatewayClientPort } from "./runtime-workspace-read-gateway-client.ts";
 import { WorkspaceReadToolRuntime } from "./runtime-workspace-read-tool-runtime.ts";
 
 export type NativeWorkspaceReadCatalog = "disabled" | "enabled";
 
 export type RuntimeWorkspaceReadFileConfig = Readonly<{
-  signer: DeviceCommandSignerPort;
-  gateway: RuntimeWorkspaceReadGatewayClientPort;
+  workspace: WorkspaceReadFileAuthorityPort &
+    Readonly<{ close(): Promise<void> }>;
 }>;
 
-export type RuntimeWorkspaceReadCompositionStorePort =
-  ConstructorParameters<typeof StoreBackedRuntimeWorkspaceAuthority>[0]["store"] &
-    RuntimeWorkspaceReadAuthorityStorePort;
+export type RuntimeWorkspaceReadCompositionStorePort = ConstructorParameters<
+  typeof StoreBackedRuntimeWorkspaceAuthority
+>[0]["store"] &
+  RuntimeWorkspaceReadAuthorityStorePort;
 
 /** Validates that immutable release metadata and private execution authority agree. */
 export function validateRuntimeWorkspaceReadComposition(input: {
@@ -58,7 +58,10 @@ export function createRuntimeWorkspaceReadToolRuntime(input: {
   if (input.readFile === undefined) {
     return input.configuredRuntime ?? new InMemoryToolBroker();
   }
-  if (input.deployment === undefined || input.workspaceReadStore === undefined) {
+  if (
+    input.deployment === undefined ||
+    input.workspaceReadStore === undefined
+  ) {
     throw new Error("runtime_workspace_read_configuration_incomplete");
   }
   const bindings = new StoreBackedRuntimeWorkspaceAuthority({
@@ -69,14 +72,12 @@ export function createRuntimeWorkspaceReadToolRuntime(input: {
     store: input.workspaceReadStore,
     commands: new RuntimeWorkspaceReadFileCommandService({
       bindings,
-      signer: input.readFile.signer,
       digester: input.digester,
     }),
-    gateway: input.readFile.gateway,
+    authority: input.readFile.workspace,
   });
   const runtime = new WorkspaceReadToolRuntime({
     binding: {
-      deviceBindingId: input.deployment.deviceBindingId,
       workspaceBindingId: input.deployment.workspaceBindingId,
       policySnapshotId: input.deployment.policySnapshotId,
     },

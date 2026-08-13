@@ -135,7 +135,7 @@ import {
   type OfficeMutationResponse,
   type GetOfficeResponse,
   type ListOfficesResponse,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 import Fastify, { type FastifyInstance } from "fastify";
 
 import { projectCapabilities } from "./capability-projection.ts";

@@ -1,4 +1,7 @@
-import type { ProviderCheckpoint, RateLimitSnapshot } from "@crewon/contracts";
+import type {
+  ProviderCheckpoint,
+  RateLimitSnapshot,
+} from "@crewon/contracts/runtime";
 import type { ToolCallKind, ToolDefinition } from "@crewon/tool-broker";
 import type { AgentHistoryItem } from "./agent-kernel-port.ts";
 import type { ModelRequestDispatchEvidence } from "./model-request-evidence.ts";

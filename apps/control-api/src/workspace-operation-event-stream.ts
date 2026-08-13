@@ -8,7 +8,7 @@ import type {
 import {
   isWorkspaceOperationTerminal,
   type WorkspaceOperationEventView,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
 import {

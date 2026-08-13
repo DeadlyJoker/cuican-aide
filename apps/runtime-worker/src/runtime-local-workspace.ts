@@ -3,53 +3,44 @@ import { constants } from "node:fs";
 import { lstat, open, readdir, realpath } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
 
-import {
-  canonicalDeviceFilesystemReadCommandDigest,
-  parseDeviceFilesystemReadCommand,
-  parseDeviceWorkspaceListCommand,
-  type DeviceFilesystemReadCommand,
-  type DeviceFilesystemReadDispatchReference,
-  type DeviceFilesystemReadDispatchResolution,
-  type DeviceFilesystemReadRouteIntent,
-  type DeviceWorkspaceListCommand,
-  type DeviceWorkspaceListDispatchReference,
-  type DeviceWorkspaceListDispatchResolution,
-} from "@crewon/contracts";
-import {
-  DeviceWorkspaceListDispatchClientError,
-  type DeviceWorkspaceListDispatchClientPort,
-} from "@crewon/device-dispatch";
-
-import {
-  RuntimeWorkspaceReadGatewayClientError,
-  type RuntimeWorkspaceReadGatewayClientPort,
-} from "./runtime-workspace-read-gateway-client.ts";
+import type {
+  WorkspaceDeliveryLease,
+  WorkspaceListDispatcherPort,
+  WorkspaceListResolution,
+  WorkspaceOperationRecord,
+  WorkspaceReadFileAuthorityPort,
+  WorkspaceReadFileResolution,
+  FrozenWorkspaceReadFileDispatch,
+} from "@crewon/application";
+import { RuntimeWorkspaceError } from "./runtime-workspace-error.ts";
 
 type Authority = Readonly<{
   workspaceBindingId: string;
   incarnationId: string;
-  deviceBindingId: string;
-  deviceId: string;
   runtimeBindingId: string;
 }>;
 
 /** Executes the packaged desktop's selected local Workspace without a native sidecar. */
 export class LocalWorkspaceListDispatchClient
-  implements DeviceWorkspaceListDispatchClientPort
+  implements WorkspaceListDispatcherPort
 {
   readonly #root: string;
   readonly #authority: Authority;
-  readonly #receipts = new Map<string, DeviceWorkspaceListDispatchResolution>();
+  readonly #receipts = new Map<string, WorkspaceListResolution>();
 
   constructor(config: { root: string; authority: Authority }) {
     this.#root = requireAbsoluteRoot(config.root);
     this.#authority = config.authority;
   }
 
-  async execute(commandInput: DeviceWorkspaceListCommand, signal: AbortSignal) {
-    const command = parseDeviceWorkspaceListCommand(commandInput);
+  async execute(
+    operation: WorkspaceOperationRecord,
+    lease: WorkspaceDeliveryLease,
+    signal: AbortSignal,
+  ) {
+    const command = operation.command;
     this.#assertAuthority(command);
-    requireActiveList(signal, command.expiresAt);
+    requireActiveList(signal, lease.expiresAt);
     const prior = this.#receipts.get(command.executionId);
     if (prior !== undefined) return structuredClone(prior);
     const directory = await readdir(this.#root, { withFileTypes: true });
@@ -78,135 +69,107 @@ export class LocalWorkspaceListDispatchClient
         kind: entry.isDirectory() ? ("directory" as const) : ("file" as const),
       };
     });
-    entries.sort((left, right) => Buffer.compare(left.nameBytes, right.nameBytes));
+    entries.sort((left, right) =>
+      Buffer.compare(left.nameBytes, right.nameBytes),
+    );
     const truncated = entries.length > command.limits.maxEntries;
     const result = {
-      schemaVersion: "crewon.workspace-list-result.v0" as const,
       executionId: command.executionId,
       actionDigest: command.actionDigest,
       commandDigest: command.commandDigest,
-      entries: entries.slice(0, command.limits.maxEntries).map(({ name, kind }) => ({
-        name,
-        kind,
-      })),
+      entries: entries
+        .slice(0, command.limits.maxEntries)
+        .map(({ name, kind }) => ({
+          name,
+          kind,
+        })),
       truncated,
     };
-    if (Buffer.byteLength(JSON.stringify(result)) > command.limits.maxOutputBytes)
+    if (
+      Buffer.byteLength(JSON.stringify(result)) > command.limits.maxOutputBytes
+    )
       throw listError("workspace_list_result_too_large", "notSent");
-    const receiptId = `local-list:${command.executionId}`;
-    const resolution: DeviceWorkspaceListDispatchResolution = {
+    const providerReceiptId = `local-list:${command.executionId}`;
+    const resolution: WorkspaceListResolution = {
       status: "completed",
       executionId: command.executionId,
-      receiptId,
-      terminal: {
-        schemaVersion: "crewon.device-workspace-list-event.v0",
-        protocolVersion: 1,
-        commandKind: "workspaceList",
-        deviceId: command.deviceId,
-        executionId: command.executionId,
-        receiptId,
-        connectionEpoch: 1,
-        workspaceBindingId: command.workspaceBindingId,
-        incarnationId: command.incarnationId,
-        deviceBindingId: command.deviceBindingId,
-        runtimeBindingId: command.runtimeBindingId,
-        actionDigest: command.actionDigest,
-        commandDigest: command.commandDigest,
-        sequence: 2,
-        observedAt: new Date().toISOString(),
-        type: "workspace_list.completed",
-        data: { result },
-      },
+      actionDigest: command.actionDigest,
+      commandDigest: command.commandDigest,
+      providerReceiptId,
+      entries: result.entries,
+      truncated: result.truncated,
     };
     this.#receipts.set(command.executionId, resolution);
     return structuredClone(resolution);
   }
 
-  async reconcile(reference: DeviceWorkspaceListDispatchReference) {
+  async reconcile(
+    operation: WorkspaceOperationRecord,
+    _lease: WorkspaceDeliveryLease,
+    _signal: AbortSignal,
+  ) {
     return structuredClone(
-      this.#receipts.get(reference.executionId) ?? unknownList(reference),
+      this.#receipts.get(operation.executionId) ?? unknownList(operation),
     );
   }
 
-  async cancel(reference: DeviceWorkspaceListDispatchReference) {
-    return this.reconcile(reference);
+  async cancel(
+    operation: WorkspaceOperationRecord,
+    lease: WorkspaceDeliveryLease,
+    signal: AbortSignal,
+  ) {
+    return this.reconcile(operation, lease, signal);
   }
 
   async close(): Promise<void> {}
 
-  #assertAuthority(command: DeviceWorkspaceListCommand) {
+  #assertAuthority(command: WorkspaceOperationRecord["command"]) {
     if (
       command.workspaceBindingId !== this.#authority.workspaceBindingId ||
       command.incarnationId !== this.#authority.incarnationId ||
-      command.deviceBindingId !== this.#authority.deviceBindingId ||
-      command.deviceId !== this.#authority.deviceId ||
       command.runtimeBindingId !== this.#authority.runtimeBindingId
     )
       throw listError("runtime_workspace_binding_invalid", "notSent");
   }
 }
 
-/** Executes the packaged read_file capability against the same frozen root. */
-export class LocalWorkspaceReadGatewayClient
-  implements RuntimeWorkspaceReadGatewayClientPort
+/** Executes the packaged read_file capability directly against the frozen root. */
+export class LocalWorkspaceReadAuthority
+  implements WorkspaceReadFileAuthorityPort
 {
   readonly #root: string;
   readonly #authority: Authority;
-  readonly #receipts = new Map<string, DeviceFilesystemReadDispatchResolution>();
+  readonly #receipts = new Map<string, WorkspaceReadFileResolution>();
 
   constructor(config: { root: string; authority: Authority }) {
     this.#root = requireAbsoluteRoot(config.root);
     this.#authority = config.authority;
   }
 
-  async execute(
-    intent: DeviceFilesystemReadRouteIntent,
-    commandInput: DeviceFilesystemReadCommand,
-    signal: AbortSignal,
-  ) {
-    const command = parseDeviceFilesystemReadCommand(commandInput);
-    this.#assertAuthority(intent, command);
+  async execute(command: FrozenWorkspaceReadFileDispatch, signal: AbortSignal) {
+    this.#assertAuthority(command);
     requireActiveRead(signal, command.expiresAt);
     const prior = this.#receipts.get(command.executionId);
     if (prior !== undefined) return structuredClone(prior);
     const content = await readBoundedLocalFile(
       this.#root,
-      command.arguments.relativePathSegments,
+      command.relativePathSegments,
       command.limits.maxOutputBytes,
       signal,
     );
-    const commandDigest = canonicalDeviceFilesystemReadCommandDigest(
-      command,
-      digestUtf8,
-    );
-    const receiptId = `local-read:${command.executionId}`;
-    const resolution: DeviceFilesystemReadDispatchResolution = {
+    const providerReceiptId = `local-read:${command.executionId}`;
+    const resolution: WorkspaceReadFileResolution = {
       status: "completed",
       executionId: command.executionId,
-      receiptId,
-      terminal: {
-        schemaVersion: "crewon.device-filesystem-read-event.v0",
-        protocolVersion: 1,
-        commandKind: "workspaceRead",
-        deviceId: command.deviceId,
-        executionId: command.executionId,
-        receiptId,
-        connectionEpoch: 1,
-        workspaceBindingId: command.workspaceBindingId,
-        incarnationId: command.arguments.workspaceIncarnationId,
-        commandDigest,
-        sequence: 2,
-        observedAt: new Date().toISOString(),
-        type: "workspace_read.completed",
-        data: {
-          result: {
-            schemaVersion: "crewon.workspace-file-read-result.v0",
-            encoding: "utf8",
-            content,
-            byteLength: Buffer.byteLength(content),
-            outputDigest: digestUtf8(content),
-          },
-        },
+      actionDigest: command.actionDigest,
+      commandDigest: command.commandDigest,
+      providerReceiptId,
+      result: {
+        schemaVersion: "crewon.workspace-file-read-result.v0",
+        encoding: "utf8",
+        content,
+        byteLength: Buffer.byteLength(content),
+        outputDigest: digestUtf8(content),
       },
     };
     this.#receipts.set(command.executionId, resolution);
@@ -214,33 +177,25 @@ export class LocalWorkspaceReadGatewayClient
   }
 
   async reconcile(
-    _intent: DeviceFilesystemReadRouteIntent,
-    reference: DeviceFilesystemReadDispatchReference,
+    command: FrozenWorkspaceReadFileDispatch,
+    _signal: AbortSignal,
   ) {
     return structuredClone(
-      this.#receipts.get(reference.executionId) ?? unknownRead(reference),
+      this.#receipts.get(command.executionId) ?? unknownRead(command),
     );
   }
 
-  async cancel(
-    intent: DeviceFilesystemReadRouteIntent,
-    reference: DeviceFilesystemReadDispatchReference,
-  ) {
-    return this.reconcile(intent, reference);
+  async cancel(command: FrozenWorkspaceReadFileDispatch, signal: AbortSignal) {
+    return this.reconcile(command, signal);
   }
 
   async close(): Promise<void> {}
 
-  #assertAuthority(
-    intent: DeviceFilesystemReadRouteIntent,
-    command: DeviceFilesystemReadCommand,
-  ) {
+  #assertAuthority(command: FrozenWorkspaceReadFileDispatch) {
     if (
-      intent.deviceBindingId !== this.#authority.deviceBindingId ||
-      intent.runtimeBindingId !== this.#authority.runtimeBindingId ||
-      command.deviceId !== this.#authority.deviceId ||
+      command.runtimeBindingId !== this.#authority.runtimeBindingId ||
       command.workspaceBindingId !== this.#authority.workspaceBindingId ||
-      command.arguments.workspaceIncarnationId !== this.#authority.incarnationId
+      command.incarnationId !== this.#authority.incarnationId
     )
       throw readError("runtime_workspace_binding_invalid", "notSent");
   }
@@ -272,10 +227,11 @@ async function readBoundedLocalFile(
     if (stats.size > maximumBytes)
       throw readError("workspace_read_output_too_large", "notSent");
     const bytes = await handle.readFile();
-    if (signal.aborted) throw readError("workspace_read_aborted", "possiblySent");
+    if (signal.aborted)
+      throw readError("workspace_read_aborted", "possiblySent");
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
   } catch (error) {
-    if (error instanceof RuntimeWorkspaceReadGatewayClientError) throw error;
+    if (error instanceof RuntimeWorkspaceError) throw error;
     throw readError("workspace_read_failed", "notSent", error);
   } finally {
     await handle.close();
@@ -298,32 +254,31 @@ function requireActiveRead(signal: AbortSignal, expiresAt: string) {
 }
 
 function unknownList(
-  reference: DeviceWorkspaceListDispatchReference,
-): DeviceWorkspaceListDispatchResolution {
+  operation: WorkspaceOperationRecord,
+): WorkspaceListResolution {
   return {
     status: "unknownOutcome",
-    executionId: reference.executionId,
-    receiptId: reference.receiptId,
-    terminal: null,
+    executionId: operation.executionId,
+    actionDigest: operation.command.actionDigest,
+    commandDigest: operation.command.commandDigest,
+    providerReceiptId: operation.resolution?.providerReceiptId ?? null,
   };
 }
 
 function unknownRead(
-  reference: DeviceFilesystemReadDispatchReference,
-): DeviceFilesystemReadDispatchResolution {
+  command: FrozenWorkspaceReadFileDispatch,
+): WorkspaceReadFileResolution {
   return {
     status: "unknownOutcome",
-    executionId: reference.executionId,
-    receiptId: reference.receiptId,
-    terminal: null,
+    executionId: command.executionId,
+    actionDigest: command.actionDigest,
+    commandDigest: command.commandDigest,
+    providerReceiptId: command.providerReceiptId,
   };
 }
 
-function listError(
-  code: string,
-  certainty: "notSent" | "possiblySent",
-) {
-  return new DeviceWorkspaceListDispatchClientError(code, { certainty });
+function listError(code: string, certainty: "notSent" | "possiblySent") {
+  return new RuntimeWorkspaceError(code, { certainty });
 }
 
 function readError(
@@ -331,7 +286,7 @@ function readError(
   certainty: "notSent" | "possiblySent",
   cause?: unknown,
 ) {
-  return new RuntimeWorkspaceReadGatewayClientError(code, {
+  return new RuntimeWorkspaceError(code, {
     certainty,
     cause,
   });

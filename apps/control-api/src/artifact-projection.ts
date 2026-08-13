@@ -1,4 +1,4 @@
-import type { ArtifactView } from "@crewon/contracts";
+import type { ArtifactView } from "@crewon/contracts/runtime";
 import type { ArtifactRecord } from "@crewon/domain";
 
 export function projectArtifact(artifact: ArtifactRecord): ArtifactView {

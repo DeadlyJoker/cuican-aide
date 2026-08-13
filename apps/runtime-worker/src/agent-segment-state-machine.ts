@@ -1,5 +1,5 @@
 import { AgentKernelError, type KernelAgentEvent } from "@crewon/agent-kernel";
-import type { ProviderCheckpoint } from "@crewon/contracts";
+import type { ProviderCheckpoint } from "@crewon/contracts/runtime";
 
 export type AgentSegmentImmediateAction =
   | Readonly<{

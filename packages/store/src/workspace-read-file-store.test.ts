@@ -1,19 +1,16 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
 import {
-  canonicalDeviceFilesystemReadCommandDigest,
-  type DeviceFilesystemReadCommand,
-  type DeviceFilesystemReadEvent,
-} from "@crewon/contracts";
-import type {
-  FrozenWorkspaceReadFileDispatch,
-  IdempotencyDescriptor,
-  WorkspaceReadFileStore,
+  canonicalJson,
+  type FrozenWorkspaceReadFileDispatch,
+  type IdempotencyDescriptor,
+  type WorkspaceReadFileResolution,
+  type WorkspaceReadFileStore,
 } from "@crewon/application";
 import {
   WorkspaceReadFileApplicationService,
@@ -24,30 +21,13 @@ import { InMemoryWorkspaceReadFileStore } from "./in-memory-workspace-read-file-
 import { DatabaseSync } from "node:sqlite";
 import { SqliteWorkspaceReadFileStore } from "./sqlite-workspace-read-file-store.ts";
 
-const fixture = JSON.parse(
-  readFileSync(
-    new URL(
-      "../../test-contracts/fixtures/device-protocol.reference.json",
-      import.meta.url,
-    ),
-    "utf8",
-  ),
-) as {
-  valid: {
-    filesystemReadCommand: DeviceFilesystemReadCommand;
-    filesystemReadEvents: readonly DeviceFilesystemReadEvent[];
-  };
-};
-
-const command = fixture.valid.filesystemReadCommand;
-const terminal = fixture.valid.filesystemReadEvents[1]!;
 const locator = {
   tenantId: "tenant-1",
   spaceId: "space-1",
-  runId: command.runId,
-  stepId: command.stepId,
-  attemptId: command.attemptId,
-  executionId: command.executionId,
+  runId: "run-1",
+  stepId: "step-1",
+  attemptId: "attempt-1",
+  executionId: "execution-filesystem-1",
 };
 const executeIdempotency = idempotency("execute-key");
 
@@ -66,7 +46,7 @@ function conformance(name: string, create: () => WorkspaceReadFileStore) {
       idempotency: executeIdempotency,
     });
     assert.equal(first.operation.status, "prepared");
-    assert.equal(first.operation.frozen.reference.receiptId, null);
+    assert.equal(first.operation.frozen.providerReceiptId, null);
     assert.deepEqual(replay?.operation, first.operation);
   });
 
@@ -102,7 +82,7 @@ function conformance(name: string, create: () => WorkspaceReadFileStore) {
       resolution: completed(),
     });
     assert.equal(
-      committed.operation.frozen.reference.receiptId,
+      committed.operation.frozen.providerReceiptId,
       "receipt-read-1",
     );
   });
@@ -140,7 +120,7 @@ function conformance(name: string, create: () => WorkspaceReadFileStore) {
         phase: "execute",
         idempotency: executeIdempotency,
         expectedRevision: fenced.revision,
-        resolution: { ...completed(), receiptId: "receipt-drift" },
+        resolution: { ...completed(), providerReceiptId: "receipt-drift" },
       }),
     );
   });
@@ -431,7 +411,7 @@ test("reconcile and cancel remain passive across a cancel race", async () => {
         throw new Error("must not resolve current binding");
       },
     },
-    gateway: {
+    authority: {
       async execute() {
         executes += 1;
         return completed();
@@ -460,57 +440,70 @@ test("reconcile and cancel remain passive across a cancel race", async () => {
 });
 
 function frozen(): FrozenWorkspaceReadFileDispatch {
-  return {
-    command: structuredClone(command),
-    routeIntent: {
-      deviceBindingId: "device-binding-1",
-      runtimeBindingId: "runtime-binding-1",
-    },
-    reference: {
-      deviceId: command.deviceId,
-      executionId: command.executionId,
-      workspaceBindingId: command.workspaceBindingId,
-      incarnationId: command.arguments.workspaceIncarnationId,
-      deviceBindingId: "device-binding-1",
-      runtimeBindingId: "runtime-binding-1",
-      actionDigest: command.actionDigest,
-      commandDigest: terminal.commandDigest,
-      leaseId: command.leaseId,
-      leaseEpoch: command.leaseEpoch,
-      receiptId: null,
-    },
-  };
+  return commandFor(locator.executionId);
 }
 function executionAuthority(executionId: string) {
-  const value = frozen();
-  const executionCommand = { ...value.command, executionId };
   return {
     locator: { ...locator, executionId },
-    frozen: {
-      ...value,
-      command: executionCommand,
-      reference: {
-        ...value.reference,
-        executionId,
-        commandDigest: canonicalDeviceFilesystemReadCommandDigest(
-          executionCommand,
-          (input) =>
-            `sha256:${createHash("sha256").update(input).digest("hex")}`,
-        ),
-      },
+    frozen: commandFor(executionId),
+  };
+}
+function completed(): WorkspaceReadFileResolution {
+  const command = frozen();
+  const content = "workspace content";
+  return {
+    status: "completed" as const,
+    executionId: locator.executionId,
+    actionDigest: command.actionDigest,
+    commandDigest: command.commandDigest,
+    providerReceiptId: "receipt-read-1",
+    result: {
+      schemaVersion: "crewon.workspace-file-read-result.v0",
+      encoding: "utf8",
+      content,
+      byteLength: Buffer.byteLength(content),
+      outputDigest: sha256(content),
     },
   };
 }
-function completed() {
-  return {
-    status: "completed" as const,
-    executionId: command.executionId,
-    receiptId: "receipt-read-1",
-    terminal: structuredClone(terminal) as Extract<
-      DeviceFilesystemReadEvent,
-      { type: "workspace_read.completed" }
-    >,
+
+function commandFor(executionId: string): FrozenWorkspaceReadFileDispatch {
+  const command: FrozenWorkspaceReadFileDispatch = {
+    schemaVersion: "crewon.workspace-read-file-command.v0",
+    executionId,
+    runId: locator.runId,
+    stepId: locator.stepId,
+    attemptId: locator.attemptId,
+    leaseId: "lease-1",
+    leaseEpoch: 1,
+    expiresAt: "2026-08-15T00:00:00.000Z",
+    workspaceBindingId: "workspace-binding-1",
+    incarnationId: "incarnation-1",
+    runtimeBindingId: "runtime-binding-1",
+    policySnapshotId: "policy-1",
+    actionDigest: `sha256:${"a".repeat(64)}`,
+    commandDigest: `sha256:${"0".repeat(64)}`,
+    relativePathSegments: ["docs", "README.md"],
+    limits: {
+      timeoutMs: 30_000,
+      maxOutputBytes: 64 * 1024,
+      maxArtifactBytes: 16 * 1024 * 1024,
+    },
+    providerReceiptId: null,
   };
+  return {
+    ...command,
+    commandDigest: sha256(
+      canonicalJson({
+        schemaVersion: "crewon.workspace-read-file-command-digest.v0",
+        command,
+      }),
+    ),
+  };
+}
+
+function sha256(value: string): string {
+  return `sha256:${createHash("sha256").update(value).digest("hex")}`;
 }
 function idempotency(key: string): IdempotencyDescriptor {
   return {
@@ -520,6 +513,7 @@ function idempotency(key: string): IdempotencyDescriptor {
   };
 }
 function executeIntent() {
+  const command = frozen();
   return {
     ...locator,
     threadId: "thread-1",
@@ -544,7 +538,7 @@ function serviceOf(
         return frozen();
       },
     },
-    gateway: {
+    authority: {
       execute,
       async reconcile() {
         return completed();

@@ -44,13 +44,11 @@ import {
   sha256,
   signal,
 } from "./workspace-list-application-service.test-support.ts";
-test("shares the canonical action and dispatch digest golden vector with Device N1", () => {
+test("freezes the provider-neutral action and dispatch digest vector", () => {
   const draft: FrozenWorkspaceListCommand = {
     executionId: "workspace-execution-1",
     workspaceBindingId: "workspace-1",
     incarnationId: "incarnation-1",
-    deviceBindingId: "device-binding-1",
-    deviceId: "device-1",
     runtimeBindingId: "runtime-binding-1",
     policySnapshotId: "policy-1",
     actionDigest: `sha256:${"0".repeat(64)}`,
@@ -103,11 +101,11 @@ test("shares the canonical action and dispatch digest golden vector with Device 
     { actionDigest, commandDigest, resultDigest },
     {
       actionDigest:
-        "sha256:cc0bf069b288744307c6155248be77640e1c18ff3c24ec6befd650575421cc67",
+        "sha256:2ef3685e485de632d6495d314af9aa708ba33afb858e763bd00043285b8d35b0",
       commandDigest:
-        "sha256:3dc53ee016858a79e5bc45bdf3180dcb5530c9c4bcf9fe1a43bcb634df08836e",
+        "sha256:951a827df67bea6c4203b00c4f756f36179e2220c5531bbd61c7ef728a90bbad",
       resultDigest:
-        "sha256:98724a08cbfeccfa374ab88cd894ec987e448657aa03d3e542022135fe09300e",
+        "sha256:6bc0275912c28ccbf458efd31948068ff775672471e98199f08f87f854976fb1",
     },
   );
 });

@@ -11,7 +11,7 @@ import type {
 import {
   parseProviderCheckpoint,
   type ProviderCheckpoint,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 
 import type { WorkItemLeaseInput } from "./durable-queue-port.ts";
 import type {

@@ -2,7 +2,7 @@ import type {
   CreditsSnapshot,
   RateLimitSnapshot,
   RateLimitWindow,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 
 const MAX_ERROR_BODY_BYTES = 64 * 1024;
 

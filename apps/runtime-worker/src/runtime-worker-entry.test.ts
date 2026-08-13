@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -21,10 +20,6 @@ test("packaged entry starts the Workspace listener and emits only non-secret rea
   const databasePath = temporaryDatabasePath(context);
   const config = packagedConfig();
   await activateRelease(databasePath, config);
-  const commandKey = generateKeyPairSync("ed25519");
-  const privateKeyPem = commandKey.privateKey
-    .export({ type: "pkcs8", format: "pem" })
-    .toString();
   const token = "packaged-workspace-private-token-at-least-32-bytes";
   const entry = fileURLToPath(
     new URL(
@@ -64,12 +59,9 @@ test("packaged entry starts the Workspace listener and emits only non-secret rea
           spaceId: "space-1",
           workspaceBindingId: config.route.workspaceBindingId,
           incarnationId: "incarnation-1",
-          deviceBindingId: "device-binding-1",
-          deviceId: "device-1",
           runtimeBindingId: config.route.runtimeGeneration,
           policySnapshotId: config.route.policySnapshotId,
         },
-        signing: { keyId: "workspace-key-1", privateKeyPem },
       },
       credentialBindings: null,
     })}\n`,
@@ -82,7 +74,7 @@ test("packaged entry starts the Workspace listener and emits only non-secret rea
   assert.doesNotMatch(
     `${output.stdout}\n${output.stderr}`,
     new RegExp(
-      [token, privateKeyPem, TEST_WORKER_KEY, TEST_WORKER_CERT, databasePath]
+      [token, TEST_WORKER_KEY, TEST_WORKER_CERT, databasePath]
         .map(escapeRegExp)
         .join("|"),
       "u",
@@ -201,9 +193,9 @@ function runtimeBindings(remoteMcpConfigPath: string) {
           storeResponses: false,
           idleTimeoutMs: 60_000,
           sequencePolicy: "required",
-          },
-          mcpStdioConfigPath: null,
-          remoteMcpConfigPath,
+        },
+        mcpStdioConfigPath: null,
+        remoteMcpConfigPath,
       },
     ],
   };
@@ -248,9 +240,6 @@ function remoteMcpConfig() {
 }
 
 function currentBootstrap(bearerToken: string) {
-  const privateKeyPem = generateKeyPairSync("ed25519")
-    .privateKey.export({ type: "pkcs8", format: "pem" })
-    .toString();
   return {
     schemaVersion: "crewon.worker-native-bootstrap.v4",
     provider: null,
@@ -267,12 +256,9 @@ function currentBootstrap(bearerToken: string) {
         spaceId: "space-1",
         workspaceBindingId: "workspace-1",
         incarnationId: "incarnation-1",
-        deviceBindingId: "device-binding-1",
-        deviceId: "device-1",
         runtimeBindingId: "runtime-generation-1",
         policySnapshotId: "policy-1",
       },
-      signing: { keyId: "workspace-key-1", privateKeyPem },
       deadlineMs: 35_000,
     },
     credentialBindings: {

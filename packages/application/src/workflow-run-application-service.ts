@@ -1,4 +1,4 @@
-import type { JsonValue } from "@crewon/contracts";
+import type { JsonValue } from "@crewon/contracts/runtime";
 import {
   WorkflowVersionError,
   parseCompiledWorkflowVersion,

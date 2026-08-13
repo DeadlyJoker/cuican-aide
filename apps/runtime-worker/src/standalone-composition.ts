@@ -12,6 +12,7 @@ import {
   type AgentVersionDeploymentCandidate,
   type ArtifactStorePort,
   type RunRoute,
+  type WorkspaceListDispatcherPort,
 } from "@crewon/application";
 import {
   PostgresDomainStore,
@@ -20,10 +21,6 @@ import {
   SqliteWorkspaceReadFileStore,
 } from "@crewon/store";
 import type { GovernedContextBundle } from "@crewon/context";
-import type {
-  DeviceWorkspaceListCommandSignerPort,
-  DeviceWorkspaceListDispatchClientPort,
-} from "@crewon/device-dispatch";
 import type { ToolRuntimePort } from "@crewon/tool-broker";
 
 import { RuntimeWorker, type RuntimeWorkerConfig } from "./runtime-worker.ts";
@@ -134,8 +131,8 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
     token: string;
     authority: RuntimeWorkspaceDispatchAuthority;
     ids: RuntimeWorkspaceExecutionIdGeneratorPort;
-    signer: DeviceWorkspaceListCommandSignerPort;
-    gateway: DeviceWorkspaceListDispatchClientPort;
+    workspace: WorkspaceListDispatcherPort &
+      Readonly<{ close(): Promise<void> }>;
     nativeRoot?: string;
     deadlineMs?: number;
   }>;
@@ -454,8 +451,7 @@ async function composeRuntimeWorker(
       workspaceDispatchService = new RuntimeWorkspaceDispatchService({
         authority: workspaceAuthority,
         digester,
-        signer: config.workspacePrivate.signer,
-        gateway: config.workspacePrivate.gateway,
+        workspace: config.workspacePrivate.workspace,
       });
       workspacePrivateServer = await startRuntimeWorkspacePrivateServer({
         port: config.workspacePrivate.port,
@@ -505,7 +501,7 @@ async function composeRuntimeWorker(
       results.push(
         ...(await Promise.allSettled([
           workspaceDispatchService?.close() ?? Promise.resolve(),
-          config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
+          config.workspaceReadFile?.workspace.close() ?? Promise.resolve(),
           agentVersionRegistry.close(),
           artifactStore?.close() ?? Promise.resolve(),
           workspaceReadStore?.close() ?? Promise.resolve(),
@@ -546,8 +542,8 @@ async function closeStartupResources(
   config: RuntimeWorkerCompositionConfig,
 ): Promise<void> {
   await Promise.allSettled([
-    config.workspacePrivate?.gateway.close() ?? Promise.resolve(),
-    config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
+    config.workspacePrivate?.workspace.close() ?? Promise.resolve(),
+    config.workspaceReadFile?.workspace.close() ?? Promise.resolve(),
     config.artifactStore?.close() ?? Promise.resolve(),
   ]);
 }

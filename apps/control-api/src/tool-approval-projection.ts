@@ -1,4 +1,4 @@
-import type { ToolApprovalView } from "@crewon/contracts";
+import type { ToolApprovalView } from "@crewon/contracts/runtime";
 import type { ToolApprovalState } from "@crewon/domain";
 
 export function projectToolApproval(

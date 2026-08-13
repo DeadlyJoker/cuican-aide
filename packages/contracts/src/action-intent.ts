@@ -1,8 +1,10 @@
 import { ContractValidationError } from "./contract-validation-error.ts";
-import {
-  parseDeviceExecutionLimits,
-  type DeviceExecutionLimits,
-} from "./device-protocol.ts";
+
+export type ActionExecutionLimits = Readonly<{
+  timeoutMs: number;
+  maxOutputBytes: number;
+  maxArtifactBytes: number;
+}>;
 
 export type ActionIntent = Readonly<{
   schemaVersion: "crewon.action-intent.v0";
@@ -26,7 +28,7 @@ export type ActionIntent = Readonly<{
   }>;
   capability: string;
   approvalRequirement: "none" | "perAction";
-  limits: DeviceExecutionLimits;
+  limits: ActionExecutionLimits;
 }>;
 
 export function parseActionIntent(input: unknown): ActionIntent {
@@ -106,7 +108,7 @@ export function parseActionIntent(input: unknown): ActionIntent {
   ) {
     throw new ContractValidationError("action_approval_requirement_invalid");
   }
-  parseDeviceExecutionLimits(intent.limits);
+  parseActionExecutionLimits(intent.limits);
   return structuredClone(intent) as ActionIntent;
 }
 
@@ -184,6 +186,25 @@ function requireCapability(value: unknown): void {
     value.length > 128
   ) {
     throw new ContractValidationError("action_capability_invalid");
+  }
+}
+
+function parseActionExecutionLimits(value: unknown): void {
+  const limits = requireObject(value, "action_limits_invalid");
+  requireExactKeys(limits, ["maxArtifactBytes", "maxOutputBytes", "timeoutMs"]);
+  for (const [candidate, maximum, code] of [
+    [limits.timeoutMs, 86_400_000, "action_timeout_invalid"],
+    [limits.maxOutputBytes, 1_048_576, "action_output_limit_invalid"],
+    [limits.maxArtifactBytes, 1_073_741_824, "action_artifact_limit_invalid"],
+  ] as const) {
+    if (
+      typeof candidate !== "number" ||
+      !Number.isSafeInteger(candidate) ||
+      candidate < 1 ||
+      candidate > maximum
+    ) {
+      throw new ContractValidationError(code);
+    }
   }
 }
 

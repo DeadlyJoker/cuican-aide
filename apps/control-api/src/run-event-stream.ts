@@ -1,7 +1,7 @@
 import type { ServerResponse } from "node:http";
 
 import type { ActorContext, RunApplicationService } from "@crewon/application";
-import type { RunEventViewMode } from "@crewon/contracts";
+import type { RunEventViewMode } from "@crewon/contracts/runtime";
 import type { RunLifecycleEvent } from "@crewon/domain";
 import type { FastifyReply, FastifyRequest } from "fastify";
 

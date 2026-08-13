@@ -2,7 +2,7 @@ import type {
   RunEventView,
   RunEventViewMode,
   RunView,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 import type { RunLifecycleEvent, RunState } from "@crewon/domain";
 
 export function projectRun(state: RunState): RunView {

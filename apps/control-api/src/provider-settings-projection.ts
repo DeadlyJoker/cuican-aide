@@ -5,7 +5,7 @@ import type {
 import type {
   ModelProviderSettingsSnapshot,
   ProbeModelProviderResponse,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 
 export type ProviderRuntimeRouteAvailability = "available" | "unavailable";
 

@@ -5,7 +5,7 @@ import {
   parseProviderCheckpoint,
   type ActionIntent,
   type CanonicalAgentEvent,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 import type {
   ModelHistoryItem,
   ProposedPlan,

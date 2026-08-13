@@ -1,7 +1,7 @@
 import {
   parseProviderCheckpoint,
   type ProviderCheckpoint,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 import type {
   ModelDispatchTerminalOutcome,
   ToolExecutionReceiptState,
@@ -110,13 +110,17 @@ export function validateWorkflowNodeContinuationCheckpoint(
     invalidContinuation();
   const authority = validateAuthority(checkpoint.authority);
   const activeDispatch = validateActiveDispatch(checkpoint.activeDispatch);
-  const terminalCandidate = validateTerminalCandidate(checkpoint.terminalCandidate);
+  const terminalCandidate = validateTerminalCandidate(
+    checkpoint.terminalCandidate,
+  );
   let providerCheckpoint: ProviderCheckpoint | null;
   try {
     providerCheckpoint =
       checkpoint.providerCheckpoint === null
         ? null
-        : structuredClone(parseProviderCheckpoint(checkpoint.providerCheckpoint));
+        : structuredClone(
+            parseProviderCheckpoint(checkpoint.providerCheckpoint),
+          );
   } catch {
     invalidContinuation();
   }
@@ -126,11 +130,15 @@ export function validateWorkflowNodeContinuationCheckpoint(
   } catch {
     invalidContinuation();
   }
-  if (!Array.isArray(checkpoint.history) ||
-      checkpoint.history.length > MAX_WORKFLOW_CONTINUATION_HISTORY_ITEMS)
+  if (
+    !Array.isArray(checkpoint.history) ||
+    checkpoint.history.length > MAX_WORKFLOW_CONTINUATION_HISTORY_ITEMS
+  )
     invalidContinuation();
   const history = checkpoint.history.map(validateHistoryItem);
-  if (utf8Bytes(canonicalJson(history)) > MAX_WORKFLOW_CONTINUATION_HISTORY_BYTES)
+  if (
+    utf8Bytes(canonicalJson(history)) > MAX_WORKFLOW_CONTINUATION_HISTORY_BYTES
+  )
     invalidContinuation();
   return structuredClone({
     schemaVersion: "crewon.workflow-node-continuation.v0",
@@ -148,44 +156,78 @@ export function validateWorkflowNodeContinuationCheckpoint(
   }) as WorkflowNodeContinuationCheckpoint;
 }
 
-function validateTerminalCandidate(input: unknown): WorkflowNodeTerminalCandidate | null {
+function validateTerminalCandidate(
+  input: unknown,
+): WorkflowNodeTerminalCandidate | null {
   if (input === null) return null;
   const value = exactRecord(input);
-  exactKeys(value, ["candidateId", "dispatchTerminalOutcome", "evidence",
-    "schemaVersion", "segmentId"]);
+  exactKeys(value, [
+    "candidateId",
+    "dispatchTerminalOutcome",
+    "evidence",
+    "schemaVersion",
+    "segmentId",
+  ]);
   const dispatch = exactRecord(value.dispatchTerminalOutcome);
   exactKeys(dispatch, ["certainty", "code", "kind"]);
-  if (value.schemaVersion !== "crewon.workflow-node-terminal-candidate.v0" ||
-      !digest(value.candidateId) || !boundedId(value.segmentId) ||
-      !["completed", "failed", "canceled"].includes(String(dispatch.kind)) ||
-      !["notSent", "responseObserved"].includes(String(dispatch.certainty)) ||
-      (dispatch.kind === "completed" ? dispatch.code !== null
-        : !boundedText(dispatch.code))) invalidContinuation();
+  if (
+    value.schemaVersion !== "crewon.workflow-node-terminal-candidate.v0" ||
+    !digest(value.candidateId) ||
+    !boundedId(value.segmentId) ||
+    !["completed", "failed", "canceled"].includes(String(dispatch.kind)) ||
+    !["notSent", "responseObserved"].includes(String(dispatch.certainty)) ||
+    (dispatch.kind === "completed"
+      ? dispatch.code !== null
+      : !boundedText(dispatch.code))
+  )
+    invalidContinuation();
   const evidence = exactRecord(value.evidence);
   validateTerminalEvidenceShape(evidence);
-  if (evidence.status !== dispatch.kind ||
-      utf8Bytes(canonicalJson(value)) > MAX_WORKFLOW_CONTINUATION_HISTORY_ITEM_BYTES)
+  if (
+    evidence.status !== dispatch.kind ||
+    utf8Bytes(canonicalJson(value)) >
+      MAX_WORKFLOW_CONTINUATION_HISTORY_ITEM_BYTES
+  )
     invalidContinuation();
   return structuredClone(value) as WorkflowNodeTerminalCandidate;
 }
 
-function validateTerminalEvidenceShape(evidence: Record<string, unknown>): void {
+function validateTerminalEvidenceShape(
+  evidence: Record<string, unknown>,
+): void {
   if (evidence.schemaVersion !== "crewon.workflow-node-terminal.v0")
     invalidContinuation();
   if (evidence.status === "completed") {
-    exactKeys(evidence, ["canonicalValueJson", "schemaVersion", "status", "value", "valueRef"]);
+    exactKeys(evidence, [
+      "canonicalValueJson",
+      "schemaVersion",
+      "status",
+      "value",
+      "valueRef",
+    ]);
     const valueRef = exactRecord(evidence.valueRef);
     exactKeys(valueRef, ["authority", "valueDigest"]);
     validateValueAuthority(valueRef.authority);
-    if (!boundedText(evidence.canonicalValueJson) || !digest(valueRef.valueDigest))
+    if (
+      !boundedText(evidence.canonicalValueJson) ||
+      !digest(valueRef.valueDigest)
+    )
       invalidContinuation();
     return;
   }
   if (evidence.status === "failed") {
-    exactKeys(evidence, ["authority", "certainty", "failureCode", "schemaVersion", "status"]);
+    exactKeys(evidence, [
+      "authority",
+      "certainty",
+      "failureCode",
+      "schemaVersion",
+      "status",
+    ]);
     validateValueAuthority(evidence.authority);
-    if (!boundedText(evidence.failureCode) ||
-        !["notSent", "responseObserved"].includes(String(evidence.certainty)))
+    if (
+      !boundedText(evidence.failureCode) ||
+      !["notSent", "responseObserved"].includes(String(evidence.certainty))
+    )
       invalidContinuation();
     return;
   }
@@ -201,10 +243,22 @@ function validateTerminalEvidenceShape(evidence: Record<string, unknown>): void 
 
 function validateValueAuthority(input: unknown): void {
   const authority = exactRecord(input);
-  exactKeys(authority, ["nodeId", "outputSchemaDigest", "workflowContentDigest",
-    "workflowId", "workflowVersionId"]);
-  if (![authority.nodeId, authority.workflowId, authority.workflowVersionId].every(boundedId) ||
-      !digest(authority.outputSchemaDigest) || !digest(authority.workflowContentDigest))
+  exactKeys(authority, [
+    "nodeId",
+    "outputSchemaDigest",
+    "workflowContentDigest",
+    "workflowId",
+    "workflowVersionId",
+  ]);
+  if (
+    ![
+      authority.nodeId,
+      authority.workflowId,
+      authority.workflowVersionId,
+    ].every(boundedId) ||
+    !digest(authority.outputSchemaDigest) ||
+    !digest(authority.workflowContentDigest)
+  )
     invalidContinuation();
 }
 
@@ -247,7 +301,9 @@ function validateAuthority(input: unknown): WorkflowAgentAttemptAuthority {
   return structuredClone(value) as WorkflowAgentAttemptAuthority;
 }
 
-function validateActiveDispatch(input: unknown): WorkflowNodeDispatchAuthority | null {
+function validateActiveDispatch(
+  input: unknown,
+): WorkflowNodeDispatchAuthority | null {
   if (input === null) return null;
   const value = exactRecord(input);
   exactKeys(value, [
@@ -298,8 +354,10 @@ function validateHistoryItem(input: unknown): WorkflowContinuationHistoryItem {
       invalidContinuation();
   } else invalidContinuation();
   try {
-    if (utf8Bytes(canonicalJson(value)) >
-        MAX_WORKFLOW_CONTINUATION_HISTORY_ITEM_BYTES)
+    if (
+      utf8Bytes(canonicalJson(value)) >
+      MAX_WORKFLOW_CONTINUATION_HISTORY_ITEM_BYTES
+    )
       invalidContinuation();
   } catch {
     invalidContinuation();
@@ -316,7 +374,10 @@ function exactRecord(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function exactKeys(value: Record<string, unknown>, expected: readonly string[]): void {
+function exactKeys(
+  value: Record<string, unknown>,
+  expected: readonly string[],
+): void {
   const keys = Object.keys(value).sort();
   const sortedExpected = [...expected].sort();
   if (
@@ -377,12 +438,12 @@ export type WorkflowNodeDispatchAuthority = Readonly<{
 
 export type SettleWorkflowNodeModelTerminalInput =
   WorkflowNodeTerminalSettlement &
-  Readonly<{
-    lease: WorkItemLeaseInput;
-    authority: WorkflowAgentAttemptAuthority;
-    dispatch: WorkflowNodeDispatchAuthority;
-    dispatchTerminalOutcome: ModelDispatchTerminalOutcome;
-  }>;
+    Readonly<{
+      lease: WorkItemLeaseInput;
+      authority: WorkflowAgentAttemptAuthority;
+      dispatch: WorkflowNodeDispatchAuthority;
+      dispatchTerminalOutcome: ModelDispatchTerminalOutcome;
+    }>;
 
 export type CommitWorkflowToolContinuationInput = Readonly<{
   lease: WorkItemLeaseInput;
@@ -392,8 +453,10 @@ export type CommitWorkflowToolContinuationInput = Readonly<{
   completedEvent: ToolCompletedAgentEvent;
   providerReceiptId: string;
   expectedContinuationRevision: number | null;
-  next: Omit<WorkflowNodeContinuationCheckpoint,
-    "revision" | "updatedAt" | "terminalCandidate">;
+  next: Omit<
+    WorkflowNodeContinuationCheckpoint,
+    "revision" | "updatedAt" | "terminalCandidate"
+  >;
   committedAt: string;
 }>;
 
@@ -401,8 +464,10 @@ export type CommitWorkflowAssistantContinuationInput = Readonly<{
   lease: WorkItemLeaseInput;
   authority: WorkflowAgentAttemptAuthority;
   expectedContinuationRevision: number | null;
-  next: Omit<WorkflowNodeContinuationCheckpoint,
-    "revision" | "updatedAt" | "terminalCandidate">;
+  next: Omit<
+    WorkflowNodeContinuationCheckpoint,
+    "revision" | "updatedAt" | "terminalCandidate"
+  >;
   committedAt: string;
   terminalResult:
     | null
@@ -424,20 +489,26 @@ export interface WorkflowNodeContinuationStore {
   ): Promise<WorkflowNodeContinuationCheckpoint | null>;
   commitWorkflowToolContinuation(
     input: CommitWorkflowToolContinuationInput,
-  ): Promise<Readonly<{
-    receipt: ToolExecutionReceiptState;
-    continuation: WorkflowNodeContinuationCheckpoint;
-  }>>;
+  ): Promise<
+    Readonly<{
+      receipt: ToolExecutionReceiptState;
+      continuation: WorkflowNodeContinuationCheckpoint;
+    }>
+  >;
   commitWorkflowAssistantContinuation(
     input: CommitWorkflowAssistantContinuationInput,
   ): Promise<WorkflowNodeContinuationCheckpoint>;
-  settlePreparedWorkflowNodeTerminal(input: Readonly<{
-    lease: WorkItemLeaseInput;
-    binding: import("@crewon/domain").FrozenWorkflowVersionBinding;
-    authority: WorkflowAgentAttemptAuthority;
-    candidateId: string;
-    operationId: string;
-  }>): ReturnType<WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]>;
+  settlePreparedWorkflowNodeTerminal(
+    input: Readonly<{
+      lease: WorkItemLeaseInput;
+      binding: import("@crewon/domain").FrozenWorkflowVersionBinding;
+      authority: WorkflowAgentAttemptAuthority;
+      candidateId: string;
+      operationId: string;
+    }>,
+  ): ReturnType<
+    WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]
+  >;
 
   /**
    * Atomically establishes the single terminal truth for one Workflow node.
@@ -450,11 +521,13 @@ export interface WorkflowNodeContinuationStore {
    */
   settleWorkflowNodeModelTerminal(
     input: SettleWorkflowNodeModelTerminalInput,
-  ): Promise<Readonly<{
-    disposition: "settled" | "replay" | "reconciliationScheduled";
-    continuation: null;
-    handoff: WorkflowAtomicHandoff;
-    runDisposition: WorkflowRunDisposition;
-    evidence: WorkflowNodeTerminalSettlement["evidence"];
-  }>>;
+  ): Promise<
+    Readonly<{
+      disposition: "settled" | "replay" | "reconciliationScheduled";
+      continuation: null;
+      handoff: WorkflowAtomicHandoff;
+      runDisposition: WorkflowRunDisposition;
+      evidence: WorkflowNodeTerminalSettlement["evidence"];
+    }>
+  >;
 }

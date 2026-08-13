@@ -370,8 +370,6 @@ function operation(executionId: string): WorkspaceOperationRecord {
       executionId,
       workspaceBindingId: "workspace-1",
       incarnationId: "incarnation-1",
-      deviceBindingId: "device-binding-1",
-      deviceId: "device-1",
       runtimeBindingId: "runtime-binding-1",
       policySnapshotId: "policy-1",
       actionDigest: `sha256:${"a".repeat(64)}`,

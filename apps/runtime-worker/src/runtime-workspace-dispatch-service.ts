@@ -5,25 +5,16 @@ import {
   validateWorkspaceDeliveryLease,
   validateWorkspaceListResolution,
   validateWorkspaceOperationRecord,
+  type WorkspaceListDispatcherPort,
   type WorkspaceOperationRecord,
 } from "@crewon/application";
 import {
-  DEVICE_PROTOCOL_VERSION,
   RUNTIME_WORKER_WORKSPACE_API_VERSION,
   parseRuntimeWorkerWorkspaceDispatchRequest,
   parseRuntimeWorkerWorkspaceDispatchResponse,
-  type DeviceWorkspaceListCommand,
-  type DeviceWorkspaceListDispatchReference,
-  type DeviceWorkspaceListDispatchResolution,
   type RuntimeWorkerWorkspaceDispatchRequest,
   type RuntimeWorkerWorkspaceDispatchResponse,
-  type RuntimeWorkerWorkspaceResolution,
-} from "@crewon/contracts";
-import {
-  DeviceWorkspaceListDispatchClientError,
-  type DeviceWorkspaceListCommandSignerPort,
-  type DeviceWorkspaceListDispatchClientPort,
-} from "@crewon/device-dispatch";
+} from "@crewon/contracts/runtime";
 
 import {
   validateRuntimeWorkspaceDispatchAuthority,
@@ -32,25 +23,24 @@ import {
 } from "./runtime-workspace-binding-resolver.ts";
 import { RuntimeWorkspaceError } from "./runtime-workspace-error.ts";
 
-/** Signs and dispatches only a validated, already-frozen Workspace operation. */
+/** Dispatches a validated, already-frozen operation to the local Workspace authority. */
 export class RuntimeWorkspaceDispatchService {
   readonly #authority: RuntimeWorkspaceDispatchAuthorityPort;
   readonly #digester: ContentDigester;
-  readonly #signer: DeviceWorkspaceListCommandSignerPort;
-  readonly #gateway: DeviceWorkspaceListDispatchClientPort;
+  readonly #workspace: WorkspaceListDispatcherPort &
+    Readonly<{ close(): Promise<void> }>;
   readonly #now: () => Date;
 
   constructor(config: {
     authority: RuntimeWorkspaceDispatchAuthorityPort;
     digester: ContentDigester;
-    signer: DeviceWorkspaceListCommandSignerPort;
-    gateway: DeviceWorkspaceListDispatchClientPort;
+    workspace: WorkspaceListDispatcherPort &
+      Readonly<{ close(): Promise<void> }>;
     now?: () => Date;
   }) {
     this.#authority = config.authority;
     this.#digester = config.digester;
-    this.#signer = config.signer;
-    this.#gateway = config.gateway;
+    this.#workspace = config.workspace;
     this.#now = config.now ?? (() => new Date());
   }
 
@@ -65,18 +55,9 @@ export class RuntimeWorkspaceDispatchService {
     this.#validateLease(lease.leasedAt, lease.expiresAt);
     const authority = dispatchAuthority(operation);
     await this.#admit(authority, signal);
-    const signed =
-      request.phase === "execute"
-        ? await this.#signedCommand(request, operation, signal)
-        : null;
     await this.#admit(authority, signal);
     this.#validateLease(lease.leasedAt, lease.expiresAt);
-    const resolution = await this.#invokeGateway(
-      request,
-      operation,
-      signed,
-      signal,
-    );
+    const resolution = await this.#invokeWorkspace(request, operation, signal);
     try {
       const validated = validateWorkspaceListResolution(
         resolution,
@@ -92,90 +73,33 @@ export class RuntimeWorkspaceDispatchService {
         request,
       );
     } catch (error) {
-      throw new RuntimeWorkspaceError(
-        "runtime_workspace_gateway_response_invalid",
-        {
-          certainty: "possiblySent",
-          cause: error,
-        },
-      );
-    }
-  }
-
-  async close(): Promise<void> {
-    await this.#gateway.close();
-  }
-
-  async #invokeGateway(
-    request: RuntimeWorkerWorkspaceDispatchRequest,
-    operation: WorkspaceOperationRecord,
-    signed: DeviceWorkspaceListCommand | null,
-    signal: AbortSignal,
-  ): Promise<RuntimeWorkerWorkspaceResolution> {
-    try {
-      const gatewayResolution =
-        request.phase === "execute"
-          ? await this.#gateway.execute(
-              signed ?? failSignedCommandMissing(),
-              signal,
-            )
-          : request.phase === "reconcile"
-            ? await this.#gateway.reconcile(reference(operation), signal)
-            : await this.#gateway.cancel(reference(operation), signal);
-      return projectResolution(gatewayResolution, operation);
-    } catch (error) {
-      if (error instanceof DeviceWorkspaceListDispatchClientError) {
-        throw new RuntimeWorkspaceError(error.code, {
-          retryable: error.retryable,
-          certainty: error.certainty,
-          cause: error,
-        });
-      }
-      if (error instanceof RuntimeWorkspaceError) throw error;
-      throw new RuntimeWorkspaceError("runtime_workspace_gateway_unavailable", {
-        retryable: true,
+      throw new RuntimeWorkspaceError("runtime_workspace_response_invalid", {
         certainty: "possiblySent",
         cause: error,
       });
     }
   }
 
-  async #signedCommand(
+  async close(): Promise<void> {
+    await this.#workspace.close();
+  }
+
+  async #invokeWorkspace(
     request: RuntimeWorkerWorkspaceDispatchRequest,
     operation: WorkspaceOperationRecord,
     signal: AbortSignal,
-  ): Promise<DeviceWorkspaceListCommand> {
+  ) {
     try {
-      return await abortable(
-        this.#signer.sign({
-          command: {
-            schemaVersion: "crewon.device-workspace-list-command.v0",
-            protocolVersion: DEVICE_PROTOCOL_VERSION,
-            commandKind: "workspaceList",
-            deviceId: operation.command.deviceId,
-            executionId: operation.executionId,
-            leaseId: request.deliveryLease.leaseId,
-            leaseEpoch: request.deliveryLease.epoch,
-            expiresAt: request.deliveryLease.expiresAt,
-            workspaceBindingId: operation.command.workspaceBindingId,
-            incarnationId: operation.command.incarnationId,
-            deviceBindingId: operation.command.deviceBindingId,
-            runtimeBindingId: operation.command.runtimeBindingId,
-            policySnapshotId: operation.command.policySnapshotId,
-            operation: "listTopLevel",
-            limits: operation.command.limits,
-            actionDigest: operation.command.actionDigest,
-            commandDigest: operation.command.commandDigest,
-            idempotencyKey: operation.idempotencyKey,
-            traceContext: { traceparent: null, tracestate: null },
-          },
-        }),
-        signal,
-        "notSent",
-      );
+      return await (request.phase === "execute"
+        ? this.#workspace.execute(operation, request.deliveryLease, signal)
+        : request.phase === "reconcile"
+          ? this.#workspace.reconcile(operation, request.deliveryLease, signal)
+          : this.#workspace.cancel(operation, request.deliveryLease, signal));
     } catch (error) {
       if (error instanceof RuntimeWorkspaceError) throw error;
-      throw new RuntimeWorkspaceError("runtime_workspace_signing_failed", {
+      throw new RuntimeWorkspaceError("runtime_workspace_unavailable", {
+        retryable: true,
+        certainty: "possiblySent",
         cause: error,
       });
     }
@@ -266,77 +190,9 @@ function dispatchAuthority(
     spaceId: operation.spaceId,
     workspaceBindingId: operation.command.workspaceBindingId,
     incarnationId: operation.command.incarnationId,
-    deviceBindingId: operation.command.deviceBindingId,
-    deviceId: operation.command.deviceId,
     runtimeBindingId: operation.command.runtimeBindingId,
     policySnapshotId: operation.command.policySnapshotId,
   };
-}
-
-function failSignedCommandMissing(): never {
-  throw new RuntimeWorkspaceError("runtime_workspace_signed_command_missing");
-}
-
-function reference(
-  operation: WorkspaceOperationRecord,
-): DeviceWorkspaceListDispatchReference {
-  return {
-    deviceId: operation.command.deviceId,
-    executionId: operation.executionId,
-    workspaceBindingId: operation.command.workspaceBindingId,
-    incarnationId: operation.command.incarnationId,
-    deviceBindingId: operation.command.deviceBindingId,
-    runtimeBindingId: operation.command.runtimeBindingId,
-    actionDigest: operation.command.actionDigest,
-    commandDigest: operation.command.commandDigest,
-    receiptId: operation.resolution?.providerReceiptId ?? null,
-  };
-}
-
-function projectResolution(
-  resolution: DeviceWorkspaceListDispatchResolution,
-  operation: WorkspaceOperationRecord,
-): RuntimeWorkerWorkspaceResolution {
-  switch (resolution.status) {
-    case "completed":
-      return {
-        status: "completed",
-        executionId: resolution.executionId,
-        actionDigest: resolution.terminal.actionDigest,
-        commandDigest: resolution.terminal.commandDigest,
-        providerReceiptId: resolution.receiptId,
-        entries: resolution.terminal.data.result.entries,
-        truncated: resolution.terminal.data.result.truncated,
-      };
-    case "failed":
-      return {
-        status: "failed",
-        executionId: resolution.executionId,
-        actionDigest: resolution.terminal.actionDigest,
-        commandDigest: resolution.terminal.commandDigest,
-        providerReceiptId: resolution.receiptId,
-        code: resolution.terminal.data.code,
-        retryable: resolution.terminal.data.retryable,
-      };
-    case "canceled":
-      return {
-        status: "canceled",
-        executionId: resolution.executionId,
-        actionDigest: resolution.terminal.actionDigest,
-        commandDigest: resolution.terminal.commandDigest,
-        providerReceiptId: resolution.receiptId,
-      };
-    case "unknownOutcome":
-      return {
-        status: "unknownOutcome",
-        executionId: resolution.executionId,
-        actionDigest:
-          resolution.terminal?.actionDigest ?? operation.command.actionDigest,
-        commandDigest:
-          resolution.terminal?.commandDigest ?? operation.command.commandDigest,
-        providerReceiptId: resolution.receiptId,
-      };
-  }
 }
 
 function abortable<T>(

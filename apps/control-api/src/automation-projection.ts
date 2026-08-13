@@ -3,7 +3,7 @@ import type {
   AutomationMutationResponse,
   AutomationView,
   RunAutomationNowResponse,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 import type { AutomationDefinition } from "@crewon/domain";
 
 import { projectRun } from "./run-projection.ts";

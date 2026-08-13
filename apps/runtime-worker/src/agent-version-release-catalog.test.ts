@@ -112,7 +112,6 @@ function workspaceReadRuntime(): WorkspaceReadToolRuntime {
   };
   return new WorkspaceReadToolRuntime({
     binding: {
-      deviceBindingId: "device-binding-1",
       workspaceBindingId: "workspace-binding-1",
       policySnapshotId: "standalone-policy-v0",
     },

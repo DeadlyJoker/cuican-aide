@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { canonicalJsonValue } from "@crewon/contracts";
+import { canonicalJsonValue } from "@crewon/contracts/runtime";
 
 import type { ModelRequest } from "./model-transport-port.ts";
 

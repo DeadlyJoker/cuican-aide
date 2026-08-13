@@ -1,6 +1,6 @@
 import type { Readable, Writable } from "node:stream";
 
-import type { ErrorEnvelope } from "@crewon/contracts";
+import type { ErrorEnvelope } from "@crewon/contracts/runtime";
 
 export const PAUSED_ADMISSION_ENV = "CREWON_CONTROL_PAUSED_ADMISSION";
 export const ACTIVATION_CONFIRMED_LINE =

@@ -22,7 +22,7 @@ import {
 import type {
   CanonicalAgentEvent,
   ProviderCheckpoint,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 import {
   ContextHistoryError,
   CONTEXT_COMPACTION_PROMPT,

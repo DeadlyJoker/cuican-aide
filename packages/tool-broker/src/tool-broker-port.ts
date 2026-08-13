@@ -1,4 +1,4 @@
-import type { ActionIntent } from "@crewon/contracts";
+import type { ActionIntent } from "@crewon/contracts/runtime";
 
 export type ToolCallKind = "function" | "custom";
 

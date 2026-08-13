@@ -2,7 +2,7 @@ import {
   parseProviderCheckpoint,
   parseRateLimitSnapshot,
   type CanonicalAgentEvent,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 import type { RunLifecycleEvent, RunState } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";

@@ -8,7 +8,6 @@ import {
   parseRuntimeWorkerWorkspaceDispatchResponse,
   parseRuntimeWorkerWorkspaceFreezeCommandError,
   parseRuntimeWorkerWorkspaceFreezeCommandResponse,
-  type DeviceWorkspaceListCommand,
   type RuntimeWorkerFrozenWorkspaceCommand,
   type RuntimeWorkerWorkspaceDispatchRequest,
   type RuntimeWorkerWorkspaceFreezeCommandRequest,
@@ -113,15 +112,13 @@ test("projects unsafe internal dispatch errors through the strict safe wire", as
   );
 });
 
-test("preserves possiblySent when a malformed Gateway success fails post-send validation", async (context) => {
+test("preserves possiblySent when a malformed Workspace result fails validation", async (context) => {
   const freeze = new RuntimeWorkspaceFreezeService({
     bindings: {
       resolve: async (query) => ({
         ...query,
         workspaceBindingId: "workspace-1",
         incarnationId: "incarnation-1",
-        deviceBindingId: "device-binding-1",
-        deviceId: "device-1",
         runtimeBindingId: "runtime-binding-1",
         policySnapshotId: "policy-1",
       }),
@@ -135,31 +132,13 @@ test("preserves possiblySent when a malformed Gateway success fails post-send va
   const dispatch = new RuntimeWorkspaceDispatchService({
     authority: { admit: async (expected) => expected },
     digester: new NodeSha256ContentDigester(),
-    signer: {
-      async sign({ command: unsigned }) {
-        return {
-          ...unsigned,
-          authorization: {
-            schemaVersion: "crewon.device-authorization.v0",
-            scheme: "ed25519",
-            keyId: "workspace-key-1",
-            issuedAt: "2026-08-10T00:00:30.000Z",
-            expiresAt: unsigned.expiresAt,
-            approvalProof: null,
-            signature: "A".repeat(86),
-          },
-        };
-      },
-    },
-    gateway: {
-      async execute(signed) {
-        const completed = gatewayCompleted(signed);
+    workspace: {
+      async execute(operation) {
+        const completed = completedDispatchResponse("execute").resolution;
         return {
           ...completed,
-          terminal: {
-            ...completed.terminal,
-            actionDigest: `sha256:${"f".repeat(64)}`,
-          },
+          executionId: operation.executionId,
+          actionDigest: `sha256:${"f".repeat(64)}`,
         };
       },
       async reconcile() {
@@ -193,7 +172,7 @@ test("preserves possiblySent when a malformed Gateway success fails post-send va
       schemaVersion: "crewon.runtime-worker-workspace-dispatch-error.v0",
       apiVersion: 1,
       phase: "execute",
-      code: "runtime_workspace_gateway_response_invalid",
+      code: "runtime_workspace_response_invalid",
       retryable: false,
       certainty: "possiblySent",
     },
@@ -330,8 +309,6 @@ function frozenCommand(): RuntimeWorkerFrozenWorkspaceCommand {
     executionId: "workspace-execution-1",
     workspaceBindingId: "workspace-1",
     incarnationId: "incarnation-1",
-    deviceBindingId: "device-binding-1",
-    deviceId: "device-1",
     runtimeBindingId: "runtime-binding-1",
     policySnapshotId: "policy-1",
     actionDigest: ACTION_DIGEST,
@@ -389,42 +366,6 @@ function dispatchRequest(
       epoch: 1,
       leasedAt: "2026-08-10T00:00:00.000Z",
       expiresAt: "2026-08-10T00:01:00.000Z",
-    },
-  };
-}
-
-function gatewayCompleted(command: DeviceWorkspaceListCommand) {
-  return {
-    status: "completed" as const,
-    executionId: command.executionId,
-    receiptId: "gateway-receipt-1",
-    terminal: {
-      schemaVersion: "crewon.device-workspace-list-event.v0" as const,
-      protocolVersion: 1 as const,
-      commandKind: "workspaceList" as const,
-      deviceId: command.deviceId,
-      executionId: command.executionId,
-      receiptId: "gateway-receipt-1",
-      connectionEpoch: 1,
-      workspaceBindingId: command.workspaceBindingId,
-      incarnationId: command.incarnationId,
-      deviceBindingId: command.deviceBindingId,
-      runtimeBindingId: command.runtimeBindingId,
-      actionDigest: command.actionDigest,
-      commandDigest: command.commandDigest,
-      sequence: 2,
-      observedAt: "2026-08-10T00:00:31.000Z",
-      type: "workspace_list.completed" as const,
-      data: {
-        result: {
-          schemaVersion: "crewon.workspace-list-result.v0" as const,
-          executionId: command.executionId,
-          actionDigest: command.actionDigest,
-          commandDigest: command.commandDigest,
-          entries: [{ name: "README.md", kind: "file" as const }],
-          truncated: false,
-        },
-      },
     },
   };
 }

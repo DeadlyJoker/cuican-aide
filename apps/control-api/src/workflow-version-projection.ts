@@ -6,7 +6,7 @@ import {
 import type {
   WorkflowVersionSummaryView,
   WorkflowVersionView,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 
 export function projectWorkflowVersion(
   asset: WorkflowVersionAsset,

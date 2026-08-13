@@ -8,7 +8,7 @@ import {
   parseWorkspaceNativeReadonlyRequest,
   type WorkspaceNativeReadonlyRequest,
   type WorkspaceNativeReadonlyResponse,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 import type { RuntimeWorkspaceDispatchAuthority } from "./runtime-workspace-binding-resolver.ts";
 import { RuntimeWorkspaceError } from "./runtime-workspace-error.ts";
 const execFileAsync = promisify(execFile);

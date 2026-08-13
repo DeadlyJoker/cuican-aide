@@ -135,8 +135,6 @@ test("accepts one all-or-none Workspace bootstrap and redacts every secret Debug
     spaceId: "space-1",
     workspaceBindingId: "workspace-1",
     incarnationId: "incarnation-1",
-    deviceBindingId: "device-binding-1",
-    deviceId: "device-1",
     runtimeBindingId: "runtime-generation-1",
     policySnapshotId: "policy-1",
   });
@@ -144,7 +142,6 @@ test("accepts one all-or-none Workspace bootstrap and redacts every secret Debug
     inspect(bootstrap),
     inspect(bootstrap.workspace),
     inspect(bootstrap.workspace.privateServer),
-    inspect(bootstrap.workspace.signing),
   ]) {
     assert.equal(inspected, "RuntimeNativeBootstrap([REDACTED])");
     assert.doesNotMatch(inspected, /secret|PRIVATE KEY|CERTIFICATE/u);
@@ -268,11 +265,9 @@ test("rejects a second unread bootstrap before parsing its credentials", () => {
   assert.ok(takeRuntimeNativeBootstrap() !== null);
 });
 
-test("rejects partial Workspace secrets, extra keys, and invalid caps", () => {
+test("rejects extra Workspace keys and invalid caps", () => {
   for (const mutate of [
-    (value: Record<string, any>) =>
-      delete value.workspace.signing.privateKeyPem,
-    (value: Record<string, any>) => (value.workspace.signing.extra = true),
+    (value: Record<string, any>) => (value.workspace.extra = true),
     (value: Record<string, any>) => (value.workspace.privateServer.port = -1),
     (value: Record<string, any>) => (value.workspace.deadlineMs = 999),
   ]) {
@@ -286,8 +281,6 @@ test("rejects partial Workspace secrets, extra keys, and invalid caps", () => {
 });
 
 function workspaceBootstrap() {
-  const privateKey =
-    "-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----";
   return {
     schemaVersion: "crewon.worker-native-bootstrap.v4",
     provider: null,
@@ -304,12 +297,9 @@ function workspaceBootstrap() {
         spaceId: "space-1",
         workspaceBindingId: "workspace-1",
         incarnationId: "incarnation-1",
-        deviceBindingId: "device-binding-1",
-        deviceId: "device-1",
         runtimeBindingId: "runtime-generation-1",
         policySnapshotId: "policy-1",
       },
-      signing: { keyId: "workspace-key-1", privateKeyPem: privateKey },
       deadlineMs: 35_000,
     },
     credentialBindings: null,

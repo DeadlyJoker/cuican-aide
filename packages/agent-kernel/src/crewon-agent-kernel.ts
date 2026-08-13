@@ -3,7 +3,7 @@ import {
   parseProviderCheckpoint,
   parseRateLimitSnapshot,
   type ProviderCheckpoint,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 import { validateProviderTurnState } from "@crewon/domain";
 import {
   type ToolCallKind,

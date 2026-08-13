@@ -80,7 +80,7 @@ test("rejects malformed, absolute, ambiguous paths and authority-shaped extra ke
     );
   }
   for (const input of [
-    JSON.stringify({ path: "README.md", deviceId: "device-2" }),
+    JSON.stringify({ path: "README.md", authorityId: "forged-authority" }),
     JSON.stringify({ path: "README.md", workspaceBindingId: "workspace-2" }),
     JSON.stringify({ path: "README.md", approvalProof: {} }),
     JSON.stringify({}),
@@ -168,7 +168,7 @@ test("maps an exact durable failure to a completed Tool error result", async () 
       result: {
         schemaVersion: "crewon.tool-result.v0",
         callId: "call-1",
-        output: "device execution failed: workspace_file_read_not_found",
+        output: "workspace read failed: workspace_file_read_not_found",
         isError: true,
         artifactRef: null,
       },
@@ -341,7 +341,6 @@ function toolRuntime(
 
 function binding() {
   return {
-    deviceBindingId: "device-binding-1",
     workspaceBindingId: "workspace-1",
     policySnapshotId: "policy-1",
   };
@@ -353,7 +352,7 @@ function policy() {
     recovery: "reconcilable" as const,
     resourceBindingId: "workspace-1",
     credentialBindingId: null,
-    executionTarget: { kind: "device" as const, bindingId: "device-binding-1" },
+    executionTarget: { kind: "control" as const, bindingId: "workspace-1" },
     capability: "workspace.read_file.v0",
     approvalRequirement: "none" as const,
     limits: {

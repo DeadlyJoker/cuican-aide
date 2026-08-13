@@ -1,4 +1,4 @@
-import type { JsonValue } from "@crewon/contracts";
+import type { JsonValue } from "@crewon/contracts/runtime";
 
 import type { WorkflowRunInputAuthority } from "./durable-queue-port.ts";
 import type { RunRoute } from "./run-commands.ts";

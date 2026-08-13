@@ -9,7 +9,7 @@ import {
 import {
   parseProviderCheckpoint,
   type ProviderCheckpoint,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 
 import {
   httpError,

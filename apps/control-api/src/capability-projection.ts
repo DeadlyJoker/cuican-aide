@@ -1,6 +1,6 @@
 import type { AgentVersionAsset, ContentDigester } from "@crewon/application";
 import { parseAgentVersionAsset } from "@crewon/agent-version";
-import type { CapabilitySummaryView } from "@crewon/contracts";
+import type { CapabilitySummaryView } from "@crewon/contracts/runtime";
 
 export type CapabilityProjection = Readonly<{
   key: string;

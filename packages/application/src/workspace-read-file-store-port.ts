@@ -1,19 +1,68 @@
-import type {
-  DeviceFilesystemReadCommand,
-  DeviceFilesystemReadDispatchReference,
-  DeviceFilesystemReadDispatchResolution,
-  DeviceFilesystemReadRouteIntent,
-} from "@crewon/contracts";
-
 import type { IdempotencyDescriptor } from "./run-store-port.ts";
 
 export type WorkspaceReadFilePhase = "execute" | "reconcile" | "cancel";
 
+export const WORKSPACE_READ_FILE_LIMITS = Object.freeze({
+  timeoutMs: 30_000,
+  maxOutputBytes: 64 * 1024,
+  maxArtifactBytes: 16 * 1024 * 1024,
+});
+
 export type FrozenWorkspaceReadFileDispatch = Readonly<{
-  command: DeviceFilesystemReadCommand;
-  routeIntent: DeviceFilesystemReadRouteIntent;
-  reference: DeviceFilesystemReadDispatchReference;
+  schemaVersion: "crewon.workspace-read-file-command.v0";
+  executionId: string;
+  runId: string;
+  stepId: string;
+  attemptId: string;
+  leaseId: string;
+  leaseEpoch: number;
+  expiresAt: string;
+  workspaceBindingId: string;
+  incarnationId: string;
+  runtimeBindingId: string;
+  policySnapshotId: string;
+  actionDigest: string;
+  commandDigest: string;
+  relativePathSegments: readonly string[];
+  limits: Readonly<{
+    timeoutMs: number;
+    maxOutputBytes: number;
+    maxArtifactBytes: number;
+  }>;
+  providerReceiptId: string | null;
 }>;
+
+export type WorkspaceReadFileResolution =
+  | Readonly<{
+      status: "completed";
+      executionId: string;
+      actionDigest: string;
+      commandDigest: string;
+      providerReceiptId: string;
+      result: Readonly<{
+        schemaVersion: "crewon.workspace-file-read-result.v0";
+        encoding: "utf8";
+        content: string;
+        byteLength: number;
+        outputDigest: string;
+      }>;
+    }>
+  | Readonly<{
+      status: "failed";
+      executionId: string;
+      actionDigest: string;
+      commandDigest: string;
+      providerReceiptId: string;
+      code: string;
+      retryable: boolean;
+    }>
+  | Readonly<{
+      status: "canceled" | "unknownOutcome";
+      executionId: string;
+      actionDigest: string;
+      commandDigest: string;
+      providerReceiptId: string | null;
+    }>;
 
 export type WorkspaceReadFileRecord = Readonly<{
   schemaVersion: "crewon.workspace-read-file-operation.v0";
@@ -24,12 +73,9 @@ export type WorkspaceReadFileRecord = Readonly<{
   attemptId: string;
   executionId: string;
   revision: number;
-  status:
-    | "prepared"
-    | "possiblySent"
-    | DeviceFilesystemReadDispatchResolution["status"];
+  status: "prepared" | "possiblySent" | WorkspaceReadFileResolution["status"];
   frozen: FrozenWorkspaceReadFileDispatch;
-  resolution: DeviceFilesystemReadDispatchResolution | null;
+  resolution: WorkspaceReadFileResolution | null;
 }>;
 
 export type WorkspaceReadFileMutationResult = Readonly<{
@@ -88,7 +134,7 @@ export interface WorkspaceReadFileStore {
         phase: WorkspaceReadFilePhase;
         idempotency: IdempotencyDescriptor;
         expectedRevision: number;
-        resolution: DeviceFilesystemReadDispatchResolution;
+        resolution: WorkspaceReadFileResolution;
       }>,
   ): Promise<WorkspaceReadFileMutationResult>;
 }

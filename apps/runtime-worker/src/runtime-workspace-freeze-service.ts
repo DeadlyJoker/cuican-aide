@@ -11,7 +11,7 @@ import {
   parseRuntimeWorkerWorkspaceFreezeCommandResponse,
   type RuntimeWorkerWorkspaceFreezeCommandRequest,
   type RuntimeWorkerWorkspaceFreezeCommandResponse,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 
 import {
   validateRuntimeWorkspaceBindingSnapshot,
@@ -73,8 +73,6 @@ export class RuntimeWorkspaceFreezeService {
       executionId,
       workspaceBindingId: binding.workspaceBindingId,
       incarnationId: binding.incarnationId,
-      deviceBindingId: binding.deviceBindingId,
-      deviceId: binding.deviceId,
       runtimeBindingId: binding.runtimeBindingId,
       policySnapshotId: binding.policySnapshotId,
       actionDigest: EMPTY_DIGEST,

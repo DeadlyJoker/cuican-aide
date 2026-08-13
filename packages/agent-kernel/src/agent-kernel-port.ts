@@ -2,7 +2,7 @@ import type {
   CanonicalAgentEvent,
   ProviderCheckpoint,
   RateLimitSnapshot,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 import type { ToolCallKind, ToolDefinition } from "@crewon/tool-broker";
 
 export type AgentHistoryItem =

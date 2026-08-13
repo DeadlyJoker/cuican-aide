@@ -4,7 +4,7 @@ import type {
   AgentSegmentControlSink,
   KernelAgentEvent,
 } from "@crewon/agent-kernel";
-import type { ProviderCheckpoint } from "@crewon/contracts";
+import type { ProviderCheckpoint } from "@crewon/contracts/runtime";
 import { AgentSegmentStateMachine } from "./agent-segment-state-machine.ts";
 
 export type AgentSegmentExecutionResult = Readonly<{

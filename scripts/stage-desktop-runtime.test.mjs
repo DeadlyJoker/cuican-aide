@@ -18,7 +18,7 @@ test("accepts only the Node 24 runtime ABI", () => {
   );
 });
 
-test("rejects removed Device and Responses Lite compatibility markers", () => {
+test("rejects removed Device protocol and Responses Lite compatibility markers", () => {
   assert.doesNotThrow(() =>
     assertNoRemovedRuntimeMarkers("standard Responses runtime"),
   );
@@ -26,6 +26,10 @@ test("rejects removed Device and Responses Lite compatibility markers", () => {
     "CREWON_DEVICE_TOOL_CONFIG_PATH",
     "crewon.device-tool-runtime.v0",
     "deviceToolConfigPath",
+    "crewon.device-command.v0",
+    "crewon.device-workspace-list-command.v0",
+    "Ed25519Device",
+    "HttpsDeviceDispatchClient",
     "responsesLite",
     "responses-lite",
   ]) {
@@ -68,7 +72,10 @@ test("release staging binds the distributable runtime to target and digest", () 
 test("desktop bundle contains only the Tauri shell and TypeScript runtime", () => {
   const root = dirname(dirname(fileURLToPath(import.meta.url)));
   const config = JSON.parse(
-    readFileSync(join(root, "apps/crewon-ui/src-tauri/tauri.conf.json"), "utf8"),
+    readFileSync(
+      join(root, "apps/crewon-ui/src-tauri/tauri.conf.json"),
+      "utf8",
+    ),
   );
   assert.deepEqual(config.bundle.externalBin, [
     "binaries/crewon-process-guardian",

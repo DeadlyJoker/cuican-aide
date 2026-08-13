@@ -1,10 +1,3 @@
-import type {
-  DeviceFilesystemReadDispatchResolution,
-  DeviceFilesystemReadRouteIntent,
-  DeviceFilesystemReadCommand,
-  DeviceFilesystemReadDispatchReference,
-} from "@crewon/contracts";
-
 import { ApplicationError } from "./application-error.ts";
 import type { IdempotencyDescriptor } from "./run-store-port.ts";
 import type {
@@ -13,6 +6,7 @@ import type {
   WorkspaceReadFileMutationResult,
   WorkspaceReadFilePhase,
   WorkspaceReadFileRecord,
+  WorkspaceReadFileResolution,
   WorkspaceReadFileStore,
 } from "./workspace-read-file-store-port.ts";
 
@@ -48,22 +42,19 @@ export interface WorkspaceReadFileCommandFactoryPort {
   ): Promise<FrozenWorkspaceReadFileDispatch>;
 }
 
-export interface WorkspaceReadFileGatewayPort {
+export interface WorkspaceReadFileAuthorityPort {
   execute(
-    intent: DeviceFilesystemReadRouteIntent,
-    command: DeviceFilesystemReadCommand,
+    frozen: FrozenWorkspaceReadFileDispatch,
     signal: AbortSignal,
-  ): Promise<DeviceFilesystemReadDispatchResolution>;
+  ): Promise<WorkspaceReadFileResolution>;
   reconcile(
-    intent: DeviceFilesystemReadRouteIntent,
-    reference: DeviceFilesystemReadDispatchReference,
+    frozen: FrozenWorkspaceReadFileDispatch,
     signal: AbortSignal,
-  ): Promise<DeviceFilesystemReadDispatchResolution>;
+  ): Promise<WorkspaceReadFileResolution>;
   cancel(
-    intent: DeviceFilesystemReadRouteIntent,
-    reference: DeviceFilesystemReadDispatchReference,
+    frozen: FrozenWorkspaceReadFileDispatch,
     signal: AbortSignal,
-  ): Promise<DeviceFilesystemReadDispatchResolution>;
+  ): Promise<WorkspaceReadFileResolution>;
 }
 
 export class WorkspaceReadFileDispatchError extends Error {
@@ -79,16 +70,16 @@ export class WorkspaceReadFileDispatchError extends Error {
 export class WorkspaceReadFileApplicationService {
   readonly #store: WorkspaceReadFileStore;
   readonly #commands: WorkspaceReadFileCommandFactoryPort;
-  readonly #gateway: WorkspaceReadFileGatewayPort;
+  readonly #authority: WorkspaceReadFileAuthorityPort;
 
   constructor(config: {
     store: WorkspaceReadFileStore;
     commands: WorkspaceReadFileCommandFactoryPort;
-    gateway: WorkspaceReadFileGatewayPort;
+    authority: WorkspaceReadFileAuthorityPort;
   }) {
     this.#store = config.store;
     this.#commands = config.commands;
-    this.#gateway = config.gateway;
+    this.#authority = config.authority;
   }
 
   async execute(
@@ -202,14 +193,13 @@ export class WorkspaceReadFileApplicationService {
             expectedRevision: operation.revision,
           })
         : operation;
-    const { routeIntent, command, reference } = dispatchOperation.frozen;
-    let resolution: DeviceFilesystemReadDispatchResolution;
+    let resolution: WorkspaceReadFileResolution;
     try {
       resolution = await (phase === "execute"
-        ? this.#gateway.execute(routeIntent, command, signal)
+        ? this.#authority.execute(dispatchOperation.frozen, signal)
         : phase === "reconcile"
-          ? this.#gateway.reconcile(routeIntent, reference, signal)
-          : this.#gateway.cancel(routeIntent, reference, signal));
+          ? this.#authority.reconcile(dispatchOperation.frozen, signal)
+          : this.#authority.cancel(dispatchOperation.frozen, signal));
     } catch (error) {
       const certainty = dispatchCertainty(error);
       if (phase === "execute" && certainty === "notSent") {

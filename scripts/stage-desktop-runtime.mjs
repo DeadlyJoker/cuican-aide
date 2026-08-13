@@ -80,6 +80,10 @@ const REMOVED_RUNTIME_MARKERS = [
   "CREWON_DEVICE_TOOL_CONFIG_PATH",
   "crewon.device-tool-runtime.v0",
   "deviceToolConfigPath",
+  "crewon.device-command.v0",
+  "crewon.device-workspace-list-command.v0",
+  "Ed25519Device",
+  "HttpsDeviceDispatchClient",
   "responsesLite",
   "responses-lite",
 ];
@@ -87,7 +91,9 @@ const REMOVED_RUNTIME_MARKERS = [
 export function assertNoRemovedRuntimeMarkers(bundleSource) {
   for (const marker of REMOVED_RUNTIME_MARKERS) {
     if (bundleSource.includes(marker)) {
-      throw new Error(`desktop runtime bundle contains removed marker: ${marker}`);
+      throw new Error(
+        `desktop runtime bundle contains removed marker: ${marker}`,
+      );
     }
   }
 }
@@ -219,7 +225,12 @@ function stageControlRuntime(target) {
     join(repoRoot, "apps", "runtime-worker", "src", "release-main.ts"),
     join(runtimeOutDir, "runtime-release.mjs"),
   );
-  for (const bundle of ["runtime-worker.mjs", "runtime-release.mjs"]) {
+  for (const bundle of [
+    "control-api.mjs",
+    "provider-settings-coordinator.mjs",
+    "runtime-worker.mjs",
+    "runtime-release.mjs",
+  ]) {
     assertNoRemovedRuntimeMarkers(
       readFileSync(join(runtimeOutDir, bundle), "utf8"),
     );

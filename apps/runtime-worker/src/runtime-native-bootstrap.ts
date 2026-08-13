@@ -6,7 +6,6 @@ import type { RuntimeWorkspaceDispatchAuthority } from "./runtime-workspace-bind
 const SCHEMA_VERSION = "crewon.worker-native-bootstrap.v4";
 const PRIVATE_CREDENTIAL_SCHEMA_VERSION =
   "crewon.remote-mcp-private-credentials.v1";
-const MAX_PEM_BYTES = 128 * 1024;
 const MAX_CREDENTIAL_BINDINGS = 32;
 
 export type RuntimeNativeWorkspaceBootstrap = Readonly<{
@@ -14,7 +13,6 @@ export type RuntimeNativeWorkspaceBootstrap = Readonly<{
   deadlineMs: number;
   privateServer: Readonly<{ port: number; token: string }>;
   authority: RuntimeWorkspaceDispatchAuthority;
-  signing: Readonly<{ keyId: string; privateKeyPem: string }>;
 }>;
 
 export type RuntimeNativeBootstrap = Readonly<{
@@ -240,7 +238,6 @@ function parseWorkspace(value: unknown): RuntimeNativeWorkspaceBootstrap {
       "authority",
       "deadlineMs",
       "privateServer",
-      "signing",
       "trustedLocalPath",
     ]) ||
     !integer(value.deadlineMs, 1_000, 60_000) ||
@@ -253,7 +250,6 @@ function parseWorkspace(value: unknown): RuntimeNativeWorkspaceBootstrap {
     deadlineMs: Number(value.deadlineMs),
     privateServer: parseWorkspacePrivateServer(value.privateServer),
     authority: parseWorkspaceAuthority(value.authority),
-    signing: parseWorkspaceSigning(value.signing),
   });
 }
 
@@ -283,8 +279,6 @@ function parseWorkspaceAuthority(
   value: unknown,
 ): RuntimeWorkspaceDispatchAuthority {
   const keys = [
-    "deviceBindingId",
-    "deviceId",
     "incarnationId",
     "policySnapshotId",
     "runtimeBindingId",
@@ -298,27 +292,9 @@ function parseWorkspaceAuthority(
     spaceId: opaque(value.spaceId),
     workspaceBindingId: opaque(value.workspaceBindingId),
     incarnationId: opaque(value.incarnationId),
-    deviceBindingId: opaque(value.deviceBindingId),
-    deviceId: opaque(value.deviceId),
     runtimeBindingId: opaque(value.runtimeBindingId),
     policySnapshotId: opaque(value.policySnapshotId),
   };
-}
-
-function parseWorkspaceSigning(
-  value: unknown,
-): RuntimeNativeWorkspaceBootstrap["signing"] {
-  if (
-    !object(value) ||
-    !exactKeys(value, ["keyId", "privateKeyPem"]) ||
-    !pem(value.privateKeyPem, "PRIVATE KEY")
-  ) {
-    throw invalid();
-  }
-  return redact({
-    keyId: opaque(value.keyId),
-    privateKeyPem: value.privateKeyPem,
-  });
 }
 
 function parseProvider(value: unknown): RuntimeProviderBinding | null {
@@ -380,42 +356,6 @@ function parseProbe(value: unknown): RuntimeNativeBootstrap["probe"] {
     throw invalid();
   }
   return { port: Number(value.port), token: value.token };
-}
-
-function httpsOrigin(value: unknown): string {
-  if (typeof value !== "string") throw invalid();
-  let endpoint: URL;
-  try {
-    endpoint = new URL(value);
-  } catch {
-    throw invalid();
-  }
-  if (
-    endpoint.protocol !== "https:" ||
-    endpoint.username !== "" ||
-    endpoint.password !== "" ||
-    endpoint.search !== "" ||
-    endpoint.hash !== "" ||
-    (endpoint.pathname !== "" && endpoint.pathname !== "/") ||
-    (value !== endpoint.origin && value !== `${endpoint.origin}/`)
-  ) {
-    throw invalid();
-  }
-  return value;
-}
-
-function pem(
-  value: unknown,
-  label: "PRIVATE KEY" | "CERTIFICATE",
-): value is string {
-  return (
-    typeof value === "string" &&
-    Buffer.byteLength(value) > 0 &&
-    Buffer.byteLength(value) <= MAX_PEM_BYTES &&
-    !/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/u.test(value) &&
-    value.startsWith(`-----BEGIN ${label}-----\n`) &&
-    value.trimEnd().endsWith(`-----END ${label}-----`)
-  );
 }
 
 function opaque(value: unknown): string {

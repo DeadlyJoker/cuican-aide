@@ -205,17 +205,17 @@ test("starts and closes the optional private Provider probe server", async (cont
   await runtime.close();
 });
 
-test("starts the optional loopback Workspace server and closes its Gateway client", async (context) => {
+test("starts the optional loopback Workspace server and closes its local authority", async (context) => {
   const databasePath = temporaryDatabasePath(context);
   const config = workspaceRuntimeConfig();
   await activateRelease(databasePath, config);
-  let gatewayCloses = 0;
+  let workspaceCloses = 0;
   const runtime = await createStandaloneRuntimeWorker({
     ...config,
     databasePath,
     scanIntervalMs: null,
     workspacePrivate: workspaceConfig(0, () => {
-      gatewayCloses += 1;
+      workspaceCloses += 1;
     }),
   });
   assert.match(
@@ -223,7 +223,7 @@ test("starts the optional loopback Workspace server and closes its Gateway clien
     /^http:\/\/127\.0\.0\.1:\d+$/u,
   );
   await runtime.close();
-  assert.equal(gatewayCloses, 1);
+  assert.equal(workspaceCloses, 1);
 });
 
 test("closes Workspace resources when the private loopback port is occupied", async (context) => {
@@ -243,43 +243,43 @@ test("closes Workspace resources when the private loopback port is occupied", as
   const databasePath = temporaryDatabasePath(context);
   const config = workspaceRuntimeConfig();
   await activateRelease(databasePath, config);
-  let gatewayCloses = 0;
+  let workspaceCloses = 0;
   await assert.rejects(
     createStandaloneRuntimeWorker({
       ...config,
       databasePath,
       scanIntervalMs: null,
       workspacePrivate: workspaceConfig(address.port, () => {
-        gatewayCloses += 1;
+        workspaceCloses += 1;
       }),
     }),
     (error) =>
       error instanceof Error && "code" in error && error.code === "EADDRINUSE",
   );
-  assert.equal(gatewayCloses, 1);
+  assert.equal(workspaceCloses, 1);
   const reopened = new SqliteRunStore(databasePath);
   await reopened.close();
 });
 
-test("closes packaged Workspace Gateway and Store on static deployment mismatch", async (context) => {
+test("closes packaged Workspace authority and Store on static deployment mismatch", async (context) => {
   const databasePath = temporaryDatabasePath(context);
   const config = runtimeConfig();
   await activateRelease(databasePath, config);
-  let gatewayCloses = 0;
+  let workspaceCloses = 0;
   await assert.rejects(
     createStandaloneRuntimeWorker({
       ...config,
       databasePath,
       scanIntervalMs: null,
       workspacePrivate: workspaceConfig(0, () => {
-        gatewayCloses += 1;
+        workspaceCloses += 1;
       }),
     }),
     (error) =>
       error instanceof Error &&
       error.message === "runtime_workspace_deployment_mismatch",
   );
-  assert.equal(gatewayCloses, 1);
+  assert.equal(workspaceCloses, 1);
   const reopened = new SqliteRunStore(databasePath);
   await reopened.close();
 });
@@ -383,14 +383,11 @@ function workspaceConfig(port: number, closed: () => void) {
       spaceId: "space-1",
       workspaceBindingId: "workspace-1",
       incarnationId: "incarnation-1",
-      deviceBindingId: "device-binding-1",
-      deviceId: "device-1",
       runtimeBindingId: "runtime-binding-1",
       policySnapshotId: "policy-1",
     },
     ids: { nextExecutionId: () => "workspace-execution-1" },
-    signer: { sign: async () => assert.fail("sign not expected") },
-    gateway: {
+    workspace: {
       execute: async () => assert.fail("execute not expected"),
       reconcile: async () => assert.fail("reconcile not expected"),
       cancel: async () => assert.fail("cancel not expected"),

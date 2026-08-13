@@ -187,8 +187,9 @@ export class RuntimeWorkspaceReadApplicationAdapter
     if (
       intent.workspaceBindingId !== this.#deployment.workspaceBindingId ||
       intent.resourceBindingId !== this.#deployment.workspaceBindingId ||
-      intent.executionTarget.kind !== "device" ||
-      intent.executionTarget.bindingId !== this.#deployment.deviceBindingId ||
+      intent.executionTarget.kind !== "control" ||
+      intent.executionTarget.bindingId !==
+        this.#deployment.workspaceBindingId ||
       intent.policySnapshotId !== this.#deployment.policySnapshotId ||
       intent.capability !== "workspace.read_file.v0"
     ) {
@@ -243,17 +244,16 @@ function projectResolution(
     return {
       status: "unknownOutcome",
       executionId: operation.executionId,
-      providerReceiptId: operation.frozen.reference.receiptId,
+      providerReceiptId: operation.frozen.providerReceiptId,
     };
   }
   switch (resolution.status) {
     case "completed": {
-      const { outputDigest: _, ...readResult } =
-        resolution.terminal.data.result;
+      const { outputDigest: _, ...readResult } = resolution.result;
       return {
         status: "completed",
         executionId: operation.executionId,
-        providerReceiptId: resolution.receiptId,
+        providerReceiptId: resolution.providerReceiptId,
         result: readResult,
       };
     }
@@ -261,21 +261,21 @@ function projectResolution(
       return {
         status: "failed",
         executionId: operation.executionId,
-        providerReceiptId: resolution.receiptId,
-        code: resolution.terminal.data.code,
-        retryable: resolution.terminal.data.retryable,
+        providerReceiptId: resolution.providerReceiptId,
+        code: resolution.code,
+        retryable: resolution.retryable,
       };
     case "canceled":
       return {
         status: "canceled",
         executionId: operation.executionId,
-        providerReceiptId: resolution.receiptId,
+        providerReceiptId: resolution.providerReceiptId,
       };
     case "unknownOutcome":
       return {
         status: "unknownOutcome",
         executionId: operation.executionId,
-        providerReceiptId: resolution.receiptId,
+        providerReceiptId: resolution.providerReceiptId,
       };
   }
 }

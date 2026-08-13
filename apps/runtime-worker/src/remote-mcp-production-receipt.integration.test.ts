@@ -452,8 +452,6 @@ function agentSource() {
 }
 
 function nativeCredentialEnvelope() {
-  const privateKey =
-    "-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----";
   return {
     schemaVersion: "crewon.worker-native-bootstrap.v4",
     provider: null,
@@ -470,12 +468,9 @@ function nativeCredentialEnvelope() {
         spaceId: "space-1",
         workspaceBindingId: "workspace-1",
         incarnationId: "incarnation-1",
-        deviceBindingId: "device-binding-1",
-        deviceId: "device-1",
         runtimeBindingId: "runtime-generation-1",
         policySnapshotId: "policy-1",
       },
-      signing: { keyId: "workspace-key-1", privateKeyPem: privateKey },
       deadlineMs: 35_000,
     },
     credentialBindings: {

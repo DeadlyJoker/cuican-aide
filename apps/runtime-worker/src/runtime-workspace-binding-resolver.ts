@@ -15,8 +15,6 @@ export type RuntimeWorkspaceBindingSnapshot = RuntimeWorkspaceBindingQuery &
   Readonly<{
     workspaceBindingId: string;
     incarnationId: string;
-    deviceBindingId: string;
-    deviceId: string;
     /** Identifies the exact active/default Agent runtime generation. */
     runtimeBindingId: string;
     policySnapshotId: string;
@@ -35,8 +33,6 @@ export type RuntimeWorkspaceDispatchAuthority = Readonly<{
   spaceId: string;
   workspaceBindingId: string;
   incarnationId: string;
-  deviceBindingId: string;
-  deviceId: string;
   runtimeBindingId: string;
   policySnapshotId: string;
 }>;
@@ -125,8 +121,6 @@ export function validateRuntimeWorkspaceDispatchAuthority(
     throw new RuntimeWorkspaceError("runtime_workspace_binding_invalid");
   }
   const keys = [
-    "deviceBindingId",
-    "deviceId",
     "incarnationId",
     "policySnapshotId",
     "runtimeBindingId",
@@ -147,8 +141,6 @@ export function validateRuntimeWorkspaceDispatchAuthority(
     spaceId: opaque(input.spaceId),
     workspaceBindingId: opaque(input.workspaceBindingId),
     incarnationId: opaque(input.incarnationId),
-    deviceBindingId: opaque(input.deviceBindingId),
-    deviceId: opaque(input.deviceId),
     runtimeBindingId: opaque(input.runtimeBindingId),
     policySnapshotId: opaque(input.policySnapshotId),
   };
@@ -167,8 +159,6 @@ export function sameRuntimeWorkspaceDispatchAuthority(
     left.spaceId === right.spaceId &&
     left.workspaceBindingId === right.workspaceBindingId &&
     left.incarnationId === right.incarnationId &&
-    left.deviceBindingId === right.deviceBindingId &&
-    left.deviceId === right.deviceId &&
     left.runtimeBindingId === right.runtimeBindingId &&
     left.policySnapshotId === right.policySnapshotId
   );
@@ -183,8 +173,6 @@ export function validateRuntimeWorkspaceBindingSnapshot(
   }
   const keys = [
     "actorId",
-    "deviceBindingId",
-    "deviceId",
     "expectedThreadRevision",
     "incarnationId",
     "policySnapshotId",
@@ -212,8 +200,6 @@ export function validateRuntimeWorkspaceBindingSnapshot(
     actorId: identity(input.actorId),
     workspaceBindingId: opaque(input.workspaceBindingId),
     incarnationId: opaque(input.incarnationId),
-    deviceBindingId: opaque(input.deviceBindingId),
-    deviceId: opaque(input.deviceId),
     runtimeBindingId: opaque(input.runtimeBindingId),
     policySnapshotId: opaque(input.policySnapshotId),
   };

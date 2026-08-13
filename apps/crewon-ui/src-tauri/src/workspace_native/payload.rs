@@ -34,7 +34,6 @@ impl<'a> WorkspaceLaunchPayloads<'a> {
             return Err(WorkspaceNativeError::PayloadInvalid);
         }
         let workspace = authority.current_workspace()?;
-        let command_key = material.command_signing();
         Ok(Self {
             worker_workspace: WorkerWorkspaceBootstrap {
                 trusted_local_path: workspace.trusted_path(),
@@ -48,14 +47,8 @@ impl<'a> WorkspaceLaunchPayloads<'a> {
                     space_id: STANDALONE_SPACE_ID,
                     workspace_binding_id: workspace.workspace_binding_id(),
                     incarnation_id: workspace.incarnation_id(),
-                    device_binding_id: authority.device_binding_id(),
-                    device_id: authority.device_id(),
                     runtime_binding_id: workspace.workspace_runtime_binding_id(),
                     policy_snapshot_id: STANDALONE_POLICY_SNAPSHOT_ID,
-                },
-                signing: WorkerSigning {
-                    key_id: command_key.key_id(),
-                    private_key_pem: command_key.private_key_pem(),
                 },
             },
         })
@@ -75,7 +68,6 @@ struct WorkerWorkspaceBootstrap<'a> {
     deadline_ms: u32,
     private_server: WorkerPrivateServer<'a>,
     authority: WorkerWorkspaceAuthority<'a>,
-    signing: WorkerSigning<'a>,
 }
 
 #[derive(Serialize)]
@@ -92,15 +84,6 @@ struct WorkerWorkspaceAuthority<'a> {
     space_id: &'static str,
     workspace_binding_id: &'a str,
     incarnation_id: &'a str,
-    device_binding_id: &'a str,
-    device_id: &'a str,
     runtime_binding_id: &'a str,
     policy_snapshot_id: &'static str,
-}
-
-#[derive(Serialize)]
-#[serde(rename_all = "camelCase")]
-struct WorkerSigning<'a> {
-    key_id: &'a str,
-    private_key_pem: &'a str,
 }

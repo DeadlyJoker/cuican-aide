@@ -1,5 +1,4 @@
 import assert from "node:assert/strict";
-import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -34,12 +33,8 @@ test("runs SQLite Thread freeze through private loopback and local TS Workspace"
   const config = runtimeConfig();
   await activateRelease(databasePath, config);
   await seedThread(databasePath);
-  const commandKey = generateKeyPairSync("ed25519");
   const native = createRuntimeNativeWorkspaceResources({
-    bootstrap: workspaceBootstrap(
-      workspace,
-      commandKey.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
-    ),
+    bootstrap: workspaceBootstrap(workspace),
     runtimeTenantId: config.runtimeTenantId,
     route: config.route,
   });
@@ -69,13 +64,11 @@ test("runs SQLite Thread freeze through private loopback and local TS Workspace"
     {
       workspaceBindingId: freeze.command.workspaceBindingId,
       incarnationId: freeze.command.incarnationId,
-      deviceId: freeze.command.deviceId,
       runtimeBindingId: freeze.command.runtimeBindingId,
     },
     {
       workspaceBindingId: "workspace-1",
       incarnationId: "incarnation-1",
-      deviceId: "device-1",
       runtimeBindingId: "runtime-generation-1",
     },
   );
@@ -272,14 +265,12 @@ function workspaceDispatchRequest(
 
 function workspaceBootstrap(
   trustedLocalPath: string,
-  signingPrivateKeyPem: string,
 ): RuntimeNativeWorkspaceBootstrap {
   return {
     trustedLocalPath,
     deadlineMs: 35_000,
     privateServer: { port: 0, token: WORKSPACE_TOKEN },
     authority: staticAuthority(),
-    signing: { keyId: "workspace-key-1", privateKeyPem: signingPrivateKeyPem },
   };
 }
 
@@ -289,8 +280,6 @@ function staticAuthority(): RuntimeNativeWorkspaceBootstrap["authority"] {
     spaceId: "space-1",
     workspaceBindingId: "workspace-1",
     incarnationId: "incarnation-1",
-    deviceBindingId: "device-binding-1",
-    deviceId: "device-1",
     runtimeBindingId: "runtime-generation-1",
     policySnapshotId: "policy-1",
   };

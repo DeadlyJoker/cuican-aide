@@ -42,7 +42,7 @@ test("projects every Workspace status without private authority fields", () => {
         status: "failed",
         result: {
           status: "failed",
-          code: "device.unavailable",
+          code: "workspace.unavailable",
           retryable: true,
         },
       },
@@ -59,7 +59,6 @@ test("projects every Workspace status without private authority fields", () => {
     "actionDigest",
     "commandDigest",
     "providerReceiptId",
-    "deviceId",
     "workspaceBindingId",
     "incarnationId",
     "runtimeBindingId",
@@ -182,8 +181,6 @@ function operation(
       executionId,
       workspaceBindingId: "workspace-1",
       incarnationId: "incarnation-1",
-      deviceBindingId: "device-binding-1",
-      deviceId: "device-1",
       runtimeBindingId: "runtime-binding-1",
       policySnapshotId: "policy-1",
       actionDigest: `sha256:${"a".repeat(64)}`,
@@ -224,7 +221,7 @@ function resolution(
       status,
       ...common,
       providerReceiptId: "receipt-secret",
-      code: "device.unavailable",
+      code: "workspace.unavailable",
       retryable: true,
     };
   }

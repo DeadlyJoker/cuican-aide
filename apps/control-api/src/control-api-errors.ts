@@ -3,7 +3,7 @@ import {
   ContractValidationError,
   type ErrorCategory,
   type ErrorEnvelope,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 
 import { ControlApiIdentityError } from "./control-api-ports.ts";
 import { ProviderProbeWorkerError } from "./provider-probe-worker-client.ts";

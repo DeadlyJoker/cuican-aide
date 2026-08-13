@@ -1,52 +1,94 @@
 import { createHash } from "node:crypto";
 
 import {
-  canonicalDeviceFilesystemReadCommandDigest,
-  parseDeviceFilesystemReadDispatchReference,
-  parseDeviceFilesystemReadWorkerDispatchRequest,
-  parseDeviceFilesystemReadWorkerDispatchResponse,
-} from "@crewon/contracts";
-import {
+  WORKSPACE_READ_FILE_LIMITS,
+  canonicalJson,
   RunStoreError,
   type FrozenWorkspaceReadFileDispatch,
   type IdempotencyDescriptor,
   type WorkspaceReadFileLocator,
   type WorkspaceReadFileRecord,
+  type WorkspaceReadFileResolution,
 } from "@crewon/application";
+
+const EMPTY_DIGEST = `sha256:${"0".repeat(64)}`;
 
 export function validateFrozenWorkspaceReadFileDispatch(
   input: FrozenWorkspaceReadFileDispatch,
 ): FrozenWorkspaceReadFileDispatch {
-  const request = parseDeviceFilesystemReadWorkerDispatchRequest({
-    schemaVersion: "crewon.device-filesystem-read-dispatch-request.v0",
-    apiVersion: 1,
-    operation: "execute",
-    routeIntent: input.routeIntent,
-    command: input.command,
-  });
-  if (request.operation !== "execute") invalid();
-  const reference = parseDeviceFilesystemReadDispatchReference(input.reference);
-  const command = request.command;
   if (
-    reference.receiptId !== null ||
-    reference.deviceId !== command.deviceId ||
-    reference.executionId !== command.executionId ||
-    reference.workspaceBindingId !== command.workspaceBindingId ||
-    reference.incarnationId !== command.arguments.workspaceIncarnationId ||
-    reference.deviceBindingId !== request.routeIntent.deviceBindingId ||
-    reference.runtimeBindingId !== request.routeIntent.runtimeBindingId ||
-    reference.actionDigest !== command.actionDigest ||
-    reference.commandDigest !==
-      canonicalDeviceFilesystemReadCommandDigest(command, digest) ||
-    reference.leaseId !== command.leaseId ||
-    reference.leaseEpoch !== command.leaseEpoch
-  )
+    !exactKeys(input, [
+      "actionDigest",
+      "attemptId",
+      "commandDigest",
+      "executionId",
+      "expiresAt",
+      "incarnationId",
+      "leaseEpoch",
+      "leaseId",
+      "limits",
+      "policySnapshotId",
+      "providerReceiptId",
+      "relativePathSegments",
+      "runId",
+      "runtimeBindingId",
+      "schemaVersion",
+      "stepId",
+      "workspaceBindingId",
+    ]) ||
+    input.schemaVersion !== "crewon.workspace-read-file-command.v0" ||
+    !Number.isSafeInteger(input.leaseEpoch) ||
+    input.leaseEpoch < 1 ||
+    !canonicalTimestamp(input.expiresAt) ||
+    !exactKeys(input.limits, [
+      "maxArtifactBytes",
+      "maxOutputBytes",
+      "timeoutMs",
+    ]) ||
+    input.limits.timeoutMs !== WORKSPACE_READ_FILE_LIMITS.timeoutMs ||
+    input.limits.maxOutputBytes !== WORKSPACE_READ_FILE_LIMITS.maxOutputBytes ||
+    input.limits.maxArtifactBytes !==
+      WORKSPACE_READ_FILE_LIMITS.maxArtifactBytes ||
+    !Array.isArray(input.relativePathSegments) ||
+    input.relativePathSegments.length < 1 ||
+    input.relativePathSegments.length > 32
+  ) {
     invalid();
-  return structuredClone({
-    command,
-    routeIntent: request.routeIntent,
-    reference,
-  });
+  }
+  for (const value of [
+    input.executionId,
+    input.runId,
+    input.stepId,
+    input.attemptId,
+    input.leaseId,
+    input.workspaceBindingId,
+    input.incarnationId,
+    input.runtimeBindingId,
+    input.policySnapshotId,
+  ]) {
+    id(value);
+  }
+  for (const segment of input.relativePathSegments) pathSegment(segment);
+  digest(input.actionDigest);
+  digest(input.commandDigest);
+  if (input.providerReceiptId !== null) id(input.providerReceiptId);
+  const base: FrozenWorkspaceReadFileDispatch = {
+    ...input,
+    commandDigest: EMPTY_DIGEST,
+    providerReceiptId: null,
+  };
+  if (
+    input.commandDigest !==
+    sha256(
+      canonicalJson({
+        schemaVersion: "crewon.workspace-read-file-command-digest.v0",
+        command: base,
+      }),
+    )
+  ) {
+    invalid();
+  }
+  return structuredClone(input);
 }
 
 export function validateWorkspaceReadFileLocator(
@@ -84,8 +126,9 @@ export function requireWorkspaceReadFileLocator(
     operation.stepId !== locator.stepId ||
     operation.attemptId !== locator.attemptId ||
     operation.executionId !== locator.executionId
-  )
+  ) {
     invalid();
+  }
 }
 
 export function validateWorkspaceReadFileIdempotency(
@@ -99,14 +142,15 @@ export function validateWorkspaceReadFileIdempotency(
     !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/u.test(input.key) ||
     typeof input.requestFingerprint !== "string" ||
     !/^sha256:[a-f0-9]{64}$/u.test(input.requestFingerprint)
-  )
+  ) {
     invalid();
+  }
   return structuredClone(input);
 }
 
 export function validateWorkspaceReadFileRecord(
   input: WorkspaceReadFileRecord,
-) {
+): WorkspaceReadFileRecord {
   if (
     !exactKeys(input, [
       "attemptId",
@@ -124,8 +168,9 @@ export function validateWorkspaceReadFileRecord(
     input.schemaVersion !== "crewon.workspace-read-file-operation.v0" ||
     !Number.isSafeInteger(input.revision) ||
     input.revision < 1
-  )
+  ) {
     invalid();
+  }
   const locator = validateWorkspaceReadFileLocator({
     tenantId: input.tenantId,
     spaceId: input.spaceId,
@@ -134,16 +179,18 @@ export function validateWorkspaceReadFileRecord(
     attemptId: input.attemptId,
     executionId: input.executionId,
   });
-  const frozen = validateFrozenOrUpgraded(input.frozen);
+  const frozen = validateFrozenWorkspaceReadFileDispatch(input.frozen);
   if (
-    frozen.command.executionId !== locator.executionId ||
-    frozen.command.runId !== locator.runId ||
-    frozen.command.stepId !== locator.stepId ||
-    frozen.command.attemptId !== locator.attemptId
-  )
+    frozen.executionId !== locator.executionId ||
+    frozen.runId !== locator.runId ||
+    frozen.stepId !== locator.stepId ||
+    frozen.attemptId !== locator.attemptId
+  ) {
     invalid();
+  }
   if (input.resolution === null) {
-    if (!["prepared", "possiblySent"].includes(input.status)) invalid();
+    if (input.status !== "prepared" && input.status !== "possiblySent")
+      invalid();
   } else {
     const parsed = exactResolution(
       { ...input, frozen, resolution: null },
@@ -152,99 +199,200 @@ export function validateWorkspaceReadFileRecord(
     );
     if (
       input.status !== parsed.status ||
-      frozen.reference.receiptId !== parsed.receiptId
-    )
+      frozen.providerReceiptId !== parsed.providerReceiptId
+    ) {
       invalid();
+    }
   }
   return structuredClone({ ...input, frozen });
 }
 
 export function exactResolution(
   operation: WorkspaceReadFileRecord,
-  phase: "execute" | "reconcile" | "cancel",
-  resolution: unknown,
-) {
-  const request =
-    phase === "execute"
-      ? {
-          schemaVersion: "crewon.device-filesystem-read-dispatch-request.v0",
-          apiVersion: 1,
-          operation: phase,
-          routeIntent: operation.frozen.routeIntent,
-          command: operation.frozen.command,
-        }
-      : {
-          schemaVersion: "crewon.device-filesystem-read-dispatch-request.v0",
-          apiVersion: 1,
-          operation: phase,
-          routeIntent: operation.frozen.routeIntent,
-          reference: operation.frozen.reference,
-        };
-  return parseDeviceFilesystemReadWorkerDispatchResponse(
-    {
-      schemaVersion: "crewon.device-filesystem-read-dispatch-response.v0",
-      apiVersion: 1,
-      operation: phase,
-      resolution,
-    },
-    parseDeviceFilesystemReadWorkerDispatchRequest(request),
-    digest,
-  ).resolution;
+  _phase: "execute" | "reconcile" | "cancel",
+  input: unknown,
+): WorkspaceReadFileResolution {
+  if (!plainObject(input)) invalid();
+  const common = {
+    executionId: id(input.executionId),
+    actionDigest: digest(input.actionDigest),
+    commandDigest: digest(input.commandDigest),
+  };
+  if (
+    common.executionId !== operation.executionId ||
+    common.actionDigest !== operation.frozen.actionDigest ||
+    common.commandDigest !== operation.frozen.commandDigest
+  ) {
+    invalid();
+  }
+  if (input.status === "completed") {
+    if (
+      !exactKeys(input, [
+        "actionDigest",
+        "commandDigest",
+        "executionId",
+        "providerReceiptId",
+        "result",
+        "status",
+      ]) ||
+      !plainObject(input.result) ||
+      !exactKeys(input.result, [
+        "byteLength",
+        "content",
+        "encoding",
+        "outputDigest",
+        "schemaVersion",
+      ]) ||
+      input.result.schemaVersion !== "crewon.workspace-file-read-result.v0" ||
+      input.result.encoding !== "utf8" ||
+      typeof input.result.content !== "string" ||
+      input.result.byteLength !== Buffer.byteLength(input.result.content) ||
+      input.result.byteLength > WORKSPACE_READ_FILE_LIMITS.maxOutputBytes ||
+      input.result.outputDigest !== sha256(input.result.content)
+    ) {
+      invalid();
+    }
+    return {
+      status: "completed",
+      ...common,
+      providerReceiptId: id(input.providerReceiptId),
+      result: {
+        schemaVersion: "crewon.workspace-file-read-result.v0",
+        encoding: "utf8",
+        content: input.result.content,
+        byteLength: input.result.byteLength,
+        outputDigest: input.result.outputDigest,
+      },
+    };
+  }
+  if (input.status === "failed") {
+    if (
+      !exactKeys(input, [
+        "actionDigest",
+        "code",
+        "commandDigest",
+        "executionId",
+        "providerReceiptId",
+        "retryable",
+        "status",
+      ]) ||
+      typeof input.code !== "string" ||
+      !/^[a-z0-9_.:-]{1,128}$/u.test(input.code) ||
+      typeof input.retryable !== "boolean"
+    ) {
+      invalid();
+    }
+    return {
+      status: "failed",
+      ...common,
+      providerReceiptId: id(input.providerReceiptId),
+      code: input.code,
+      retryable: input.retryable,
+    };
+  }
+  if (input.status !== "canceled" && input.status !== "unknownOutcome")
+    invalid();
+  if (
+    !exactKeys(input, [
+      "actionDigest",
+      "commandDigest",
+      "executionId",
+      "providerReceiptId",
+      "status",
+    ]) ||
+    (input.status === "canceled" && input.providerReceiptId === null)
+  ) {
+    invalid();
+  }
+  return {
+    status: input.status,
+    ...common,
+    providerReceiptId:
+      input.providerReceiptId === null ? null : id(input.providerReceiptId),
+  };
 }
 
 export function withResolution(
   operation: WorkspaceReadFileRecord,
   resolution: ReturnType<typeof exactResolution>,
 ): WorkspaceReadFileRecord {
-  const oldReceipt = operation.frozen.reference.receiptId;
-  if (oldReceipt !== null && resolution.receiptId !== oldReceipt) invalid();
-  const receiptId = resolution.receiptId ?? oldReceipt;
+  const oldReceipt = operation.frozen.providerReceiptId;
+  if (oldReceipt !== null && resolution.providerReceiptId !== oldReceipt)
+    invalid();
+  const committedResolution =
+    resolution.status === "unknownOutcome" &&
+    resolution.providerReceiptId === null &&
+    oldReceipt !== null
+      ? { ...resolution, providerReceiptId: oldReceipt }
+      : resolution;
   return validateWorkspaceReadFileRecord({
     ...operation,
     revision: operation.revision + 1,
     status: resolution.status,
     frozen: {
       ...operation.frozen,
-      reference: { ...operation.frozen.reference, receiptId },
+      providerReceiptId: committedResolution.providerReceiptId,
     },
-    resolution,
+    resolution: committedResolution,
   });
 }
 
-function validateFrozenOrUpgraded(input: FrozenWorkspaceReadFileDispatch) {
-  const receiptId = input.reference.receiptId;
-  const frozen = validateFrozenWorkspaceReadFileDispatch({
-    ...input,
-    reference: { ...input.reference, receiptId: null },
-  });
-  return receiptId === null
-    ? frozen
-    : {
-        ...frozen,
-        reference: { ...frozen.reference, receiptId: id(receiptId) },
-      };
+function canonicalTimestamp(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(value) &&
+    !Number.isNaN(Date.parse(value))
+  );
 }
-function digest(value: string) {
+
+function pathSegment(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length < 1 ||
+    Buffer.byteLength(value) > 255 ||
+    value === "." ||
+    value === ".." ||
+    /[\\/:\0]/u.test(value)
+  ) {
+    invalid();
+  }
+  return value;
+}
+
+function digest(value: unknown): string {
+  if (typeof value !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(value))
+    invalid();
+  return value;
+}
+
+function sha256(value: string): string {
   return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
 }
+
 function exactKeys(
   value: unknown,
   keys: readonly string[],
 ): value is Record<string, unknown> {
   return (
-    typeof value === "object" &&
-    value !== null &&
+    plainObject(value) &&
     Object.keys(value).sort().join(",") === [...keys].sort().join(",")
   );
 }
+
+function plainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
 function id(value: unknown): string {
   if (
     typeof value !== "string" ||
     !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/u.test(value)
-  )
+  ) {
     invalid();
+  }
   return value;
 }
+
 function invalid(): never {
   throw new RunStoreError("workspace_read_file_stored_state_invalid");
 }

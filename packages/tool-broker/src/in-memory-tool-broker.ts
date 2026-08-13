@@ -4,7 +4,7 @@ import {
   canonicalActionIntent,
   parseActionIntent,
   type ActionIntent,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 
 import {
   ToolBrokerError,

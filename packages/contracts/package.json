@@ -3,8 +3,10 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./runtime": "./src/runtime.ts"
   },
   "scripts": {
     "generate": "node scripts/generate-control-api-types.mjs",

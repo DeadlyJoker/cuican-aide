@@ -95,7 +95,6 @@ test("dispatch admission compares every frozen static authority field", async ()
     { runtimeBindingId: "runtime-generation-other" },
     { workspaceBindingId: "workspace-other" },
     { policySnapshotId: "policy-other" },
-    { deviceId: "device-other" },
     { incarnationId: "incarnation-other" },
   ]) {
     assert.equal(
@@ -125,8 +124,6 @@ function authority(): RuntimeWorkspaceDispatchAuthority {
     spaceId: "space-1",
     workspaceBindingId: "workspace-1",
     incarnationId: "incarnation-1",
-    deviceBindingId: "device-binding-1",
-    deviceId: "device-1",
     runtimeBindingId: "runtime-generation-1",
     policySnapshotId: "policy-1",
   };

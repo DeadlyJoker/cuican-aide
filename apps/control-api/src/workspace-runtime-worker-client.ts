@@ -28,7 +28,7 @@ import {
   type WorkspaceNativeReadonlyResponse,
   type RuntimeWorkerWorkspaceDispatchRequest,
   type RuntimeWorkerWorkspacePhase,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 
 export class RuntimeWorkspaceWorkerClientError extends Error {
   readonly code: string;

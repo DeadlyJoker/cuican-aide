@@ -1,15 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import type { RunRoute } from "@crewon/application";
-import {
-  Ed25519DeviceCommandSigner,
-  Ed25519DeviceWorkspaceListCommandSigner,
-} from "@crewon/device-dispatch";
 
 import type { RuntimeNativeWorkspaceBootstrap } from "./runtime-native-bootstrap.ts";
 import {
   LocalWorkspaceListDispatchClient,
-  LocalWorkspaceReadGatewayClient,
+  LocalWorkspaceReadAuthority,
 } from "./runtime-local-workspace.ts";
 import type { RuntimeWorkerCompositionConfig } from "./standalone-composition.ts";
 
@@ -34,28 +30,11 @@ export function createRuntimeNativeWorkspaceResources(input: {
   ) {
     throw new Error("runtime_workspace_deployment_mismatch");
   }
-  const signingKey = Buffer.from(input.bootstrap.signing.privateKeyPem, "utf8");
-  let signer: Ed25519DeviceWorkspaceListCommandSigner;
-  let readSigner: Ed25519DeviceCommandSigner;
-  try {
-    signer = new Ed25519DeviceWorkspaceListCommandSigner({
-      keyId: input.bootstrap.signing.keyId,
-      privateKey: { key: signingKey, format: "pem" },
-      authorizationTtlMs: input.bootstrap.deadlineMs,
-    });
-    readSigner = new Ed25519DeviceCommandSigner({
-      keyId: input.bootstrap.signing.keyId,
-      privateKey: { key: signingKey, format: "pem" },
-      authorizationTtlMs: input.bootstrap.deadlineMs,
-    });
-  } finally {
-    signingKey.fill(0);
-  }
   const listAuthority = new LocalWorkspaceListDispatchClient({
     root: input.bootstrap.trustedLocalPath,
     authority,
   });
-  const readAuthority = new LocalWorkspaceReadGatewayClient({
+  const readAuthority = new LocalWorkspaceReadAuthority({
     root: input.bootstrap.trustedLocalPath,
     authority,
   });
@@ -63,7 +42,7 @@ export function createRuntimeNativeWorkspaceResources(input: {
     async close(): Promise<void> {
       await Promise.allSettled([listAuthority.close(), readAuthority.close()]);
     },
-    readFile: { signer: readSigner, gateway: readAuthority },
+    readFile: { workspace: readAuthority },
     config: {
       port: input.bootstrap.privateServer.port,
       token: input.bootstrap.privateServer.token,
@@ -71,8 +50,7 @@ export function createRuntimeNativeWorkspaceResources(input: {
       ids: {
         nextExecutionId: () => `workspace-execution-${randomUUID()}`,
       },
-      signer,
-      gateway: listAuthority,
+      workspace: listAuthority,
       nativeRoot: input.bootstrap.trustedLocalPath,
       deadlineMs: input.bootstrap.deadlineMs,
     },

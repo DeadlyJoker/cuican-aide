@@ -25,8 +25,6 @@ const authority = {
   spaceId: "space-1",
   workspaceBindingId: "workspace-1",
   incarnationId: "incarnation-1",
-  deviceBindingId: "device-binding-1",
-  deviceId: "device-1",
   runtimeBindingId: "runtime-1",
   policySnapshotId: "policy-1",
 };

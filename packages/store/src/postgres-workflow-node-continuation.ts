@@ -5,7 +5,7 @@ import {
   type WorkflowAgentAttemptAuthority,
   type WorkflowNodeContinuationCheckpoint,
 } from "@crewon/application";
-import { parseCanonicalAgentEvent } from "@crewon/contracts";
+import { parseCanonicalAgentEvent } from "@crewon/contracts/runtime";
 import type { WorkflowContentDigester } from "@crewon/domain";
 import type { PoolClient } from "pg";
 

@@ -1,6 +1,6 @@
 import type { AgentHistoryItem, KernelAgentEvent } from "@crewon/agent-kernel";
 import type { WorkflowExecutionValue } from "@crewon/application";
-import type { ProviderCheckpoint } from "@crewon/contracts";
+import type { ProviderCheckpoint } from "@crewon/contracts/runtime";
 import type {
   WorkflowNodeDefinition,
   WorkflowSchemaValue,
@@ -100,7 +100,10 @@ export function decideWorkflowNodeSegment(
 ): WorkflowNodeExecutionPolicyDecision {
   const intents: WorkflowNodeDurabilityIntent[] = [];
   if (segment.bufferedEvents.length > 0) {
-    intents.push({ kind: "persistAgentEvents", events: segment.bufferedEvents });
+    intents.push({
+      kind: "persistAgentEvents",
+      events: segment.bufferedEvents,
+    });
   }
   if (segment.providerCheckpoint !== null) {
     intents.push({
@@ -175,10 +178,9 @@ export function decideWorkflowNodeExecutionError(input: {
     : settleFailure(input.error);
 }
 
-function settleFailure(error: unknown): Extract<
-  WorkflowNodeExecutionPolicyDecision,
-  { kind: "settle" }
-> {
+function settleFailure(
+  error: unknown,
+): Extract<WorkflowNodeExecutionPolicyDecision, { kind: "settle" }> {
   return {
     kind: "settle",
     intents: [],

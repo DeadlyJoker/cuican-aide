@@ -62,7 +62,6 @@ export interface DurableWorkspaceReadPort {
 }
 
 export type WorkspaceReadToolRuntimeBinding = Readonly<{
-  deviceBindingId: string;
   workspaceBindingId: string;
   policySnapshotId: string;
   limits?: Readonly<{
@@ -98,11 +97,8 @@ export class WorkspaceReadToolRuntime implements ToolRuntimePort {
       resourceBindingId: this.#workspaceBindingId,
       credentialBindingId: null,
       executionTarget: {
-        kind: "device",
-        bindingId: opaqueId(
-          config.binding.deviceBindingId,
-          "workspace_read_device_binding_invalid",
-        ),
+        kind: "control",
+        bindingId: this.#workspaceBindingId,
       },
       capability: CAPABILITY,
       approvalRequirement: "none",
@@ -263,7 +259,7 @@ function projectResolution(
       result: {
         schemaVersion: "crewon.tool-result.v0",
         callId: command.callId,
-        output: `device execution failed: ${value.code}`,
+        output: `workspace read failed: ${value.code}`,
         isError: true,
         artifactRef: null,
       },

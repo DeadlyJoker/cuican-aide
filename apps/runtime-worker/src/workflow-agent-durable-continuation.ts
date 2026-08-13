@@ -4,8 +4,7 @@ import type {
 } from "@crewon/application";
 import type { ModelDispatchReceipt } from "@crewon/domain";
 import type { AgentHistoryItem } from "@crewon/agent-kernel";
-import type { ProviderCheckpoint } from "@crewon/contracts";
-
+import type { ProviderCheckpoint } from "@crewon/contracts/runtime";
 
 export type WorkflowDurableExecutionAuthority = Readonly<{
   tenantId: string;
@@ -38,16 +37,18 @@ export function workflowAttemptAuthority(
   };
 }
 
-export function workflowContinuationCheckpoint(input: Readonly<{
-  authority: WorkflowDurableExecutionAuthority;
-  segmentId: string;
-  modelSampleIndex: number;
-  toolRoundsConsumed: number;
-  history: readonly AgentHistoryItem[];
-  dispatch: ModelDispatchReceipt | null;
-  providerCheckpoint: ProviderCheckpoint | null;
-  providerTurnState: string | null;
-}>): Omit<WorkflowNodeContinuationCheckpoint, "revision" | "updatedAt"> {
+export function workflowContinuationCheckpoint(
+  input: Readonly<{
+    authority: WorkflowDurableExecutionAuthority;
+    segmentId: string;
+    modelSampleIndex: number;
+    toolRoundsConsumed: number;
+    history: readonly AgentHistoryItem[];
+    dispatch: ModelDispatchReceipt | null;
+    providerCheckpoint: ProviderCheckpoint | null;
+    providerTurnState: string | null;
+  }>,
+): Omit<WorkflowNodeContinuationCheckpoint, "revision" | "updatedAt"> {
   if (input.dispatch?.status === "terminal") {
     throw new Error("workflow_model_dispatch_already_terminal");
   }
@@ -60,12 +61,15 @@ export function workflowContinuationCheckpoint(input: Readonly<{
     toolRoundsConsumed: input.toolRoundsConsumed,
     providerCheckpoint: input.providerCheckpoint,
     providerTurnState: input.providerTurnState,
-    activeDispatch: input.dispatch === null ? null : {
-      operationId: input.dispatch.operationId,
-      requestSequence: input.dispatch.requestSequence,
-      expectedRevision: input.dispatch.revision,
-      status: input.dispatch.status,
-    },
+    activeDispatch:
+      input.dispatch === null
+        ? null
+        : {
+            operationId: input.dispatch.operationId,
+            requestSequence: input.dispatch.requestSequence,
+            expectedRevision: input.dispatch.revision,
+            status: input.dispatch.status,
+          },
     history: input.history,
   };
 }

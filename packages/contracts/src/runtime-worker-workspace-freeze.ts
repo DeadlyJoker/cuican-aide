@@ -167,8 +167,6 @@ export function parseRuntimeWorkerFrozenWorkspaceCommand(
   exact(command, [
     "actionDigest",
     "commandDigest",
-    "deviceBindingId",
-    "deviceId",
     "executionId",
     "incarnationId",
     "limits",
@@ -180,8 +178,6 @@ export function parseRuntimeWorkerFrozenWorkspaceCommand(
     executionId: opaqueId(command.executionId),
     workspaceBindingId: opaqueId(command.workspaceBindingId),
     incarnationId: opaqueId(command.incarnationId),
-    deviceBindingId: opaqueId(command.deviceBindingId),
-    deviceId: opaqueId(command.deviceId),
     runtimeBindingId: opaqueId(command.runtimeBindingId),
     policySnapshotId: opaqueId(command.policySnapshotId),
     actionDigest: digest(command.actionDigest),

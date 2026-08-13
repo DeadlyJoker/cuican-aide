@@ -1,19 +1,10 @@
-import { canonicalJson, type ContentDigester } from "@crewon/application";
 import {
-  DEVICE_FILESYSTEM_READ_CAPABILITY,
-  DEVICE_FILESYSTEM_READ_MAX_BYTES,
-  DEVICE_FILESYSTEM_READ_MAX_TIMEOUT_MS,
-  DEVICE_PROTOCOL_VERSION,
-  canonicalDeviceFilesystemReadCommandDigest,
-  parseDeviceFilesystemReadCommand,
-  type DeviceFilesystemReadCommand,
-  type DeviceExecutionCommand,
-} from "@crewon/contracts";
-import type { DeviceCommandSignerPort } from "@crewon/device-dispatch";
-import type {
-  FrozenWorkspaceReadFileDispatch,
-  WorkspaceReadFileCommandFactoryPort,
-  WorkspaceReadFileExecuteIntent,
+  WORKSPACE_READ_FILE_LIMITS,
+  canonicalJson,
+  type ContentDigester,
+  type FrozenWorkspaceReadFileDispatch,
+  type WorkspaceReadFileCommandFactoryPort,
+  type WorkspaceReadFileExecuteIntent,
 } from "@crewon/application";
 
 import {
@@ -23,7 +14,8 @@ import {
 } from "./runtime-workspace-binding-resolver.ts";
 import { RuntimeWorkspaceError } from "./runtime-workspace-error.ts";
 
-const MAX_ARTIFACT_BYTES = 16 * 1024 * 1024;
+const EMPTY_DIGEST = `sha256:${"0".repeat(64)}`;
+const WORKSPACE_READ_FILE_CAPABILITY = "workspace.read_file.v0" as const;
 
 export type RuntimeWorkspaceReadFileAuthority = RuntimeWorkspaceBindingQuery &
   Readonly<{
@@ -59,12 +51,10 @@ export type CanonicalRuntimeWorkspaceReadFileIntent = Readonly<{
   binding: Readonly<{
     workspaceBindingId: string;
     incarnationId: string;
-    deviceBindingId: string;
-    deviceId: string;
     runtimeBindingId: string;
   }>;
   policySnapshotId: string;
-  capability: typeof DEVICE_FILESYSTEM_READ_CAPABILITY;
+  capability: typeof WORKSPACE_READ_FILE_CAPABILITY;
   relativePathSegments: readonly string[];
   limits: Readonly<{
     timeoutMs: number;
@@ -80,39 +70,36 @@ export function canonicalRuntimeWorkspaceReadFileIntent(
   return canonicalJson(input);
 }
 
-/** Produces one signed, server-routed read command for a future private Gateway client. */
+/** Produces one provider-neutral, server-routed local Workspace read command. */
 export interface RuntimeWorkspaceReadFileCommandPort {
   produce(
     intent: RuntimeWorkspaceReadFileIntent,
     signal: AbortSignal,
-  ): Promise<DeviceFilesystemReadCommand>;
+  ): Promise<FrozenWorkspaceReadFileDispatch>;
 }
 
-/** Revalidates Thread/deployment authority, freezes the read, and signs it. */
+/** Revalidates Thread/deployment authority and freezes the local read. */
 export class RuntimeWorkspaceReadFileCommandService
   implements
     RuntimeWorkspaceReadFileCommandPort,
     WorkspaceReadFileCommandFactoryPort
 {
   readonly #bindings: RuntimeWorkspaceBindingResolverPort;
-  readonly #signer: DeviceCommandSignerPort;
   readonly #digester: ContentDigester;
 
   constructor(config: {
     bindings: RuntimeWorkspaceBindingResolverPort;
-    signer: DeviceCommandSignerPort;
     digester: ContentDigester;
   }) {
     this.#bindings = config.bindings;
-    this.#signer = config.signer;
     this.#digester = config.digester;
   }
 
   async produce(
     intent: RuntimeWorkspaceReadFileIntent,
     signal: AbortSignal,
-  ): Promise<DeviceFilesystemReadCommand> {
-    return (await this.#produceFrozen(intent, signal)).command;
+  ): Promise<FrozenWorkspaceReadFileDispatch> {
+    return this.#produceFrozen(intent, signal);
   }
 
   create(
@@ -163,9 +150,7 @@ export class RuntimeWorkspaceReadFileCommandService
     }
     const binding = validateRuntimeWorkspaceBindingSnapshot(resolved, query);
     const limits = {
-      timeoutMs: DEVICE_FILESYSTEM_READ_MAX_TIMEOUT_MS,
-      maxOutputBytes: DEVICE_FILESYSTEM_READ_MAX_BYTES,
-      maxArtifactBytes: MAX_ARTIFACT_BYTES,
+      ...WORKSPACE_READ_FILE_LIMITS,
     };
     const actionDigest = this.#digester.sha256(
       canonicalRuntimeWorkspaceReadFileIntent({
@@ -186,79 +171,41 @@ export class RuntimeWorkspaceReadFileCommandService
         binding: {
           workspaceBindingId: binding.workspaceBindingId,
           incarnationId: binding.incarnationId,
-          deviceBindingId: binding.deviceBindingId,
-          deviceId: binding.deviceId,
           runtimeBindingId: binding.runtimeBindingId,
         },
         policySnapshotId: binding.policySnapshotId,
-        capability: DEVICE_FILESYSTEM_READ_CAPABILITY,
+        capability: WORKSPACE_READ_FILE_CAPABILITY,
         relativePathSegments,
         limits,
       }),
     );
-    const command: Omit<DeviceExecutionCommand, "authorization"> = {
-      schemaVersion: "crewon.device-command.v0",
-      protocolVersion: DEVICE_PROTOCOL_VERSION,
-      deviceId: binding.deviceId,
-      leaseId: authority.leaseId,
-      leaseEpoch: authority.leaseEpoch,
-      expiresAt: authority.expiresAt,
+    const command: FrozenWorkspaceReadFileDispatch = {
+      schemaVersion: "crewon.workspace-read-file-command.v0",
+      executionId: authority.executionId,
       runId: authority.runId,
       stepId: authority.stepId,
       attemptId: authority.attemptId,
-      executionId: authority.executionId,
+      leaseId: authority.leaseId,
+      leaseEpoch: authority.leaseEpoch,
+      expiresAt: authority.expiresAt,
       workspaceBindingId: binding.workspaceBindingId,
-      capability: DEVICE_FILESYSTEM_READ_CAPABILITY,
+      incarnationId: binding.incarnationId,
+      runtimeBindingId: binding.runtimeBindingId,
+      policySnapshotId: binding.policySnapshotId,
       actionDigest,
-      arguments: {
-        schemaVersion: "crewon.device-filesystem-read-arguments.v0",
-        workspaceIncarnationId: binding.incarnationId,
-        relativePathSegments,
-        encoding: "utf8",
-      },
-      payloadRef: null,
+      commandDigest: EMPTY_DIGEST,
+      relativePathSegments,
       limits,
-      idempotencyKey: `workspace-read:${actionDigest.slice("sha256:".length)}`,
-      traceContext: { traceparent: null, tracestate: null },
+      providerReceiptId: null,
     };
     requireNotAborted(signal);
-    const signed = parseDeviceFilesystemReadCommand(
-      await this.#signer.sign({ command, approvalProof: null }),
+    const commandDigest = this.#digester.sha256(
+      canonicalJson({
+        schemaVersion: "crewon.workspace-read-file-command-digest.v0",
+        command,
+      }),
     );
-    if (
-      JSON.stringify(withoutAuthorization(signed)) !==
-        JSON.stringify(command) ||
-      signed.authorization.approvalProof !== null
-    ) {
-      throw new RuntimeWorkspaceError(
-        "runtime_workspace_read_signature_mismatch",
-      );
-    }
-    requireNotAborted(signal);
-    const commandDigest = canonicalDeviceFilesystemReadCommandDigest(
-      signed,
-      (value) => this.#digester.sha256(value),
-    );
-    return {
-      command: signed,
-      routeIntent: {
-        deviceBindingId: binding.deviceBindingId,
-        runtimeBindingId: binding.runtimeBindingId,
-      },
-      reference: {
-        deviceId: binding.deviceId,
-        executionId: authority.executionId,
-        workspaceBindingId: binding.workspaceBindingId,
-        incarnationId: binding.incarnationId,
-        deviceBindingId: binding.deviceBindingId,
-        runtimeBindingId: binding.runtimeBindingId,
-        actionDigest,
-        commandDigest,
-        leaseId: authority.leaseId,
-        leaseEpoch: authority.leaseEpoch,
-        receiptId: null,
-      },
-    };
+    return { ...command, commandDigest };
   }
 }
 
@@ -306,8 +253,6 @@ function validateAuthority(
       ...query,
       workspaceBindingId: "validation",
       incarnationId: "validation",
-      deviceBindingId: "validation",
-      deviceId: "validation",
       runtimeBindingId: "validation",
       policySnapshotId: "validation",
     },
@@ -360,13 +305,6 @@ function canonicalTimestamp(value: string): boolean {
     /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(value) &&
     !Number.isNaN(Date.parse(value))
   );
-}
-
-function withoutAuthorization(
-  command: DeviceExecutionCommand,
-): Omit<DeviceExecutionCommand, "authorization"> {
-  const { authorization: _, ...unsigned } = command;
-  return unsigned;
 }
 
 function requireNotAborted(signal: AbortSignal): void {

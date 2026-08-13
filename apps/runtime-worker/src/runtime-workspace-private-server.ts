@@ -26,7 +26,7 @@ import {
   type RuntimeWorkerWorkspaceDispatchRequest,
   type RuntimeWorkerWorkspaceFreezeCommandError,
   type RuntimeWorkerWorkspacePhase,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 
 import type { RuntimeWorkspaceDispatchService } from "./runtime-workspace-dispatch-service.ts";
 import { RuntimeWorkspaceError } from "./runtime-workspace-error.ts";

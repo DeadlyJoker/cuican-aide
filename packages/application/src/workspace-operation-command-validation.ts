@@ -25,8 +25,6 @@ export function validateFrozenWorkspaceListCommand(
     !hasExactKeys(input, [
       "actionDigest",
       "commandDigest",
-      "deviceBindingId",
-      "deviceId",
       "executionId",
       "incarnationId",
       "limits",
@@ -41,8 +39,6 @@ export function validateFrozenWorkspaceListCommand(
     executionId: opaqueId(input.executionId),
     workspaceBindingId: opaqueId(input.workspaceBindingId),
     incarnationId: opaqueId(input.incarnationId),
-    deviceBindingId: opaqueId(input.deviceBindingId),
-    deviceId: opaqueId(input.deviceId),
     runtimeBindingId: opaqueId(input.runtimeBindingId),
     policySnapshotId: opaqueId(input.policySnapshotId),
     actionDigest: digest(input.actionDigest),
@@ -64,8 +60,6 @@ export function canonicalWorkspaceListAction(input: {
     binding: {
       workspaceBindingId: command.workspaceBindingId,
       incarnationId: command.incarnationId,
-      deviceBindingId: command.deviceBindingId,
-      deviceId: command.deviceId,
       runtimeBindingId: command.runtimeBindingId,
     },
     policySnapshotId: command.policySnapshotId,
@@ -99,8 +93,6 @@ export function canonicalWorkspaceListDispatchCommand(input: {
     binding: {
       workspaceBindingId: command.workspaceBindingId,
       incarnationId: command.incarnationId,
-      deviceBindingId: command.deviceBindingId,
-      deviceId: command.deviceId,
       runtimeBindingId: command.runtimeBindingId,
     },
     policySnapshotId: command.policySnapshotId,

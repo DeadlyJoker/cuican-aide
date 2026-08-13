@@ -9,7 +9,7 @@ import type {
   ThreadGoalMutationResponse,
   ThreadGoalView,
   ThreadView,
-} from "@crewon/contracts";
+} from "@crewon/contracts/runtime";
 import {
   projectPublicThreadGoalEvent,
   type ThreadGoal,

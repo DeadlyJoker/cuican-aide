@@ -49,7 +49,6 @@ fn worker_payload_projects_only_local_workspace_authority() {
             "authority",
             "deadlineMs",
             "privateServer",
-            "signing",
             "trustedLocalPath",
         ],
     );

@@ -1,5 +1,3 @@
-import { deviceExecutionCommandJsonSchema } from "./device-protocol-schema.ts";
-
 const opaqueId = {
   type: "string",
   pattern: "^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$",
@@ -73,7 +71,28 @@ export const actionIntentJsonSchema = {
       pattern: "^[a-z][a-z0-9]*(?:[._:-][a-z0-9]+){0,15}$",
     },
     approvalRequirement: { enum: ["none", "perAction"] },
-    limits: deviceExecutionCommandJsonSchema.properties.limits,
+    limits: {
+      type: "object",
+      additionalProperties: false,
+      required: ["timeoutMs", "maxOutputBytes", "maxArtifactBytes"],
+      properties: {
+        timeoutMs: {
+          type: "integer",
+          minimum: 1,
+          maximum: 86_400_000,
+        },
+        maxOutputBytes: {
+          type: "integer",
+          minimum: 1,
+          maximum: 1_048_576,
+        },
+        maxArtifactBytes: {
+          type: "integer",
+          minimum: 1,
+          maximum: 1_073_741_824,
+        },
+      },
+    },
   },
   allOf: [
     {

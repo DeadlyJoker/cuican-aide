@@ -37,8 +37,6 @@ export type FrozenWorkspaceListCommand = Readonly<{
   executionId: string;
   workspaceBindingId: string;
   incarnationId: string;
-  deviceBindingId: string;
-  deviceId: string;
   runtimeBindingId: string;
   policySnapshotId: string;
   actionDigest: string;
