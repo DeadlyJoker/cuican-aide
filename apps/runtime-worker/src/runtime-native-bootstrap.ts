@@ -3,9 +3,7 @@ import { inspect } from "node:util";
 import type { RuntimeProviderBinding } from "./provider-probe-service.ts";
 import type { RuntimeWorkspaceDispatchAuthority } from "./runtime-workspace-binding-resolver.ts";
 
-const SCHEMA_VERSION_V1 = "crewon.worker-native-bootstrap.v1";
-const SCHEMA_VERSION_V2 = "crewon.worker-native-bootstrap.v2";
-const SCHEMA_VERSION_V3 = "crewon.worker-native-bootstrap.v3";
+const SCHEMA_VERSION = "crewon.worker-native-bootstrap.v4";
 const PRIVATE_CREDENTIAL_SCHEMA_VERSION =
   "crewon.remote-mcp-private-credentials.v1";
 const MAX_PEM_BYTES = 128 * 1024;
@@ -58,15 +56,7 @@ export function installRuntimeNativeBootstrap(value: unknown): void {
   }
   let parsed: ParsedPrivateBootstrap | null = null;
   try {
-    const schemaVersion = value.schemaVersion;
-    parsed =
-      schemaVersion === SCHEMA_VERSION_V1
-        ? parseV1(value)
-        : schemaVersion === SCHEMA_VERSION_V2
-          ? parseV2(value)
-          : schemaVersion === SCHEMA_VERSION_V3
-            ? parseV3(value)
-            : null;
+    parsed = parseCurrent(value);
     if (parsed === null) throw invalid();
     const provider = parseProvider(value.provider);
     const probe = parseProbe(value.probe);
@@ -101,41 +91,12 @@ export function takeRuntimeNativeBootstrap(): RuntimeNativeBootstrap | null {
   return value;
 }
 
-function parseV1(
-  value: Record<string, unknown>,
-): ParsedPrivateBootstrap | null {
-  return exactKeys(value, ["apiKey", "probe", "provider", "schemaVersion"])
-    ? { workspace: null, credentialBindings: null }
-    : null;
-}
-
-function parseV2(
-  value: Record<string, unknown>,
-): ParsedPrivateBootstrap | null {
-  if (
-    !exactKeys(value, [
-      "apiKey",
-      "probe",
-      "provider",
-      "schemaVersion",
-      "workspace",
-    ])
-  ) {
-    return null;
-  }
-  return {
-    workspace:
-      value.workspace === null ? null : parseWorkspace(value.workspace),
-    credentialBindings: null,
-  };
-}
-
 type ParsedPrivateBootstrap = Readonly<{
   workspace: RuntimeNativeWorkspaceBootstrap | null;
   credentialBindings: RuntimeNativeCredentialBindings | null;
 }>;
 
-function parseV3(
+function parseCurrent(
   value: Record<string, unknown>,
 ): ParsedPrivateBootstrap | null {
   if (
@@ -147,12 +108,16 @@ function parseV3(
       "schemaVersion",
       "workspace",
     ]) ||
-    value.credentialBindings === null
+    value.schemaVersion !== SCHEMA_VERSION
   ) {
     return null;
   }
-  if (value.workspace === null) return null;
-  const workspace = parseWorkspace(value.workspace);
+  const workspace =
+    value.workspace === null ? null : parseWorkspace(value.workspace);
+  if (value.credentialBindings === null) {
+    return { workspace, credentialBindings: null };
+  }
+  if (workspace === null) return null;
   const credentialBindings = parseCredentialBindings(value.credentialBindings);
   const authority = credentialBindings.authority;
   if (

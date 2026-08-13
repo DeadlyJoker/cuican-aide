@@ -48,6 +48,16 @@ TypeScript bundles. An isolated-HOME smoke reached Control readiness on port
 no supervised child process or listener behind. Updater signing/notarization is
 still blocked only by the unavailable release private key.
 
+The GUI-to-Worker stdin boundary now has one current envelope,
+`crewon.worker-native-bootstrap.v4`. Standalone, selected Workspace, and private
+MCP credential launches use the same exact shape with explicit nullable
+`workspace` and `credentialBindings` fields; the `v1`/`v2`/`v3` readers and
+emitters were deleted instead of retained as migration compatibility. A rebuilt
+application completed the real packaged Workflow crash/restart smoke with one
+Agent sample before the kill, one Verification sample after restart, one
+canonical terminal event, and complete guardian cleanup. The updater artifact
+was generated before the expected missing-signing-key failure.
+
 ## Not migrated and deliberately unavailable under Control
 
 | Capability family                                            | Current Control behavior                                                                                            | Required replacement before enabling                                                                   |

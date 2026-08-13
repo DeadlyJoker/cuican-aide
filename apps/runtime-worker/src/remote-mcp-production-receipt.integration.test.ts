@@ -166,7 +166,7 @@ async function runPackagedGateChild(t: TestContext): Promise<void> {
   t.after(() => {
     if (child.exitCode === null) child.kill("SIGKILL");
   });
-  child.stdin.end(`${JSON.stringify(nativeV3Envelope())}\n`);
+  child.stdin.end(`${JSON.stringify(nativeCredentialEnvelope())}\n`);
   const stdout: Buffer[] = [];
   const stderr: Buffer[] = [];
   child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
@@ -453,11 +453,11 @@ function agentSource() {
   };
 }
 
-function nativeV3Envelope() {
+function nativeCredentialEnvelope() {
   const privateKey =
     "-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----";
   return {
-    schemaVersion: "crewon.worker-native-bootstrap.v3",
+    schemaVersion: "crewon.worker-native-bootstrap.v4",
     provider: null,
     apiKey: null,
     probe: { port: 3211, token: "worker-private-token" },

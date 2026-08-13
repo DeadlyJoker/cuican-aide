@@ -132,7 +132,7 @@ fn start(app: &AppHandle) -> Result<StartedRuntime, ControlRuntimeStartError> {
             return Err(error);
         }
     };
-    let legacy_bootstrap = workspace_bootstrap
+    let standalone_bootstrap = workspace_bootstrap
         .is_none()
         .then(|| worker_bootstrap_input(provider_runtime.as_ref(), &session))
         .transpose()
@@ -140,7 +140,7 @@ fn start(app: &AppHandle) -> Result<StartedRuntime, ControlRuntimeStartError> {
     let worker_bootstrap = workspace_bootstrap
         .as_ref()
         .map(|bootstrap| bootstrap.input.as_ref())
-        .or(legacy_bootstrap.as_deref())
+        .or(standalone_bootstrap.as_deref())
         .ok_or(ControlRuntimeStartError::RuntimeUnavailable)?;
     let worker = spawn_node_with_input(
         app,

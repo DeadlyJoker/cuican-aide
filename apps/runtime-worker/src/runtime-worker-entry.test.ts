@@ -17,7 +17,7 @@ import {
 import { activateStandaloneRuntimeAgentVersionRelease } from "./agent-version-release-composition.ts";
 import type { RuntimeWorkerCompositionConfig } from "./standalone-composition.ts";
 
-test("packaged entry starts v2 Workspace listener and emits only non-secret readiness", async (context) => {
+test("packaged entry starts the Workspace listener and emits only non-secret readiness", async (context) => {
   const databasePath = temporaryDatabasePath(context);
   const config = packagedConfig();
   await activateRelease(databasePath, config);
@@ -51,7 +51,7 @@ test("packaged entry starts v2 Workspace listener and emits only non-secret read
   });
   child.stdin.write(
     `${JSON.stringify({
-      schemaVersion: "crewon.worker-native-bootstrap.v2",
+      schemaVersion: "crewon.worker-native-bootstrap.v4",
       provider: null,
       apiKey: null,
       probe: { port: 3211, token: "unused-provider-probe-token" },
@@ -71,6 +71,7 @@ test("packaged entry starts v2 Workspace listener and emits only non-secret read
         },
         signing: { keyId: "workspace-key-1", privateKeyPem },
       },
+      credentialBindings: null,
     })}\n`,
   );
   const output = await waitForWorkspaceReady(child);
@@ -145,8 +146,8 @@ process.stdout.write("bootstrap-ready\\n");`,
   );
 });
 
-test("packaged v3 entry redacts credentials when startup fails after composition", async (context) => {
-  const directory = mkdtempSync(join(tmpdir(), "crewon-packaged-v3-failure-"));
+test("packaged entry redacts credentials when startup fails after composition", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-packaged-failure-"));
   context.after(() => rmSync(directory, { recursive: true, force: true }));
   const remotePath = join(directory, "remote.json");
   const bindingsPath = join(directory, "bindings.json");
@@ -173,7 +174,7 @@ test("packaged v3 entry redacts credentials when startup fails after composition
     stdio: ["pipe", "pipe", "pipe"],
   });
   const secret = "V3_STARTUP_FAILURE_SECRET_SENTINEL";
-  child.stdin.end(`${JSON.stringify(v3Bootstrap(secret))}\n`);
+  child.stdin.end(`${JSON.stringify(currentBootstrap(secret))}\n`);
   const output = await collectExit(child);
   assert.notEqual(output.code, 0);
   assert.doesNotMatch(
@@ -248,12 +249,12 @@ function remoteMcpConfig() {
   };
 }
 
-function v3Bootstrap(bearerToken: string) {
+function currentBootstrap(bearerToken: string) {
   const privateKeyPem = generateKeyPairSync("ed25519")
     .privateKey.export({ type: "pkcs8", format: "pem" })
     .toString();
   return {
-    schemaVersion: "crewon.worker-native-bootstrap.v3",
+    schemaVersion: "crewon.worker-native-bootstrap.v4",
     provider: null,
     apiKey: null,
     probe: { port: 3211, token: "unused-provider-probe-token" },

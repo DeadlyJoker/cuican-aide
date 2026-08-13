@@ -162,7 +162,9 @@ fn provider_secret_uses_zeroizing_stdin_bootstrap_not_child_environment() {
                 "port": 3211,
                 "token": session.provider_probe_token.as_str(),
             },
-            "schemaVersion": "crewon.worker-native-bootstrap.v1",
+            "schemaVersion": "crewon.worker-native-bootstrap.v4",
+            "workspace": null,
+            "credentialBindings": null,
         }),
     );
 }
@@ -358,19 +360,18 @@ fn private_credentials_resolve_once_before_detach_and_are_reused_for_rollback() 
 }
 
 #[test]
-fn workspace_worker_uses_v2_stdin_and_control_gets_only_the_proven_loopback_route() {
+fn workspace_worker_uses_current_stdin_and_control_gets_only_the_proven_loopback_route() {
     let directory = tempdir().expect("temporary directory");
     let paths = runtime_paths(directory.path());
     let session = SessionMaterial::generate().expect("session");
     let workspace = json!({
         "authority": { "runtimeBindingId": "workspace-runtime-1" },
-        "gateway": { "endpoint": "https://127.0.0.1:43125" },
         "privateServer": { "port": 0, "token": "workspace-private-token-0000000001" },
         "signing": { "keyId": "workspace-key-1" },
     });
     let workspace_json = serde_json::to_vec(&workspace).expect("workspace json");
     let bootstrap = worker_bootstrap_input_with_workspace(None, &session, &workspace_json)
-        .expect("v2 bootstrap");
+        .expect("worker bootstrap");
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&bootstrap).expect("bootstrap json"),
         json!({
@@ -380,8 +381,9 @@ fn workspace_worker_uses_v2_stdin_and_control_gets_only_the_proven_loopback_rout
                 "port": 3211,
                 "token": session.provider_probe_token.as_str(),
             },
-            "schemaVersion": "crewon.worker-native-bootstrap.v2",
+            "schemaVersion": "crewon.worker-native-bootstrap.v4",
             "workspace": workspace,
+            "credentialBindings": null,
         })
     );
 
@@ -411,7 +413,7 @@ fn workspace_worker_uses_v2_stdin_and_control_gets_only_the_proven_loopback_rout
 }
 
 #[test]
-fn remote_mcp_credentials_use_exact_v3_zeroizing_stdin_without_legacy_wire_changes() {
+fn remote_mcp_credentials_use_exact_current_zeroizing_stdin() {
     let session = SessionMaterial::generate().expect("session");
     let workspace_json =
         serde_json::to_vec(&json!({ "workspace": "private" })).expect("workspace json");
@@ -432,7 +434,7 @@ fn remote_mcp_credentials_use_exact_v3_zeroizing_stdin_without_legacy_wire_chang
         &workspace_json,
         Some(&credentials),
     )
-    .expect("v3 bootstrap");
+    .expect("worker bootstrap");
     assert_eq!(
         serde_json::from_slice::<serde_json::Value>(&bootstrap).expect("bootstrap json"),
         json!({
@@ -455,7 +457,7 @@ fn remote_mcp_credentials_use_exact_v3_zeroizing_stdin_without_legacy_wire_chang
                 "token": session.provider_probe_token.as_str(),
             },
             "provider": null,
-            "schemaVersion": "crewon.worker-native-bootstrap.v3",
+            "schemaVersion": "crewon.worker-native-bootstrap.v4",
             "workspace": { "workspace": "private" },
         })
     );
@@ -464,11 +466,19 @@ fn remote_mcp_credentials_use_exact_v3_zeroizing_stdin_without_legacy_wire_chang
         "PrivateCredentialBindings([REDACTED])"
     );
 
-    let legacy = worker_bootstrap_input_with_workspace(None, &session, &workspace_json)
-        .expect("legacy v2 bootstrap");
-    let legacy: serde_json::Value = serde_json::from_slice(&legacy).expect("legacy json");
-    assert_eq!(legacy["schemaVersion"], "crewon.worker-native-bootstrap.v2");
-    assert_eq!(legacy.get("credentialBindings"), None);
+    let without_credentials =
+        worker_bootstrap_input_with_workspace(None, &session, &workspace_json)
+            .expect("worker bootstrap without credentials");
+    let without_credentials: serde_json::Value =
+        serde_json::from_slice(&without_credentials).expect("bootstrap json");
+    assert_eq!(
+        without_credentials["schemaVersion"],
+        "crewon.worker-native-bootstrap.v4"
+    );
+    assert_eq!(
+        without_credentials["credentialBindings"],
+        serde_json::Value::Null
+    );
 }
 
 #[test]

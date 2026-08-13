@@ -9,7 +9,7 @@ import {
 
 test("accepts one exact in-memory native bootstrap and clears it on take", () => {
   installRuntimeNativeBootstrap({
-    schemaVersion: "crewon.worker-native-bootstrap.v1",
+    schemaVersion: "crewon.worker-native-bootstrap.v4",
     provider: {
       credentialKind: "keychain",
       endpoint: "https://api.example.com/v1",
@@ -19,6 +19,8 @@ test("accepts one exact in-memory native bootstrap and clears it on take", () =>
     },
     apiKey: "worker-only-secret",
     probe: { port: 3211, token: "worker-private-token" },
+    workspace: null,
+    credentialBindings: null,
   });
   assert.deepEqual(takeRuntimeNativeBootstrap(), {
     provider: {
@@ -40,27 +42,33 @@ test("rejects authority injection and a second unread bootstrap", () => {
   assert.throws(
     () =>
       installRuntimeNativeBootstrap({
-        schemaVersion: "crewon.worker-native-bootstrap.v1",
+        schemaVersion: "crewon.worker-native-bootstrap.v4",
         provider: null,
         apiKey: null,
         probe: { port: 3211, token: "worker-private-token" },
+        workspace: null,
+        credentialBindings: null,
         runtimeBindingId: "renderer-authority",
       }),
     /runtime_native_bootstrap_invalid/u,
   );
   installRuntimeNativeBootstrap({
-    schemaVersion: "crewon.worker-native-bootstrap.v1",
+    schemaVersion: "crewon.worker-native-bootstrap.v4",
     provider: null,
     apiKey: null,
     probe: { port: 3211, token: "worker-private-token" },
+    workspace: null,
+    credentialBindings: null,
   });
   assert.throws(
     () =>
       installRuntimeNativeBootstrap({
-        schemaVersion: "crewon.worker-native-bootstrap.v1",
+        schemaVersion: "crewon.worker-native-bootstrap.v4",
         provider: null,
         apiKey: null,
         probe: { port: 3211, token: "worker-private-token" },
+        workspace: null,
+        credentialBindings: null,
       }),
     /runtime_native_bootstrap_invalid/u,
   );
@@ -77,7 +85,7 @@ test("rejects secret and binding cross-shapes", () => {
   assert.throws(
     () =>
       installRuntimeNativeBootstrap({
-        schemaVersion: "crewon.worker-native-bootstrap.v1",
+        schemaVersion: "crewon.worker-native-bootstrap.v4",
         provider: {
           credentialKind: "none",
           endpoint: "http://127.0.0.1:11434/v1",
@@ -87,6 +95,8 @@ test("rejects secret and binding cross-shapes", () => {
         },
         apiKey: "must-not-be-present",
         probe: { port: 3211, token: "worker-private-token" },
+        workspace: null,
+        credentialBindings: null,
       }),
     /runtime_native_bootstrap_invalid/u,
   );
@@ -94,7 +104,7 @@ test("rejects secret and binding cross-shapes", () => {
 
 test("preserves the exact authority endpoint after structural validation", () => {
   installRuntimeNativeBootstrap({
-    schemaVersion: "crewon.worker-native-bootstrap.v1",
+    schemaVersion: "crewon.worker-native-bootstrap.v4",
     provider: {
       credentialKind: "none",
       endpoint: "http://127.0.0.1:11434/v1/",
@@ -104,6 +114,8 @@ test("preserves the exact authority endpoint after structural validation", () =>
     },
     apiKey: null,
     probe: { port: 3211, token: "worker-private-token" },
+    workspace: null,
+    credentialBindings: null,
   });
   assert.equal(
     takeRuntimeNativeBootstrap()?.provider?.endpoint,
@@ -111,7 +123,7 @@ test("preserves the exact authority endpoint after structural validation", () =>
   );
 });
 
-test("accepts one all-or-none Workspace v2 bootstrap and redacts every secret Debug view", () => {
+test("accepts one all-or-none Workspace bootstrap and redacts every secret Debug view", () => {
   const value = workspaceBootstrap();
   installRuntimeNativeBootstrap(value);
   const bootstrap = takeRuntimeNativeBootstrap();
@@ -139,9 +151,8 @@ test("accepts one all-or-none Workspace v2 bootstrap and redacts every secret De
   }
 });
 
-test("accepts exact v3 private credential bindings and destroys them after one consumption", () => {
+test("accepts exact private credential bindings and destroys them after one consumption", () => {
   const value = workspaceBootstrap() as Record<string, any>;
-  value.schemaVersion = "crewon.worker-native-bootstrap.v3";
   value.credentialBindings = privateCredentialBindings();
   installRuntimeNativeBootstrap(value);
   const bootstrap = takeRuntimeNativeBootstrap();
@@ -181,7 +192,6 @@ test("rejects credential extras, duplicate ids, empty values, and cross-binding 
         "other-valid-runtime"),
   ]) {
     const value = workspaceBootstrap() as Record<string, any>;
-    value.schemaVersion = "crewon.worker-native-bootstrap.v3";
     value.credentialBindings = privateCredentialBindings();
     mutate(value);
     assert.throws(
@@ -193,7 +203,6 @@ test("rejects credential extras, duplicate ids, empty values, and cross-binding 
 
 test("requires the complete expected authority before credential consumption", () => {
   const value = workspaceBootstrap() as Record<string, any>;
-  value.schemaVersion = "crewon.worker-native-bootstrap.v3";
   value.credentialBindings = privateCredentialBindings();
   installRuntimeNativeBootstrap(value);
   const credentials = takeRuntimeNativeBootstrap()?.credentialBindings;
@@ -209,7 +218,7 @@ test("requires the complete expected authority before credential consumption", (
   credentials.destroy();
 });
 
-test("destroys parsed v3 credentials when later bootstrap validation fails", () => {
+test("destroys parsed credentials when later bootstrap validation fails", () => {
   for (const mutate of [
     (value: Record<string, any>) => (value.probe.port = 0),
     (value: Record<string, any>) =>
@@ -222,7 +231,6 @@ test("destroys parsed v3 credentials when later bootstrap validation fails", () 
       }),
   ]) {
     const value = workspaceBootstrap() as Record<string, any>;
-    value.schemaVersion = "crewon.worker-native-bootstrap.v3";
     value.credentialBindings = privateCredentialBindings();
     mutate(value);
     assert.throws(
@@ -240,13 +248,14 @@ test("destroys parsed v3 credentials when later bootstrap validation fails", () 
 
 test("rejects a second unread bootstrap before parsing its credentials", () => {
   installRuntimeNativeBootstrap({
-    schemaVersion: "crewon.worker-native-bootstrap.v1",
+    schemaVersion: "crewon.worker-native-bootstrap.v4",
     provider: null,
     apiKey: null,
     probe: { port: 3211, token: "worker-private-token" },
+    workspace: null,
+    credentialBindings: null,
   });
   const rejected = workspaceBootstrap() as Record<string, any>;
-  rejected.schemaVersion = "crewon.worker-native-bootstrap.v3";
   rejected.credentialBindings = privateCredentialBindings();
   assert.throws(
     () => installRuntimeNativeBootstrap(rejected),
@@ -280,7 +289,7 @@ function workspaceBootstrap() {
   const privateKey =
     "-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----";
   return {
-    schemaVersion: "crewon.worker-native-bootstrap.v2",
+    schemaVersion: "crewon.worker-native-bootstrap.v4",
     provider: null,
     apiKey: null,
     probe: { port: 3211, token: "worker-private-token" },
@@ -303,6 +312,7 @@ function workspaceBootstrap() {
       signing: { keyId: "workspace-key-1", privateKeyPem: privateKey },
       deadlineMs: 35_000,
     },
+    credentialBindings: null,
   };
 }
 

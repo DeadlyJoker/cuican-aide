@@ -77,7 +77,7 @@ pub(super) fn start_worker_with_context(
     let workspace_bootstrap = workspace
         .map(|workspace| workspace.worker_bootstrap(provider, session, private_credentials))
         .transpose()?;
-    let legacy_bootstrap = workspace_bootstrap
+    let standalone_bootstrap = workspace_bootstrap
         .is_none()
         .then(|| worker_bootstrap_input(provider, session))
         .transpose()
@@ -85,7 +85,7 @@ pub(super) fn start_worker_with_context(
     let worker_bootstrap_input = workspace_bootstrap
         .as_ref()
         .map(|bootstrap| bootstrap.input.as_ref())
-        .or(legacy_bootstrap.as_deref())
+        .or(standalone_bootstrap.as_deref())
         .ok_or(ControlRuntimeStartError::RuntimeUnavailable)?;
     let (events, child) = spawn_node_with_input(
         app,

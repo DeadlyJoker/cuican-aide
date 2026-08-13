@@ -204,7 +204,7 @@ fn production_keyring_adapter_process_preserves_one_read_snapshot_across_rotatio
     assert_eq!(result["candidateEqualsRollback"], true);
     assert_eq!(result["initialSnapshotPresent"], true);
     assert_eq!(result["rotatedSnapshotAbsent"], true);
-    assert_eq!(result["schemaVersion"], "crewon.worker-native-bootstrap.v3");
+    assert_eq!(result["schemaVersion"], "crewon.worker-native-bootstrap.v4");
     assert!([SECRET, ROTATED_SECRET]
         .into_iter()
         .all(|secret| !stdout.contains(secret)));

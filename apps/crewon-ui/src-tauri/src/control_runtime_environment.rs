@@ -266,7 +266,7 @@ pub(super) fn worker_bootstrap_input(
     provider: Option<&ActiveProviderRuntime>,
     session: &SessionMaterial,
 ) -> Result<Zeroizing<Vec<u8>>, ()> {
-    serialize_worker_bootstrap(provider, session, "crewon.worker-native-bootstrap.v1")
+    serialize_worker_bootstrap(provider, session, None, None)
 }
 
 #[cfg(test)]
@@ -287,34 +287,17 @@ pub(super) fn worker_bootstrap_input_with_workspace_and_credentials(
     if workspace_json.is_empty() {
         return Err(());
     }
-    // Preserve the exact v2 wire until private Remote MCP credentials exist;
-    // only the stdin-only credential envelope opts a launch into strict v3.
-    let schema_version = if credentials.is_some() {
-        "crewon.worker-native-bootstrap.v3"
-    } else {
-        "crewon.worker-native-bootstrap.v2"
-    };
-    let mut bootstrap = serialize_worker_bootstrap(provider, session, schema_version)?;
-    if bootstrap.pop() != Some(b'}') {
-        return Err(());
-    }
-    bootstrap.extend_from_slice(b",\"workspace\":");
-    bootstrap.extend_from_slice(workspace_json);
-    if let Some(credentials) = credentials {
-        bootstrap.extend_from_slice(b",\"credentialBindings\":");
-        serde_json::to_writer(&mut *bootstrap, credentials).map_err(|_| ())?;
-    }
-    bootstrap.push(b'}');
-    Ok(bootstrap)
+    serialize_worker_bootstrap(provider, session, Some(workspace_json), credentials)
 }
 
 fn serialize_worker_bootstrap(
     provider: Option<&ActiveProviderRuntime>,
     session: &SessionMaterial,
-    schema_version: &'static str,
+    workspace_json: Option<&[u8]>,
+    credentials: Option<&PrivateCredentialBindings>,
 ) -> Result<Zeroizing<Vec<u8>>, ()> {
-    serde_json::to_vec(&WorkerBootstrap {
-        schema_version,
+    let mut bootstrap = serde_json::to_vec(&WorkerBootstrap {
+        schema_version: "crewon.worker-native-bootstrap.v4",
         provider: provider.map(|runtime| WorkerProviderBinding {
             credential_kind: runtime.binding.credential_kind,
             endpoint: &runtime.binding.endpoint,
@@ -331,7 +314,24 @@ fn serialize_worker_bootstrap(
         },
     })
     .map(Zeroizing::new)
-    .map_err(|_| ())
+    .map_err(|_| ())?;
+    if bootstrap.pop() != Some(b'}') {
+        return Err(());
+    }
+    bootstrap.extend_from_slice(b",\"workspace\":");
+    match workspace_json {
+        Some(workspace_json) => bootstrap.extend_from_slice(workspace_json),
+        None => bootstrap.extend_from_slice(b"null"),
+    }
+    bootstrap.extend_from_slice(b",\"credentialBindings\":");
+    match credentials {
+        Some(credentials) => {
+            serde_json::to_writer(&mut *bootstrap, credentials).map_err(|_| ())?;
+        }
+        None => bootstrap.extend_from_slice(b"null"),
+    }
+    bootstrap.push(b'}');
+    Ok(bootstrap)
 }
 
 fn responses_endpoint(base_url: &str) -> String {

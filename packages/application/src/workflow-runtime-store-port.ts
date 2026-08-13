@@ -7,9 +7,9 @@ import type { WorkflowExecutionStore } from "./workflow-execution-store-port.ts"
 /**
  * Single, non-splittable Workflow runtime transaction authority.
  *
- * Production dispatchers and certification accept only this combined Store;
- * composition and continuation methods must therefore share one physical
- * transaction authority and cannot be injected as separate instances.
+ * Production dispatchers accept only this combined Store. Composition and
+ * continuation methods must therefore share one physical transaction
+ * authority and cannot be injected as separate instances.
  */
 export interface WorkflowRuntimeStore
   extends WorkflowRunAdmissionStore,
