@@ -7,6 +7,11 @@ import {
 
 import { ControlApiIdentityError } from "./control-api-ports.ts";
 import { ProviderProbeWorkerError } from "./provider-probe-worker-client.ts";
+import { LocalSettingsRevisionConflictError } from "./local-settings-store.ts";
+
+export class LocalSettingsUnavailableError extends Error {
+  readonly code = "local_settings_unavailable";
+}
 
 export type ErrorResponse = Readonly<{
   statusCode: number;
@@ -36,6 +41,12 @@ export function errorResponse(
   }
   if (error instanceof ContractValidationError) {
     return response("validation", error.code, requestId, 400);
+  }
+  if (error instanceof LocalSettingsRevisionConflictError) {
+    return response("conflict", error.code, requestId, 409);
+  }
+  if (error instanceof LocalSettingsUnavailableError) {
+    return response("deviceUnavailable", error.code, requestId, 503);
   }
   if (error instanceof ProviderProbeWorkerError) {
     if (error.code === "provider_probe_worker_unavailable") {

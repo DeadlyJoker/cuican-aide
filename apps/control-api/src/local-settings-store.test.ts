@@ -29,3 +29,29 @@ test("persists the standalone local settings snapshot with CAS", () => {
   assert.deepEqual(reopened.get(), saved);
   reopened.close();
 });
+
+test("allows only one Store instance to win the same revision", () => {
+  const path = join(
+    mkdtempSync(join(tmpdir(), "crewon-local-settings-race-")),
+    "control.sqlite",
+  );
+  const first = new LocalSettingsStore(path);
+  const second = new LocalSettingsStore(path);
+  const winner = first.put({
+    locale: "en",
+    theme: "dark",
+    expectedRevision: 0,
+  });
+  assert.throws(
+    () =>
+      second.put({
+        locale: "zh",
+        theme: "light",
+        expectedRevision: 0,
+      }),
+    /local_settings_revision_conflict/,
+  );
+  assert.deepEqual(second.get(), winner);
+  first.close();
+  second.close();
+});

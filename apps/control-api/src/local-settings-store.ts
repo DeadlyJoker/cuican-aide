@@ -7,6 +7,15 @@ export type LocalSettings = Readonly<{
   updatedAt: string | null;
 }>;
 
+export class LocalSettingsRevisionConflictError extends Error {
+  readonly code = "local_settings_revision_conflict";
+
+  constructor() {
+    super("local_settings_revision_conflict");
+    this.name = "LocalSettingsRevisionConflictError";
+  }
+}
+
 /** Device-local settings authority. It is intentionally not composed in Team mode. */
 export class LocalSettingsStore {
   readonly #database: DatabaseSync;
@@ -50,19 +59,28 @@ export class LocalSettingsStore {
     theme: "dark" | "light";
     expectedRevision: number;
   }): LocalSettings {
-    const current = this.get();
-    if (current.revision !== input.expectedRevision)
-      throw new Error("local_settings_revision_conflict");
     const updatedAt = new Date().toISOString();
-    const revision = current.revision + 1;
-    this.#database
+    const result = this.#database
       .prepare(
         `INSERT INTO local_settings(singleton, locale, theme, revision, updated_at)
-      VALUES (1, ?, ?, ?, ?) ON CONFLICT(singleton) DO UPDATE SET
-      locale=excluded.locale, theme=excluded.theme, revision=excluded.revision, updated_at=excluded.updated_at`,
+         SELECT 1, ?, ?, 1, ?
+         WHERE ? = 0 OR EXISTS (SELECT 1 FROM local_settings WHERE singleton = 1)
+         ON CONFLICT(singleton) DO UPDATE SET
+           locale=excluded.locale,
+           theme=excluded.theme,
+           revision=local_settings.revision + 1,
+           updated_at=excluded.updated_at
+         WHERE local_settings.revision = ?`,
       )
-      .run(input.locale, input.theme, revision, updatedAt);
-    return { locale: input.locale, theme: input.theme, revision, updatedAt };
+      .run(
+        input.locale,
+        input.theme,
+        updatedAt,
+        input.expectedRevision,
+        input.expectedRevision,
+      );
+    if (result.changes !== 1) throw new LocalSettingsRevisionConflictError();
+    return this.get();
   }
 
   close(): void {

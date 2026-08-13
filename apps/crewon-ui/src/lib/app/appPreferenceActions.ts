@@ -18,6 +18,12 @@ type DesktopPreferenceClient = {
   ): Promise<unknown>;
 };
 
+type ControlPreferenceClient = {
+  getLocalSettings(): Promise<{
+    settings: { locale: Locale; theme: "dark" | "light" };
+  }>;
+};
+
 export type DesktopPreferenceSync = (keyPath: string, value: string) => void;
 export type LocaleSetter = (locale: Locale) => void;
 export type LocalePersistence = (locale: Locale) => void;
@@ -55,7 +61,9 @@ export function syncDesktopPreferenceAction(params: {
   isConnected: boolean;
   keyPath: string;
   locale: Locale;
-  setNotice: (notice: ReturnType<typeof desktopPreferenceSyncFailureNotice>) => void;
+  setNotice: (
+    notice: ReturnType<typeof desktopPreferenceSyncFailureNotice>,
+  ) => void;
   value: string;
 }): void {
   if (!params.isConnected) {
@@ -71,7 +79,9 @@ export function syncDesktopPreferenceAction(params: {
       },
     ])
     .catch((error) => {
-      params.setNotice(desktopPreferenceSyncFailureNotice(error, params.locale));
+      params.setNotice(
+        desktopPreferenceSyncFailureNotice(error, params.locale),
+      );
     });
 }
 
@@ -103,4 +113,32 @@ export function applyDesktopPreferencesAction(params: {
   );
   params.setTheme(resolvedTheme);
   params.persistTheme(resolvedTheme);
+}
+
+export async function hydrateControlPreferencesAction(params: {
+  client: ControlPreferenceClient;
+  locale: Locale;
+  persistLocale: LocalePersistence;
+  persistTheme: ThemePersistence;
+  setAppliedAppearance: (desktopConfig: Record<string, unknown>) => void;
+  setLocale: LocaleSetter;
+  setNotice: (
+    notice: ReturnType<typeof desktopPreferenceSyncFailureNotice>,
+  ) => void;
+  setTheme: (theme: Theme) => void;
+}): Promise<void> {
+  try {
+    const { settings } = await params.client.getLocalSettings();
+    const desktopConfig = {
+      uiLocale: settings.locale,
+      appearanceTheme: settings.theme,
+    };
+    params.setLocale(settings.locale);
+    params.setTheme(settings.theme);
+    params.persistLocale(settings.locale);
+    params.persistTheme(settings.theme);
+    params.setAppliedAppearance(desktopConfig);
+  } catch (error) {
+    params.setNotice(desktopPreferenceSyncFailureNotice(error, params.locale));
+  }
 }

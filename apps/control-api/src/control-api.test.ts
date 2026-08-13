@@ -82,6 +82,7 @@ import type { FastifyInstance } from "fastify";
 
 import { buildControlApi } from "./control-api.ts";
 import { ProcessLocalActivationGate } from "./paused-admission.ts";
+import { LocalSettingsStore } from "./local-settings-store.ts";
 import { OutboxDispatcher } from "./outbox-dispatcher.ts";
 import { RunEventHub } from "./run-event-hub.ts";
 import type { ThreadEventPoller } from "./thread-event-stream.ts";
@@ -237,6 +238,83 @@ test("fenced Control admission exposes only exact health activation surfaces", a
     headers: readHeaders(),
   });
   assert.equal(activated.statusCode, 200, activated.body);
+});
+
+test("serves local settings with CSRF, atomic CAS, and stable unavailability", async (context) => {
+  const runtime = await testRuntime(context);
+  const localSettings = new LocalSettingsStore(":memory:");
+  const app = buildControlApi({ ...runtime.dependencies, localSettings });
+  context.after(() => {
+    localSettings.close();
+    return app.close();
+  });
+
+  const read = await app.inject({
+    method: "GET",
+    url: "/api/v1/local-settings",
+    headers: readHeaders(),
+  });
+  assert.equal(read.statusCode, 200, read.body);
+  assert.deepEqual(read.json(), {
+    settings: { locale: "zh", theme: "light", revision: 0, updatedAt: null },
+  });
+
+  const missingCsrf = await app.inject({
+    method: "PUT",
+    url: "/api/v1/local-settings",
+    headers: readHeaders(),
+    payload: { locale: "en", theme: "dark", expectedRevision: 0 },
+  });
+  assert.equal(missingCsrf.statusCode, 403, missingCsrf.body);
+
+  const update = await app.inject({
+    method: "PUT",
+    url: "/api/v1/local-settings",
+    headers: jsonMutationHeaders("local-settings-1"),
+    payload: { locale: "en", theme: "dark", expectedRevision: 0 },
+  });
+  assert.equal(update.statusCode, 200, update.body);
+  assert.equal(
+    update.json<{ settings: { revision: number } }>().settings.revision,
+    1,
+  );
+
+  const conflict = await app.inject({
+    method: "PUT",
+    url: "/api/v1/local-settings",
+    headers: jsonMutationHeaders("local-settings-2"),
+    payload: { locale: "zh", theme: "light", expectedRevision: 0 },
+  });
+  assertError(conflict, 409, "conflict", "local_settings_revision_conflict");
+
+  const unavailable = buildControlApi({
+    ...runtime.dependencies,
+    localSettings: null,
+  });
+  context.after(() => unavailable.close());
+  const unavailableRead = await unavailable.inject({
+    method: "GET",
+    url: "/api/v1/local-settings",
+    headers: readHeaders(),
+  });
+  assertError(
+    unavailableRead,
+    503,
+    "deviceUnavailable",
+    "local_settings_unavailable",
+  );
+  const unavailableWrite = await unavailable.inject({
+    method: "PUT",
+    url: "/api/v1/local-settings",
+    headers: jsonMutationHeaders("local-settings-unavailable"),
+    payload: { locale: "en", theme: "dark", expectedRevision: 0 },
+  });
+  assertError(
+    unavailableWrite,
+    503,
+    "deviceUnavailable",
+    "local_settings_unavailable",
+  );
 });
 
 test("Office receipt replay is stable and selected target starts a canonical Run", async (context) => {

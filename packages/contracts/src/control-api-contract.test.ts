@@ -32,6 +32,7 @@ import {
   parseLastEventSequence,
   parseMessageListQuery,
   parseProbeModelProviderRequest,
+  parsePutLocalSettingsRequest,
   parsePublishAgentVersionRequest,
   parseRunId,
   parseRunEventViewMode,
@@ -53,6 +54,30 @@ import {
   type ThreadGoalEventView,
   type ThreadGoalMutationResponse,
 } from "./control-api-contract.ts";
+
+test("parses exact bounded local settings mutations", () => {
+  assert.deepEqual(
+    parsePutLocalSettingsRequest({
+      expectedRevision: 2,
+      locale: "en",
+      theme: "dark",
+    }),
+    { expectedRevision: 2, locale: "en", theme: "dark" },
+  );
+  for (const input of [
+    { expectedRevision: -1, locale: "en", theme: "dark" },
+    { expectedRevision: 0, locale: "fr", theme: "dark" },
+    { expectedRevision: 0, locale: "en", theme: "system" },
+    { expectedRevision: 0, locale: "en", theme: "dark", extra: true },
+  ]) {
+    assert.throws(
+      () => parsePutLocalSettingsRequest(input),
+      (error) =>
+        error instanceof ContractValidationError &&
+        error.code === "local_settings_request_invalid",
+    );
+  }
+});
 import { RUN_STATUSES } from "./run-contract.ts";
 
 const openApi = JSON.parse(

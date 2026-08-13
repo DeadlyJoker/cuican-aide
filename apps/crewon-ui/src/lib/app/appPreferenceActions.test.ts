@@ -9,6 +9,7 @@ import {
   changeLocalePreferenceAction,
   syncDesktopPreferenceAction,
   toggleThemePreferenceAction,
+  hydrateControlPreferencesAction,
 } from "./appPreferenceActions";
 import type { NoticeState } from "./appRuntimeState";
 import type { Locale } from "../i18n";
@@ -20,6 +21,71 @@ async function flushAsyncWork() {
 }
 
 describe("app preference actions", () => {
+  it("hydrates renderer preferences only from connected Control settings", async () => {
+    const localeValues: Locale[] = [];
+    const themeValues: Theme[] = [];
+    const cachedLocales: Locale[] = [];
+    const cachedThemes: Theme[] = [];
+    const appearances: Array<Record<string, unknown>> = [];
+
+    await hydrateControlPreferencesAction({
+      client: {
+        async getLocalSettings() {
+          return { settings: { locale: "zh", theme: "dark" } };
+        },
+      },
+      locale: "en",
+      persistLocale: (value) => cachedLocales.push(value),
+      persistTheme: (value) => cachedThemes.push(value),
+      setAppliedAppearance: (value) => appearances.push(value),
+      setLocale: (value) => localeValues.push(value),
+      setNotice: vi.fn(),
+      setTheme: (value) => themeValues.push(value),
+    });
+
+    expect({
+      localeValues,
+      themeValues,
+      cachedLocales,
+      cachedThemes,
+      appearances,
+    }).toEqual({
+      localeValues: ["zh"],
+      themeValues: ["dark"],
+      cachedLocales: ["zh"],
+      cachedThemes: ["dark"],
+      appearances: [{ uiLocale: "zh", appearanceTheme: "dark" }],
+    });
+  });
+
+  it("fails closed with a notice when Control settings cannot hydrate", async () => {
+    const setLocale = vi.fn();
+    const setTheme = vi.fn();
+    const persistLocale = vi.fn();
+    const persistTheme = vi.fn();
+    const notices: NoticeState[] = [];
+    await hydrateControlPreferencesAction({
+      client: {
+        async getLocalSettings() {
+          throw new Error("settings unavailable");
+        },
+      },
+      locale: "en",
+      persistLocale,
+      persistTheme,
+      setAppliedAppearance: vi.fn(),
+      setLocale,
+      setNotice: (notice) => notices.push(notice),
+      setTheme,
+    });
+    expect(setLocale).not.toHaveBeenCalled();
+    expect(setTheme).not.toHaveBeenCalled();
+    expect(persistLocale).not.toHaveBeenCalled();
+    expect(persistTheme).not.toHaveBeenCalled();
+    expect(notices).toEqual([
+      { text: "settings unavailable", tone: "warning" },
+    ]);
+  });
   it("changes locale across state, local persistence, and desktop config", () => {
     let locale: Locale = "en";
     const persistLocale = vi.fn();

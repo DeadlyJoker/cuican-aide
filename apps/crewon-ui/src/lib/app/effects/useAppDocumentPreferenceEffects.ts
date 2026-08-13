@@ -1,23 +1,23 @@
 import { useEffect, type MutableRefObject } from "react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
+import type { ControlApiClient } from "@crewon/control-client";
 
-import type { AppServerClient } from "../../app-server/appServer";
 import { appDocumentTitle } from "../appDocumentActions";
-import { applyDesktopPreferencesAction } from "../appPreferenceActions";
+import { hydrateControlPreferencesAction } from "../appPreferenceActions";
 import { parseAppearancePreferences } from "../../appearance/appearanceSerialization";
 import { setAppliedAppearance } from "../../appearance/appearanceRuntime";
-import { systemPrefersDark } from "../../appearance/applyAppearance";
 import { persistLocale, type Locale } from "../../i18n";
 import { persistTheme, type Theme } from "../../theme";
+import type { NoticeState } from "../appRuntimeState";
 
 export type AppDocumentPreferenceEffectsParams = {
-  client: AppServerClient | null;
+  client: Pick<ControlApiClient, "getLocalSettings">;
   composerValue: string;
-  cwd: string;
-  isConnected: boolean;
+  controlRuntimeConnected: boolean;
   locale: Locale;
   localeRef: MutableRefObject<Locale>;
   setLocale: (locale: Locale) => void;
+  setNotice: (notice: NoticeState | null) => void;
   setTheme: (theme: Theme) => void;
   theme: Theme;
   thread: Thread | null;
@@ -27,11 +27,11 @@ export type AppDocumentPreferenceEffectsParams = {
 export function useAppDocumentPreferenceEffects({
   client,
   composerValue,
-  cwd,
-  isConnected,
+  controlRuntimeConnected,
   locale,
   localeRef,
   setLocale,
+  setNotice,
   setTheme,
   theme,
   thread,
@@ -55,47 +55,38 @@ export function useAppDocumentPreferenceEffects({
   }, [composerValue, thread, untitledThreadLabel]);
 
   useEffect(() => {
-    if (!isConnected) {
+    if (!controlRuntimeConnected) {
       return;
     }
 
     let cancelled = false;
-    void client
-      ?.readConfig(cwd)
-      .then((configRead) => {
-        if (cancelled) {
-          return;
+    void hydrateControlPreferencesAction({
+      client,
+      locale,
+      persistLocale: (nextLocale) => {
+        if (!cancelled) persistLocale(nextLocale);
+      },
+      persistTheme: (nextTheme) => {
+        if (!cancelled) persistTheme(nextTheme);
+      },
+      setAppliedAppearance: (desktopConfig) => {
+        if (!cancelled) {
+          setAppliedAppearance(parseAppearancePreferences(desktopConfig));
         }
-
-        const themeOverride = new URLSearchParams(window.location.search).get(
-          "theme",
-        );
-
-        const desktopConfig = configRead.config.desktop as Record<
-          string,
-          unknown
-        > | null;
-
-        applyDesktopPreferencesAction({
-          desktopConfig,
-          persistLocale,
-          persistTheme,
-          prefersDark: systemPrefersDark(),
-          setLocale,
-          setTheme,
-          themeOverride,
-        });
-
-        // Colors, fonts, and behavior flags land on the document root here so
-        // the stylesheets can read them independently of the theme.
-        setAppliedAppearance(parseAppearancePreferences(desktopConfig));
-      })
-      .catch(() => {
-        // Desktop preferences are best-effort; config/settings panels surface detailed errors.
-      });
+      },
+      setLocale: (nextLocale) => {
+        if (!cancelled) setLocale(nextLocale);
+      },
+      setNotice: (nextNotice) => {
+        if (!cancelled) setNotice(nextNotice);
+      },
+      setTheme: (nextTheme) => {
+        if (!cancelled) setTheme(nextTheme);
+      },
+    });
 
     return () => {
       cancelled = true;
     };
-  }, [client, cwd, isConnected, setLocale, setTheme]);
+  }, [client, controlRuntimeConnected, locale, setLocale, setNotice, setTheme]);
 }

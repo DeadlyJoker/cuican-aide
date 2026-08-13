@@ -281,6 +281,27 @@ export function parseProbeModelProviderRequest(
   return {};
 }
 
+export function parsePutLocalSettingsRequest(
+  input: unknown,
+): PutLocalSettingsRequest {
+  if (!hasExactKeys(input, ["expectedRevision", "locale", "theme"])) {
+    throw new ContractValidationError("local_settings_request_invalid");
+  }
+  if (
+    (input.locale !== "en" && input.locale !== "zh") ||
+    (input.theme !== "dark" && input.theme !== "light") ||
+    !Number.isSafeInteger(input.expectedRevision) ||
+    Number(input.expectedRevision) < 0
+  ) {
+    throw new ContractValidationError("local_settings_request_invalid");
+  }
+  return {
+    expectedRevision: Number(input.expectedRevision),
+    locale: input.locale,
+    theme: input.theme,
+  };
+}
+
 export function parseCreateAutomationRequest(
   input: unknown,
 ): CreateAutomationRequest {

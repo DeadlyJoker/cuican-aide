@@ -67,6 +67,7 @@ import {
   parseLastEventSequence,
   parseMessageListQuery,
   parseProbeModelProviderRequest,
+  parsePutLocalSettingsRequest,
   parseRenameThreadRequest,
   parseRollbackThreadRequest,
   parsePublishAgentVersionRequest,
@@ -140,6 +141,7 @@ import {
   notFoundResponse,
   readinessErrorResponse,
   WorkspaceControlUnavailableError,
+  LocalSettingsUnavailableError,
 } from "./control-api-errors.ts";
 import type {
   ControlApiIdentityPort,
@@ -345,38 +347,17 @@ export function buildControlApi(
   app.get("/api/v1/local-settings", async (request) => {
     await dependencies.identity.resolveActor(requestContext(request));
     if (dependencies.localSettings == null)
-      throw new Error("local_settings_unavailable");
+      throw new LocalSettingsUnavailableError();
     return { settings: dependencies.localSettings.get() };
   });
 
   app.put<{ Body: unknown }>("/api/v1/local-settings", async (request) => {
     await dependencies.identity.resolveActor(requestContext(request));
     if (dependencies.localSettings == null)
-      throw new Error("local_settings_unavailable");
-    const body = request.body;
-    if (
-      typeof body !== "object" ||
-      body === null ||
-      Array.isArray(body) ||
-      Object.keys(body).sort().join(",") !== "expectedRevision,locale,theme" ||
-      ((body as { locale?: unknown }).locale !== "en" &&
-        (body as { locale?: unknown }).locale !== "zh") ||
-      ((body as { theme?: unknown }).theme !== "dark" &&
-        (body as { theme?: unknown }).theme !== "light") ||
-      !Number.isSafeInteger(
-        (body as { expectedRevision?: unknown }).expectedRevision,
-      ) ||
-      Number((body as { expectedRevision?: unknown }).expectedRevision) < 0
-    )
-      throw new ContractValidationError("local_settings_request_invalid");
+      throw new LocalSettingsUnavailableError();
+    const body = parsePutLocalSettingsRequest(request.body);
     return {
-      settings: dependencies.localSettings.put(
-        body as {
-          locale: "en" | "zh";
-          theme: "dark" | "light";
-          expectedRevision: number;
-        },
-      ),
+      settings: dependencies.localSettings.put(body),
     };
   });
 

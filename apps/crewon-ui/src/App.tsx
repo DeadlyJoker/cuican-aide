@@ -283,13 +283,13 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     selectedThread,
   });
   useAppDocumentPreferenceEffects({
-    client: null,
+    client: controlClient,
     ...composerState,
-    cwd,
-    isConnected,
+    controlRuntimeConnected,
     locale,
     localeRef,
     setLocale,
+    setNotice,
     setTheme,
     theme,
     thread: renderCommandShell ? null : selectedThread,
