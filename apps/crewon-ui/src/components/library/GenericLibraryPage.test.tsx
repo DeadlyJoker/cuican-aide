@@ -78,4 +78,48 @@ describe("GenericLibraryPage capability market", () => {
     expect(markup).toContain('data-logo="excel"');
     expect(markup).toMatchSnapshot();
   });
+
+  it("snapshots the read-only Control capability catalog", () => {
+    const panel: LibraryPanel = {
+      kind: "tools",
+      title: "Capabilities",
+      subtitle: "1 released capability · Control release release-1",
+      catalogMode: "controlCapabilities",
+      body: "Read-only released Tool metadata.",
+      actions: [
+        {
+          id: "create-skill",
+          label: "Create Skill (not migrated)",
+          disabled: true,
+          disabledReason: "Control has no Skill mutation authority",
+        },
+      ],
+      items: [
+        {
+          title: "search_workspace",
+          meta: "function · parallel · jsonSchema",
+          description: "Search workspace metadata",
+          glyph: "ƒ",
+          accent: "cyan",
+          badge: { label: "read-only released Tool", tone: "planning" },
+          tags: ["agent-v1"],
+        },
+      ],
+    };
+    const markup = renderToStaticMarkup(
+      <GenericLibraryPage
+        locale="en"
+        panel={panel}
+        onBack={vi.fn()}
+        onItemAction={vi.fn()}
+        onPanelAction={vi.fn()}
+        onPanelFieldChange={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("Search released capabilities");
+    expect(markup).not.toContain("Search Skills or MCP");
+    expect(markup).toContain('disabled=""');
+    expect(markup).toMatchSnapshot();
+  });
 });

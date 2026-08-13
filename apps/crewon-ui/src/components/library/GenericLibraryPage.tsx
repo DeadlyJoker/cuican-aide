@@ -1,3 +1,5 @@
+import { useMemo, useState } from "react";
+
 import type { Locale } from "../../lib/i18n";
 import type { LibraryItem, LibraryPanel } from "../../lib/domain/crewonDomain";
 import { LibraryCard } from "./LibraryCard";
@@ -32,9 +34,14 @@ export function GenericLibraryPage({
     "all" | "cloud" | "local"
   >("all");
   const [capabilitySearch, setCapabilitySearch] = useState("");
-  const showCapabilityToolbar = panel.kind === "tools" && !panel.fields;
+  const showCapabilityToolbar =
+    panel.kind === "tools" &&
+    !panel.fields &&
+    panel.catalogMode !== "controlCapabilities";
+  const showControlCapabilitySearch =
+    panel.kind === "tools" && panel.catalogMode === "controlCapabilities";
   const visibleItems = useMemo(() => {
-    if (!showCapabilityToolbar) {
+    if (!showCapabilityToolbar && !showControlCapabilitySearch) {
       return panel.items;
     }
     const query = capabilitySearch.trim().toLocaleLowerCase();
@@ -79,6 +86,7 @@ export function GenericLibraryPage({
     locationFilter,
     panel.items,
     showCapabilityToolbar,
+    showControlCapabilitySearch,
   ]);
 
   return (
@@ -156,6 +164,25 @@ export function GenericLibraryPage({
           />
         </div>
       ) : null}
+      {showControlCapabilitySearch ? (
+        <div className="capability-library-toolbar">
+          <input
+            aria-label={
+              locale === "zh"
+                ? "搜索已发布能力"
+                : "Search released capabilities"
+            }
+            placeholder={
+              locale === "zh"
+                ? "搜索能力名称或 Agent 版本"
+                : "Search capability or Agent version"
+            }
+            type="search"
+            value={capabilitySearch}
+            onChange={(event) => setCapabilitySearch(event.target.value)}
+          />
+        </div>
+      ) : null}
       {panel.fields ? (
         <div className="library-fields">
           {panel.fields.map((field) => (
@@ -224,4 +251,3 @@ export function GenericLibraryPage({
     </main>
   );
 }
-import { useMemo, useState } from "react";

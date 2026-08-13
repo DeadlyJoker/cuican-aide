@@ -66,7 +66,8 @@ export function LibraryActions({
             aria-busy={isPending}
             data-tone={action.tone}
             key={actionKey}
-            disabled={pendingActionKey !== null}
+            disabled={action.disabled || pendingActionKey !== null}
+            title={action.disabledReason}
             onClick={async () => {
               setPendingActionKey(actionKey);
               try {

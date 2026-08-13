@@ -36,7 +36,7 @@ export async function openControlLibraryAction(params: {
   });
 
   if (kind === "tools") {
-    await openControlToolOutputs(params);
+    await openControlCapabilityCatalog(params);
     return;
   }
 
@@ -189,79 +189,77 @@ function controlReadFailure(
   };
 }
 
-async function openControlToolOutputs(params: {
+async function openControlCapabilityCatalog(params: {
   client: ControlApiClient;
-  kind: LibraryKind;
   locale: Locale;
-  selectedThreadId: string | null;
   setLibraryPanel: SetLibraryPanel;
 }): Promise<void> {
-  const { client, locale, selectedThreadId, setLibraryPanel } = params;
-  if (selectedThreadId === null) {
-    setLibraryPanel({
-      kind: "tools",
-      title: libraryTitle("tools", locale),
-      subtitle: "Control authority",
-      items: [],
-      error:
-        locale === "zh"
-          ? "请选择一个线程以读取其已验证 Artifact；不会回退到 legacy Tool 目录。"
-          : "Select a thread to read its verified Artifacts; the legacy Tool catalog will not be used.",
-    });
-    return;
-  }
-
+  const { client, locale, setLibraryPanel } = params;
   try {
-    const runs = await client.listThreadRuns(selectedThreadId, { limit: 50 });
-    const outputRefs = [
-      ...new Set(
-        runs.data.flatMap(({ outputRef }) =>
-          outputRef === null ? [] : [outputRef],
-        ),
-      ),
-    ].slice(0, 20);
-    const artifacts = (
-      await Promise.all(
-        outputRefs.map(async (outputRef) => {
-          try {
-            return (await client.getArtifact(outputRef)).artifact;
-          } catch {
-            return null;
-          }
-        }),
-      )
-    ).filter((artifact) => artifact !== null);
+    const firstPage = await client.listActiveCapabilities({ limit: 100 });
+    const capabilities = [...firstPage.data];
+    let cursor = firstPage.nextCursor;
+    while (cursor !== null) {
+      const page = await client.listActiveCapabilities({ cursor, limit: 100 });
+      capabilities.push(...page.data);
+      cursor = page.nextCursor;
+    }
     setLibraryPanel({
       kind: "tools",
       title: libraryTitle("tools", locale),
+      catalogMode: "controlCapabilities",
       subtitle:
         locale === "zh"
-          ? `${artifacts.length} 个已验证 Tool Output Artifact`
-          : `${artifacts.length} verified Tool Output Artifacts`,
+          ? `${capabilities.length} 个已发布能力 · Control release ${firstPage.releaseId}`
+          : `${capabilities.length} released capabilities · Control release ${firstPage.releaseId}`,
       body:
         locale === "zh"
-          ? "仅展示 Control API 能验证的当前线程产物；Skill 与 MCP 目录尚无 Control contract。"
-          : "Only current-thread outputs verified by Control API are shown; Skill and MCP catalogs have no Control contract yet.",
-      items: artifacts.map((artifact, index) => ({
-        title: artifact.artifactId,
-        meta: `${artifact.mediaType} · ${artifact.byteLength} B`,
-        description:
-          locale === "zh"
-            ? `来自 Run ${artifact.source.runId} · Step ${artifact.source.stepId}`
-            : `From Run ${artifact.source.runId} · Step ${artifact.source.stepId}`,
-        glyph: "◆",
-        accent: index % 2 === 0 ? "cyan" : "slate",
+          ? "只读目录来自当前 active AgentVersion release 的 Tool metadata；不包含输入 schema、instructions、凭据或密钥。"
+          : "This read-only catalog contains Tool metadata from the active AgentVersion release; input schemas, instructions, credentials, and secrets are not exposed.",
+      actions: [
+        {
+          id: "create-skill",
+          label:
+            locale === "zh"
+              ? "创建 Skill（未迁移）"
+              : "Create Skill (not migrated)",
+          disabled: true,
+          disabledReason:
+            locale === "zh"
+              ? "Control 尚无 Skill mutation authority"
+              : "Control has no Skill mutation authority",
+        },
+        {
+          id: "create-mcp",
+          label:
+            locale === "zh"
+              ? "创建 MCP（未迁移）"
+              : "Create MCP (not migrated)",
+          disabled: true,
+          disabledReason:
+            locale === "zh"
+              ? "Control 尚无 MCP mutation authority"
+              : "Control has no MCP mutation authority",
+        },
+      ],
+      items: capabilities.map((capability, index) => ({
+        title: capability.name,
+        meta: `${capability.kind} · ${capability.execution} · ${capability.inputFormat}`,
+        description: capability.description,
+        glyph: capability.kind === "function" ? "ƒ" : "T",
+        accent: index % 2 === 0 ? "cyan" : "violet",
         badge: {
-          label: locale === "zh" ? "只读产物" : "read-only artifact",
+          label:
+            locale === "zh" ? "只读 released Tool" : "read-only released Tool",
           tone: "planning",
         },
-        tags: [artifact.scan.status, artifact.sensitivity],
+        tags: [capability.agentVersionId],
       })),
       error:
-        artifacts.length === 0
+        capabilities.length === 0
           ? locale === "zh"
-            ? "当前线程没有可由 Control API 验证的 Artifact；未使用 legacy Tool 数据填充。"
-            : "This thread has no Artifacts verifiable by Control API; legacy Tool data was not used."
+            ? "当前 active release 未投影任何能力；未使用 legacy Skill/MCP/App 数据填充。"
+            : "The active release projects no capabilities; legacy Skill/MCP/App data was not used."
           : undefined,
     });
   } catch (error) {

@@ -24,6 +24,7 @@ export type LibraryPanel = {
   workspace?: OfficeWorkspace;
   agentConfig?: AgentConfig;
   knowledge?: KnowledgeData;
+  catalogMode?: "skillMcp" | "controlCapabilities";
 };
 
 export type LibraryPanelField = {
@@ -93,6 +94,8 @@ export type LibraryPanelAction = {
   knowledgeTitle?: string;
   knowledgeKind?: "file" | "directory";
   tone?: "danger" | "primary";
+  disabled?: boolean;
+  disabledReason?: string;
 };
 
 export type LibraryAccent =
