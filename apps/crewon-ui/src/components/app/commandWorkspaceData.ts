@@ -25,7 +25,6 @@ export const shellNavItems: ShellNavItem[] = [
   { key: "command", label: "新建任务", en: "New task" },
   { key: "assist", label: "助理", en: "Assistant" },
   { key: "agents", label: "智能体", en: "Agents" },
-  { key: "schedule", label: "日程安排", en: "Schedule" },
   { key: "team", label: "团队", en: "Team" },
 ];
 
@@ -100,30 +99,5 @@ export const agentCards = [
     title: "Filesystem MCP",
     detail: "读取项目文件、写入迁移结果并辅助验证。",
     filter: "mcp",
-  },
-];
-
-export const scheduleCards = [
-  {
-    title: "团队交付日历",
-    detail: "关联办公室成员、Workflow Gate 和验收节点。",
-    filter: "calendar teamflow",
-    odId: "schedule-calendar-team",
-  },
-  {
-    title: "个人跟进日历",
-    detail: "整理今天的项目事项、提醒和阻塞复盘。",
-    filter: "calendar personal",
-  },
-  {
-    title: "小队执行安排",
-    detail: "把 Agent 小队任务安排到可追踪的执行节奏。",
-    filter: "arrangement teamflow",
-    odId: "schedule-arrangement-catalog",
-  },
-  {
-    title: "个人任务安排",
-    detail: "从主页 composer 生成个人计划和提醒。",
-    filter: "arrangement personal",
   },
 ];

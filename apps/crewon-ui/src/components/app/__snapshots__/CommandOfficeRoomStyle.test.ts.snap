@@ -400,11 +400,7 @@ exports[`command Office room style > snapshots the canonical Office workspace em
 }
 .team-office-runtime-room
   > .office-workspace
-  :is(
-    .office-top,
-    .office-room-body,
-    .office-memory-panel
-  ) {
+  :is(.office-top, .office-room-body, .office-memory-panel) {
   max-width: none;
 }
 .team-office-room-loading,

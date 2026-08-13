@@ -14,7 +14,6 @@ export type CommandShellView =
   | "projects"
   | "agents"
   | "knowledge"
-  | "schedule"
   | "team";
 
 export type CommandComposerMode = "plan" | "goal" | "agent";

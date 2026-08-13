@@ -59,7 +59,7 @@ describe("App Workspace Control composition", () => {
     expect(source).not.toContain("./lib/app-server/");
     expect(source).toContain("export function App({ controlClient }");
     expect(source).not.toContain("client: null");
-    expect(source).toContain("scheduleClient={null}");
+    expect(source).not.toContain("scheduleClient");
   });
 
   it("has no development recovery route that restarts App Server", () => {
@@ -273,9 +273,8 @@ describe("App Workspace Control composition", () => {
       "utf8",
     );
 
-    expect(source).toContain("workspaceAuthority: CommandWorkspaceAuthority;");
-    expect(source).toContain("workspaceAuthority,");
-    expect(source).not.toContain('workspaceAuthority = "legacy"');
+    expect(source).not.toContain("workspaceAuthority");
+    expect(source).not.toContain("onChangeWorkspaceCwd");
     expect(source).not.toContain("teamCwd");
   });
 

@@ -125,6 +125,15 @@ group real durable definitions as single Agent or Team, and the old Experts
 dialog, cards, DTO, styles, tests and snapshots were deleted rather than
 adapted.
 
+The Command shell cutover is now structural rather than a production flag. Its
+public component contract no longer accepts `workspaceAuthority`, renderer cwd,
+`executionTargetClient` or `scheduleClient`; new tasks cross only the Control
+thread boundary and native Workspace selection crosses only the typed desktop
+authority. The legacy folder roster/picker tree, Agent Platform execution-target
+adapter, personal Schedule implementation, Office creation fallback and their
+compatibility tests were deleted. The visible sidebar is a single Control task
+tree, and no hidden Schedule route remains in the renderer.
+
 A fresh renderer build and the Tauri bundle manifest are now guarded together:
 the production bundle contains no `AppServerClient`, WebSocket/6176 transport,
 Rust Device/App Server or Device Gateway marker, while the packaged executable

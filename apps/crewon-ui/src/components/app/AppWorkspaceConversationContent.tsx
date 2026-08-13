@@ -76,12 +76,10 @@ export function AppWorkspaceConversationContent({
       <CommandWorkspace
         composerValue={composerValue}
         connectionState={connectionState}
-        cwd={cwd}
         isSending={isSending}
         locale={locale}
         modelOptions={modelOptions}
         slashCommands={slashCommands}
-        workspaceAuthority="control"
         workMode={workMode}
         onChangeComposerValue={onChangeComposerValue}
         onModeChange={onModeChange}

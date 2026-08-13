@@ -3,9 +3,17 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 
 import type { AgentConfig } from "../../lib/domain/crewonDomain";
 import type { Locale } from "../../lib/i18n";
-import type { CommandOfficeCreationInput } from "./commandOfficeCreation";
 
 type AgentRecord = { config: AgentConfig; filePath: string };
+
+export type CommandOfficeCreationInput = {
+  goal: string;
+  members: Array<{
+    config: AgentConfig;
+    responsibility: string;
+  }>;
+  title: string;
+};
 
 export function CommandOfficeCreateDialog({
   agents,

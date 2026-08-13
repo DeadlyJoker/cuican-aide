@@ -23,6 +23,11 @@ describe("Control Workflow architecture", () => {
         import: "default",
         query: "?raw",
       }),
+      ...import.meta.glob("../../components/app/CommandWorkspace.tsx", {
+        eager: true,
+        import: "default",
+        query: "?raw",
+      }),
     } as Record<string, string>;
     const forbidden = [
       "app-server",
@@ -41,7 +46,7 @@ describe("Control Workflow architecture", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("does not reintroduce an executionTargetClient null composition seam", () => {
+  it("does not reintroduce legacy execution target or schedule composition", () => {
     const appSource = import.meta.glob("../../App.tsx", {
       eager: true,
       import: "default",
@@ -49,5 +54,6 @@ describe("Control Workflow architecture", () => {
     })["../../App.tsx"] as string;
 
     expect(appSource).not.toContain("executionTargetClient={null}");
+    expect(appSource).not.toContain("scheduleClient");
   });
 });

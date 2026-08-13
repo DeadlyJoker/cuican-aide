@@ -29,28 +29,17 @@ import { commandSceneSlashItems } from "./commandWorkspaceSceneResources";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 
-type TestCommandWorkspaceProps = Omit<
-  ComponentProps<typeof CommandWorkspaceComponent>,
-  "workspaceAuthority"
+type TestCommandWorkspaceProps = ComponentProps<
+  typeof CommandWorkspaceComponent
 > & {
   onAttachContext?: (workspaceCwd?: string | null) => void;
-  workspaceAuthority?: ComponentProps<
-    typeof CommandWorkspaceComponent
-  >["workspaceAuthority"];
 };
 
-/** Legacy workspace markup remains available only as an explicit test fixture. */
 function CommandWorkspace({
   onAttachContext: _onAttachContext,
-  workspaceAuthority = "legacy",
   ...props
 }: TestCommandWorkspaceProps) {
-  return (
-    <CommandWorkspaceComponent
-      {...props}
-      workspaceAuthority={workspaceAuthority}
-    />
-  );
+  return <CommandWorkspaceComponent {...props} />;
 }
 
 function snapshot(): AgentPlatformSnapshot {
@@ -241,7 +230,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="disconnected"
-        cwd="C:\\Users\\admin\\Documents\\crewon"
         isSending={false}
         modelOptions={[
           { label: "gpt-5.6-sol", value: "gpt-5.6-sol" },
@@ -300,7 +288,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         linkedThreads={[selectedThread]}
         selectedThread={selectedThread}
@@ -322,7 +309,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="disconnected"
-        cwd="/repo/frontend"
         isSending={false}
         locale="en"
         workMode="code"
@@ -364,7 +350,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         providerResource={providerResource}
         workMode="code"
@@ -383,7 +368,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         providerResource={providerResource}
         selectedThread={existingThread}
@@ -427,7 +411,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         providerResource={{
           snapshot,
@@ -458,7 +441,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         providerResource={{
           snapshot,
@@ -546,7 +528,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue="检查这些资源"
         connectionState="connected"
-        cwd="/repo"
         isSending={false}
         pendingComposerMentions={[
           {
@@ -583,13 +564,12 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("产品知识库");
   });
 
-  it("passes workspace cwd only when creating a new thread", () => {
+  it("uses the Control-owned new-thread boundary", () => {
     const existingThreadCalls: unknown[][] = [];
     const newThreadCalls: unknown[][] = [];
     const settings = { model: "gpt-5.5" };
 
     submitCommandComposer({
-      cwd: "/srv/crewon-workspaces/agent-platform",
       onSend: (...args) => existingThreadCalls.push(args),
       onSendNewThread: (...args) => newThreadCalls.push(args),
       settings,
@@ -597,7 +577,6 @@ describe("CommandWorkspace", () => {
       text: "继续处理",
     });
     submitCommandComposer({
-      cwd: "/srv/crewon-workspaces/agent-platform",
       onSend: (...args) => existingThreadCalls.push(args),
       onSendNewThread: (...args) => newThreadCalls.push(args),
       settings,
@@ -606,9 +585,7 @@ describe("CommandWorkspace", () => {
     });
 
     expect(existingThreadCalls).toEqual([["继续处理", settings]]);
-    expect(newThreadCalls).toEqual([
-      ["新建任务", settings, "/srv/crewon-workspaces/agent-platform"],
-    ]);
+    expect(newThreadCalls).toEqual([["新建任务", settings]]);
   });
 
   it("creates a new authority thread before first Provider Agent execution", () => {
@@ -786,17 +763,14 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain("data-scene-capabilities");
   });
 
-  it("renders only real workspaces and conversations in the sidebar", () => {
+  it("renders only Control tasks and conversations in the sidebar", () => {
     const markup = renderCommandWorkspace();
 
     expect(markup).toContain("新建会话");
-    expect(markup).toContain("新增空间");
-    expect(markup).toContain("文件夹路径");
-    expect(markup).toContain("工作空间");
-    expect(markup).toContain('aria-controls="current-workspace-thread-list"');
-    expect(markup).toContain('aria-expanded="true"');
-    expect(markup).toContain('id="current-workspace-thread-list"');
-    expect(markup).toContain("crewon");
+    expect(markup).toContain('aria-label="任务和对话"');
+    expect(markup).not.toContain("新增空间");
+    expect(markup).not.toContain("文件夹路径");
+    expect(markup).not.toContain("current-workspace-thread-list");
     expect(markup).not.toContain("建议任务");
     expect(markup).not.toContain('data-od-id="workspace-node-product"');
   });
@@ -815,11 +789,9 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd={privatePath}
         isSending={false}
         linkedThreads={[thread]}
         locale="en"
-        workspaceAuthority="control"
         workspaceOperations={{
           ...workspaceOperationsSlot("active"),
           nativeWorkspaceDisplayName: "safe-project",
@@ -827,7 +799,6 @@ describe("CommandWorkspace", () => {
         workMode="code"
         onAttachContext={() => undefined}
         onChangeComposerValue={() => undefined}
-        onChangeWorkspaceCwd={vi.fn()}
         onModeChange={() => undefined}
         onRetryConnection={() => undefined}
         onSend={() => undefined}
@@ -874,7 +845,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         modelOptions={[
           {
@@ -932,23 +902,6 @@ describe("CommandWorkspace", () => {
             },
           ],
         }}
-        cwd="/repo/frontend"
-        executionTargetClient={{
-          addOfficeMemberConfig: vi.fn(),
-          createOfficeConfig: vi.fn(),
-          listAgentConfigs: vi.fn(async () => ({
-            data: [
-              {
-                config: {
-                  id: "legacy-agent",
-                  name: "Legacy Agent",
-                } as never,
-                filePath: "/legacy-agent.json",
-              },
-            ],
-          })),
-          listOfficeConfigs: vi.fn(async () => ({ data: [] })),
-        }}
         isSending={false}
         modelOptions={[{ label: "legacy-model", value: "legacy-model" }]}
         workMode="code"
@@ -1001,7 +954,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         selectedThread={thread}
         selectedThreadId="thread-1"
@@ -1218,7 +1170,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         workMode="code"
         onAttachContext={() => undefined}
@@ -1241,7 +1192,7 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('data-shell-view="assist"');
     expect(markup).toContain('data-shell-view="projects"');
     expect(markup).toContain('data-shell-view="agents"');
-    expect(markup).toContain('data-shell-view="schedule"');
+    expect(markup).not.toContain('data-shell-view="schedule"');
     expect(markup).toContain('data-shell-view="team"');
     expect(markup).toContain('data-run-title-zh="\u77e5\u8bc6\u5e93"');
   });
@@ -1259,7 +1210,7 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("Workflow \u6267\u884c\u961f\u5217");
     expect(markup).toContain("\u6267\u884c\u72b6\u6001\u673a");
     expect(markup).toContain("\u667a\u80fd\u4f53");
-    expect(markup).toContain("\u65e5\u7a0b\u5b89\u6392");
+    expect(markup).not.toContain("\u65e5\u7a0b\u5b89\u6392");
     expect(markup).toContain("\u529e\u516c\u5ba4");
   });
 
@@ -1280,7 +1231,6 @@ describe("CommandWorkspace", () => {
         assistantThread={assistantThread}
         composerValue="继续跟进"
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         workMode="code"
         onAttachContext={() => undefined}
@@ -1322,51 +1272,6 @@ describe("CommandWorkspace", () => {
     }).toMatchSnapshot();
   });
 
-  it("keeps workspaces from existing conversations visible when another workspace is active", () => {
-    const originalWorkspaceThread = {
-      cwd: "/repo/original-workspace",
-      id: "thread-original-workspace",
-      name: "Original workspace conversation",
-      preview: "Conversation from the original workspace",
-      updatedAt: Math.floor(Date.now() / 1000),
-    } as unknown as Thread;
-    const markup = renderToStaticMarkup(
-      <CommandWorkspace
-        composerValue=""
-        connectionState="connected"
-        cwd="/repo/current-workspace"
-        isSending={false}
-        linkedThreads={[originalWorkspaceThread]}
-        workMode="code"
-        onAttachContext={() => undefined}
-        onChangeComposerValue={() => undefined}
-        onModeChange={() => undefined}
-        onRetryConnection={() => undefined}
-        onSelectLinkedThread={() => undefined}
-        onSend={() => undefined}
-      />,
-    );
-
-    expect(markup).toContain("current-workspace");
-    expect(markup).toContain("original-workspace");
-    expect(markup).toContain('aria-label="切换到工作空间 original-workspace"');
-    expect(markup).toContain(
-      'data-linked-thread-id="thread-original-workspace"',
-    );
-  });
-
-  it("includes personal schedule jobs, history, and delivery landmarks", () => {
-    const markup = renderCommandWorkspace();
-
-    expect(markup).toContain('data-shell-view="schedule"');
-    expect(markup).toContain("个人日程");
-    expect(markup).toContain("执行记录");
-    expect(markup).toContain("个人日程中心");
-    expect(markup).toContain('aria-labelledby="schedule-create-title"');
-    expect(markup).toContain("新建个人日程");
-    expect(markup).toContain("到时自动开始执行");
-  });
-
   it("renders real slash commands as homepage palette candidates", () => {
     const command: ComposerSlashCommand = {
       id: "skill:review",
@@ -1385,7 +1290,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         slashCommands={[command]}
         workMode="code"
@@ -1415,7 +1319,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         linkedThreads={[backendThread]}
         selectedThreadId="thread-backend-1"
@@ -1429,8 +1332,7 @@ describe("CommandWorkspace", () => {
       />,
     );
 
-    expect(markup).toContain("工作空间");
-    expect(markup).toContain("frontend");
+    expect(markup).toContain('aria-label="任务和对话"');
     expect(markup).not.toContain("建议任务");
     expect(markup).not.toContain("后端会话");
     expect(markup).toContain('data-linked-thread-id="thread-backend-1"');
@@ -1438,59 +1340,7 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("Tool and MCP run streamed from app-server");
   });
 
-  it("keeps existing workspaces actionable for a workspace-less new task", () => {
-    const workspaceThread = {
-      cwd: "/repo/frontend",
-      id: "thread-existing-workspace",
-      name: "Existing workspace conversation",
-      preview: "This workspace remains available from a standalone draft",
-      updatedAt: Math.floor(Date.now() / 1000),
-    } as unknown as Thread;
-    const markup = renderToStaticMarkup(
-      <CommandWorkspace
-        composerValue=""
-        connectionState="connected"
-        cwd=""
-        isSending={false}
-        linkedThreads={[workspaceThread]}
-        workMode="code"
-        onAttachContext={() => undefined}
-        onChangeComposerValue={() => undefined}
-        onChangeWorkspaceCwd={() => undefined}
-        onModeChange={() => undefined}
-        onRetryConnection={() => undefined}
-        onSelectLinkedThread={() => undefined}
-        onSend={() => undefined}
-      />,
-    );
-
-    expect(markup).not.toContain(
-      "当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。",
-    );
-    expect(markup).toContain('aria-label="在工作空间 frontend 中新建会话"');
-    expect(markup).toContain(
-      'data-linked-thread-id="thread-existing-workspace"',
-    );
-    expect({
-      hasEmptyWorkspaceHint: markup.includes(
-        "当前没有绑定文件夹空间，可以新增空间或直接开始无空间会话。",
-      ),
-      hasNewConversationAction: markup.includes(
-        'aria-label="在工作空间 frontend 中新建会话"',
-      ),
-      hasWorkspaceThread: markup.includes(
-        'data-linked-thread-id="thread-existing-workspace"',
-      ),
-    }).toMatchInlineSnapshot(`
-      {
-        "hasEmptyWorkspaceHint": false,
-        "hasNewConversationAction": true,
-        "hasWorkspaceThread": true,
-      }
-    `);
-  });
-
-  it("renders workspace-less conversations in their own sidebar group", () => {
+  it("renders Control conversations in the task tree", () => {
     const standaloneThread = {
       cwd: null,
       id: "thread-standalone-1",
@@ -1502,7 +1352,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         linkedThreads={[standaloneThread]}
         selectedThreadId="thread-standalone-1"
@@ -1516,11 +1365,7 @@ describe("CommandWorkspace", () => {
       />,
     );
 
-    expect(markup).toContain("无工作空间");
-    expect(markup).toContain(
-      'aria-controls="standalone-workspace-thread-list"',
-    );
-    expect(markup).toContain('id="standalone-workspace-thread-list"');
+    expect(markup).toContain('aria-label="任务和对话"');
     expect(markup).toContain('data-linked-thread-id="thread-standalone-1"');
     expect(markup).toContain("Standalone conversation");
     expect(markup).toContain("No folder was attached to this chat");
@@ -1566,7 +1411,6 @@ describe("CommandWorkspace", () => {
         activeTurnId={null}
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         linkedThreads={[selectedThread]}
         selectedThread={selectedThread}
@@ -1634,7 +1478,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         workMode="code"
         workspaceOperations={workspaceOperationsSlot("active")}
@@ -1761,7 +1604,6 @@ describe("CommandWorkspace", () => {
         activeTurnId={null}
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         linkedThreads={[selectedThread]}
         selectedThread={selectedThread}
@@ -1827,7 +1669,6 @@ describe("CommandWorkspace", () => {
         activeTurnId="turn-running-command-room"
         composerValue="补充验收标准"
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         linkedThreads={[runningThread]}
         selectedThread={runningThread}
@@ -1920,7 +1761,6 @@ describe("CommandWorkspace", () => {
         activeTurnId="turn-live-agent-runtime"
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         linkedThreads={[runningThread]}
         selectedThread={runningThread}
@@ -1956,7 +1796,6 @@ describe("CommandWorkspace", () => {
       <CommandWorkspace
         composerValue=""
         connectionState="connected"
-        cwd="/repo/frontend"
         isSending={false}
         linkedThreads={[backendThread]}
         workMode="code"

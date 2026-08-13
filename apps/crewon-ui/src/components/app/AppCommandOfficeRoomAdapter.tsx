@@ -20,7 +20,6 @@ export function createControlCommandOfficeRoomAdapter({
   threadId: string | null;
 }): CommandOfficeRoomAdapter {
   return {
-    usesControlContract: true,
     listCatalog: async () => {
       const catalog = await listControlOfficeCatalog(client);
       return { ...catalog, officeStatus: "ready", status: "ready" };

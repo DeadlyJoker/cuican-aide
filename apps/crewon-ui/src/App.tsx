@@ -80,11 +80,8 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   const { isDemoPreview, platform } = useAppEnvironment();
   // Who you are in CrewON. The model account below is a separate credential.
   const platformAccount = useAgentPlatformAccount();
-  const {
-    libraryLoadRequestRef,
-    openLibraryRef,
-    refreshSettingsSectionRef,
-  } = useAppCoordinatorRefs();
+  const { libraryLoadRequestRef, openLibraryRef, refreshSettingsSectionRef } =
+    useAppCoordinatorRefs();
   const { locale, localeRef, notice, setLocale, setNotice, setTheme, theme } =
     useAppShellRuntimeState();
   const {
@@ -413,13 +410,12 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     selectThread,
     sendMessageInNewThread,
     ...composerState,
-    setDraftWorkspaceCwd,
     ...threadState,
     startDraftThread,
   });
   useAppKeyboardShortcutEffects({
     ...composerState,
-    startDraftThread: () => startCommandShellDraftThread(null),
+    startDraftThread: startCommandShellDraftThread,
   });
   const unavailableWorkspaceCapability = () => {
     setNotice({
@@ -584,10 +580,8 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         committedExecutionIntent={committedExecutionIntent}
         composerValue={composerValue}
         connectionState={threadConnectionState}
-        cwd={cwd}
         isSending={isSending}
         linkedThreads={conversationThreads}
-        platform={platform}
         locale={locale}
         selectedThread={commandShellRuntime.selectedThread}
         selectedThreadId={commandShellRuntime.selectedThreadId}
@@ -604,8 +598,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           }
         }
         controlWorkflowAdapter={controlWorkflowAdapter}
-        scheduleClient={null}
-        workspaceAuthority="control"
         workspaceOperations={{
           state: controlWorkspace.state,
           mutationAuthority: controlWorkspace.mutationAuthority,
@@ -731,7 +723,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           void openLibrary(kind);
         }}
         onNewThread={() => {
-          startCommandShellDraftThread(null);
+          startCommandShellDraftThread();
         }}
         onRenameThread={renameThread}
         onSearchChange={setThreadSearchTerm}

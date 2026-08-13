@@ -11,19 +11,16 @@ import {
   useState,
 } from "react";
 
-import { CommandOfficeCreateDialog } from "./CommandOfficeCreateDialog";
-import { useCommandOfficeCatalogAutoReconnect } from "./commandOfficeCatalogReconnect";
 import {
-  createCommandOffice,
-  type CommandOfficeCreationClient,
+  CommandOfficeCreateDialog,
   type CommandOfficeCreationInput,
-} from "./commandOfficeCreation";
+} from "./CommandOfficeCreateDialog";
+import { useCommandOfficeCatalogAutoReconnect } from "./commandOfficeCatalogReconnect";
 import {
   CommandSidebar,
   Palette,
   type CommandLinkedThread,
   type PaletteItemWithCommand,
-  type CommandWorkspaceAuthority,
 } from "./CommandWorkspaceChrome";
 import { CommandWorkspaceAssistant } from "./CommandWorkspaceAssistant";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
@@ -38,7 +35,6 @@ import {
   ProjectsView,
   TeamView,
 } from "./CommandWorkspaceViews";
-import { ScheduleView, type ScheduleClient } from "./CommandWorkspaceSchedule";
 import { classNames } from "./commandWorkspaceUtils";
 
 type ThreadGoalStatus = ThreadGoalView["status"];
@@ -56,17 +52,11 @@ import {
   commandSceneSlashItems,
 } from "./commandWorkspaceSceneResources";
 import {
-  platformAgentToConfig,
   readAgentPlatformSnapshot,
   type AgentPlatformSnapshot,
 } from "../../lib/agent-platform/agentPlatformClient";
-import {
-  agentPlatformExecutionTargetOptions,
-  platformAgentForExecutionTarget,
-} from "../../lib/agent-platform/agentPlatformExecutionTargets";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
-import type { PlatformKind } from "../../lib/platform";
 import type { ControlWorkflowAdapter } from "../../lib/workflow/controlWorkflowAdapter";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import {
@@ -95,7 +85,6 @@ import {
   officeRecordKey,
   type OfficeConfigRecordReference,
 } from "../../lib/office/officePanelFromRecord";
-import { isLegacyGeneratedOfficePlaceholder } from "../../lib/office/legacyOfficePlaceholder";
 import {
   commandComposerRuntimeSettings,
   fallbackCommandModelOptions,
@@ -181,32 +170,10 @@ type CommandWorkspaceProps = {
     targets: ExecutionTargetOption[];
   }> | null;
   controlWorkflowAdapter?: ControlWorkflowAdapter | null;
-  cwd: string;
-  executionTargetClient?: {
-    addOfficeMemberConfig: CommandOfficeCreationClient["addOfficeMemberConfig"];
-    createOfficeConfig: CommandOfficeCreationClient["createOfficeConfig"];
-    listAgentConfigs(cwd: string): Promise<{
-      data: Array<{ config: AgentConfig; filePath: string }>;
-    }>;
-    listOfficeConfigs(cwd: string): Promise<{
-      data: OfficeConfigRecordReference[];
-    }>;
-    saveAgentConfig?: (cwd: string, config: AgentConfig) => Promise<unknown>;
-    updateAgentConfig?: (
-      cwd: string,
-      filePath: string,
-      config: AgentConfig,
-    ) => Promise<unknown>;
-    deleteAgentConfig?: (cwd: string, filePath: string) => Promise<unknown>;
-  } | null;
   workspaceOperations?: CommandWorkspaceOperationsSlot | null;
-  /** `control` removes every legacy cwd/path authority surface. */
-  workspaceAuthority: CommandWorkspaceAuthority;
-  scheduleClient?: ScheduleClient | null;
   isSending: boolean;
   linkedThreads?: Thread[];
   locale?: Locale;
-  platform?: PlatformKind;
   modelOptions?: CommandModelOption[];
   officeRoomAdapter?: CommandOfficeRoomAdapter | null;
   pendingComposerMentions?: PendingComposerMention[];
@@ -233,7 +200,6 @@ type CommandWorkspaceProps = {
   onComposerResourceSelect?: (
     selection: CommandComposerResourceSelection,
   ) => void;
-  onChangeWorkspaceCwd?: (cwd: string | null) => void;
   onClearAssistantThread?: () => void | Promise<void>;
   onModeChange: (mode: WorkMode) => void;
   onOpenSettings?: () => void;
@@ -253,7 +219,6 @@ type CommandWorkspaceProps = {
   onSendNewThread?: (
     text: string,
     threadSettings?: ThreadRuntimeSettings,
-    workspaceCwd?: string | null,
     images?: ComposerImageInput[],
   ) => void;
   onSelectLinkedThread?: (threadId: string | null) => void;
@@ -300,7 +265,6 @@ export function commandComposerResourceSelection(
 }
 
 export function submitCommandComposer({
-  cwd,
   onSend,
   onSendNewThread,
   settings,
@@ -308,7 +272,6 @@ export function submitCommandComposer({
   text,
   images,
 }: {
-  cwd: string | null;
   onSend: CommandWorkspaceProps["onSend"];
   onSendNewThread: CommandWorkspaceProps["onSendNewThread"];
   settings: ThreadRuntimeSettings;
@@ -318,9 +281,9 @@ export function submitCommandComposer({
 }): void {
   if (shouldCreateNewThread && onSendNewThread) {
     if (images?.length) {
-      onSendNewThread(text, settings, cwd, images);
+      onSendNewThread(text, settings, images);
     } else {
-      onSendNewThread(text, settings, cwd);
+      onSendNewThread(text, settings);
     }
     return;
   }
@@ -350,17 +313,16 @@ export function shouldCreateCommandThread({
 }
 
 export type CommandOfficeRoomAdapter = {
-  create?: (
+  create: (
     input: CommandOfficeCreationInput,
   ) => Promise<OfficeConfigRecordReference>;
-  listCatalog?: () => Promise<CommandDomainCatalog>;
+  listCatalog: () => Promise<CommandDomainCatalog>;
   open: (record: OfficeConfigRecordReference) => void | Promise<void>;
   render: (
     record: OfficeConfigRecordReference,
     onBack: () => void,
     onDeleted: () => void,
   ) => ReactNode;
-  usesControlContract?: boolean;
 };
 
 type PlatformLoadState = "loading" | "ready" | "fallback";
@@ -377,7 +339,6 @@ const shellViewIds: CommandShellView[] = [
   "projects",
   "agents",
   "knowledge",
-  "schedule",
   "team",
 ];
 
@@ -393,13 +354,6 @@ function shellViewFromHash(): CommandShellView {
   }
   const value = window.location.hash.replace(/^#view-/, "");
   return isShellView(value) ? value : "command";
-}
-
-function shellViewForAuthority(
-  view: CommandShellView,
-  authority: CommandWorkspaceAuthority,
-): CommandShellView {
-  return authority === "control" && view === "schedule" ? "command" : view;
 }
 
 function basename(path: string) {
@@ -503,15 +457,10 @@ export function CommandWorkspace({
   connectionState,
   controlExecutionCatalog,
   controlWorkflowAdapter = null,
-  cwd,
-  executionTargetClient = null,
-  scheduleClient = null,
   workspaceOperations = null,
-  workspaceAuthority,
   isSending,
   linkedThreads = [],
   locale = "zh",
-  platform = "web",
   modelOptions = fallbackCommandModelOptions,
   officeRoomAdapter = null,
   pendingComposerMentions = [],
@@ -526,7 +475,6 @@ export function CommandWorkspace({
   onAddLocalResources,
   onChangeComposerValue,
   onComposerResourceSelect,
-  onChangeWorkspaceCwd,
   onClearAssistantThread,
   onModeChange,
   onOpenSettings,
@@ -549,9 +497,8 @@ export function CommandWorkspace({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const lastCommandThreadIdRef = useRef<string | null>(selectedThreadId);
-  const [activeView, setActiveView] = useState<CommandShellView>(() =>
-    shellViewForAuthority(shellViewFromHash(), workspaceAuthority),
-  );
+  const [activeView, setActiveView] =
+    useState<CommandShellView>(shellViewFromHash);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
@@ -606,9 +553,6 @@ export function CommandWorkspace({
     useState<AgentPlatformSnapshot>(emptyAgentPlatformSnapshot);
   const [catalogFilter, setCatalogFilter] = useState("skill");
   const [catalogSearch, setCatalogSearch] = useState("");
-  const [scheduleMode, setScheduleMode] = useState("tasks");
-  const [scheduleSource, setScheduleSource] = useState("personal");
-  const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [teamMode, setTeamMode] = useState<TeamMode>("office");
   const [teamCatalog, setTeamCatalog] = useState<CommandDomainCatalog>({
     agents: [],
@@ -638,9 +582,7 @@ export function CommandWorkspace({
 
   useEffect(() => {
     function syncRoute() {
-      setActiveView(
-        shellViewForAuthority(shellViewFromHash(), workspaceAuthority),
-      );
+      setActiveView(shellViewFromHash());
     }
     window.addEventListener("hashchange", syncRoute);
     window.addEventListener("popstate", syncRoute);
@@ -648,26 +590,11 @@ export function CommandWorkspace({
       window.removeEventListener("hashchange", syncRoute);
       window.removeEventListener("popstate", syncRoute);
     };
-  }, [workspaceAuthority]);
-
-  // An office is a long-lived chat inside one workspace, so switching the
-  // workspace must close whatever room is open.
-  useEffect(() => {
-    officeOpenRequestRef.current += 1;
-    setOfficeRoomId(null);
-    setOfficeCreateOpen(false);
-    setOfficeCreateError(null);
-    setOfficeRoomWarning(null);
-    setSelectedOfficeRecord(null);
-    setOfficeRoomError(null);
-  }, [cwd]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
-    if (
-      ((!executionTargetClient || !cwd) && !officeRoomAdapter?.listCatalog) ||
-      connectionState !== "connected"
-    ) {
+    if (!officeRoomAdapter || connectionState !== "connected") {
       setExecutionTargetCatalog({
         agents: [],
         offices: [],
@@ -683,58 +610,25 @@ export function CommandWorkspace({
       officeStatus: "loading",
       status: "loading",
     });
-    if (officeRoomAdapter?.listCatalog) {
-      void officeRoomAdapter.listCatalog().then(
-        (catalog) => !cancelled && setExecutionTargetCatalog(catalog),
-        () =>
-          !cancelled &&
-          setExecutionTargetCatalog({
-            agents: [],
-            offices: [],
-            officeStatus: "unavailable",
-            status: "unavailable",
-          }),
-      );
-      return () => {
-        cancelled = true;
-      };
-    }
-    Promise.allSettled([
-      executionTargetClient!.listAgentConfigs(cwd),
-      executionTargetClient!.listOfficeConfigs(cwd),
-    ]).then(([agents, offices]) => {
-      if (!cancelled) {
-        const agentsAvailable = agents.status === "fulfilled";
-        const officesAvailable = offices.status === "fulfilled";
+    void officeRoomAdapter.listCatalog().then(
+      (catalog) => !cancelled && setExecutionTargetCatalog(catalog),
+      () =>
+        !cancelled &&
         setExecutionTargetCatalog({
-          agents: agentsAvailable ? agents.value.data : [],
-          offices: officesAvailable
-            ? offices.value.data
-                .filter(
-                  (record) =>
-                    !isLegacyGeneratedOfficePlaceholder(record.config),
-                )
-                .map((record) => ({
-                  ...record,
-                  workspaceCwd: cwd,
-                }))
-            : [],
-          officeStatus: officesAvailable ? "ready" : "unavailable",
-          status: agentsAvailable || officesAvailable ? "ready" : "unavailable",
-        });
-      }
-    });
+          agents: [],
+          offices: [],
+          officeStatus: "unavailable",
+          status: "unavailable",
+        }),
+    );
     return () => {
       cancelled = true;
     };
-  }, [connectionState, cwd, executionTargetClient, officeRoomAdapter]);
+  }, [connectionState, officeRoomAdapter]);
 
   useEffect(() => {
     let cancelled = false;
-    if (
-      ((!executionTargetClient || !cwd) && !officeRoomAdapter?.listCatalog) ||
-      connectionState !== "connected"
-    ) {
+    if (!officeRoomAdapter || connectionState !== "connected") {
       setTeamCatalog({
         agents: [],
         offices: [],
@@ -750,64 +644,28 @@ export function CommandWorkspace({
       officeStatus: "loading",
       status: "loading",
     });
-    if (officeRoomAdapter?.listCatalog) {
-      void officeRoomAdapter.listCatalog().then(
-        (catalog) => !cancelled && setTeamCatalog(catalog),
-        () =>
-          !cancelled &&
-          setTeamCatalog({
-            agents: [],
-            offices: [],
-            officeStatus: "unavailable",
-            status: "unavailable",
-          }),
-      );
-      return () => {
-        cancelled = true;
-      };
-    }
-    Promise.allSettled([
-      executionTargetClient!.listAgentConfigs(cwd),
-      executionTargetClient!.listOfficeConfigs(cwd),
-    ]).then(([agents, offices]) => {
-      if (cancelled) {
-        return;
-      }
-      const agentsAvailable = agents.status === "fulfilled";
-      const officesAvailable = offices.status === "fulfilled";
-      setTeamCatalog({
-        agents: agentsAvailable ? agents.value.data : [],
-        offices: officesAvailable
-          ? offices.value.data
-              .filter(
-                (record) => !isLegacyGeneratedOfficePlaceholder(record.config),
-              )
-              .map((record) => ({
-                ...record,
-                workspaceCwd: cwd,
-              }))
-          : [],
-        officeStatus: officesAvailable ? "ready" : "unavailable",
-        status: agentsAvailable || officesAvailable ? "ready" : "unavailable",
-      });
-    });
+    void officeRoomAdapter.listCatalog().then(
+      (catalog) => !cancelled && setTeamCatalog(catalog),
+      () =>
+        !cancelled &&
+        setTeamCatalog({
+          agents: [],
+          offices: [],
+          officeStatus: "unavailable",
+          status: "unavailable",
+        }),
+    );
     return () => {
       cancelled = true;
     };
-  }, [
-    connectionState,
-    executionTargetClient,
-    officeRoomAdapter,
-    teamRefreshNonce,
-    cwd,
-  ]);
+  }, [connectionState, officeRoomAdapter, teamRefreshNonce]);
 
   useCommandOfficeCatalogAutoReconnect({
     active: activeView === "team" && teamMode === "office",
     connectionState,
     refreshNonce: setTeamRefreshNonce,
     status: teamCatalog.officeStatus,
-    workspaceCwd: cwd,
+    workspaceCwd: workspaceOperations?.nativeWorkspaceDisplayName ?? "",
   });
 
   useEffect(() => {
@@ -917,13 +775,8 @@ export function CommandWorkspace({
     [platformSnapshot],
   );
   const contextPaletteItems = useMemo(
-    () =>
-      commandSceneContextItems(
-        scene,
-        emptyAgentPlatformSnapshot,
-        workspaceAuthority === "legacy" ? cwd : "",
-      ),
-    [cwd, scene, workspaceAuthority],
+    () => commandSceneContextItems(scene, emptyAgentPlatformSnapshot, ""),
+    [scene],
   );
   const slashPaletteItems = useMemo(
     () => commandSceneSlashItems(emptyAgentPlatformSnapshot, slashCommands),
@@ -1082,19 +935,11 @@ export function CommandWorkspace({
           providerResource?.executionAgents ?? [],
         )
       : [];
-    const platformTargets =
-      providerTargets.length === 0
-        ? agentPlatformExecutionTargetOptions(
-            platformSnapshot,
-            executionTargetCatalog.agents,
-          )
-        : [];
-    return [...domainTargets, ...providerTargets, ...platformTargets];
+    return [...domainTargets, ...providerTargets];
   }, [
     controlExecutionCatalog,
     executionTargetCatalog,
     locale,
-    platformSnapshot,
     providerResource?.executionAgents,
     providerExecutionTargetsAvailable,
   ]);
@@ -1140,73 +985,45 @@ export function CommandWorkspace({
           },
         ];
   const workspaceOptions = useMemo<CommandComposerSelectOption[]>(() => {
-    if (workspaceAuthority === "control") {
-      const displayName = workspaceOperations?.nativeWorkspaceDisplayName;
-      return [
-        {
-          detail:
-            locale === "zh"
-              ? "使用默认执行环境，不向新任务显式绑定目录"
-              : "Use the default execution environment without explicitly binding a directory",
-          label: locale === "zh" ? "无工作空间" : "No workspace",
-          value: noWorkspaceValue,
-        },
-        ...(displayName
-          ? [
-              {
-                detail:
-                  locale === "zh"
-                    ? "由桌面端安全 authority 管理"
-                    : "Managed by the desktop authority",
-                label: displayName,
-                value: "__native_workspace__",
-              },
-            ]
-          : []),
-        {
-          detail:
-            locale === "zh"
-              ? "打开桌面文件夹选择器；路径只交给 native authority"
-              : "Open the desktop folder picker; only the native authority receives the path",
-          label:
-            locale === "zh"
-              ? displayName
-                ? "更换工作空间…"
-                : "选择工作空间…"
-              : displayName
-                ? "Replace Workspace…"
-                : "Select Workspace…",
-          value: "__select_native_workspace__",
-        },
-      ];
-    }
-    const paths = [cwd, ...linkedThreads.map((thread) => thread.cwd ?? "")]
-      .map((path) => path.trim())
-      .filter(
-        (path, index, allPaths) => path && allPaths.indexOf(path) === index,
-      );
+    const displayName = workspaceOperations?.nativeWorkspaceDisplayName;
     return [
       {
         detail:
           locale === "zh"
-            ? "不绑定项目文件夹，使用默认执行环境"
-            : "Use the default execution environment without a project folder",
+            ? "使用默认执行环境，不向新任务显式绑定目录"
+            : "Use the default execution environment without explicitly binding a directory",
         label: locale === "zh" ? "无工作空间" : "No workspace",
         value: noWorkspaceValue,
       },
-      ...paths.map((path) => ({
-        detail: path,
-        label: basename(path),
-        value: path,
-      })),
+      ...(displayName
+        ? [
+            {
+              detail:
+                locale === "zh"
+                  ? "由桌面端安全 authority 管理"
+                  : "Managed by the desktop authority",
+              label: displayName,
+              value: "__native_workspace__",
+            },
+          ]
+        : []),
+      {
+        detail:
+          locale === "zh"
+            ? "打开桌面文件夹选择器；路径只交给 native authority"
+            : "Open the desktop folder picker; only the native authority receives the path",
+        label:
+          locale === "zh"
+            ? displayName
+              ? "更换工作空间…"
+              : "选择工作空间…"
+            : displayName
+              ? "Replace Workspace…"
+              : "Select Workspace…",
+        value: "__select_native_workspace__",
+      },
     ];
-  }, [
-    cwd,
-    linkedThreads,
-    locale,
-    workspaceAuthority,
-    workspaceOperations?.nativeWorkspaceDisplayName,
-  ]);
+  }, [locale, workspaceOperations?.nativeWorkspaceDisplayName]);
   useEffect(() => {
     const targetProviderAgent = providerAgentResourceForTarget(
       providerResource?.executionAgents ?? [],
@@ -1237,20 +1054,6 @@ export function CommandWorkspace({
 
   async function selectExecutionTarget(nextTarget: string) {
     setCloudAgentTargetError(null);
-    const platformAgent = platformAgentForExecutionTarget(
-      platformSnapshot,
-      nextTarget,
-    );
-    if (platformAgent) {
-      try {
-        await addPlatformAgentToWorkspace(platformAgent.id);
-      } catch (error) {
-        setCloudAgentTargetError(
-          error instanceof Error ? error.message : "云智能体同步失败",
-        );
-        return;
-      }
-    }
     const providerAgent = providerAgentResourceForTarget(
       providerResource?.executionAgents ?? [],
       nextTarget,
@@ -1268,7 +1071,6 @@ export function CommandWorkspace({
   const commandLinkedThreads: CommandLinkedThread[] = useMemo(
     () =>
       linkedThreads.map((thread) => ({
-        cwd: workspaceAuthority === "legacy" ? (thread.cwd ?? null) : null,
         id: thread.id,
         preview: thread.preview,
         title: sidebarThreadTitle(
@@ -1278,7 +1080,7 @@ export function CommandWorkspace({
         updatedAt: thread.updatedAt,
         updatedLabel: formatRelativeTime(thread.updatedAt, locale),
       })),
-    [linkedThreads, locale, workspaceAuthority],
+    [linkedThreads, locale],
   );
   const platformHasResources =
     platformSnapshot.agents.length +
@@ -1310,15 +1112,14 @@ export function CommandWorkspace({
   }
 
   function switchView(view: CommandShellView) {
-    const nextView = shellViewForAuthority(view, workspaceAuthority);
     setOpenPalette(null);
     setPaletteQuery("");
-    setActiveView(nextView);
+    setActiveView(view);
     if (typeof window !== "undefined") {
       window.history.replaceState(
         null,
         "",
-        `${window.location.pathname}${window.location.search}#view-${nextView}`,
+        `${window.location.pathname}${window.location.search}#view-${view}`,
       );
     }
   }
@@ -1406,7 +1207,6 @@ export function CommandWorkspace({
       selectedThread,
     });
     submitCommandComposer({
-      cwd: workspaceAuthority === "legacy" ? cwd || null : null,
       images: commandImages.map(({ detail, url }) => ({ detail, url })),
       onSend,
       onSendNewThread,
@@ -1684,35 +1484,28 @@ export function CommandWorkspace({
   }
 
   async function createRuntimeOffice(input: CommandOfficeCreationInput) {
-    if (
-      !officeRoomAdapter ||
-      (!officeRoomAdapter.create && (!executionTargetClient || !cwd))
-    ) {
+    if (!officeRoomAdapter) {
       return;
     }
     setOfficeCreateBusy(true);
     setOfficeCreateError(null);
     try {
-      const result = officeRoomAdapter.create
-        ? { record: await officeRoomAdapter.create(input), warnings: [] }
-        : await createCommandOffice(executionTargetClient!, cwd, input, locale);
-      const recordKey = officeRecordKey(result.record);
+      const record = await officeRoomAdapter.create(input);
+      const recordKey = officeRecordKey(record);
       setTeamCatalog((current) => ({
         ...current,
         offices: [
           ...current.offices.filter(
             (record) => officeRecordKey(record) !== recordKey,
           ),
-          result.record,
+          record,
         ],
         officeStatus: "ready",
         status: "ready",
       }));
       setOfficeCreateOpen(false);
-      await openRuntimeOffice(result.record);
-      setOfficeRoomWarning(
-        result.warnings.length > 0 ? result.warnings.join("；") : null,
-      );
+      await openRuntimeOffice(record);
+      setOfficeRoomWarning(null);
     } catch (error) {
       setOfficeCreateError(
         error instanceof Error ? error.message : "无法创建办公室",
@@ -1722,35 +1515,11 @@ export function CommandWorkspace({
     }
   }
 
-  async function addPlatformAgentToWorkspace(agentId: number) {
-    if (!executionTargetClient?.saveAgentConfig || !cwd) {
-      throw new Error("CrewON Control 或当前工作区不可用，无法加入智能体");
-    }
-    const index = platformSnapshot.agents.findIndex(
-      (agent) => agent.id === agentId,
-    );
-    const agent = platformSnapshot.agents[index];
-    if (!agent) {
-      throw new Error("云智能体已不存在，请刷新资源后重试");
-    }
-    await executionTargetClient.saveAgentConfig(
-      cwd,
-      platformAgentToConfig(agent, platformSnapshot, index),
-    );
-    setTeamRefreshNonce((current) => current + 1);
-  }
-
-  const currentWorkspace =
-    workspaceAuthority === "legacy"
-      ? basename(cwd || (locale === "zh" ? "工作空间" : "Workspace"))
-      : null;
   const selectedOfficeRecordKey = selectedOfficeRecord
     ? officeRecordKey(selectedOfficeRecord)
     : null;
   const canCreateOffice = Boolean(
-    officeRoomAdapter &&
-      (officeRoomAdapter.create || (executionTargetClient && cwd)) &&
-      connectionState === "connected",
+    officeRoomAdapter && connectionState === "connected",
   );
   const officeRuntime = officeRoomAdapter
     ? {
@@ -1787,7 +1556,7 @@ export function CommandWorkspace({
         ) : null,
         selectedRecordKey: selectedOfficeRecordKey,
         status: teamCatalog.officeStatus,
-        workspaceCwd: cwd,
+        workspaceCwd: "",
         onCreate: canCreateOffice
           ? () => {
               setOfficeCreateError(null);
@@ -1883,7 +1652,7 @@ export function CommandWorkspace({
     showCommandThread && selectedThread ? (
       <CommandThreadRoom
         activeTurnId={activeTurnId}
-        cwd={workspaceAuthority === "legacy" ? cwd : ""}
+        cwd=""
         locale={locale}
         selectedThread={selectedThread}
         streamingText={streamingText}
@@ -1928,27 +1697,18 @@ export function CommandWorkspace({
         <CommandSidebar
           activeView={activeView}
           isSearchOpen={sidebarSearchOpen}
-          cwd={workspaceAuthority === "legacy" ? cwd : ""}
           linkedThreads={commandLinkedThreads}
           locale={locale}
-          platform={platform}
           query={sidebarSearchQuery}
           selectedLinkedThreadId={activeLinkedThreadId}
           slots={slots}
-          workspaceAuthority={workspaceAuthority}
           onCloseSearch={() => {
             setSidebarSearchOpen(false);
             setSidebarSearchQuery("");
           }}
-          onCreateWorkspace={
-            workspaceAuthority === "legacy" ? onChangeWorkspaceCwd : undefined
-          }
-          onNewThread={(workspaceCwd) => {
+          onNewThread={() => {
             setActiveLinkedThreadId(null);
             setNewTaskDraft(true);
-            if (workspaceAuthority === "legacy") {
-              onChangeWorkspaceCwd?.(workspaceCwd);
-            }
             onChangeComposerValue("");
             switchView("command");
             textareaRef.current?.focus();
@@ -2273,10 +2033,8 @@ export function CommandWorkspace({
                         className="workspace-label"
                         data-od-id="workspace-picker"
                       >
-                        {workspaceAuthority === "control"
-                          ? (workspaceOperations?.nativeWorkspaceDisplayName ??
-                            (locale === "zh" ? "无工作空间" : "No workspace"))
-                          : currentWorkspace}
+                        {workspaceOperations?.nativeWorkspaceDisplayName ??
+                          (locale === "zh" ? "无工作空间" : "No workspace")}
                       </span>
                     ) : (
                       <CommandComposerSelect
@@ -2286,30 +2044,20 @@ export function CommandWorkspace({
                         className="workspace-dropdown"
                         options={workspaceOptions}
                         value={
-                          workspaceAuthority === "control"
-                            ? workspaceOperations?.nativeWorkspaceDisplayName
-                              ? "__native_workspace__"
-                              : noWorkspaceValue
-                            : cwd || noWorkspaceValue
+                          workspaceOperations?.nativeWorkspaceDisplayName
+                            ? "__native_workspace__"
+                            : noWorkspaceValue
                         }
                         onChange={(nextWorkspace) => {
-                          if (workspaceAuthority === "control") {
-                            const action =
-                              nextWorkspace === noWorkspaceValue
-                                ? workspaceOperations?.onClearNativeWorkspace
-                                : workspaceOperations?.onSelectNativeWorkspace;
-                            if (action) {
-                              void Promise.resolve(action()).catch(
-                                () => undefined,
-                              );
-                            }
-                            return;
-                          }
-                          onChangeWorkspaceCwd?.(
+                          const action =
                             nextWorkspace === noWorkspaceValue
-                              ? null
-                              : nextWorkspace,
-                          );
+                              ? workspaceOperations?.onClearNativeWorkspace
+                              : workspaceOperations?.onSelectNativeWorkspace;
+                          if (action) {
+                            void Promise.resolve(action()).catch(
+                              () => undefined,
+                            );
+                          }
                         }}
                       />
                     )}
@@ -2622,7 +2370,6 @@ export function CommandWorkspace({
             onReload={reloadPlatformResources}
             onCatalogFilterChange={setCatalogFilter}
             onCatalogSearchChange={setCatalogSearch}
-            onAddAgent={addPlatformAgentToWorkspace}
             onSaveCapability={onSaveCapability}
           />
           <KnowledgeCatalogView
@@ -2632,21 +2379,6 @@ export function CommandWorkspace({
             snapshot={platformSnapshot}
             onReload={reloadPlatformResources}
           />
-          {workspaceAuthority === "legacy" ? (
-            <ScheduleView
-              active={activeView === "schedule"}
-              client={scheduleClient}
-              cwd={cwd}
-              modalOpen={scheduleModalOpen}
-              scheduleMode={scheduleMode}
-              scheduleSource={scheduleSource}
-              onCloseModal={() => setScheduleModalOpen(false)}
-              onModeChange={setScheduleMode}
-              onOpenModal={() => setScheduleModalOpen(true)}
-              onSourceChange={setScheduleSource}
-              onOpenThread={onSelectLinkedThread}
-            />
-          ) : null}
           <TeamView
             active={activeView === "team"}
             officeRuntime={officeRuntime}
@@ -2676,7 +2408,7 @@ export function CommandWorkspace({
               busy={officeCreateBusy}
               error={officeCreateError}
               locale={locale}
-              supportsGoal={!officeRoomAdapter?.usesControlContract}
+              supportsGoal={false}
               onClose={() => {
                 if (!officeCreateBusy) {
                   setOfficeCreateOpen(false);
