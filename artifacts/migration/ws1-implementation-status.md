@@ -17,8 +17,13 @@
 - W01 production transaction protocol、Workflow Start、scheduler fan-out、node admission、node settlement、Human Gate、
   reconciliation、真实 PostgreSQL 双连接和 packaged crash recovery 均已有纵向证据。并行 cancel 已改为每节点独立 lease/
   reconcile authority 与 dedicated cancellation coordinator；SQLite 双 running sibling 回归证明一个 worker 不能借自己的 lease
-  结算 sibling，最终也没有 stranded WorkItem。PostgreSQL 同构实现已完成 typecheck，当前环境缺少
-  `CREWON_TEST_POSTGRES_URL`，仍需 real-host 复验。这不代表整个产品迁移完成。
+  结算 sibling，最终也没有 stranded WorkItem。真实 PostgreSQL 16 串行完整 Store 套件为 `546 pass / 0 fail`（一个与
+  Workflow 无关的 Provider 环境标记用例 skip）；其中双 running sibling、late-response reconciliation、双进程
+  `SIGKILL` 恢复均实际执行通过。这不代表整个产品迁移完成。
+- packaged `.app` 通过真实 Control client 启动并读取 Workflow，client-view SSE 只出现一个 `run.completed`；相同 start
+  idempotency key 返回 `committed -> replayed` 且保持同一 Run，SQLite admission receipt 与 canonical Run 均为一条。
+  Worker `SIGKILL` 后 guardian 清理受管进程，同一 HOME 重启完成 Agent -> Verification；GUI `SIGKILL` 后再次清理并释放
+  Control 端口。
 - Renderer 已改为 Control-only bootstrap。Library 与 Settings 不再构造 App Server client：Library 的 Automation/Knowledge/
   Agent/Office/Tool 读取和允许的 mutation 走 Control；Settings 只公开 Account、Appearance、Model access 三个具有真实 Control
   authority 的页面。语言/主题使用 revision CAS，成功提交后才更新本地状态；旧 Config、Personalization、Thread Settings 和
