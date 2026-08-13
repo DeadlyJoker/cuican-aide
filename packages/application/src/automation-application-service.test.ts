@@ -39,7 +39,7 @@ const actor = {
   spaceId: "space-1",
 } as const;
 
-test("creates a frozen manual-only definition behind an atomic Thread fence", async () => {
+test("creates a frozen scheduled definition behind an atomic Thread fence", async () => {
   const events: string[] = [];
   const store = new FakeAutomationStore(events);
   const service = createService(store, events);
@@ -62,21 +62,22 @@ test("creates a frozen manual-only definition behind an atomic Thread fence", as
     expectedStatus: "active",
   });
   assert.deepEqual(result.record.definition, {
-    schemaVersion: "crewon.automation.v0",
+    schemaVersion: "crewon.automation.v1",
     automationId: "automation-1",
     tenantId: "tenant-1",
     spaceId: "space-1",
-    createdByActorId: "actor-1",
+    owner: actor,
     threadId: "thread-1",
     title: "Daily summary",
     prompt: "Summarize the project.",
     agentVersionId: "agent-version-1",
     schedule: createCommand().schedule,
-    executionMode: "manualOnly",
+    misfirePolicy: "coalesceLatest",
     revision: 1,
     createdAt: "2026-08-09T00:00:00Z",
     updatedAt: "2026-08-09T00:00:00Z",
   });
+  assert.deepEqual(result.record.scheduleState, scheduleState());
   assert.equal(
     result.record.definitionDigest,
     sha256(canonicalJson(result.record.definition)),
@@ -223,6 +224,7 @@ test("builds one provenance-bound ordinary Turn in the compound commit", async (
     invocationId: "automationInvocation-1",
     runId: "run-1",
     routeDigest: sha256(canonicalJson(route())),
+    trigger: { kind: "manual" },
   });
   assert.equal(input.instruction, renderAutomationInstruction(definition()));
   assert.deepEqual(input.message.origin, {
@@ -235,7 +237,7 @@ test("builds one provenance-bound ordinary Turn in the compound commit", async (
   assert.equal(input.runEvent.data.goalBinding, null);
   assert.deepEqual(input.runEvent.data.origin, input.message.origin);
   assert.deepEqual(input.workItem.payload, {
-    schemaVersion: "crewon.automation-invocation-work-item.v0",
+    schemaVersion: "crewon.automation-invocation-work-item.v1",
     trigger: "automationInvocation",
     throughSequence: 1,
     binding: input.binding,
@@ -406,6 +408,7 @@ test("coarse authorization denial performs no Store, route, clock, or ID work", 
         return route();
       },
     },
+    scheduleCalculator,
   });
 
   await assert.rejects(
@@ -455,6 +458,7 @@ test("coarse authorization denial performs no Store, route, clock, or ID work", 
         return route();
       },
     },
+    scheduleCalculator,
   });
   await assert.rejects(
     createDenied.createAutomation(actor, createCommand()),
@@ -624,6 +628,7 @@ function createService(store: FakeAutomationStore, events: string[]) {
         return route();
       },
     },
+    scheduleCalculator,
   });
 }
 
@@ -647,11 +652,8 @@ function createCommand(): CreateAutomationCommand {
     prompt: "Summarize the project.",
     requestedAgentVersionId: null,
     schedule: {
-      scheduleType: "daily",
-      nextRunAt: "2026-08-10T10:00:00Z",
-      intervalSeconds: 86_400,
-      time: "18:00",
-      weekday: 0,
+      kind: "daily",
+      localTime: "18:00",
       timezone: "Asia/Shanghai",
     },
   };
@@ -672,7 +674,7 @@ function definition(): AutomationDefinition {
     automationId: "automation-1",
     tenantId: "tenant-1",
     spaceId: "space-1",
-    createdByActorId: "actor-1",
+    owner: actor,
     threadId: "thread-1",
     title: "Daily summary",
     prompt: "Summarize the project.",
@@ -684,7 +686,11 @@ function definition(): AutomationDefinition {
 
 function definitionRecord(): AutomationDefinitionRecord {
   const value = definition();
-  return { definition: value, definitionDigest: sha256(canonicalJson(value)) };
+  return {
+    definition: value,
+    definitionDigest: sha256(canonicalJson(value)),
+    scheduleState: scheduleState(),
+  };
 }
 
 function recordWithSpace(spaceId: string) {
@@ -693,7 +699,7 @@ function recordWithSpace(spaceId: string) {
     automationId: current.automationId,
     tenantId: current.tenantId,
     spaceId,
-    createdByActorId: current.createdByActorId,
+    owner: { ...current.owner, spaceId },
     threadId: current.threadId,
     title: current.title,
     prompt: current.prompt,
@@ -701,8 +707,30 @@ function recordWithSpace(spaceId: string) {
     schedule: current.schedule,
     createdAt: current.createdAt,
   });
-  return { definition: value, definitionDigest: sha256(canonicalJson(value)) };
+  return {
+    definition: value,
+    definitionDigest: sha256(canonicalJson(value)),
+    scheduleState: scheduleState(),
+  };
 }
+
+function scheduleState() {
+  return {
+    schemaVersion: "crewon.automation-schedule-state.v1" as const,
+    automationId: "automation-1",
+    scheduleRevision: 1 as const,
+    status: "enabled" as const,
+    nextOccurrenceAt: "2026-08-10T10:00:00Z",
+    lastScheduledFor: null,
+    retryAt: null,
+    revision: 1,
+    updatedAt: "2026-08-09T00:00:00Z",
+  };
+}
+
+const scheduleCalculator = {
+  nextOccurrence: () => "2026-08-10T10:00:00Z",
+};
 
 function invocationContext(): AutomationInvocationContext {
   return {

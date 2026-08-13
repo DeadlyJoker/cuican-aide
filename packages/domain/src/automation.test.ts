@@ -8,11 +8,13 @@ import {
   parseAutomationDefinition,
   parseAutomationInvocationBinding,
   parseAutomationInvocationOrigin,
+  parseAutomationScheduleSpec,
+  parseAutomationScheduleState,
   renderAutomationInstruction,
   type CreateAutomationDefinitionInput,
 } from "./automation.ts";
 
-test("creates one exact immutable manual-only Automation definition", () => {
+test("creates one exact immutable scheduled Automation definition", () => {
   const definition = createAutomationDefinition(definitionInput());
 
   assert.deepEqual(definition, definitionFixture());
@@ -54,10 +56,7 @@ test("validates IDs, immutable state and strict UTC timestamps", () => {
     { ...definitionInput(), createdAt: "2026-02-30T00:00:00Z" },
     {
       ...definitionInput(),
-      schedule: {
-        ...definitionInput().schedule,
-        nextRunAt: "2026-08-10T10:00:00+08:00",
-      },
+      schedule: { kind: "daily", localTime: "18:00", timezone: "Invalid/Zone" },
     },
   ]) {
     assert.throws(
@@ -69,17 +68,52 @@ test("validates IDs, immutable state and strict UTC timestamps", () => {
     () =>
       parseAutomationDefinition({
         ...definitionFixture(),
-        executionMode: "scheduled",
-      }),
-    hasCode("automation_state_invalid"),
-  );
-  assert.throws(
-    () =>
-      parseAutomationDefinition({
-        ...definitionFixture(),
         updatedAt: "2026-08-09T00:00:01Z",
       }),
     hasCode("automation_state_invalid"),
+  );
+});
+
+test("accepts only strict discriminated schedules and durable schedule state", () => {
+  for (const schedule of [
+    { kind: "once", at: "2026-08-10T10:00:00Z" },
+    { kind: "interval", anchorAt: "2026-08-10T10:00:00Z", everySeconds: 300 },
+    { kind: "daily", localTime: "18:00", timezone: "Asia/Shanghai" },
+    { kind: "weekly", isoWeekday: 7, localTime: "18:00", timezone: "UTC" },
+  ] as const) {
+    assert.deepEqual(parseAutomationScheduleSpec(schedule), schedule);
+  }
+  for (const schedule of [
+    { kind: "interval", anchorAt: "2026-08-10T10:00:00Z", everySeconds: 299 },
+    { kind: "daily", localTime: "24:00", timezone: "UTC" },
+    { kind: "weekly", isoWeekday: 0, localTime: "18:00", timezone: "UTC" },
+    {
+      kind: "daily",
+      localTime: "18:00",
+      timezone: "UTC",
+      nextRunAt: "2026-08-10T10:00:00Z",
+    },
+  ]) {
+    assert.throws(
+      () => parseAutomationScheduleSpec(schedule),
+      hasCode("automation_schedule_invalid"),
+    );
+  }
+  const state = {
+    schemaVersion: "crewon.automation-schedule-state.v1" as const,
+    automationId: "automation-1",
+    scheduleRevision: 1 as const,
+    status: "enabled" as const,
+    nextOccurrenceAt: "2026-08-10T10:00:00Z",
+    lastScheduledFor: null,
+    retryAt: null,
+    revision: 1,
+    updatedAt: "2026-08-09T00:00:00Z",
+  };
+  assert.deepEqual(parseAutomationScheduleState(state), state);
+  assert.throws(
+    () => parseAutomationScheduleState({ ...state, nextOccurrenceAt: null }),
+    hasCode("automation_schedule_state_invalid"),
   );
 });
 
@@ -177,6 +211,7 @@ test("validates exact Automation invocation identity and digest provenance", () 
     invocationId: "invocation-1",
     runId: "run-1",
     routeDigest: `sha256:${"b".repeat(64)}`,
+    trigger: { kind: "manual" as const },
   };
 
   assert.deepEqual(parseAutomationInvocationBinding(binding), binding);
@@ -215,17 +250,19 @@ function definitionInput(): CreateAutomationDefinitionInput {
     automationId: "automation-1",
     tenantId: "tenant-1",
     spaceId: "space-1",
-    createdByActorId: "actor-1",
+    owner: {
+      principalId: "principal-1",
+      actorId: "actor-1",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+    },
     threadId: "thread-1",
     title: "Daily summary",
     prompt: "Summarize the project.",
     agentVersionId: "agent-version-1",
     schedule: {
-      scheduleType: "daily",
-      nextRunAt: "2026-08-10T10:00:00Z",
-      intervalSeconds: 86_400,
-      time: "18:00",
-      weekday: 0,
+      kind: "daily",
+      localTime: "18:00",
       timezone: "Asia/Shanghai",
     },
     createdAt: "2026-08-09T00:00:00Z",
@@ -234,9 +271,9 @@ function definitionInput(): CreateAutomationDefinitionInput {
 
 function definitionFixture() {
   return {
-    schemaVersion: "crewon.automation.v0" as const,
+    schemaVersion: "crewon.automation.v1" as const,
     ...definitionInput(),
-    executionMode: "manualOnly" as const,
+    misfirePolicy: "coalesceLatest" as const,
     revision: 1 as const,
     updatedAt: definitionInput().createdAt,
   };

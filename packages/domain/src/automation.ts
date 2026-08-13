@@ -1,35 +1,49 @@
-export const AUTOMATION_SCHEDULE_TYPES = [
-  "daily",
-  "weekly",
-  "interval",
-  "once",
-] as const;
-
 export const MAX_AUTOMATION_INSTRUCTION_BYTES = 9_999;
+export const AUTOMATION_MISFIRE_POLICY = "coalesceLatest" as const;
+export const AUTOMATION_TIME_DISAMBIGUATION = "compatible" as const;
 
-export type AutomationScheduleType = (typeof AUTOMATION_SCHEDULE_TYPES)[number];
+export type AutomationScheduleSpec =
+  | Readonly<{ kind: "once"; at: string }>
+  | Readonly<{ kind: "interval"; anchorAt: string; everySeconds: number }>
+  | Readonly<{ kind: "daily"; localTime: string; timezone: string }>
+  | Readonly<{
+      kind: "weekly";
+      isoWeekday: 1 | 2 | 3 | 4 | 5 | 6 | 7;
+      localTime: string;
+      timezone: string;
+    }>;
 
-export type AutomationSchedule = Readonly<{
-  scheduleType: AutomationScheduleType;
-  nextRunAt: string;
-  intervalSeconds: number;
-  time: string;
-  weekday: number;
-  timezone: string;
+export type AutomationOwnerBinding = Readonly<{
+  principalId: string;
+  actorId: string;
+  tenantId: string;
+  spaceId: string;
+}>;
+
+export type AutomationScheduleState = Readonly<{
+  schemaVersion: "crewon.automation-schedule-state.v1";
+  automationId: string;
+  scheduleRevision: 1;
+  status: "enabled" | "disabled" | "completed";
+  nextOccurrenceAt: string | null;
+  lastScheduledFor: string | null;
+  retryAt: string | null;
+  revision: number;
+  updatedAt: string;
 }>;
 
 export type AutomationDefinition = Readonly<{
-  schemaVersion: "crewon.automation.v0";
+  schemaVersion: "crewon.automation.v1";
   automationId: string;
   tenantId: string;
   spaceId: string;
-  createdByActorId: string;
+  owner: AutomationOwnerBinding;
   threadId: string;
   title: string;
   prompt: string;
   agentVersionId: string;
-  schedule: AutomationSchedule;
-  executionMode: "manualOnly";
+  schedule: AutomationScheduleSpec;
+  misfirePolicy: typeof AUTOMATION_MISFIRE_POLICY;
   revision: 1;
   createdAt: string;
   updatedAt: string;
@@ -39,16 +53,25 @@ export type CreateAutomationDefinitionInput = Readonly<{
   automationId: string;
   tenantId: string;
   spaceId: string;
-  createdByActorId: string;
+  owner: AutomationOwnerBinding;
   threadId: string;
   title: string;
   prompt: string;
   agentVersionId: string;
-  schedule: AutomationSchedule;
+  schedule: AutomationScheduleSpec;
   createdAt: string;
 }>;
 
-/** Server-derived provenance carried by one manual Automation invocation. */
+export type AutomationInvocationTrigger =
+  | Readonly<{ kind: "manual" }>
+  | Readonly<{
+      kind: "schedule";
+      scheduleRevision: 1;
+      scheduledFor: string;
+      occurrenceDigest: string;
+    }>;
+
+/** Server-derived provenance carried by one Automation invocation. */
 export type AutomationInvocationBinding = Readonly<{
   automationId: string;
   automationRevision: 1;
@@ -57,6 +80,7 @@ export type AutomationInvocationBinding = Readonly<{
   invocationId: string;
   runId: string;
   routeDigest: string;
+  trigger: AutomationInvocationTrigger;
 }>;
 
 export type AutomationInvocationOrigin = Readonly<{
@@ -84,7 +108,7 @@ export function createAutomationDefinition(
       "agentVersionId",
       "automationId",
       "createdAt",
-      "createdByActorId",
+      "owner",
       "prompt",
       "schedule",
       "spaceId",
@@ -99,17 +123,17 @@ export function createAutomationDefinition(
     "automation_created_at_invalid",
   );
   return parseAutomationDefinition({
-    schemaVersion: "crewon.automation.v0",
+    schemaVersion: "crewon.automation.v1",
     automationId: value.automationId,
     tenantId: value.tenantId,
     spaceId: value.spaceId,
-    createdByActorId: value.createdByActorId,
+    owner: value.owner,
     threadId: value.threadId,
     title: value.title,
     prompt: value.prompt,
     agentVersionId: value.agentVersionId,
     schedule: value.schedule,
-    executionMode: "manualOnly",
+    misfirePolicy: AUTOMATION_MISFIRE_POLICY,
     revision: 1,
     createdAt,
     updatedAt: createdAt,
@@ -126,8 +150,8 @@ export function parseAutomationDefinition(
       "agentVersionId",
       "automationId",
       "createdAt",
-      "createdByActorId",
-      "executionMode",
+      "owner",
+      "misfirePolicy",
       "prompt",
       "revision",
       "schedule",
@@ -141,8 +165,8 @@ export function parseAutomationDefinition(
     "automation_state_invalid",
   );
   if (
-    value.schemaVersion !== "crewon.automation.v0" ||
-    value.executionMode !== "manualOnly" ||
+    value.schemaVersion !== "crewon.automation.v1" ||
+    value.misfirePolicy !== AUTOMATION_MISFIRE_POLICY ||
     value.revision !== 1
   ) {
     throw new AutomationDefinitionError("automation_state_invalid");
@@ -156,10 +180,10 @@ export function parseAutomationDefinition(
     "automation_tenant_id_invalid",
   );
   const spaceId = requireOpaqueId(value.spaceId, "automation_space_id_invalid");
-  const createdByActorId = requireOpaqueId(
-    value.createdByActorId,
-    "automation_actor_id_invalid",
-  );
+  const owner = parseAutomationOwnerBinding(value.owner);
+  if (owner.tenantId !== tenantId || owner.spaceId !== spaceId) {
+    throw new AutomationDefinitionError("automation_owner_scope_invalid");
+  }
   const threadId = requireOpaqueId(
     value.threadId,
     "automation_thread_id_invalid",
@@ -178,7 +202,7 @@ export function parseAutomationDefinition(
     value.agentVersionId,
     "automation_agent_version_id_invalid",
   );
-  const schedule = parseAutomationSchedule(value.schedule);
+  const schedule = parseAutomationScheduleSpec(value.schedule);
   const createdAt = requireTimestamp(
     value.createdAt,
     "automation_created_at_invalid",
@@ -195,13 +219,13 @@ export function parseAutomationDefinition(
     automationId,
     tenantId,
     spaceId,
-    createdByActorId,
+    owner,
     threadId,
     title,
     prompt,
     agentVersionId,
     schedule,
-    executionMode: value.executionMode,
+    misfirePolicy: value.misfirePolicy,
     revision: value.revision,
     createdAt,
     updatedAt,
@@ -216,59 +240,140 @@ export function validateAutomationDefinition(
   parseAutomationDefinition(input);
 }
 
-export function parseAutomationSchedule(input: unknown): AutomationSchedule {
+export function parseAutomationScheduleSpec(
+  input: unknown,
+): AutomationScheduleSpec {
   const value = requireObject(input, "automation_schedule_invalid");
+  if (value.kind === "once") {
+    requireExactKeys(value, ["at", "kind"], "automation_schedule_invalid");
+    return {
+      kind: value.kind,
+      at: requireTimestamp(value.at, "automation_schedule_invalid"),
+    };
+  }
+  if (value.kind === "interval") {
+    requireExactKeys(
+      value,
+      ["anchorAt", "everySeconds", "kind"],
+      "automation_schedule_invalid",
+    );
+    if (
+      !Number.isSafeInteger(value.everySeconds) ||
+      Number(value.everySeconds) < 5 * 60 ||
+      Number(value.everySeconds) > 366 * 24 * 60 * 60
+    ) {
+      throw new AutomationDefinitionError("automation_schedule_invalid");
+    }
+    return {
+      kind: value.kind,
+      anchorAt: requireTimestamp(value.anchorAt, "automation_schedule_invalid"),
+      everySeconds: Number(value.everySeconds),
+    };
+  }
+  if (value.kind === "daily" || value.kind === "weekly") {
+    requireExactKeys(
+      value,
+      value.kind === "daily"
+        ? ["kind", "localTime", "timezone"]
+        : ["isoWeekday", "kind", "localTime", "timezone"],
+      "automation_schedule_invalid",
+    );
+    const localTime = requireLocalTime(value.localTime);
+    const timezone = requireIanaTimezone(value.timezone);
+    if (value.kind === "daily")
+      return { kind: value.kind, localTime, timezone };
+    if (
+      !Number.isSafeInteger(value.isoWeekday) ||
+      Number(value.isoWeekday) < 1 ||
+      Number(value.isoWeekday) > 7
+    ) {
+      throw new AutomationDefinitionError("automation_schedule_invalid");
+    }
+    return {
+      kind: value.kind,
+      isoWeekday: Number(value.isoWeekday) as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+      localTime,
+      timezone,
+    };
+  }
+  throw new AutomationDefinitionError("automation_schedule_invalid");
+}
+
+export function validateAutomationScheduleSpec(
+  input: unknown,
+): asserts input is AutomationScheduleSpec {
+  parseAutomationScheduleSpec(input);
+}
+
+export function parseAutomationOwnerBinding(
+  input: unknown,
+): AutomationOwnerBinding {
+  const value = requireObject(input, "automation_owner_invalid");
   requireExactKeys(
     value,
-    [
-      "intervalSeconds",
-      "nextRunAt",
-      "scheduleType",
-      "time",
-      "timezone",
-      "weekday",
-    ],
-    "automation_schedule_invalid",
+    ["actorId", "principalId", "spaceId", "tenantId"],
+    "automation_owner_invalid",
   );
-  if (
-    typeof value.scheduleType !== "string" ||
-    !AUTOMATION_SCHEDULE_TYPES.includes(
-      value.scheduleType as AutomationScheduleType,
-    ) ||
-    !Number.isSafeInteger(value.intervalSeconds) ||
-    Number(value.intervalSeconds) < 0 ||
-    Number(value.intervalSeconds) > 366 * 24 * 60 * 60 ||
-    !Number.isSafeInteger(value.weekday) ||
-    Number(value.weekday) < 0 ||
-    Number(value.weekday) > 6 ||
-    typeof value.time !== "string" ||
-    !/^([01]\d|2[0-3]):[0-5]\d$/u.test(value.time) ||
-    (value.scheduleType === "interval" &&
-      Number(value.intervalSeconds) < 5 * 60)
-  ) {
-    throw new AutomationDefinitionError("automation_schedule_invalid");
-  }
   return {
-    scheduleType: value.scheduleType as AutomationScheduleType,
-    nextRunAt: requireTimestamp(
-      value.nextRunAt,
-      "automation_next_run_at_invalid",
-    ),
-    intervalSeconds: Number(value.intervalSeconds),
-    time: value.time,
-    weekday: Number(value.weekday),
-    timezone: requireBoundedText(
-      value.timezone,
-      256,
-      "automation_schedule_invalid",
-    ),
+    principalId: requireOpaqueId(value.principalId, "automation_owner_invalid"),
+    actorId: requireOpaqueId(value.actorId, "automation_owner_invalid"),
+    tenantId: requireOpaqueId(value.tenantId, "automation_owner_invalid"),
+    spaceId: requireOpaqueId(value.spaceId, "automation_owner_invalid"),
   };
 }
 
-export function validateAutomationSchedule(
+export function parseAutomationScheduleState(
   input: unknown,
-): asserts input is AutomationSchedule {
-  parseAutomationSchedule(input);
+): AutomationScheduleState {
+  const value = requireObject(input, "automation_schedule_state_invalid");
+  requireExactKeys(
+    value,
+    [
+      "automationId",
+      "lastScheduledFor",
+      "nextOccurrenceAt",
+      "retryAt",
+      "revision",
+      "scheduleRevision",
+      "schemaVersion",
+      "status",
+      "updatedAt",
+    ],
+    "automation_schedule_state_invalid",
+  );
+  if (
+    value.schemaVersion !== "crewon.automation-schedule-state.v1" ||
+    value.scheduleRevision !== 1 ||
+    !Number.isSafeInteger(value.revision) ||
+    Number(value.revision) < 1 ||
+    !["enabled", "disabled", "completed"].includes(String(value.status))
+  ) {
+    throw new AutomationDefinitionError("automation_schedule_state_invalid");
+  }
+  const nextOccurrenceAt = optionalTimestamp(value.nextOccurrenceAt);
+  if (
+    (value.status === "enabled" && nextOccurrenceAt === null) ||
+    (value.status === "completed" && nextOccurrenceAt !== null)
+  ) {
+    throw new AutomationDefinitionError("automation_schedule_state_invalid");
+  }
+  return {
+    schemaVersion: value.schemaVersion,
+    automationId: requireOpaqueId(
+      value.automationId,
+      "automation_schedule_state_invalid",
+    ),
+    scheduleRevision: value.scheduleRevision,
+    status: value.status as AutomationScheduleState["status"],
+    nextOccurrenceAt,
+    lastScheduledFor: optionalTimestamp(value.lastScheduledFor),
+    retryAt: optionalTimestamp(value.retryAt),
+    revision: Number(value.revision),
+    updatedAt: requireTimestamp(
+      value.updatedAt,
+      "automation_schedule_state_invalid",
+    ),
+  };
 }
 
 export function parseAutomationInvocationBinding(
@@ -285,6 +390,7 @@ export function parseAutomationInvocationBinding(
       "invocationId",
       "routeDigest",
       "runId",
+      "trigger",
     ],
     "automation_invocation_binding_invalid",
   );
@@ -318,6 +424,45 @@ export function parseAutomationInvocationBinding(
       "automation_invocation_binding_invalid",
     ),
     routeDigest: value.routeDigest,
+    trigger: parseAutomationInvocationTrigger(value.trigger),
+  };
+}
+
+export function parseAutomationInvocationTrigger(
+  input: unknown,
+): AutomationInvocationTrigger {
+  const value = requireObject(input, "automation_invocation_trigger_invalid");
+  if (value.kind === "manual") {
+    requireExactKeys(value, ["kind"], "automation_invocation_trigger_invalid");
+    return { kind: value.kind };
+  }
+  if (value.kind !== "schedule") {
+    throw new AutomationDefinitionError(
+      "automation_invocation_trigger_invalid",
+    );
+  }
+  requireExactKeys(
+    value,
+    ["kind", "occurrenceDigest", "scheduledFor", "scheduleRevision"],
+    "automation_invocation_trigger_invalid",
+  );
+  if (
+    value.scheduleRevision !== 1 ||
+    typeof value.occurrenceDigest !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/u.test(value.occurrenceDigest)
+  ) {
+    throw new AutomationDefinitionError(
+      "automation_invocation_trigger_invalid",
+    );
+  }
+  return {
+    kind: value.kind,
+    scheduleRevision: value.scheduleRevision,
+    scheduledFor: requireTimestamp(
+      value.scheduledFor,
+      "automation_invocation_trigger_invalid",
+    ),
+    occurrenceDigest: value.occurrenceDigest,
   };
 }
 
@@ -462,6 +607,31 @@ function requireTimestamp(value: unknown, code: string): string {
     parsed.getUTCSeconds() !== Number(match[6])
   ) {
     throw new AutomationDefinitionError(code);
+  }
+  return value;
+}
+
+function optionalTimestamp(value: unknown): string | null {
+  return value === null
+    ? null
+    : requireTimestamp(value, "automation_schedule_state_invalid");
+}
+
+function requireLocalTime(value: unknown): string {
+  if (typeof value !== "string" || !/^([01]\d|2[0-3]):[0-5]\d$/u.test(value)) {
+    throw new AutomationDefinitionError("automation_schedule_invalid");
+  }
+  return value;
+}
+
+function requireIanaTimezone(value: unknown): string {
+  if (typeof value !== "string" || value.length === 0 || value.length > 256) {
+    throw new AutomationDefinitionError("automation_schedule_invalid");
+  }
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: value }).format(0);
+  } catch {
+    throw new AutomationDefinitionError("automation_schedule_invalid");
   }
   return value;
 }

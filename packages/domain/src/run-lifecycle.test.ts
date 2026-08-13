@@ -640,6 +640,7 @@ function automationOrigin(runId: string) {
       invocationId: "invocation-1",
       runId,
       routeDigest: `sha256:${"b".repeat(64)}`,
+      trigger: { kind: "manual" as const },
     },
   };
 }

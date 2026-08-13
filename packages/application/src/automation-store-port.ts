@@ -2,7 +2,8 @@ import type {
   AutomationDefinition,
   AutomationInvocationBinding,
   AutomationInvocationOrigin,
-  AutomationSchedule,
+  AutomationScheduleSpec,
+  AutomationScheduleState,
   ModelHistoryHead,
   ModelHistoryItem,
   RunLifecycleEvent,
@@ -12,7 +13,7 @@ import type {
 } from "@crewon/domain";
 import {
   AutomationDefinitionError,
-  parseAutomationSchedule,
+  parseAutomationScheduleSpec,
 } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
@@ -88,7 +89,7 @@ export type CreateAutomationCommand = Readonly<{
   title: string;
   prompt: string;
   requestedAgentVersionId: string | null;
-  schedule: AutomationSchedule;
+  schedule: AutomationScheduleSpec;
 }>;
 
 export type RunAutomationNowCommand = Readonly<{
@@ -102,6 +103,7 @@ export type RunAutomationNowCommand = Readonly<{
 export type AutomationDefinitionRecord = Readonly<{
   definition: AutomationDefinition;
   definitionDigest: string;
+  scheduleState: AutomationScheduleState;
 }>;
 
 export type AutomationLocator = Readonly<{
@@ -312,7 +314,7 @@ export function validateAutomationCreateCommand(
     );
   }
   try {
-    parseAutomationSchedule(command.schedule);
+    parseAutomationScheduleSpec(command.schedule);
   } catch (error) {
     throw mapAutomationError(error);
   }

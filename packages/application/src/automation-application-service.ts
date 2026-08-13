@@ -3,12 +3,14 @@ import {
   createAutomationDefinition,
   parseAutomationInvocationBinding,
   parseAutomationInvocationOrigin,
+  parseAutomationScheduleState,
   reduceRunLifecycleEvent,
   renderAutomationInstruction,
   validateAutomationDefinition,
   validateModelHistoryItem,
   type AutomationDefinition,
   type AutomationInvocationBinding,
+  type AutomationInvocationTrigger,
 } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
@@ -31,6 +33,7 @@ import type {
   CreateAutomationCommand,
   RunAutomationNowCommand,
 } from "./automation-store-port.ts";
+import type { AutomationScheduleCalculatorPort } from "./automation-scheduler-store-port.ts";
 import {
   isAutomationDigest,
   isAutomationTimestamp,
@@ -63,6 +66,7 @@ export class AutomationApplicationService {
   readonly #ids: AutomationApplicationIdGenerator;
   readonly #digester: ContentDigester;
   readonly #routeResolver: RunRouteResolverPort;
+  readonly #scheduleCalculator: AutomationScheduleCalculatorPort;
 
   constructor(dependencies: {
     store: AutomationStore;
@@ -71,6 +75,7 @@ export class AutomationApplicationService {
     ids: AutomationApplicationIdGenerator;
     digester: ContentDigester;
     routeResolver: RunRouteResolverPort;
+    scheduleCalculator: AutomationScheduleCalculatorPort;
   }) {
     this.#store = dependencies.store;
     this.#authorization = dependencies.authorization;
@@ -78,6 +83,7 @@ export class AutomationApplicationService {
     this.#ids = dependencies.ids;
     this.#digester = dependencies.digester;
     this.#routeResolver = dependencies.routeResolver;
+    this.#scheduleCalculator = dependencies.scheduleCalculator;
   }
 
   async createAutomation(
@@ -113,8 +119,20 @@ export class AutomationApplicationService {
       command.threadId,
       command.requestedAgentVersionId,
     );
-    const definition = this.#createDefinition(actor, command, route);
-    const record = this.#record(definition);
+    const createdAt = this.#now();
+    const definition = this.#createDefinition(actor, command, route, createdAt);
+    const nextOccurrenceAt = this.#scheduleCalculator.nextOccurrence({
+      schedule: definition.schedule,
+      after: createdAt,
+      inclusive: true,
+    });
+    if (nextOccurrenceAt === null) {
+      throw new ApplicationError(
+        "validation",
+        "automation_schedule_has_no_occurrence",
+      );
+    }
+    const record = this.#record(definition, nextOccurrenceAt);
     const result = await this.#storeCall(() =>
       this.#store.commitAutomationCreate({
         tenantId: actor.tenantId,
@@ -251,19 +269,20 @@ export class AutomationApplicationService {
     actor: ActorContext,
     command: CreateAutomationCommand,
     route: RunRoute,
+    createdAt: string,
   ): AutomationDefinition {
     try {
       return createAutomationDefinition({
         automationId: this.#nextId("automation"),
         tenantId: actor.tenantId,
         spaceId: actor.spaceId,
-        createdByActorId: actor.actorId,
+        owner: actor,
         threadId: command.threadId,
         title: command.title,
         prompt: command.prompt,
         agentVersionId: route.agentVersionId,
         schedule: command.schedule,
-        createdAt: this.#now(),
+        createdAt,
       });
     } catch (error) {
       throw mapAutomationError(error);
@@ -307,6 +326,7 @@ export class AutomationApplicationService {
         invocationId: this.#nextId("automationInvocation"),
         runId,
         routeDigest,
+        trigger: { kind: "manual" } satisfies AutomationInvocationTrigger,
       });
     const origin = parseAutomationInvocationOrigin({
       kind: "automation",
@@ -420,7 +440,7 @@ export class AutomationApplicationService {
         runId,
         kind: "run.execute",
         payload: {
-          schemaVersion: "crewon.automation-invocation-work-item.v0",
+          schemaVersion: "crewon.automation-invocation-work-item.v1",
           trigger: "automationInvocation",
           throughSequence: 1,
           binding,
@@ -456,13 +476,27 @@ export class AutomationApplicationService {
     return record;
   }
 
-  #record(definition: AutomationDefinition): AutomationDefinitionRecord {
+  #record(
+    definition: AutomationDefinition,
+    nextOccurrenceAt: string,
+  ): AutomationDefinitionRecord {
     return {
       definition,
       definitionDigest: this.#digest(
         canonicalJson(definition),
         "automation_definition_digest_invalid",
       ),
+      scheduleState: parseAutomationScheduleState({
+        schemaVersion: "crewon.automation-schedule-state.v1",
+        automationId: definition.automationId,
+        scheduleRevision: 1,
+        status: "enabled",
+        nextOccurrenceAt,
+        lastScheduledFor: null,
+        retryAt: null,
+        revision: 1,
+        updatedAt: definition.createdAt,
+      }),
     };
   }
 
@@ -473,12 +507,14 @@ export class AutomationApplicationService {
     this.#hideCrossSpaceRecord(actor, record);
     try {
       validateAutomationDefinition(record.definition);
+      parseAutomationScheduleState(record.scheduleState);
     } catch (error) {
       throw mapAutomationError(error, "internal");
     }
     if (
       record.definition.tenantId !== actor.tenantId ||
       record.definition.spaceId !== actor.spaceId ||
+      record.scheduleState.automationId !== record.definition.automationId ||
       !isAutomationDigest(record.definitionDigest) ||
       this.#digest(
         canonicalJson(record.definition),
@@ -691,7 +727,7 @@ export class AutomationApplicationService {
       artifacts.workItem.createdAt !== occurredAt ||
       canonicalJson(artifacts.workItem.payload) !==
         canonicalJson({
-          schemaVersion: "crewon.automation-invocation-work-item.v0",
+          schemaVersion: "crewon.automation-invocation-work-item.v1",
           trigger: "automationInvocation",
           throughSequence: 1,
           binding,
@@ -778,6 +814,7 @@ export class AutomationApplicationService {
       binding.automationId !== command.automationId ||
       binding.automationId !== definition.automationId ||
       binding.automationRevision !== command.expectedAutomationRevision ||
+      binding.trigger.kind !== "manual" ||
       canonicalJson(result.runState) !== canonicalJson(reduced) ||
       result.runState.purpose !== "turn" ||
       result.runState.threadId !== definition.threadId ||
@@ -996,7 +1033,7 @@ function idempotency(
     }),
     key,
     requestFingerprint: canonicalJson({
-      schemaVersion: "crewon.automation-command-fingerprint.v0",
+      schemaVersion: "crewon.automation-command-fingerprint.v1",
       actor: {
         actorId: actor.actorId,
         tenantId: actor.tenantId,

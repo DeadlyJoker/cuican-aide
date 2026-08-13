@@ -284,6 +284,7 @@ function automationOrigin() {
       invocationId: "invocation-1",
       runId: "run-1",
       routeDigest: `sha256:${"b".repeat(64)}`,
+      trigger: { kind: "manual" as const },
     },
   };
 }
@@ -293,17 +294,19 @@ function automationDefinition(prompt: string) {
     automationId: "automation-1",
     tenantId: "tenant-1",
     spaceId: "space-1",
-    createdByActorId: "actor-1",
+    owner: {
+      principalId: "principal-1",
+      actorId: "actor-1",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+    },
     threadId: "thread-1",
     title: "Daily summary",
     prompt,
     agentVersionId: "agent-version-1",
     schedule: {
-      scheduleType: "daily",
-      nextRunAt: "2026-08-10T10:00:00Z",
-      intervalSeconds: 86_400,
-      time: "18:00",
-      weekday: 0,
+      kind: "daily",
+      localTime: "18:00",
       timezone: "Asia/Shanghai",
     },
     createdAt: "2026-08-09T00:00:00Z",

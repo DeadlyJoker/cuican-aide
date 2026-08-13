@@ -263,6 +263,7 @@ function automationMessage(
         invocationId: "invocation-1",
         runId: "automation-run-1",
         routeDigest: `sha256:${"d".repeat(64)}`,
+        trigger: { kind: "manual" as const },
       },
     },
   };

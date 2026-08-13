@@ -31,7 +31,7 @@ export type WorkflowSchedulerWorkItemPayload = Readonly<{
 }>;
 
 export type AutomationInvocationWorkItemPayload = Readonly<{
-  schemaVersion: "crewon.automation-invocation-work-item.v0";
+  schemaVersion: "crewon.automation-invocation-work-item.v1";
   trigger: "automationInvocation";
   throughSequence: 1;
   binding: AutomationInvocationBinding;
