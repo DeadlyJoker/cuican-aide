@@ -91,6 +91,20 @@ export type KnowledgeAuthorizationResource = Readonly<{
   knowledgeId: string | null;
 }>;
 
+export type OfficeAuthorizationAction =
+  | "office:create"
+  | "office:read"
+  | "office:list"
+  | "office:run";
+
+export type OfficeAuthorizationResource = Readonly<{
+  kind: "office";
+  tenantId: string;
+  spaceId: string;
+  officeId: string | null;
+  officeVersionId: string | null;
+}>;
+
 export type ArtifactAuthorizationResource = Readonly<{
   kind: "artifact";
   tenantId: string;
@@ -117,6 +131,7 @@ export type AuthorizationAction =
   | ToolApprovalAuthorizationAction
   | AgentVersionAuthorizationAction
   | WorkflowVersionAuthorizationAction
+  | OfficeAuthorizationAction
   | ArtifactAuthorizationAction
   | KnowledgeAuthorizationAction
   | ModelProviderSettingsAuthorizationAction;
@@ -127,6 +142,7 @@ export type AuthorizationResource =
   | ToolApprovalAuthorizationResource
   | AgentVersionAuthorizationResource
   | WorkflowVersionAuthorizationResource
+  | OfficeAuthorizationResource
   | ArtifactAuthorizationResource
   | KnowledgeAuthorizationResource
   | ModelProviderSettingsAuthorizationResource;

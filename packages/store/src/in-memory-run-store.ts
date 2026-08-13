@@ -145,6 +145,7 @@ import {
   type WorkspaceOperationRecord,
   type WorkspaceOperationSnapshot,
 } from "@crewon/application";
+import { InMemoryOfficeStore } from "./in-memory-office-store.ts";
 import { InMemoryAutomationAuthority } from "./in-memory-automation-authority.ts";
 import type {
   StoredAutomationCreateReceipt,
@@ -450,6 +451,7 @@ export class InMemoryRunStore implements DomainStore {
   readonly #toolApprovalActions = new Map<string, string>();
   readonly #clock: LeaseClock;
   readonly #automationAuthority: InMemoryAutomationAuthority;
+  readonly #officeAuthority = new InMemoryOfficeStore();
 
   constructor(options: { clock?: LeaseClock } = {}) {
     this.#clock = options.clock ?? new SystemLeaseClock();
@@ -474,6 +476,10 @@ export class InMemoryRunStore implements DomainStore {
         this.#appendModelHistory(threadId, items),
     });
   }
+
+  commitOfficeDefinition(input: Parameters<InMemoryOfficeStore["commitOfficeDefinition"]>[0]) { return this.#officeAuthority.commitOfficeDefinition(input); }
+  loadOfficeDefinition(input: Parameters<InMemoryOfficeStore["loadOfficeDefinition"]>[0]) { return this.#officeAuthority.loadOfficeDefinition(input); }
+  listOfficeDefinitions(input: Parameters<InMemoryOfficeStore["listOfficeDefinitions"]>[0]) { return this.#officeAuthority.listOfficeDefinitions(input); }
 
   async close(): Promise<void> {}
 

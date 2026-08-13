@@ -3,6 +3,7 @@ export * from "./artifact.ts";
 export * from "./knowledge.ts";
 export * from "./automation.ts";
 export * from "./model-history.ts";
+export * from "./office.ts";
 export * from "./model-dispatch-receipt.ts";
 export * from "./proposed-plan.ts";
 export * from "./provider-turn-state.ts";

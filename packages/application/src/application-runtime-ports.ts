@@ -17,6 +17,8 @@ export type ApplicationIdKind =
   | "approval"
   | "toolReceipt"
   | "toolExecution"
+  | "office"
+  | "officeVersion"
   | "artifact"
   | "knowledge";
 

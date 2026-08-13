@@ -162,6 +162,7 @@ import {
   migratePostgresKnowledge,
   POSTGRES_KNOWLEDGE_SCHEMA_VERSION,
 } from "./knowledge-schema.ts";
+import { PostgresOfficeStore } from "./postgres-office-store.ts";
 
 const workflowDigester: WorkflowContentDigester = {
   sha256: (value) =>
@@ -174,6 +175,7 @@ export class PostgresDomainStore
   implements DomainStore, WorkflowRuntimeStore
 {
   readonly #knowledge: PostgresKnowledgeStore;
+  readonly #officeAuthority: PostgresOfficeStore;
   constructor(options: PostgresThreadStoreOptions) {
     super({ ...options, digester: workflowDigester });
     this.#knowledge = new PostgresKnowledgeStore(
@@ -181,6 +183,7 @@ export class PostgresDomainStore
       this.schemaSql(),
       () => this.assertOpen(),
     );
+    this.#officeAuthority = new PostgresOfficeStore(this.pool, this.schemaSql());
   }
   workflowVersionStore(
     digester: WorkflowContentDigester,
@@ -202,6 +205,7 @@ export class PostgresDomainStore
 
   override async migrate(): Promise<void> {
     await super.migrate();
+    await this.#officeAuthority.migrate();
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -301,6 +305,9 @@ export class PostgresDomainStore
       client.release();
     }
   }
+  commitOfficeDefinition(input: Parameters<PostgresOfficeStore["commitOfficeDefinition"]>[0]) { return this.#officeAuthority.commitOfficeDefinition(input); }
+  loadOfficeDefinition(input: Parameters<PostgresOfficeStore["loadOfficeDefinition"]>[0]) { return this.#officeAuthority.loadOfficeDefinition(input); }
+  listOfficeDefinitions(input: Parameters<PostgresOfficeStore["listOfficeDefinitions"]>[0]) { return this.#officeAuthority.listOfficeDefinitions(input); }
 
   loadKnowledgeReceipt(
     query: KnowledgeReceiptQuery,

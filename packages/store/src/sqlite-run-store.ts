@@ -12,6 +12,7 @@ import {
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
 import { migrateSqliteWorkflowExecutions } from "./workflow-execution-schema.ts";
 import { migrateSqliteWorkflowVersions } from "./workflow-version-schema.ts";
+import { migrateSqliteOffices, SqliteOfficeStore } from "./sqlite-office-store.ts";
 
 import {
   RunLifecycleError,
@@ -548,6 +549,7 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
   readonly #workflowDigester: WorkflowContentDigester | null;
   readonly #automationAuthority: SqliteAutomationAuthority;
   readonly #knowledge: SqliteKnowledgeStore;
+  readonly #officeAuthority: SqliteOfficeStore;
   #workflowRuntime: SqliteWorkflowRunCompositionStore | null = null;
   #closed = false;
 
@@ -668,8 +670,10 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
       writeWorkItems: (items) => this.#writeWorkItems(items),
     });
     this.#knowledge = new SqliteKnowledgeStore(this.#database, () => this.#assertOpen());
+    this.#officeAuthority = new SqliteOfficeStore(this.#database);
     try {
       configureAndMigrateSqlite(this.#database);
+      migrateSqliteOffices(this.#database);
       migrateSqliteWorkflowVersions(this.#database);
       migrateSqliteWorkflowExecutions(this.#database);
       if (this.#workflowDigester !== null)
@@ -704,6 +708,10 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
   listKnowledge(query: KnowledgeListQuery): Promise<KnowledgePage> {
     return this.#knowledge.listKnowledge(query);
   }
+
+  commitOfficeDefinition(input: Parameters<SqliteOfficeStore["commitOfficeDefinition"]>[0]) { return this.#officeAuthority.commitOfficeDefinition(input); }
+  loadOfficeDefinition(input: Parameters<SqliteOfficeStore["loadOfficeDefinition"]>[0]) { return this.#officeAuthority.loadOfficeDefinition(input); }
+  listOfficeDefinitions(input: Parameters<SqliteOfficeStore["listOfficeDefinitions"]>[0]) { return this.#officeAuthority.listOfficeDefinitions(input); }
 
   async loadAutomationCreateReceipt(
     query: AutomationCreateReceiptQuery,

@@ -20,9 +20,11 @@ import type {
 } from "./thread-goal-store-port.ts";
 import type { GoalToolStore } from "./goal-tool-store-port.ts";
 import type { WorkspaceOperationStore } from "./workspace-operation-store-port.ts";
+import type { OfficeDefinitionStore } from "./office-store-port.ts";
 
 /** Combined authority implemented by local and Team composition roots. */
 export type DomainStore = RunStore &
+  OfficeDefinitionStore &
   RunReceiptStore &
   ThreadStore &
   SpaceScopedThreadStore &

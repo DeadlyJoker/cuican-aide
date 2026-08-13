@@ -19,6 +19,8 @@ export * from "./knowledge-application-service.ts";
 export * from "./knowledge-store-port.ts";
 export * from "./goal-tool-store-port.ts";
 export * from "./model-history-store-port.ts";
+export * from "./office-store-port.ts";
+export * from "./office-application-service.ts";
 export * from "./model-dispatch-evidence-store-port.ts";
 export * from "./model-provider-settings-application-service.ts";
 export * from "./model-provider-settings-store-port.ts";
