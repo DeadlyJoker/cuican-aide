@@ -62,7 +62,6 @@ import {
   useProviderResourceComposer,
   workspaceCapabilityHandlersForAuthority,
   workspaceCwdForAuthority,
-  showDemoThreadsAction,
 } from "./lib/app";
 import {
   mentionsWithSlashCommand,
@@ -87,6 +86,7 @@ import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadR
 import { useControlCommandCatalog } from "./lib/control-runtime/useControlCommandCatalog";
 import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWorkspaceRuntime";
 import { desktopWorkspaceAuthority } from "./lib/desktop/desktopWorkspaceAuthorityAdapter";
+import { showDemoThreadsAction } from "./lib/app/appConnectionActions";
 
 export function App({ controlClient }: { controlClient: ControlApiClient }) {
   const workspaceUiAuthority = "control" as const;
