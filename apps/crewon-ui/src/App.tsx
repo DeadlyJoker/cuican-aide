@@ -77,6 +77,7 @@ import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadR
 import { useControlCommandCatalog } from "./lib/control-runtime/useControlCommandCatalog";
 import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWorkspaceRuntime";
 import { desktopWorkspaceAuthority } from "./lib/desktop/desktopWorkspaceAuthorityAdapter";
+import { useControlWorkflowAdapter } from "./lib/control-runtime/useControlWorkflowAdapter";
 
 export function App({ controlClient }: { controlClient: ControlApiClient }) {
   const workspaceUiAuthority = "control" as const;
@@ -162,6 +163,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     client: controlClient,
     connected: controlRuntimeConnected,
   });
+  const controlWorkflowAdapter = useControlWorkflowAdapter(controlClient);
   const controlWorkspace = useControlWorkspaceRuntime({
     client: controlRuntimeConnected ? controlClient : null,
     nativeAuthority: desktopWorkspaceAuthority(),
@@ -641,6 +643,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           }
         }
         executionTargetClient={null}
+        controlWorkflowAdapter={controlWorkflowAdapter}
         scheduleClient={null}
         workspaceAuthority={workspaceUiAuthority}
         workspaceOperations={{

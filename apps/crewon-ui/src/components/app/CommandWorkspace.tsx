@@ -1,7 +1,6 @@
 import { ListChecks, Plus, ShieldCheck, Target } from "lucide-react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
-import type { WorkflowRunUpdatedNotification } from "@crewon-protocol/v2/WorkflowRunUpdatedNotification";
 import {
   type ChangeEvent,
   type ClipboardEvent,
@@ -72,6 +71,7 @@ import {
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
 import type { PlatformKind } from "../../lib/platform";
+import type { ControlWorkflowAdapter } from "../../lib/workflow/controlWorkflowAdapter";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import {
   pendingComposerImagesFromFiles,
@@ -119,15 +119,6 @@ import {
   threadProgressSummary,
 } from "../../lib/thread/threadProgressSummary";
 import type { WorkMode } from "../../lib/workMode";
-import type {
-  CrewonWorkflowExecution,
-  CrewonWorkflowNodeInput,
-  CrewonWorkflowRecord,
-} from "../../lib/workflow/crewonWorkflow";
-import {
-  crewonWorkflowConfigFromValue,
-  workflowRecordsWithRuntimeUpdate,
-} from "../../lib/workflow/crewonWorkflow";
 import { sidebarThreadTitle } from "../SidebarPresentation";
 import { DesktopWindowDragRegion } from "../TitleBarWindowControls";
 import {
@@ -194,6 +185,7 @@ type CommandWorkspaceProps = {
     modelOptionsByTarget: Readonly<Record<string, CommandModelOption[]>>;
     targets: ExecutionTargetOption[];
   }> | null;
+  controlWorkflowAdapter?: ControlWorkflowAdapter | null;
   cwd: string;
   executionTargetClient?: {
     addOfficeMemberConfig: CommandOfficeCreationClient["addOfficeMemberConfig"];
@@ -211,39 +203,6 @@ type CommandWorkspaceProps = {
       config: AgentConfig,
     ) => Promise<unknown>;
     deleteAgentConfig?: (cwd: string, filePath: string) => Promise<unknown>;
-    listWorkflowConfigs?: (cwd: string) => Promise<{
-      data: CrewonWorkflowRecord[];
-    }>;
-    createWorkflowConfig?: (
-      cwd: string,
-      input: {
-        name: string;
-        description: string;
-        lead: string;
-        nodes: CrewonWorkflowNodeInput[];
-      },
-    ) => Promise<unknown>;
-    runWorkflowConfig?: (
-      cwd: string,
-      workflowId: string,
-      input: string,
-    ) => Promise<CrewonWorkflowExecution>;
-    resolveWorkflowGate?: (
-      cwd: string,
-      workflowId: string,
-      executionId: string,
-      nodeId: string,
-      decision: "approve" | "reject",
-      comment: string | null,
-    ) => Promise<CrewonWorkflowExecution>;
-    cancelWorkflowRun?: (
-      cwd: string,
-      workflowId: string,
-      executionId: string,
-    ) => Promise<CrewonWorkflowExecution>;
-    subscribeWorkflowRunUpdates?: (
-      listener: (notification: WorkflowRunUpdatedNotification) => void,
-    ) => () => void;
     listExpertTeams?: (
       workspaceKey: string,
     ) => Promise<{ data: ExpertTeamRecordReference[] }>;
@@ -561,6 +520,7 @@ export function CommandWorkspace({
   composerValue,
   connectionState,
   controlExecutionCatalog,
+  controlWorkflowAdapter = null,
   cwd,
   executionTargetClient = null,
   scheduleClient = null,
@@ -692,15 +652,6 @@ export function CommandWorkspace({
     null,
   );
   const [expertCreateBusy, setExpertCreateBusy] = useState(false);
-  const [workflowCreateOpen, setWorkflowCreateOpen] = useState(false);
-  const [workflowCreateError, setWorkflowCreateError] = useState<string | null>(
-    null,
-  );
-  const [workflowCreateBusy, setWorkflowCreateBusy] = useState(false);
-  const [workflows, setWorkflows] = useState<CrewonWorkflowRecord[]>([]);
-  const [workflowsStatus, setWorkflowsStatus] = useState<
-    "loading" | "ready" | "unavailable"
-  >("loading");
   const [fallbackExpertWorkspaceKey, setFallbackExpertWorkspaceKey] = useState<
     string | null
   >(null);
@@ -994,61 +945,6 @@ export function CommandWorkspace({
     expertWorkspaceKey,
     teamRefreshNonce,
   ]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      connectionState !== "connected" ||
-      !cwd ||
-      !executionTargetClient?.listWorkflowConfigs
-    ) {
-      setWorkflows([]);
-      setWorkflowsStatus(
-        connectionState === "connecting" ? "loading" : "unavailable",
-      );
-      return;
-    }
-    setWorkflowsStatus("loading");
-    executionTargetClient
-      .listWorkflowConfigs(cwd)
-      .then((response) => {
-        if (!cancelled) {
-          setWorkflows(response.data);
-          setWorkflowsStatus("ready");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setWorkflows([]);
-          setWorkflowsStatus("unavailable");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [connectionState, cwd, executionTargetClient, teamRefreshNonce]);
-
-  useEffect(() => {
-    if (!cwd || !executionTargetClient?.subscribeWorkflowRunUpdates) {
-      return;
-    }
-    return executionTargetClient.subscribeWorkflowRunUpdates((notification) => {
-      if (notification.cwd !== cwd) {
-        return;
-      }
-      const config = crewonWorkflowConfigFromValue(notification.config);
-      if (!config) {
-        return;
-      }
-      setWorkflows((current) =>
-        workflowRecordsWithRuntimeUpdate(current, {
-          filePath: notification.filePath,
-          config,
-        }),
-      );
-      setWorkflowsStatus("ready");
-    });
-  }, [cwd, executionTargetClient]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1569,23 +1465,6 @@ export function CommandWorkspace({
     }
   }
 
-  async function reloadWorkflowDefinitions() {
-    if (!executionTargetClient?.listWorkflowConfigs || !cwd) {
-      setWorkflows([]);
-      setWorkflowsStatus("unavailable");
-      return;
-    }
-    setWorkflowsStatus("loading");
-    try {
-      const response = await executionTargetClient.listWorkflowConfigs(cwd);
-      setWorkflows(response.data);
-      setWorkflowsStatus("ready");
-    } catch {
-      setWorkflows([]);
-      setWorkflowsStatus("unavailable");
-    }
-  }
-
   function switchView(view: CommandShellView) {
     const nextView = shellViewForAuthority(view, workspaceAuthority);
     setOpenPalette(null);
@@ -2063,53 +1942,6 @@ export function CommandWorkspace({
     }
   }
 
-  async function createWorkflowDefinition(
-    input: CommandTeamCapabilityCreateInput,
-  ) {
-    if (
-      input.kind !== "workflow" ||
-      !cwd ||
-      !executionTargetClient?.createWorkflowConfig
-    ) {
-      return;
-    }
-    setWorkflowCreateBusy(true);
-    setWorkflowCreateError(null);
-    try {
-      await executionTargetClient.createWorkflowConfig(cwd, {
-        description: input.goal,
-        lead: input.lead,
-        name: input.title,
-        nodes: input.nodes.map((node) =>
-          node.type === "humanGate"
-            ? {
-                type: "humanGate" as const,
-                instruction: node.instruction,
-                title: node.title,
-              }
-            : {
-                type: "agent" as const,
-                agentId: node.agentId,
-                agentName:
-                  teamCatalog.agents.find(
-                    (record) => record.config.agentId === node.agentId,
-                  )?.config.name ?? node.title,
-                instruction: node.instruction,
-                title: node.title,
-              },
-        ),
-      });
-      await reloadWorkflowDefinitions();
-      setWorkflowCreateOpen(false);
-    } catch (error) {
-      setWorkflowCreateError(
-        error instanceof Error ? error.message : "无法创建协作流",
-      );
-    } finally {
-      setWorkflowCreateBusy(false);
-    }
-  }
-
   const currentWorkspace =
     workspaceAuthority === "legacy"
       ? basename(cwd || (locale === "zh" ? "工作空间" : "Workspace"))
@@ -2126,12 +1958,6 @@ export function CommandWorkspace({
     expertWorkspaceKey &&
       executionTargetClient?.createExpertTeam &&
       connectionState === "connected",
-  );
-  const canCreateWorkflow = Boolean(
-    cwd &&
-      connectionState === "connected" &&
-      executionTargetClient?.createWorkflowConfig &&
-      workflowsStatus !== "unavailable",
   );
   const officeRuntime = officeRoomAdapter
     ? {
@@ -3033,8 +2859,8 @@ export function CommandWorkspace({
             officeRuntime={officeRuntime}
             officeRoomId={officeRoomId}
             teamMode={teamMode}
-            workflows={workflows}
-            workflowStatus={workflowsStatus}
+            controlWorkflowAdapter={controlWorkflowAdapter}
+            selectedThreadId={selectedThreadId}
             expertTeams={expertTeams}
             expertTeamsStatus={expertTeamsStatus}
             onCreateOffice={
@@ -3042,14 +2868,6 @@ export function CommandWorkspace({
                 ? () => {
                     setOfficeCreateError(null);
                     setOfficeCreateOpen(true);
-                  }
-                : undefined
-            }
-            onCreateWorkflow={
-              canCreateWorkflow
-                ? () => {
-                    setWorkflowCreateError(null);
-                    setWorkflowCreateOpen(true);
                   }
                 : undefined
             }
@@ -3062,46 +2880,6 @@ export function CommandWorkspace({
                   }
                 : undefined
             }
-            onReloadWorkflows={reloadWorkflowDefinitions}
-            onRunWorkflow={async (workflow, input) => {
-              if (!cwd || !executionTargetClient?.runWorkflowConfig) {
-                throw new Error("CrewON Control 尚未提供协作流执行能力");
-              }
-              return executionTargetClient.runWorkflowConfig(
-                cwd,
-                workflow.config.workflowId,
-                input,
-              );
-            }}
-            onCancelWorkflow={async (workflow, executionId) => {
-              if (!cwd || !executionTargetClient?.cancelWorkflowRun) {
-                throw new Error("CrewON Control 尚未提供协作流取消能力");
-              }
-              return executionTargetClient.cancelWorkflowRun(
-                cwd,
-                workflow.config.workflowId,
-                executionId,
-              );
-            }}
-            onResolveWorkflowGate={async (
-              workflow,
-              executionId,
-              nodeId,
-              decision,
-              comment,
-            ) => {
-              if (!cwd || !executionTargetClient?.resolveWorkflowGate) {
-                throw new Error("CrewON Control 尚未提供 Human Gate 处理能力");
-              }
-              return executionTargetClient.resolveWorkflowGate(
-                cwd,
-                workflow.config.workflowId,
-                executionId,
-                nodeId,
-                decision,
-                comment,
-              );
-            }}
             onSelectExpert={openExpertTeam}
             onTeamModeChange={(mode) => {
               setTeamMode(mode);
@@ -3139,34 +2917,6 @@ export function CommandWorkspace({
                 }
               }}
               onSubmit={(input) => void createExpertTeam(input)}
-            />
-          ) : null}
-          {workflowCreateOpen ? (
-            <CommandTeamCapabilityCreateDialog
-              kind="workflow"
-              busy={workflowCreateBusy}
-              error={workflowCreateError}
-              workflowAgents={teamCatalog.agents.flatMap(({ config }) =>
-                config.agentId
-                  ? [
-                      {
-                        description: config.role,
-                        id: config.agentId,
-                        modelName: config.model,
-                        name: config.name,
-                        systemPrompt: config.systemPrompt,
-                      },
-                    ]
-                  : [],
-              )}
-              workspaceCwd={cwd}
-              onClose={() => {
-                if (!workflowCreateBusy) {
-                  setWorkflowCreateOpen(false);
-                  setWorkflowCreateError(null);
-                }
-              }}
-              onSubmit={(input) => void createWorkflowDefinition(input)}
             />
           ) : null}
         </section>

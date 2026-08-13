@@ -154,6 +154,8 @@ describe("App Workspace Control composition", () => {
     expect(source).toContain("useControlCommandCatalog({");
     expect(source).toContain("executionTargetClient={null}");
     expect(source).toContain("controlExecutionCatalog={");
+    expect(source).toContain("controlWorkflowAdapter={controlWorkflowAdapter}");
+    expect(source).toContain("useControlWorkflowAdapter(controlClient)");
   });
 
   it("keeps account settings Control-only", () => {

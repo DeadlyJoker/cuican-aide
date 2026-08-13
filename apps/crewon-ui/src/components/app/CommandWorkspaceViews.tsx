@@ -18,7 +18,7 @@ import {
   type CommandOfficeRoomProps,
 } from "./CommandOfficeRoom";
 import { CommandExpertsPanel } from "./CommandExpertsPanel";
-import { CommandWorkflowPanel } from "./CommandWorkflowPanel";
+import { ControlWorkflowPanel } from "./ControlWorkflowPanel";
 import { SegmentedTabs } from "./SegmentedTabs";
 import { classNames } from "./commandWorkspaceUtils";
 import {
@@ -44,10 +44,7 @@ import type {
   AgentPlatformSnapshot,
 } from "../../lib/agent-platform/agentPlatformClient";
 import type { ExpertTeamRecordReference } from "../../lib/experts/expertTeamRecord";
-import type {
-  CrewonWorkflowExecution,
-  CrewonWorkflowRecord,
-} from "../../lib/workflow/crewonWorkflow";
+import type { ControlWorkflowAdapter } from "../../lib/workflow/controlWorkflowAdapter";
 
 type FilterOption = {
   label: string;
@@ -1374,18 +1371,13 @@ export function TeamView({
   officeRuntime,
   officeRoomId,
   teamMode,
-  workflows,
-  workflowStatus,
+  controlWorkflowAdapter,
+  selectedThreadId,
   expertTeams,
   expertTeamsStatus,
   onCreateOffice,
-  onCreateWorkflow,
   onCreateExpertTeam,
   onRefresh,
-  onReloadWorkflows,
-  onRunWorkflow,
-  onCancelWorkflow,
-  onResolveWorkflowGate,
   onSelectExpert,
   onTeamModeChange,
 }: {
@@ -1393,30 +1385,13 @@ export function TeamView({
   officeRuntime: Omit<CommandOfficeRoomProps, "isOpen"> | null;
   officeRoomId: string | null;
   teamMode: TeamMode;
-  workflows: CrewonWorkflowRecord[];
-  workflowStatus: "loading" | "ready" | "unavailable";
+  controlWorkflowAdapter?: ControlWorkflowAdapter | null;
+  selectedThreadId?: string | null;
   expertTeams: ExpertTeamRecordReference[];
   expertTeamsStatus: "loading" | "ready" | "unavailable";
   onCreateOffice?: () => void;
-  onCreateWorkflow?: () => void;
   onCreateExpertTeam?: () => void;
   onRefresh?: () => void;
-  onReloadWorkflows: () => Promise<void>;
-  onRunWorkflow: (
-    workflow: CrewonWorkflowRecord,
-    input: string,
-  ) => Promise<CrewonWorkflowExecution>;
-  onCancelWorkflow: (
-    workflow: CrewonWorkflowRecord,
-    executionId: string,
-  ) => Promise<CrewonWorkflowExecution>;
-  onResolveWorkflowGate: (
-    workflow: CrewonWorkflowRecord,
-    executionId: string,
-    nodeId: string,
-    decision: "approve" | "reject",
-    comment: string | null,
-  ) => Promise<CrewonWorkflowExecution>;
   onSelectExpert: (record: ExpertTeamRecordReference) => void;
   onTeamModeChange: (mode: TeamMode) => void;
 }) {
@@ -1476,16 +1451,6 @@ export function TeamView({
             >
               {officeStatus === "loading" ? "同步中…" : "同步真实数据"}
             </button>
-            {teamMode === "workflow" && onCreateWorkflow ? (
-              <button
-                className="button primary"
-                type="button"
-                data-team-action="workflow"
-                onClick={onCreateWorkflow}
-              >
-                创建协作流
-              </button>
-            ) : null}
             <button
               className="button primary"
               type="button"
@@ -1549,15 +1514,18 @@ export function TeamView({
           data-workflow-shell=""
           hidden={teamMode !== "workflow"}
         >
-          <CommandWorkflowPanel
-            status={workflowStatus}
-            workflows={workflows}
-            onCancel={onCancelWorkflow}
-            onReload={onReloadWorkflows}
-            onResolveGate={onResolveWorkflowGate}
-            onRun={onRunWorkflow}
-            onRoomOpenChange={setWorkflowRoomOpen}
-          />
+          {controlWorkflowAdapter ? (
+            <ControlWorkflowPanel
+              adapter={controlWorkflowAdapter}
+              selectedThreadId={selectedThreadId ?? null}
+              onRoomOpenChange={setWorkflowRoomOpen}
+            />
+          ) : (
+            <section className="team-office-empty team-capability-live-empty">
+              <h2>协作流服务暂不可用</h2>
+              <p>CrewON Control 未提供 Workflow authority。</p>
+            </section>
+          )}
         </section>
 
         <section
