@@ -52,16 +52,6 @@ export function appViewFromSearch(search: string): AppView {
   return "chat";
 }
 
-export function legacyOfficeCommandShellUrl(currentHref: string): string | null {
-  const nextUrl = new URL(currentHref);
-  if (nextUrl.searchParams.get("view") !== "office") {
-    return null;
-  }
-  nextUrl.searchParams.delete("view");
-  nextUrl.hash = "#view-team";
-  return `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`;
-}
-
 export function settingsSectionFromSearch(search: string): SettingsSection {
   const section = new URLSearchParams(search).get("section");
   switch (section) {

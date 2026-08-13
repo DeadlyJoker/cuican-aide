@@ -47,11 +47,9 @@ import {
   shouldRenderCommandShellView,
   assistantThreadRuntimeState,
   commandShellRuntimeState,
-  isLegacyWorkspacePanelItem,
   platformResourceMentionPath,
   withPlatformResourceMention,
   useAppDraftWorkspaceState,
-  workspaceCwdForAuthority,
   showDemoThreadsAction,
 } from "./lib/app";
 import {
@@ -80,7 +78,6 @@ import { desktopWorkspaceAuthority } from "./lib/desktop/desktopWorkspaceAuthori
 import { useControlWorkflowAdapter } from "./lib/control-runtime/useControlWorkflowAdapter";
 
 export function App({ controlClient }: { controlClient: ControlApiClient }) {
-  const workspaceUiAuthority = "control" as const;
   const { isDemoPreview, platform } = useAppEnvironment();
   // Who you are in CrewON. The model account below is a separate credential.
   const platformAccount = useAgentPlatformAccount();
@@ -430,10 +427,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   });
   useAppKeyboardShortcutEffects({
     ...composerState,
-    startDraftThread: () =>
-      startCommandShellDraftThread(
-        workspaceCwdForAuthority(workspaceUiAuthority, cwd),
-      ),
+    startDraftThread: () => startCommandShellDraftThread(null),
   });
   const unavailableWorkspaceCapability = () => {
     setNotice({
@@ -543,19 +537,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   const handleComposerCapabilityPanelItem = async (
     item: CapabilityPanelItem,
   ) => {
-    if (
-      workspaceUiAuthority === "control" &&
-      isLegacyWorkspacePanelItem(item)
-    ) {
-      setNotice({
-        text:
-          locale === "zh"
-            ? "Control 模式下旧本地工作空间入口不可用，请使用工作空间操作面板。"
-            : "Legacy local workspace actions are unavailable in Control mode. Use the Workspace operations panel.",
-        tone: "warning",
-      });
-      return;
-    }
     const officeAttachmentConsumer = officeAttachmentConsumerRef.current;
     if (
       officeAttachmentConsumer &&
@@ -641,7 +622,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         executionTargetClient={null}
         controlWorkflowAdapter={controlWorkflowAdapter}
         scheduleClient={null}
-        workspaceAuthority={workspaceUiAuthority}
+        workspaceAuthority="control"
         workspaceOperations={{
           state: controlWorkspace.state,
           mutationAuthority: controlWorkspace.mutationAuthority,
@@ -686,7 +667,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           onTerminalStart: startWorkbenchTerminal,
           onTerminalStop: stopWorkbenchTerminal,
           onTerminalWrite: writeWorkbenchTerminalInput,
-          terminalCwd: workspaceCwdForAuthority(workspaceUiAuthority, cwd),
+          terminalCwd: null,
           terminalOutput,
           terminalProcessId,
           readonlyClient: controlRuntimeConnected ? controlClient : null,
@@ -788,9 +769,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           void openLibrary(kind);
         }}
         onNewThread={() => {
-          startCommandShellDraftThread(
-            workspaceCwdForAuthority(workspaceUiAuthority, cwd),
-          );
+          startCommandShellDraftThread(null);
         }}
         onRenameThread={renameThread}
         onSearchChange={setThreadSearchTerm}

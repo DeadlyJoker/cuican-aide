@@ -1,10 +1,7 @@
 import { useEffect, useRef } from "react";
 
 import type { AppView } from "../appRouting";
-import {
-  legacyOfficeCommandShellUrl,
-  libraryViewFromSearch,
-} from "../appRouting";
+import { libraryViewFromSearch } from "../appRouting";
 import {
   syncSettingsViewPanelAction,
   syncViewFromSearchAction,
@@ -71,11 +68,6 @@ export function useAppViewSyncEffects({
 
   useEffect(() => {
     const syncViewFromUrl = () => {
-      const legacyOfficeUrl = legacyOfficeCommandShellUrl(window.location.href);
-      if (legacyOfficeUrl) {
-        window.history.replaceState(null, "", legacyOfficeUrl);
-        window.dispatchEvent(new Event("hashchange"));
-      }
       const search = window.location.search;
       syncViewFromSearchAction({
         demoSettingsPanel,
