@@ -32,6 +32,38 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/knowledge": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listKnowledge"];
+    put?: never;
+    post: operations["createKnowledge"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/knowledge/{knowledgeId}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getKnowledge"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/automations": {
     parameters: {
       query?: never;
@@ -746,6 +778,38 @@ export interface components {
       /** @constant */
       expectedAutomationRevision: 1;
       expectedThreadRevision: number;
+    };
+    CreateKnowledgeRequest: {
+      /** @enum {string} */
+      kind: "memory" | "source";
+      sourceId: string;
+      title: string;
+      content: string;
+    };
+    KnowledgeView: {
+      /** @constant */
+      schemaVersion: "crewon.knowledge.v0";
+      knowledgeId: string;
+      /** @enum {string} */
+      kind: "memory" | "source";
+      sourceId: string;
+      title: string;
+      content: string;
+      contentDigest: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    KnowledgeMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      knowledge: components["schemas"]["KnowledgeView"];
+    };
+    GetKnowledgeResponse: {
+      knowledge: components["schemas"]["KnowledgeView"];
+    };
+    ListKnowledgeResponse: {
+      data: components["schemas"]["KnowledgeView"][];
+      nextCursor: string | null;
     };
     /** @description Redacted immutable manual-only Automation definition. Tenant, actor, schedules, digests and invocation routes are private. */
     AutomationView: {
@@ -1883,6 +1947,98 @@ export interface operations {
       409: components["responses"]["Error"];
       500: components["responses"]["Error"];
       503: components["responses"]["Error"];
+    };
+  };
+  listKnowledge: {
+    parameters: {
+      query?: {
+        cursor?: components["parameters"]["ResourceCursor"];
+        limit?: components["parameters"]["Limit"];
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Scoped Knowledge page */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListKnowledgeResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+    };
+  };
+  createKnowledge: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateKnowledgeRequest"];
+      };
+    };
+    responses: {
+      /** @description Replayed Knowledge record */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["KnowledgeMutationResponse"];
+        };
+      };
+      /** @description Committed Knowledge record */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["KnowledgeMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+    };
+  };
+  getKnowledge: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        knowledgeId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Scoped Knowledge record */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetKnowledgeResponse"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
     };
   };
   listAutomations: {
