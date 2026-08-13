@@ -58,8 +58,8 @@ export function AgentHistoryCard({
               <em>{locale === "zh" ? "等待首次保存" : "Waiting for save"}</em>
               <p>
                 {locale === "zh"
-                  ? "保存配置后会写入 app-server agent/create 或 agent/update。"
-                  : "Saving writes this configuration through app-server agent/create or agent/update."}
+                  ? "此旧配置编辑器未接入 Control；保存入口已禁用。"
+                  : "This legacy editor is not connected to Control; saving is disabled."}
               </p>
             </div>
           </article>

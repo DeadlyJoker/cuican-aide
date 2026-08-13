@@ -291,7 +291,7 @@ function settingsContentCopy(locale: Locale) {
         currentStatus: "当前状态",
         dataModeDescription: {
           demo: "当前仅展示演示内容，所有输入和操作均已锁定。",
-          disconnected: "未连接本地 app-server，不展示或保存占位配置。",
+          disconnected: "CrewON Control 不可用，不展示或保存占位配置。",
           live: "",
         },
         dataModeTitle: {
@@ -310,7 +310,7 @@ function settingsContentCopy(locale: Locale) {
         dataModeDescription: {
           demo: "Demo content is read-only and cannot be saved.",
           disconnected:
-            "The local app-server is unavailable, so placeholder settings are not shown or saved.",
+            "CrewON Control is unavailable, so placeholder settings are not shown or saved.",
           live: "",
         },
         dataModeTitle: {

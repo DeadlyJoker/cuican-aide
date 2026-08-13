@@ -13,9 +13,28 @@ describe("App Workspace Control composition", () => {
     expect(source).not.toMatch(
       /useAppConnectionEffects|selectThreadRuntimeAuthority|legacyDomainClientForAuthority|clientRef/u,
     );
+    expect(source).not.toContain("./lib/app-server/");
+    expect(source).not.toContain("AppServerClient");
     expect(source).toContain("export function App({ controlClient }");
     expect(source).toContain("client: null");
     expect(source).toContain("scheduleClient={null}");
+  });
+
+  it("has no development recovery route that restarts App Server", () => {
+    const viteConfig = readFileSync(
+      new URL("../../../vite.config.ts", import.meta.url),
+      "utf8",
+    );
+    const reconnect = readFileSync(
+      new URL(
+        "../../components/app/commandOfficeCatalogReconnect.ts",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(viteConfig).not.toMatch(/restart-app-server|crewon-app-server/iu);
+    expect(reconnect).not.toMatch(/restart|app-server/iu);
   });
 
   it("sources the packaged command target and model catalogs only from Control", () => {

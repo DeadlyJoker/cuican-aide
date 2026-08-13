@@ -221,7 +221,7 @@ export function CommandProjectTree({
 
   async function browse(path: string) {
     if (!client) {
-      setDirectoryError("app-server 未连接，无法读取目录。");
+      setDirectoryError("CrewON Control 不可用，无法读取目录。");
       return;
     }
     setDirectoryLoading(true);

@@ -7,9 +7,9 @@ export function classNames(...values: Array<string | false | null | undefined>) 
 export function connectionLabel(connectionState: ConnectionState) {
   switch (connectionState) {
     case "connected":
-      return "已连接：本地 app-server";
+      return "已连接：CrewON Control";
     case "connecting":
-      return "连接中：正在连接本地 app-server";
+      return "连接中：正在连接 CrewON Control";
     case "demo":
       return "已连接：演示模式";
     case "disconnected":

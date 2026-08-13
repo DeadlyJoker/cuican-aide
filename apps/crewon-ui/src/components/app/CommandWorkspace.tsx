@@ -1230,7 +1230,7 @@ export function CommandWorkspace({
         ? [
             {
               action: "provider-resources" as const,
-              detail: "通过 app-server 添加可执行的云端 MCP Tool 或知识库",
+              detail: "通过资源 authority 添加可执行的云端 MCP Tool 或知识库",
               kind: "knowledge" as const,
               label: "云端资源",
               title: "选择云端资源",
@@ -2715,8 +2715,8 @@ export function CommandWorkspace({
                         onClick={onRetryConnection}
                       >
                         {locale === "zh"
-                          ? "重试 app-server"
-                          : "Retry app-server"}
+                          ? "重试 Control"
+                          : "Retry Control"}
                       </button>
                     ) : null}
                     <span

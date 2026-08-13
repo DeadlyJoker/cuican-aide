@@ -108,7 +108,7 @@ export function ProviderResourcePicker({
         <div className="provider-resource-picker__empty" role="status">
           <RefreshCw className="provider-resource-picker__spin" aria-hidden="true" />
           <strong>{snapshot.phase === "recovering" ? "正在恢复连接" : "正在读取资源"}</strong>
-          <span>通过 app-server 校验身份、工作空间与 Provider 能力…</span>
+          <span>通过资源 authority 校验身份、工作空间与 Provider 能力…</span>
         </div>
       ) : snapshot.phase === "unavailable" || snapshot.phase === "disconnected" ? (
         <div className="provider-resource-picker__empty" role="status">
@@ -116,7 +116,7 @@ export function ProviderResourcePicker({
           <strong>
             {snapshot.phase === "disconnected" ? "连接已断开" : "云端资源暂不可用"}
           </strong>
-          <span>{snapshot.error ?? "等待 app-server 恢复后重新读取真实状态。"}</span>
+          <span>{snapshot.error ?? "等待资源 authority 恢复后重新读取真实状态。"}</span>
           {onRetry ? (
             <button type="button" onClick={onRetry}>
               <RefreshCw aria-hidden="true" />
@@ -275,7 +275,7 @@ function resourceIsBindable(
 
 function providerSummary(snapshot: ProviderResourceSnapshot): string {
   if (!snapshot.provider) {
-    return "由 app-server 安全连接";
+    return "由资源 authority 安全连接";
   }
   return `${snapshot.provider.providerId} · ${snapshot.resources.length} 项`;
 }
