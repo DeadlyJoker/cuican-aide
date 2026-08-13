@@ -423,7 +423,6 @@ impl Fixture {
                     "workspaceBindingId": candidate.workspace_binding_id(),
                     "provider": valid_provider(),
                     "mcpStdioConfigPath": null,
-                    "deviceToolConfigPath": null,
                     "remoteMcpConfigPath": remote_path,
                 }],
             }))

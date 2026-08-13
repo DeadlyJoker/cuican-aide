@@ -341,7 +341,6 @@ function releasedManifests(t: TestContext, endpoint: string) {
             sequencePolicy: "required",
           },
           mcpStdioConfigPath: null,
-          deviceToolConfigPath: null,
           remoteMcpConfigPath: remotePath,
         },
       ],

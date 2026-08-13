@@ -202,10 +202,9 @@ function runtimeBindings(remoteMcpConfigPath: string) {
           requestProfile: "standard",
           idleTimeoutMs: 60_000,
           sequencePolicy: "required",
-        },
-        mcpStdioConfigPath: null,
-        deviceToolConfigPath: null,
-        remoteMcpConfigPath,
+          },
+          mcpStdioConfigPath: null,
+          remoteMcpConfigPath,
       },
     ],
   };

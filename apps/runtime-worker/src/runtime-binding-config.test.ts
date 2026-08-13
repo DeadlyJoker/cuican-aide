@@ -427,7 +427,6 @@ function config(contentDigest: string, apiKeyEnvironment: string | null) {
           sequencePolicy: "required" as const,
         },
         mcpStdioConfigPath: null,
-        deviceToolConfigPath: null,
         remoteMcpConfigPath: null,
       },
     ],

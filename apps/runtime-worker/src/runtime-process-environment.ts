@@ -19,8 +19,6 @@ import {
   type ToolRuntimePort,
 } from "@crewon/tool-broker";
 
-import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
-
 export function requiredEnvironment(name: string): string {
   const value = process.env[name];
   if (value === undefined || value.trim().length === 0) {
@@ -128,10 +126,6 @@ export async function createConfiguredToolRuntime(): Promise<
     const mcp = await createConfiguredMcpRuntime();
     if (mcp !== undefined) {
       runtimes.push(mcp);
-    }
-    const deviceConfigPath = process.env.CREWON_DEVICE_TOOL_CONFIG_PATH?.trim();
-    if (deviceConfigPath) {
-      runtimes.push(loadDeviceToolRuntime(deviceConfigPath));
     }
     if (runtimes.length === 0) {
       return undefined;

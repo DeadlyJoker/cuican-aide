@@ -59,7 +59,6 @@ struct RuntimeBinding {
     workspace_binding_id: RequiredNullable,
     provider: RuntimeProvider,
     mcp_stdio_config_path: RequiredNullable,
-    device_tool_config_path: RequiredNullable,
     remote_mcp_config_path: RequiredNullable,
 }
 
@@ -218,7 +217,6 @@ fn load_private_credential_bindings_from(
         &binding.authority_id,
         &binding.provider,
         &binding.mcp_stdio_config_path,
-        &binding.device_tool_config_path,
     );
     let Some(remote_path) = binding
         .remote_mcp_config_path
@@ -272,11 +270,7 @@ impl RuntimeBinding {
                 .as_str()
                 .is_ok_and(|value| value.is_none_or(|value| bounded(value, 512)))
             && self.provider.valid()
-            && [
-                &self.mcp_stdio_config_path,
-                &self.device_tool_config_path,
-                &self.remote_mcp_config_path,
-            ]
+            && [&self.mcp_stdio_config_path, &self.remote_mcp_config_path]
             .into_iter()
             .all(|path| {
                 path.as_str()

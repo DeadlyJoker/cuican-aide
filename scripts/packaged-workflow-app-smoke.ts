@@ -68,7 +68,7 @@ writeFileSync(bindingsPath, JSON.stringify({
     workspaceBindingId: null, provider: { kind: "directResponses", endpoint: responsesEndpoint,
       apiKeyEnvironment: null, storeResponses: true, requestProfile: "standard",
       idleTimeoutMs: 10_000, sequencePolicy: "required" },
-    mcpStdioConfigPath: null, deviceToolConfigPath: null, remoteMcpConfigPath: null,
+    mcpStdioConfigPath: null, remoteMcpConfigPath: null,
   })),
 }));
 const store = new SqliteRunStore(databasePath, { workflowDigester: digester });

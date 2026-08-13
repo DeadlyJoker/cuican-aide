@@ -17,7 +17,6 @@
         "sequencePolicy": "required"
       },
       "mcpStdioConfigPath": null,
-      "deviceToolConfigPath": null,
       "remoteMcpConfigPath": null
     }
   ]

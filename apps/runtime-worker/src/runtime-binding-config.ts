@@ -21,7 +21,6 @@ import {
   ConfiguredAgentVersionRuntimeFactory,
   type AgentVersionRuntimeBinding,
 } from "./configured-agent-version-runtime-factory.ts";
-import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
 import { loadRemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
 import type { RemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
 import {
@@ -51,7 +50,6 @@ type RuntimeBindingConfig = Readonly<{
       sequencePolicy: "required" | "whenPresent";
     }>;
     mcpStdioConfigPath: string | null;
-    deviceToolConfigPath: string | null;
     remoteMcpConfigPath: string | null;
   }>[];
 }>;
@@ -154,7 +152,6 @@ function parseBinding(
       "agentVersionId",
       "authorityId",
       "contentDigest",
-      "deviceToolConfigPath",
       "mcpStdioConfigPath",
       "provider",
       "remoteMcpConfigPath",
@@ -179,10 +176,6 @@ function parseBinding(
       value.mcpStdioConfigPath === null
         ? null
         : bounded(value.mcpStdioConfigPath, 4096),
-    deviceToolConfigPath:
-      value.deviceToolConfigPath === null
-        ? null
-        : bounded(value.deviceToolConfigPath, 4096),
     remoteMcpConfigPath:
       value.remoteMcpConfigPath === null
         ? null
@@ -256,10 +249,9 @@ function runtimeBindings(
       materializationDigest: expectedMaterializationDigest,
       createTransport: (version) =>
         directResponsesTransport(binding.provider, version, apiKey),
-      createToolRuntime: (version) =>
+      createToolRuntime: () =>
         createBoundToolRuntime(
           binding,
-          version,
           expectedMaterializationDigest,
           remoteMcpDependencies,
         ),
@@ -284,14 +276,6 @@ function materializationDigest(
           ? null
           : readBoundedJson(
               binding.mcpStdioConfigPath,
-              512 * 1024,
-              "agent_version_materialization_config_invalid",
-            ),
-      deviceToolConfig:
-        binding.deviceToolConfigPath === null
-          ? null
-          : readBoundedJson(
-              binding.deviceToolConfigPath,
               512 * 1024,
               "agent_version_materialization_config_invalid",
             ),
@@ -323,7 +307,6 @@ function stableJson(value: unknown): string {
 
 async function createBoundToolRuntime(
   binding: RuntimeBindingConfig["bindings"][number],
-  version: CompiledAgentVersion,
   expectedMaterializationDigest: string,
   remoteMcpDependencies: RemoteMcpCompositionDependencies | undefined,
 ): Promise<ToolRuntimePort> {
@@ -348,11 +331,6 @@ async function createBoundToolRuntime(
     if (binding.mcpStdioConfigPath !== null) {
       runtimes.push(
         await createConnectedMcpRuntime(binding.mcpStdioConfigPath),
-      );
-    }
-    if (binding.deviceToolConfigPath !== null) {
-      runtimes.push(
-        loadDeviceToolRuntime(binding.deviceToolConfigPath, version.tools),
       );
     }
     if (binding.remoteMcpConfigPath !== null) {
