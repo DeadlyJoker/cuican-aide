@@ -8,6 +8,58 @@ import {
   ControlApiProtocolError,
 } from "./control-api-client.ts";
 
+test("reads and probes model provider settings through Control API", async () => {
+  const requests: { input: string; init: RequestInit }[] = [];
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async (input, init = {}) => {
+      requests.push({ input: String(input), init });
+      return String(input).endsWith("/probe")
+        ? jsonResponse(200, {
+            disposition: "completed",
+            providerId: "openai",
+            catalogRevision: 2,
+            status: "ok",
+            models: [],
+            modelCount: 0,
+            latencyMs: 1,
+            retryable: false,
+            retryAfterMs: null,
+          })
+        : jsonResponse(200, {
+            settings: {
+              revision: 2,
+              activeProviderId: "openai",
+              providers: [],
+              runtimeAvailability: "available",
+              updatedAt: null,
+            },
+          });
+    },
+  });
+
+  await client.getModelProviderSettings();
+  await client.probeModelProvider("provider-probe-1");
+
+  assert.deepEqual(
+    requests.map(({ input, init }) => ({ method: init.method, input })),
+    [
+      {
+        method: "GET",
+        input: "https://control.example/api/v1/model-provider-settings",
+      },
+      {
+        method: "POST",
+        input: "https://control.example/api/v1/model-provider-settings/probe",
+      },
+    ],
+  );
+  assert.equal(
+    new Headers(requests[1]?.init.headers).get("idempotency-key"),
+    "provider-probe-1",
+  );
+});
+
 test("sends a typed selected-version Run without client-owned route fields", async () => {
   const requests: { input: string; init: RequestInit }[] = [];
   const client = new ControlApiClient({

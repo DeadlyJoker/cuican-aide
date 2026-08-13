@@ -19,6 +19,7 @@ import type {
   ForkThreadRequest,
   GetAgentVersionResponse,
   GetArtifactResponse,
+  GetModelProviderSettingsResponse,
   GetRunResponse,
   GetThreadResponse,
   GetThreadGoalResponse,
@@ -29,6 +30,7 @@ import type {
   ListThreadMessagesResponse,
   PublishAgentVersionRequest,
   PublishWorkflowVersionRequest,
+  ProbeModelProviderResponse,
   WorkflowVersionMutationResponse,
   GetWorkflowVersionResponse,
   ListWorkflowVersionsResponse,
@@ -92,6 +94,31 @@ export class ControlApiClient {
     );
     this.#origin = optionalOrigin(config.origin);
     this.#fetch = config.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  getModelProviderSettings(
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetModelProviderSettingsResponse> {
+    return this.#json("GET", "/api/v1/model-provider-settings", null, {
+      ...options,
+      expectedStatuses: [200],
+    });
+  }
+
+  probeModelProvider(
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<ProbeModelProviderResponse> {
+    return this.#json(
+      "POST",
+      "/api/v1/model-provider-settings/probe",
+      {},
+      {
+        ...options,
+        idempotencyKey,
+        expectedStatuses: [200],
+      },
+    );
   }
 
   createThread(
