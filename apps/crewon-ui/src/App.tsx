@@ -596,6 +596,7 @@ export function App({
     clientRef,
     connectionAttempt,
     connectionState,
+    enabled: controlClient === null,
     emptySelectionBehavior:
       draftWorkspaceCwd === undefined ? "selectFirst" : "preserve",
     handleNotification,

@@ -103,15 +103,6 @@ function proxiedServerUrl(): string {
 }
 
 /**
- * A packaged desktop build loads from `tauri://` or `http://tauri.localhost`, so
- * there is no dev server to proxy through and the app talks to the sidecar
- * app-server directly on the loopback port.
- */
-function sidecarServerUrl(): string {
-  return `ws://127.0.0.1:${DEFAULT_APP_SERVER_PORT}`;
-}
-
-/**
  * Whether this page is served by the Vite dev server rather than from a packaged
  * bundle. `tauri dev` also loads over http from the dev server, and in that case
  * the proxy is present and should be used.
@@ -188,5 +179,5 @@ export function defaultServerUrl(): string {
     return configuredServerUrl(import.meta.env.VITE_CREWON_APP_SERVER_URL);
   }
 
-  return hasDevServerProxy() ? proxiedServerUrl() : sidecarServerUrl();
+  return hasDevServerProxy() ? proxiedServerUrl() : "";
 }

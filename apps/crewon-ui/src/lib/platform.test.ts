@@ -82,17 +82,17 @@ describe("default server URL", () => {
  * cover both platforms' packaged webview origins.
  */
 describe("packaged desktop build", () => {
-  it("dials the sidecar directly from the macOS packaged webview", () => {
+  it("has no implicit legacy runtime on the macOS packaged webview", () => {
     stubLocation("tauri://localhost/index.html");
 
-    expect(defaultServerUrl()).toBe("ws://127.0.0.1:6176");
+    expect(defaultServerUrl()).toBe("");
   });
 
-  it("dials the sidecar directly from the Windows packaged webview", () => {
+  it("has no implicit legacy runtime on the Windows packaged webview", () => {
     // Windows serves the bundle over a synthetic http host rather than tauri://.
     stubLocation("http://tauri.localhost/index.html");
 
-    expect(defaultServerUrl()).toBe("ws://127.0.0.1:6176");
+    expect(defaultServerUrl()).toBe("");
   });
 
   it("keeps a loopback override direct instead of rewriting it to the proxy", () => {

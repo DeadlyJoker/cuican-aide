@@ -31,6 +31,7 @@ export type AppConnectionEffectsParams = {
   clientRef: MutableRefObject<AppServerClient | null>;
   connectionAttempt: number;
   connectionState: ConnectionState;
+  enabled: boolean;
   emptySelectionBehavior: EmptyThreadSelectionBehavior;
   handleNotification: (notification: AppServerNotification) => void;
   handleServerRequest: (request: AppServerRequest) => void;
@@ -61,6 +62,7 @@ export function useAppConnectionEffects({
   clientRef,
   connectionAttempt,
   connectionState,
+  enabled,
   emptySelectionBehavior,
   handleNotification,
   handleServerRequest,
@@ -87,6 +89,11 @@ export function useAppConnectionEffects({
   switchToDemoThreads,
 }: AppConnectionEffectsParams) {
   useEffect(() => {
+    if (!enabled) {
+      clientRef.current?.close();
+      clientRef.current = null;
+      return undefined;
+    }
     return runConnectionBootstrapEffectAction({
       createClient: (onConnectionLost) =>
         new AppServerClient(
@@ -120,6 +127,7 @@ export function useAppConnectionEffects({
     });
   }, [
     connectionAttempt,
+    enabled,
     handleNotification,
     handleServerRequest,
     isDemoPreview,
@@ -131,7 +139,7 @@ export function useAppConnectionEffects({
   ]);
 
   useEffect(() => {
-    if (connectionState !== "disconnected") {
+    if (!enabled || connectionState !== "disconnected") {
       return undefined;
     }
 
@@ -142,7 +150,13 @@ export function useAppConnectionEffects({
       setConnectionState,
       setTimeout: (handler, timeout) => window.setTimeout(handler, timeout),
     });
-  }, [clientRef, connectionState, setConnectionAttempt, setConnectionState]);
+  }, [
+    clientRef,
+    connectionState,
+    enabled,
+    setConnectionAttempt,
+    setConnectionState,
+  ]);
 
   useEffect(() => {
     localizeDemoThreadsAction({
