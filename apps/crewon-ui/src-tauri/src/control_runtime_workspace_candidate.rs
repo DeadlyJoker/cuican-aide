@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::sync::MutexGuard;
 
-use super::workspace::quarantine_workspace_foundation;
 use super::workspace::WorkspaceRuntimeContext;
 use super::workspace_install::CompleteWorkspaceRuntime;
 use super::workspace_install::PreparedWorkspaceInstall;
@@ -13,15 +12,10 @@ impl StagedWorkspaceCandidate {
     pub(super) fn into_complete(
         mut self,
     ) -> Result<CompleteWorkspaceRuntime, DesktopWorkspaceError> {
-        let (context, gateway, gateway_events) = match self.foundation.take()
-        {
-            Some(foundation) => (
-                Some(foundation.context),
-                Some(foundation.gateway),
-                Some(foundation.gateway_events),
-            ),
-            None => (None, None, None),
-        };
+        let context = self
+            .foundation
+            .take()
+            .map(|foundation| foundation.context);
         let worker = self
             .worker
             .take()
@@ -36,8 +30,8 @@ impl StagedWorkspaceCandidate {
             control_events: control.events,
             device: None,
             device_events: None,
-            gateway,
-            gateway_events,
+            gateway: None,
+            gateway_events: None,
             worker: worker.child,
             worker_events: worker.events,
         })
@@ -52,7 +46,7 @@ impl StagedWorkspaceCandidate {
             children.push(worker.child);
         }
         supervisor.quarantine_candidate_processes(children);
-        quarantine_workspace_foundation(supervisor, self.foundation.take());
+        self.foundation.take();
         if let Some(prepared) = self.prepared.take() {
             prepared.stop(supervisor);
         }

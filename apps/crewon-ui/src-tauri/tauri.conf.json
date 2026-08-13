@@ -36,7 +36,6 @@
     ],
     "resources": [
       "binaries/runtime/control-api.mjs",
-      "binaries/runtime/device-gateway.mjs",
       "binaries/runtime/provider-settings-coordinator.mjs",
       "binaries/runtime/runtime-release.mjs",
       "binaries/runtime/runtime-worker.mjs"

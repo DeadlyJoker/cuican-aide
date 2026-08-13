@@ -1013,13 +1013,10 @@ fn runtime_paths(root: &Path) -> super::RuntimePaths {
         artifact_root: root.join("artifacts"),
         control_api_bundle: root.join("control.mjs"),
         control_database: root.join("control.sqlite"),
-        device_gateway_bundle: root.join("gateway.mjs"),
         provider_coordinator_bundle: root.join("coordinator.mjs"),
         root: root.to_path_buf(),
         runtime_release_bundle: root.join("release.mjs"),
         worker_bundle: root.join("worker.mjs"),
         workspace_authority: root.join("workspace-authority"),
-        workspace_launch_root: root.join("workspace-launch"),
-        workspace_runtime_root: root.join("workspace-runtimes"),
     }
 }

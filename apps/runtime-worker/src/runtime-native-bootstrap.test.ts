@@ -133,8 +133,6 @@ test("accepts one all-or-none Workspace v2 bootstrap and redacts every secret De
     inspect(bootstrap.workspace),
     inspect(bootstrap.workspace.privateServer),
     inspect(bootstrap.workspace.signing),
-    inspect(bootstrap.workspace.gateway),
-    inspect(bootstrap.workspace.gateway.tls),
   ]) {
     assert.equal(inspected, "RuntimeNativeBootstrap([REDACTED])");
     assert.doesNotMatch(inspected, /secret|PRIVATE KEY|CERTIFICATE/u);
@@ -261,14 +259,12 @@ test("rejects a second unread bootstrap before parsing its credentials", () => {
   assert.ok(takeRuntimeNativeBootstrap() !== null);
 });
 
-test("rejects partial Workspace secrets, extra keys, unsafe endpoint, and invalid caps", () => {
+test("rejects partial Workspace secrets, extra keys, and invalid caps", () => {
   for (const mutate of [
-    (value: Record<string, any>) => delete value.workspace.gateway.tls.keyPem,
+    (value: Record<string, any>) => delete value.workspace.signing.privateKeyPem,
     (value: Record<string, any>) => (value.workspace.signing.extra = true),
-    (value: Record<string, any>) =>
-      (value.workspace.gateway.endpoint = "https://gateway.example/device/v1"),
     (value: Record<string, any>) => (value.workspace.privateServer.port = -1),
-    (value: Record<string, any>) => (value.workspace.gateway.deadlineMs = 999),
+    (value: Record<string, any>) => (value.workspace.deadlineMs = 999),
   ]) {
     const value = workspaceBootstrap() as Record<string, any>;
     mutate(value);
@@ -282,8 +278,6 @@ test("rejects partial Workspace secrets, extra keys, unsafe endpoint, and invali
 function workspaceBootstrap() {
   const privateKey =
     "-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----";
-  const certificate =
-    "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----";
   return {
     schemaVersion: "crewon.worker-native-bootstrap.v2",
     provider: null,
@@ -307,16 +301,7 @@ function workspaceBootstrap() {
         policySnapshotId: "policy-1",
       },
       signing: { keyId: "workspace-key-1", privateKeyPem: privateKey },
-      gateway: {
-        endpoint: "https://gateway.example/",
-        deadlineMs: 35_000,
-        tls: {
-          keyPem: privateKey,
-          certificatePem: certificate,
-          caCertificatePem: certificate,
-          servername: "gateway.example",
-        },
-      },
+      deadlineMs: 35_000,
     },
   };
 }

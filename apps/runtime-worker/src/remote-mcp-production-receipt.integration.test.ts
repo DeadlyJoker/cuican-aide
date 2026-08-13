@@ -456,8 +456,6 @@ function agentSource() {
 function nativeV3Envelope() {
   const privateKey =
     "-----BEGIN PRIVATE KEY-----\nAA==\n-----END PRIVATE KEY-----";
-  const certificate =
-    "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----";
   return {
     schemaVersion: "crewon.worker-native-bootstrap.v3",
     provider: null,
@@ -481,16 +479,7 @@ function nativeV3Envelope() {
         policySnapshotId: "policy-1",
       },
       signing: { keyId: "workspace-key-1", privateKeyPem: privateKey },
-      gateway: {
-        endpoint: "https://gateway.example/",
-        deadlineMs: 35_000,
-        tls: {
-          keyPem: privateKey,
-          certificatePem: certificate,
-          caCertificatePem: certificate,
-          servername: "gateway.example",
-        },
-      },
+      deadlineMs: 35_000,
     },
     credentialBindings: {
       schemaVersion: "crewon.remote-mcp-private-credentials.v1",

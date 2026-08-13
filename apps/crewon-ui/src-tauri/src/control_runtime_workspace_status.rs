@@ -62,9 +62,7 @@ pub(super) fn project_status(
         .map_err(|_| DesktopWorkspaceError::unavailable())?;
     let supervisor_generation = lifecycle
         .control_generation
-        .max(lifecycle.worker_generation)
-        .max(lifecycle.device_generation)
-        .max(lifecycle.gateway_generation);
+        .max(lifecycle.worker_generation);
     if transitioning {
         return DesktopWorkspaceStatus::project(
             authority,
@@ -75,8 +73,6 @@ pub(super) fn project_status(
     let runtime_matches = if authority.current_snapshot().is_some() {
         lifecycle.control_api.is_some()
             && lifecycle.worker.is_some()
-            && lifecycle.device.is_some()
-            && lifecycle.gateway.is_some()
             && lifecycle
                 .workspace
                 .as_ref()
@@ -84,8 +80,6 @@ pub(super) fn project_status(
     } else {
         lifecycle.control_api.is_some()
             && lifecycle.worker.is_some()
-            && lifecycle.device.is_none()
-            && lifecycle.gateway.is_none()
             && lifecycle.workspace.is_none()
     };
     let availability = if !lifecycle.available || !runtime_matches {

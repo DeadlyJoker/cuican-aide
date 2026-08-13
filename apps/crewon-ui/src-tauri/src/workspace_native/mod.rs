@@ -23,14 +23,9 @@ pub(crate) use catalog::WorkspaceAuthorityPrepareResult;
 #[allow(unused_imports)]
 pub(crate) use catalog::WorkspaceSelectionBeginResult;
 pub(crate) use catalog::MAX_SAFE_REVISION;
-pub(crate) use catalog_io::prepare_authority_directory as prepare_private_directory;
 pub(crate) use catalog_values::valid_id;
 pub(crate) use lease::WorkspaceAuthorityLease;
 use material::WorkspaceLaunchMaterial;
-#[allow(unused_imports)]
-pub(crate) use payload::GatewayReadyAddress;
-#[allow(unused_imports)]
-pub(crate) use payload::WorkspaceGatewayLaunchPayloads;
 #[allow(unused_imports)]
 pub(crate) use payload::WorkspaceLaunchPayloads;
 #[allow(unused_imports)]

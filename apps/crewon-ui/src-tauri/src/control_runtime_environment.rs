@@ -1,6 +1,5 @@
 use std::ffi::OsStr;
 use std::ffi::OsString;
-use std::path::Path;
 
 use serde::Serialize;
 use zeroize::Zeroizing;
@@ -132,36 +131,6 @@ pub(super) struct WorkspaceWorkerEnvironment<'a> {
     pub(super) origin: &'a str,
     pub(super) token: &'a str,
     pub(super) deadline_ms: u32,
-}
-
-pub(super) struct GatewayEnvironment<'a> {
-    pub(super) database_path: &'a Path,
-    pub(super) gateway_id: &'a str,
-    pub(super) registry_path: &'a Path,
-    pub(super) tls_key_path: &'a Path,
-    pub(super) tls_certificate_path: &'a Path,
-    pub(super) tls_ca_path: &'a Path,
-}
-
-pub(super) fn gateway_environment(config: GatewayEnvironment<'_>) -> ChildEnvironment {
-    let mut environment = child_environment();
-    environment.extend([
-        env("CREWON_DEVICE_GATEWAY_DATABASE_PATH", config.database_path),
-        env("CREWON_DEVICE_GATEWAY_HOST", "127.0.0.1"),
-        env(
-            "CREWON_DEVICE_GATEWAY_LOCAL_WORKSPACE_GATEWAY_ID",
-            config.gateway_id,
-        ),
-        env("CREWON_DEVICE_GATEWAY_PORT", "0"),
-        env("CREWON_DEVICE_REGISTRY_PATH", config.registry_path),
-        env("CREWON_DEVICE_GATEWAY_TLS_CA_PATH", config.tls_ca_path),
-        env(
-            "CREWON_DEVICE_GATEWAY_TLS_CERT_PATH",
-            config.tls_certificate_path,
-        ),
-        env("CREWON_DEVICE_GATEWAY_TLS_KEY_PATH", config.tls_key_path),
-    ]);
-    environment
 }
 
 pub(super) fn release_environment(

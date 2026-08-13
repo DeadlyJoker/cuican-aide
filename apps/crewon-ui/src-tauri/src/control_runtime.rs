@@ -117,7 +117,6 @@ pub enum ControlRuntimeStartError {
     ResourceUnavailable,
     RuntimeStateAlreadyInstalled,
     WorkerNotReady,
-    GatewayNotReady,
     WorkspaceRuntimeFailed,
 }
 
@@ -142,7 +141,6 @@ impl ControlRuntimeStartError {
             Self::ResourceUnavailable => "control_runtime_resource_unavailable",
             Self::RuntimeStateAlreadyInstalled => "control_runtime_state_already_installed",
             Self::WorkerNotReady => "control_runtime_worker_not_ready",
-            Self::GatewayNotReady => "control_runtime_gateway_not_ready",
             Self::WorkspaceRuntimeFailed => "control_runtime_workspace_failed",
         }
     }

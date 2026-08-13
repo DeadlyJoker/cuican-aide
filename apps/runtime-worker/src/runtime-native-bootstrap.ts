@@ -14,19 +14,10 @@ const MAX_CREDENTIAL_BINDINGS = 32;
 export type RuntimeNativeWorkspaceBootstrap = Readonly<{
   dispatchMode: "local";
   trustedLocalPath: string;
+  deadlineMs: number;
   privateServer: Readonly<{ port: number; token: string }>;
   authority: RuntimeWorkspaceDispatchAuthority;
   signing: Readonly<{ keyId: string; privateKeyPem: string }>;
-  gateway: Readonly<{
-    endpoint: string;
-    deadlineMs: number;
-    tls: Readonly<{
-      keyPem: string;
-      certificatePem: string;
-      caCertificatePem: string;
-      servername: string;
-    }>;
-  }>;
 }>;
 
 export type RuntimeNativeBootstrap = Readonly<{
@@ -283,13 +274,14 @@ function parseWorkspace(value: unknown): RuntimeNativeWorkspaceBootstrap {
     !object(value) ||
     !exactKeys(value, [
       "authority",
+      "deadlineMs",
       "dispatchMode",
-      "gateway",
       "privateServer",
       "signing",
       "trustedLocalPath",
     ]) ||
     value.dispatchMode !== "local" ||
+    !integer(value.deadlineMs, 1_000, 60_000) ||
     !absolutePath(value.trustedLocalPath)
   ) {
     throw invalid();
@@ -297,10 +289,10 @@ function parseWorkspace(value: unknown): RuntimeNativeWorkspaceBootstrap {
   return redact({
     dispatchMode: "local",
     trustedLocalPath: value.trustedLocalPath,
+    deadlineMs: Number(value.deadlineMs),
     privateServer: parseWorkspacePrivateServer(value.privateServer),
     authority: parseWorkspaceAuthority(value.authority),
     signing: parseWorkspaceSigning(value.signing),
-    gateway: parseWorkspaceGateway(value.gateway),
   });
 }
 
@@ -365,42 +357,6 @@ function parseWorkspaceSigning(
   return redact({
     keyId: opaque(value.keyId),
     privateKeyPem: value.privateKeyPem,
-  });
-}
-
-function parseWorkspaceGateway(
-  value: unknown,
-): RuntimeNativeWorkspaceBootstrap["gateway"] {
-  if (
-    !object(value) ||
-    !exactKeys(value, ["deadlineMs", "endpoint", "tls"]) ||
-    !integer(value.deadlineMs, 1_000, 60_000) ||
-    !object(value.tls) ||
-    !exactKeys(value.tls, [
-      "caCertificatePem",
-      "certificatePem",
-      "keyPem",
-      "servername",
-    ]) ||
-    !pem(value.tls.keyPem, "PRIVATE KEY") ||
-    !pem(value.tls.certificatePem, "CERTIFICATE") ||
-    !pem(value.tls.caCertificatePem, "CERTIFICATE") ||
-    typeof value.tls.servername !== "string" ||
-    !/^[A-Za-z0-9.-]{1,253}$/u.test(value.tls.servername) ||
-    value.tls.servername.startsWith(".") ||
-    value.tls.servername.endsWith(".")
-  ) {
-    throw invalid();
-  }
-  return redact({
-    endpoint: httpsOrigin(value.endpoint),
-    deadlineMs: Number(value.deadlineMs),
-    tls: redact({
-      keyPem: value.tls.keyPem,
-      certificatePem: value.tls.certificatePem,
-      caCertificatePem: value.tls.caCertificatePem,
-      servername: value.tls.servername,
-    }),
   });
 }
 

@@ -244,24 +244,13 @@ pub(super) fn commit_workspace_install(
             .worker
             .as_ref()
             .is_none_or(|worker| !worker.is_running())
-        || lifecycle
-            .device
-            .as_ref()
-            .is_some_and(|device| !device.is_running())
-        || lifecycle
-            .gateway
-            .as_ref()
-            .is_some_and(|gateway| !gateway.is_running())
         || (authority.current_snapshot().is_some()
-            && (lifecycle.gateway.is_none()
-                || lifecycle
-                    .workspace
-                    .as_ref()
-                    .is_none_or(|workspace| !workspace.matches_authority(authority))))
+            && lifecycle
+                .workspace
+                .as_ref()
+                .is_none_or(|workspace| !workspace.matches_authority(authority)))
         || (authority.current_snapshot().is_none()
-            && (lifecycle.device.is_some()
-                || lifecycle.gateway.is_some()
-                || lifecycle.workspace.is_some()))
+            && lifecycle.workspace.is_some())
     {
         return Err(fence);
     }

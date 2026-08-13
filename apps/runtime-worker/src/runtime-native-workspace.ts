@@ -43,12 +43,12 @@ export function createRuntimeNativeWorkspaceResources(input: {
     signer = new Ed25519DeviceWorkspaceListCommandSigner({
       keyId: input.bootstrap.signing.keyId,
       privateKey: { key: signingKey, format: "pem" },
-      authorizationTtlMs: input.bootstrap.gateway.deadlineMs,
+      authorizationTtlMs: input.bootstrap.deadlineMs,
     });
     readSigner = new Ed25519DeviceCommandSigner({
       keyId: input.bootstrap.signing.keyId,
       privateKey: { key: signingKey, format: "pem" },
-      authorizationTtlMs: input.bootstrap.gateway.deadlineMs,
+      authorizationTtlMs: input.bootstrap.deadlineMs,
     });
   } finally {
     signingKey.fill(0);
@@ -74,7 +74,7 @@ export function createRuntimeNativeWorkspaceResources(input: {
       },
       signer,
       gateway,
-      deadlineMs: input.bootstrap.gateway.deadlineMs,
+      deadlineMs: input.bootstrap.deadlineMs,
     },
   };
 }

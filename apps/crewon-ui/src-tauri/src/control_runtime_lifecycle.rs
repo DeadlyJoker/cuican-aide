@@ -118,17 +118,9 @@ impl ControlRuntimeSupervisor {
         session: SessionMaterial,
         control_api: CommandChild,
         worker: CommandChild,
-        workspace: Option<(
-            Arc<workspace::WorkspaceRuntimeContext>,
-            CommandChild,
-            Option<CommandChild>,
-        )>,
+        workspace: Option<Arc<workspace::WorkspaceRuntimeContext>>,
         workspace_authority_lease: Option<crate::workspace_native::WorkspaceAuthorityLease>,
     ) -> Self {
-        let (workspace, gateway, device, workspace_generation) = match workspace {
-            Some((context, gateway, device)) => (Some(context), Some(gateway), device, 1),
-            None => (None, None, None, 0),
-        };
         Self {
             candidate_runtime: Mutex::new(None),
             candidate_workspace: Mutex::new(None),
@@ -139,10 +131,10 @@ impl ControlRuntimeSupervisor {
                 candidate_failures: Vec::new(),
                 control_generation: 1,
                 control_api: Some(control_api),
-                device,
-                device_generation: workspace_generation,
-                gateway,
-                gateway_generation: workspace_generation,
+                device: None,
+                device_generation: 0,
+                gateway: None,
+                gateway_generation: 0,
                 worker: Some(worker),
                 worker_generation: 1,
                 workspace,

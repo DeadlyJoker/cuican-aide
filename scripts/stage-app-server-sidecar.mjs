@@ -14,6 +14,7 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
+  rmSync,
   statSync,
 } from "node:fs";
 import { dirname, join, resolve } from "node:path";
@@ -164,6 +165,7 @@ function stageControlRuntime(target) {
   const nodeBinary = resolveNodeRuntime(target);
   const stagedNode = join(outDir, `crewon-node-${target}${exeSuffix}`);
   mkdirSync(runtimeOutDir, { recursive: true });
+  rmSync(join(runtimeOutDir, "device-gateway.mjs"), { force: true });
   copyExecutable(nodeBinary, stagedNode);
   // Catch launchers such as Homebrew's tiny `node` shim whose sibling dylibs are
   // not present after copying. A staged executable that cannot start is never a
@@ -173,10 +175,6 @@ function stageControlRuntime(target) {
   bundleRuntime(
     join(repoRoot, "apps", "control-api", "src", "main.ts"),
     join(runtimeOutDir, "control-api.mjs"),
-  );
-  bundleRuntime(
-    join(repoRoot, "apps", "device-gateway", "src", "main.ts"),
-    join(runtimeOutDir, "device-gateway.mjs"),
   );
   bundleRuntime(
     join(repoRoot, "apps", "runtime-worker", "src", "provider-settings-coordinator-main.ts"),

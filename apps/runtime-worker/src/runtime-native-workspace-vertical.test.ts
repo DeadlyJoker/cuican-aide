@@ -277,19 +277,10 @@ function workspaceBootstrap(
   return {
     dispatchMode: "local",
     trustedLocalPath,
+    deadlineMs: 35_000,
     privateServer: { port: 0, token: WORKSPACE_TOKEN },
     authority: staticAuthority(),
     signing: { keyId: "workspace-key-1", privateKeyPem: signingPrivateKeyPem },
-    gateway: {
-      endpoint: "https://127.0.0.1:443",
-      deadlineMs: 35_000,
-      tls: {
-        keyPem: signingPrivateKeyPem,
-        certificatePem: "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----",
-        caCertificatePem: "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----",
-        servername: "localhost",
-      },
-    },
   };
 }
 

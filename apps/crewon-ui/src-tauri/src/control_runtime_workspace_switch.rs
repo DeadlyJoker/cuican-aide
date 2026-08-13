@@ -69,7 +69,7 @@ pub(super) fn switch_workspace_runtime(
     let old_private_credentials = resolve_workspace_private_credentials(&old_authority)?;
     let candidate_private_credentials =
         resolve_workspace_private_credentials(&candidate_authority)?;
-    if stage_pre_fence_foundation(app, supervisor, paths, &old_authority, &candidate_authority)
+    if stage_pre_fence_foundation(supervisor, &old_authority, &candidate_authority)
         .is_err()
     {
         return match abort_pending(manager, operation_id) {
@@ -335,9 +335,7 @@ fn postcommit_failure(state: &WorkspaceSwitchState) -> DesktopWorkspaceError {
 }
 
 fn stage_pre_fence_foundation(
-    app: &AppHandle,
     supervisor: &ControlRuntimeSupervisor,
-    paths: &RuntimePaths,
     old: &DesktopWorkspaceAuthority,
     candidate: &DesktopWorkspaceAuthority,
 ) -> Result<(), DesktopWorkspaceError> {
@@ -349,7 +347,7 @@ fn stage_pre_fence_foundation(
         .map(|workspace| workspace.workspace_runtime_binding_id());
     let foundation = match workspace_foundation_plan(old_binding, candidate_binding) {
         WorkspaceFoundationPlan::Start => Some(
-            start_workspace_foundation(app, paths, candidate.clone(), Some(supervisor))
+            start_workspace_foundation(candidate.clone())
                 .map_err(|error| map_runtime_error(error, false))?,
         ),
         WorkspaceFoundationPlan::None | WorkspaceFoundationPlan::Reuse => None,

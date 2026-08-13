@@ -1,5 +1,4 @@
 use super::DesktopWorkspaceAuthority;
-use super::WorkspaceGatewayLaunchPayloads;
 use super::WorkspaceLaunchMaterial;
 use super::WorkspaceLaunchPayloads;
 use super::WorkspaceNativeError;
@@ -24,13 +23,6 @@ impl WorkspaceNativeLaunchSession {
         Ok(Self {
             material: WorkspaceLaunchMaterial::generate(authority)?,
         })
-    }
-
-    pub(crate) fn gateway_launch<'a>(
-        &'a self,
-        authority: &'a DesktopWorkspaceAuthority,
-    ) -> Result<WorkspaceGatewayLaunchPayloads<'a>, WorkspaceNativeError> {
-        WorkspaceGatewayLaunchPayloads::build(authority, &self.material)
     }
 
     pub(crate) fn runtime_launch<'a>(

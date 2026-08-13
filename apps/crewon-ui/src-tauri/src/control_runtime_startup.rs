@@ -4,20 +4,15 @@ struct RuntimePaths {
     artifact_root: PathBuf,
     control_api_bundle: PathBuf,
     control_database: PathBuf,
-    device_gateway_bundle: PathBuf,
     provider_coordinator_bundle: PathBuf,
     root: PathBuf,
     runtime_release_bundle: PathBuf,
     worker_bundle: PathBuf,
     workspace_authority: PathBuf,
-    workspace_launch_root: PathBuf,
-    workspace_runtime_root: PathBuf,
 }
 
 struct StartedRuntime {
     control_events: ProcessEvents,
-    device_events: Option<ProcessEvents>,
-    gateway_events: Option<ProcessEvents>,
     supervisor: ControlRuntimeSupervisor,
     worker_events: ProcessEvents,
 }
@@ -39,28 +34,6 @@ pub fn install(app: &AppHandle) -> Result<(), ControlRuntimeStartError> {
         }
     };
     manage_supervisor(app, started.supervisor)?;
-    if let Some(gateway_events) = started.gateway_events {
-        if let Err(error) = monitor_process(
-            app.clone(),
-            gateway_events,
-            "device-gateway",
-            ProcessRole::Gateway(1),
-        ) {
-            shutdown_managed_supervisor(app);
-            return Err(error);
-        }
-    }
-    if let Some(device_events) = started.device_events {
-        if let Err(error) = monitor_process(
-            app.clone(),
-            device_events,
-            "device-runtime",
-            ProcessRole::Device(1),
-        ) {
-            shutdown_managed_supervisor(app);
-            return Err(error);
-        }
-    }
     if let Err(error) = monitor_process(
         app.clone(),
         started.control_events,
@@ -136,10 +109,8 @@ fn start(app: &AppHandle) -> Result<StartedRuntime, ControlRuntimeStartError> {
     activate_runtime_release(app, &paths, provider_binding.as_ref(), &runtime_route)?;
     let provider_runtime = provider_credentials::active_provider_runtime(app)
         .map_err(|_| ControlRuntimeStartError::ProviderCredentialUnavailable)?;
-    let mut workspace_foundation = match workspace_authority {
-        Some(authority) => Some(workspace::start_workspace_foundation(
-            app, &paths, authority, None,
-        )?),
+    let workspace_foundation = match workspace_authority {
+        Some(authority) => Some(workspace::start_workspace_foundation(authority)?),
         None => None,
     };
     let worker_environment = worker_environment(&paths, provider_runtime.as_ref(), &runtime_route);
@@ -158,7 +129,6 @@ fn start(app: &AppHandle) -> Result<StartedRuntime, ControlRuntimeStartError> {
     {
         Ok(bootstrap) => bootstrap,
         Err(error) => {
-            workspace::stop_workspace_foundation(workspace_foundation.take());
             return Err(error);
         }
     };
@@ -184,7 +154,6 @@ fn start(app: &AppHandle) -> Result<StartedRuntime, ControlRuntimeStartError> {
     let (worker_events, worker) = match worker {
         Ok(worker) => worker,
         Err(error) => {
-            workspace::stop_workspace_foundation(workspace_foundation.take());
             return Err(error);
         }
     };
@@ -196,13 +165,11 @@ fn start(app: &AppHandle) -> Result<StartedRuntime, ControlRuntimeStartError> {
     .is_err()
     {
         terminate_startup_children(vec![worker]);
-        workspace::stop_workspace_foundation(workspace_foundation.take());
         return Err(ControlRuntimeStartError::WorkerNotReady);
     }
     let provider_ready = provider_ready_signal(provider_runtime.as_ref());
     if wait_for_ready(&worker_events, provider_ready.as_bytes(), READY_TIMEOUT).is_err() {
         terminate_startup_children(vec![worker]);
-        workspace::stop_workspace_foundation(workspace_foundation.take());
         return Err(ControlRuntimeStartError::WorkerNotReady);
     }
     let workspace_worker = match workspace_bootstrap {
@@ -210,7 +177,6 @@ fn start(app: &AppHandle) -> Result<StartedRuntime, ControlRuntimeStartError> {
             Ok(route) => Some(route),
             Err(error) => {
                 terminate_startup_children(vec![worker]);
-                workspace::stop_workspace_foundation(workspace_foundation.take());
                 return Err(error);
             }
         },
@@ -240,7 +206,6 @@ fn start(app: &AppHandle) -> Result<StartedRuntime, ControlRuntimeStartError> {
         Ok(started) => started,
         Err(error) => {
             terminate_startup_children(vec![worker]);
-            workspace::stop_workspace_foundation(workspace_foundation.take());
             return Err(error);
         }
     };
@@ -252,23 +217,16 @@ fn start(app: &AppHandle) -> Result<StartedRuntime, ControlRuntimeStartError> {
     .is_err()
     {
         terminate_startup_children(vec![control_api, worker]);
-        workspace::stop_workspace_foundation(workspace_foundation.take());
         return Err(ControlRuntimeStartError::ControlApiNotReady);
     }
 
-    let (workspace, gateway_events, device_events) = match workspace_foundation {
-        Some(foundation) => (
-            Some((foundation.context, foundation.gateway, None)),
-            Some(foundation.gateway_events),
-            None,
-        ),
-        None => (None, None, None),
+    let workspace = match workspace_foundation {
+        Some(foundation) => Some(foundation.context),
+        None => None,
     };
 
     Ok(StartedRuntime {
         control_events,
-        device_events,
-        gateway_events,
         supervisor: ControlRuntimeSupervisor::started(
             session,
             control_api,
@@ -342,13 +300,6 @@ fn prepare_paths(app: &AppHandle) -> Result<RuntimePaths, ControlRuntimeStartErr
             BaseDirectory::Resource,
         )
         .map_err(|_| ControlRuntimeStartError::ResourceUnavailable)?;
-    let device_gateway_bundle = app
-        .path()
-        .resolve(
-            "binaries/runtime/device-gateway.mjs",
-            BaseDirectory::Resource,
-        )
-        .map_err(|_| ControlRuntimeStartError::ResourceUnavailable)?;
     let runtime_release_bundle = app
         .path()
         .resolve(
@@ -376,14 +327,11 @@ fn prepare_paths(app: &AppHandle) -> Result<RuntimePaths, ControlRuntimeStartErr
         artifact_root,
         control_api_bundle,
         control_database: root.join("control.sqlite"),
-        device_gateway_bundle,
         provider_coordinator_bundle,
         root: root.clone(),
         runtime_release_bundle,
         worker_bundle,
         workspace_authority: root.join("workspace-authority-v0"),
-        workspace_launch_root: root.join("workspace-launch"),
-        workspace_runtime_root: root.join("workspace-runtimes"),
     })
 }
 

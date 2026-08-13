@@ -58,6 +58,7 @@ test("packaged entry starts v2 Workspace listener and emits only non-secret read
       workspace: {
         dispatchMode: "local",
         trustedLocalPath: process.cwd(),
+        deadlineMs: 35_000,
         privateServer: { port: 0, token },
         authority: {
           tenantId: config.runtimeTenantId,
@@ -70,16 +71,6 @@ test("packaged entry starts v2 Workspace listener and emits only non-secret read
           policySnapshotId: config.route.policySnapshotId,
         },
         signing: { keyId: "workspace-key-1", privateKeyPem },
-        gateway: {
-          endpoint: "https://127.0.0.1:1",
-          deadlineMs: 35_000,
-          tls: {
-            keyPem: TEST_WORKER_KEY,
-            certificatePem: TEST_WORKER_CERT,
-            caCertificatePem: TEST_CA_CERT,
-            servername: "localhost",
-          },
-        },
       },
     })}\n`,
   );
@@ -285,16 +276,7 @@ function v3Bootstrap(bearerToken: string) {
         policySnapshotId: "policy-1",
       },
       signing: { keyId: "workspace-key-1", privateKeyPem },
-      gateway: {
-        endpoint: "https://127.0.0.1:1",
-        deadlineMs: 35_000,
-        tls: {
-          keyPem: TEST_WORKER_KEY,
-          certificatePem: TEST_WORKER_CERT,
-          caCertificatePem: TEST_CA_CERT,
-          servername: "localhost",
-        },
-      },
+      deadlineMs: 35_000,
     },
     credentialBindings: {
       schemaVersion: "crewon.remote-mcp-private-credentials.v1",

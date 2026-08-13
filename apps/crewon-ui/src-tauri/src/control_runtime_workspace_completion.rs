@@ -11,7 +11,7 @@ pub(super) fn complete_candidate(
         authority.current_snapshot().is_some() && staged_context(supervisor)?.is_none();
     if needs_foundation {
         let foundation =
-            start_workspace_foundation(app, paths, authority.clone(), Some(supervisor))
+            start_workspace_foundation(authority.clone())
                 .map_err(|error| map_runtime_error(error, false))?;
         staged_mut(supervisor)?
             .as_mut()
@@ -86,7 +86,7 @@ fn recover_old(
     stop_staged_candidate(supervisor);
     if supervisor.require_no_failed_process_quarantine().is_err()
         || abort_pending(manager, operation_id).is_err()
-        || stage_pre_fence_foundation(app, supervisor, paths, old, old).is_err()
+        || stage_pre_fence_foundation(supervisor, old, old).is_err()
         || complete_candidate(
             app,
             supervisor,
