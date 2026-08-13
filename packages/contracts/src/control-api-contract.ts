@@ -873,11 +873,7 @@ export function formatCapabilityCursor(input: {
   releaseId: string;
   afterKey: string;
 }): string {
-  const releaseId = requireBoundedString(
-    input.releaseId,
-    128,
-    "capability_cursor_invalid",
-  );
+  const releaseId = requireCapabilityReleaseId(input.releaseId);
   const afterKey = requireBoundedString(
     input.afterKey,
     2048,
@@ -1224,11 +1220,7 @@ function parseCapabilityCursor(input: unknown): Readonly<{
       decoded.slice(CAPABILITY_CURSOR_PREFIX.length),
     );
     if (!Array.isArray(parsed) || parsed.length !== 2) throw new Error();
-    const releaseId = requireBoundedString(
-      parsed[0],
-      128,
-      "capability_cursor_invalid",
-    );
+    const releaseId = requireCapabilityReleaseId(parsed[0]);
     const afterKey = requireBoundedString(
       parsed[1],
       2048,
@@ -1241,6 +1233,13 @@ function parseCapabilityCursor(input: unknown): Readonly<{
   } catch {
     throw new ContractValidationError("capability_cursor_invalid");
   }
+}
+
+function requireCapabilityReleaseId(input: unknown): string {
+  if (typeof input !== "string" || !/^sha256:[a-f0-9]{64}$/u.test(input)) {
+    throw new ContractValidationError("capability_cursor_invalid");
+  }
+  return input;
 }
 
 function parseResourceListQuery(

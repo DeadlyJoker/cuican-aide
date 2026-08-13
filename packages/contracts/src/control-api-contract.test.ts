@@ -571,6 +571,17 @@ test("freezes strict immutable AgentVersion publication and pagination", () => {
     () => parseCapabilityListQuery({ cursor: `${capabilityCursor}x` }),
     isContractError,
   );
+  assert.throws(
+    () => formatCapabilityCursor({ releaseId: "release-1", afterKey: "key" }),
+    isContractError,
+  );
+  const malformedReleaseCursor = Buffer.from(
+    'crewon.capability.cursor.v1:["release-1","key"]',
+  ).toString("base64url");
+  assert.throws(
+    () => parseCapabilityListQuery({ cursor: malformedReleaseCursor }),
+    isContractError,
+  );
   for (const input of [
     { ...source, tenantId: "tenant-attacker" },
     { ...source, contentDigest: `sha256:${"a".repeat(64)}` },

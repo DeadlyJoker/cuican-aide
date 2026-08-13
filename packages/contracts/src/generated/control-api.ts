@@ -2014,6 +2014,7 @@ export interface components {
     Cursor: string;
     ResourceCursor: string;
     AgentVersionCursor: string;
+    CapabilityCursor: string;
     Limit: number;
   };
   requestBodies: never;
@@ -3823,7 +3824,7 @@ export interface operations {
   listActiveCapabilities: {
     parameters: {
       query?: {
-        cursor?: components["parameters"]["AgentVersionCursor"];
+        cursor?: components["parameters"]["CapabilityCursor"];
         limit?: components["parameters"]["Limit"];
       };
       header?: never;

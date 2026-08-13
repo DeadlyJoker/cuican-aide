@@ -1877,7 +1877,7 @@
       "get": {
         "operationId": "listActiveCapabilities",
         "parameters": [
-          { "$ref": "#/components/parameters/AgentVersionCursor" },
+          { "$ref": "#/components/parameters/CapabilityCursor" },
           { "$ref": "#/components/parameters/Limit" }
         ],
         "responses": {
@@ -2187,6 +2187,16 @@
           "type": "string",
           "pattern": "^[A-Za-z0-9_-]{1,768}$",
           "maxLength": 768
+        }
+      },
+      "CapabilityCursor": {
+        "name": "cursor",
+        "in": "query",
+        "required": false,
+        "schema": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,4096}$",
+          "maxLength": 4096
         }
       },
       "Limit": {
@@ -4570,8 +4580,8 @@
           },
           "nextCursor": {
             "type": ["string", "null"],
-            "pattern": "^[A-Za-z0-9_-]{1,2048}$",
-            "maxLength": 2048
+            "pattern": "^[A-Za-z0-9_-]{1,4096}$",
+            "maxLength": 4096
           }
         }
       },
