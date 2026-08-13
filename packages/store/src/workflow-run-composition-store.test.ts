@@ -24,6 +24,7 @@ import {
   markSqliteModelDispatchPossiblySent,
   observeSqliteModelDispatchResponse,
   prepareSqliteModelDispatch,
+  terminateSqliteModelDispatch,
 } from "./sqlite-model-dispatch-evidence.ts";
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
 
@@ -179,8 +180,27 @@ test("SQLite cancellation terminalizes a running not-dispatched node", async (t)
   const admitted = await store.admitWorkflowNodeWork(admissionInput);
   const attempt = admitted.admission!.attempt;
   const dispatchDatabase = new DatabaseSync(path);
+  const prior = prepareSqliteModelDispatch(dispatchDatabase, { tenantId: "tenant-1",
+    runId: "run-1", lease: nodeLease, attempt, operationId: "completed-prior-dispatch",
+    requestSequence: 1, operation: "dispatch", requestDigest: digester.sha256("prior-request"),
+    provider: { agentVersionId: "agent-v1", adapterName: "responses", adapterVersion: "1",
+      modelId: "model" }, preparedAt: "2026-08-12T00:00:00.000Z" });
+  const priorSent = markSqliteModelDispatchPossiblySent(dispatchDatabase, {
+    tenantId: "tenant-1", runId: "run-1", lease: nodeLease, attempt,
+    operationId: prior.operationId, requestSequence: prior.requestSequence,
+    expectedRevision: prior.revision, transitionedAt: "2026-08-12T00:00:00.000Z" });
+  const priorObserved = observeSqliteModelDispatchResponse(dispatchDatabase, {
+    tenantId: "tenant-1", runId: "run-1", lease: nodeLease, attempt,
+    operationId: prior.operationId, requestSequence: prior.requestSequence,
+    expectedRevision: priorSent.revision, checkpointDigest: digester.sha256("prior-checkpoint"),
+    transitionedAt: "2026-08-12T00:00:00.000Z" });
+  terminateSqliteModelDispatch(dispatchDatabase, { tenantId: "tenant-1", runId: "run-1",
+    lease: nodeLease, attempt, operationId: prior.operationId,
+    requestSequence: prior.requestSequence, expectedRevision: priorObserved.revision,
+    transitionedAt: "2026-08-12T00:00:00.000Z",
+    outcome: { kind: "completed", code: null, certainty: "responseObserved" } });
   prepareSqliteModelDispatch(dispatchDatabase, { tenantId: "tenant-1", runId: "run-1",
-    lease: nodeLease, attempt, operationId: "prepared-dispatch", requestSequence: 1,
+    lease: nodeLease, attempt, operationId: "prepared-dispatch", requestSequence: 2,
     operation: "dispatch", requestDigest: digester.sha256("request"), provider: {
       agentVersionId: "agent-v1", adapterName: "responses", adapterVersion: "1", modelId: "model" },
     preparedAt: "2026-08-12T00:00:00.000Z" });
@@ -324,6 +344,139 @@ test("SQLite cancellation fences parallel running siblings to their own leases",
   durable.close();
 });
 
+test("SQLite cancellation replaces completed sibling reconciles and replays after restart", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-workflow-cancel-restart-"));
+  const path = join(directory, "cancel.sqlite");
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  const store = new SqliteRunStore(path, { workflowDigester: digester, clock });
+  t.after(() => store.close());
+  await new ThreadApplicationService({ store,
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    ids: { nextId: () => "thread-1" }, digester }).createThread({ tenantId: "tenant-1",
+      principalId: "principal-1", spaceId: "space-1", actorId: "actor-1" }, {
+      kind: "thread.create", idempotencyKey: "restart-thread", title: "Restart cancel" });
+  const parallelWorkflow = compileWorkflowVersion({ ...source,
+    workflowId: "restart-workflow", workflowVersionId: "restart-version",
+    entryNodeIds: ["left", "right"], outputNodeIds: ["join"], nodes: [
+      { ...common("left"), kind: "agent", agentVersionId: "agent-v1" },
+      { ...common("right"), kind: "agent", agentVersionId: "agent-v1" },
+      { ...common("join", ["left", "right"]), inputSchema: { ...fanInSchema,
+        properties: { left: objectSchema, right: objectSchema }, required: ["left", "right"] },
+        kind: "verification", verifierAgentVersionId: "verifier-v1" },
+    ] }, digester);
+  const parallelBinding = { workflowId: parallelWorkflow.workflowId,
+    workflowVersionId: parallelWorkflow.workflowVersionId,
+    contentDigest: parallelWorkflow.contentDigest };
+  await seed(path, clock.nowEpochMilliseconds() + 60_000, parallelWorkflow, parallelBinding);
+  const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+    lease, binding: parallelBinding, schedulerOperationId: "restart-schedule",
+    workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+  const oldReconcileIds: string[] = [];
+  for (const [index, work] of scheduled.nodeWorkItems.entries()) {
+    const ownerId = `node-worker-${index}`;
+    const leaseId = `node-lease-${index}`;
+    const claim = await store.claimNextWorkItem({ ownerId, leaseId, leaseDurationMs: 60_000 });
+    assert.equal(claim?.workItem.workItemId, work.workItemId);
+    const nodeLease = { workItemId: work.workItemId, ownerId, leaseId,
+      leaseEpoch: claim!.lease.epoch };
+    const admitted = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+      lease: nodeLease, binding: parallelBinding, nodeId: work.nodeId,
+      claimId: work.claimId, claimEpoch: work.claimEpoch,
+      schedulerOperationId: "restart-schedule", admissionOperationId: `admit-${work.nodeId}`,
+      attemptLeaseDurationMs: 60_000 });
+    const unknown = await store.settleWorkflowNode({ tenantId: "tenant-1", runId: "run-1",
+      lease: nodeLease, binding: parallelBinding, nodeId: work.nodeId,
+      claimId: work.claimId, claimEpoch: work.claimEpoch,
+      stepId: admitted.admission!.attempt.stepId,
+      attemptId: admitted.admission!.attempt.attemptId,
+      operationId: `unknown-${work.nodeId}`, outcome: { status: "unknown" } });
+    oldReconcileIds.push(unknown.handoff.nextWorkItemId!);
+  }
+  await new RunApplicationService({ store,
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:01.000Z" },
+    ids: { nextId: (kind) => `restart-${kind}` } }).transitionRun({ tenantId: "tenant-1",
+      principalId: "principal-1", spaceId: "space-1", actorId: "actor-1" }, {
+      kind: "run.requestCancel", runId: "run-1", expectedRevision: 2,
+      idempotencyKey: "request-restart-cancel" });
+  clock.set(Date.parse("2026-08-12T00:00:02.000Z"));
+  for (const index of [0, 1]) {
+    const claim = await store.claimNextWorkItem({ ownerId: `stale-worker-${index}`,
+      leaseId: `stale-lease-${index}`, leaseDurationMs: 60_000 });
+    assert.equal(claim?.workItem.payload.trigger, "workflowReconcile");
+    assert.ok(oldReconcileIds.includes(claim!.workItem.workItemId));
+    await store.completeWorkItem({ workItemId: claim!.workItem.workItemId,
+      ownerId: `stale-worker-${index}`, leaseId: `stale-lease-${index}`,
+      leaseEpoch: claim!.lease.epoch });
+  }
+  const cancelClaim = await store.claimNextWorkItem({ ownerId: "cancel-worker",
+    leaseId: "cancel-lease", leaseDurationMs: 60_000 });
+  assert.equal(cancelClaim?.workItem.payload.trigger, "workflowCancel");
+  const operationId = String(cancelClaim!.workItem.payload.cancellationOperationId);
+  const cancelLease = { workItemId: cancelClaim!.workItem.workItemId,
+    ownerId: "cancel-worker", leaseId: "cancel-lease", leaseEpoch: cancelClaim!.lease.epoch };
+  const retained = await store.cancelWorkflowExecution({ tenantId: "tenant-1", runId: "run-1",
+    binding: parallelBinding, operationId, reasonCode: "user_requested", lease: cancelLease });
+  assert.equal(retained.disposition, "retryRequired");
+  assert.equal(retained.handoff.currentWorkItem, "retained");
+  assert.equal(retained.reconciliationWorkItemIds.length, 2);
+  assert.deepEqual(retained.reconciliationWorkItemIds.map((workItemId) =>
+    oldReconcileIds.includes(workItemId)), [false, false]);
+  const partial = new DatabaseSync(path);
+  assert.equal(partial.prepare(`SELECT count(*) count FROM workflow_composition_receipts
+    WHERE kind='cancelExecution'`).get()!.count, 0);
+  assert.equal(partial.prepare(`SELECT count(*) count FROM work_items WHERE
+    json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`).get()!.count, 4);
+  partial.close();
+  await store.retryWorkItem({ ...cancelLease, retryAfterMs: 60_000,
+    reasonCode: "workflow_cancellation_retry_required" });
+
+  const restarted = new SqliteRunStore(path, { workflowDigester: digester, clock });
+  t.after(() => restarted.close());
+  const reconciledWorkItemIds: string[] = [];
+  for (const index of [0, 1]) {
+    const ownerId = `reconcile-worker-${index}`;
+    const leaseId = `reconcile-lease-${index}`;
+    const claim = await restarted.claimNextWorkItem({ ownerId, leaseId,
+      leaseDurationMs: 60_000 });
+    assert.ok(retained.reconciliationWorkItemIds.includes(claim!.workItem.workItemId));
+    assert.ok(!reconciledWorkItemIds.includes(claim!.workItem.workItemId));
+    reconciledWorkItemIds.push(claim!.workItem.workItemId);
+    const workItemId: string = claim!.workItem.workItemId;
+    const payload = claim!.workItem.payload as Record<string, unknown>;
+    const reconcileInput: Parameters<SqliteRunStore["reconcileWorkflowNode"]>[0] = {
+      tenantId: "tenant-1",
+      runId: "run-1", binding: parallelBinding, lease: { workItemId, ownerId, leaseId,
+        leaseEpoch: claim!.lease.epoch }, nodeId: String(payload.nodeId),
+      claimId: String(payload.claimId), claimEpoch: Number(payload.claimEpoch),
+      reconciliationOperationId: String(payload.reconciliationOperationId) };
+    const reconciled = await restarted.reconcileWorkflowNode(reconcileInput);
+    assert.deepEqual([reconciled.disposition, reconciled.evidenceStatus,
+      reconciled.runDisposition], ["settled", "notDispatched", "nonTerminal"]);
+    assert.equal((await restarted.reconcileWorkflowNode(reconcileInput)).disposition, "replay");
+  }
+  clock.set(Date.parse("2026-08-12T00:01:03.000Z"));
+  const finalClaim = await restarted.claimNextWorkItem({ ownerId: "final-worker",
+    leaseId: "final-lease", leaseDurationMs: 60_000 });
+  assert.equal(finalClaim?.workItem.workItemId, cancelLease.workItemId);
+  const finalInput = { tenantId: "tenant-1", runId: "run-1", binding: parallelBinding,
+    operationId, reasonCode: "user_requested", lease: {
+      workItemId: finalClaim!.workItem.workItemId, ownerId: "final-worker",
+      leaseId: "final-lease", leaseEpoch: finalClaim!.lease.epoch } };
+  const final = await restarted.cancelWorkflowExecution(finalInput);
+  assert.deepEqual([final.disposition, final.runDisposition, final.execution.status],
+    ["reconciliationScheduled", "terminalConverged", "canceled"]);
+  assert.deepEqual(final.reconciliationWorkItemIds, retained.reconciliationWorkItemIds);
+  assert.equal(final.handoff.nextWorkItemId, retained.reconciliationWorkItemIds[0]);
+
+  const replayStore = new SqliteRunStore(path, { workflowDigester: digester, clock });
+  t.after(() => replayStore.close());
+  assert.deepEqual(await replayStore.cancelWorkflowExecution(finalInput),
+    { ...final, disposition: "replay" });
+});
+
 test("SQLite cancellation retains possibly-sent node reconciliation", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-workflow-cancel-unknown-"));
   const path = join(directory, "cancel.sqlite");
@@ -396,12 +549,18 @@ test("SQLite cancellation retains possibly-sent node reconciliation", async (t) 
     reasonCode: "user_requested", lease: { workItemId: cancelClaim!.workItem.workItemId,
       ownerId: "cancel-worker", leaseId: "cancel-lease", leaseEpoch: cancelClaim!.lease.epoch } };
   const canceled = await store.cancelWorkflowExecution(cancelInput);
-  assert.equal(canceled.disposition, "reconciliationScheduled");
+  assert.equal(canceled.disposition, "retryRequired");
   assert.equal(canceled.execution.nodes[0]!.status, "unknown");
   assert.equal(canceled.runDisposition, "nonTerminal");
-  assert.deepEqual(await store.cancelWorkflowExecution(cancelInput),
-    { ...canceled, disposition: "replay" });
+  assert.deepEqual(canceled.reconciliationWorkItemIds,
+    [reconcileClaim!.workItem.workItemId]);
+  const retainedAgain = await store.cancelWorkflowExecution(cancelInput);
+  assert.equal(retainedAgain.disposition, "retryRequired");
+  assert.deepEqual(retainedAgain.reconciliationWorkItemIds,
+    canceled.reconciliationWorkItemIds);
   const database = new DatabaseSync(path);
+  assert.equal(database.prepare(`SELECT count(*) count FROM
+    workflow_composition_receipts WHERE kind='cancelExecution'`).get()!.count, 0);
   assert.deepEqual({ ...database.prepare(`SELECT status FROM model_dispatch_receipts
     WHERE operation_id='possibly-sent-dispatch'`).get() }, { status: "possiblySent" });
   assert.equal(database.prepare(`SELECT count(*) count FROM work_items WHERE status='pending' AND
@@ -1966,7 +2125,7 @@ async function seed(
       spaceId: run.spaceId, createdByActorId: run.createdByActorId,
       authorityId: run.authorityId, runtimeGeneration: run.runtimeGeneration,
       agentVersionId: run.agentVersionId, policySnapshotId: run.policySnapshotId,
-      workspaceBindingId: null, workflowVersionBinding: binding,
+      workspaceBindingId: null, workflowVersionBinding: bindingAsset,
       collaborationMode: "default", goalBinding: null, purpose: "workflow", origin: null } };
   const started = { schemaVersion: "crewon.run-event.v0", identity: { runId: "run-1" },
     eventId: "seed-run-started", sequence: 2, occurredAt: run.updatedAt,

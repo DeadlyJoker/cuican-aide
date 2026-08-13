@@ -8,6 +8,7 @@ import {
   type WorkflowNodeContinuationCheckpoint,
   type CommitWorkflowAssistantContinuationInput,
   type WorkflowNodeContinuationStore,
+  type WorkflowCancellationResult,
   type WorkflowRunCompositionStore,
 } from "@crewon/application";
 import {
@@ -67,11 +68,16 @@ import { SqliteWorkflowNodeContinuationAuthority } from "./sqlite-workflow-node-
 import { settleSqliteWorkflowNodeWithinTransaction } from "./sqlite-workflow-node-settlement.ts";
 import { settleSqliteWorkflowNodeModelTerminalWithinTransaction } from "./sqlite-workflow-model-settlement.ts";
 import type { SqliteWorkflowNodeSettlementContext } from "./sqlite-workflow-node-settlement.ts";
+import {
+  ensureSqliteCancellationReconciliation,
+  sqliteCancellationReconciliationWorkItemIds,
+} from "./sqlite-workflow-cancellation.ts";
 
 type Dependencies = Readonly<{
   digester: WorkflowContentDigester;
   clock?: LeaseClock;
 }>;
+
 /** SQLite production composition authority. Every admission is one IMMEDIATE transaction. */
 export class SqliteWorkflowRunCompositionStore
   implements WorkflowRunCompositionStore
@@ -482,7 +488,7 @@ export class SqliteWorkflowRunCompositionStore
 
   async cancelWorkflowExecution(
     input: Parameters<WorkflowRunCompositionStore["cancelWorkflowExecution"]>[0],
-  ): ReturnType<WorkflowRunCompositionStore["cancelWorkflowExecution"]> {
+  ): Promise<WorkflowCancellationResult> {
     const nowMs = readLeaseClock(this.#clock);
     const now = new Date(nowMs).toISOString();
     const fingerprint = this.#fingerprint("cancelExecution", input);
@@ -493,7 +499,7 @@ export class SqliteWorkflowRunCompositionStore
         this.#validateCancellationReplay(input, replay);
         this.#database.exec("COMMIT");
         return structuredClone({ ...(replay as object), disposition: "replay" } as
-          Awaited<ReturnType<WorkflowRunCompositionStore["cancelWorkflowExecution"]>>);
+          WorkflowCancellationResult);
       }
       this.#validateLease(input, nowMs);
       const run = this.#loadRun(input.tenantId, input.runId);
@@ -518,7 +524,16 @@ export class SqliteWorkflowRunCompositionStore
       let requiresReconciliation = false;
       const canceledNodeIds: string[] = [];
       const canceledGateRequestNodeIds: string[] = [];
-      const reconciliationWorkItemIds: string[] = [];
+      const cancellationContext = {
+        database: this.#database, digester: this.#digester,
+        loadWorkflow: (value: Parameters<
+          WorkflowRunCompositionStore["cancelWorkflowExecution"]>[0]) =>
+            this.#loadWorkflow(value),
+        insertWorkItem: (id: string, value: Parameters<
+          WorkflowRunCompositionStore["cancelWorkflowExecution"]>[0],
+        payload: Record<string, unknown>, timestamp: string, clock: number) =>
+          this.#insertWorkflowWorkItem(id, value, payload, timestamp, clock),
+      };
       const nodes = execution.nodes.map((node) => {
         if (node.status === "pending") {
           this.#cancelUnadmittedStep(input, node.nodeId, node.kind, now);
@@ -566,31 +581,8 @@ export class SqliteWorkflowRunCompositionStore
         }
         if (node.status === "running") return node;
         if (node.status === "unknown") {
-          const works = this.#database.prepare(`SELECT work_item_id,status,work_item_json
-            FROM work_items WHERE tenant_id=? AND run_id=? AND
-            json_extract(work_item_json,'$.payload.trigger')='workflowReconcile' AND
-            json_extract(work_item_json,'$.payload.nodeId')=? AND
-            json_extract(work_item_json,'$.payload.claimId')=? AND
-            json_extract(work_item_json,'$.payload.claimEpoch')=? LIMIT 2`).all(
-              input.tenantId, input.runId, node.nodeId, node.claimId, node.claimEpoch) as
-                { work_item_id: string; status: string; work_item_json: string }[];
-          if (works.length !== 1 ||
-              !["pending", "leased", "completed"].includes(works[0]!.status))
-            throw new RunStoreError("workflow_cancellation_reconciliation_required");
-          const payload = (JSON.parse(works[0]!.work_item_json) as { payload: {
-            reconciliationOperationId?: unknown } }).payload;
-          if (typeof payload.reconciliationOperationId !== "string" ||
-              works[0]!.work_item_id !== workflowAuthorityId("reconcile", {
-                tenantId: input.tenantId, runId: input.runId, binding: input.binding,
-                operationId: payload.reconciliationOperationId, nodeId: node.nodeId,
-                claimId: node.claimId, claimEpoch: node.claimEpoch }, this.#digester) ||
-              stableJson(payload) !== stableJson({
-            schemaVersion: "crewon.workflow-reconcile-work-item.v0",
-            trigger: "workflowReconcile", binding: input.binding,
-            nodeId: node.nodeId, claimId: node.claimId, claimEpoch: node.claimEpoch,
-            reconciliationOperationId: payload.reconciliationOperationId,
-          })) throw new RunStoreError("workflow_cancellation_reconciliation_required");
-          reconciliationWorkItemIds.push(works[0]!.work_item_id);
+          ensureSqliteCancellationReconciliation(
+            cancellationContext, input, node, now, nowMs);
         }
         if (node.status === "waitingHuman") {
           const changed = this.#database.prepare(
@@ -628,14 +620,15 @@ export class SqliteWorkflowRunCompositionStore
         ["queued", "running", "unknown", "waitingHuman"].includes(node.status));
       if (requiresReconciliation)
         throw new RunStoreError("workflow_cancellation_reconciliation_required");
-      reconciliationWorkItemIds.sort();
       const next = { ...execution, revision: execution.revision + 1,
         cancelRequested: true, nodes,
         status: active ? "running" as const : "canceled" as const, updatedAt: now };
       this.#writeExecution(next, now);
       canceledNodeIds.sort();
       canceledGateRequestNodeIds.sort();
-      if (nodes.some((node) => node.status === "running" || node.status === "queued")) {
+      const reconciliationWorkItemIds = sqliteCancellationReconciliationWorkItemIds(
+        cancellationContext, input, next);
+      if (active) {
         this.#database.exec("COMMIT");
         return structuredClone({ disposition: "retryRequired" as const,
           canceledNodeIds, canceledGateRequestNodeIds, reconciliationWorkItemIds,
@@ -714,22 +707,24 @@ export class SqliteWorkflowRunCompositionStore
       const dispatchAuthority = this.#database.prepare(
         `SELECT operation_id FROM model_dispatch_receipts
          WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=?
+         AND status!='terminal'
          ORDER BY request_sequence DESC, revision DESC LIMIT 2`,
       ).all(input.tenantId, input.runId, input.nodeId, attempt.attemptId) as
         { operation_id: string }[];
-      if (dispatchAuthority.length !== 1)
+      if (dispatchAuthority.length > 1)
         throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
-      const dispatch = loadSqliteModelDispatchReceipt(this.#database, {
-        tenantId: input.tenantId, runId: input.runId, stepId: input.nodeId,
-        attemptId: attempt.attemptId,
-        operationId: dispatchAuthority[0]!.operation_id,
-      });
-      if (dispatch === null || dispatch.workItemId !== attempt.workItemId ||
-          dispatch.leaseEpoch !== attempt.leaseEpoch)
+      const dispatch = dispatchAuthority[0] === undefined ? null
+        : loadSqliteModelDispatchReceipt(this.#database, {
+            tenantId: input.tenantId, runId: input.runId, stepId: input.nodeId,
+            attemptId: attempt.attemptId,
+            operationId: dispatchAuthority[0].operation_id,
+          });
+      if (dispatch !== null && (dispatch.workItemId !== attempt.workItemId ||
+          dispatch.leaseEpoch !== attempt.leaseEpoch))
         throw new RunStoreError("workflow_reconciliation_evidence_missing");
-      const evidenceStatus = dispatch.status === "prepared"
+      const evidenceStatus = dispatch === null || dispatch.status === "prepared"
         ? "notDispatched" as const : dispatch.status;
-      if (dispatch.status === "responseObserved") {
+      if (dispatch?.status === "responseObserved") {
         const authority = { tenantId: input.tenantId, runId: input.runId,
           workItemId: attempt.workItemId, leaseEpoch: attempt.leaseEpoch,
           nodeId: input.nodeId,
@@ -765,7 +760,8 @@ export class SqliteWorkflowRunCompositionStore
             outcome: { status: "canceled" as const } };
           const settled = settleSqliteWorkflowNodeWithinTransaction(
             { ...this.#nodeSettlementContext(), receipt: () => null,
-              insertReceipt: () => undefined }, settlementInput,
+              insertReceipt: () => undefined,
+              convergeTerminalRun: () => "nonTerminal" }, settlementInput,
             this.#fingerprint("reconcileCancel", { input, candidateId: candidate.candidateId }),
             now, nowMs, { attemptAuthority: { workItemId: attempt.workItemId,
               leaseEpoch: attempt.leaseEpoch },
@@ -798,6 +794,42 @@ export class SqliteWorkflowRunCompositionStore
         return structuredClone(result);
       }
       if (evidenceStatus === "notDispatched") {
+        if (run!.cancelRequested) {
+          const terminal = dispatch === null ? null
+            : terminateSqliteModelDispatchForAttempt(this.#database, {
+                tenantId: input.tenantId, runId: input.runId,
+                attempt: { stepId: input.nodeId, attemptId: attempt.attemptId },
+                attemptWorkItemId: attempt.workItemId,
+                attemptLeaseEpoch: attempt.leaseEpoch,
+                operationId: dispatch.operationId,
+                requestSequence: dispatch.requestSequence,
+                expectedRevision: dispatch.revision,
+                transitionedAt: now,
+                outcome: { kind: "canceled", code: "user_requested", certainty: "notSent" },
+              });
+          const settlementInput = { tenantId: input.tenantId, runId: input.runId,
+            lease: input.lease, binding: input.binding, nodeId: input.nodeId,
+            claimId: input.claimId, claimEpoch: input.claimEpoch, stepId: input.nodeId,
+            attemptId: attempt.attemptId,
+            operationId: `reconcile-cancel:${input.reconciliationOperationId}`,
+            outcome: { status: "canceled" as const } };
+          const settled = settleSqliteWorkflowNodeWithinTransaction(
+            { ...this.#nodeSettlementContext(), receipt: () => null,
+              insertReceipt: () => undefined,
+              convergeTerminalRun: () => "nonTerminal" }, settlementInput,
+            this.#fingerprint("reconcileCancel", { input, evidenceStatus }),
+            now, nowMs, { attemptAuthority: { workItemId: attempt.workItemId,
+              leaseEpoch: attempt.leaseEpoch },
+              attemptCheckpointDigest: terminal?.responseCheckpointDigest ?? null,
+              suppressContinuation: true });
+          const result = { disposition: "settled" as const, evidenceStatus,
+            execution: settled.execution, handoff: settled.handoff,
+            runDisposition: "nonTerminal" as const };
+          this.#insertReceipt(receiptInput, "reconcileNode", fingerprint,
+            { ...result, cancellationWinner: true });
+          this.#database.exec("COMMIT");
+          return structuredClone(result);
+        }
         finishSqliteRunAttempt(this.#database, { tenantId: input.tenantId,
           runId: input.runId, workItemId: attempt.workItemId,
           leaseEpoch: attempt.leaseEpoch, attempt: { stepId: input.nodeId,
@@ -1475,11 +1507,15 @@ export class SqliteWorkflowRunCompositionStore
     fingerprint: string,
     now: string,
     nowMs: number,
-  ): Awaited<ReturnType<WorkflowRunCompositionStore["cancelWorkflowExecution"]>> & {
-    canceledNodeIds: string[]; canceledGateRequestNodeIds: string[] } {
+  ): WorkflowCancellationResult {
     const node = execution.nodes.find((candidate) => candidate.nodeId === payload.nodeId);
     if (node === undefined || node.claimId !== payload.claimId ||
-        node.claimEpoch !== payload.claimEpoch)
+        node.claimEpoch !== payload.claimEpoch || stableJson(payload) !== stableJson({
+          schemaVersion: "crewon.workflow-node-work-item.v0",
+          trigger: "workflowNode", binding: input.binding, nodeId: node.nodeId,
+          claimId: node.claimId, claimEpoch: node.claimEpoch,
+          schedulerOperationId: node.claimOperationId,
+        }))
       throw new RunStoreError("workflow_composition_work_item_mismatch");
     if (node.status === "queued") {
       this.#cancelUnadmittedStep(input, node.nodeId, node.kind, now);
@@ -1488,27 +1524,8 @@ export class SqliteWorkflowRunCompositionStore
         attemptId: null, operationId: `${input.operationId}:${node.nodeId}`,
         outcome: { status: "canceled" } }, null, now, nowMs);
       const canceledNodeIds = [node.nodeId];
-      let nodes = execution.nodes.map((candidate) => candidate.nodeId === node.nodeId
+      const nodes = execution.nodes.map((candidate) => candidate.nodeId === node.nodeId
         ? { ...candidate, status: "canceled" as const } : candidate);
-      const workflow = this.#loadWorkflow(input);
-      let changed = true;
-      while (changed) {
-        changed = false;
-        nodes = nodes.map((candidate) => {
-          if (candidate.status !== "pending") return candidate;
-          const definition = workflow.nodes.find((value) => value.nodeId === candidate.nodeId)!;
-          if (!definition.dependsOn.some((dependencyId) => nodes.find(
-            (value) => value.nodeId === dependencyId)?.status === "canceled")) return candidate;
-          this.#cancelUnadmittedStep(input, candidate.nodeId, candidate.kind, now);
-          this.#appendNodeTerminalEvent({ ...input, nodeId: candidate.nodeId,
-            claimId: null, claimEpoch: null, stepId: candidate.nodeId, attemptId: null,
-            operationId: `${input.operationId}:${candidate.nodeId}`,
-            outcome: { status: "canceled" } }, null, now, nowMs);
-          canceledNodeIds.push(candidate.nodeId);
-          changed = true;
-          return { ...candidate, status: "canceled" as const };
-        });
-      }
       const status = nodes.some((candidate) =>
         ["queued", "running", "unknown"].includes(candidate.status))
         ? "running" as const
@@ -1534,7 +1551,8 @@ export class SqliteWorkflowRunCompositionStore
     const attempt = step?.currentAttemptId === null || step === null ? null
       : loadSqliteRunAttempt(this.#database, { tenantId: input.tenantId,
           runId: input.runId, stepId: node.nodeId, attemptId: step.currentAttemptId });
-    if (step === null || attempt === null || attempt.workItemId !== input.lease.workItemId ||
+    if (step === null || attempt === null || attempt.status !== "running" ||
+        attempt.workItemId !== input.lease.workItemId ||
         attempt.leaseEpoch !== input.lease.leaseEpoch || node.claimId === null)
       throw new RunStoreError("workflow_cancellation_reconciliation_required");
     const dispatchRows = this.#database.prepare(
@@ -1549,6 +1567,9 @@ export class SqliteWorkflowRunCompositionStore
       : loadSqliteModelDispatchReceipt(this.#database, { tenantId: input.tenantId,
           runId: input.runId, stepId: node.nodeId, attemptId: attempt.attemptId,
           operationId: dispatchRows[0].operation_id });
+    if (dispatch !== null && (dispatch.workItemId !== attempt.workItemId ||
+        dispatch.leaseEpoch !== attempt.leaseEpoch))
+      throw new RunStoreError("workflow_cancellation_reconciliation_required");
     if (dispatch?.status === "prepared") {
       const terminal = terminateSqliteModelDispatch(this.#database, {
         tenantId: input.tenantId, runId: input.runId,
@@ -1657,19 +1678,22 @@ export class SqliteWorkflowRunCompositionStore
       const nodeEvents = events.filter((event) => event.type === "workflow.node.terminal");
       const resultKeys = ["canceledGateRequestNodeIds", "canceledNodeIds", "disposition",
         "execution", "handoff", "reconciliationWorkItemIds", "runDisposition"];
-      const terminal = result.disposition === "canceled";
+      const terminal = result.runDisposition === "terminalConverged";
       const pending = result.disposition === "cancellationPending";
       const reconciliation = result.disposition === "reconciliationScheduled";
-      if ((!terminal && !pending && !reconciliation) ||
+      if ((!pending && !reconciliation && result.disposition !== "canceled") ||
+          (terminal && result.disposition !== "canceled" && !reconciliation) ||
+          (!terminal && result.disposition === "canceled") ||
           result.runDisposition !== (terminal ? "terminalConverged" : "nonTerminal") ||
           stableJson(Object.keys(result).sort()) !== stableJson(resultKeys) ||
           result.handoff.currentWorkItem !== "completed" ||
-          (terminal && (result.handoff.nextWorkItemId !== null ||
-            result.handoff.kind !== "none")) ||
           (pending && (result.handoff.nextWorkItemId !== null ||
             result.handoff.kind !== "none")) ||
           (reconciliation && (result.handoff.nextWorkItemId === null ||
-            result.handoff.kind !== "reconcile")) || execution === null || run === null ||
+            result.handoff.kind !== "reconcile")) ||
+          (result.disposition === "canceled" &&
+            (result.handoff.nextWorkItemId !== null || result.handoff.kind !== "none")) ||
+          execution === null || run === null ||
           !this.#isCancellationReplayExecutionCompatible(result.execution, execution) ||
           (terminal ? execution.status !== "canceled"
             : !["running", "waitingHuman", "canceled"].includes(execution.status)) ||
@@ -1691,6 +1715,7 @@ export class SqliteWorkflowRunCompositionStore
             !result.canceledNodeIds.includes(nodeId)) ||
           result.canceledNodeIds.length > execution.nodes.length ||
           result.canceledGateRequestNodeIds.length > execution.nodes.length ||
+          result.reconciliationWorkItemIds.length > execution.nodes.length ||
           (terminal ? run.status !== "canceled" : !["running", "canceled"].includes(run.status)) ||
           stableJson(replayRunLifecycle(events)) !== stableJson(run) ||
           nodeEvents.filter((event) => event.type === "workflow.node.terminal" &&
@@ -1729,19 +1754,18 @@ export class SqliteWorkflowRunCompositionStore
           })) throw new Error("cancel attempt work mismatch");
           const dispatchRows = this.#database.prepare(`SELECT operation_id FROM
             model_dispatch_receipts WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=?
-            LIMIT 2`).all(input.tenantId, input.runId, nodeId, attempt.attemptId) as
+            ORDER BY request_sequence`).all(input.tenantId, input.runId, nodeId, attempt.attemptId) as
               { operation_id: string }[];
-          const dispatch = dispatchRows.length === 1
-            ? loadSqliteModelDispatchReceipt(this.#database, { tenantId: input.tenantId,
-                runId: input.runId, stepId: nodeId, attemptId: attempt.attemptId,
-                operationId: dispatchRows[0]!.operation_id }) : null;
-          if (dispatchRows.length > 1 || (dispatch !== null &&
-              (dispatch.status !== "terminal" ||
-                stableJson(dispatch.terminalOutcome) !== stableJson({ kind: "canceled",
-                  code: "user_requested", certainty: "notSent" }) ||
+          for (const row of dispatchRows) {
+            const dispatch = loadSqliteModelDispatchReceipt(this.#database, {
+              tenantId: input.tenantId, runId: input.runId, stepId: nodeId,
+              attemptId: attempt.attemptId, operationId: row.operation_id,
+            });
+            if (dispatch?.status !== "terminal" ||
                 dispatch.workItemId !== attempt.workItemId ||
-                dispatch.leaseEpoch !== attempt.leaseEpoch)))
-            throw new Error("cancel dispatch mismatch");
+                dispatch.leaseEpoch !== attempt.leaseEpoch)
+              throw new Error("cancel dispatch mismatch");
+          }
         }
         const outbox = this.#database.prepare(`SELECT message_json FROM outbox
           WHERE tenant_id=? AND run_id=? AND json_extract(message_json,'$.payload.eventId')=?`)
@@ -1749,27 +1773,35 @@ export class SqliteWorkflowRunCompositionStore
         if (outbox.length !== 1) throw new Error("cancel outbox mismatch");
       }
       if (reconciliation) {
-        const unknown = execution.nodes.filter((node) => node.status === "unknown");
-        if (unknown.length === 0) throw new Error("cancel reconcile node missing");
-        const expectedIds: string[] = [];
-        for (const node of unknown) {
-          const rows = this.#database.prepare(`SELECT work_item_id,status FROM work_items
-            WHERE tenant_id=? AND run_id=? AND
-            json_extract(work_item_json,'$.payload.trigger')='workflowReconcile' AND
-            json_extract(work_item_json,'$.payload.nodeId')=? AND
-            json_extract(work_item_json,'$.payload.claimId')=? AND
-            json_extract(work_item_json,'$.payload.claimEpoch')=? LIMIT 2`).all(
-              input.tenantId, input.runId, node.nodeId, node.claimId, node.claimEpoch) as
-                { work_item_id: string; status: string }[];
-          if (rows.length !== 1 ||
-              !["pending", "leased", "completed"].includes(rows[0]!.status))
-            throw new Error("cancel reconcile work mismatch");
-          expectedIds.push(rows[0]!.work_item_id);
-        }
-        expectedIds.sort();
-        if (stableJson(result.reconciliationWorkItemIds) !== stableJson(expectedIds) ||
-            result.handoff.nextWorkItemId !== expectedIds[0])
+        if (result.reconciliationWorkItemIds.length === 0 ||
+            result.handoff.nextWorkItemId !== result.reconciliationWorkItemIds[0])
           throw new Error("cancel reconcile handoff mismatch");
+        for (const workItemId of result.reconciliationWorkItemIds) {
+          const row = this.#database.prepare(`SELECT status,work_item_json FROM work_items
+            WHERE tenant_id=? AND run_id=? AND work_item_id=?`).get(
+              input.tenantId, input.runId, workItemId) as
+                { status: string; work_item_json: string } | undefined;
+          const payload = row === undefined ? null
+            : (JSON.parse(row.work_item_json) as { payload?: Record<string, unknown> }).payload;
+          const receiptNodeIndex = result.execution.nodes.findIndex((node) =>
+            node.nodeId === payload?.nodeId);
+          const receiptNode = result.execution.nodes[receiptNodeIndex];
+          const currentNode = execution.nodes[receiptNodeIndex];
+          const operationId = payload?.reconciliationOperationId;
+          if (row === undefined || !["pending", "leased", "completed"].includes(row.status) ||
+              typeof operationId !== "string" || receiptNodeIndex < 0 ||
+              receiptNode === undefined || currentNode === undefined ||
+              receiptNode.claimId !== payload?.claimId ||
+              receiptNode.claimEpoch !== payload?.claimEpoch ||
+              !["unknown", "canceled"].includes(receiptNode.status) ||
+              !["unknown", "canceled"].includes(currentNode.status) ||
+              stableJson(payload?.binding) !== stableJson(input.binding) ||
+              workItemId !== workflowAuthorityId("reconcile", {
+                tenantId: input.tenantId, runId: input.runId, binding: input.binding,
+                operationId, nodeId: receiptNode.nodeId, claimId: receiptNode.claimId,
+                claimEpoch: receiptNode.claimEpoch,
+              }, this.#digester)) throw new Error("cancel reconcile work mismatch");
+        }
       } else if (result.reconciliationWorkItemIds.length !== 0) {
         throw new Error("cancel reconcile proof mismatch");
       }
@@ -1804,14 +1836,20 @@ export class SqliteWorkflowRunCompositionStore
         receipt.workflowId !== current.workflowId ||
         receipt.workflowVersionId !== current.workflowVersionId ||
         receipt.contentDigest !== current.contentDigest) return false;
+    let reachedUnsettledUnknown = false;
     return receipt.nodes.every((node, index) => {
       const candidate = current.nodes[index];
       if (candidate === undefined || candidate.nodeId !== node.nodeId ||
           candidate.claimId !== node.claimId || candidate.claimEpoch !== node.claimEpoch)
         return false;
       if (node.status === "canceled") return candidate.status === "canceled";
-      if (node.status === "unknown")
-        return candidate.status === "unknown" || candidate.status === "canceled";
+      if (node.status === "unknown") {
+        if (candidate.status === "unknown") {
+          reachedUnsettledUnknown = true;
+          return true;
+        }
+        return candidate.status === "canceled" && !reachedUnsettledUnknown;
+      }
       return candidate.status === node.status || candidate.status === "canceled";
     });
   }
@@ -1823,7 +1861,8 @@ export class SqliteWorkflowRunCompositionStore
     try {
       const result = replay as { disposition?: unknown; evidenceStatus?: unknown;
         handoff?: unknown; runDisposition?: unknown; cancellationWinner?: unknown };
-      if (result.disposition !== "settled" || result.evidenceStatus !== "responseObserved" ||
+      if (result.disposition !== "settled" ||
+          !["notDispatched", "responseObserved"].includes(String(result.evidenceStatus)) ||
           result.cancellationWinner !== true ||
           stableJson(Object.keys(result).sort()) !== stableJson([
             "cancellationWinner", "disposition", "evidenceStatus", "execution", "handoff",
@@ -1841,45 +1880,52 @@ export class SqliteWorkflowRunCompositionStore
           step?.status !== "canceled" || attempt?.status !== "canceled")
         throw new Error("cancel reconcile authority mismatch");
       const dispatchRows = this.#database.prepare(`SELECT operation_id FROM model_dispatch_receipts
-        WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=? LIMIT 2`).all(
+        WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=?
+        ORDER BY request_sequence`).all(
           input.tenantId, input.runId, input.nodeId, attempt.attemptId) as
             { operation_id: string }[];
-      const dispatch = dispatchRows.length === 1
-        ? loadSqliteModelDispatchReceipt(this.#database, { tenantId: input.tenantId,
-            runId: input.runId, stepId: input.nodeId, attemptId: attempt.attemptId,
-            operationId: dispatchRows[0]!.operation_id }) : null;
-      if (dispatch?.status !== "terminal" || dispatch.terminalOutcome?.certainty !==
-          "responseObserved" || dispatch.workItemId !== attempt.workItemId ||
-          dispatch.leaseEpoch !== attempt.leaseEpoch)
+      const dispatches = dispatchRows.map((row) => loadSqliteModelDispatchReceipt(
+        this.#database, { tenantId: input.tenantId, runId: input.runId,
+          stepId: input.nodeId, attemptId: attempt.attemptId,
+          operationId: row.operation_id }));
+      if (dispatches.some((dispatch) => dispatch?.status !== "terminal" ||
+          dispatch.workItemId !== attempt.workItemId ||
+          dispatch.leaseEpoch !== attempt.leaseEpoch) ||
+          (result.evidenceStatus === "responseObserved" &&
+            !dispatches.some((dispatch) => dispatch?.terminalOutcome?.certainty ===
+              "responseObserved")))
         throw new Error("cancel reconcile dispatch mismatch");
-      const authority = {
+      if (result.evidenceStatus === "responseObserved") {
+        const responseDispatch = dispatches.at(-1)!;
+        const authority = {
         tenantId: input.tenantId, runId: input.runId, workItemId: attempt.workItemId,
         leaseEpoch: attempt.leaseEpoch, nodeId: input.nodeId,
         nodeKind: node.kind === "verification" ? "verification" as const : "agent" as const,
         claimId: input.claimId, claimEpoch: input.claimEpoch,
         agentVersionId: node.agentVersionId, attempt: { stepId: input.nodeId,
           attemptId: attempt.attemptId } };
-      const continuationRow = this.#database.prepare(`SELECT checkpoint_json FROM
-        workflow_node_continuations WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=?`
-      ).get(input.tenantId, input.runId, input.nodeId, attempt.attemptId) as
-        { checkpoint_json: string } | undefined;
-      const checkpoint = continuationRow === undefined ? null
-        : validateWorkflowNodeContinuationCheckpoint(JSON.parse(continuationRow.checkpoint_json));
-      const terminalCandidate = checkpoint?.terminalCandidate ?? null;
-      const workflow = this.#loadWorkflow(input);
-      if (checkpoint === null || stableJson(checkpoint.authority) !== stableJson(authority) ||
-          terminalCandidate === null ||
-          stableJson(terminalCandidate?.dispatchTerminalOutcome) !==
-            stableJson(dispatch.terminalOutcome))
-        throw new Error("cancel reconcile candidate mismatch");
-      const evidence = validateWorkflowNodeTerminalEvidence({ workflow, nodeId: input.nodeId,
-        evidence: terminalCandidate.evidence, digester: this.#digester });
-      validateWorkflowDispatchTerminalCorrelation({
-        dispatch: terminalCandidate.dispatchTerminalOutcome, evidence });
-      if (terminalCandidate.candidateId !== this.#digester.sha256(canonicalJson({ authority,
-        segmentId: checkpoint.segmentId, evidence,
-        dispatchTerminalOutcome: terminalCandidate.dispatchTerminalOutcome })))
-        throw new Error("cancel reconcile candidate digest mismatch");
+        const continuationRow = this.#database.prepare(`SELECT checkpoint_json FROM
+          workflow_node_continuations WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=?`
+        ).get(input.tenantId, input.runId, input.nodeId, attempt.attemptId) as
+          { checkpoint_json: string } | undefined;
+        const checkpoint = continuationRow === undefined ? null
+          : validateWorkflowNodeContinuationCheckpoint(JSON.parse(continuationRow.checkpoint_json));
+        const terminalCandidate = checkpoint?.terminalCandidate ?? null;
+        const workflow = this.#loadWorkflow(input);
+        if (checkpoint === null || stableJson(checkpoint.authority) !== stableJson(authority) ||
+            terminalCandidate === null ||
+            stableJson(terminalCandidate.dispatchTerminalOutcome) !==
+              stableJson(responseDispatch.terminalOutcome))
+          throw new Error("cancel reconcile candidate mismatch");
+        const evidence = validateWorkflowNodeTerminalEvidence({ workflow, nodeId: input.nodeId,
+          evidence: terminalCandidate.evidence, digester: this.#digester });
+        validateWorkflowDispatchTerminalCorrelation({
+          dispatch: terminalCandidate.dispatchTerminalOutcome, evidence });
+        if (terminalCandidate.candidateId !== this.#digester.sha256(canonicalJson({ authority,
+          segmentId: checkpoint.segmentId, evidence,
+          dispatchTerminalOutcome: terminalCandidate.dispatchTerminalOutcome })))
+          throw new Error("cancel reconcile candidate digest mismatch");
+      }
       const work = this.#database.prepare(
         "SELECT status FROM work_items WHERE work_item_id=?").get(input.lease.workItemId) as
           { status: string } | undefined;
