@@ -1,6 +1,6 @@
 # WS1 实施状态
 
-日期：2026-08-13
+日期：2026-08-14
 状态：In progress
 
 本文件记录当前 source tree 已验证的事实，不把局部测试外推为 WS1 或完整迁移完成。
@@ -17,9 +17,18 @@
 - W01 production transaction protocol、Workflow Start、scheduler fan-out、node admission、node settlement、Human Gate、
   reconciliation、真实 PostgreSQL 双连接和 packaged crash recovery 均已有纵向证据。并行 cancel 已改为每节点独立 lease/
   reconcile authority 与 dedicated cancellation coordinator；SQLite 双 running sibling 回归证明一个 worker 不能借自己的 lease
-  结算 sibling，最终也没有 stranded WorkItem。真实 PostgreSQL 16 串行完整 Store 套件为 `546 pass / 0 fail`（一个与
+  结算 sibling，最终也没有 stranded WorkItem。历史 PostgreSQL 16 串行完整 Store 套件为 `546 pass / 0 fail`（一个与
   Workflow 无关的 Provider 环境标记用例 skip）；其中双 running sibling、late-response reconciliation、双进程
   `SIGKILL` 恢复均实际执行通过。这不代表整个产品迁移完成。
+- 2026-08-14 新增默认运行的 SQLite Control→RuntimeWorker 并行取消纵向验收：两个 Agent sibling 在各自
+  `responseObserved` durable boundary 后模拟 lease loss，Control 同 key cancel replay 只产生一次请求；coordinator 首次返回 typed
+  retained/retry，两个新 Worker 分别以 epoch 2 回收同一 node WorkItem，并各自创建唯一 reconcile authority。两个 reconcile 完成后
+  coordinator 才写唯一 `run.canceled`；最终无 Verification Attempt、无 live Attempt、无 active/stranded WorkItem，模型 dispatch
+  始终为 2，后续 Worker 为 idle。该测试使用多 Store/Worker 实例与显式 lease expiry/reopen，不声称执行了 OS `SIGKILL`。
+- 上述验收暴露并修复 reclaimed WorkItem 与旧 Attempt epoch 的 fence：只有当前 lease 已验证、WorkItem ID 相同且 Attempt epoch
+  不晚于当前 epoch 时才能继续取消；prepared dispatch 的 terminal mutation 与 Attempt settlement 都使用原 Attempt authority。
+  SQLite 有默认回归，PostgreSQL 实现与类型已对齐；当前环境未配置 `CREWON_TEST_POSTGRES_URL`，因此 2026-08-14 没有重新执行真实
+  PostgreSQL 用例，文档中的 PostgreSQL 16 结果只作为历史发布证据。
 - packaged `.app` 通过真实 Control client 启动并读取 Workflow，client-view SSE 只出现一个 `run.completed`；相同 start
   idempotency key 返回 `committed -> replayed` 且保持同一 Run，SQLite admission receipt 与 canonical Run 均为一条。
   Worker `SIGKILL` 后 guardian 清理受管进程，同一 HOME 重启完成 Agent -> Verification；GUI `SIGKILL` 后再次清理并释放
