@@ -1423,6 +1423,104 @@ if (postgresUrl === undefined) {
     }
   });
 
+  test("PostgreSQL cancellation fences two running siblings to node-owned leases", async () => {
+    const schema = `workflow_cancel_parallel_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    const store = await PostgresWorkflowRunCompositionStore.open({ pool, schema, digester });
+    const parallelWorkflow = compileWorkflowVersion({ ...source,
+      workflowId: "parallel-workflow", workflowVersionId: "parallel-version",
+      entryNodeIds: ["left", "right"], outputNodeIds: ["join"], nodes: [
+        { ...common("left"), kind: "agent", agentVersionId: "agent-v1" },
+        { ...common("right"), kind: "agent", agentVersionId: "agent-v1" },
+        { ...common("join", ["left", "right"]), inputSchema: { ...fanInSchema,
+          properties: { left: objectSchema, right: objectSchema }, required: ["left", "right"] },
+          kind: "verification", verifierAgentVersionId: "verifier-v1" },
+      ] }, digester);
+    const parallelBinding = { workflowId: parallelWorkflow.workflowId,
+      workflowVersionId: parallelWorkflow.workflowVersionId,
+      contentDigest: parallelWorkflow.contentDigest };
+    try {
+      await seedPostgresComposition(pool, schema, parallelWorkflow, parallelBinding);
+      const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+        lease, binding: parallelBinding, schedulerOperationId: "schedule-fanout-1",
+        workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+      assert.deepEqual(scheduled.nodeWorkItems.map((work) => work.nodeId), ["left", "right"]);
+      const lanes = [];
+      for (const [index, work] of scheduled.nodeWorkItems.entries()) {
+        const ownerId = `node-worker-${index}`;
+        const leaseId = `node-lease-${index}`;
+        await pool.query(`UPDATE ${schema}.work_items SET status='leased',lease_owner_id=$1,
+          lease_id=$2,lease_epoch=1,lease_expires_at=clock_timestamp()+interval '1 minute'
+          WHERE work_item_id=$3`, [ownerId, leaseId, work.workItemId]);
+        const nodeLease = { workItemId: work.workItemId, ownerId, leaseId, leaseEpoch: 1 };
+        const admitted = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+          lease: nodeLease, binding: parallelBinding, nodeId: work.nodeId, claimId: work.claimId,
+          claimEpoch: work.claimEpoch, schedulerOperationId: "schedule-fanout-1",
+          admissionOperationId: `admit-${work.nodeId}`, attemptLeaseDurationMs: 30_000 });
+        const attempt = admitted.admission!.attempt;
+        await store.prepareModelDispatch({ tenantId: "tenant-1", runId: "run-1", lease: nodeLease,
+          attempt: { stepId: attempt.stepId, attemptId: attempt.attemptId },
+          operationId: `dispatch-${work.nodeId}`, requestSequence: 1, operation: "dispatch",
+          requestDigest: digester.sha256(work.nodeId), provider: { agentVersionId: "agent-v1",
+            adapterName: "responses", adapterVersion: "1", modelId: "model-1" },
+          preparedAt: "2026-08-13T00:00:00.000Z" });
+        lanes.push({ work, nodeLease });
+      }
+      const run = await pool.query<{ state_json: Record<string, unknown> }>(
+        `SELECT state_json FROM ${schema}.run_snapshots WHERE run_id='run-1'`);
+      await pool.query(`UPDATE ${schema}.run_snapshots SET state_json=$1 WHERE run_id='run-1'`,
+        [{ ...run.rows[0]!.state_json, cancelRequested: true }]);
+      const cancelWork = { workItemId: "cancel-work-parallel", tenantId: "tenant-1", runId: "run-1",
+        kind: "run.execute", payload: { schemaVersion: "crewon.workflow-cancel-work-item.v0",
+          trigger: "workflowCancel", binding: parallelBinding,
+          cancellationOperationId: "cancel-parallel" }, createdAt: "2026-08-13T00:00:01.000Z" };
+      await pool.query(`INSERT INTO ${schema}.work_items
+        (work_item_id,tenant_id,run_id,kind,work_item_json,created_at,status,available_at,
+         lease_owner_id,lease_id,lease_epoch,lease_expires_at,attempt_count)
+        VALUES ($1,'tenant-1','run-1','run.execute',$2,$3,'leased',$3,
+          'cancel-worker','cancel-lease',1,clock_timestamp()+interval '1 minute',1)`,
+        [cancelWork.workItemId, cancelWork, cancelWork.createdAt]);
+      const coordinatorInput = { tenantId: "tenant-1", runId: "run-1", binding: parallelBinding,
+        operationId: "cancel-parallel", reasonCode: "user_requested", lease: {
+          workItemId: cancelWork.workItemId, ownerId: "cancel-worker",
+          leaseId: "cancel-lease", leaseEpoch: 1 } } as const;
+      const attemptsBefore = await pool.query(`SELECT step_id,status,work_item_id,lease_epoch,state_json
+        FROM ${schema}.run_attempts ORDER BY step_id`);
+      const retained = await store.cancelWorkflowExecution(coordinatorInput);
+      assert.deepEqual([retained.disposition, retained.handoff.currentWorkItem,
+        retained.runDisposition], ["retryRequired", "retained", "nonTerminal"]);
+      const foreignLeases = await pool.query(`SELECT work_item_json->'payload'->>'nodeId' node_id,
+        status,lease_owner_id,lease_id,lease_epoch FROM ${schema}.work_items
+        WHERE work_item_json->'payload'->>'trigger'='workflowNode' ORDER BY node_id`);
+      assert.deepEqual(foreignLeases.rows, [
+        { node_id: "left", status: "leased", lease_owner_id: "node-worker-0",
+          lease_id: "node-lease-0", lease_epoch: 1 },
+        { node_id: "right", status: "leased", lease_owner_id: "node-worker-1",
+          lease_id: "node-lease-1", lease_epoch: 1 },
+      ]);
+      assert.deepEqual((await pool.query(`SELECT step_id,status,work_item_id,lease_epoch,state_json
+        FROM ${schema}.run_attempts ORDER BY step_id`)).rows, attemptsBefore.rows);
+      for (const lane of lanes) {
+        const canceled = await store.cancelWorkflowExecution({ tenantId: "tenant-1", runId: "run-1",
+          binding: parallelBinding, lease: lane.nodeLease,
+          operationId: `cancel-${lane.work.nodeId}`, reasonCode: "user_requested" });
+        assert.equal(canceled.disposition, "cancellationPending");
+      }
+      const final = await store.cancelWorkflowExecution(coordinatorInput);
+      assert.deepEqual([final.disposition, final.runDisposition, final.execution.status,
+        final.handoff.currentWorkItem], ["canceled", "terminalConverged", "canceled", "completed"]);
+      const durable = await pool.query(`SELECT
+        (SELECT count(*)::int FROM ${schema}.run_attempts WHERE status!='canceled') live_attempts,
+        (SELECT count(*)::int FROM ${schema}.work_items WHERE status!='completed') stranded_work,
+        (SELECT state_json->>'status' FROM ${schema}.run_snapshots WHERE run_id='run-1') run_status`);
+      assert.deepEqual(durable.rows[0],
+        { live_attempts: 0, stranded_work: 0, run_status: "canceled" });
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await store.close();
+    }
+  });
+
   test("PostgreSQL cancellation retains possibly-sent reconciliation authority", async () => {
     const schema = `workflow_cancel_unknown_${randomUUID().replaceAll("-", "")}`;
     const pool = new Pool({ connectionString: postgresUrl });
@@ -1629,18 +1727,20 @@ if (postgresUrl === undefined) {
 async function seedPostgresComposition(
   pool: Pool,
   schema: string,
+  workflowAsset = workflow,
+  bindingAsset = binding,
 ): Promise<void> {
-  const run = runState();
+  const run = runState(bindingAsset);
   await pool.query(
     `INSERT INTO ${schema}.workflow_versions
     (tenant_id,workflow_id,workflow_version_id,content_digest,definition_json,created_at)
     VALUES ($1,$2,$3,$4,$5,$6)`,
     [
       "tenant-1",
-      workflow.workflowId,
-      workflow.workflowVersionId,
-      workflow.contentDigest,
-      serializeCompiledWorkflowVersion(workflow),
+      workflowAsset.workflowId,
+      workflowAsset.workflowVersionId,
+      workflowAsset.contentDigest,
+      serializeCompiledWorkflowVersion(workflowAsset),
       run.createdAt,
     ],
   );
@@ -1656,7 +1756,8 @@ async function seedPostgresComposition(
     VALUES ('tenant-1','run-1','root-value-1','rootInput',NULL,$1,'{}',$2)`,
     [digester.sha256("{}"), run.createdAt],
   );
-  await seedPostgresSchedulerWork(pool, schema, "work-1", "schedule-fanout-1");
+  await seedPostgresSchedulerWork(
+    pool, schema, "work-1", "schedule-fanout-1", "1 minute", bindingAsset);
 }
 
 async function seedPostgresSchedulerWork(
@@ -1665,12 +1766,13 @@ async function seedPostgresSchedulerWork(
   workItemId: string,
   operationId: string,
   expiry = "1 minute",
+  bindingAsset = binding,
 ): Promise<void> {
   const now = "2026-08-12T00:00:00.000Z";
   const payload = {
     schemaVersion: "crewon.workflow-scheduler-work-item.v1",
     trigger: "workflowScheduler",
-    binding,
+    binding: bindingAsset,
     schedulerOperationId: operationId,
     workflowInput: {
       valueId: "root-value-1",
