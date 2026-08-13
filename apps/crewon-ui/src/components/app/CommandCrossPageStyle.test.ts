@@ -71,7 +71,9 @@ describe("cross-page control scale", () => {
           // A percentage or auto is layout-driven, not a control size.
           if (/^(auto|100%|inherit|0)$/.test(value)) continue;
           const line = source.slice(0, rule.start).split("\n").length;
-          offenders.push(`${file}:${line} ${rule.selector.slice(0, 52)} = ${value}`);
+          offenders.push(
+            `${file}:${line} ${rule.selector.slice(0, 52)} = ${value}`,
+          );
         }
       }
     }
@@ -119,7 +121,11 @@ describe("cross-page elevation", () => {
           if (value.includes("var(") || value === "none") continue;
           if (value.includes("inset")) continue;
           // A zero-blur spread is a ring, which the tokens do not describe.
-          if (/(?:^|[\s,])-?[\d.]+(?:px)?\s+-?[\d.]+(?:px)?\s+0(?:px)?\s/.test(value)) {
+          if (
+            /(?:^|[\s,])-?[\d.]+(?:px)?\s+-?[\d.]+(?:px)?\s+0(?:px)?\s/.test(
+              value,
+            )
+          ) {
             continue;
           }
           if (!isDecorativeGrey(value)) continue;
@@ -169,7 +175,10 @@ describe("component stylesheets", () => {
       const lines: string[] = source.split("\n");
       for (const [index, line] of lines.entries()) {
         // A hex inside var(--token, #fallback) is a legitimate fallback.
-        const bare = line.replace(/var\(--[\w-]+,\s*#[\da-fA-F]{3,8}\s*\)/g, "");
+        const bare = line.replace(
+          /var\(--[\w-]+,\s*#[\da-fA-F]{3,8}\s*\)/g,
+          "",
+        );
         const hex = bare.match(/#[\da-fA-F]{3,8}/);
         if (hex) offenders.push(`${name}:${index + 1} ${hex[0]}`);
       }
@@ -195,11 +204,7 @@ describe("component stylesheets", () => {
   });
 });
 
-/*
- * The schedule page grew its own two tab strips -- an underline set and a boxed
- * set -- that shared nothing with the catalog tabs: 34px tall against 28px, its
- * own grey track, and a literal shadow. Both now render SegmentedTabs.
- */
+/* Page tab strips share the same segmented-control implementation. */
 describe("one segmented control", () => {
   it("routes page tab strips through the shared component", () => {
     const pages = new URL("./", import.meta.url);
@@ -233,7 +238,9 @@ describe("one segmented control", () => {
         for (const own of ["min-height", "background", "box-shadow"]) {
           if (props.has(own)) {
             const line = source.slice(0, rule.start).split("\n").length;
-            offenders.push(`${file}:${line} ${rule.selector.slice(0, 40)} ${own}`);
+            offenders.push(
+              `${file}:${line} ${rule.selector.slice(0, 40)} ${own}`,
+            );
           }
         }
       }
@@ -243,14 +250,7 @@ describe("one segmented control", () => {
   });
 });
 
-/*
- * Header rows drifted three ways at once. The tab strip sat in a `1fr` column,
- * so a 199px strip stretched to 915px and squeezed the actions column onto a
- * second row: 80px on agents and 84px on team against 42px on schedule. The
- * agents buttons were also `compact` (28px) beside a 32px search box, and the
- * schedule carried its 12px trailing gap as margin while the catalog pages count
- * it as padding, so its first content row sat 10px lower than everywhere else.
- */
+/* Header tab columns remain content-sized and controls share one height. */
 describe("page header row", () => {
   it("sizes the tab column to its content, not the free space", () => {
     const offenders: string[] = [];
@@ -287,24 +287,9 @@ describe("page header row", () => {
     // Without this the agents header renders 28px buttons beside a 32px search.
     expect(rule?.body).toContain("min-height: var(--control-h-md)");
   });
-
-  it("carries the trailing gap the same way on every page", () => {
-    const source = readStyles("original-shell-overrides.css");
-    const rule = scanRules(source).find(
-      (candidate) => candidate.selector === ".schedule-header",
-    );
-
-    // Padding, like the catalog headers, so the box height already includes it.
-    expect(rule?.body).toContain("padding-bottom: 12px");
-    expect(rule?.body).not.toMatch(/margin-bottom:/);
-  });
 });
 
-/*
- * The schedule and team headers reflowed under @media (max-width: 980px) and
- * (860px). Neither ever matched: the window stays wide while the canvas shrinks
- * behind the workbench and sidebar, so those pages never responded at all.
- */
+/* Feature headers reflow against their canvas rather than the window. */
 describe("header reflow is canvas-relative", () => {
   it("reflows page headers from container queries, not the viewport", () => {
     const source = readStyles("original-shell-overrides.css");
@@ -313,7 +298,7 @@ describe("header reflow is canvas-relative", () => {
     for (const rule of scanRules(source)) {
       const media = rule.atRules.find((at) => at.startsWith("@media"));
       if (!media) continue;
-      if (!/-header(-actions)?\b|\.schedule-subnav\b/.test(rule.selector)) {
+      if (!/-header(-actions)?\b/.test(rule.selector)) {
         continue;
       }
       // Reflow is the layout switch; colour and font tweaks are fine in @media.
@@ -341,10 +326,7 @@ describe("header reflow is canvas-relative", () => {
   });
 });
 
-/*
- * The schedule page set its own clamped page inset and stack gap, which pushed
- * its tab row 90px below the identical row on the catalog pages.
- */
+/* Feature pages use the shared page inset and stack rhythm. */
 describe("page inset", () => {
   it("insets every feature page the same way", () => {
     const source = readStyles("original-shell-overrides.css");
@@ -367,8 +349,7 @@ describe("page inset", () => {
   });
 
   it("lets no single page set its own stack rhythm", () => {
-    // The shared baseline may carry a gap; a page-specific override may not,
-    // since that is how the schedule drifted from the rest.
+    // The shared baseline may carry a gap; a page-specific override may not.
     const source = readStyles("original-shell-overrides.css");
     const offenders: string[] = [];
 
@@ -405,7 +386,8 @@ describe("button colour reset", () => {
       for (const rule of scanRules(source)) {
         // A selector that ends at the bare `button` element but carries two or
         // more classes ahead of it outranks component rules.
-        if (!/(^|,)\s*(\.[\w-]+){2,}\s+button\s*$/.test(rule.selector)) continue;
+        if (!/(^|,)\s*(\.[\w-]+){2,}\s+button\s*$/.test(rule.selector))
+          continue;
         if (!/(?:^|[\s;])color:/.test(rule.body)) continue;
         const line = source.slice(0, rule.start).split("\n").length;
         offenders.push(`${file}:${line} ${rule.selector.slice(0, 52)}`);
@@ -575,7 +557,9 @@ describe("team room header", () => {
           if (value.startsWith("var(--control-h-")) continue;
           if (/^(auto|100%|inherit|0|64px)$/.test(value)) continue;
           const line = source.slice(0, rule.start).split("\n").length;
-          offenders.push(`${file}:${line} ${rule.selector.slice(0, 40)} = ${value}`);
+          offenders.push(
+            `${file}:${line} ${rule.selector.slice(0, 40)} = ${value}`,
+          );
         }
       }
     }
