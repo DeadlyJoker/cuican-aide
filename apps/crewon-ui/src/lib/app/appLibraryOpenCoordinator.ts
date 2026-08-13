@@ -1,7 +1,6 @@
 import type { AppServerClient } from "../app-server/appServer";
-import {
-  createAppLibraryOpenHandlers,
-} from "./handlers/appLibraryOpenHandlers";
+import type { ControlApiClient } from "@crewon/control-client";
+import { createAppLibraryOpenHandlers } from "./handlers/appLibraryOpenHandlers";
 
 type LibraryLoadRequestRef = {
   current: number;
@@ -16,6 +15,7 @@ export type AppLibraryOpenCoordinatorParams = Omit<
   "beginLibraryLoad" | "client" | "markLibraryLoad" | "setThreadGoal"
 > & {
   getClient: () => AppServerClient | null;
+  controlClient?: ControlApiClient | null;
   libraryLoadRequestRef: LibraryLoadRequestRef;
 };
 
@@ -34,7 +34,9 @@ export function createAppLibraryOpenCoordinator(
       params.libraryLoadRequestRef.current += 1;
     },
     setThreadGoal: async (threadId, goal, tokenBudget) => {
-      await params.getClient()?.setThreadGoal(threadId, goal, tokenBudget ?? null);
+      await params
+        .getClient()
+        ?.setThreadGoal(threadId, goal, tokenBudget ?? null);
     },
   });
 }

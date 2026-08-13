@@ -146,7 +146,7 @@ export function patchAutomationDetailPanelIfCurrent(
     ? {
         ...panel,
         ...patch,
-    }
+      }
     : panel;
 }
 
@@ -184,6 +184,8 @@ function automationDetailActions(
     automationTitle: action.title,
     automationThreadId: action.threadId,
     automationPrompt: action.prompt,
+    controlAutomationId: action.controlAutomationId,
+    controlAutomationRevision: action.controlAutomationRevision,
     tone: "primary",
   });
 

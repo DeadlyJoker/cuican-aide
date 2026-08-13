@@ -1,4 +1,5 @@
 import type { AppServerClient } from "../../app-server/appServer";
+import type { ControlApiClient } from "@crewon/control-client";
 import type { NoticeState } from "../appRuntimeState";
 import type { AppView } from "../appRouting";
 import type { BackendWorkspace } from "../../backend/backendWorkspace";
@@ -13,6 +14,7 @@ import type {
 import { demoLibraryPanel } from "../../demo/demoContent";
 import { loadMcpInventory } from "../../domain/domainCollaborationBackend";
 import { officeConfigRecordsToLibraryItems } from "../../domain/domainLibraryItems";
+import { listControlAutomationLibraryItems } from "../../automation/controlAutomationLibrary";
 import type { Locale } from "../../i18n";
 import { createAppLibraryItemOpenHandlers } from "./appLibraryItemOpenHandlers";
 import {
@@ -25,6 +27,12 @@ import {
 } from "../../library/libraryOpenActions";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { OfficeThreadResolution } from "../../office/officeThreadActions";
+import {
+  controlAutomationCollectionContent,
+  libraryCollectionPanel,
+  libraryLoadFailurePanel,
+  libraryLoadingPanel,
+} from "../../library/libraryCollectionPanels";
 
 type LibraryPanelSetter = OpenLibraryActionParams["setLibraryPanel"];
 type ThreadSetter = (updater: (currentThreads: Thread[]) => Thread[]) => void;
@@ -37,6 +45,7 @@ export type AppLibraryOpenHandlers = {
 export type AppLibraryOpenHandlersParams = {
   beginLibraryLoad: () => () => boolean;
   client: AppServerClient | null;
+  controlClient?: ControlApiClient | null;
   connectionHint: string;
   createBackendAgentConfig: () => Promise<AgentConfig>;
   cwd: string;
@@ -49,9 +58,7 @@ export type AppLibraryOpenHandlersParams = {
   isDemo: boolean;
   isDemoPreview: boolean;
   isUnsupportedRpcError: (error: unknown) => boolean;
-  loadAgentLibraryItems: (
-    cwd: string,
-  ) => Promise<{ items: LibraryItem[] }>;
+  loadAgentLibraryItems: (cwd: string) => Promise<{ items: LibraryItem[] }>;
   loadToolLibraryItems: (cwd: string) => Promise<LibraryItem[]>;
   locale: Locale;
   markLibraryLoad: () => void;
@@ -86,6 +93,38 @@ export function createAppLibraryOpenHandlers(
   params: AppLibraryOpenHandlersParams,
 ): AppLibraryOpenHandlers {
   const openLibrary = async (kind: LibraryKind) => {
+    if (kind === "automation" && params.controlClient != null) {
+      const isCurrentLibraryLoad = params.beginLibraryLoad();
+      params.setAppView("library");
+      params.setCapabilityDockOpen(false);
+      params.setInspectorOpen(false);
+      params.setLibraryPanel(libraryLoadingPanel(kind, params.locale));
+      try {
+        const items = await listControlAutomationLibraryItems(
+          params.controlClient,
+          params.locale,
+        );
+        if (isCurrentLibraryLoad()) {
+          params.setLibraryPanel(
+            libraryCollectionPanel(
+              kind,
+              controlAutomationCollectionContent({
+                items,
+                locale: params.locale,
+              }),
+              params.locale,
+            ),
+          );
+        }
+      } catch (error) {
+        if (isCurrentLibraryLoad()) {
+          params.setLibraryPanel(
+            libraryLoadFailurePanel(kind, error, params.locale),
+          );
+        }
+      }
+      return;
+    }
     await openLibraryAction({
       beginLibraryLoad: params.beginLibraryLoad,
       connectionHint: params.connectionHint,
@@ -109,7 +148,9 @@ export function createAppLibraryOpenHandlers(
       listSkills: (effectiveCwd) =>
         params.client?.listSkills(effectiveCwd) ?? Promise.resolve(null),
       loadAgentLibraryItems: (effectiveCwd) =>
-        params.loadAgentLibraryItems(effectiveCwd).then((library) => library.items),
+        params
+          .loadAgentLibraryItems(effectiveCwd)
+          .then((library) => library.items),
       loadMcpInventory: (threadId, effectiveCwd) =>
         loadMcpInventory(params.client, threadId, effectiveCwd),
       loadToolLibraryItems: params.loadToolLibraryItems,
@@ -128,12 +169,16 @@ export function createAppLibraryOpenHandlers(
   };
 
   const openLibraryItem = async (item: LibraryItem) => {
+    const controlAutomationSelected =
+      params.controlClient != null &&
+      item.action?.type === "automation-detail" &&
+      Boolean(item.action.controlAutomationId);
     await openLibraryItemAction({
       handlers: createAppLibraryItemOpenHandlers({
         client: params.client,
         createBackendAgentConfig: params.createBackendAgentConfig,
         ensureOfficeThread: params.ensureOfficeThread,
-        isConnected: params.isConnected,
+        isConnected: params.isConnected || controlAutomationSelected,
         isUnsupportedRpcError: params.isUnsupportedRpcError,
         locale: params.locale,
         openAgentsLibrary: () => openLibrary("agents"),
@@ -146,7 +191,7 @@ export function createAppLibraryOpenHandlers(
         setThreads: params.setThreads,
         writeAgentConfig: params.writeAgentConfig,
       }),
-      isConnected: params.isConnected,
+      isConnected: params.isConnected || controlAutomationSelected,
       isDemo: params.isDemo,
       isDemoPreview: params.isDemoPreview,
       item,

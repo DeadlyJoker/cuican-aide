@@ -6,6 +6,7 @@ import {
   backendAgentCollectionContent,
   backendAutomationCollectionContent,
   backendOfficeCollectionContent,
+  controlAutomationCollectionContent,
   knowledgeLibraryPanel,
   libraryCollectionPanel,
   libraryDisconnectedPanel,
@@ -220,6 +221,34 @@ describe("library collection panel helpers", () => {
         },
       ],
     });
+  });
+
+  it("snapshots the Control manual-only Automation collection", () => {
+    expect(
+      controlAutomationCollectionContent({
+        items: [item("Manual audit")],
+        locale: "en",
+      }),
+    ).toMatchInlineSnapshot(`
+      {
+        "actions": [],
+        "body": "Automations are managed by Control API and run manually. Scheduling, toggles, and compatibility edits are not offered here.",
+        "items": [
+          {
+            "description": "Open an automation to run it through Control authority.",
+            "meta": "1 immutable definition",
+            "section": true,
+            "title": "Control automations",
+          },
+          {
+            "description": "Saved record",
+            "meta": "record",
+            "title": "Manual audit",
+          },
+        ],
+        "subtitle": "1 manual automation",
+      }
+    `);
   });
 
   it("builds backend agent collection content", () => {

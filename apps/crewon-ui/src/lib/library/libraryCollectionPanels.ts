@@ -196,7 +196,8 @@ export function backendAutomationCollectionContent(params: {
           ]
         : [
             {
-              title: locale === "zh" ? "暂无后端自动化" : "No backend automations",
+              title:
+                locale === "zh" ? "暂无后端自动化" : "No backend automations",
               meta: "automation/list",
               description:
                 locale === "zh"
@@ -211,6 +212,58 @@ export function backendAutomationCollectionContent(params: {
         ? "当前 app-server 不支持 automation/list，无法读取后端自动化。"
         : "The current app-server does not support automation/list."
       : undefined,
+  };
+}
+
+export function controlAutomationCollectionContent(params: {
+  items: LibraryItem[];
+  locale: Locale;
+}): LibraryCollectionContent {
+  const { items, locale } = params;
+  return {
+    subtitle:
+      locale === "zh"
+        ? `${items.length} 条手动自动化`
+        : items.length === 1
+          ? "1 manual automation"
+          : `${items.length} manual automations`,
+    body:
+      locale === "zh"
+        ? "自动化由 Control API 管理，仅支持手动立即运行；这里不提供定时、启停或编辑伪兼容。"
+        : "Automations are managed by Control API and run manually. Scheduling, toggles, and compatibility edits are not offered here.",
+    actions: [],
+    items:
+      items.length > 0
+        ? [
+            {
+              title: locale === "zh" ? "Control 自动化" : "Control automations",
+              meta:
+                locale === "zh"
+                  ? `${items.length} 条不可变定义`
+                  : items.length === 1
+                    ? "1 immutable definition"
+                    : `${items.length} immutable definitions`,
+              description:
+                locale === "zh"
+                  ? "打开后可通过 Control authority 立即运行。"
+                  : "Open an automation to run it through Control authority.",
+              section: true,
+            },
+            ...items,
+          ]
+        : [
+            {
+              title:
+                locale === "zh" ? "暂无手动自动化" : "No manual automations",
+              meta: "Control API",
+              description:
+                locale === "zh"
+                  ? "当前 Control authority 中没有可运行的自动化。"
+                  : "The current Control authority has no runnable automations.",
+              glyph: "◷",
+              accent: "slate",
+            },
+          ],
   };
 }
 
@@ -231,7 +284,10 @@ export function backendAgentCollectionContent(params: {
         ? "智能体来自 app-server agent/list。新建只会打开配置草稿，填写真实名称和职责并保存后才写入后端。"
         : "Agents are loaded from app-server agent/list. Creating one opens a draft; the backend is written only after a real name and role are saved.",
     actions: [
-      collectionAction("create-agent", locale === "zh" ? "新建智能体" : "New agent"),
+      collectionAction(
+        "create-agent",
+        locale === "zh" ? "新建智能体" : "New agent",
+      ),
     ],
     items:
       storedItems.length > 0 || externalItems.length > 0

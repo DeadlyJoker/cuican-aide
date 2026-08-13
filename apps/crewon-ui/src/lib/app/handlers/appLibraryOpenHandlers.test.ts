@@ -1,9 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ControlApiClient } from "@crewon/control-client";
 
 import type { AppServerClient } from "../../app-server/appServer";
-import type {
-  AppLibraryOpenHandlersParams,
-} from "./appLibraryOpenHandlers";
+import type { AppLibraryOpenHandlersParams } from "./appLibraryOpenHandlers";
 import type { LibraryItem, LibraryPanel } from "../../domain/crewonDomain";
 import type { OpenLibraryItemActionParams } from "../../library/libraryItemActionFlow";
 import type { OpenLibraryActionParams } from "../../library/libraryOpenActions";
@@ -24,9 +23,11 @@ const libraryItemFlowSpy = vi.hoisted(() => ({
 }));
 
 const itemHandlerSpy = vi.hoisted(() => ({
-  lastParams: null as Parameters<
-    typeof import("./appLibraryItemOpenHandlers").createAppLibraryItemOpenHandlers
-  >[0] | null,
+  lastParams: null as
+    | Parameters<
+        typeof import("./appLibraryItemOpenHandlers").createAppLibraryItemOpenHandlers
+      >[0]
+    | null,
   create: vi.fn(
     (
       params: Parameters<
@@ -188,7 +189,10 @@ describe("app library open handlers", () => {
     });
     const loadAgentLibraryItems = vi.fn(async () => ({ items: [item()] }));
     const loadToolLibraryItems = vi.fn(async () => [item()]);
-    const readKnowledgeData = vi.fn(async () => ({ memories: [], sources: [] }));
+    const readKnowledgeData = vi.fn(async () => ({
+      memories: [],
+      sources: [],
+    }));
     const storedAutomationItems = vi.fn(async () => [item()]);
     const handlers = createAppLibraryOpenHandlers(
       createParams({
@@ -233,6 +237,53 @@ describe("app library open handlers", () => {
     );
     expect(readKnowledgeData).toHaveBeenCalledOnce();
     expect(storedAutomationItems).toHaveBeenCalledWith([]);
+  });
+
+  it("loads Automation from Control without touching the legacy client", async () => {
+    const listAutomationConfigs = vi.fn();
+    const setLibraryPanel = vi.fn();
+    const controlClient = {
+      listAutomations: vi.fn(async () => ({
+        data: [
+          {
+            agentVersionId: "agent-version-1",
+            automaticScheduling: false as const,
+            automationId: "automation-1",
+            createdAt: "2026-08-13T00:00:00.000Z",
+            executionMode: "manualOnly" as const,
+            prompt: "Summarize",
+            revision: 1 as const,
+            threadId: "thread-1",
+            title: "Summary",
+            updatedAt: "2026-08-13T00:00:00.000Z",
+          },
+        ],
+        nextCursor: null,
+      })),
+    } as unknown as ControlApiClient;
+    const handlers = createAppLibraryOpenHandlers(
+      createParams({
+        client: client({ listAutomationConfigs }),
+        controlClient,
+        isConnected: false,
+        setLibraryPanel,
+      }),
+    );
+
+    await handlers.openLibrary("automation");
+
+    expect(controlClient.listAutomations).toHaveBeenCalledWith({ limit: 100 });
+    expect(listAutomationConfigs).not.toHaveBeenCalled();
+    expect(libraryOpenSpy.open).not.toHaveBeenCalled();
+    expect(setLibraryPanel).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        actions: [],
+        kind: "automation",
+        items: expect.arrayContaining([
+          expect.objectContaining({ title: "Summary" }),
+        ]),
+      }),
+    );
   });
 
   it("wires openLibraryItem through app item handlers and marks library loads", async () => {

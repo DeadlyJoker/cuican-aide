@@ -1,6 +1,7 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
 import type { AppServerClient } from "../../app-server/appServer";
+import type { ControlApiClient } from "@crewon/control-client";
 import type { AppView } from "../appRouting";
 import type { NoticeState } from "../appRuntimeState";
 import type { ConfirmHandler } from "../../shared/confirmHandler";
@@ -56,6 +57,7 @@ type ThreadSetter = (updater: (currentThreads: Thread[]) => Thread[]) => void;
 export type AppLibraryPanelActionHandlersParams = {
   action: LibraryPanelAction;
   client: AppServerClient | null;
+  controlClient?: ControlApiClient | null;
   confirm: ConfirmHandler;
   createBackendAgentConfig: () => Promise<AgentConfig>;
   ensureBackendToolThread: (

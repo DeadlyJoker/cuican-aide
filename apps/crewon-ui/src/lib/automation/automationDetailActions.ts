@@ -9,10 +9,12 @@ import {
   matchingAutomationDetailItemsPanel,
   matchingAutomationDetailPanel,
 } from "./automationDetailPanel";
-import type { LibraryItem, LibraryItemAction, LibraryPanel } from "../domain/crewonDomain";
-import {
-  automationConfigRecordToLibraryItem,
-} from "../domain/domainLibraryItems";
+import type {
+  LibraryItem,
+  LibraryItemAction,
+  LibraryPanel,
+} from "../domain/crewonDomain";
+import { automationConfigRecordToLibraryItem } from "../domain/domainLibraryItems";
 import {
   automationRunRecordItems,
   emptyAutomationRunItems,
@@ -56,6 +58,10 @@ export async function openAutomationDetailAction({
   setLibraryPanel((currentPanel) =>
     automationDetailPanel(currentPanel, automationPanel),
   );
+
+  if (action.controlAutomationId) {
+    return true;
+  }
 
   if (!isConnected) {
     return true;

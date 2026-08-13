@@ -82,6 +82,8 @@ export type LibraryPanelAction = {
   automationTitle?: string;
   automationThreadId?: string;
   automationPrompt?: string;
+  controlAutomationId?: string;
+  controlAutomationRevision?: 1;
   threadId?: string;
   skillEnabled?: boolean;
   skillName?: string;
@@ -767,6 +769,8 @@ export type LibraryItem = {
         threadId?: string;
         config?: AutomationConfig;
         configPath?: string;
+        controlAutomationId?: string;
+        controlAutomationRevision?: 1;
       }
     | {
         type: "external-agent-import";

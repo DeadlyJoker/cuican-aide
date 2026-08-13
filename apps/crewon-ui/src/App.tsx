@@ -463,13 +463,14 @@ export function App({
     setLibraryPanel,
     setNotice,
   });
-  const { openLibrary: openLegacyLibrary, openLibraryItem } =
+  const { openLibrary: openBackendLibrary, openLibraryItem } =
     createAppLibraryOpenCoordinator({
       connectionHint: t.connectionHints[connectionState],
+      controlClient,
       createBackendAgentConfig,
       cwd,
       ensureOfficeThread,
-      getClient: () => clientRef.current,
+      getClient: () => legacyDomainClient,
       isConnected,
       isDemo,
       isDemoPreview,
@@ -491,9 +492,9 @@ export function App({
       storedAutomationItems: automationConfigRecordsToLibraryItems,
       writeAgentConfig: writeAgentConfigFile,
     });
-  const openLibrary = async (kind: Parameters<typeof openLegacyLibrary>[0]) => {
-    if (controlClient === null) {
-      await openLegacyLibrary(kind);
+  const openLibrary = async (kind: Parameters<typeof openBackendLibrary>[0]) => {
+    if (controlClient === null || kind === "automation") {
+      await openBackendLibrary(kind);
       return;
     }
     setAppView("library");
@@ -546,6 +547,7 @@ export function App({
   const handleLibraryPanelAction = createAppLibraryPanelDispatchCoordinator({
     automationRunByTurnRef,
     client: clientRef.current,
+    controlClient,
     confirm: requestConfirm,
     createBackendAgentConfig,
     ensureBackendToolThread,
