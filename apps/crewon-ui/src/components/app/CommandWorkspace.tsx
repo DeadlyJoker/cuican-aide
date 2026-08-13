@@ -24,10 +24,6 @@ import {
   type CommandOfficeCreationInput,
 } from "./commandOfficeCreation";
 import {
-  clearLegacyCommandTeamWorkspaceCwd,
-  legacyCommandTeamWorkspaceCwd,
-} from "./commandTeamWorkspace";
-import {
   CommandSidebar,
   Palette,
   type CommandLinkedThread,
@@ -264,12 +260,8 @@ type CommandWorkspaceProps = {
     ) => Promise<{ record: ExpertTeamRecordReference }>;
   } | null;
   workspaceOperations?: CommandWorkspaceOperationsSlot | null;
-  /**
-   * `control` removes every legacy cwd/path authority surface. Omission keeps
-   * historical call sites in the legacy cohort; production composition passes
-   * this explicitly.
-   */
-  workspaceAuthority?: CommandWorkspaceAuthority;
+  /** `control` removes every legacy cwd/path authority surface. */
+  workspaceAuthority: CommandWorkspaceAuthority;
   scheduleClient?: ScheduleClient | null;
   isSending: boolean;
   linkedThreads?: Thread[];
@@ -293,7 +285,6 @@ type CommandWorkspaceProps = {
     sequence: number;
   } | null;
   workMode: WorkMode;
-  onAttachContext: (workspaceCwd?: string | null) => void;
   onAddLocalResources?: (
     files: File[],
     kind: LocalResourceSelectionKind,
@@ -563,7 +554,7 @@ export function CommandWorkspace({
   executionTargetClient = null,
   scheduleClient = null,
   workspaceOperations = null,
-  workspaceAuthority = "legacy",
+  workspaceAuthority,
   isSending,
   linkedThreads = [],
   locale = "zh",
@@ -738,23 +729,6 @@ export function CommandWorkspace({
     setSelectedOfficeRecord(null);
     setOfficeRoomError(null);
   }, [cwd]);
-
-  // Legacy links carried a separate ?teamCwd= workspace for the team page. The
-  // workspace now has a single source of truth (the sidebar), so adopt the old
-  // parameter once and drop it from the URL.
-  useEffect(() => {
-    if (workspaceAuthority !== "legacy") {
-      return;
-    }
-    const legacyCwd = legacyCommandTeamWorkspaceCwd();
-    if (!legacyCwd) {
-      return;
-    }
-    clearLegacyCommandTeamWorkspaceCwd();
-    if (legacyCwd !== cwd.trim()) {
-      onChangeWorkspaceCwd?.(legacyCwd);
-    }
-  }, [cwd, onChangeWorkspaceCwd, workspaceAuthority]);
 
   useEffect(() => {
     let cancelled = false;

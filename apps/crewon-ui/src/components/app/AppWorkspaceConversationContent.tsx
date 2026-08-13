@@ -81,8 +81,8 @@ export function AppWorkspaceConversationContent({
         locale={locale}
         modelOptions={modelOptions}
         slashCommands={slashCommands}
+        workspaceAuthority="control"
         workMode={workMode}
-        onAttachContext={onAttachContext}
         onChangeComposerValue={onChangeComposerValue}
         onModeChange={onModeChange}
         onSaveCapability={onSaveCapability}

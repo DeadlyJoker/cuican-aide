@@ -1,5 +1,6 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { ComponentProps } from "react";
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { ProviderResourceSnapshot } from "../../lib/provider-resource/providerResourceSession";
 
@@ -9,7 +10,7 @@ import {
   cleanSlotTitle,
   commandComposerResourceSelection,
   commandComposerKeyIntent,
-  CommandWorkspace,
+  CommandWorkspace as CommandWorkspaceComponent,
   type CommandWorkspaceOperationsSlot,
   executionIntentAfterCommit,
   insertTokenIntoComposerValue,
@@ -27,6 +28,30 @@ import { Palette } from "./CommandWorkspaceChrome";
 import { commandSceneSlashItems } from "./commandWorkspaceSceneResources";
 import type { AgentPlatformSnapshot } from "../../lib/agent-platform/agentPlatformClient";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
+
+type TestCommandWorkspaceProps = Omit<
+  ComponentProps<typeof CommandWorkspaceComponent>,
+  "workspaceAuthority"
+> & {
+  onAttachContext?: (workspaceCwd?: string | null) => void;
+  workspaceAuthority?: ComponentProps<
+    typeof CommandWorkspaceComponent
+  >["workspaceAuthority"];
+};
+
+/** Legacy workspace markup remains available only as an explicit test fixture. */
+function CommandWorkspace({
+  onAttachContext: _onAttachContext,
+  workspaceAuthority = "legacy",
+  ...props
+}: TestCommandWorkspaceProps) {
+  return (
+    <CommandWorkspaceComponent
+      {...props}
+      workspaceAuthority={workspaceAuthority}
+    />
+  );
+}
 
 function snapshot(): AgentPlatformSnapshot {
   return {

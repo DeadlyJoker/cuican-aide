@@ -69,6 +69,21 @@ describe("App Workspace Control composition", () => {
     expect(composition).not.toMatch(
       /readWorkspaceFiles|attachWorkspaceContext|clientRef|\bcwd\b|\bplatform\b/u,
     );
+    const routeStart = source.indexOf("<AppCommandShellRoute");
+    const routeEnd = source.indexOf("return (\n    <AppShellChromeFrame", routeStart);
+    expect(source.slice(routeStart, routeEnd)).not.toContain("onAttachContext=");
+  });
+
+  it("requires an explicit Workspace authority and has no URL authority fallback", () => {
+    const source = readFileSync(
+      new URL("../../components/app/CommandWorkspace.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("workspaceAuthority: CommandWorkspaceAuthority;");
+    expect(source).toContain("workspaceAuthority,");
+    expect(source).not.toContain('workspaceAuthority = "legacy"');
+    expect(source).not.toContain("teamCwd");
   });
 
   it("keeps the hook free of legacy filesystem and AppServer fallbacks", () => {

@@ -1012,10 +1012,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           onCancel: () => resolveConfirm(false),
           onConfirm: () => resolveConfirm(true),
         }}
-        onAttachContext={(workspaceCwd) => {
-          officeAttachmentConsumerRef.current = null;
-          void attachWorkspaceContext(workspaceCwd);
-        }}
         onAddLocalResources={(files, kind) =>
           addLocalComposerResources({
             client: null,
