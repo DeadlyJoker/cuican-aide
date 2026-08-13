@@ -34,6 +34,7 @@ import type {
   GetAgentVersionResponse,
   GetAutomationResponse,
   GetArtifactResponse,
+  GetAccountSnapshotResponse,
   GetModelProviderSettingsResponse,
   GetRunResponse,
   GetThreadResponse,
@@ -119,6 +120,15 @@ export class ControlApiClient {
     );
     this.#origin = optionalOrigin(config.origin);
     this.#fetch = config.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  getAccountSnapshot(
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetAccountSnapshotResponse> {
+    return this.#json("GET", "/api/v1/account-snapshot", null, {
+      ...options,
+      expectedStatuses: [200],
+    });
   }
 
   getLocalSettings(

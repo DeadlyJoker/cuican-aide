@@ -356,6 +356,20 @@ export function buildControlApi(
     void reply.code(mapped.statusCode).send(mapped.body);
   });
 
+  app.get("/api/v1/account-snapshot", async (request) => {
+    const actor = await dependencies.identity.resolveActor(
+      requestContext(request),
+    );
+    return {
+      account: {
+        identity: actor,
+        authentication: { status: "authenticated", authority: "control" },
+        usage: { status: "unavailable", reason: "notOwned" },
+        rateLimits: { status: "unavailable", reason: "notOwned" },
+      },
+    };
+  });
+
   app.get("/api/v1/local-settings", async (request) => {
     await dependencies.identity.resolveActor(requestContext(request));
     if (dependencies.localSettings == null)

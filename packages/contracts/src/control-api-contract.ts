@@ -4,6 +4,9 @@ import { ContractValidationError } from "./contract-validation-error.ts";
 
 export type ControlApiPaths = paths;
 export type ControlApiOperations = operations;
+export type AccountSnapshot = components["schemas"]["AccountSnapshot"];
+export type GetAccountSnapshotResponse =
+  components["schemas"]["GetAccountSnapshotResponse"];
 export type LocalSettings = components["schemas"]["LocalSettings"];
 export type LocalSettingsResponse =
   components["schemas"]["LocalSettingsResponse"];

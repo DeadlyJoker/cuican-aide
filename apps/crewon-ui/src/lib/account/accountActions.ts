@@ -60,7 +60,10 @@ export type AccountActionHandlersParams = {
 };
 
 export type RefreshAccountPanelActionParams = {
-  controlClient?: Pick<ControlApiClient, "getLocalSettings"> | null;
+  controlClient?: Pick<
+    ControlApiClient,
+    "getAccountSnapshot" | "getLocalSettings"
+  > | null;
   client: AccountRefreshClient | null | undefined;
   connectionHint: string;
   connectionState: ConnectionState;
@@ -119,7 +122,10 @@ export async function refreshAccountPanelAction({
 }: RefreshAccountPanelActionParams) {
   if (controlClient != null) {
     try {
-      const { settings } = await controlClient.getLocalSettings();
+      const [{ account }, { settings }] = await Promise.all([
+        controlClient.getAccountSnapshot(),
+        controlClient.getLocalSettings(),
+      ]);
       setCapabilityPanel({
         title: locale === "zh" ? "账号" : "Account",
         subtitle:
@@ -127,16 +133,28 @@ export async function refreshAccountPanelAction({
             ? "CrewON 身份与本机偏好"
             : "CrewON identity and local preferences",
         body: [
-          platformUser?.display_name ??
-            platformUser?.nickname ??
-            platformUser?.username ??
-            platformUser?.email ??
-            (locale === "zh" ? "未登录企业账号" : "No enterprise account"),
+          `${locale === "zh" ? "Control 身份" : "Control identity"}: ${account.identity.principalId}`,
+          `${locale === "zh" ? "执行主体" : "Actor"}: ${account.identity.actorId}`,
+          `${locale === "zh" ? "租户 / 空间" : "Tenant / space"}: ${account.identity.tenantId} / ${account.identity.spaceId}`,
+          `${locale === "zh" ? "认证状态" : "Authentication"}: ${account.authentication.status} (${account.authentication.authority})`,
+          platformUser
+            ? `${locale === "zh" ? "企业资料" : "Enterprise profile"}: ${
+                platformUser.display_name ??
+                platformUser.nickname ??
+                platformUser.username
+              }`
+            : null,
           platformUser?.email
             ? `${locale === "zh" ? "邮箱" : "Email"}: ${platformUser.email}`
             : null,
           `${locale === "zh" ? "语言" : "Language"}: ${settings.locale}`,
           `${locale === "zh" ? "主题" : "Theme"}: ${settings.theme}`,
+          locale === "zh"
+            ? "账户使用量：不可用（Control 没有该数据权威）"
+            : "Account usage: unavailable (not owned by Control)",
+          locale === "zh"
+            ? "账户限流：不可用（Control 没有该数据权威）"
+            : "Account rate limits: unavailable (not owned by Control)",
           locale === "zh"
             ? "本页不再连接 App Server；模型凭据在“模型接入”中管理。"
             : "This page no longer connects to App Server; model credentials are managed under Model access.",

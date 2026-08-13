@@ -241,7 +241,9 @@ describe("account actions", () => {
       baseParams({
         client: {
           async getAccount() {
-            return accountStatus({ account: account({ email: "new@example.com" }) });
+            return accountStatus({
+              account: account({ email: "new@example.com" }),
+            });
           },
           async loginAccount() {
             return { type: "chatgptAuthTokens" };
@@ -328,6 +330,80 @@ describe("account actions", () => {
       error: "denied",
       subtitle: "Auth action",
     });
+  });
+
+  it("renders authenticated Control identity and explicit unavailable telemetry", async () => {
+    let panel: CapabilityPanel | null = null;
+    await refreshAccountPanelAction(
+      baseRefreshParams({
+        controlClient: {
+          async getAccountSnapshot() {
+            return {
+              account: {
+                identity: {
+                  principalId: "principal-1",
+                  actorId: "actor-1",
+                  tenantId: "tenant-1",
+                  spaceId: "space-1",
+                },
+                authentication: {
+                  status: "authenticated",
+                  authority: "control",
+                },
+                usage: { status: "unavailable", reason: "notOwned" },
+                rateLimits: { status: "unavailable", reason: "notOwned" },
+              },
+            };
+          },
+          async getLocalSettings() {
+            return {
+              settings: {
+                locale: "en",
+                theme: "dark",
+                revision: 1,
+                updatedAt: null,
+              },
+            };
+          },
+        },
+        setCapabilityPanel: (nextPanel) => {
+          panel = nextPanel;
+        },
+      }),
+    );
+
+    expect(panel).toMatchObject({
+      title: "Account",
+      actions: [{ id: "refresh-account", label: "Refresh" }],
+    });
+    const body = (panel as CapabilityPanel | null)?.body ?? "";
+    expect(body).toContain("Control identity: principal-1");
+    expect(body).toContain("Authentication: authenticated (control)");
+    expect(body).toContain("Account usage: unavailable (not owned by Control)");
+    expect(body).toContain(
+      "Account rate limits: unavailable (not owned by Control)",
+    );
+    expect(panel).toMatchInlineSnapshot(`
+      {
+        "actions": [
+          {
+            "id": "refresh-account",
+            "label": "Refresh",
+          },
+        ],
+        "body": "Control identity: principal-1
+      Actor: actor-1
+      Tenant / space: tenant-1 / space-1
+      Authentication: authenticated (control)
+      Language: en
+      Theme: dark
+      Account usage: unavailable (not owned by Control)
+      Account rate limits: unavailable (not owned by Control)
+      This page no longer connects to App Server; model credentials are managed under Model access.",
+        "subtitle": "CrewON identity and local preferences",
+        "title": "Account",
+      }
+    `);
   });
 
   it("shows a disconnected refresh panel without backend reads", async () => {

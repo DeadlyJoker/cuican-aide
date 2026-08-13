@@ -7,6 +7,26 @@
   "servers": [{ "url": "/" }],
   "security": [{ "sessionCookie": [] }, { "mobileBearer": [] }],
   "paths": {
+    "/api/v1/account-snapshot": {
+      "get": {
+        "operationId": "getAccountSnapshot",
+        "responses": {
+          "200": {
+            "description": "Authenticated Control identity with explicitly unavailable unowned telemetry",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetAccountSnapshotResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/api/v1/local-settings": {
       "get": {
         "operationId": "getLocalSettings",
@@ -2310,6 +2330,60 @@
       }
     },
     "schemas": {
+      "AccountIdentitySnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["principalId", "actorId", "tenantId", "spaceId"],
+        "properties": {
+          "principalId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "actorId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "tenantId": { "type": "string", "minLength": 1, "maxLength": 512 },
+          "spaceId": { "type": "string", "minLength": 1, "maxLength": 512 }
+        }
+      },
+      "AccountAuthenticationSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "authority"],
+        "properties": {
+          "status": { "type": "string", "const": "authenticated" },
+          "authority": { "type": "string", "const": "control" }
+        }
+      },
+      "UnavailableAccountMetric": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["status", "reason"],
+        "properties": {
+          "status": { "type": "string", "const": "unavailable" },
+          "reason": { "type": "string", "const": "notOwned" }
+        }
+      },
+      "AccountSnapshot": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["identity", "authentication", "usage", "rateLimits"],
+        "properties": {
+          "identity": {
+            "$ref": "#/components/schemas/AccountIdentitySnapshot"
+          },
+          "authentication": {
+            "$ref": "#/components/schemas/AccountAuthenticationSnapshot"
+          },
+          "usage": { "$ref": "#/components/schemas/UnavailableAccountMetric" },
+          "rateLimits": {
+            "$ref": "#/components/schemas/UnavailableAccountMetric"
+          }
+        }
+      },
+      "GetAccountSnapshotResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["account"],
+        "properties": {
+          "account": { "$ref": "#/components/schemas/AccountSnapshot" }
+        }
+      },
       "LocalSettings": {
         "type": "object",
         "additionalProperties": false,

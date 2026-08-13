@@ -436,6 +436,38 @@ test("serves local settings with CSRF, atomic CAS, and stable unavailability", a
   );
 });
 
+test("serves an authenticated account snapshot without inventing telemetry", async (context) => {
+  const runtime = await testRuntime(context);
+  const response = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/account-snapshot",
+    headers: readHeaders(),
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json(), {
+    account: {
+      identity: {
+        principalId: "standalone-principal",
+        actorId: "standalone-actor",
+        tenantId: "standalone-tenant",
+        spaceId: "standalone-space",
+      },
+      authentication: { status: "authenticated", authority: "control" },
+      usage: { status: "unavailable", reason: "notOwned" },
+      rateLimits: { status: "unavailable", reason: "notOwned" },
+    },
+  });
+  assertError(
+    await runtime.app.inject({
+      method: "GET",
+      url: "/api/v1/account-snapshot",
+    }),
+    401,
+    "authentication",
+    "session_invalid",
+  );
+});
+
 test("Office receipt replay is stable and selected target starts a canonical Run", async (context) => {
   const runtime = await testRuntime(context);
   const threadResponse = await runtime.app.inject({

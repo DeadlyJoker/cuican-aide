@@ -90,6 +90,7 @@ const openApi = JSON.parse(
 test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields", () => {
   assert.equal(openApi.openapi, "3.1.1");
   assert.deepEqual(Object.keys(openApi.paths).sort(), [
+    "/api/v1/account-snapshot",
     "/api/v1/agent-versions",
     "/api/v1/agent-versions/active",
     "/api/v1/agent-versions/{agentVersionId}",

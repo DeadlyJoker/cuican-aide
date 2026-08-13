@@ -44,6 +44,32 @@ test("reads and updates device-local settings through the typed client", async (
   );
 });
 
+test("reads the safe account snapshot through the typed client", async () => {
+  let requested = "";
+  const response = {
+    account: {
+      identity: {
+        principalId: "principal-1",
+        actorId: "actor-1",
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+      },
+      authentication: { status: "authenticated", authority: "control" },
+      usage: { status: "unavailable", reason: "notOwned" },
+      rateLimits: { status: "unavailable", reason: "notOwned" },
+    },
+  } as const;
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async (input) => {
+      requested = String(input);
+      return jsonResponse(200, response);
+    },
+  });
+  assert.deepEqual(await client.getAccountSnapshot(), response);
+  assert.equal(requested, "https://control.example/api/v1/account-snapshot");
+});
+
 test("lists the active capability catalog with an opaque cursor", async () => {
   let requested = "";
   const response = {
