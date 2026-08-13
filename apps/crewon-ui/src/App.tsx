@@ -57,7 +57,6 @@ import {
   saveCapabilityDraftAction,
   withPlatformResourceMention,
   useAppDraftWorkspaceState,
-  useProviderResourceComposer,
   workspaceCwdForAuthority,
   showDemoThreadsAction,
 } from "./lib/app";
@@ -240,13 +239,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     untitledThreadLabel: t.untitledThread,
   });
   const commandModelOptions: CommandModelOption[] = [];
-  const providerResourceComposer = useProviderResourceComposer({
-    client: null,
-    connectionAttempt: 0,
-    isConnected,
-    ...threadState,
-    onError: (message) => setNotice({ text: message, tone: "warning" }),
-  });
   const controlComposerResources = useControlComposerResourceDiscovery({
     client: controlRuntimeConnected ? controlClient : null,
     connected: controlRuntimeConnected,
@@ -591,8 +583,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     setNotice,
     shouldAutoCloseSidebar,
     untitledThreadLabel: t.untitledThread,
-    prepareThreadExecutionContext:
-      providerResourceComposer.prepareThreadExecutionContext,
   });
   const {
     openCommandShellThread,
@@ -922,7 +912,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         }}
         officeRoomAdapter={commandOfficeRoomAdapter}
         pendingComposerMentions={pendingComposerMentions}
-        providerResource={providerResourceComposer.commandShellResource}
         confirmDialog={{
           locale,
           request: confirmRequest,

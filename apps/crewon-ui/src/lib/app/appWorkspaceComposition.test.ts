@@ -78,6 +78,17 @@ describe("App Workspace Control composition", () => {
     expect(source).not.toContain("workspaceCapabilityHandlersForAuthority");
   });
 
+  it("does not compose the disconnected App Server Provider resource hook", () => {
+    const source = readFileSync(
+      new URL("../../App.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("useControlComposerResourceDiscovery");
+    expect(source).not.toContain("useProviderResourceComposer");
+    expect(source).not.toContain("providerResourceComposer");
+  });
+
   it("sources the packaged command target and model catalogs only from Control", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),
