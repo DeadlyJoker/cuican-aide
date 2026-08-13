@@ -86,6 +86,7 @@ import { officeRecordKey } from "./lib/office/officePanelFromRecord";
 import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate";
 import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
+import { useControlCommandCatalog } from "./lib/control-runtime/useControlCommandCatalog";
 import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWorkspaceRuntime";
 import { selectThreadRuntimeAuthority } from "./lib/control-runtime/threadRuntimeAuthority";
 import { legacyDomainClientForAuthority } from "./lib/control-runtime/legacyDomainAuthority";
@@ -193,6 +194,10 @@ export function App({
     setThreads: threadState.setThreads,
     showArchivedThreadsRef,
   });
+  const controlCommandCatalog = useControlCommandCatalog({
+    client: controlClient,
+    connected: controlRuntimeConnected,
+  });
   const controlWorkspace = useControlWorkspaceRuntime({
     client: controlRuntimeConnected ? controlClient : null,
     nativeAuthority:
@@ -273,9 +278,9 @@ export function App({
     legacyClient: clientRef.current,
   });
   const commandModelOptions = useAppCommandModelOptions({
-    client: clientRef.current,
+    client: controlClient === null ? clientRef.current : null,
     connectionAttempt,
-    isConnected,
+    isConnected: controlClient === null && isConnected,
   });
   const providerResourceComposer = useProviderResourceComposer({
     client: clientRef.current,
@@ -1034,7 +1039,17 @@ export function App({
         threadGoalBusy={threadGoalBusy}
         workMode={workMode}
         modelOptions={commandModelOptions}
-        executionTargetClient={clientRef.current}
+        controlExecutionCatalog={
+          controlClient === null
+            ? undefined
+            : (controlCommandCatalog ?? {
+                modelOptionsByTarget: {},
+                targets: [],
+              })
+        }
+        executionTargetClient={
+          controlClient === null ? clientRef.current : null
+        }
         scheduleClient={legacyDomainClient}
         workspaceAuthority={workspaceUiAuthority}
         workspaceOperations={

@@ -878,6 +878,66 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("最深入的推理");
   });
 
+  it("renders only Control Agent versions and their bound model on the home composer", () => {
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        controlExecutionCatalog={{
+          modelOptionsByTarget: {
+            crewon: [
+              {
+                isDefault: true,
+                label: "control-model",
+                value: "control-model",
+              },
+            ],
+          },
+          targets: [
+            {
+              detail: "Control · control-model",
+              kind: "crewon",
+              label: "CrewON · 单 Agent",
+              strategy: "single",
+              value: "crewon",
+            },
+          ],
+        }}
+        cwd="/repo/frontend"
+        executionTargetClient={{
+          addOfficeMemberConfig: vi.fn(),
+          createOfficeConfig: vi.fn(),
+          listAgentConfigs: vi.fn(async () => ({
+            data: [
+              {
+                config: {
+                  id: "legacy-agent",
+                  name: "Legacy Agent",
+                } as never,
+                filePath: "/legacy-agent.json",
+              },
+            ],
+          })),
+          listOfficeConfigs: vi.fn(async () => ({ data: [] })),
+        }}
+        isSending={false}
+        modelOptions={[{ label: "legacy-model", value: "legacy-model" }]}
+        workMode="code"
+        onAttachContext={() => undefined}
+        onChangeComposerValue={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain("CrewON · 单 Agent");
+    expect(markup).toContain("control-model");
+    expect(markup).not.toContain("Legacy Agent");
+    expect(markup).not.toContain("legacy-model");
+    expect(markup).not.toContain("Team");
+  });
+
   it("shows run progress and the active goal above a thread composer", () => {
     const thread = {
       cwd: "/repo/frontend",

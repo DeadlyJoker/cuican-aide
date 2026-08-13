@@ -16,6 +16,22 @@ describe("App Workspace Control composition", () => {
     expect(source).toContain("const client = legacyDomainClient");
   });
 
+  it("sources the packaged command target and model catalogs only from Control", () => {
+    const source = readFileSync(
+      new URL("../../App.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("useControlCommandCatalog({");
+    expect(source).toContain(
+      "client: controlClient === null ? clientRef.current : null",
+    );
+    expect(source).toContain(
+      "executionTargetClient={\n          controlClient === null ? clientRef.current : null",
+    );
+    expect(source).toContain("controlExecutionCatalog={");
+  });
+
   it("derives the visible slot only from Control and native authority", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),

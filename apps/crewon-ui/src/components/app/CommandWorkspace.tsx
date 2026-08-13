@@ -94,6 +94,7 @@ import type { ExpertTeamRecordReference } from "../../lib/experts/expertTeamReco
 import {
   executionTargetGroups,
   executionTargetOptionsFromDomain,
+  type ExecutionTargetOption,
   scenePresets,
   scenePresetsEn,
   type CommandScene,
@@ -194,6 +195,10 @@ type CommandWorkspaceProps = {
   assistantThread?: Thread | null;
   composerValue: string;
   connectionState: ConnectionState;
+  controlExecutionCatalog?: Readonly<{
+    modelOptionsByTarget: Readonly<Record<string, CommandModelOption[]>>;
+    targets: ExecutionTargetOption[];
+  }> | null;
   cwd: string;
   executionTargetClient?: {
     addOfficeMemberConfig: CommandOfficeCreationClient["addOfficeMemberConfig"];
@@ -553,6 +558,7 @@ export function CommandWorkspace({
   assistantThread = null,
   composerValue,
   connectionState,
+  controlExecutionCatalog,
   cwd,
   executionTargetClient = null,
   scheduleClient = null,
@@ -1084,8 +1090,13 @@ export function CommandWorkspace({
     selectedThreadId,
   ]);
 
-  const effectiveModelOptions =
-    modelOptions.length > 0 ? modelOptions : fallbackCommandModelOptions;
+  const selectedControlModelOptions =
+    controlExecutionCatalog?.modelOptionsByTarget[executionTarget];
+  const effectiveModelOptions = controlExecutionCatalog
+    ? (selectedControlModelOptions ?? [])
+    : modelOptions.length > 0
+      ? modelOptions
+      : fallbackCommandModelOptions;
 
   useEffect(() => {
     const defaultModel = effectiveModelOptions.find(
@@ -1095,14 +1106,19 @@ export function CommandWorkspace({
       setModel(
         defaultModel ??
           effectiveModelOptions[0]?.value ??
-          fallbackCommandModelOptions[0].value,
+          (controlExecutionCatalog ? "" : fallbackCommandModelOptions[0].value),
       );
       return;
     }
     if (!modelSelectionTouched && defaultModel && model !== defaultModel) {
       setModel(defaultModel);
     }
-  }, [effectiveModelOptions, model, modelSelectionTouched]);
+  }, [
+    controlExecutionCatalog,
+    effectiveModelOptions,
+    model,
+    modelSelectionTouched,
+  ]);
 
   // Derived rather than synced through an effect: an unsupported effort after a
   // model swap resolves to that model's catalog default on the same render, so
@@ -1270,6 +1286,9 @@ export function CommandWorkspace({
     onRemoveComposerMention?.(resource.id);
   }
   const executionTargets = useMemo(() => {
+    if (controlExecutionCatalog) {
+      return controlExecutionCatalog.targets;
+    }
     const domainTargets = executionTargetOptionsFromDomain({
       ...executionTargetCatalog,
       locale,
@@ -1307,6 +1326,7 @@ export function CommandWorkspace({
       ...expertTargets,
     ];
   }, [
+    controlExecutionCatalog,
     executionTargetCatalog,
     expertTeams,
     locale,
@@ -1614,7 +1634,7 @@ export function CommandWorkspace({
 
   function sendComposerValue(submittedValue = composerValue) {
     const trimmed = submittedValue.trim();
-    if (isSending || !trimmed) {
+    if (isSending || !trimmed || (controlExecutionCatalog && !model)) {
       return;
     }
     onChangeComposerValue("");
