@@ -1,5 +1,6 @@
 export * from "./execution-lifecycle.ts";
 export * from "./artifact.ts";
+export * from "./knowledge.ts";
 export * from "./automation.ts";
 export * from "./model-history.ts";
 export * from "./model-dispatch-receipt.ts";

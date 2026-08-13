@@ -17,7 +17,8 @@ export type ApplicationIdKind =
   | "approval"
   | "toolReceipt"
   | "toolExecution"
-  | "artifact";
+  | "artifact"
+  | "knowledge";
 
 export interface ApplicationIdGenerator {
   nextId(kind: ApplicationIdKind): string;

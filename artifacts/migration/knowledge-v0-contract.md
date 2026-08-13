@@ -8,6 +8,8 @@ does not define embeddings, retrieval ranking, background ingestion, or scheduli
 `crewon.knowledge.v0` stores one immutable UTF-8 text record scoped by `(tenantId, spaceId)`:
 
 - `knowledgeId`, `tenantId`, `spaceId`, `ownerActorId`, and `sourceId` are bounded opaque IDs.
+  `sourceId` is required for both kinds: for `memory` it identifies the producer/capture event; for
+  `source` it identifies the originating source. Absence is rejected rather than inferred.
 - `kind` is `memory` or `source`; `title` is 1..256 UTF-8 bytes and `content` is 1..32768 UTF-8
   bytes. Lone UTF-16 surrogates and non-NFC strings are rejected.
 - `contentDigest` is the lowercase `sha256:<64 hex>` digest of the UTF-8 content.

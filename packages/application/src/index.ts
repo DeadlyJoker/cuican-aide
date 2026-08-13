@@ -15,6 +15,8 @@ export * from "./authorization-port.ts";
 export * from "./durable-queue-port.ts";
 export * from "./domain-store-port.ts";
 export * from "./goal-tool.ts";
+export * from "./knowledge-application-service.ts";
+export * from "./knowledge-store-port.ts";
 export * from "./goal-tool-store-port.ts";
 export * from "./model-history-store-port.ts";
 export * from "./model-dispatch-evidence-store-port.ts";

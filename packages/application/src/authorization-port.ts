@@ -81,6 +81,15 @@ export type WorkflowVersionAuthorizationResource = Readonly<{
 }>;
 
 export type ArtifactAuthorizationAction = "artifact:read";
+export type KnowledgeAuthorizationAction =
+  | "knowledge:create"
+  | "knowledge:read";
+export type KnowledgeAuthorizationResource = Readonly<{
+  kind: "knowledge";
+  tenantId: string;
+  spaceId: string;
+  knowledgeId: string | null;
+}>;
 
 export type ArtifactAuthorizationResource = Readonly<{
   kind: "artifact";
@@ -109,6 +118,7 @@ export type AuthorizationAction =
   | AgentVersionAuthorizationAction
   | WorkflowVersionAuthorizationAction
   | ArtifactAuthorizationAction
+  | KnowledgeAuthorizationAction
   | ModelProviderSettingsAuthorizationAction;
 
 export type AuthorizationResource =
@@ -118,6 +128,7 @@ export type AuthorizationResource =
   | AgentVersionAuthorizationResource
   | WorkflowVersionAuthorizationResource
   | ArtifactAuthorizationResource
+  | KnowledgeAuthorizationResource
   | ModelProviderSettingsAuthorizationResource;
 
 export type AuthorizationDecision =
