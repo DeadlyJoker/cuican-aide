@@ -218,7 +218,9 @@ describe("thread settings panel helpers", () => {
         currentModel: "gpt-5",
         currentSandbox: "workspace-write",
         modelOptions: [{ label: "GPT-5", value: "gpt-5" }],
-        sandboxOptions: [{ label: "workspace-write", value: "workspace-write" }],
+        sandboxOptions: [
+          { label: "workspace-write", value: "workspace-write" },
+        ],
       }),
     ).toEqual([
       {
@@ -278,7 +280,9 @@ describe("thread settings panel helpers", () => {
         currentModel: "gpt-5",
         currentSandbox: "workspace-write",
         modelOptions: [{ label: "GPT-5", value: "gpt-5" }],
-        sandboxOptions: [{ label: "workspace-write", value: "workspace-write" }],
+        sandboxOptions: [
+          { label: "workspace-write", value: "workspace-write" },
+        ],
       }),
     });
     expect(
@@ -305,9 +309,7 @@ describe("thread settings panel helpers", () => {
     expect(threadCompactSuccessBody("en")).toBe(
       "Context compaction started. It will appear in this session when complete.",
     );
-    expect(threadCompactFailureMessage(null, "zh")).toBe(
-      "启动上下文压缩失败",
-    );
+    expect(threadCompactFailureMessage(null, "zh")).toBe("启动上下文压缩失败");
     expect(threadCompactFailureMessage(new Error("denied"), "en")).toBe(
       "denied",
     );

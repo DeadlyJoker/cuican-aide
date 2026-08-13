@@ -158,7 +158,8 @@ async function handleAction(
 ): Promise<{ handled: boolean; state: CapturedRecruitState }> {
   const state: CapturedRecruitState = {
     ensuredThreads: [],
-    libraryPanel: options.libraryPanel === undefined ? panel() : options.libraryPanel,
+    libraryPanel:
+      options.libraryPanel === undefined ? panel() : options.libraryPanel,
     notice: null,
     persistedMembers: [],
     startedTurns: [],
@@ -197,7 +198,11 @@ async function handleAction(
       member,
       threadId,
     ) => {
-      state.persistedMembers.push({ agentId, memberName: member.name, threadId });
+      state.persistedMembers.push({
+        agentId,
+        memberName: member.name,
+        threadId,
+      });
       const workspaceWithoutThread = { ...workspaceBeforeMember };
       delete workspaceWithoutThread.threadId;
       return Object.hasOwn(options, "persistResult")
@@ -287,7 +292,9 @@ describe("library office recruit actions", () => {
     expect(state.startedTurns).toEqual([
       {
         threadId: "office-thread",
-        text: expect.stringContaining('Office "Office" recruited agent: Planner'),
+        text: expect.stringContaining(
+          'Office "Office" recruited agent: Planner',
+        ),
       },
     ]);
     expect(state.threads[0]?.turns).toEqual([turn()]);
