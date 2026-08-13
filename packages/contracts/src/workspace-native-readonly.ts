@@ -1,5 +1,6 @@
 import { ContractValidationError } from "./contract-validation-error.ts";
-export const WORKSPACE_NATIVE_READONLY_PATH = "/worker/v1/workspace-native-readonly" as const;
+export const WORKSPACE_NATIVE_READONLY_PATH =
+  "/worker/v1/workspace-native-readonly" as const;
 export const WORKSPACE_NATIVE_READONLY_LIMITS = {
   requestBytes: 8 * 1024,
   responseBytes: 256 * 1024,
@@ -9,7 +10,11 @@ export const WORKSPACE_NATIVE_READONLY_LIMITS = {
   maxFileBytes: 2 * 1024 * 1024,
   maxStatusEntries: 2_000,
 } as const;
-type Scope = Readonly<{ tenantId: string; spaceId: string; workspaceBindingId: string }>;
+type Scope = Readonly<{
+  tenantId: string;
+  spaceId: string;
+  workspaceBindingId: string;
+}>;
 
 export type WorkspaceContentSearchRequest = Scope &
   Readonly<{
@@ -18,24 +23,36 @@ export type WorkspaceContentSearchRequest = Scope &
     query: string;
     pathSegments: readonly string[];
     maxMatches: number;
-}>;
+  }>;
 export type WorkspaceGitStatusRequest = Scope &
   Readonly<{
     schemaVersion: "crewon.workspace-native-readonly-request.v0";
     operation: "gitStatus";
   }>;
-export type WorkspaceNativeReadonlyRequest = WorkspaceContentSearchRequest | WorkspaceGitStatusRequest;
+export type WorkspaceNativeReadonlyRequest =
+  | WorkspaceContentSearchRequest
+  | WorkspaceGitStatusRequest;
 
 export type WorkspaceNativeReadonlyControlRequest =
-  | Omit<WorkspaceContentSearchRequest, "tenantId" | "spaceId">
-  | Omit<WorkspaceGitStatusRequest, "tenantId" | "spaceId">;
+  | Omit<
+      WorkspaceContentSearchRequest,
+      "tenantId" | "spaceId" | "workspaceBindingId"
+    >
+  | Omit<
+      WorkspaceGitStatusRequest,
+      "tenantId" | "spaceId" | "workspaceBindingId"
+    >;
 
 export type WorkspaceNativeReadonlyResponse =
   | Readonly<{
       schemaVersion: "crewon.workspace-native-readonly-response.v0";
       operation: "contentSearch";
       workspaceBindingId: string;
-      matches: readonly Readonly<{ path: string; line: number; preview: string }>[];
+      matches: readonly Readonly<{
+        path: string;
+        line: number;
+        preview: string;
+      }>[];
       scannedFiles: number;
       scannedBytes: number;
       truncated: boolean;
@@ -46,9 +63,23 @@ export type WorkspaceNativeReadonlyResponse =
       workspaceBindingId: string;
       branch: string | null;
       head: string | null;
-      entries: readonly Readonly<{ path: string; index: string; worktree: string }>[];
+      entries: readonly Readonly<{
+        path: string;
+        index: string;
+        worktree: string;
+      }>[];
       truncated: boolean;
     }>;
+
+export type WorkspaceNativeReadonlyControlResponse =
+  | Omit<
+      Extract<WorkspaceNativeReadonlyResponse, { operation: "contentSearch" }>,
+      "workspaceBindingId"
+    >
+  | Omit<
+      Extract<WorkspaceNativeReadonlyResponse, { operation: "gitStatus" }>,
+      "workspaceBindingId"
+    >;
 
 export function parseWorkspaceNativeReadonlyRequest(
   input: unknown,
@@ -112,11 +143,18 @@ export function parseWorkspaceNativeReadonlyControlRequest(
   input: unknown,
 ): WorkspaceNativeReadonlyControlRequest {
   const value = object(input);
+  exact(
+    value,
+    value.operation === "contentSearch"
+      ? ["maxMatches", "operation", "pathSegments", "query", "schemaVersion"]
+      : ["operation", "schemaVersion"],
+  );
   return stripScope(
     parseWorkspaceNativeReadonlyRequest({
       ...value,
       tenantId: "control-scope",
       spaceId: "control-scope",
+      workspaceBindingId: "control-binding",
     }),
   );
 }
@@ -124,8 +162,58 @@ export function parseWorkspaceNativeReadonlyControlRequest(
 function stripScope(
   value: WorkspaceNativeReadonlyRequest,
 ): WorkspaceNativeReadonlyControlRequest {
-  const { tenantId: _tenantId, spaceId: _spaceId, ...request } = value;
+  const {
+    tenantId: _tenantId,
+    spaceId: _spaceId,
+    workspaceBindingId: _workspaceBindingId,
+    ...request
+  } = value;
   return request;
+}
+
+export function projectWorkspaceNativeReadonlyControlResponse(
+  input: unknown,
+  expected: WorkspaceNativeReadonlyRequest,
+): WorkspaceNativeReadonlyControlResponse {
+  const { workspaceBindingId: _workspaceBindingId, ...response } =
+    parseWorkspaceNativeReadonlyResponse(input, expected);
+  return response;
+}
+
+export function parseWorkspaceNativeReadonlyControlResponse(
+  input: unknown,
+  expected: WorkspaceNativeReadonlyControlRequest,
+): WorkspaceNativeReadonlyControlResponse {
+  const value = object(input);
+  exact(
+    value,
+    expected.operation === "contentSearch"
+      ? [
+          "matches",
+          "operation",
+          "scannedBytes",
+          "scannedFiles",
+          "schemaVersion",
+          "truncated",
+        ]
+      : [
+          "branch",
+          "entries",
+          "head",
+          "operation",
+          "schemaVersion",
+          "truncated",
+        ],
+  );
+  return projectWorkspaceNativeReadonlyControlResponse(
+    { ...value, workspaceBindingId: "control-binding" },
+    {
+      ...expected,
+      tenantId: "control-scope",
+      spaceId: "control-scope",
+      workspaceBindingId: "control-binding",
+    },
+  );
 }
 
 export function parseWorkspaceNativeReadonlyResponse(
@@ -146,7 +234,11 @@ export function parseWorkspaceNativeReadonlyResponse(
       !Array.isArray(value.matches) ||
       value.matches.length > expected.maxMatches ||
       !safeCount(value.scannedFiles) ||
-      !safeCount(value.scannedBytes)
+      Number(value.scannedFiles) >
+        WORKSPACE_NATIVE_READONLY_LIMITS.maxScannedFiles ||
+      !safeCount(value.scannedBytes) ||
+      Number(value.scannedBytes) >
+        WORKSPACE_NATIVE_READONLY_LIMITS.maxScannedBytes
     )
       throw invalid();
     const matches = value.matches.map((item) => {
@@ -178,11 +270,16 @@ export function parseWorkspaceNativeReadonlyResponse(
   if (
     !Array.isArray(value.entries) ||
     value.entries.length > WORKSPACE_NATIVE_READONLY_LIMITS.maxStatusEntries ||
-    !(value.branch === null ||
-      (typeof value.branch === "string" && utf8Bytes(value.branch) <= 1024 &&
-        !/[\p{Cc}\p{Cf}]/u.test(value.branch))) ||
-    !(value.head === null ||
-      (typeof value.head === "string" && /^[a-f0-9]{40,64}$/u.test(value.head)))
+    !(
+      value.branch === null ||
+      (typeof value.branch === "string" &&
+        utf8Bytes(value.branch) <= 1024 &&
+        !/[\p{Cc}\p{Cf}]/u.test(value.branch))
+    ) ||
+    !(
+      value.head === null ||
+      (typeof value.head === "string" && /^[a-f0-9]{40,64}$/u.test(value.head))
+    )
   )
     throw invalid();
   const entries = value.entries.map((item) => {
@@ -191,12 +288,18 @@ export function parseWorkspaceNativeReadonlyResponse(
     if (
       typeof entry.path !== "string" ||
       typeof entry.index !== "string" ||
-      entry.index.length !== 1 ||
+      !statusCode(entry.index) ||
       typeof entry.worktree !== "string" ||
-      entry.worktree.length !== 1
+      !statusCode(entry.worktree) ||
+      ((entry.index === "?" || entry.index === "!") &&
+        entry.worktree !== entry.index)
     )
       throw invalid();
-    return { path: resultPath(entry.path), index: entry.index, worktree: entry.worktree };
+    return {
+      path: resultPath(entry.path),
+      index: entry.index,
+      worktree: entry.worktree,
+    };
   });
   return {
     schemaVersion: value.schemaVersion,
@@ -236,13 +339,28 @@ function segment(value: unknown): string {
   return value;
 }
 function resultPath(value: string): string {
-  if (utf8Bytes(value) > 4096 || value.startsWith("/") || value.includes("\\") ||
-    value.split("/").some((part) => part.length === 0 || part === "." || part === ".." ||
-      /[\p{Cc}\p{Cf}]/u.test(part))) throw invalid();
+  if (
+    utf8Bytes(value) > 4096 ||
+    value.startsWith("/") ||
+    value.includes("\\") ||
+    value
+      .split("/")
+      .some(
+        (part) =>
+          part.length === 0 ||
+          part === "." ||
+          part === ".." ||
+          /[\p{Cc}\p{Cf}]/u.test(part),
+      )
+  )
+    throw invalid();
   return value;
 }
 function safeCount(value: unknown): boolean {
   return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+function statusCode(value: string): boolean {
+  return value.length === 1 && " MADRCU?!".includes(value);
 }
 function utf8Bytes(value: string): number {
   return new TextEncoder().encode(value).byteLength;

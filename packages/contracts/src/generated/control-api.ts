@@ -560,6 +560,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/threads/{threadId}/workspace-readonly": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post: operations["executeWorkspaceReadonly"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/threads/{threadId}/workspace-list/{executionId}": {
     parameters: {
       query?: never;
@@ -1226,6 +1242,53 @@ export interface components {
     WorkspaceOperationActionRequest: {
       expectedOperationRevision: number;
     };
+    WorkspaceNativeReadonlyRequest:
+      | {
+          /** @constant */
+          schemaVersion: "crewon.workspace-native-readonly-request.v0";
+          /** @constant */
+          operation: "contentSearch";
+          query: string;
+          pathSegments: string[];
+          maxMatches: number;
+        }
+      | {
+          /** @constant */
+          schemaVersion: "crewon.workspace-native-readonly-request.v0";
+          /** @constant */
+          operation: "gitStatus";
+        };
+    WorkspaceNativeReadonlyResponse:
+      | {
+          /** @constant */
+          schemaVersion: "crewon.workspace-native-readonly-response.v0";
+          /** @constant */
+          operation: "contentSearch";
+          matches: {
+            path: string;
+            line: number;
+            preview: string;
+          }[];
+          scannedFiles: number;
+          scannedBytes: number;
+          truncated: boolean;
+        }
+      | {
+          /** @constant */
+          schemaVersion: "crewon.workspace-native-readonly-response.v0";
+          /** @constant */
+          operation: "gitStatus";
+          branch: string | null;
+          head: string | null;
+          entries: {
+            path: string;
+            /** @enum {string} */
+            index: " " | "M" | "A" | "D" | "R" | "C" | "U" | "?" | "!";
+            /** @enum {string} */
+            worktree: " " | "M" | "A" | "D" | "R" | "C" | "U" | "?" | "!";
+          }[];
+          truncated: boolean;
+        };
     WorkspaceListEntryView: {
       /** @description A redacted direct-child name of at most 255 UTF-8 bytes; never a path. */
       name: string;
@@ -3587,6 +3650,41 @@ export interface operations {
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
       500: components["responses"]["Error"];
+    };
+  };
+  executeWorkspaceReadonly: {
+    parameters: {
+      query?: never;
+      header: {
+        /** @description Required for Thread Goal mutations. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkspaceNativeReadonlyRequest"];
+      };
+    };
+    responses: {
+      /** @description Bounded read-only result from the currently selected Workspace */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceNativeReadonlyResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
     };
   };
   getWorkspaceOperation: {

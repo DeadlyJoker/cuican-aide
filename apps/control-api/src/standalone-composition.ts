@@ -69,6 +69,7 @@ type ControlApiCompositionConfig = Readonly<{
   workspaceWorker?: Readonly<{
     origin: string;
     token: string;
+    workspaceBindingId: string;
     deadlineMs?: number;
   }>;
 }>;
@@ -325,7 +326,14 @@ function composeControlApi(
       automations,
       knowledge,
       workspaceLists,
-      workspaceReadonly: workspaceWorker,
+      workspaceReadonly:
+        workspaceWorker === null || config.workspaceWorker === undefined
+          ? null
+          : {
+              workspaceBindingId: config.workspaceWorker.workspaceBindingId,
+              executeReadonly: (input, signal) =>
+                workspaceWorker!.executeReadonly(input, signal),
+            },
       workspaceQueries,
       providerSettings,
       providerProbes,

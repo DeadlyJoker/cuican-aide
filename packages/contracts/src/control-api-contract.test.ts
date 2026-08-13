@@ -127,6 +127,7 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/threads/{threadId}/workspace-list/{executionId}/events",
     "/api/v1/threads/{threadId}/workspace-list/{executionId}:cancel",
     "/api/v1/threads/{threadId}/workspace-list/{executionId}:reconcile",
+    "/api/v1/threads/{threadId}/workspace-readonly",
     "/api/v1/threads/{threadId}:archive",
     "/api/v1/threads/{threadId}:compact",
     "/api/v1/threads/{threadId}:delete",
@@ -140,6 +141,29 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/workflow-versions",
     "/api/v1/workflow-versions/{workflowVersionId}",
   ]);
+  const workspaceReadonly = (
+    openApi.paths["/api/v1/threads/{threadId}/workspace-readonly"] as {
+      post: Record<string, any>;
+    }
+  ).post;
+  assert.equal(workspaceReadonly.operationId, "executeWorkspaceReadonly");
+  assert.deepEqual(
+    workspaceReadonly.parameters.map(
+      (parameter: { $ref: string }) => parameter.$ref,
+    ),
+    [
+      "#/components/parameters/ThreadId",
+      "#/components/parameters/RequiredCsrfToken",
+    ],
+  );
+  assert.equal(
+    workspaceReadonly.requestBody.content["application/json"].schema.$ref,
+    "#/components/schemas/WorkspaceNativeReadonlyRequest",
+  );
+  assert.equal(
+    workspaceReadonly.responses["200"].content["application/json"].schema.$ref,
+    "#/components/schemas/WorkspaceNativeReadonlyResponse",
+  );
   assert.deepEqual(
     Object.keys(openApi.components.schemas.CreateRunRequest.properties),
     ["threadId", "agentVersionId"],

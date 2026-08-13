@@ -65,6 +65,7 @@ import type {
   ThreadGoalMutationResponse,
   ThreadMutationResponse,
   ToolApprovalMutationResponse,
+  WorkspaceNativeReadonlyRequest,
 } from "@crewon/contracts";
 import {
   formatCapabilityCursor,
@@ -80,7 +81,7 @@ import {
 import { InMemoryRunStore } from "@crewon/store";
 import type { FastifyInstance } from "fastify";
 
-import { buildControlApi } from "./control-api.ts";
+import { buildControlApi, type ControlApiDependencies } from "./control-api.ts";
 import { ProcessLocalActivationGate } from "./paused-admission.ts";
 import { LocalSettingsStore } from "./local-settings-store.ts";
 import { OutboxDispatcher } from "./outbox-dispatcher.ts";
@@ -105,6 +106,124 @@ import {
 const SESSION_TOKEN = "session-token-32-bytes-minimum-0001";
 const CSRF_TOKEN = "csrf-token-32-bytes-minimum-value-1";
 const ORIGIN = "http://127.0.0.1:5175";
+
+test("authorizes and bounds the public Workspace read-only route", async (context) => {
+  let failWorker = false;
+  const observed: unknown[] = [];
+  const workspaceReadonly = {
+    workspaceBindingId: "server-workspace-binding",
+    async executeReadonly(
+      input: WorkspaceNativeReadonlyRequest,
+      _signal: AbortSignal,
+    ) {
+      observed.push(input);
+      if (failWorker) throw new Error("private_worker_failed");
+      return {
+        schemaVersion: "crewon.workspace-native-readonly-response.v0" as const,
+        operation: "contentSearch" as const,
+        workspaceBindingId: "server-workspace-binding",
+        matches: [],
+        scannedFiles: 0,
+        scannedBytes: 0,
+        truncated: false,
+      };
+    },
+  };
+  const runtime = await testRuntime(context, { workspaceReadonly });
+  const created = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/threads",
+    headers: jsonMutationHeaders("workspace-readonly-thread"),
+    payload: { title: "Workspace read-only" },
+  });
+  const threadId = created.json<ThreadMutationResponse>().thread.threadId;
+  const url = `/api/v1/threads/${threadId}/workspace-readonly`;
+  const payload = {
+    schemaVersion: "crewon.workspace-native-readonly-request.v0",
+    operation: "contentSearch",
+    query: "needle",
+    pathSegments: [],
+    maxMatches: 10,
+  };
+
+  assertError(
+    await runtime.app.inject({ method: "POST", url, payload }),
+    401,
+    "authentication",
+    "session_invalid",
+  );
+  assertError(
+    await runtime.app.inject({
+      method: "POST",
+      url,
+      headers: readHeaders(),
+      payload,
+    }),
+    403,
+    "authorization",
+    "csrf_invalid",
+  );
+  assertError(
+    await runtime.app.inject({
+      method: "POST",
+      url: "/api/v1/threads/missing/workspace-readonly",
+      headers: { ...readHeaders(), "x-csrf-token": CSRF_TOKEN },
+      payload,
+    }),
+    404,
+    "notFound",
+    "thread_not_found",
+  );
+
+  const success = await runtime.app.inject({
+    method: "POST",
+    url,
+    headers: { ...readHeaders(), "x-csrf-token": CSRF_TOKEN },
+    payload,
+  });
+  assert.equal(success.statusCode, 200, success.body);
+  assert.deepEqual(success.json(), {
+    schemaVersion: "crewon.workspace-native-readonly-response.v0",
+    operation: "contentSearch",
+    matches: [],
+    scannedFiles: 0,
+    scannedBytes: 0,
+    truncated: false,
+  });
+  assert.deepEqual(observed, [
+    {
+      ...payload,
+      tenantId: "standalone-tenant",
+      spaceId: "standalone-space",
+      workspaceBindingId: "server-workspace-binding",
+    },
+  ]);
+
+  failWorker = true;
+  assertError(
+    await runtime.app.inject({
+      method: "POST",
+      url,
+      headers: { ...readHeaders(), "x-csrf-token": CSRF_TOKEN },
+      payload,
+    }),
+    503,
+    "deviceUnavailable",
+    "workspace_native_readonly_unavailable",
+  );
+  runtime.dependencies.workspaceReadonly = null;
+  assertError(
+    await runtime.app.inject({
+      method: "POST",
+      url,
+      headers: { ...readHeaders(), "x-csrf-token": CSRF_TOKEN },
+      payload,
+    }),
+    503,
+    "deviceUnavailable",
+    "workspace_native_readonly_unavailable",
+  );
+});
 
 test("creates, reads, lists and invokes one redacted manual-only Automation", async (context) => {
   const runtime = await testRuntime(context);
@@ -2737,6 +2856,7 @@ async function testRuntime(
   options: Readonly<{
     threadEventPoller?: ThreadEventPoller;
     threadGoalEventPoller?: ThreadGoalEventPoller;
+    workspaceReadonly?: ControlApiDependencies["workspaceReadonly"];
   }> = {},
 ) {
   const actor = standaloneActor();
@@ -2938,6 +3058,7 @@ async function testRuntime(
     providerProbes,
     providerRuntimeAvailability: "available" as const,
     workspaceLists: null,
+    workspaceReadonly: options.workspaceReadonly ?? null,
     workspaceQueries,
     agentVersionDigester: digester,
     workflowVersionDigester: digester,

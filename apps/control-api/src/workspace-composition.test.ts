@@ -63,6 +63,7 @@ test("fails startup closed for an invalid Workspace route and releases SQLite", 
       createStandaloneControlApi({
         ...config(path),
         workspaceWorker: {
+          workspaceBindingId: "workspace-binding-1",
           origin: "http://localhost:3211",
           token: WORKER_TOKEN,
         },
@@ -89,6 +90,7 @@ test("maps a malformed successful freeze response to internal instead of unavail
   const runtime = createStandaloneControlApi({
     ...config(databasePath(context)),
     workspaceWorker: {
+      workspaceBindingId: "workspace-binding-1",
       origin: `http://127.0.0.1:${address.port}`,
       token: WORKER_TOKEN,
     },
@@ -188,7 +190,11 @@ test("freezes and dispatches once, then receipt-replays the same idempotency com
   context.after(() => worker.close());
   const runtime = createStandaloneControlApi({
     ...config(databasePath(context)),
-    workspaceWorker: { origin: worker.origin, token: WORKER_TOKEN },
+    workspaceWorker: {
+      origin: worker.origin,
+      token: WORKER_TOKEN,
+      workspaceBindingId: "workspace-binding-1",
+    },
   });
   context.after(() => runtime.app.close());
   assert.ok(runtime.workspaceLists !== null);

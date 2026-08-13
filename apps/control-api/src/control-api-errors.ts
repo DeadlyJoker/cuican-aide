@@ -27,6 +27,14 @@ export class WorkspaceControlUnavailableError extends Error {
   }
 }
 
+export class WorkspaceNativeReadonlyUnavailableError extends Error {
+  readonly code = "workspace_native_readonly_unavailable";
+  constructor(options?: ErrorOptions) {
+    super("workspace_native_readonly_unavailable", options);
+    this.name = "WorkspaceNativeReadonlyUnavailableError";
+  }
+}
+
 export function errorResponse(
   error: unknown,
   requestId: string,
@@ -72,6 +80,9 @@ export function errorResponse(
       requestId,
       503,
     );
+  }
+  if (error instanceof WorkspaceNativeReadonlyUnavailableError) {
+    return response("deviceUnavailable", error.code, requestId, 503);
   }
   if (isFastifyBadRequest(error)) {
     return response("validation", "request_body_invalid", requestId, 400);

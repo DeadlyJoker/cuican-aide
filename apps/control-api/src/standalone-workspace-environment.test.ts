@@ -15,6 +15,7 @@ test("projects an all-or-none standalone loopback Workspace worker", () => {
       {
         CREWON_WORKSPACE_WORKER_ORIGIN: "http://127.0.0.1:43125",
         CREWON_WORKSPACE_WORKER_TOKEN: TOKEN,
+        CREWON_WORKSPACE_BINDING_ID: "workspace-binding-1",
         CREWON_WORKSPACE_WORKER_DEADLINE_MS: "40000",
       },
       "standalone",
@@ -22,6 +23,7 @@ test("projects an all-or-none standalone loopback Workspace worker", () => {
     {
       origin: "http://127.0.0.1:43125",
       token: TOKEN,
+      workspaceBindingId: "workspace-binding-1",
       deadlineMs: 40_000,
     },
   );
@@ -32,21 +34,26 @@ test("rejects incomplete, non-loopback, and malformed standalone routes", () => 
     { CREWON_WORKSPACE_WORKER_ORIGIN: "http://127.0.0.1:43125" },
     { CREWON_WORKSPACE_WORKER_TOKEN: TOKEN },
     { CREWON_WORKSPACE_WORKER_DEADLINE_MS: "40000" },
+    { CREWON_WORKSPACE_BINDING_ID: "workspace-binding-1" },
     {
       CREWON_WORKSPACE_WORKER_ORIGIN: "http://localhost:43125",
       CREWON_WORKSPACE_WORKER_TOKEN: TOKEN,
+      CREWON_WORKSPACE_BINDING_ID: "workspace-binding-1",
     },
     {
       CREWON_WORKSPACE_WORKER_ORIGIN: "http://127.0.0.1:43125/path",
       CREWON_WORKSPACE_WORKER_TOKEN: TOKEN,
+      CREWON_WORKSPACE_BINDING_ID: "workspace-binding-1",
     },
     {
       CREWON_WORKSPACE_WORKER_ORIGIN: "http://127.0.0.1:43125",
       CREWON_WORKSPACE_WORKER_TOKEN: "short",
+      CREWON_WORKSPACE_BINDING_ID: "workspace-binding-1",
     },
     {
       CREWON_WORKSPACE_WORKER_ORIGIN: "http://127.0.0.1:43125",
       CREWON_WORKSPACE_WORKER_TOKEN: TOKEN,
+      CREWON_WORKSPACE_BINDING_ID: "workspace-binding-1",
       CREWON_WORKSPACE_WORKER_DEADLINE_MS: "60001",
     },
   ]) {
@@ -62,6 +69,7 @@ test("forbids every ambient Workspace worker variable in production", () => {
     { CREWON_WORKSPACE_WORKER_TOKEN: TOKEN },
     { CREWON_WORKSPACE_WORKER_DEADLINE_MS: "40000" },
     { CREWON_WORKSPACE_WORKER_TOKEN: "" },
+    { CREWON_WORKSPACE_BINDING_ID: "workspace-binding-1" },
   ]) {
     assert.throws(
       () =>

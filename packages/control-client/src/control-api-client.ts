@@ -1,11 +1,11 @@
 import {
   WORKSPACE_NATIVE_READONLY_LIMITS,
   parseWorkspaceNativeReadonlyControlRequest,
-  parseWorkspaceNativeReadonlyResponse,
+  parseWorkspaceNativeReadonlyControlResponse,
 } from "@crewon/contracts";
 import type {
   WorkspaceNativeReadonlyControlRequest,
-  WorkspaceNativeReadonlyResponse,
+  WorkspaceNativeReadonlyControlResponse,
   ActiveAgentVersionCatalogResponse,
   AutomationMutationResponse,
   AgentVersionMutationResponse,
@@ -520,7 +520,7 @@ export class ControlApiClient {
     threadId: string,
     body: WorkspaceNativeReadonlyControlRequest,
     options: ControlApiRequestOptions = {},
-  ): Promise<WorkspaceNativeReadonlyResponse> {
+  ): Promise<WorkspaceNativeReadonlyControlResponse> {
     const request = parseWorkspaceNativeReadonlyControlRequest(body);
     const response = await this.#json<unknown>(
       "POST",
@@ -533,11 +533,7 @@ export class ControlApiClient {
         maximumResponseBytes: WORKSPACE_NATIVE_READONLY_LIMITS.responseBytes,
       },
     );
-    return parseWorkspaceNativeReadonlyResponse(response, {
-      ...request,
-      tenantId: "control-scope",
-      spaceId: "control-scope",
-    });
+    return parseWorkspaceNativeReadonlyControlResponse(response, request);
   }
 
   listThreadMessages(

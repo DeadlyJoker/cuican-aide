@@ -3,13 +3,15 @@ type Environment = Readonly<Record<string, string | undefined>>;
 export type StandaloneWorkspaceWorkerEnvironment = Readonly<{
   origin: string;
   token: string;
+  workspaceBindingId: string;
   deadlineMs?: number;
 }>;
 
 const ORIGIN = "CREWON_WORKSPACE_WORKER_ORIGIN";
 const TOKEN = "CREWON_WORKSPACE_WORKER_TOKEN";
 const DEADLINE = "CREWON_WORKSPACE_WORKER_DEADLINE_MS";
-const NAMES = [ORIGIN, TOKEN, DEADLINE] as const;
+const BINDING = "CREWON_WORKSPACE_BINDING_ID";
+const NAMES = [ORIGIN, TOKEN, DEADLINE, BINDING] as const;
 
 /**
  * Projects the PC-only Worker route. Production rejects these ambient values
@@ -30,13 +32,20 @@ export function resolveStandaloneWorkspaceWorkerEnvironment(
 
   const origin = requiredExact(environment, ORIGIN);
   const token = requiredExact(environment, TOKEN);
+  const workspaceBindingId = requiredExact(environment, BINDING);
+  if (
+    workspaceBindingId.length > 128 ||
+    /[\u0000-\u001f\u007f]/u.test(workspaceBindingId)
+  )
+    throw new Error("CREWON_WORKSPACE_BINDING_ID_invalid");
   const deadline = environment[DEADLINE];
   const parsedOrigin = loopbackOrigin(origin);
   const bytes = Buffer.byteLength(token, "utf8");
   if (bytes < 32 || bytes > 8_192 || /[\u0000-\u001f\u007f]/u.test(token)) {
     throw new Error("CREWON_WORKSPACE_WORKER_TOKEN_invalid");
   }
-  if (deadline === undefined) return { origin: parsedOrigin, token };
+  if (deadline === undefined)
+    return { origin: parsedOrigin, token, workspaceBindingId };
   if (deadline !== deadline.trim() || !/^\d{4,5}$/u.test(deadline)) {
     throw new Error("CREWON_WORKSPACE_WORKER_DEADLINE_MS_invalid");
   }
@@ -48,7 +57,7 @@ export function resolveStandaloneWorkspaceWorkerEnvironment(
   ) {
     throw new Error("CREWON_WORKSPACE_WORKER_DEADLINE_MS_invalid");
   }
-  return { origin: parsedOrigin, token, deadlineMs };
+  return { origin: parsedOrigin, token, workspaceBindingId, deadlineMs };
 }
 
 function requiredExact(environment: Environment, name: string): string {

@@ -79,7 +79,6 @@ test("calls the bounded typed Workspace read-only product route", async () => {
       return jsonResponse(200, {
         schemaVersion: "crewon.workspace-native-readonly-response.v0",
         operation: "contentSearch",
-        workspaceBindingId: "workspace-1",
         matches: [],
         scannedFiles: 0,
         scannedBytes: 0,
@@ -90,7 +89,6 @@ test("calls the bounded typed Workspace read-only product route", async () => {
   const result = await client.executeWorkspaceReadonly("thread/1", {
     schemaVersion: "crewon.workspace-native-readonly-request.v0",
     operation: "contentSearch",
-    workspaceBindingId: "workspace-1",
     pathSegments: [],
     query: "needle",
     maxMatches: 10,
@@ -103,7 +101,6 @@ test("calls the bounded typed Workspace read-only product route", async () => {
   assert.deepEqual(JSON.parse(String(captured[0]?.init.body)), {
     schemaVersion: "crewon.workspace-native-readonly-request.v0",
     operation: "contentSearch",
-    workspaceBindingId: "workspace-1",
     pathSegments: [],
     query: "needle",
     maxMatches: 10,

@@ -147,13 +147,14 @@ export class RuntimeNativeReadonlyService {
   ): Promise<WorkspaceNativeReadonlyResponse> {
     const root = await realpath(this.#root);
     const run = (args: readonly string[]) =>
-      execFileAsync("git", [...args], {
+      execFileAsync("git", ["-c", "core.fsmonitor=false", ...args], {
         cwd: root,
-        encoding: "utf8",
+        encoding: "buffer",
         maxBuffer: LIMITS.responseBytes,
         signal,
         timeout: 10_000,
         windowsHide: true,
+        env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
       });
     try {
       const [status, branch, head] = await Promise.all([
@@ -167,7 +168,10 @@ export class RuntimeNativeReadonlyService {
         run(["rev-parse", "--abbrev-ref", "HEAD"]),
         run(["rev-parse", "--verify", "HEAD"]),
       ]);
-      const records = status.stdout.split("\0").filter(Boolean);
+      const statusText = decodeGitOutput(status.stdout);
+      const branchText = decodeGitOutput(branch.stdout).trim();
+      const headText = decodeGitOutput(head.stdout).trim();
+      const records = statusText.split("\0").filter(Boolean);
       const truncated = records.length > LIMITS.maxStatusEntries;
       const entries = records
         .slice(0, LIMITS.maxStatusEntries)
@@ -184,9 +188,8 @@ export class RuntimeNativeReadonlyService {
         schemaVersion: "crewon.workspace-native-readonly-response.v0",
         operation: "gitStatus",
         workspaceBindingId: this.#authority.workspaceBindingId,
-        branch:
-          branch.stdout.trim() === "HEAD" ? null : branch.stdout.trim() || null,
-        head: head.stdout.trim() || null,
+        branch: branchText === "HEAD" ? null : branchText || null,
+        head: headText || null,
         entries,
         truncated,
       };
@@ -196,6 +199,15 @@ export class RuntimeNativeReadonlyService {
         ? error
         : failure("workspace_native_git_unavailable", error);
     }
+  }
+}
+
+export function decodeGitOutput(value: string | Buffer): string {
+  try {
+    const bytes = typeof value === "string" ? Buffer.from(value) : value;
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  } catch (error) {
+    throw failure("workspace_native_git_output_invalid", error);
   }
 }
 

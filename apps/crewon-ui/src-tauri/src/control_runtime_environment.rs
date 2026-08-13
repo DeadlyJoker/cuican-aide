@@ -114,6 +114,9 @@ pub(super) fn control_environment(
                 workspace_worker.deadline_ms.to_string(),
             ),
         ]);
+        if let Some(workspace_binding_id) = route.workspace_binding_id() {
+            environment.push(env("CREWON_WORKSPACE_BINDING_ID", workspace_binding_id));
+        }
     }
     if admission == ControlAdmissionMode::Paused {
         environment.push(env("CREWON_CONTROL_PAUSED_ADMISSION", "1"));

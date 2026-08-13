@@ -1,18 +1,34 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { promisify } from "node:util";
 
-import { RuntimeNativeReadonlyService } from "./runtime-native-readonly.ts";
+import {
+  RuntimeNativeReadonlyService,
+  decodeGitOutput,
+} from "./runtime-native-readonly.ts";
 
 const run = promisify(execFile);
 const authority = {
-  tenantId: "tenant-1", spaceId: "space-1", workspaceBindingId: "workspace-1",
-  incarnationId: "incarnation-1", deviceBindingId: "device-binding-1",
-  deviceId: "device-1", runtimeBindingId: "runtime-1", policySnapshotId: "policy-1",
+  tenantId: "tenant-1",
+  spaceId: "space-1",
+  workspaceBindingId: "workspace-1",
+  incarnationId: "incarnation-1",
+  deviceBindingId: "device-binding-1",
+  deviceId: "device-1",
+  runtimeBindingId: "runtime-1",
+  policySnapshotId: "policy-1",
 };
 
 test("literal search is bounded, scoped, and does not follow links", async (context) => {
@@ -86,6 +102,11 @@ test("Git status exposes fixed read-only metadata", async (context) => {
   await run("git", ["commit", "-qm", "initial"], { cwd: root });
   await writeFile(join(root, "tracked.txt"), "two");
   await writeFile(join(root, "new.txt"), "new");
+  const marker = join(root, "fsmonitor-ran");
+  const hook = join(root, "malicious-fsmonitor.sh");
+  await writeFile(hook, `#!/bin/sh\nprintf ran > '${marker}'\n`);
+  await chmod(hook, 0o700);
+  await run("git", ["config", "core.fsmonitor", hook], { cwd: root });
   const service = new RuntimeNativeReadonlyService({ root, authority });
   const result = await service.execute(
     {
@@ -103,8 +124,17 @@ test("Git status exposes fixed read-only metadata", async (context) => {
   assert.match(result.head ?? "", /^[a-f0-9]{40}$/u);
   assert.deepEqual(result.entries, [
     { index: " ", worktree: "M", path: "tracked.txt" },
+    { index: "?", worktree: "?", path: "malicious-fsmonitor.sh" },
     { index: "?", worktree: "?", path: "new.txt" },
   ]);
+  await assert.rejects(readFile(marker), { code: "ENOENT" });
+});
+
+test("Git output rejects non-UTF-8 bytes", () => {
+  assert.throws(
+    () => decodeGitOutput(Buffer.from([0xff])),
+    /workspace_native_git_output_invalid/u,
+  );
 });
 
 function search(pathSegments: readonly string[]) {

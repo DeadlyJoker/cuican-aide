@@ -203,7 +203,17 @@ fn provider_changes_preserve_the_workspace_release_and_worker_route() {
     let release = release_environment(&paths, Some(&candidate.binding), &route);
     let worker = worker_environment(&paths, Some(&candidate), &route);
     let session = SessionMaterial::generate().expect("session");
-    let control = control_environment(&paths, &session, None, &route, ControlAdmissionMode::Active);
+    let control = control_environment(
+        &paths,
+        &session,
+        Some(&WorkspaceWorkerEnvironment {
+            origin: "http://127.0.0.1:43126",
+            token: "workspace-private-token-0000000001",
+            deadline_ms: 40_000,
+        }),
+        &route,
+        ControlAdmissionMode::Active,
+    );
     let agent_version_id = route.agent_version_id().to_string();
 
     for environment in [&release, &worker] {
@@ -258,6 +268,13 @@ fn provider_changes_preserve_the_workspace_release_and_worker_route() {
             && matches!(
                 &variable.value,
                 ChildEnvironmentValue::Plain(value) if value == agent_version_id.as_str()
+            )
+    }));
+    assert!(control.iter().any(|variable| {
+        variable.key == "CREWON_WORKSPACE_BINDING_ID"
+            && matches!(
+                &variable.value,
+                ChildEnvironmentValue::Plain(value) if value == workspace_binding_id.as_str()
             )
     }));
 }

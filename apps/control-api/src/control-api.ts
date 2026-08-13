@@ -87,6 +87,7 @@ import {
   parseWorkspaceOperationLastEventSequence,
   parseWorkspaceOperationListQuery,
   parseWorkspaceNativeReadonlyControlRequest,
+  projectWorkspaceNativeReadonlyControlResponse,
   parsePublishWorkflowVersionRequest,
   parseWorkflowVersionId,
   parseWorkflowVersionListQuery,
@@ -145,6 +146,7 @@ import {
   readinessErrorResponse,
   WorkspaceControlUnavailableError,
   LocalSettingsUnavailableError,
+  WorkspaceNativeReadonlyUnavailableError,
 } from "./control-api-errors.ts";
 import type {
   ControlApiIdentityPort,
@@ -249,6 +251,7 @@ export type ControlApiDependencies = Readonly<{
   workspaceQueries: WorkspaceOperationQueryService;
   workspaceLists: WorkspaceListApplicationService | null;
   workspaceReadonly?: Readonly<{
+    workspaceBindingId: string;
     executeReadonly(
       input: WorkspaceNativeReadonlyRequest,
       signal: AbortSignal,
@@ -862,21 +865,35 @@ export function buildControlApi(
       const threadId = parseThreadId(request.params.threadId);
       await dependencies.threads.getThread(actor, threadId);
       const service = dependencies.workspaceReadonly;
-      if (service == null)
-        throw new Error("workspace_native_readonly_unavailable");
+      if (service == null) throw new WorkspaceNativeReadonlyUnavailableError();
       const body = parseWorkspaceNativeReadonlyControlRequest(request.body);
       const requestAbort = requestAbortSignal(request.raw);
       try {
-        return reply.code(200).send(
-          await service.executeReadonly(
+        const workerRequest = {
+          ...body,
+          tenantId: actor.tenantId,
+          spaceId: actor.spaceId,
+          workspaceBindingId: service.workspaceBindingId,
+        } as const;
+        let result;
+        try {
+          result = await service.executeReadonly(
             {
-              ...body,
-              tenantId: actor.tenantId,
-              spaceId: actor.spaceId,
+              ...workerRequest,
             },
             requestAbort.signal,
-          ),
-        );
+          );
+        } catch (error) {
+          throw new WorkspaceNativeReadonlyUnavailableError({ cause: error });
+        }
+        return reply
+          .code(200)
+          .send(
+            projectWorkspaceNativeReadonlyControlResponse(
+              result,
+              workerRequest,
+            ),
+          );
       } finally {
         requestAbort.dispose();
       }
