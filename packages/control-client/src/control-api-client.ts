@@ -902,7 +902,13 @@ export class ControlApiClient {
       "POST",
       `/api/v1/tool-approvals/${resourceId(approvalId)}:decide`,
       body,
-      { ...options, idempotencyKey, expectedStatuses: [200] },
+      {
+        ...options,
+        idempotencyKey,
+        requireCsrf: true,
+        requireIdempotency: true,
+        expectedStatuses: [200],
+      },
     );
   }
 

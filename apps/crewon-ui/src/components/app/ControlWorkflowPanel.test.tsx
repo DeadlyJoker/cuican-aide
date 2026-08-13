@@ -116,6 +116,36 @@ describe("ControlWorkflowPanel", () => {
     expect(selectionAbort).not.toContain("data-run-id");
   });
 
+  it("snapshots a truthful pending Tool approval with bounded public fields", () => {
+    const waiting = renderState({
+      catalogState: "ready",
+      selected: workflowVersion(),
+      selectedThreadId: "thread-1",
+      run: workflowRun({
+        status: "waitingApproval",
+        waitingApproval: { approvalId: "approval-1" },
+      }),
+      approval: {
+        approvalId: "approval-1",
+        runId: "run-1",
+        status: "required",
+        revision: 2,
+        requiredAt: "2026-08-13T00:00:30.000Z",
+        expiresAt: null,
+        decision: null,
+        comment: null,
+        decidedAt: null,
+      },
+    });
+
+    expect(waiting).toMatchSnapshot();
+    expect(waiting).toContain("工具操作等待审批");
+    expect(waiting).toContain("批准");
+    expect(waiting).toContain("驳回");
+    expect(waiting).not.toContain("receipt");
+    expect(waiting).not.toContain("lease");
+  });
+
   it("keeps the stateful loading boundary safe during server rendering", () => {
     const adapter = {
       discover: vi.fn(),
@@ -138,6 +168,7 @@ function renderState(
   return renderToStaticMarkup(
     <ControlWorkflowPanelView
       state={{
+        approval: null,
         busy: false,
         catalog: [],
         catalogState: "loading",
@@ -153,6 +184,7 @@ function renderState(
       onInputChange={vi.fn()}
       onOpen={vi.fn()}
       onReload={vi.fn()}
+      onApprovalDecision={vi.fn()}
       onStart={vi.fn()}
     />,
   );

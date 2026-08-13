@@ -466,6 +466,56 @@ test("decides a Workflow Human Gate with only public claim authority", async () 
   );
 });
 
+test("decides a Tool approval with CSRF and idempotency and fails closed without CSRF", async () => {
+  const requests: Array<{ input: string; init: RequestInit }> = [];
+  const response = {
+    disposition: "replayed" as const,
+    approval: {
+      approvalId: "approval-1",
+      runId: "run-1",
+      status: "approved" as const,
+      revision: 2,
+      requiredAt: "2026-08-13T00:00:00.000Z",
+      expiresAt: null,
+      decision: "approved" as const,
+      comment: null,
+      decidedAt: "2026-08-13T00:01:00.000Z",
+    },
+    run: { ...runResponse().run, status: "running" as const },
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example",
+    csrfToken: "csrf-token",
+    fetch: async (input, init = {}) => {
+      requests.push({ input: String(input), init });
+      return jsonResponse(200, response);
+    },
+  });
+  const body = {
+    expectedRevision: 1,
+    decision: "approved" as const,
+    comment: null,
+  };
+  assert.deepEqual(
+    await client.decideToolApproval("approval-1", body, "decision-1"),
+    response,
+  );
+  const headers = new Headers(requests[0]?.init.headers);
+  assert.equal(headers.get("x-csrf-token"), "csrf-token");
+  assert.equal(headers.get("idempotency-key"), "decision-1");
+
+  const unavailable = new ControlApiClient({
+    baseUrl: "https://control.example",
+    fetch: async () => {
+      throw new Error("must not dispatch");
+    },
+  });
+  await assert.rejects(
+    unavailable.decideToolApproval("approval-1", body, "decision-2"),
+    hasProtocolCode("control_client_csrf_token_required"),
+  );
+});
+
 test("lists bounded WorkflowVersion summaries without definition fields", async () => {
   const summary = {
     workflowId: "workflow-1",

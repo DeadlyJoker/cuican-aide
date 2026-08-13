@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowUp, RotateCw } from "lucide-react";
 import type {
   RunView,
+  ToolApprovalView,
   WorkflowVersionSummaryView,
   WorkflowVersionView,
 } from "@crewon/contracts";
@@ -9,12 +10,14 @@ import {
   isTerminalWorkflowRun,
   publicWorkflowRunStatus,
   type WorkflowStreamState,
+  type WorkflowApprovalDecision,
 } from "../../lib/workflow/controlWorkflowRun";
 
 type CatalogState = "loading" | "ready" | "unavailable";
 type PanelStreamState = WorkflowStreamState | Readonly<{ kind: "idle" }>;
 
 export type ControlWorkflowPanelViewState = Readonly<{
+  approval: ToolApprovalView | null;
   busy: boolean;
   catalog: WorkflowVersionSummaryView[];
   catalogState: CatalogState;
@@ -32,6 +35,7 @@ export function ControlWorkflowPanelView({
   onInputChange,
   onOpen,
   onReload,
+  onApprovalDecision,
   onStart,
 }: {
   state: ControlWorkflowPanelViewState;
@@ -39,6 +43,7 @@ export function ControlWorkflowPanelView({
   onInputChange: (value: string) => void;
   onOpen: (workflow: WorkflowVersionSummaryView) => void;
   onReload: () => void;
+  onApprovalDecision: (decision: WorkflowApprovalDecision) => void;
   onStart: () => void;
 }) {
   if (state.selected === null) {
@@ -136,6 +141,13 @@ export function ControlWorkflowPanelView({
               </div>
             </article>
             {state.run ? <RunMessage run={state.run} /> : null}
+            {state.run?.status === "waitingApproval" ? (
+              <ApprovalMessage
+                approval={state.approval}
+                busy={state.busy}
+                onDecision={onApprovalDecision}
+              />
+            ) : null}
             {state.error ? (
               <p className="workflow-control-error" role="alert">
                 {state.error}
@@ -212,6 +224,65 @@ function RunMessage({ run }: { run: RunView }) {
           {run.outputRef ? ` · 输出引用：${run.outputRef}` : ""}
           {run.failure ? ` · 失败代码：${run.failure.code}` : ""}
         </p>
+      </div>
+    </article>
+  );
+}
+
+function ApprovalMessage({
+  approval,
+  busy,
+  onDecision,
+}: {
+  approval: ToolApprovalView | null;
+  busy: boolean;
+  onDecision: (decision: WorkflowApprovalDecision) => void;
+}) {
+  if (approval === null) {
+    return (
+      <article className="office-room-message" aria-busy="true">
+        <span className="team-avatar">批</span>
+        <div>
+          <strong>正在读取工具审批</strong>
+          <p>审批详情只从 CrewON Control 权威读取。</p>
+        </div>
+      </article>
+    );
+  }
+  const pending = approval.status === "required";
+  return (
+    <article
+      className="office-room-message workflow-approval-message"
+      data-approval-id={approval.approvalId}
+    >
+      <span className="team-avatar">批</span>
+      <div>
+        <strong>{pending ? "工具操作等待审批" : "工具审批已决定"}</strong>
+        <p>
+          {pending
+            ? `审批 ${approval.approvalId} · 修订 ${approval.revision}`
+            : `${approval.status} · ${approval.decidedAt ?? "等待 canonical Run 更新"}`}
+        </p>
+        {pending ? (
+          <span className="inline-actions" aria-label="工具审批操作">
+            <button
+              className="button compact primary"
+              type="button"
+              disabled={busy}
+              onClick={() => onDecision("approved")}
+            >
+              批准
+            </button>
+            <button
+              className="button compact"
+              type="button"
+              disabled={busy}
+              onClick={() => onDecision("rejected")}
+            >
+              驳回
+            </button>
+          </span>
+        ) : null}
       </div>
     </article>
   );

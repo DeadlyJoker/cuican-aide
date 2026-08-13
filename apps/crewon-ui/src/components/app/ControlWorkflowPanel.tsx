@@ -1,5 +1,6 @@
 import type {
   RunView,
+  ToolApprovalView,
   WorkflowVersionSummaryView,
   WorkflowVersionView,
 } from "@crewon/contracts";
@@ -8,10 +9,14 @@ import { useEffect, useRef, useState } from "react";
 import type { ControlWorkflowAdapter } from "../../lib/workflow/controlWorkflowAdapter";
 import {
   ControlWorkflowInputError,
+  decideControlWorkflowApproval,
   followControlWorkflowRun,
+  retainWorkflowApprovalAttempt,
   retainWorkflowStartAttempt,
   startControlWorkflowRun,
   type WorkflowStartAttempt,
+  type WorkflowApprovalAttempt,
+  type WorkflowApprovalDecision,
   type WorkflowStreamState,
 } from "../../lib/workflow/controlWorkflowRun";
 import {
@@ -39,6 +44,7 @@ export function ControlWorkflowPanel({
   const [selected, setSelected] = useState<WorkflowVersionView | null>(null);
   const [input, setInput] = useState("{}");
   const [run, setRun] = useState<RunView | null>(null);
+  const [approval, setApproval] = useState<ToolApprovalView | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamState, setStreamState] = useState<PanelStreamState>({
@@ -48,7 +54,9 @@ export function ControlWorkflowPanel({
   const catalogAbortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
   const runAbortRef = useRef<AbortController | null>(null);
+  const approvalAbortRef = useRef<AbortController | null>(null);
   const startAttemptRef = useRef<WorkflowStartAttempt | null>(null);
+  const approvalAttemptRef = useRef<WorkflowApprovalAttempt | null>(null);
   const threadRef = useRef(selectedThreadId);
 
   async function reload(signal: AbortSignal) {
@@ -98,6 +106,7 @@ export function ControlWorkflowPanel({
       abort.abort();
       detailAbortRef.current?.abort();
       runAbortRef.current?.abort();
+      approvalAbortRef.current?.abort();
     };
   }, [adapter]);
 
@@ -108,10 +117,38 @@ export function ControlWorkflowPanel({
     runAbortRef.current = null;
     startAttemptRef.current = null;
     setRun(null);
+    setApproval(null);
     setBusy(false);
     setError(null);
     setStreamState({ kind: "idle" });
   }, [selectedThreadId]);
+
+  useEffect(() => {
+    approvalAbortRef.current?.abort();
+    setApproval(null);
+    approvalAttemptRef.current = null;
+    const approvalId = run?.waitingApproval?.approvalId;
+    if (run?.status !== "waitingApproval" || approvalId === undefined) return;
+    const abort = new AbortController();
+    approvalAbortRef.current = abort;
+    void adapter
+      .readApproval(approvalId, abort.signal)
+      .then((next) => {
+        if (
+          !abort.signal.aborted &&
+          next.approvalId === approvalId &&
+          next.runId === run.runId
+        ) {
+          setApproval(next);
+        }
+      })
+      .catch((approvalError: unknown) => {
+        if (!abort.signal.aborted) {
+          setError(errorMessage(approvalError, "无法读取工具审批"));
+        }
+      });
+    return () => abort.abort();
+  }, [adapter, run?.runId, run?.status, run?.waitingApproval?.approvalId]);
 
   async function open(summary: WorkflowVersionSummaryView) {
     const request = ++requestRef.current;
@@ -129,6 +166,7 @@ export function ControlWorkflowPanel({
       if (request !== requestRef.current || abort.signal.aborted) return;
       setSelected(version);
       setRun(null);
+      setApproval(null);
       startAttemptRef.current = null;
       setStreamState({ kind: "idle" });
       onRoomOpenChange?.(true);
@@ -193,12 +231,41 @@ export function ControlWorkflowPanel({
     }
   }
 
+  async function decide(decision: WorkflowApprovalDecision) {
+    if (approval === null || busy) return;
+    const attempt = retainWorkflowApprovalAttempt(
+      approvalAttemptRef.current,
+      approval,
+      decision,
+    );
+    approvalAttemptRef.current = attempt;
+    setBusy(true);
+    setError(null);
+    try {
+      const result = await decideControlWorkflowApproval(
+        adapter,
+        approval,
+        decision,
+        attempt.idempotencyKey,
+      );
+      approvalAttemptRef.current = null;
+      setApproval(result.approval);
+      setRun(result.run);
+    } catch (decisionError) {
+      setError(errorMessage(decisionError, "工具审批失败"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function close() {
     requestRef.current += 1;
     detailAbortRef.current?.abort();
     runAbortRef.current?.abort();
+    approvalAbortRef.current?.abort();
     setSelected(null);
     setRun(null);
+    setApproval(null);
     setBusy(false);
     startAttemptRef.current = null;
     setError(null);
@@ -207,6 +274,7 @@ export function ControlWorkflowPanel({
   }
 
   const state: ControlWorkflowPanelViewState = {
+    approval,
     busy,
     catalog,
     catalogState,
@@ -224,6 +292,7 @@ export function ControlWorkflowPanel({
       onInputChange={setInput}
       onOpen={(summary) => void open(summary)}
       onReload={beginReload}
+      onApprovalDecision={(decision) => void decide(decision)}
       onStart={() => void start()}
     />
   );

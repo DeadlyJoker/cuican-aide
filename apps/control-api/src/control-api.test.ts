@@ -2519,6 +2519,32 @@ test("queries and decides a durable Tool approval without exposing execution bin
   assert.equal(decidedBody.approval.status, "approved");
   assert.equal(decidedBody.run.runId, runId);
   assert.equal(decidedBody.run.status, "running");
+  const replayed = await runtime.app.inject({
+    method: "POST",
+    url: `/api/v1/tool-approvals/${required.approval.approvalId}:decide`,
+    headers: mutationHeaders("approval-decide-api-1"),
+    payload: {
+      expectedRevision: readBody.approval.revision,
+      decision: "approved",
+      comment: "approved over HTTP",
+    },
+  });
+  assert.equal(replayed.statusCode, 200, replayed.body);
+  assert.equal(
+    replayed.json<ToolApprovalMutationResponse>().disposition,
+    "replayed",
+  );
+  const stale = await runtime.app.inject({
+    method: "POST",
+    url: `/api/v1/tool-approvals/${required.approval.approvalId}:decide`,
+    headers: mutationHeaders("approval-decide-api-stale"),
+    payload: {
+      expectedRevision: readBody.approval.revision,
+      decision: "rejected",
+      comment: null,
+    },
+  });
+  assertError(stale, 409, "conflict", "approval_already_terminal");
   const resumed = await runtime.store.claimNextWorkItem({
     ownerId: "approval-resumed-worker",
     leaseId: "approval-resumed-lease",

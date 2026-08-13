@@ -3,11 +3,13 @@ import type { RunEventView, RunView } from "@crewon/contracts";
 
 import type { ControlWorkflowAdapter } from "./controlWorkflowAdapter";
 import {
+  decideControlWorkflowApproval,
   ControlWorkflowInputError,
   createWorkflowStartIdempotencyKey,
   followControlWorkflowRun,
   parseControlWorkflowInput,
   publicWorkflowRunStatus,
+  retainWorkflowApprovalAttempt,
   retainWorkflowStartAttempt,
   startControlWorkflowRun,
 } from "./controlWorkflowRun";
@@ -243,6 +245,63 @@ describe("Control Workflow Run", () => {
     expect(publicWorkflowRunStatus("waitingApproval")).toBeNull();
     expect(publicWorkflowRunStatus("suspended")).toBeNull();
   });
+
+  it("retains one decision key for exact retries and fences stale revisions", async () => {
+    const approval = {
+      approvalId: "approval-1",
+      runId: "run-1",
+      status: "required" as const,
+      revision: 3,
+      requiredAt: "2026-08-13T00:00:00.000Z",
+      expiresAt: null,
+      decision: null,
+      comment: null,
+      decidedAt: null,
+    };
+    const first = retainWorkflowApprovalAttempt(
+      null,
+      approval,
+      "approved",
+      () => "decision-1",
+    );
+    expect(
+      retainWorkflowApprovalAttempt(first, approval, "approved", () => "new"),
+    ).toBe(first);
+    expect(
+      retainWorkflowApprovalAttempt(
+        first,
+        { ...approval, revision: 4 },
+        "approved",
+        () => "decision-2",
+      ).idempotencyKey,
+    ).toBe("tool-approval.decide:decision-2");
+
+    const decideApproval = vi.fn().mockResolvedValue({
+      disposition: "replayed",
+      approval: {
+        ...approval,
+        status: "approved",
+        revision: 4,
+        decision: "approved",
+        decidedAt: "2026-08-13T00:01:00.000Z",
+      },
+      run: workflowRun({ status: "running", revision: 4 }),
+    });
+    await expect(
+      decideControlWorkflowApproval(
+        workflowAdapter({ decideApproval }),
+        approval,
+        "approved",
+        first.idempotencyKey,
+      ),
+    ).resolves.toMatchObject({ run: { status: "running" } });
+    expect(decideApproval).toHaveBeenCalledWith({
+      approvalId: "approval-1",
+      body: { expectedRevision: 3, decision: "approved", comment: null },
+      idempotencyKey: "tool-approval.decide:decision-1",
+      signal: undefined,
+    });
+  });
 });
 
 function workflowAdapter(
@@ -253,6 +312,8 @@ function workflowAdapter(
     readVersion: vi.fn(),
     start: vi.fn(),
     readRun: vi.fn(),
+    readApproval: vi.fn(),
+    decideApproval: vi.fn(),
     events: vi.fn(),
     ...overrides,
   };

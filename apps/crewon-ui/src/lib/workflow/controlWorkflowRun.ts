@@ -1,5 +1,6 @@
 import {
   parseStartWorkflowRunRequest,
+  type ToolApprovalView,
   type RunEventView,
   type RunView,
   type StartWorkflowRunRequest,
@@ -26,6 +27,13 @@ export type WorkflowStreamState =
   | Readonly<{ kind: "terminal" }>;
 
 export type WorkflowStartAttempt = Readonly<{
+  fingerprint: string;
+  idempotencyKey: string;
+}>;
+
+export type WorkflowApprovalDecision = "approved" | "rejected";
+
+export type WorkflowApprovalAttempt = Readonly<{
   fingerprint: string;
   idempotencyKey: string;
 }>;
@@ -85,6 +93,54 @@ export function retainWorkflowStartAttempt(
         fingerprint,
         idempotencyKey: createWorkflowStartIdempotencyKey(randomUUID),
       };
+}
+
+export function retainWorkflowApprovalAttempt(
+  current: WorkflowApprovalAttempt | null,
+  approval: ToolApprovalView,
+  decision: WorkflowApprovalDecision,
+  randomUUID: () => string = () => globalThis.crypto.randomUUID(),
+): WorkflowApprovalAttempt {
+  const fingerprint = JSON.stringify([
+    approval.approvalId,
+    approval.revision,
+    decision,
+  ]);
+  return current?.fingerprint === fingerprint
+    ? current
+    : {
+        fingerprint,
+        idempotencyKey: `tool-approval.decide:${randomUUID()}`,
+      };
+}
+
+export async function decideControlWorkflowApproval(
+  adapter: ControlWorkflowAdapter,
+  approval: ToolApprovalView,
+  decision: WorkflowApprovalDecision,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<Readonly<{ approval: ToolApprovalView; run: RunView }>> {
+  if (approval.status !== "required") {
+    throw new ControlApiProtocolError("control_workflow_approval_not_pending");
+  }
+  const result = await adapter.decideApproval({
+    approvalId: approval.approvalId,
+    body: { expectedRevision: approval.revision, decision, comment: null },
+    idempotencyKey,
+    signal,
+  });
+  if (
+    result.approval.approvalId !== approval.approvalId ||
+    result.approval.runId !== approval.runId ||
+    result.approval.status !== decision ||
+    result.run.runId !== approval.runId
+  ) {
+    throw new ControlApiProtocolError(
+      "control_workflow_approval_response_invalid",
+    );
+  }
+  return result;
 }
 
 export async function startControlWorkflowRun(

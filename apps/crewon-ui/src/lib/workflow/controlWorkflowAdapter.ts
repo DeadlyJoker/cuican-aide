@@ -1,8 +1,11 @@
 import type {
+  DecideToolApprovalRequest,
   ListWorkflowVersionsResponse,
   RunEventView,
   RunView,
   StartWorkflowRunRequest,
+  ToolApprovalMutationResponse,
+  ToolApprovalView,
   WorkflowVersionView,
 } from "@crewon/contracts";
 import {
@@ -29,6 +32,16 @@ export type ControlWorkflowAdapter = Readonly<{
     signal?: AbortSignal;
   }): Promise<RunView>;
   readRun(runId: string, signal?: AbortSignal): Promise<RunView>;
+  readApproval(
+    approvalId: string,
+    signal?: AbortSignal,
+  ): Promise<ToolApprovalView>;
+  decideApproval(input: {
+    approvalId: string;
+    body: DecideToolApprovalRequest;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  }): Promise<ToolApprovalMutationResponse>;
   events(input: {
     runId: string;
     afterSequence: number;
@@ -67,6 +80,16 @@ export function createControlWorkflowAdapter(
     async readRun(runId, signal) {
       return (await client.getRun(runId, { signal })).run;
     },
+    async readApproval(approvalId, signal) {
+      return (await client.getToolApproval(approvalId, { signal })).approval;
+    },
+    decideApproval: (input) =>
+      client.decideToolApproval(
+        input.approvalId,
+        input.body,
+        input.idempotencyKey,
+        { signal: input.signal },
+      ),
     events: (input) =>
       streamRunEvents(client, {
         runId: input.runId,
