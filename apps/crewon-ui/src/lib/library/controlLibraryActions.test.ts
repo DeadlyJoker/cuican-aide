@@ -404,9 +404,7 @@ describe("openControlLibraryAction", () => {
       revision: 1,
       title: officeVersionId,
       members: [],
-      executionTargets: [
-        { targetId: "default", agentVersionId: "agent-v1" },
-      ],
+      executionTargets: [{ targetId: "default", agentVersionId: "agent-v1" }],
       createdByActorId: "actor-1",
       createdAt: "2026-08-13T00:00:00.000Z",
     });
@@ -435,10 +433,9 @@ describe("openControlLibraryAction", () => {
       [{ limit: 100 }],
       [{ before: "page-2", limit: 100 }],
     ]);
-    expect((panel as LibraryPanel | null)?.items.map((item) => item.title)).toEqual([
-      "office-v1",
-      "office-v2",
-    ]);
+    expect(
+      (panel as LibraryPanel | null)?.items.map((item) => item.title),
+    ).toEqual(["office-v1", "office-v2"]);
   });
 
   it("does not let an obsolete Library request replace the current panel", async () => {

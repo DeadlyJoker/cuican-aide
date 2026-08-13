@@ -163,9 +163,7 @@ describe("Control settings coordinator", () => {
 
     expect(harness.client.putLocalSettings).not.toHaveBeenCalled();
     expect(harness.coordinator.handleAction("save-config")).toBe(true);
-    expect(harness.coordinator.handleAction("save-thread-settings")).toBe(
-      true,
-    );
+    expect(harness.coordinator.handleAction("save-thread-settings")).toBe(true);
     expect(harness.setNotice).toHaveBeenCalledWith(
       expect.objectContaining({ tone: "warning" }),
     );

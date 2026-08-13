@@ -1,4 +1,7 @@
-import type { CapabilityPanel, CapabilityPanelItem } from "./capabilityPanelTypes";
+import type {
+  CapabilityPanel,
+  CapabilityPanelItem,
+} from "./capabilityPanelTypes";
 import type { LibraryPanel } from "../domain/crewonDomain";
 import { pathBaseName } from "../shared/pathUtils";
 import { updatePanelFieldValue } from "../shared/panelState";

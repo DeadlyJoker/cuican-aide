@@ -1,10 +1,7 @@
 import { LoaderCircle } from "lucide-react";
 import { Suspense, lazy } from "react";
 
-import type {
-  LibraryItem,
-  LibraryPanel,
-} from "../../lib/domain/crewonDomain";
+import type { LibraryItem, LibraryPanel } from "../../lib/domain/crewonDomain";
 import type { LibraryPanelActionCallback } from "../library/LibraryPrimitives";
 import { translate, type Locale } from "../../lib/i18n";
 

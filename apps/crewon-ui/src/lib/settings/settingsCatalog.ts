@@ -147,21 +147,24 @@ export function settingsSectionLabel(
   if (section === "account") {
     return locale === "zh" ? "账号" : "Account";
   }
-  const labelKeys: Record<Exclude<SettingsSection, "account">, SettingsCopyKey> = {
-    appearance: "appearance",
+  const labelKeys: Record<
+    Exclude<SettingsSection, "account">,
+    SettingsCopyKey
+  > = {
+    "appearance": "appearance",
     "app-snapshots": "appSnapshots",
-    browser: "browser",
+    "browser": "browser",
     "computer-control": "computerControl",
-    config: "config",
-    connections: "connections",
-    environment: "environment",
-    git: "git",
-    hooks: "hooks",
-    keyboard: "keyboard",
+    "config": "config",
+    "connections": "connections",
+    "environment": "environment",
+    "git": "git",
+    "hooks": "hooks",
+    "keyboard": "keyboard",
     "mcp-servers": "mcpServers",
     "model-providers": "modelProviders",
-    personalization: "personalization",
-    worktrees: "worktrees",
+    "personalization": "personalization",
+    "worktrees": "worktrees",
   };
   return sidebarCopy[locale][labelKeys[section]];
 }

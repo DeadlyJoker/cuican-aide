@@ -1,9 +1,6 @@
 import type { LibraryPanelActionCallback } from "./LibraryPrimitives";
 import type { Locale } from "../../lib/i18n";
-import type {
-  LibraryItem,
-  LibraryPanel,
-} from "../../lib/domain/crewonDomain";
+import type { LibraryItem, LibraryPanel } from "../../lib/domain/crewonDomain";
 import { GenericLibraryPage } from "./GenericLibraryPage";
 import { KnowledgeView } from "./KnowledgeView";
 

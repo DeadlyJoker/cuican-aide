@@ -109,7 +109,9 @@ function createParams(
 describe("app capability panel handlers", () => {
   it("wires action dispatch with derived thread ids and trimmed field values", () => {
     const confirm = vi.fn(() => true);
-    const handlers = createAppCapabilityPanelHandlers(createParams({ confirm }));
+    const handlers = createAppCapabilityPanelHandlers(
+      createParams({ confirm }),
+    );
 
     handlers.handleCapabilityPanelAction("save-config");
 

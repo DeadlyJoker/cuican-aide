@@ -21,8 +21,9 @@ type ClosestTarget = {
   closest: (selector: string) => unknown;
 };
 
-function hasClosestTarget(target: EventTarget | null): target is EventTarget &
-  ClosestTarget {
+function hasClosestTarget(
+  target: EventTarget | null,
+): target is EventTarget & ClosestTarget {
   return Boolean(
     target &&
       "closest" in target &&
@@ -35,7 +36,10 @@ function hasViewParam(search: string): boolean {
 }
 
 export function openSettingsAction(params: {
-  demoSettingsPanel: (section: SettingsSection, locale: Locale) => CapabilityPanel;
+  demoSettingsPanel: (
+    section: SettingsSection,
+    locale: Locale,
+  ) => CapabilityPanel;
   isDemo: boolean;
   locale: Locale;
   refreshDefaultSettingsPanel: () => void | Promise<void>;
@@ -59,7 +63,10 @@ export function openSettingsAction(params: {
 }
 
 export function openSettingsSectionAction(params: {
-  demoSettingsPanel: (section: SettingsSection, locale: Locale) => CapabilityPanel;
+  demoSettingsPanel: (
+    section: SettingsSection,
+    locale: Locale,
+  ) => CapabilityPanel;
   isDemo: boolean;
   locale: Locale;
   refreshSettingsSection: (section: SettingsSection) => void | Promise<void>;
@@ -104,7 +111,10 @@ export function toggleInspectorAction(params: {
 }): void {
   params.setInspectorOpen((open) =>
     !open &&
-    params.shouldAutoCloseInspector(params.sidebarOpen, params.capabilityDockOpen)
+    params.shouldAutoCloseInspector(
+      params.sidebarOpen,
+      params.capabilityDockOpen,
+    )
       ? false
       : !open,
   );
@@ -178,7 +188,10 @@ export function closeCrampedInspectorAction(params: {
   sidebarOpen: boolean;
 }): boolean {
   if (
-    !params.shouldAutoCloseInspector(params.sidebarOpen, params.capabilityDockOpen)
+    !params.shouldAutoCloseInspector(
+      params.sidebarOpen,
+      params.capabilityDockOpen,
+    )
   ) {
     return false;
   }
@@ -187,7 +200,10 @@ export function closeCrampedInspectorAction(params: {
 }
 
 export function syncViewFromSearchAction(params: {
-  demoSettingsPanel: (section: SettingsSection, locale: Locale) => CapabilityPanel;
+  demoSettingsPanel: (
+    section: SettingsSection,
+    locale: Locale,
+  ) => CapabilityPanel;
   isConnected: boolean;
   isDemo: boolean;
   lastSyncedSearch: string;
@@ -240,7 +256,10 @@ export function syncViewFromSearchAction(params: {
 
 export function syncSettingsViewPanelAction(params: {
   appView: AppView;
-  demoSettingsPanel: (section: SettingsSection, locale: Locale) => CapabilityPanel;
+  demoSettingsPanel: (
+    section: SettingsSection,
+    locale: Locale,
+  ) => CapabilityPanel;
   isConnected: boolean;
   isDemo: boolean;
   locale: Locale;

@@ -203,9 +203,7 @@ export function createAppSettingsCoordinator(
     try {
       const { settings: current } = await params.client.getLocalSettings();
       const nextLocale: Locale =
-        isLocale && (value === "en" || value === "zh")
-          ? value
-          : current.locale;
+        isLocale && (value === "en" || value === "zh") ? value : current.locale;
       const nextTheme: Theme =
         isTheme && (value === "light" || value === "dark")
           ? value

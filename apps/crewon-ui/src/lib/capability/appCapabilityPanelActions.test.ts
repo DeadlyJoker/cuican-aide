@@ -1,6 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { CapabilityPanel, CapabilityPanelItem } from "./capabilityPanelTypes";
+import type {
+  CapabilityPanel,
+  CapabilityPanelItem,
+} from "./capabilityPanelTypes";
 import {
   openPluginPathFromPanelAction,
   updateCapabilityPanelFieldAction,

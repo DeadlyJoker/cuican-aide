@@ -172,8 +172,13 @@ describe("App Workspace Control composition", () => {
       /readWorkspaceFiles|attachWorkspaceContext|clientRef|\bcwd\b|\bplatform\b/u,
     );
     const routeStart = source.indexOf("<AppCommandShellRoute");
-    const routeEnd = source.indexOf("return (\n    <AppShellChromeFrame", routeStart);
-    expect(source.slice(routeStart, routeEnd)).not.toContain("onAttachContext=");
+    const routeEnd = source.indexOf(
+      "return (\n    <AppShellChromeFrame",
+      routeStart,
+    );
+    expect(source.slice(routeStart, routeEnd)).not.toContain(
+      "onAttachContext=",
+    );
   });
 
   it("requires an explicit Workspace authority and has no URL authority fallback", () => {

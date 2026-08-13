@@ -10,10 +10,7 @@ import type {
   CommandModelOption,
   ThreadRuntimeSettings,
 } from "../../lib/thread/threadRuntimeSettings";
-import type {
-  LibraryItem,
-  LibraryPanel,
-} from "../../lib/domain/crewonDomain";
+import type { LibraryItem, LibraryPanel } from "../../lib/domain/crewonDomain";
 import type { LibraryPanelActionCallback } from "../library/LibraryPrimitives";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import type { Locale } from "../../lib/i18n";

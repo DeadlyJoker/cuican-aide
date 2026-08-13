@@ -223,7 +223,10 @@ async function submitAutomation(params: ControlLibraryInteraction) {
       title,
     });
     await params.openLibrary("automation");
-    success(params, params.locale === "zh" ? "自动化已创建。" : "Automation created.");
+    success(
+      params,
+      params.locale === "zh" ? "自动化已创建。" : "Automation created.",
+    );
   } catch (error) {
     warning(params, error, "Unable to create automation.");
   }

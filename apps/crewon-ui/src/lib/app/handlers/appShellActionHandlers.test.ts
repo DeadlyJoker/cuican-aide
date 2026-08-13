@@ -1,8 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type {
-  AppShellActionHandlersParams,
-} from "./appShellActionHandlers";
+import type { AppShellActionHandlersParams } from "./appShellActionHandlers";
 import { createAppShellActionHandlers } from "./appShellActionHandlers";
 import type { AppView } from "../appRouting";
 import type { NoticeState } from "../appRuntimeState";
