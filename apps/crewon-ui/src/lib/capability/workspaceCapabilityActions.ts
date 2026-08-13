@@ -12,9 +12,6 @@ import {
 import {
   defaultCapabilityPanel,
   fileMetadataText,
-  terminalCompletedPanel,
-  terminalErrorPanel,
-  terminalRunningPanel,
 } from "./capabilityPanelText";
 import {
   attachContextDemoPanel,
@@ -132,14 +129,6 @@ type BaseWorkspaceCapabilityActionParams = {
   setCapabilityPanel: SetCapabilityPanel;
 };
 
-export type RunTerminalStatusActionParams =
-  BaseWorkspaceCapabilityActionParams & {
-    processIdFactory?: () => string;
-    setTerminalProcessId: (processId: string | null) => void;
-    terminalCommand: string;
-    terminalProcessId: () => string | null;
-  };
-
 export type WorkbenchTerminalSessionActionParams =
   BaseWorkspaceCapabilityActionParams & {
     appendTerminalOutputLine: (notice: string) => void;
@@ -179,67 +168,6 @@ export type LoadBrowserAppsActionParams =
     isDemoPreview: boolean;
     selectedThreadId: string | null;
   };
-
-export async function runTerminalStatusAction(
-  params: RunTerminalStatusActionParams,
-) {
-  const {
-    busyToolId,
-    client,
-    isConnected,
-    isDemo,
-    locale,
-    processIdFactory = () => `crewon-ui-terminal-${Date.now()}`,
-    resolveBackendCwd,
-    setBusyToolId,
-    setCapabilityPanel,
-    setTerminalProcessId,
-    terminalCommand,
-    terminalProcessId,
-  } = params;
-
-  const command = terminalCommand.trim();
-  if (isDemo) {
-    const panel = demoCapabilityPanel("terminal", locale);
-    setCapabilityPanel(
-      command ? { ...panel, subtitle: `${command}  ·  exit 0` } : panel,
-    );
-    return;
-  }
-
-  if (busyToolId || !isConnected || !command) {
-    return;
-  }
-
-  const terminalCwd = await resolveBackendCwd();
-  if (!terminalCwd) {
-    return;
-  }
-
-  setBusyToolId("terminal");
-  const processId = processIdFactory();
-  setTerminalProcessId(processId);
-  setCapabilityPanel(terminalRunningPanel(terminalCwd, locale));
-
-  try {
-    const response = await client?.runCommand(terminalCwd, command, processId);
-    setCapabilityPanel((currentPanel) =>
-      terminalCompletedPanel({
-        command,
-        currentBody: currentPanel?.body,
-        locale,
-        response,
-      }),
-    );
-  } catch (error) {
-    setCapabilityPanel(terminalErrorPanel({ command, error, locale }));
-  } finally {
-    if (terminalProcessId() === processId) {
-      setTerminalProcessId(null);
-    }
-    setBusyToolId(null);
-  }
-}
 
 export async function startWorkbenchTerminalSessionAction(
   params: WorkbenchTerminalSessionActionParams,

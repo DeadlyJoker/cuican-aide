@@ -1,12 +1,10 @@
 import type { FsGetMetadataResponse } from "@crewon-protocol/v2/FsGetMetadataResponse";
 import type { PluginReadResponse } from "@crewon-protocol/v2/PluginReadResponse";
 
-import type { BackgroundTerminal } from "../app-server/appServer";
 import type {
   CapabilityPanel,
   CapabilityPanelAction,
   CapabilityPanelField,
-  CapabilityPanelItem,
 } from "./capabilityPanelTypes";
 import type { Locale } from "../i18n";
 import { formatUnixMillis } from "../shared/timeFormatters";
@@ -14,12 +12,6 @@ import { formatUnixMillis } from "../shared/timeFormatters";
 type PanelSearchControls = {
   actions: CapabilityPanelAction[];
   fields: CapabilityPanelField[];
-};
-
-type TerminalCommandResponse = {
-  exitCode: number;
-  stderr?: string | null;
-  stdout?: string | null;
 };
 
 export function defaultCapabilityPanel(locale: Locale): CapabilityPanel {
@@ -102,214 +94,6 @@ export function filePanelSearchControls(
       },
       { id: "clear-file-search", label: locale === "zh" ? "清空" : "Clear" },
     ],
-  };
-}
-
-export function backgroundTerminalLabel(
-  terminal: BackgroundTerminal,
-  locale: Locale,
-): string {
-  const metrics = [
-    terminal.osPid ? `pid ${terminal.osPid}` : null,
-    terminal.cpuPercent == null
-      ? null
-      : `cpu ${terminal.cpuPercent.toFixed(1)}%`,
-    terminal.rssKb == null
-      ? null
-      : `rss ${Math.round(terminal.rssKb / 1024)}MB`,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-  const title = terminal.command || terminal.processId;
-  const suffix = metrics ? `  ${metrics}` : "";
-  const cwd = String(terminal.cwd);
-  return `${title}${suffix}\n${locale === "zh" ? "目录" : "cwd"} ${cwd}`;
-}
-
-export function backgroundTerminalsLoadingPanel(
-  threadId: string,
-  locale: Locale,
-): CapabilityPanel {
-  return {
-    title: locale === "zh" ? "后台终端" : "Background terminals",
-    subtitle: threadId,
-    body: locale === "zh" ? "正在读取..." : "Reading...",
-  };
-}
-
-export function backgroundTerminalsEmptyPanel(locale: Locale): CapabilityPanel {
-  return {
-    title: locale === "zh" ? "后台终端" : "Background terminals",
-    subtitle: locale === "zh" ? "0 个后台任务" : "0 background tasks",
-    body:
-      locale === "zh"
-        ? "当前会话没有后台终端。"
-        : "This session has no background terminals.",
-    actions: [backgroundTerminalsRefreshAction(locale)],
-  };
-}
-
-export function backgroundTerminalsPanel(params: {
-  locale: Locale;
-  terminals: BackgroundTerminal[];
-  threadId: string;
-}): CapabilityPanel {
-  const { locale, terminals, threadId } = params;
-  return {
-    title: locale === "zh" ? "后台终端" : "Background terminals",
-    subtitle:
-      locale === "zh"
-        ? `${terminals.length} 个后台任务`
-        : `${terminals.length} background tasks`,
-    body:
-      terminals.length > 0
-        ? locale === "zh"
-          ? "点击任务可终止对应进程。"
-          : "Click a task to terminate its process."
-        : locale === "zh"
-          ? "当前会话没有后台终端。"
-          : "This session has no background terminals.",
-    actions: [
-      backgroundTerminalsRefreshAction(locale),
-      {
-        id: "clean-background-terminals",
-        label: locale === "zh" ? "清理已结束" : "Clean finished",
-      },
-    ],
-    items: terminals.map(
-      (terminal): CapabilityPanelItem => ({
-        label: backgroundTerminalLabel(terminal, locale),
-        action: {
-          type: "background-terminal",
-          threadId,
-          processId: terminal.processId,
-        },
-      }),
-    ),
-  };
-}
-
-export function backgroundTerminalsErrorPanel(params: {
-  error: unknown;
-  locale: Locale;
-  threadId: string;
-}): CapabilityPanel {
-  const { error, locale, threadId } = params;
-  return {
-    title: locale === "zh" ? "后台终端" : "Background terminals",
-    subtitle: threadId,
-    error:
-      error instanceof Error
-        ? error.message
-        : locale === "zh"
-          ? "读取后台终端失败"
-          : "Unable to read background terminals",
-  };
-}
-
-export function terminalRunningPanel(
-  cwd: string,
-  locale: Locale,
-): CapabilityPanel {
-  return {
-    title: locale === "zh" ? "终端" : "Terminal",
-    subtitle: cwd,
-    commandInput: true,
-    body: terminalRunningText(locale),
-    fields: [
-      {
-        id: "terminal-stdin",
-        label: locale === "zh" ? "输入" : "Input",
-        placeholder:
-          locale === "zh"
-            ? "发送到运行中的命令，可用 \\n 换行"
-            : "Send to the running command; use \\n for newline",
-        value: "",
-      },
-    ],
-    actions: [
-      terminalSendToThreadAction(locale),
-      backgroundTerminalAction(locale),
-      {
-        id: "send-terminal-input",
-        label: locale === "zh" ? "发送输入" : "Send input",
-        tone: "primary",
-      },
-      {
-        id: "stop-terminal",
-        label: locale === "zh" ? "停止" : "Stop",
-        tone: "danger",
-      },
-    ],
-  };
-}
-
-export function terminalCompletedPanel(params: {
-  command: string;
-  currentBody?: string;
-  locale: Locale;
-  response?: TerminalCommandResponse | null;
-}): CapabilityPanel {
-  const { command, currentBody, locale, response } = params;
-  const output = [response?.stdout, response?.stderr]
-    .filter(Boolean)
-    .join("\n")
-    .trim();
-  return {
-    title: locale === "zh" ? "终端" : "Terminal",
-    subtitle: response ? `${command}  exit ${response.exitCode}` : command,
-    commandInput: true,
-    body:
-      (currentBody && currentBody !== terminalRunningText(locale)
-        ? currentBody
-        : output) || (locale === "zh" ? "无输出" : "No output"),
-    actions: [terminalSendToThreadAction(locale), backgroundTerminalAction(locale)],
-  };
-}
-
-export function terminalErrorPanel(params: {
-  command: string;
-  error: unknown;
-  locale: Locale;
-}): CapabilityPanel {
-  const { command, error, locale } = params;
-  return {
-    title: locale === "zh" ? "终端" : "Terminal",
-    subtitle: command,
-    commandInput: true,
-    error:
-      error instanceof Error
-        ? error.message
-        : locale === "zh"
-          ? "命令执行失败"
-          : "Command failed",
-  };
-}
-
-function terminalRunningText(locale: Locale): string {
-  return locale === "zh" ? "正在运行..." : "Running...";
-}
-
-function terminalSendToThreadAction(locale: Locale): CapabilityPanelAction {
-  return {
-    id: "send-terminal-to-thread",
-    label: locale === "zh" ? "发送到会话" : "Send to session",
-  };
-}
-
-function backgroundTerminalAction(locale: Locale): CapabilityPanelAction {
-  return {
-    id: "refresh-background-terminals",
-    label: locale === "zh" ? "后台任务" : "Background tasks",
-  };
-}
-
-function backgroundTerminalsRefreshAction(
-  locale: Locale,
-): CapabilityPanelAction {
-  return {
-    id: "refresh-background-terminals",
-    label: locale === "zh" ? "刷新" : "Refresh",
   };
 }
 

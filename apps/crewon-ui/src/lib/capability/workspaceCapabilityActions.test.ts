@@ -9,14 +9,15 @@ import {
   readWorkspaceDiffAction,
   readWorkspaceFilesAction,
   resizeWorkbenchTerminalAction,
-  runTerminalStatusAction,
   startWorkbenchTerminalSessionAction,
   stopWorkbenchTerminalSessionAction,
   writeWorkbenchTerminalInputAction,
-  type RunTerminalStatusActionParams,
+  type WorkbenchTerminalSessionActionParams,
 } from "./workspaceCapabilityActions";
 
-type WorkspaceClient = NonNullable<RunTerminalStatusActionParams["client"]>;
+type WorkspaceClient = NonNullable<
+  WorkbenchTerminalSessionActionParams["client"]
+>;
 
 function metadata(
   overrides: Partial<FsGetMetadataResponse> = {},
@@ -107,7 +108,9 @@ function panelSink(initialPanel: CapabilityPanel | null = null) {
   };
 }
 
-function baseParams(overrides: Partial<RunTerminalStatusActionParams> = {}) {
+function baseParams(
+  overrides: Partial<WorkbenchTerminalSessionActionParams> = {},
+) {
   const sink = panelSink();
   return {
     busyToolId: null,
@@ -119,59 +122,10 @@ function baseParams(overrides: Partial<RunTerminalStatusActionParams> = {}) {
     setBusyToolId: () => {},
     setCapabilityPanel: sink.setCapabilityPanel,
     ...overrides,
-  } satisfies Partial<RunTerminalStatusActionParams>;
+  } satisfies Partial<WorkbenchTerminalSessionActionParams>;
 }
 
 describe("workspace capability actions", () => {
-  it("runs terminal status and releases the active process id", async () => {
-    const sink = panelSink({ title: "Terminal", body: "previous" });
-    const busyStates: Array<string | null> = [];
-    const processIds: Array<string | null> = [];
-    let currentProcessId: string | null = null;
-    const commands: Array<{
-      command: string;
-      cwd: string;
-      processId?: string;
-    }> = [];
-
-    await runTerminalStatusAction({
-      ...baseParams(),
-      client: baseClient({
-        async runCommand(cwd, command, processId) {
-          commands.push({ command, cwd, processId });
-          return { exitCode: 0, stdout: "clean\n", stderr: null };
-        },
-      }),
-      processIdFactory: () => "proc-1",
-      setBusyToolId: (toolId) => {
-        busyStates.push(toolId);
-      },
-      setCapabilityPanel: sink.setCapabilityPanel,
-      setTerminalProcessId: (processId) => {
-        currentProcessId = processId;
-        processIds.push(processId);
-      },
-      terminalCommand: "  git status --short  ",
-      terminalProcessId: () => currentProcessId,
-    });
-
-    expect(commands).toEqual([
-      { command: "git status --short", cwd: "/repo", processId: "proc-1" },
-    ]);
-    expect(processIds).toEqual(["proc-1", null]);
-    expect(busyStates).toEqual(["terminal", null]);
-    expect(sink.panel).toEqual({
-      actions: [
-        { id: "send-terminal-to-thread", label: "Send to session" },
-        { id: "refresh-background-terminals", label: "Background tasks" },
-      ],
-      body: "clean",
-      commandInput: true,
-      subtitle: "git status --short  exit 0",
-      title: "Terminal",
-    });
-  });
-
   it("keeps one PTY session alive for interactive input and resize", async () => {
     const sink = panelSink();
     const outputLines: string[] = [];
