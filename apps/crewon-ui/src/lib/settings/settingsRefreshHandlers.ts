@@ -4,6 +4,7 @@ import type { ThreadGoalView } from "@crewon/contracts";
 
 import { refreshAccountPanelAction } from "../account/accountActions";
 import type { AppServerClient } from "../app-server/appServer";
+import type { ControlApiClient } from "@crewon/control-client";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
 import { refreshModelProvidersPanelAction } from "../model-provider/modelProviderActions";
@@ -76,6 +77,7 @@ export type AppSettingsRefreshHandlers = {
 export function createAppSettingsRefreshHandlers(params: {
   accountStatus: AccountStatus | null;
   client: AppServerClient | null;
+  controlClient?: ControlApiClient | null;
   connectionHint: string;
   connectionState: ConnectionState;
   conversationSummary: ConversationSummary | null;
@@ -101,6 +103,7 @@ export function createAppSettingsRefreshHandlers(params: {
 }): AppSettingsRefreshHandlers {
   const baseParams = {
     client: params.client,
+    controlClient: params.controlClient,
     connectionHint: params.connectionHint,
     isConnected: params.isConnected,
     locale: params.locale,

@@ -8,6 +8,7 @@ import {
   createAppCommandOfficeRoomAdapter,
 } from "./components/app";
 import type { ControlApiClient } from "@crewon/control-client";
+import { openControlLibraryAction } from "./lib/library/controlLibraryActions";
 import { CommandSettingsLazyRoute } from "./components/app/CommandSettingsLazyRoute";
 import {
   isMissingThreadError,
@@ -180,17 +181,17 @@ export function App({
     rehydrateThreadAuthority: rehydrateControlThreadAuthority,
     runtime: controlThreadRuntime,
   } = useControlThreadRuntime({
-      appendStreamingTextDelta: threadState.appendStreamingTextDelta,
-      client: controlClient,
-      selectedThreadId,
-      selectedThreadIdRef,
-      setActiveTurnByThread: threadState.setActiveTurnByThread,
-      setSelectedThreadId,
-      setStreamingTextByThread: threadState.setStreamingTextByThread,
-      setThreadGoal: workspaceStatus.setThreadGoal,
-      setThreads: threadState.setThreads,
-      showArchivedThreadsRef,
-    });
+    appendStreamingTextDelta: threadState.appendStreamingTextDelta,
+    client: controlClient,
+    selectedThreadId,
+    selectedThreadIdRef,
+    setActiveTurnByThread: threadState.setActiveTurnByThread,
+    setSelectedThreadId,
+    setStreamingTextByThread: threadState.setStreamingTextByThread,
+    setThreadGoal: workspaceStatus.setThreadGoal,
+    setThreads: threadState.setThreads,
+    showArchivedThreadsRef,
+  });
   const controlWorkspace = useControlWorkspaceRuntime({
     client: controlRuntimeConnected ? controlClient : null,
     nativeAuthority:
@@ -457,33 +458,49 @@ export function App({
     setLibraryPanel,
     setNotice,
   });
-  const { openLibrary, openLibraryItem } = createAppLibraryOpenCoordinator({
-    connectionHint: t.connectionHints[connectionState],
-    createBackendAgentConfig,
-    cwd,
-    ensureOfficeThread,
-    getClient: () => clientRef.current,
-    isConnected,
-    isDemo,
-    isDemoPreview,
-    isUnsupportedRpcError,
-    libraryLoadRequestRef,
-    loadAgentLibraryItems,
-    loadToolLibraryItems,
-    locale,
-    optionalBackendWorkspace,
-    readAutomationRunItems,
-    readKnowledgeData: createBackendKnowledgeData,
-    refreshToolActionFromBackend,
-    resolveBackendCwd,
-    ...threadState,
-    setAppView,
-    ...chromeState,
-    setLibraryPanel,
-    setNotice,
-    storedAutomationItems: automationConfigRecordsToLibraryItems,
-    writeAgentConfig: writeAgentConfigFile,
-  });
+  const { openLibrary: openLegacyLibrary, openLibraryItem } =
+    createAppLibraryOpenCoordinator({
+      connectionHint: t.connectionHints[connectionState],
+      createBackendAgentConfig,
+      cwd,
+      ensureOfficeThread,
+      getClient: () => clientRef.current,
+      isConnected,
+      isDemo,
+      isDemoPreview,
+      isUnsupportedRpcError,
+      libraryLoadRequestRef,
+      loadAgentLibraryItems,
+      loadToolLibraryItems,
+      locale,
+      optionalBackendWorkspace,
+      readAutomationRunItems,
+      readKnowledgeData: createBackendKnowledgeData,
+      refreshToolActionFromBackend,
+      resolveBackendCwd,
+      ...threadState,
+      setAppView,
+      ...chromeState,
+      setLibraryPanel,
+      setNotice,
+      storedAutomationItems: automationConfigRecordsToLibraryItems,
+      writeAgentConfig: writeAgentConfigFile,
+    });
+  const openLibrary = async (kind: Parameters<typeof openLegacyLibrary>[0]) => {
+    if (controlClient === null) {
+      await openLegacyLibrary(kind);
+      return;
+    }
+    setAppView("library");
+    setCapabilityDockOpen(false);
+    chromeState.setInspectorOpen(false);
+    await openControlLibraryAction({
+      client: controlClient,
+      kind,
+      locale,
+      setLibraryPanel,
+    });
+  };
   const saveCapability = (draft: CapabilityEditorDraft) =>
     saveCapabilityDraftAction({
       client: clientRef.current,
@@ -754,6 +771,7 @@ export function App({
     ...workspaceStatus,
     capabilityPanel,
     client: clientRef.current,
+    controlClient,
     connectionHint: t.connectionHints[connectionState],
     connectionState,
     currentCwd: cwd,
@@ -1018,7 +1036,8 @@ export function App({
                 state: controlWorkspace.state,
                 mutationAuthority: controlWorkspace.mutationAuthority,
                 nativeWorkspaceSelected:
-                  (controlWorkspace.nativeWorkspace?.displayName ?? null) !== null,
+                  (controlWorkspace.nativeWorkspace?.displayName ?? null) !==
+                  null,
                 nativeWorkspaceDisplayName:
                   controlWorkspace.nativeWorkspace?.displayName ?? null,
                 nativeWorkspaceBusy: controlWorkspace.nativeBusy,
@@ -1032,7 +1051,8 @@ export function App({
                     : undefined,
                 onClearNativeWorkspace:
                   controlWorkspace.mutationAuthority === "desktop" &&
-                  (controlWorkspace.nativeWorkspace?.displayName ?? null) !== null
+                  (controlWorkspace.nativeWorkspace?.displayName ?? null) !==
+                    null
                     ? controlWorkspace.clearNativeWorkspace
                     : undefined,
               }

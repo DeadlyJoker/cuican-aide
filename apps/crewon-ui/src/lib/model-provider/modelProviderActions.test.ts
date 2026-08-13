@@ -232,6 +232,48 @@ describe("modelProviderDraftFromFields", () => {
 });
 
 describe("refreshModelProvidersPanelAction", () => {
+  it("uses Control API as the packaged settings authority", async () => {
+    const setCapabilityPanel = vi.fn();
+    const readConfig = vi.fn(async () => {
+      throw new Error("legacy client must not be called");
+    });
+    const getModelProviderSettings = vi.fn(async () => ({
+      settings: {
+        revision: 3,
+        activeProviderId: "openai",
+        providers: [
+          {
+            providerId: "openai",
+            displayName: "OpenAI",
+            endpoint: "https://api.openai.com/v1",
+            credentialKind: "keychain" as const,
+            environmentVariable: null,
+            isActive: true,
+          },
+        ],
+        runtimeAvailability: "available" as const,
+        updatedAt: null,
+      },
+    }));
+
+    await refreshModelProvidersPanelAction({
+      client: { readConfig } as never,
+      controlClient: { getModelProviderSettings },
+      credentialStore: null,
+      isConnected: true,
+      locale: "en",
+      resolveBackendCwd: async () => "/ignored",
+      setCapabilityPanel,
+    });
+
+    expect(getModelProviderSettings).toHaveBeenCalledOnce();
+    expect(readConfig).not.toHaveBeenCalled();
+    expect(setCapabilityPanel).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining("openai"),
+      }),
+    );
+  });
   it("does not read config when the app-server is not connected", async () => {
     const readConfig = vi.fn();
     const test = harness({

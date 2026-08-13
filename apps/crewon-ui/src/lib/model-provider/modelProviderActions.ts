@@ -9,6 +9,7 @@
 import type { ConfigReadResponse } from "@crewon-protocol/v2/ConfigReadResponse";
 import type { ModelProviderProbeResponse } from "@crewon-protocol/v2/ModelProviderProbeResponse";
 import type { JsonValue } from "@crewon-protocol/serde_json/JsonValue";
+import type { ControlApiClient } from "@crewon/control-client";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
@@ -79,6 +80,7 @@ type SetCapabilityPanel = (
  */
 export type ModelProviderRefreshParams = {
   client: ModelProviderClient | null | undefined;
+  controlClient?: Pick<ControlApiClient, "getModelProviderSettings"> | null;
   /** Shown as the subtitle when disconnected; the action dispatcher has none. */
   connectionHint?: string;
   isConnected: boolean;
@@ -106,6 +108,24 @@ async function readProviderState(params: ModelProviderRefreshParams): Promise<{
   configRead: ConfigReadResponse | null;
   cwd: string | null;
 }> {
+  if (params.controlClient !== null && params.controlClient !== undefined) {
+    const { settings } = await params.controlClient.getModelProviderSettings();
+    return {
+      catalog: {
+        activeProviderId: settings.activeProviderId,
+        bindings: settings.providers.map((provider) => ({
+          credentialAvailable: true,
+          credentialKind: provider.credentialKind,
+          endpoint: provider.endpoint,
+          environmentVariable: provider.environmentVariable,
+          isActive: provider.isActive,
+          providerId: provider.providerId,
+        })),
+      },
+      configRead: null,
+      cwd: null,
+    };
+  }
   const store = credentialStoreFor(params);
   const catalog = (await store?.catalog()) ?? null;
   if (store !== null) {
