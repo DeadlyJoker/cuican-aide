@@ -11,6 +11,7 @@ import type {
   LibraryPanel,
 } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";
+import { listControlKnowledge } from "../knowledge/controlKnowledgeLibrary";
 import { libraryTitle } from "./libraryPanelFormatters";
 
 type SetLibraryPanel = (
@@ -81,7 +82,7 @@ async function openControlKnowledge(params: {
   setLibraryPanel: SetLibraryPanel;
 }): Promise<void> {
   try {
-    const response = await params.client.listKnowledge({ limit: 100 });
+    const response = await listControlKnowledge(params.client);
     const memories = response.data.filter(({ kind }) => kind === "memory");
     const sources = response.data.filter(({ kind }) => kind === "source");
     params.setLibraryPanel({
@@ -89,8 +90,8 @@ async function openControlKnowledge(params: {
       title: libraryTitle("knowledge", params.locale),
       subtitle:
         params.locale === "zh"
-          ? `${memories.length} 条记忆 · ${sources.length} 个知识源`
-          : `${memories.length} memories · ${sources.length} sources`,
+          ? `${memories.length} 条记忆 · ${sources.length} 个知识源${response.truncated ? "（仅显示前 500 条）" : ""}`
+          : `${memories.length} memories · ${sources.length} sources${response.truncated ? " (first 500 shown)" : ""}`,
       items: [],
       knowledge: {
         memories: memories.map(controlKnowledgeMemory),

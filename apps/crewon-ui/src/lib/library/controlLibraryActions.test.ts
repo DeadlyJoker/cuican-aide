@@ -296,6 +296,47 @@ describe("openControlLibraryAction", () => {
     });
   });
 
+  it("loads all bounded Control Knowledge pages", async () => {
+    let panel: LibraryPanel | null = null;
+    const listKnowledge = vi
+      .fn()
+      .mockResolvedValueOnce({ data: [], nextCursor: "page-2" })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            schemaVersion: "crewon.knowledge.v0",
+            knowledgeId: "knowledge-2",
+            kind: "memory",
+            sourceId: "thread:2",
+            title: "Second page",
+            content: "Loaded through the cursor",
+            contentDigest: "sha256:2",
+            createdAt: "2026-08-13T00:00:00.000Z",
+          },
+        ],
+        nextCursor: null,
+      });
+
+    await openControlLibraryAction({
+      client: { listKnowledge } as unknown as ControlApiClient,
+      kind: "knowledge",
+      locale: "en",
+      selectedThreadId: null,
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+    });
+
+    expect(listKnowledge.mock.calls).toEqual([
+      [{ limit: 100 }],
+      [{ cursor: "page-2", limit: 100 }],
+    ]);
+    expect(panel).toMatchObject({
+      subtitle: "1 memories · 0 sources",
+      knowledge: { memories: [{ title: "Second page" }] },
+    });
+  });
+
   it("maps Control Office definitions into existing library cards", async () => {
     let panel: LibraryPanel | null = null;
     const listOffices = vi.fn(async () => ({
