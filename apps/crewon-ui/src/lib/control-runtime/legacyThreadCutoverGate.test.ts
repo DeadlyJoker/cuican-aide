@@ -53,20 +53,15 @@ function callsIn(file: ts.SourceFile): string[] {
 }
 
 describe("legacy Thread cutover gate", () => {
-  it("inventories the production composition as one injected authority", () => {
+  it("keeps the production composition free of the legacy authority selector", () => {
     const app = parse("../../App.tsx");
     const calls = callsIn(app);
+    const appSource = source("../../App.tsx");
 
-    expect(source("../../App.tsx")).toContain(
-      "controlClientConfigured: controlClient !== null",
+    expect(appSource).not.toMatch(
+      /selectThreadRuntimeAuthority|legacyRuntime|clientRef/u,
     );
-    expect(source("../../App.tsx")).toContain(
-      "controlRuntime: controlThreadRuntime",
-    );
-    expect(source("../../App.tsx")).toContain(
-      "legacyRuntime: clientRef.current",
-    );
-    expect(source("../../App.tsx")).toMatch(
+    expect(appSource).toMatch(
       /createAppThreadRuntimeHandlers\(\{[\s\S]*?client: threadRuntimeClient,/u,
     );
 

@@ -30,8 +30,6 @@ import {
   shouldAutoCloseInspector,
   useAppChromeEffects,
   useAppConfirmDialog,
-  useAppConnectionEffects,
-  useAppConnectionHandlerSet,
   useAppCoordinatorRefs,
   useAppDocumentPreferenceEffects,
   useAppEnvironment,
@@ -48,7 +46,6 @@ import {
   useAppShellRuntimeState,
   useAppTerminalState,
   useAppThreadSelection,
-  useAppServerEventHandlerSet,
   useAppThreadListEffects,
   useAppThreadMetadataEffects,
   useAppViewSyncEffects,
@@ -61,7 +58,6 @@ import {
   platformResourceMentionPath,
   saveCapabilityDraftAction,
   withPlatformResourceMention,
-  useAppCommandModelOptions,
   useAppDraftWorkspaceState,
   useProviderResourceComposer,
   workspaceCapabilityHandlersForAuthority,
@@ -73,56 +69,38 @@ import {
 } from "./lib/composer/composerSlashCommands";
 import type { CapabilityPanelItem } from "./lib/capability/capabilityPanelTypes";
 import { demoCapabilityPanel, demoSettingsPanel } from "./lib/demo/demoContent";
+import { getDemoThreads } from "./lib/demo/demoData";
 import { persistLocale, translate } from "./lib/i18n";
 import { persistTheme } from "./lib/theme";
 import { commitSettingsField } from "./lib/settings/settingsFieldCommitHandler";
 import { isSingleConversationThread } from "./lib/thread/threadSourceFilters";
 import { createThreadGoalComposerHandlers } from "./lib/thread/threadGoalComposerActions";
+import type { CommandModelOption } from "./lib/thread/threadRuntimeSettings";
 import {
   assistantThreadRuntimeSettings,
   latestAssistantThread,
 } from "./lib/thread/assistantThread";
-import { officeRecordKey } from "./lib/office/officePanelFromRecord";
 import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate";
 import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
 import { useControlCommandCatalog } from "./lib/control-runtime/useControlCommandCatalog";
 import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWorkspaceRuntime";
-import { selectThreadRuntimeAuthority } from "./lib/control-runtime/threadRuntimeAuthority";
-import { legacyDomainClientForAuthority } from "./lib/control-runtime/legacyDomainAuthority";
 import { desktopWorkspaceAuthority } from "./lib/desktop/desktopWorkspaceAuthorityAdapter";
+import { showDemoThreadsAction } from "./lib/app/appConnectionActions";
 
-export function App({
-  controlClient = null,
-}: {
-  controlClient?: ControlApiClient | null;
-}) {
-  const workspaceUiAuthority =
-    controlClient === null ? ("legacy" as const) : ("control" as const);
-  const { isDemoPreview, platform, principalSessionEnabled, serverUrl } =
-    useAppEnvironment();
+export function App({ controlClient }: { controlClient: ControlApiClient }) {
+  const workspaceUiAuthority = "control" as const;
+  const { isDemoPreview, platform } = useAppEnvironment();
   // Who you are in CrewON. The model account below is a separate credential.
   const platformAccount = useAgentPlatformAccount();
   const {
-    clientRef,
     libraryLoadRequestRef,
     openLibraryRef,
     openThreadSettingsPanelRef,
     refreshSettingsSectionRef,
   } = useAppCoordinatorRefs();
-  const {
-    connectionAttempt,
-    connectionState,
-    locale,
-    localeRef,
-    notice,
-    setConnectionAttempt,
-    setConnectionState,
-    setLocale,
-    setNotice,
-    setTheme,
-    theme,
-  } = useAppShellRuntimeState();
+  const { locale, localeRef, notice, setLocale, setNotice, setTheme, theme } =
+    useAppShellRuntimeState();
   const {
     appView,
     appViewRef,
@@ -200,8 +178,7 @@ export function App({
   });
   const controlWorkspace = useControlWorkspaceRuntime({
     client: controlRuntimeConnected ? controlClient : null,
-    nativeAuthority:
-      controlClient === null ? null : desktopWorkspaceAuthority(),
+    nativeAuthority: desktopWorkspaceAuthority(),
     rehydrateThreadAuthority: rehydrateControlThreadAuthority,
     selectedThreadId,
   });
@@ -212,7 +189,6 @@ export function App({
    */
   const pendingRequests = useAppPendingServerRequests();
   const {
-    appendTerminalOutputDelta,
     appendTerminalOutputLine,
     setTerminalCommand,
     setTerminalProcessId,
@@ -235,7 +211,6 @@ export function App({
     setComposerValue,
     setPendingComposerMentions,
     setPendingContextFile,
-    setSlashCommandRefreshKey,
     setWorkMode,
     slashCommandRefreshKey,
     workMode,
@@ -247,6 +222,13 @@ export function App({
   const { draftWorkspaceCwd, setDraftWorkspaceCwd } = useAppDraftWorkspaceState(
     () => setSelectedThreadId(null),
   );
+  const threadRuntimeClient = controlRuntimeConnected
+    ? controlThreadRuntime
+    : null;
+  const threadRuntimeConnected = controlRuntimeConnected;
+  const threadConnectionState = controlRuntimeConnected
+    ? ("connected" as const)
+    : ("connecting" as const);
 
   const {
     activeTurnId,
@@ -257,40 +239,21 @@ export function App({
     titlebarTitle,
   } = useAppThreadSelection({
     ...threadState,
-    connectionState,
+    connectionState: threadConnectionState,
     draftWorkspaceCwd,
     newDraftThreadLabel: t.newDraftThread,
     untitledThreadLabel: t.untitledThread,
   });
-  const threadAuthority = selectThreadRuntimeAuthority({
-    controlClientConfigured: controlClient !== null,
-    controlConnected: controlRuntimeConnected,
-    controlRuntime: controlThreadRuntime,
-    legacyConnected: isConnected,
-    legacyConnectionState: connectionState,
-    legacyRuntime: clientRef.current,
-  });
-  const threadRuntimeClient = threadAuthority.client;
-  const threadRuntimeConnected = threadAuthority.connected;
-  const threadConnectionState = threadAuthority.connectionState;
-  const legacyDomainClient = legacyDomainClientForAuthority({
-    controlClientConfigured: controlClient !== null,
-    legacyClient: clientRef.current,
-  });
-  const commandModelOptions = useAppCommandModelOptions({
-    client: controlClient === null ? clientRef.current : null,
-    connectionAttempt,
-    isConnected: controlClient === null && isConnected,
-  });
+  const commandModelOptions: CommandModelOption[] = [];
   const providerResourceComposer = useProviderResourceComposer({
-    client: clientRef.current,
-    connectionAttempt,
+    client: null,
+    connectionAttempt: 0,
     isConnected,
     ...threadState,
     onError: (message) => setNotice({ text: message, tone: "warning" }),
   });
   const slashCommands = useAppSlashCommands({
-    client: clientRef.current,
+    client: null,
     cwd,
     isConnected,
     isDemoPreview,
@@ -320,7 +283,7 @@ export function App({
     selectedThread,
   });
   useAppDocumentPreferenceEffects({
-    client: clientRef.current,
+    client: null,
     ...composerState,
     cwd,
     isConnected,
@@ -341,19 +304,27 @@ export function App({
     [threads, threadsRef],
   ]);
 
-  const {
-    preserveThreadsAfterConnectionLoss,
-    retryConnection,
-    showDemoThreads,
-    switchToDemoThreads,
-  } = useAppConnectionHandlerSet({
-    getClient: () => clientRef.current,
-    localeRef,
-    setConnectionAttempt,
-    setConnectionState,
-    setNotice,
-    ...threadState,
-  });
+  const preserveThreadsAfterConnectionLoss = (showConnectionNotice = true) => {
+    if (showConnectionNotice) {
+      setNotice({
+        text:
+          localeRef.current === "zh"
+            ? "Control 运行时不可用；CrewON 不会回退到旧 App Server。"
+            : "The Control runtime is unavailable; CrewON will not fall back to the legacy App Server.",
+        tone: "warning",
+      });
+    }
+    threadState.setStreamingTextByThread({});
+  };
+  const retryConnection = () => globalThis.location.reload();
+  const showDemoThreads = () => {
+    showDemoThreadsAction({
+      demoThreads: getDemoThreads(localeRef.current),
+      setSelectedThreadId,
+      setStreamingTextByThread: threadState.setStreamingTextByThread,
+      setThreads: threadState.setThreads,
+    });
+  };
 
   useAppThreadListEffects({
     client: threadRuntimeClient,
@@ -370,7 +341,7 @@ export function App({
 
   useAppViewSyncEffects({
     appView,
-    connectionState,
+    connectionState: threadConnectionState,
     demoSettingsPanel,
     isConnected,
     isDemo,
@@ -386,7 +357,7 @@ export function App({
   });
 
   useAppThreadMetadataEffects({
-    client: clientRef.current,
+    client: null,
     cwd,
     isConnected,
     isDemo,
@@ -432,7 +403,7 @@ export function App({
     writeKnowledgeMemory,
     writeOfficeConfigFile,
   } = createAppDomainBackendCoordinator({
-    client: legacyDomainClient,
+    client: null,
     currentCwd: cwd,
     isConnected,
     isDemoPreview,
@@ -455,7 +426,7 @@ export function App({
     sendOfficeMessage,
     previewOfficeMemberContext,
   } = createAppOfficeRuntimeCoordinator({
-    client: legacyDomainClient,
+    client: null,
     getActiveTurnByThread: () => activeTurnByThreadRef.current,
     isConnected,
     isMissingThreadError,
@@ -470,12 +441,12 @@ export function App({
   });
   const { openLibrary: openBackendLibrary, openLibraryItem } =
     createAppLibraryOpenCoordinator({
-      connectionHint: t.connectionHints[connectionState],
+      connectionHint: t.connectionHints[threadConnectionState],
       controlClient,
       createBackendAgentConfig,
       cwd,
       ensureOfficeThread,
-      getClient: () => legacyDomainClient,
+      getClient: () => null,
       isConnected,
       isDemo,
       isDemoPreview,
@@ -497,11 +468,9 @@ export function App({
       storedAutomationItems: automationConfigRecordsToLibraryItems,
       writeAgentConfig: writeAgentConfigFile,
     });
-  const openLibrary = async (kind: Parameters<typeof openBackendLibrary>[0]) => {
-    if (controlClient === null || kind === "automation") {
-      await openBackendLibrary(kind);
-      return;
-    }
+  const openLibrary = async (
+    kind: Parameters<typeof openBackendLibrary>[0],
+  ) => {
     setAppView("library");
     setCapabilityDockOpen(false);
     chromeState.setInspectorOpen(false);
@@ -515,7 +484,7 @@ export function App({
   };
   const saveCapability = (draft: CapabilityEditorDraft) =>
     saveCapabilityDraftAction({
-      client: clientRef.current,
+      client: null,
       draft,
       locale,
       resolveBackendCwd,
@@ -532,7 +501,7 @@ export function App({
     updateAgentConfig,
   } = createAppDomainActionCoordinator({
     ...workspaceStatus,
-    client: clientRef.current,
+    client: null,
     ensureOfficeThread,
     getCapabilityPanelItemHandler: () => handleCapabilityPanelItem,
     isConnected,
@@ -551,7 +520,7 @@ export function App({
 
   const handleLibraryPanelAction = createAppLibraryPanelDispatchCoordinator({
     automationRunByTurnRef,
-    client: clientRef.current,
+    client: null,
     controlClient,
     confirm: requestConfirm,
     createBackendAgentConfig,
@@ -588,64 +557,6 @@ export function App({
     writeAutomationConfigFile,
     writeKnowledgeMemory,
     writeOfficeConfigFile,
-  });
-
-  const { handleNotification, handleServerRequest } =
-    useAppServerEventHandlerSet({
-      appendTerminalOutputDelta,
-      appViewRef,
-      automationRunByTurnRef,
-      capabilityPanelRef,
-      clientRef,
-      controlThreadAuthority: controlClient !== null,
-      libraryPanelRef,
-      localeRef,
-      officeRunByTurnRef,
-      onResourceBindingUpdated:
-        providerResourceComposer.handleBindingNotification,
-      openLibraryRef,
-      openThreadSettingsPanelRef,
-      readAutomationRunItems,
-      refreshComposerSlashCommands: () => {
-        setSlashCommandRefreshKey((key) => key + 1);
-      },
-      refreshSettingsSectionRef,
-      ...threadState,
-      ...workspaceStatus,
-      ...chromeState,
-      setCapabilityPanel,
-      setLibraryPanel,
-      setNotice,
-      ...pendingRequests,
-      settingsSectionRef,
-      syncAutomationRun: updateAutomationRun,
-      terminalProcessIdRef,
-    });
-
-  useAppConnectionEffects({
-    clientRef,
-    connectionAttempt,
-    connectionState,
-    enabled: controlClient === null,
-    emptySelectionBehavior:
-      draftWorkspaceCwd === undefined ? "selectFirst" : "preserve",
-    handleNotification,
-    handleServerRequest,
-    isDemo,
-    isDemoPreview,
-    locale,
-    manageThreads: threadAuthority.legacyManagesThreads,
-    preserveThreadsAfterConnectionLoss,
-    principalSessionEnabled,
-    selectedThread,
-    ...threadState,
-    serverUrl,
-    ...workspaceStatus,
-    setConnectionAttempt,
-    setConnectionState,
-    setNotice,
-    showDemoThreads,
-    switchToDemoThreads,
   });
 
   useAppChromeEffects({
@@ -705,7 +616,6 @@ export function App({
       providerResourceComposer.prepareThreadExecutionContext,
   });
   const {
-    changeCommandShellWorkspace,
     openCommandShellThread,
     sendCommandShellMessage,
     startCommandShellDraftThread,
@@ -737,7 +647,7 @@ export function App({
   } = createAppWorkspaceCapabilityHandlers({
     ...workspaceStatus,
     appendTerminalOutputLine,
-    client: clientRef.current,
+    client: null,
     getTerminalProcessId: () => terminalProcessIdRef.current,
     isConnected,
     isDemo,
@@ -783,10 +693,10 @@ export function App({
   } = createAppSettingsCoordinator({
     ...workspaceStatus,
     capabilityPanel,
-    client: clientRef.current,
+    client: null,
     controlClient,
-    connectionHint: t.connectionHints[connectionState],
-    connectionState,
+    connectionHint: t.connectionHints[threadConnectionState],
+    connectionState: threadConnectionState,
     currentCwd: cwd,
     isConnected,
     isDemoPreview,
@@ -819,7 +729,7 @@ export function App({
     appView,
     ...chromeState,
     capabilityPanel,
-    client: clientRef.current,
+    client: null,
     getLocale: () => localeRef.current,
     isConnected,
     isDemo,
@@ -849,10 +759,10 @@ export function App({
   } = createAppCapabilityPanelHandlers({
     ...workspaceStatus,
     capabilityPanel,
-    client: clientRef.current,
+    client: null,
     threadLifecycleClient: threadRuntimeClient,
     threadLifecycleConnected: threadRuntimeConnected,
-    threadLifecycleControlConfigured: controlClient !== null,
+    threadLifecycleControlConfigured: true,
     confirm: requestConfirm,
     createThread,
     cwd,
@@ -893,7 +803,7 @@ export function App({
   });
   const handleSettingsFieldCommit = (fieldId: string, value: string) =>
     commitSettingsField({
-      client: clientRef.current,
+      client: null,
       fieldId,
       isConnected,
       locale,
@@ -949,17 +859,11 @@ export function App({
     libraryPanel,
     locale,
     refreshRecord: async (record) => {
-      const client = legacyDomainClient;
       const workspaceCwd = record.workspaceCwd?.trim() || cwd.trim();
-      if (!client || !workspaceCwd) {
+      if (!workspaceCwd) {
         return null;
       }
-      const recordKey = officeRecordKey(record);
-      const response = await client.listOfficeConfigs(workspaceCwd);
-      const refreshedRecord = response.data
-        .map((item) => ({ ...item, workspaceCwd }))
-        .find((item) => officeRecordKey(item) === recordKey);
-      return refreshedRecord ?? null;
+      return null;
     },
     setLibraryPanel,
     runtimeProps: {
@@ -998,7 +902,7 @@ export function App({
         dataMode={
           isDemo
             ? "demo"
-            : connectionState === "connected"
+            : threadConnectionState === "connected"
               ? "live"
               : "disconnected"
         }
@@ -1040,46 +944,36 @@ export function App({
         workMode={workMode}
         modelOptions={commandModelOptions}
         controlExecutionCatalog={
-          controlClient === null
-            ? undefined
-            : (controlCommandCatalog ?? {
-                modelOptionsByTarget: {},
-                targets: [],
-              })
+          controlCommandCatalog ?? {
+            modelOptionsByTarget: {},
+            targets: [],
+          }
         }
-        executionTargetClient={
-          controlClient === null ? clientRef.current : null
-        }
-        scheduleClient={legacyDomainClient}
+        executionTargetClient={null}
+        scheduleClient={null}
         workspaceAuthority={workspaceUiAuthority}
-        workspaceOperations={
-          controlClient === null
-            ? null
-            : {
-                state: controlWorkspace.state,
-                mutationAuthority: controlWorkspace.mutationAuthority,
-                nativeWorkspaceSelected:
-                  (controlWorkspace.nativeWorkspace?.displayName ?? null) !==
-                  null,
-                nativeWorkspaceDisplayName:
-                  controlWorkspace.nativeWorkspace?.displayName ?? null,
-                nativeWorkspaceBusy: controlWorkspace.nativeBusy,
-                safeError: controlWorkspace.safeError,
-                onCreate: controlWorkspace.create,
-                onReconcile: controlWorkspace.reconcile,
-                onCancel: controlWorkspace.cancel,
-                onSelectNativeWorkspace:
-                  controlWorkspace.mutationAuthority === "desktop"
-                    ? controlWorkspace.selectNativeWorkspace
-                    : undefined,
-                onClearNativeWorkspace:
-                  controlWorkspace.mutationAuthority === "desktop" &&
-                  (controlWorkspace.nativeWorkspace?.displayName ?? null) !==
-                    null
-                    ? controlWorkspace.clearNativeWorkspace
-                    : undefined,
-              }
-        }
+        workspaceOperations={{
+          state: controlWorkspace.state,
+          mutationAuthority: controlWorkspace.mutationAuthority,
+          nativeWorkspaceSelected:
+            (controlWorkspace.nativeWorkspace?.displayName ?? null) !== null,
+          nativeWorkspaceDisplayName:
+            controlWorkspace.nativeWorkspace?.displayName ?? null,
+          nativeWorkspaceBusy: controlWorkspace.nativeBusy,
+          safeError: controlWorkspace.safeError,
+          onCreate: controlWorkspace.create,
+          onReconcile: controlWorkspace.reconcile,
+          onCancel: controlWorkspace.cancel,
+          onSelectNativeWorkspace:
+            controlWorkspace.mutationAuthority === "desktop"
+              ? controlWorkspace.selectNativeWorkspace
+              : undefined,
+          onClearNativeWorkspace:
+            controlWorkspace.mutationAuthority === "desktop" &&
+            (controlWorkspace.nativeWorkspace?.displayName ?? null) !== null
+              ? controlWorkspace.clearNativeWorkspace
+              : undefined,
+        }}
         capabilityDrawer={{
           busyToolId,
           commandValue: terminalCommand,
@@ -1122,7 +1016,7 @@ export function App({
         }}
         onAddLocalResources={(files, kind) =>
           addLocalComposerResources({
-            client: clientRef.current,
+            client: null,
             connected: isConnected,
             cwd,
             files,
@@ -1165,11 +1059,6 @@ export function App({
           }
         }}
         onRetryConnection={retryConnection}
-        onChangeWorkspaceCwd={
-          workspaceUiAuthority === "legacy"
-            ? changeCommandShellWorkspace
-            : undefined
-        }
         onSelectLinkedThread={openCommandShellThread}
         onSendAssistant={(text, threadSettings, images) => {
           const settings = assistantThreadRuntimeSettings(threadSettings);
@@ -1214,7 +1103,7 @@ export function App({
         }
         activeSection={settingsSection}
         appView={appView}
-        connectionState={connectionState}
+        connectionState={threadConnectionState}
         isSearchingThreads={isSearchingThreads}
         locale={locale}
         platform={platform}
@@ -1251,7 +1140,7 @@ export function App({
         capabilityPanel={capabilityPanel}
         composerFocusSignal={composerFocusSignal}
         composerValue={composerValue}
-        connectionState={connectionState}
+        connectionState={threadConnectionState}
         cwd={cwd}
         disabled={!isConnected && !isDemo}
         isDemo={isDemo}
@@ -1318,7 +1207,7 @@ export function App({
         inspectorOpen={inspectorOpen}
         loadedThreadIds={loadedThreadIds}
         locale={locale}
-        serverUrl={serverUrl}
+        serverUrl=""
         terminalCommand={terminalCommand}
         thread={selectedThread}
         threadGoal={threadGoal}

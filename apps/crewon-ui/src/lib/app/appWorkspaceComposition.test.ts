@@ -4,16 +4,18 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("App Workspace Control composition", () => {
-  it("never gives packaged Office or Automation a legacy client", () => {
+  it("does not compose the legacy App Server connection or authorities", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),
       "utf8",
     );
 
-    expect(source).toContain("legacyDomainClientForAuthority({");
-    expect(source).toContain("client: legacyDomainClient");
-    expect(source).toContain("scheduleClient={legacyDomainClient}");
-    expect(source).toContain("const client = legacyDomainClient");
+    expect(source).not.toMatch(
+      /useAppConnectionEffects|selectThreadRuntimeAuthority|legacyDomainClientForAuthority|clientRef/u,
+    );
+    expect(source).toContain("export function App({ controlClient }");
+    expect(source).toContain("client: null");
+    expect(source).toContain("scheduleClient={null}");
   });
 
   it("sources the packaged command target and model catalogs only from Control", () => {
@@ -23,12 +25,7 @@ describe("App Workspace Control composition", () => {
     );
 
     expect(source).toContain("useControlCommandCatalog({");
-    expect(source).toContain(
-      "client: controlClient === null ? clientRef.current : null",
-    );
-    expect(source).toContain(
-      "executionTargetClient={\n          controlClient === null ? clientRef.current : null",
-    );
+    expect(source).toContain("executionTargetClient={null}");
     expect(source).toContain("controlExecutionCatalog={");
   });
 
@@ -48,15 +45,11 @@ describe("App Workspace Control composition", () => {
     expect(source).toContain(
       "client: controlRuntimeConnected ? controlClient : null",
     );
-    expect(source).toMatch(
-      /nativeAuthority:\s*controlClient === null\s*\? null\s*:\s*desktopWorkspaceAuthority\(\)/u,
-    );
+    expect(source).toContain("nativeAuthority: desktopWorkspaceAuthority()");
     expect(source).toContain(
       "rehydrateThreadAuthority: rehydrateControlThreadAuthority",
     );
     expect(composition).toContain("state: controlWorkspace.state");
-    expect(composition).toContain("controlClient === null");
-    expect(composition).toContain("? null");
     expect(composition).toContain(
       'controlWorkspace.mutationAuthority === "desktop"',
     );

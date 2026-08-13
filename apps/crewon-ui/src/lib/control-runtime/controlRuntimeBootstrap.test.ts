@@ -79,7 +79,7 @@ describe("Control runtime bootstrap", () => {
         surface: "desktop",
         readDesktopSession: async () => input,
       }),
-    ).rejects.toThrow();
+    ).resolves.toBeNull();
   });
 
   it("does not fall back when the packaged Control runtime is unavailable", async () => {
@@ -90,7 +90,7 @@ describe("Control runtime bootstrap", () => {
           throw new Error("control_runtime_unavailable");
         },
       }),
-    ).rejects.toThrow("control_runtime_unavailable");
+    ).resolves.toBeNull();
   });
 
   it("rejects cross-origin Web Control endpoints", async () => {

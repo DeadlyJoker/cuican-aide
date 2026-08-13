@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { AgentPlatformAuthGate } from "./components/auth/AgentPlatformAuthGate";
 import { DesktopWindowFrame } from "./components/DesktopWindowFrame";
+import { ControlRuntimeUnavailable } from "./components/ControlRuntimeUnavailable";
 import { installDesktopFetch } from "./lib/desktop/desktopFetch";
 import { detectRuntimeSurface } from "./lib/platform";
 import { loadControlApiClient } from "./lib/control-runtime/controlRuntimeBootstrap";
@@ -44,7 +45,11 @@ createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <DesktopWindowFrame>
       <AgentPlatformAuthGate>
-        <App controlClient={controlClient} />
+        {controlClient === null ? (
+          <ControlRuntimeUnavailable />
+        ) : (
+          <App controlClient={controlClient} />
+        )}
       </AgentPlatformAuthGate>
     </DesktopWindowFrame>
   </StrictMode>,

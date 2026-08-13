@@ -34,22 +34,22 @@ export type ControlRuntimeBootstrapDependencies = Readonly<{
 export async function loadControlApiClient(
   dependencies: ControlRuntimeBootstrapDependencies = {},
 ): Promise<ControlApiClient | null> {
-  const surface =
-    dependencies.surface ??
-    (hasDesktopBridge() && !hasDevServerProxy() ? "desktop" : "web");
-  if (surface === "desktop") {
-    const session = parseDesktopSession(
-      await (dependencies.readDesktopSession ?? readDesktopSession)(),
-    );
-    return new ControlApiClient({
-      accessToken: session.sessionToken,
-      baseUrl: session.baseUrl,
-      csrfToken: session.csrfToken,
-      origin: session.origin,
-    });
-  }
-
   try {
+    const surface =
+      dependencies.surface ??
+      (hasDesktopBridge() && !hasDevServerProxy() ? "desktop" : "web");
+    if (surface === "desktop") {
+      const session = parseDesktopSession(
+        await (dependencies.readDesktopSession ?? readDesktopSession)(),
+      );
+      return new ControlApiClient({
+        accessToken: session.sessionToken,
+        baseUrl: session.baseUrl,
+        csrfToken: session.csrfToken,
+        origin: session.origin,
+      });
+    }
+
     const pageOrigin = dependencies.pageOrigin ?? globalThis.location.origin;
     const session = parseWebSession(
       await readWebSession(dependencies.fetch ?? globalThis.fetch, pageOrigin),
