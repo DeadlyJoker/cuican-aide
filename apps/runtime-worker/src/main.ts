@@ -283,10 +283,7 @@ try {
         });
       })();
 } catch (error) {
-  await Promise.allSettled([
-    nativeWorkspaceResources?.gateway.close(),
-    nativeWorkspaceResources?.readGateway.close(),
-  ]);
+  await nativeWorkspaceResources?.close();
   await artifactAuthority?.store.close();
   await toolRuntime?.close?.();
   await transport.close?.();

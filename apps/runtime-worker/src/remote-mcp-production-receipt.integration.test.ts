@@ -462,7 +462,6 @@ function nativeV3Envelope() {
     apiKey: null,
     probe: { port: 3211, token: "worker-private-token" },
     workspace: {
-      dispatchMode: "local",
       trustedLocalPath: process.cwd(),
       privateServer: {
         port: 0,

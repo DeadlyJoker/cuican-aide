@@ -15,9 +15,8 @@ import type { RuntimeWorkerCompositionConfig } from "./standalone-composition.ts
 
 export type RuntimeNativeWorkspaceResources = Readonly<{
   config: NonNullable<RuntimeWorkerCompositionConfig["workspacePrivate"]>;
-  gateway: LocalWorkspaceListDispatchClient;
   readFile: NonNullable<RuntimeWorkerCompositionConfig["workspaceReadFile"]>;
-  readGateway: LocalWorkspaceReadGatewayClient;
+  close(): Promise<void>;
 }>;
 
 /** Constructs the packaged Workspace resources without ambient routes or secrets. */
@@ -28,7 +27,6 @@ export function createRuntimeNativeWorkspaceResources(input: {
 }): RuntimeNativeWorkspaceResources {
   const { authority } = input.bootstrap;
   if (
-    input.bootstrap.dispatchMode !== "local" ||
     authority.tenantId !== input.runtimeTenantId ||
     authority.workspaceBindingId !== input.route.workspaceBindingId ||
     authority.runtimeBindingId !== input.route.runtimeGeneration ||
@@ -53,18 +51,19 @@ export function createRuntimeNativeWorkspaceResources(input: {
   } finally {
     signingKey.fill(0);
   }
-  const gateway = new LocalWorkspaceListDispatchClient({
+  const listAuthority = new LocalWorkspaceListDispatchClient({
     root: input.bootstrap.trustedLocalPath,
     authority,
   });
-  const readGateway = new LocalWorkspaceReadGatewayClient({
+  const readAuthority = new LocalWorkspaceReadGatewayClient({
     root: input.bootstrap.trustedLocalPath,
     authority,
   });
   return {
-    gateway,
-    readGateway,
-    readFile: { signer: readSigner, gateway: readGateway },
+    async close(): Promise<void> {
+      await Promise.allSettled([listAuthority.close(), readAuthority.close()]);
+    },
+    readFile: { signer: readSigner, gateway: readAuthority },
     config: {
       port: input.bootstrap.privateServer.port,
       token: input.bootstrap.privateServer.token,
@@ -73,7 +72,7 @@ export function createRuntimeNativeWorkspaceResources(input: {
         nextExecutionId: () => `workspace-execution-${randomUUID()}`,
       },
       signer,
-      gateway,
+      gateway: listAuthority,
       deadlineMs: input.bootstrap.deadlineMs,
     },
   };

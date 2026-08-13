@@ -12,7 +12,6 @@ const MAX_PEM_BYTES = 128 * 1024;
 const MAX_CREDENTIAL_BINDINGS = 32;
 
 export type RuntimeNativeWorkspaceBootstrap = Readonly<{
-  dispatchMode: "local";
   trustedLocalPath: string;
   deadlineMs: number;
   privateServer: Readonly<{ port: number; token: string }>;
@@ -275,19 +274,16 @@ function parseWorkspace(value: unknown): RuntimeNativeWorkspaceBootstrap {
     !exactKeys(value, [
       "authority",
       "deadlineMs",
-      "dispatchMode",
       "privateServer",
       "signing",
       "trustedLocalPath",
     ]) ||
-    value.dispatchMode !== "local" ||
     !integer(value.deadlineMs, 1_000, 60_000) ||
     !absolutePath(value.trustedLocalPath)
   ) {
     throw invalid();
   }
   return redact({
-    dispatchMode: "local",
     trustedLocalPath: value.trustedLocalPath,
     deadlineMs: Number(value.deadlineMs),
     privateServer: parseWorkspacePrivateServer(value.privateServer),

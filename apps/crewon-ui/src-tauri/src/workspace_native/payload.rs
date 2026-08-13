@@ -37,7 +37,6 @@ impl<'a> WorkspaceLaunchPayloads<'a> {
         let command_key = material.command_signing();
         Ok(Self {
             worker_workspace: WorkerWorkspaceBootstrap {
-                dispatch_mode: "local",
                 trusted_local_path: workspace.trusted_path(),
                 deadline_ms: config.deadline_ms,
                 private_server: WorkerPrivateServer {
@@ -72,7 +71,6 @@ impl<'a> WorkspaceLaunchPayloads<'a> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkerWorkspaceBootstrap<'a> {
-    dispatch_mode: &'static str,
     trusted_local_path: &'a str,
     deadline_ms: u32,
     private_server: WorkerPrivateServer<'a>,

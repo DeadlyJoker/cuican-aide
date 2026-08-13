@@ -275,7 +275,6 @@ function workspaceBootstrap(
   signingPrivateKeyPem: string,
 ): RuntimeNativeWorkspaceBootstrap {
   return {
-    dispatchMode: "local",
     trustedLocalPath,
     deadlineMs: 35_000,
     privateServer: { port: 0, token: WORKSPACE_TOKEN },

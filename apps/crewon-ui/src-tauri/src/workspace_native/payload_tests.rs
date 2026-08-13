@@ -41,7 +41,6 @@ fn worker_payload_projects_only_local_workspace_authority() {
         runtime_route.runtime_generation()
     );
     assert_eq!(worker["privateServer"]["port"], 0);
-    assert_eq!(worker["dispatchMode"], "local");
     assert_eq!(worker["trustedLocalPath"], current.trusted_path());
     assert_eq!(worker["deadlineMs"], 30_000);
     assert_keys(
@@ -49,7 +48,6 @@ fn worker_payload_projects_only_local_workspace_authority() {
         &[
             "authority",
             "deadlineMs",
-            "dispatchMode",
             "privateServer",
             "signing",
             "trustedLocalPath",
