@@ -904,7 +904,6 @@ export type AppServerConnectionOptions = {
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 12000;
 const LONG_REQUEST_TIMEOUT_MS = 60000;
-const AGENT_PLATFORM_CONTROL_TIMEOUT_MS = 90000;
 
 export class AppServerClient {
   readonly providerResources: ProviderResourceClient;
@@ -1438,50 +1437,6 @@ export class AppServerClient {
         sandboxPolicy: sandboxPolicy ?? undefined,
         threadId,
       },
-      { timeoutMs: LONG_REQUEST_TIMEOUT_MS },
-    );
-  }
-
-  async authenticateAgentPlatform(accessToken: string): Promise<{
-    user: { id: number; username: string };
-  }> {
-    return this.request("agentPlatform/auth", { accessToken });
-  }
-
-  async readAgentPlatformAgentInfo(
-    accessToken: string,
-    agentId: string,
-  ): Promise<{
-    id: number;
-    uid: string | null;
-    name: string;
-    description: string | null;
-    maxConcurrency: number;
-    activeConnections: number;
-  }> {
-    return this.request(
-      "agentPlatform/agent/info",
-      { accessToken, agentId },
-      { timeoutMs: AGENT_PLATFORM_CONTROL_TIMEOUT_MS },
-    );
-  }
-
-  async executeAgentPlatformWorkflow(
-    accessToken: string,
-    workflowId: string,
-    input: string,
-  ): Promise<{
-    workflowId: number;
-    executionId: number;
-    status: string;
-    outputs: unknown;
-    executedNodes: unknown[];
-    nodeResults: unknown;
-    error: string | null;
-  }> {
-    return this.request(
-      "agentPlatform/workflow/execute",
-      { accessToken, workflowId, input },
       { timeoutMs: LONG_REQUEST_TIMEOUT_MS },
     );
   }

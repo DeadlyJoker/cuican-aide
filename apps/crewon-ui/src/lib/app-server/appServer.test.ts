@@ -771,53 +771,7 @@ describe("app server execution intent", () => {
   });
 });
 
-describe("app server Workflow and Experts RPC contracts", () => {
-  it("sends only the Workflow execution authority and user input", async () => {
-    const client = new AppServerClient("ws://app-server", () => undefined);
-    const socket = await connectFakeClient(client);
-
-    const pending = client.executeAgentPlatformWorkflow(
-      "access-token-1",
-      "workflow-42",
-      "生成交付清单",
-    );
-    const request = JSON.parse(socket.sent.at(-1) ?? "{}") as {
-      id: number;
-      method: string;
-      params: unknown;
-    };
-
-    expect(request).toEqual({
-      id: request.id,
-      method: "agentPlatform/workflow/execute",
-      params: {
-        accessToken: "access-token-1",
-        workflowId: "workflow-42",
-        input: "生成交付清单",
-      },
-    });
-    (
-      client as unknown as {
-        handleMessage: (rawData: string) => void;
-      }
-    ).handleMessage(
-      JSON.stringify({
-        id: request.id,
-        result: {
-          workflowId: 42,
-          executionId: 7,
-          status: "completed",
-          outputs: {},
-          executedNodes: [],
-          nodeResults: {},
-          error: null,
-        },
-      }),
-    );
-
-    await pending;
-  });
-
+describe("app server Experts RPC contracts", () => {
   it("lists Experts by workspace key without leaking local path fields", async () => {
     const client = new AppServerClient("ws://app-server", () => undefined);
     const socket = await connectFakeClient(client);
