@@ -33,6 +33,9 @@ execution projection and authority.
 - `GET /api/v1/offices?limit=&before=` lists versions with stable pagination.
 - `POST /api/v1/offices/:officeVersionId:runs` starts the selected target through
   the existing canonical Run service. It does not enqueue Office-specific work.
+- The request does not atomically persist an Office-to-Run provenance binding in
+  this slice. The returned canonical Run identifies its AgentVersion and Thread;
+  durable Office provenance is an explicitly uncovered future contract.
 - All operations resolve the authenticated actor first and authorize an
   Office-scoped action before touching authoritative state.
 

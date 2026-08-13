@@ -31,7 +31,9 @@ export interface OfficeDefinitionStore {
   commitOfficeDefinition(
     input: CommitOfficeDefinitionInput,
   ): Promise<CommitOfficeDefinitionResult>;
-  loadOfficeDefinition(locator: OfficeLocator): Promise<OfficeDefinition | null>;
+  loadOfficeDefinition(
+    locator: OfficeLocator,
+  ): Promise<OfficeDefinition | null>;
   listOfficeDefinitions(input: {
     tenantId: string;
     spaceId: string;
@@ -39,4 +41,3 @@ export interface OfficeDefinitionStore {
     limit: number;
   }): Promise<readonly OfficeDefinition[]>;
 }
-
