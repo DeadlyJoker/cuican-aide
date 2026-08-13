@@ -17,10 +17,7 @@ export {
   useAppThreadMetadataEffects,
   useAppViewSyncEffects,
 } from "./effects";
-export {
-  shouldAutoCloseInspector,
-  shouldAutoCloseSidebar,
-} from "./appUiState";
+export { shouldAutoCloseInspector, shouldAutoCloseSidebar } from "./appUiState";
 export { isCommandShellHash, shouldRenderCommandShellView } from "./appRouting";
 export { createAppDomainActionCoordinator } from "./appDomainActionCoordinator";
 export { createAppDomainBackendCoordinator } from "./appDomainBackendCoordinator";
@@ -30,6 +27,7 @@ export {
   commandShellRuntimeState,
 } from "./appCommandShellRuntime";
 export { saveCapabilityDraftAction } from "./appCapabilitySaveAction";
+export { showDemoThreadsAction } from "./appConnectionActions";
 export {
   addLocalComposerResources,
   platformResourceMentionPath,

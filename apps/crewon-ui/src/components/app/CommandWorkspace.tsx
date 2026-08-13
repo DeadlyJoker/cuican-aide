@@ -410,12 +410,17 @@ export function shouldCreateCommandThread({
 }
 
 export type CommandOfficeRoomAdapter = {
+  create?: (
+    input: CommandOfficeCreationInput,
+  ) => Promise<OfficeConfigRecordReference>;
+  listCatalog?: () => Promise<CommandDomainCatalog>;
   open: (record: OfficeConfigRecordReference) => void | Promise<void>;
   render: (
     record: OfficeConfigRecordReference,
     onBack: () => void,
     onDeleted: () => void,
   ) => ReactNode;
+  usesControlContract?: boolean;
 };
 
 type PlatformLoadState = "loading" | "ready" | "fallback";
@@ -732,7 +737,10 @@ export function CommandWorkspace({
 
   useEffect(() => {
     let cancelled = false;
-    if (!executionTargetClient || !cwd || connectionState !== "connected") {
+    if (
+      ((!executionTargetClient || !cwd) && !officeRoomAdapter?.listCatalog) ||
+      connectionState !== "connected"
+    ) {
       setExecutionTargetCatalog({
         agents: [],
         offices: [],
@@ -748,9 +756,25 @@ export function CommandWorkspace({
       officeStatus: "loading",
       status: "loading",
     });
+    if (officeRoomAdapter?.listCatalog) {
+      void officeRoomAdapter.listCatalog().then(
+        (catalog) => !cancelled && setExecutionTargetCatalog(catalog),
+        () =>
+          !cancelled &&
+          setExecutionTargetCatalog({
+            agents: [],
+            offices: [],
+            officeStatus: "unavailable",
+            status: "unavailable",
+          }),
+      );
+      return () => {
+        cancelled = true;
+      };
+    }
     Promise.allSettled([
-      executionTargetClient.listAgentConfigs(cwd),
-      executionTargetClient.listOfficeConfigs(cwd),
+      executionTargetClient!.listAgentConfigs(cwd),
+      executionTargetClient!.listOfficeConfigs(cwd),
     ]).then(([agents, offices]) => {
       if (!cancelled) {
         const agentsAvailable = agents.status === "fulfilled";
@@ -780,11 +804,14 @@ export function CommandWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [connectionState, cwd, executionTargetClient]);
+  }, [connectionState, cwd, executionTargetClient, officeRoomAdapter]);
 
   useEffect(() => {
     let cancelled = false;
-    if (!executionTargetClient || !cwd || connectionState !== "connected") {
+    if (
+      ((!executionTargetClient || !cwd) && !officeRoomAdapter?.listCatalog) ||
+      connectionState !== "connected"
+    ) {
       setTeamCatalog({
         agents: [],
         offices: [],
@@ -800,9 +827,25 @@ export function CommandWorkspace({
       officeStatus: "loading",
       status: "loading",
     });
+    if (officeRoomAdapter?.listCatalog) {
+      void officeRoomAdapter.listCatalog().then(
+        (catalog) => !cancelled && setTeamCatalog(catalog),
+        () =>
+          !cancelled &&
+          setTeamCatalog({
+            agents: [],
+            offices: [],
+            officeStatus: "unavailable",
+            status: "unavailable",
+          }),
+      );
+      return () => {
+        cancelled = true;
+      };
+    }
     Promise.allSettled([
-      executionTargetClient.listAgentConfigs(cwd),
-      executionTargetClient.listOfficeConfigs(cwd),
+      executionTargetClient!.listAgentConfigs(cwd),
+      executionTargetClient!.listOfficeConfigs(cwd),
     ]).then(([agents, offices]) => {
       if (cancelled) {
         return;
@@ -832,7 +875,13 @@ export function CommandWorkspace({
     return () => {
       cancelled = true;
     };
-  }, [connectionState, executionTargetClient, teamRefreshNonce, cwd]);
+  }, [
+    connectionState,
+    executionTargetClient,
+    officeRoomAdapter,
+    teamRefreshNonce,
+    cwd,
+  ]);
 
   useCommandOfficeCatalogAutoReconnect({
     active: activeView === "team" && teamMode === "office",
@@ -1895,18 +1944,18 @@ export function CommandWorkspace({
   }
 
   async function createRuntimeOffice(input: CommandOfficeCreationInput) {
-    if (!executionTargetClient || !cwd || !officeRoomAdapter) {
+    if (
+      !officeRoomAdapter ||
+      (!officeRoomAdapter.create && (!executionTargetClient || !cwd))
+    ) {
       return;
     }
     setOfficeCreateBusy(true);
     setOfficeCreateError(null);
     try {
-      const result = await createCommandOffice(
-        executionTargetClient,
-        cwd,
-        input,
-        locale,
-      );
+      const result = officeRoomAdapter.create
+        ? { record: await officeRoomAdapter.create(input), warnings: [] }
+        : await createCommandOffice(executionTargetClient!, cwd, input, locale);
       const recordKey = officeRecordKey(result.record);
       setTeamCatalog((current) => ({
         ...current,
@@ -2053,8 +2102,7 @@ export function CommandWorkspace({
     : null;
   const canCreateOffice = Boolean(
     officeRoomAdapter &&
-      executionTargetClient &&
-      cwd &&
+      (officeRoomAdapter.create || (executionTargetClient && cwd)) &&
       connectionState === "connected",
   );
   const canCreateExpertTeam = Boolean(
@@ -2591,9 +2639,7 @@ export function CommandWorkspace({
                       >
                         {workspaceAuthority === "control"
                           ? (workspaceOperations?.nativeWorkspaceDisplayName ??
-                            (locale === "zh"
-                              ? "无工作空间"
-                              : "No workspace"))
+                            (locale === "zh" ? "无工作空间" : "No workspace"))
                           : currentWorkspace}
                       </span>
                     ) : (
@@ -3053,6 +3099,7 @@ export function CommandWorkspace({
               busy={officeCreateBusy}
               error={officeCreateError}
               locale={locale}
+              supportsGoal={!officeRoomAdapter?.usesControlContract}
               onClose={() => {
                 if (!officeCreateBusy) {
                   setOfficeCreateOpen(false);

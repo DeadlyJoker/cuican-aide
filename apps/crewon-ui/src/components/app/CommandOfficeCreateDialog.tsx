@@ -14,6 +14,7 @@ export function CommandOfficeCreateDialog({
   locale,
   onClose,
   onSubmit,
+  supportsGoal = true,
 }: {
   agents: AgentRecord[];
   busy: boolean;
@@ -21,6 +22,7 @@ export function CommandOfficeCreateDialog({
   locale: Locale;
   onClose: () => void;
   onSubmit: (input: CommandOfficeCreationInput) => void | Promise<void>;
+  supportsGoal?: boolean;
 }) {
   const titleInputRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
@@ -137,25 +139,33 @@ export function CommandOfficeCreateDialog({
                 onChange={(event) => setTitle(event.target.value)}
               />
             </label>
-            <label className="form-field">
-              <span>{zh ? "负责的工作任务" : "Owned work task"}</span>
-              <textarea
-                required
-                maxLength={2_000}
-                placeholder={
-                  zh
-                    ? "说明这个办公室长期负责的目标、边界和交付结果。"
-                    : "Describe the durable goal, boundaries, and expected outcomes."
-                }
-                value={goal}
-                onChange={(event) => setGoal(event.target.value)}
-              />
-              <small className="office-manager-note">
+            {supportsGoal ? (
+              <label className="form-field">
+                <span>{zh ? "负责的工作任务" : "Owned work task"}</span>
+                <textarea
+                  required
+                  maxLength={2_000}
+                  placeholder={
+                    zh
+                      ? "说明这个办公室长期负责的目标、边界和交付结果。"
+                      : "Describe the durable goal, boundaries, and expected outcomes."
+                  }
+                  value={goal}
+                  onChange={(event) => setGoal(event.target.value)}
+                />
+                <small className="office-manager-note">
+                  {zh
+                    ? "创建后自动生成独立的办公室主控（Leader Agent）；所选智能体作为员工加入。"
+                    : "A dedicated Office manager (Leader Agent) is created automatically; selected agents join as members."}
+                </small>
+              </label>
+            ) : (
+              <p className="office-manager-note">
                 {zh
-                  ? "创建后自动生成独立的办公室主控（Leader Agent）；所选智能体作为员工加入。"
-                  : "A dedicated Office manager (Leader Agent) is created automatically; selected agents join as members."}
-              </small>
-            </label>
+                  ? "Control Office contract 当前只保存名称、成员和执行目标，不支持长期目标字段。"
+                  : "The Control Office contract currently stores only the name, members, and execution targets; it has no durable goal field."}
+              </p>
+            )}
             {selectedAgentIds.length > 0 ? (
               <div className="form-field">
                 <span>{zh ? "每个员工负责的内容" : "Responsibilities"}</span>
@@ -212,9 +222,13 @@ export function CommandOfficeCreateDialog({
               })
             ) : (
               <p className="team-office-create-empty">
-                {zh
-                  ? "当前没有可招募的真实智能体。可以先创建办公室，稍后在群聊内招募。"
-                  : "No recruitable agents are available. Create the office now and recruit later from the room."}
+                {supportsGoal
+                  ? zh
+                    ? "当前没有可招募的真实智能体。可以先创建办公室，稍后在群聊内招募。"
+                    : "No recruitable agents are available. Create the office now and recruit later from the room."
+                  : zh
+                    ? "当前没有已发布 AgentVersion，Control Office 创建暂不可用。"
+                    : "No published AgentVersion is available, so Control Office creation is unavailable."}
               </p>
             )}
           </aside>
@@ -234,7 +248,11 @@ export function CommandOfficeCreateDialog({
           >
             {zh ? "取消" : "Cancel"}
           </button>
-          <button className="button primary" type="submit" disabled={busy}>
+          <button
+            className="button primary"
+            type="submit"
+            disabled={busy || (!supportsGoal && availableAgents.length === 0)}
+          >
             {busy
               ? zh
                 ? "正在创建…"

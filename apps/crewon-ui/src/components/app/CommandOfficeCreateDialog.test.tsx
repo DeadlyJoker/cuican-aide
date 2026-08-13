@@ -42,4 +42,22 @@ describe("CommandOfficeCreateDialog", () => {
     expect(markup).not.toContain("组长拆解");
     expect(markup).not.toContain('value="设计交付办公室"');
   });
+
+  it("snapshots the Control contract boundary without a fake goal field", () => {
+    const markup = renderToStaticMarkup(
+      <CommandOfficeCreateDialog
+        agents={[]}
+        busy={false}
+        error={null}
+        locale="zh"
+        onClose={vi.fn()}
+        onSubmit={vi.fn()}
+        supportsGoal={false}
+      />,
+    );
+
+    expect(markup).toMatchSnapshot();
+    expect(markup).toContain("不支持长期目标字段");
+    expect(markup).not.toContain("负责的工作任务");
+  });
 });

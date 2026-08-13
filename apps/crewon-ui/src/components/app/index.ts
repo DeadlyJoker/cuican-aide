@@ -1,5 +1,9 @@
 export { AppCommandShellRoute } from "./AppCommandShellRoute";
-export { createAppCommandOfficeRoomAdapter } from "./AppCommandOfficeRoomAdapter";
+export {
+  createAppCommandOfficeRoomAdapter,
+  createControlCommandOfficeRoomAdapter,
+  useControlCommandOfficeRoomAdapter,
+} from "./AppCommandOfficeRoomAdapter";
 export { AppConfirmDialog } from "./AppConfirmDialog";
 export { AppShellChromeFrame } from "./AppShellChromeFrame";
 export { AppWorkspaceContent } from "./AppWorkspaceContent";

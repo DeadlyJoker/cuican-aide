@@ -5,7 +5,7 @@ import {
   AppWorkspaceContent,
   AppWorkspaceNavigationPanel,
   AppWorkspaceSidePanels,
-  createAppCommandOfficeRoomAdapter,
+  useControlCommandOfficeRoomAdapter,
 } from "./components/app";
 import type { ControlApiClient } from "@crewon/control-client";
 import { openControlLibraryAction } from "./lib/library/controlLibraryActions";
@@ -62,6 +62,7 @@ import {
   useProviderResourceComposer,
   workspaceCapabilityHandlersForAuthority,
   workspaceCwdForAuthority,
+  showDemoThreadsAction,
 } from "./lib/app";
 import {
   mentionsWithSlashCommand,
@@ -86,7 +87,6 @@ import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadR
 import { useControlCommandCatalog } from "./lib/control-runtime/useControlCommandCatalog";
 import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWorkspaceRuntime";
 import { desktopWorkspaceAuthority } from "./lib/desktop/desktopWorkspaceAuthorityAdapter";
-import { showDemoThreadsAction } from "./lib/app/appConnectionActions";
 
 export function App({ controlClient }: { controlClient: ControlApiClient }) {
   const workspaceUiAuthority = "control" as const;
@@ -855,45 +855,10 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       setCapabilityPanel(null);
     }
   };
-  const commandOfficeRoomAdapter = createAppCommandOfficeRoomAdapter({
-    libraryPanel,
+  const commandOfficeRoomAdapter = useControlCommandOfficeRoomAdapter({
+    client: controlClient,
     locale,
-    refreshRecord: async (record) => {
-      const workspaceCwd = record.workspaceCwd?.trim() || cwd.trim();
-      if (!workspaceCwd) {
-        return null;
-      }
-      return null;
-    },
-    setLibraryPanel,
-    runtimeProps: {
-      ...threadState,
-      locale,
-      onAttachContext: (workspaceCwd, onSelectPath) => {
-        officeAttachmentConsumerRef.current = onSelectPath;
-        void attachWorkspaceContext(workspaceCwd);
-      },
-      onDecision: handleApprovalDecision,
-      onArtifact: handleOfficeArtifact,
-      onDelegationCancel: handleOfficeDelegationCancel,
-      onDelegationDispatch: handleOfficeDelegationDispatch,
-      onDelegationDispatchNext: handleOfficeDelegationDispatchNext,
-      onDelegationRetry: handleOfficeDelegationRetry,
-      onMemoryDecision: async (memoryId, status) =>
-        (await decideOfficeMemory(memoryId, status))?.response?.memory ?? null,
-      onMemoryList: async (status, cursor) =>
-        (await listOfficeMemories(status, cursor))?.response ?? null,
-      onMemberContextPreview: async (run, member) =>
-        (await previewOfficeMemberContext(run, member))?.response ?? null,
-      onPanelAction: handleLibraryPanelAction,
-      onRecruitableAgentList: listRecruitableAgentConfigs,
-      onRunCancel: handleOfficeRunCancel,
-      onRunRetry: handleOfficeRunRetry,
-      onSendMessage: sendOfficeMessage,
-      onVerificationCancel: handleOfficeVerificationCancel,
-      onVerificationRetry: handleOfficeVerificationRetry,
-      slashCommands,
-    },
+    threadId: selectedThreadId,
   });
   if (appView === "settings") {
     return (
