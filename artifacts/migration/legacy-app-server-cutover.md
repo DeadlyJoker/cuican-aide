@@ -171,3 +171,21 @@ The renderer deletion gate is now closed:
 Release signing, notarization and platform canaries remain release gates, but
 they are not Rust Runtime compatibility work and did not block this source
 deletion. Packaged Control paths never start or select the Rust app-server.
+
+## 2026-08-14 final packaged Workflow recovery smoke
+
+The application was rebuilt after the Command shell deletion. The `.app`
+contains exactly the GUI, Node 24, the process guardian and four TypeScript
+runtime bundles; recursive scans found none of the removed Device Tool,
+Responses Lite, App Server or port 6176 markers. The updater archive was also
+created, after which Tauri correctly stopped at the unavailable private signing
+key.
+
+An isolated-HOME run at
+`/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-HuHcfw`
+started Run `019ffc61-665e-765b-aa33-3a24a18bcffb` through the packaged Control
+API. Idempotent replay reused the same Run and one admission receipt. Killing
+both Worker processes after the Agent node, then restarting the GUI, produced a
+second and different model request for Verification, two total Attempts, one
+canonical `run.completed` event and terminal status `completed`. Killing the GUI
+left no Control/Worker/guardian process and released port 3210 in both runs.
