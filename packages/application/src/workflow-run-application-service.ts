@@ -75,7 +75,7 @@ export class WorkflowRunApplicationService {
   ): Promise<CommitWorkflowRunStartResult> {
     validateActor(actor);
     validateCommand(command);
-    const workflowInput = validateWorkflowInput(command.input);
+    const workflowInput = validateWorkflowRunInput(command.input);
     await this.#authorize(actor, command.threadId);
     const idempotency = idempotencyDescriptor(actor, command, workflowInput);
     try {
@@ -267,7 +267,7 @@ export class WorkflowRunApplicationService {
   }
 }
 
-function validateWorkflowInput(input: JsonValue): JsonValue {
+export function validateWorkflowRunInput(input: JsonValue): JsonValue {
   let nodes = 0;
   const visit = (value: unknown, depth: number): void => {
     nodes += 1;

@@ -19,6 +19,7 @@ export type ApplicationIdKind =
   | "toolExecution"
   | "office"
   | "officeVersion"
+  | "officeDelegation"
   | "artifact"
   | "knowledge";
 
