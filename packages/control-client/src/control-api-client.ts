@@ -1,5 +1,6 @@
 import type {
   ActiveAgentVersionCatalogResponse,
+  AutomationMutationResponse,
   AgentVersionMutationResponse,
   ArchiveThreadRequest,
   AppendThreadMessageRequest,
@@ -7,6 +8,7 @@ import type {
   CancelRunRequest,
   ClearThreadGoalRequest,
   CompactThreadRequest,
+  CreateAutomationRequest,
   CreateRunRequest,
   StartWorkflowRunRequest,
   DecideWorkflowHumanGateRequest,
@@ -18,6 +20,7 @@ import type {
   ErrorEnvelope,
   ForkThreadRequest,
   GetAgentVersionResponse,
+  GetAutomationResponse,
   GetArtifactResponse,
   GetModelProviderSettingsResponse,
   GetRunResponse,
@@ -25,6 +28,7 @@ import type {
   GetThreadGoalResponse,
   GetToolApprovalResponse,
   ListAgentVersionsResponse,
+  ListAutomationsResponse,
   ListThreadRunsResponse,
   ListThreadsResponse,
   ListThreadMessagesResponse,
@@ -37,6 +41,8 @@ import type {
   RenameThreadRequest,
   RollbackThreadRequest,
   RunMutationResponse,
+  RunAutomationNowRequest,
+  RunAutomationNowResponse,
   StartTurnRequest,
   StartTurnResponse,
   RunEventViewMode,
@@ -105,6 +111,30 @@ export class ControlApiClient {
     });
   }
 
+  createAutomation(
+    body: CreateAutomationRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<AutomationMutationResponse> {
+    return this.#json("POST", "/api/v1/automations", body, {
+      ...options,
+      idempotencyKey,
+      requireCsrf: true,
+      requireIdempotency: true,
+      expectedStatuses: [200, 201],
+    });
+  }
+
+  listAutomations(
+    query: { cursor?: string | null; limit?: number } = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<ListAutomationsResponse> {
+    return this.#json("GET", withQuery("/api/v1/automations", query), null, {
+      ...options,
+      expectedStatuses: [200],
+    });
+  }
+
   probeModelProvider(
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
@@ -117,6 +147,38 @@ export class ControlApiClient {
         ...options,
         idempotencyKey,
         expectedStatuses: [200],
+      },
+    );
+  }
+
+  getAutomation(
+    automationId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetAutomationResponse> {
+    return this.#json(
+      "GET",
+      `/api/v1/automations/${resourceId(automationId)}`,
+      null,
+      { ...options, expectedStatuses: [200] },
+    );
+  }
+
+  runAutomationNow(
+    automationId: string,
+    body: RunAutomationNowRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<RunAutomationNowResponse> {
+    return this.#json(
+      "POST",
+      `/api/v1/automations/${resourceId(automationId)}:run-now`,
+      body,
+      {
+        ...options,
+        idempotencyKey,
+        requireCsrf: true,
+        requireIdempotency: true,
+        expectedStatuses: [200, 201],
       },
     );
   }

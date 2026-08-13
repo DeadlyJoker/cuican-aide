@@ -60,6 +60,106 @@ test("reads and probes model provider settings through Control API", async () =>
   );
 });
 
+test("uses typed Control Automation routes with CAS and idempotency", async () => {
+  const requests: { input: string; init: RequestInit }[] = [];
+  const automation = {
+    automationId: "automation/1",
+    threadId: "thread-1",
+    title: "Daily summary",
+    prompt: "Summarize progress",
+    agentVersionId: "agent-version-1",
+    executionMode: "manualOnly" as const,
+    automaticScheduling: false as const,
+    revision: 1 as const,
+    createdAt: "2026-08-13T00:00:00.000Z",
+    updatedAt: "2026-08-13T00:00:00.000Z",
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    csrfToken: "automation-csrf",
+    fetch: async (input, init = {}) => {
+      requests.push({ input: String(input), init });
+      if (String(input).endsWith(":run-now")) {
+        return jsonResponse(201, {
+          disposition: "committed",
+          automation,
+          invocation: { automationId: automation.automationId, runId: "run-1" },
+          run: runResponse().run,
+        });
+      }
+      return jsonResponse(201, { disposition: "committed", automation });
+    },
+  });
+
+  await client.createAutomation(
+    {
+      threadId: "thread-1",
+      expectedThreadRevision: 2,
+      title: automation.title,
+      prompt: automation.prompt,
+      agentVersionId: automation.agentVersionId,
+    },
+    "automation-create-1",
+  );
+  await client.runAutomationNow(
+    automation.automationId,
+    { expectedAutomationRevision: 1, expectedThreadRevision: 2 },
+    "automation-run-1",
+  );
+
+  assert.deepEqual(
+    requests.map(({ input }) => input),
+    [
+      "https://control.example/api/v1/automations",
+      "https://control.example/api/v1/automations/automation%2F1:run-now",
+    ],
+  );
+  assert.deepEqual(
+    requests.map(({ init }) => new Headers(init.headers).get("idempotency-key")),
+    ["automation-create-1", "automation-run-1"],
+  );
+  assert.deepEqual(JSON.parse(String(requests[1]?.init.body)), {
+    expectedAutomationRevision: 1,
+    expectedThreadRevision: 2,
+  });
+});
+
+test("lists and reads bounded Control Automation views", async () => {
+  const requestedUrls: string[] = [];
+  const automation = {
+    automationId: "automation-1",
+    threadId: "thread-1",
+    title: "Summary",
+    prompt: "Summarize",
+    agentVersionId: "agent-version-1",
+    executionMode: "manualOnly" as const,
+    automaticScheduling: false as const,
+    revision: 1 as const,
+    createdAt: "2026-08-13T00:00:00.000Z",
+    updatedAt: "2026-08-13T00:00:00.000Z",
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async (input) => {
+      const url = String(input);
+      requestedUrls.push(url);
+      return url.includes("?limit=")
+        ? jsonResponse(200, { data: [automation], nextCursor: null })
+        : jsonResponse(200, { automation });
+    },
+  });
+
+  assert.deepEqual(await client.listAutomations({ limit: 25 }), {
+    data: [automation],
+    nextCursor: null,
+  });
+  assert.deepEqual(await client.getAutomation("automation/1"), { automation });
+  assert.deepEqual(requestedUrls, [
+    "https://control.example/api/v1/automations?limit=25",
+    "https://control.example/api/v1/automations/automation%2F1",
+  ]);
+});
+
 test("sends a typed selected-version Run without client-owned route fields", async () => {
   const requests: { input: string; init: RequestInit }[] = [];
   const client = new ControlApiClient({
