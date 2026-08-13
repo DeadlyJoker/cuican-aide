@@ -674,8 +674,12 @@ Gate 报告为通过。
 - Composer 只发现 active release 中 digest 与 AgentVersion catalog 一致的 Skill/MCP/Tool metadata；选择后写入普通 prompt token，能力执行仍由
   frozen AgentVersion release 授权。它不创建 `control://` mention、不携带 schema/instructions/secrets，也不会触发 Control 当前明确拒绝的 structured
   mention。Knowledge 在 `turn/start` 具备 durable reference contract 前继续只从 Library 使用，不把标题或私有正文伪装成 execution binding。
-- 最新 UI 验证为 `289/289` files、`1814/1814` tests，typecheck 与 production build 均通过；build 只保留既有 chunk-size warning。仓库中仍有
-  未被正常产品组合调用的 legacy App Server helper/type 源码，作为后续纯 TS capability cutover 的删除对象；它们不再是 packaged fallback 或运行依赖。
+- renderer 的可执行 App Server 恢复链也已删除：Office catalog 仅做有界 Control 重试，Vite 不再提供 restart-app-server 开发路由，正常组合不直接
+  导入 App Server 错误类型。连接、设置、Workspace、Provider resource 与旧编辑器的活跃文案统一指向 Control 或 resource authority；架构测试禁止
+  `App.tsx` 重新引入 `AppServerClient` 或 App Server import，并禁止 Vite/reconnect 恢复路径回归。
+- 最新 UI 验证为 `289/289` files、`1813/1813` tests，typecheck 与 production build 均通过；build 只保留既有 chunk-size warning。生产 JS bundle
+  明确不含 `new WebSocket`、`127.0.0.1:6176`、`restart-app-server` 或 `AppServerClient`。仓库中仍有未被正常产品组合调用的 legacy App Server
+  helper/type 源码，作为后续纯 TS capability cutover 的删除对象；它们不再是 packaged fallback 或运行依赖。
 
 当前 W01 的 SQLite、PostgreSQL real-host 与 packaged crash-recovery Gate 已关闭；发布签名/notarization 及尚未迁移的特定产品能力仍保持
 active。Rust compatibility 已从矩阵删除，不再投入迁移成本。
