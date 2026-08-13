@@ -325,6 +325,7 @@ function composeControlApi(
       automations,
       knowledge,
       workspaceLists,
+      workspaceReadonly: workspaceWorker,
       workspaceQueries,
       providerSettings,
       providerProbes,

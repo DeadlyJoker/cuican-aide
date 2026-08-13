@@ -68,6 +68,7 @@ import {
   startRuntimeWorkspacePrivateServer,
   type RuntimeWorkspacePrivateServer,
 } from "./runtime-workspace-private-server.ts";
+import { RuntimeNativeReadonlyService } from "./runtime-native-readonly.ts";
 import type { RuntimeWorkspaceExecutionIdGeneratorPort } from "./runtime-workspace-freeze-service.ts";
 import {
   createRuntimeWorkspaceReadToolRuntime,
@@ -135,6 +136,7 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
     ids: RuntimeWorkspaceExecutionIdGeneratorPort;
     signer: DeviceWorkspaceListCommandSignerPort;
     gateway: DeviceWorkspaceListDispatchClientPort;
+    nativeRoot?: string;
     deadlineMs?: number;
   }>;
   workspaceReadFile?: RuntimeWorkspaceReadFileConfig;
@@ -452,6 +454,14 @@ async function composeRuntimeWorker(
         },
         freeze,
         dispatch: workspaceDispatchService,
+        ...(config.workspacePrivate.nativeRoot === undefined
+          ? {}
+          : {
+              readonly: new RuntimeNativeReadonlyService({
+                root: config.workspacePrivate.nativeRoot,
+                authority: config.workspacePrivate.authority,
+              }),
+            }),
         deadlineMs: config.workspacePrivate.deadlineMs,
       });
     }

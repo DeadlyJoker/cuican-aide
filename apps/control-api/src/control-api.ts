@@ -86,6 +86,7 @@ import {
   parseWorkspaceOperationActionRequest,
   parseWorkspaceOperationLastEventSequence,
   parseWorkspaceOperationListQuery,
+  parseWorkspaceNativeReadonlyControlRequest,
   parsePublishWorkflowVersionRequest,
   parseWorkflowVersionId,
   parseWorkflowVersionListQuery,
@@ -119,6 +120,8 @@ import {
   type ThreadMutationResponse,
   type ToolApprovalMutationResponse,
   type GetWorkspaceOperationResponse,
+  type WorkspaceNativeReadonlyRequest,
+  type WorkspaceNativeReadonlyResponse,
   type ListWorkspaceOperationsResponse,
   type WorkspaceOperationMutationResponse,
   type WorkflowVersionMutationResponse,
@@ -245,6 +248,12 @@ export type ControlApiDependencies = Readonly<{
   providerRuntimeAvailability: ProviderRuntimeRouteAvailability;
   workspaceQueries: WorkspaceOperationQueryService;
   workspaceLists: WorkspaceListApplicationService | null;
+  workspaceReadonly?: Readonly<{
+    executeReadonly(
+      input: WorkspaceNativeReadonlyRequest,
+      signal: AbortSignal,
+    ): Promise<WorkspaceNativeReadonlyResponse>;
+  }> | null;
   agentVersionDigester: ContentDigester;
   workflowVersionDigester: ContentDigester;
   clock: ApplicationClock;
@@ -841,6 +850,36 @@ export function buildControlApi(
       const response: GetWorkspaceOperationResponse =
         projectWorkspaceOperationSnapshot(snapshot);
       return response;
+    },
+  );
+
+  app.post<{ Params: { threadId: string }; Body: unknown }>(
+    "/api/v1/threads/:threadId/workspace-readonly",
+    async (request, reply) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const threadId = parseThreadId(request.params.threadId);
+      await dependencies.threads.getThread(actor, threadId);
+      const service = dependencies.workspaceReadonly;
+      if (service == null)
+        throw new Error("workspace_native_readonly_unavailable");
+      const body = parseWorkspaceNativeReadonlyControlRequest(request.body);
+      const requestAbort = requestAbortSignal(request.raw);
+      try {
+        return reply.code(200).send(
+          await service.executeReadonly(
+            {
+              ...body,
+              tenantId: actor.tenantId,
+              spaceId: actor.spaceId,
+            },
+            requestAbort.signal,
+          ),
+        );
+      } finally {
+        requestAbort.dispose();
+      }
     },
   );
 

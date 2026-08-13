@@ -8,6 +8,8 @@ import {
 
 import {
   ContractValidationError,
+  WORKSPACE_NATIVE_READONLY_LIMITS,
+  WORKSPACE_NATIVE_READONLY_PATH,
   RUNTIME_WORKER_WORKSPACE_API_VERSION,
   RUNTIME_WORKER_WORKSPACE_DISPATCH_PATH,
   RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH,
@@ -18,6 +20,8 @@ import {
   parseRuntimeWorkerWorkspaceFreezeCommandError,
   parseRuntimeWorkerWorkspaceFreezeCommandRequest,
   parseRuntimeWorkerWorkspaceFreezeCommandResponse,
+  parseWorkspaceNativeReadonlyRequest,
+  parseWorkspaceNativeReadonlyResponse,
   type RuntimeWorkerWorkspaceDispatchError,
   type RuntimeWorkerWorkspaceDispatchRequest,
   type RuntimeWorkerWorkspaceFreezeCommandError,
@@ -27,6 +31,7 @@ import {
 import type { RuntimeWorkspaceDispatchService } from "./runtime-workspace-dispatch-service.ts";
 import { RuntimeWorkspaceError } from "./runtime-workspace-error.ts";
 import type { RuntimeWorkspaceFreezeService } from "./runtime-workspace-freeze-service.ts";
+import type { RuntimeNativeReadonlyService } from "./runtime-native-readonly.ts";
 
 /** Team authentication is intentionally absent until a real mTLS server exists. */
 export type RuntimeWorkspacePrivateAuthentication = Readonly<{
@@ -45,6 +50,7 @@ export async function startRuntimeWorkspacePrivateServer(config: {
   authentication: RuntimeWorkspacePrivateAuthentication;
   freeze: Pick<RuntimeWorkspaceFreezeService, "freeze">;
   dispatch: Pick<RuntimeWorkspaceDispatchService, "dispatch">;
+  readonly?: Pick<RuntimeNativeReadonlyService, "execute">;
   deadlineMs?: number;
 }): Promise<RuntimeWorkspacePrivateServer> {
   const port = validPort(config.port);
@@ -62,6 +68,7 @@ export async function startRuntimeWorkspacePrivateServer(config: {
       authentication,
       config.freeze,
       config.dispatch,
+      config.readonly,
       deadlineMs,
     );
   });
@@ -89,12 +96,14 @@ async function handleRequest(
   authentication: RuntimeWorkspacePrivateAuthentication,
   freeze: Pick<RuntimeWorkspaceFreezeService, "freeze">,
   dispatch: Pick<RuntimeWorkspaceDispatchService, "dispatch">,
+  readonly: Pick<RuntimeNativeReadonlyService, "execute"> | undefined,
   deadlineMs: number,
 ): Promise<void> {
   if (
     request.method !== "POST" ||
     (request.url !== RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH &&
-      request.url !== RUNTIME_WORKER_WORKSPACE_DISPATCH_PATH)
+      request.url !== RUNTIME_WORKER_WORKSPACE_DISPATCH_PATH &&
+      request.url !== WORKSPACE_NATIVE_READONLY_PATH)
   ) {
     writeEmpty(response, 404);
     return;
@@ -106,14 +115,28 @@ async function handleRequest(
   try {
     authenticate(request, authentication);
     requireJsonContentType(request.headers["content-type"]);
+    const isReadonly = request.url === WORKSPACE_NATIVE_READONLY_PATH;
+    if (isReadonly && readonly === undefined) {
+      writeEmpty(response, 404);
+      return;
+    }
     const isFreeze =
       request.url === RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH;
     const body = await readJson(
       request,
-      isFreeze
-        ? RUNTIME_WORKER_WORKSPACE_WIRE_LIMITS.freezeRequestBytes
-        : RUNTIME_WORKER_WORKSPACE_WIRE_LIMITS.dispatchRequestBytes,
+      isReadonly
+        ? WORKSPACE_NATIVE_READONLY_LIMITS.requestBytes
+        : isFreeze
+          ? RUNTIME_WORKER_WORKSPACE_WIRE_LIMITS.freezeRequestBytes
+          : RUNTIME_WORKER_WORKSPACE_WIRE_LIMITS.dispatchRequestBytes,
     );
+    if (isReadonly) {
+      const input = parseWorkspaceNativeReadonlyRequest(body);
+      const result = await readonly!.execute(input, controller.signal);
+      const output = parseWorkspaceNativeReadonlyResponse(result, input);
+      if (!response.destroyed) writeJson(response, 200, output);
+      return;
+    }
     if (isFreeze) {
       const input = parseRuntimeWorkerWorkspaceFreezeCommandRequest(body);
       const result = await freeze.freeze(input, controller.signal);
@@ -133,6 +156,11 @@ async function handleRequest(
     if (response.destroyed) return;
     if (error instanceof AuthenticationError) {
       writeEmpty(response, 401);
+      return;
+    }
+    if (request.url === WORKSPACE_NATIVE_READONLY_PATH) {
+      const projection = errorProjection(error);
+      writeJson(response, projection.status, { code: projection.code });
       return;
     }
     if (request.url === RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH) {

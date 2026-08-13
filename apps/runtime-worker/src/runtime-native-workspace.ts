@@ -73,6 +73,7 @@ export function createRuntimeNativeWorkspaceResources(input: {
       },
       signer,
       gateway: listAuthority,
+      nativeRoot: input.bootstrap.trustedLocalPath,
       deadlineMs: input.bootstrap.deadlineMs,
     },
   };

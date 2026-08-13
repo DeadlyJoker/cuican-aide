@@ -69,6 +69,47 @@ test("lists the active capability catalog with an opaque cursor", async () => {
   );
 });
 
+test("calls the bounded typed Workspace read-only product route", async () => {
+  const captured: { url: string; init: RequestInit }[] = [];
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    csrfToken: "csrf-token",
+    fetch: async (input, init = {}) => {
+      captured.push({ url: String(input), init });
+      return jsonResponse(200, {
+        schemaVersion: "crewon.workspace-native-readonly-response.v0",
+        operation: "contentSearch",
+        workspaceBindingId: "workspace-1",
+        matches: [],
+        scannedFiles: 0,
+        scannedBytes: 0,
+        truncated: false,
+      });
+    },
+  });
+  const result = await client.executeWorkspaceReadonly("thread/1", {
+    schemaVersion: "crewon.workspace-native-readonly-request.v0",
+    operation: "contentSearch",
+    workspaceBindingId: "workspace-1",
+    pathSegments: [],
+    query: "needle",
+    maxMatches: 10,
+  });
+  assert.equal(result.operation, "contentSearch");
+  assert.equal(
+    captured[0]?.url,
+    "https://control.example/api/v1/threads/thread%2F1/workspace-readonly",
+  );
+  assert.deepEqual(JSON.parse(String(captured[0]?.init.body)), {
+    schemaVersion: "crewon.workspace-native-readonly-request.v0",
+    operation: "contentSearch",
+    workspaceBindingId: "workspace-1",
+    pathSegments: [],
+    query: "needle",
+    maxMatches: 10,
+  });
+});
+
 test("uses typed Knowledge create, read and pagination routes", async () => {
   const requests: { input: string; init: RequestInit }[] = [];
   const knowledge = {

@@ -14,12 +14,18 @@ import {
   RUNTIME_WORKER_WORKSPACE_DISPATCH_PATH,
   RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH,
   RUNTIME_WORKER_WORKSPACE_WIRE_LIMITS,
+  WORKSPACE_NATIVE_READONLY_LIMITS,
+  WORKSPACE_NATIVE_READONLY_PATH,
   parseRuntimeWorkerWorkspaceDispatchError,
   parseRuntimeWorkerWorkspaceDispatchRequest,
   parseRuntimeWorkerWorkspaceDispatchResponse,
   parseRuntimeWorkerWorkspaceFreezeCommandError,
   parseRuntimeWorkerWorkspaceFreezeCommandRequest,
   parseRuntimeWorkerWorkspaceFreezeCommandResponse,
+  parseWorkspaceNativeReadonlyRequest,
+  parseWorkspaceNativeReadonlyResponse,
+  type WorkspaceNativeReadonlyRequest,
+  type WorkspaceNativeReadonlyResponse,
   type RuntimeWorkerWorkspaceDispatchRequest,
   type RuntimeWorkerWorkspacePhase,
 } from "@crewon/contracts";
@@ -185,6 +191,29 @@ export class LoopbackRuntimeWorkspaceWorkerClient
     );
     for (const controller of this.#active) controller.abort(reason);
     this.#active.clear();
+  }
+
+  async executeReadonly(
+    input: WorkspaceNativeReadonlyRequest,
+    signal: AbortSignal,
+  ): Promise<WorkspaceNativeReadonlyResponse> {
+    const request = parseWorkspaceNativeReadonlyRequest(input);
+    const response = await this.#post(
+      new URL(WORKSPACE_NATIVE_READONLY_PATH, this.#freezeUrl),
+      request,
+      WORKSPACE_NATIVE_READONLY_LIMITS.responseBytes,
+      signal,
+    );
+    if (response.status !== 200) {
+      const value = response.value as { code?: unknown };
+      throw new RuntimeWorkspaceWorkerClientError(
+        typeof value?.code === "string"
+          ? value.code
+          : "runtime_workspace_worker_unavailable",
+        "notSent",
+      );
+    }
+    return parseWorkspaceNativeReadonlyResponse(response.value, request);
   }
 
   async #dispatch(

@@ -24,3 +24,4 @@ export * from "./run-contract.ts";
 export * from "./office-control-contract.ts";
 export * from "./runtime-worker-workspace-api.ts";
 export * from "./workspace-list-control-contract.ts";
+export * from "./workspace-native-readonly.ts";
