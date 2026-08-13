@@ -300,18 +300,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     [threads, threadsRef],
   ]);
 
-  const preserveThreadsAfterConnectionLoss = (showConnectionNotice = true) => {
-    if (showConnectionNotice) {
-      setNotice({
-        text:
-          localeRef.current === "zh"
-            ? "Control 运行时不可用；CrewON 不会回退到旧 App Server。"
-            : "The Control runtime is unavailable; CrewON will not fall back to the legacy App Server.",
-        tone: "warning",
-      });
-    }
-    threadState.setStreamingTextByThread({});
-  };
   const retryConnection = () => globalThis.location.reload();
   const showDemoThreads = () => {
     showDemoThreadsAction({
@@ -595,7 +583,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     },
     newDraftPreview: t.newDraftPreview,
     newDraftThread: t.newDraftThread,
-    preserveThreadsAfterConnectionLoss,
     prompt: window.prompt,
     recordShowArchivedThreads: (showArchived) => {
       showArchivedThreadsRef.current = showArchived;

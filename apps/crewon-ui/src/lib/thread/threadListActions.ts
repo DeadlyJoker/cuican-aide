@@ -47,7 +47,6 @@ export type SelectThreadActionParams = {
   client: Pick<ThreadListClient, "readThread"> | null | undefined;
   isConnected: boolean;
   locale: Locale;
-  preserveThreadsAfterConnectionLoss: () => void;
   restoreThread?: (thread: Thread) => Promise<Thread>;
   setAppView: (view: AppView) => void;
   setInspectorOpen: (open: boolean) => void;
@@ -141,7 +140,6 @@ export async function selectThreadAction({
   client,
   isConnected,
   locale,
-  preserveThreadsAfterConnectionLoss,
   restoreThread,
   setAppView,
   setInspectorOpen,
@@ -173,7 +171,6 @@ export async function selectThreadAction({
       return restoredThread;
     }
   } catch (error) {
-    preserveThreadsAfterConnectionLoss();
     setNotice(threadReadPreservedFailureNotice(error, locale));
   }
   return null;

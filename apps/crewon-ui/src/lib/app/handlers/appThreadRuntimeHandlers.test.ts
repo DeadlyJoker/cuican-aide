@@ -142,7 +142,6 @@ function createParams(
     newDraftPreview: "Draft preview",
     newDraftThread: "Draft",
     pendingComposerMentions: [],
-    preserveThreadsAfterConnectionLoss: () => {},
     prompt: () => "Renamed",
     recordShowArchivedThreads: () => {},
     resolveBackendCwd: async () => "/repo",

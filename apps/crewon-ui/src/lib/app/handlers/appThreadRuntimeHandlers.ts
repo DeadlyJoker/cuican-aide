@@ -122,7 +122,6 @@ export type AppThreadRuntimeHandlersParams = {
   newDraftPreview: string;
   newDraftThread: string;
   pendingComposerMentions: PendingComposerMention[];
-  preserveThreadsAfterConnectionLoss: () => void;
   prompt: (message: string, defaultValue: string) => string | null;
   recordShowArchivedThreads: (showArchived: boolean) => void;
   resolveBackendCwd: () => Promise<string | undefined>;
@@ -304,8 +303,6 @@ export function createAppThreadRuntimeHandlers(
         client: params.client,
         isConnected: params.isConnected,
         locale: params.locale,
-        preserveThreadsAfterConnectionLoss:
-          params.preserveThreadsAfterConnectionLoss,
         setAppView: params.setAppView,
         setInspectorOpen: params.setInspectorOpen,
         setNotice: params.setNotice,
@@ -378,8 +375,6 @@ export function createAppThreadRuntimeHandlers(
         isDemo: params.isDemo,
         isDemoPreview: params.isDemoPreview,
         locale: params.locale,
-        preserveThreadsAfterConnectionLoss:
-          params.preserveThreadsAfterConnectionLoss,
         selectedThread: params.selectedThread,
         setBusyToolId: params.setBusyToolId,
         setCapabilityPanel: params.setCapabilityPanel,

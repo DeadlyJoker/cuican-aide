@@ -83,7 +83,6 @@ describe("thread list actions", () => {
       },
       isConnected: true,
       locale: "en",
-      preserveThreadsAfterConnectionLoss: () => {},
       restoreThread: async (restoredThread) => ({
         ...restoredThread,
         name: "Restored",
@@ -112,9 +111,8 @@ describe("thread list actions", () => {
     expect(state.threads[0]?.name).toBe("Restored");
   });
 
-  it("preserves local threads when selecting fails", async () => {
+  it("reports a thread read failure without discarding local threads", async () => {
     const state = threadState();
-    let preserved = false;
 
     await selectThreadAction({
       client: {
@@ -124,9 +122,6 @@ describe("thread list actions", () => {
       },
       isConnected: true,
       locale: "en",
-      preserveThreadsAfterConnectionLoss: () => {
-        preserved = true;
-      },
       setAppView: () => {},
       setInspectorOpen: () => {},
       setNotice: state.setNotice,
@@ -137,7 +132,7 @@ describe("thread list actions", () => {
       threadId: "thread-1",
     });
 
-    expect(preserved).toBe(true);
+    expect(state.threads).toHaveLength(1);
     expect(state.notice).toEqual({
       text: "offline",
       tone: "warning",

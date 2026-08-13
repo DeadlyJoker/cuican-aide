@@ -48,7 +48,6 @@ type BaseThreadToolActionParams = {
 };
 
 export type StartReviewActionParams = BaseThreadToolActionParams & {
-  preserveThreadsAfterConnectionLoss: () => void;
   setNotice: (notice: NoticeState) => void;
 };
 
@@ -63,7 +62,6 @@ export async function startReviewAction(params: StartReviewActionParams) {
     isDemo,
     isDemoPreview,
     locale,
-    preserveThreadsAfterConnectionLoss,
     selectedThread,
     setBusyToolId,
     setCapabilityPanel,
@@ -103,7 +101,6 @@ export async function startReviewAction(params: StartReviewActionParams) {
       );
     }
   } catch (error) {
-    preserveThreadsAfterConnectionLoss();
     setNotice(threadReviewFailureNotice(error, locale));
   } finally {
     setBusyToolId(null);

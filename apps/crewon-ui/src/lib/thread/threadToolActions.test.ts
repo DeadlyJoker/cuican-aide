@@ -96,7 +96,6 @@ function baseParams(
     isDemo: false,
     isDemoPreview: false,
     locale: "en",
-    preserveThreadsAfterConnectionLoss: () => {},
     selectedThread: thread(),
     setBusyToolId: () => {},
     setCapabilityPanel: sink.setCapabilityPanel,
@@ -188,9 +187,8 @@ describe("thread tool actions", () => {
     expect(reviewedThreads).toEqual(["created-thread"]);
   });
 
-  it("preserves threads and reports review failures", async () => {
+  it("reports review failures", async () => {
     const busyStates: Array<string | null> = [];
-    let preserved = false;
     let notice: NoticeState | null = null;
 
     await startReviewAction(
@@ -200,9 +198,6 @@ describe("thread tool actions", () => {
             throw new Error("review failed");
           },
         }),
-        preserveThreadsAfterConnectionLoss: () => {
-          preserved = true;
-        },
         setBusyToolId: (toolId) => {
           busyStates.push(toolId);
         },
@@ -212,7 +207,6 @@ describe("thread tool actions", () => {
       }),
     );
 
-    expect(preserved).toBe(true);
     expect(busyStates).toEqual(["review", null]);
     expect(notice).toEqual({
       text: "review failed",
