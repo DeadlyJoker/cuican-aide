@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { loadPendingToolEventsForSegment } from "./pending-tool-events.ts";
+import {
+  loadPendingToolEventsForSegment,
+  workflowContinuationHistoryStart,
+} from "./pending-tool-events.ts";
 
 test("isolates ordered pending tools to one Workflow sibling segment", async () => {
   const requested = (sequence: number, segmentId: string, callId: string) => ({
@@ -59,4 +62,34 @@ test("isolates ordered pending tools to one Workflow sibling segment", async () 
   assert.deepEqual(result.requestedCallIds, ["a-1", "a-2"]);
   assert.deepEqual(result.completedCallIds, ["a-1"]);
   assert.equal(result.lastSegmentSequence, 4);
+});
+
+test("continues provider history at the sampled assistant/tool-call boundary", () => {
+  const history = [
+    { type: "message", role: "user", content: "start" },
+    { type: "message", role: "assistant", content: "calling" },
+    {
+      type: "tool_call",
+      callId: "a-1",
+      kind: "function",
+      name: "tool",
+      input: "{}",
+    },
+    { type: "tool_result", callId: "a-1", kind: "function", output: "ok" },
+    {
+      type: "tool_call",
+      callId: "a-2",
+      kind: "function",
+      name: "tool",
+      input: "{}",
+    },
+  ] as const;
+  assert.equal(
+    workflowContinuationHistoryStart(history, ["a-1", "a-2"]),
+    1,
+  );
+  assert.throws(
+    () => workflowContinuationHistoryStart(history, ["missing"]),
+    /workflow_tool_approval_pending_call_missing/u,
+  );
 });

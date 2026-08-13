@@ -84,3 +84,19 @@ export async function loadPendingToolEventsForSegment(input: {
     lastSegmentSequence,
   };
 }
+
+export function workflowContinuationHistoryStart(
+  history: readonly import("@crewon/agent-kernel").AgentHistoryItem[],
+  requestedCallIds: readonly string[],
+): number {
+  const callIds = new Set(requestedCallIds);
+  const firstToolCall = history.findIndex(
+    (item) => item.type === "tool_call" && callIds.has(item.callId),
+  );
+  if (firstToolCall < 0)
+    throw new Error("workflow_tool_approval_pending_call_missing");
+  const prior = history[firstToolCall - 1];
+  return prior?.type === "message" && prior.role === "assistant"
+    ? firstToolCall - 1
+    : firstToolCall;
+}
