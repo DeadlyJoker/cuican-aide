@@ -35,8 +35,6 @@ const LEGACY_ROOT_LIB_MODULES = [
   "demoContent",
   "demoData",
   "domainAutomationContent",
-  "domainOfficeBackend",
-  "domainPersistence",
   "domainTypes",
   "libraryPanelFormatters",
   "mcpConfigFormatters",
@@ -89,8 +87,6 @@ function importsBackendImplementation(source: string): boolean {
     "lib/app-server/",
     "lib/backend/",
     "lib/server-request/",
-    "lib/domain/domainPersistence",
-    "lib/domain/domainOfficeBackend",
   ].some((snippet) => source.includes(snippet));
 }
 
