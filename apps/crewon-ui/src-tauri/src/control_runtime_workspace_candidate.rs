@@ -25,10 +25,6 @@ impl StagedWorkspaceCandidate {
             context,
             control: control.child,
             control_events: control.events,
-            device: None,
-            device_events: None,
-            gateway: None,
-            gateway_events: None,
             worker: worker.child,
             worker_events: worker.events,
         })

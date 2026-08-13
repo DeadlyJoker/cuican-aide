@@ -40,8 +40,6 @@ const ACTIVE_RUN_SQL: &str = "SELECT 1 FROM run_snapshots
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct RuntimeGeneration {
     pub(super) control: u64,
-    pub(super) device: u64,
-    pub(super) gateway: u64,
     pub(super) worker: u64,
 }
 
@@ -341,8 +339,6 @@ fn next_provider_generation(
             .control_generation
             .checked_add(1)
             .ok_or(ControlRuntimeStartError::RuntimeUnavailable)?,
-        device: lifecycle.device_generation,
-        gateway: lifecycle.gateway_generation,
         worker: lifecycle
             .worker_generation
             .checked_add(1)

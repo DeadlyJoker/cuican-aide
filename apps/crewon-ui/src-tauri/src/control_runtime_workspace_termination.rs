@@ -12,8 +12,6 @@ pub(super) struct DetachedRuntime {
     pub(super) expected: Vec<ProcessRole>,
     control: CommandChild,
     worker: CommandChild,
-    device: Option<CommandChild>,
-    gateway: Option<CommandChild>,
 }
 
 pub(super) struct StopDetachedOutcome {
@@ -43,25 +41,15 @@ pub(super) fn detach_current(
     let generation = RuntimeGeneration {
         control: next(lifecycle.control_generation)?,
         worker: next(lifecycle.worker_generation)?,
-        device: next(lifecycle.device_generation)?,
-        gateway: next(lifecycle.gateway_generation)?,
     };
-    let mut expected = vec![
+    let expected = vec![
         ProcessRole::ControlApi(lifecycle.control_generation),
         ProcessRole::Worker(lifecycle.worker_generation),
     ];
-    if lifecycle.device.is_some() {
-        expected.push(ProcessRole::Device(lifecycle.device_generation));
-    }
-    if lifecycle.gateway.is_some() {
-        expected.push(ProcessRole::Gateway(lifecycle.gateway_generation));
-    }
     supervisor.terminations.begin(expected.clone())?;
     let detached = DetachedRuntime {
         control: lifecycle.control_api.take().expect("checked Control child"),
         worker: lifecycle.worker.take().expect("checked Worker child"),
-        device: lifecycle.device.take(),
-        gateway: lifecycle.gateway.take(),
         generation,
         expected,
     };
@@ -70,8 +58,6 @@ pub(super) fn detach_current(
     lifecycle.workspace = None;
     lifecycle.control_generation = generation.control;
     lifecycle.worker_generation = generation.worker;
-    lifecycle.device_generation = generation.device;
-    lifecycle.gateway_generation = generation.gateway;
     Ok(detached)
 }
 
@@ -82,15 +68,10 @@ pub(super) fn stop_detached(
     let DetachedRuntime {
         control,
         worker,
-        device,
-        gateway,
         expected,
         ..
     } = detached;
-    let processes = [Some(control), Some(worker), device, gateway]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
+    let processes = vec![control, worker];
     let stopped = terminate_managed_children(&processes, super::TERMINATION_TIMEOUT);
     let processes = if stopped {
         supervisor.terminations.finish(&expected);
@@ -111,9 +92,7 @@ pub(super) fn stop_failed_installed(
         .lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     let generations_match = lifecycle.control_generation == generation.control
-        && lifecycle.worker_generation == generation.worker
-        && lifecycle.device_generation == generation.device
-        && lifecycle.gateway_generation == generation.gateway;
+        && lifecycle.worker_generation == generation.worker;
     lifecycle.available = false;
     lifecycle.candidate_failures.clear();
     let expected = [
@@ -125,14 +104,6 @@ pub(super) fn stop_failed_installed(
             .worker
             .as_ref()
             .map(|_| ProcessRole::Worker(lifecycle.worker_generation)),
-        lifecycle
-            .device
-            .as_ref()
-            .map(|_| ProcessRole::Device(lifecycle.device_generation)),
-        lifecycle
-            .gateway
-            .as_ref()
-            .map(|_| ProcessRole::Gateway(lifecycle.gateway_generation)),
     ]
     .into_iter()
     .flatten()
@@ -140,8 +111,6 @@ pub(super) fn stop_failed_installed(
     let processes = [
         lifecycle.control_api.take(),
         lifecycle.worker.take(),
-        lifecycle.device.take(),
-        lifecycle.gateway.take(),
     ]
     .into_iter()
     .flatten()

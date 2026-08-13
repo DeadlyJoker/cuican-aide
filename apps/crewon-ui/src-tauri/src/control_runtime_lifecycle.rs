@@ -3,10 +3,6 @@ struct RuntimeLifecycle {
     candidate_failures: Vec<ProcessRole>,
     control_generation: u64,
     control_api: Option<CommandChild>,
-    device: Option<CommandChild>,
-    device_generation: u64,
-    gateway: Option<CommandChild>,
-    gateway_generation: u64,
     worker: Option<CommandChild>,
     worker_generation: u64,
     workspace: Option<Arc<workspace::WorkspaceRuntimeContext>>,
@@ -17,12 +13,6 @@ impl RuntimeLifecycle {
         match role {
             ProcessRole::ControlApi(generation) => {
                 self.control_generation == generation && self.control_api.is_some()
-            }
-            ProcessRole::Device(generation) => {
-                self.device_generation == generation && self.device.is_some()
-            }
-            ProcessRole::Gateway(generation) => {
-                self.gateway_generation == generation && self.gateway.is_some()
             }
             ProcessRole::Worker(generation) => {
                 self.worker_generation == generation && self.worker.is_some()
@@ -99,10 +89,6 @@ impl ControlRuntimeSupervisor {
                 candidate_failures: Vec::new(),
                 control_generation: 0,
                 control_api: None,
-                device: None,
-                device_generation: 0,
-                gateway: None,
-                gateway_generation: 0,
                 worker: None,
                 worker_generation: 0,
                 workspace: None,
@@ -131,10 +117,6 @@ impl ControlRuntimeSupervisor {
                 candidate_failures: Vec::new(),
                 control_generation: 1,
                 control_api: Some(control_api),
-                device: None,
-                device_generation: 0,
-                gateway: None,
-                gateway_generation: 0,
                 worker: Some(worker),
                 worker_generation: 1,
                 workspace,
@@ -185,12 +167,7 @@ impl ControlRuntimeSupervisor {
         };
         lifecycle.available = false;
         lifecycle.candidate_failures.clear();
-        let children = [
-            lifecycle.control_api.take(),
-            lifecycle.worker.take(),
-            lifecycle.device.take(),
-            lifecycle.gateway.take(),
-        ];
+        let children = [lifecycle.control_api.take(), lifecycle.worker.take()];
         drop(lifecycle);
         let children = children.into_iter().flatten().collect::<Vec<_>>();
         self.quarantine_active_processes(children);

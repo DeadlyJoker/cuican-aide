@@ -102,12 +102,8 @@ fn prepare_repair_generation(
     if lifecycle.available
         || lifecycle.control_generation != failed.control
         || lifecycle.worker_generation != failed.worker
-        || lifecycle.device_generation != failed.device
-        || lifecycle.gateway_generation != failed.gateway
         || lifecycle.control_api.is_some()
         || lifecycle.worker.is_some()
-        || lifecycle.device.is_some()
-        || lifecycle.gateway.is_some()
         || lifecycle.workspace.is_some()
     {
         return Err(());
@@ -115,13 +111,9 @@ fn prepare_repair_generation(
     let generation = RuntimeGeneration {
         control: failed.control.checked_add(1).ok_or(())?,
         worker: failed.worker.checked_add(1).ok_or(())?,
-        device: failed.device.checked_add(1).ok_or(())?,
-        gateway: failed.gateway.checked_add(1).ok_or(())?,
     };
     lifecycle.control_generation = generation.control;
     lifecycle.worker_generation = generation.worker;
-    lifecycle.device_generation = generation.device;
-    lifecycle.gateway_generation = generation.gateway;
     lifecycle.candidate_failures.clear();
     Ok(generation)
 }

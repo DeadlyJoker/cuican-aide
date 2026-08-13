@@ -23,10 +23,6 @@ pub(super) struct CompleteWorkspaceRuntime {
     pub(super) context: Option<Arc<WorkspaceRuntimeContext>>,
     pub(super) control: CommandChild,
     pub(super) control_events: ProcessEvents,
-    pub(super) device: Option<CommandChild>,
-    pub(super) device_events: Option<ProcessEvents>,
-    pub(super) gateway: Option<CommandChild>,
-    pub(super) gateway_events: Option<ProcessEvents>,
     pub(super) worker: CommandChild,
     pub(super) worker_events: ProcessEvents,
 }
@@ -36,10 +32,6 @@ pub(super) struct PreparedWorkspaceInstall {
     context: Option<Arc<WorkspaceRuntimeContext>>,
     control: CommandChild,
     control_monitor: PreparedProcessMonitor,
-    device: Option<CommandChild>,
-    device_monitor: Option<PreparedProcessMonitor>,
-    gateway: Option<CommandChild>,
-    gateway_monitor: Option<PreparedProcessMonitor>,
     worker: CommandChild,
     worker_monitor: PreparedProcessMonitor,
 }
@@ -55,10 +47,6 @@ pub(super) fn prepare_workspace_install(
         context,
         control,
         control_events,
-        device,
-        device_events,
-        gateway,
-        gateway_events,
         worker,
         worker_events,
     } = runtime;
@@ -80,7 +68,7 @@ pub(super) fn prepare_workspace_install(
     let control_monitor = match control_monitor {
         Ok(monitor) => monitor,
         Err(error) => {
-            stop_children(supervisor, control, worker, device, gateway);
+            stop_children(supervisor, control, worker);
             return Err(error);
         }
     };
@@ -93,54 +81,15 @@ pub(super) fn prepare_workspace_install(
         Ok(monitor) => monitor,
         Err(error) => {
             drop(control_monitor);
-            stop_children(supervisor, control, worker, device, gateway);
+            stop_children(supervisor, control, worker);
             return Err(error);
         }
-    };
-    let device_monitor = match device_events {
-        Some(events) => match prepare_process_monitor(
-            app.clone(),
-            events,
-            "device-runtime-workspace-switch",
-            ProcessRole::Device(generation.device),
-        ) {
-            Ok(monitor) => Some(monitor),
-            Err(error) => {
-                drop(control_monitor);
-                drop(worker_monitor);
-                stop_children(supervisor, control, worker, device, gateway);
-                return Err(error);
-            }
-        },
-        None => None,
-    };
-    let gateway_monitor = match gateway_events {
-        Some(events) => match prepare_process_monitor(
-            app.clone(),
-            events,
-            "device-gateway-workspace-switch",
-            ProcessRole::Gateway(generation.gateway),
-        ) {
-            Ok(monitor) => Some(monitor),
-            Err(error) => {
-                drop(control_monitor);
-                drop(worker_monitor);
-                drop(device_monitor);
-                stop_children(supervisor, control, worker, device, gateway);
-                return Err(error);
-            }
-        },
-        None => None,
     };
     Ok(PreparedWorkspaceInstall {
         admission,
         context,
         control,
         control_monitor,
-        device,
-        device_monitor,
-        gateway,
-        gateway_monitor,
         worker,
         worker_monitor,
     })
@@ -160,12 +109,8 @@ pub(super) fn install_prepared_workspace(
     };
     if lifecycle.control_generation != generation.control
         || lifecycle.worker_generation != generation.worker
-        || lifecycle.device_generation != generation.device
-        || lifecycle.gateway_generation != generation.gateway
         || lifecycle.control_api.is_some()
         || lifecycle.worker.is_some()
-        || lifecycle.device.is_some()
-        || lifecycle.gateway.is_some()
     {
         drop(lifecycle);
         prepared.stop(supervisor);
@@ -176,28 +121,16 @@ pub(super) fn install_prepared_workspace(
         context,
         control,
         control_monitor,
-        device,
-        device_monitor,
-        gateway,
-        gateway_monitor,
         worker,
         worker_monitor,
     } = prepared;
     lifecycle.control_api = Some(control);
     lifecycle.worker = Some(worker);
-    lifecycle.device = device;
-    lifecycle.gateway = gateway;
     lifecycle.workspace = context;
     lifecycle.available = admission == ControlAdmissionMode::Active;
     lifecycle.candidate_failures.clear();
     drop(lifecycle);
     worker_monitor.activate();
-    if let Some(monitor) = device_monitor {
-        monitor.activate();
-    }
-    if let Some(monitor) = gateway_monitor {
-        monitor.activate();
-    }
     match admission {
         ControlAdmissionMode::Active => control_monitor.activate(),
         ControlAdmissionMode::Paused => {
@@ -231,8 +164,6 @@ pub(super) fn commit_workspace_install(
     };
     if lifecycle.control_generation != generation.control
         || lifecycle.worker_generation != generation.worker
-        || lifecycle.device_generation != generation.device
-        || lifecycle.gateway_generation != generation.gateway
         || !lifecycle.candidate_failures.is_empty()
         || lifecycle.control_api.is_none()
         || lifecycle.worker.is_none()
@@ -263,19 +194,13 @@ impl PreparedWorkspaceInstall {
         let Self {
             control,
             control_monitor,
-            device,
-            device_monitor,
-            gateway,
-            gateway_monitor,
             worker,
             worker_monitor,
             ..
         } = self;
         drop(control_monitor);
         drop(worker_monitor);
-        drop(device_monitor);
-        drop(gateway_monitor);
-        stop_children(supervisor, control, worker, device, gateway);
+        stop_children(supervisor, control, worker);
     }
 }
 
@@ -283,13 +208,8 @@ fn stop_children(
     supervisor: &ControlRuntimeSupervisor,
     control: CommandChild,
     worker: CommandChild,
-    device: Option<CommandChild>,
-    gateway: Option<CommandChild>,
 ) {
-    let children = [Some(control), Some(worker), device, gateway]
-        .into_iter()
-        .flatten()
-        .collect::<Vec<_>>();
+    let children = vec![control, worker];
     supervisor.quarantine_candidate_processes(children);
 }
 

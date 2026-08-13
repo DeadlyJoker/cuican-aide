@@ -13,8 +13,6 @@ fn old_monitor_before_replacement_install_cannot_poison_repair() {
     let supervisor = ControlRuntimeSupervisor::unavailable();
     let failed = RuntimeGeneration {
         control: 0,
-        device: 0,
-        gateway: 0,
         worker: 0,
     };
 
@@ -27,8 +25,6 @@ fn old_monitor_before_replacement_install_cannot_poison_repair() {
         (
             RuntimeGeneration {
                 control: lifecycle.control_generation,
-                device: lifecycle.device_generation,
-                gateway: lifecycle.gateway_generation,
                 worker: lifecycle.worker_generation,
             },
             lifecycle.available,
@@ -44,8 +40,6 @@ fn old_monitor_after_replacement_publish_cannot_shutdown_repair() {
     let supervisor = ControlRuntimeSupervisor::unavailable();
     let failed = RuntimeGeneration {
         control: 0,
-        device: 0,
-        gateway: 0,
         worker: 0,
     };
     let repair = prepare_repair_generation(&supervisor, failed).unwrap();
@@ -64,8 +58,6 @@ fn old_monitor_after_replacement_publish_cannot_shutdown_repair() {
         (
             RuntimeGeneration {
                 control: lifecycle.control_generation,
-                device: lifecycle.device_generation,
-                gateway: lifecycle.gateway_generation,
                 worker: lifecycle.worker_generation,
             },
             lifecycle.available,

@@ -63,8 +63,6 @@ fn monitor_error_while_candidate_process_is_running_blocks_publication() {
         &supervisor,
         RuntimeGeneration {
             control: 1,
-            device: 0,
-            gateway: 0,
             worker: 1,
         },
         &authority,

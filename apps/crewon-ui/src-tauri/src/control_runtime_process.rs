@@ -42,8 +42,6 @@ const MAX_PROCESS_OUTPUT_LINE_BYTES: u64 = 64 * 1024;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub(super) enum ProcessRole {
     ControlApi(u64),
-    Device(u64),
-    Gateway(u64),
     Worker(u64),
 }
 

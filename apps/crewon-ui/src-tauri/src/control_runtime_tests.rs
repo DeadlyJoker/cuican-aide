@@ -80,10 +80,6 @@ fn bootstrap_is_unavailable_while_admission_processes_are_detached() {
             candidate_failures: Vec::new(),
             control_api: None,
             control_generation: 2,
-            device: None,
-            device_generation: 0,
-            gateway: None,
-            gateway_generation: 0,
             worker: None,
             worker_generation: 2,
             workspace: None,
@@ -836,10 +832,6 @@ fn provider_reload_advances_only_worker_and_control_generations() {
         candidate_failures: Vec::new(),
         control_generation: 7,
         control_api: None,
-        device: None,
-        device_generation: 3,
-        gateway: None,
-        gateway_generation: 3,
         worker: None,
         worker_generation: 11,
         workspace: None,
@@ -848,8 +840,6 @@ fn provider_reload_advances_only_worker_and_control_generations() {
         next_provider_generation_for_test(&lifecycle).expect("next Provider generation"),
         RuntimeGeneration {
             control: 8,
-            device: 3,
-            gateway: 3,
             worker: 12,
         }
     );
