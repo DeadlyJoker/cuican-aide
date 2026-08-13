@@ -61,6 +61,49 @@ export function controlAutomationLibraryItem(
   };
 }
 
+export async function readControlAutomationLibraryItem(
+  client: ControlApiClient,
+  automationId: string,
+  locale: Locale,
+): Promise<LibraryItem> {
+  const response = await client.getAutomation(automationId);
+  if (response.automation.automationId !== automationId) {
+    throw new Error("control_automation_read_response_invalid");
+  }
+  return controlAutomationLibraryItem(response.automation, locale);
+}
+
+export async function createControlAutomation(params: {
+  agentVersionId: string | null;
+  client: ControlApiClient;
+  idempotencyKey: string;
+  prompt: string;
+  threadId: string;
+  title: string;
+}): Promise<LibraryItem> {
+  const threadResponse = await params.client.getThread(params.threadId);
+  if (
+    threadResponse.thread.threadId !== params.threadId ||
+    threadResponse.thread.status !== "active"
+  ) {
+    throw new Error("control_automation_thread_not_active");
+  }
+  const response = await params.client.createAutomation(
+    {
+      agentVersionId: params.agentVersionId,
+      expectedThreadRevision: threadResponse.thread.revision,
+      prompt: params.prompt,
+      threadId: params.threadId,
+      title: params.title,
+    },
+    params.idempotencyKey,
+  );
+  if (response.automation.threadId !== params.threadId) {
+    throw new Error("control_automation_create_response_invalid");
+  }
+  return controlAutomationLibraryItem(response.automation, "en");
+}
+
 export async function runControlAutomationNow(params: {
   automationId: string;
   automationRevision: 1;

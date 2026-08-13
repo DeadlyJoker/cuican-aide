@@ -6,7 +6,9 @@ import type { ControlApiClient } from "@crewon/control-client";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  createControlAutomation,
   listControlAutomationLibraryItems,
+  readControlAutomationLibraryItem,
   runControlAutomationNow,
 } from "./controlAutomationLibrary";
 
@@ -27,6 +29,54 @@ function automation(overrides: Partial<AutomationView> = {}): AutomationView {
 }
 
 describe("Control Automation library", () => {
+  it("reads the canonical definition instead of trusting list state", async () => {
+    const getAutomation = vi.fn(async () => ({
+      automation: automation({ title: "Fresh title" }),
+    }));
+
+    const item = await readControlAutomationLibraryItem(
+      { getAutomation } as unknown as ControlApiClient,
+      "automation-1",
+      "en",
+    );
+
+    expect(getAutomation).toHaveBeenCalledWith("automation-1");
+    expect(item.title).toBe("Fresh title");
+  });
+
+  it("creates with canonical Thread CAS and typed Control mutation", async () => {
+    const createAutomation = vi.fn(async () => ({
+      automation: automation({ title: "Created" }),
+      disposition: "committed" as const,
+    }));
+    const client = {
+      createAutomation,
+      getThread: vi.fn(async () => ({
+        thread: { revision: 8, status: "active", threadId: "thread-1" },
+      })),
+    } as unknown as ControlApiClient;
+
+    await createControlAutomation({
+      agentVersionId: null,
+      client,
+      idempotencyKey: "create-1",
+      prompt: "Summarize progress",
+      threadId: "thread-1",
+      title: "Created",
+    });
+
+    expect(createAutomation).toHaveBeenCalledWith(
+      {
+        agentVersionId: null,
+        expectedThreadRevision: 8,
+        prompt: "Summarize progress",
+        threadId: "thread-1",
+        title: "Created",
+      },
+      "create-1",
+    );
+  });
+
   it("lists manual-only definitions without scheduler actions", async () => {
     const listAutomations = vi
       .fn()

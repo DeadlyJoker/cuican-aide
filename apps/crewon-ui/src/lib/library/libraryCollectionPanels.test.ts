@@ -231,7 +231,12 @@ describe("library collection panel helpers", () => {
       }),
     ).toMatchInlineSnapshot(`
       {
-        "actions": [],
+        "actions": [
+          {
+            "id": "prepare-control-automation",
+            "label": "New automation",
+          },
+        ],
         "body": "Automations are managed by Control API and run manually. Scheduling, toggles, and compatibility edits are not offered here.",
         "items": [
           {

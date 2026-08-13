@@ -4,7 +4,10 @@ import {
   type AppLibraryPanelActionHandlersParams,
 } from "./appLibraryPanelActionHandlers";
 import { handleLibraryPanelActionDispatch } from "../../library/libraryPanelActionFlow";
-import { runControlAutomationNow } from "../../automation/controlAutomationLibrary";
+import {
+  createControlAutomation,
+  runControlAutomationNow,
+} from "../../automation/controlAutomationLibrary";
 
 export type AppLibraryPanelDispatchHandlerParams = Omit<
   AppLibraryPanelActionHandlersParams,
@@ -15,6 +18,129 @@ export function createAppLibraryPanelDispatchHandler(
   params: AppLibraryPanelDispatchHandlerParams,
 ): (action: LibraryPanelAction) => Promise<boolean> {
   return async (action) => {
+    if (params.controlClient && action.id === "prepare-control-automation") {
+      try {
+        const [threads, catalog] = await Promise.all([
+          params.controlClient.listThreads({ limit: 100 }),
+          params.controlClient.getActiveAgentVersionCatalog(),
+        ]);
+        const activeThreads = threads.data.filter(
+          (thread) => thread.status === "active",
+        );
+        const firstThread = activeThreads[0];
+        if (!firstThread) {
+          throw new Error("No active Control thread is available.");
+        }
+        params.setLibraryPanel({
+          actions: [
+            {
+              id: "submit-control-automation",
+              label: params.locale === "zh" ? "保存自动化" : "Save automation",
+            },
+          ],
+          body:
+            params.locale === "zh"
+              ? "创建仅支持手动立即运行的 Control 自动化。"
+              : "Create a manual run-now Control automation.",
+          fields: [
+            {
+              id: "control-automation-name",
+              label: params.locale === "zh" ? "名称" : "Name",
+              value: "",
+            },
+            {
+              id: "control-automation-prompt",
+              label: params.locale === "zh" ? "任务提示" : "Prompt",
+              value: "",
+            },
+            {
+              id: "control-automation-thread",
+              label: params.locale === "zh" ? "任务" : "Task",
+              options: activeThreads.map((thread) => ({
+                label: thread.title?.trim() || thread.threadId,
+                value: thread.threadId,
+              })),
+              value: firstThread.threadId,
+            },
+            {
+              id: "control-automation-agent",
+              label: params.locale === "zh" ? "执行 Agent" : "Execution agent",
+              options: [
+                {
+                  label:
+                    params.locale === "zh"
+                      ? "Control 默认 Agent"
+                      : "Control default agent",
+                  value: "",
+                },
+                ...catalog.data.map((version) => ({
+                  label: `${version.model.modelId} · ${version.agentVersionId}`,
+                  value: version.agentVersionId,
+                })),
+              ],
+              value: "",
+            },
+          ],
+          items: [],
+          kind: "automation",
+          subtitle: "Control API",
+          title: params.locale === "zh" ? "新建自动化" : "New automation",
+        });
+      } catch (error) {
+        params.setNotice({
+          text:
+            error instanceof Error
+              ? error.message
+              : "Unable to prepare automation creation.",
+          tone: "warning",
+        });
+      }
+      return true;
+    }
+    if (params.controlClient && action.id === "submit-control-automation") {
+      const value = (id: string) =>
+        params.libraryPanel?.fields
+          ?.find((field) => field.id === id)
+          ?.value.trim() ?? "";
+      const title = value("control-automation-name");
+      const prompt = value("control-automation-prompt");
+      const threadId = value("control-automation-thread");
+      if (!title || !prompt || !threadId) {
+        params.setNotice({
+          text:
+            params.locale === "zh"
+              ? "名称、任务提示和任务不能为空。"
+              : "Name, prompt, and task are required.",
+          tone: "warning",
+        });
+        return true;
+      }
+      try {
+        await createControlAutomation({
+          agentVersionId: value("control-automation-agent") || null,
+          client: params.controlClient,
+          idempotencyKey: `automation.create:${crypto.randomUUID()}`,
+          prompt,
+          threadId,
+          title,
+        });
+        await params.openLibrary("automation");
+        params.setNotice({
+          text:
+            params.locale === "zh" ? "自动化已创建。" : "Automation created.",
+          tone: "success",
+        });
+      } catch (error) {
+        params.setNotice({
+          text:
+            error instanceof Error
+              ? error.message
+              : "Unable to create automation.",
+          tone: "warning",
+        });
+      }
+      return true;
+    }
     if (params.controlClient && action.id === "create-knowledge-memory") {
       params.setNotice({
         text:

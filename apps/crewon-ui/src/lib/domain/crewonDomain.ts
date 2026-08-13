@@ -41,6 +41,8 @@ export type LibraryPanelAction = {
     | "call-mcp-tool"
     | "create-agent"
     | "create-automation"
+    | "prepare-control-automation"
+    | "submit-control-automation"
     | "create-knowledge-memory"
     | "create-mcp"
     | "create-office"

@@ -277,7 +277,9 @@ describe("app library open handlers", () => {
     expect(libraryOpenSpy.open).not.toHaveBeenCalled();
     expect(setLibraryPanel).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        actions: [],
+        actions: [
+          { id: "prepare-control-automation", label: "New automation" },
+        ],
         kind: "automation",
         items: expect.arrayContaining([
           expect.objectContaining({ title: "Summary" }),

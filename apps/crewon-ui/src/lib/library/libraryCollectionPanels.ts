@@ -231,7 +231,12 @@ export function controlAutomationCollectionContent(params: {
       locale === "zh"
         ? "自动化由 Control API 管理，仅支持手动立即运行；这里不提供定时、启停或编辑伪兼容。"
         : "Automations are managed by Control API and run manually. Scheduling, toggles, and compatibility edits are not offered here.",
-    actions: [],
+    actions: [
+      {
+        id: "prepare-control-automation",
+        label: locale === "zh" ? "新建自动化" : "New automation",
+      },
+    ],
     items:
       items.length > 0
         ? [

@@ -5,6 +5,55 @@ import type { AppLibraryPanelDispatchHandlerParams } from "./appLibraryPanelDisp
 import { createAppLibraryPanelDispatchHandler } from "./appLibraryPanelDispatchHandler";
 
 describe("app library Control Automation dispatch", () => {
+  it("prepares creation from real Control Threads and AgentVersions", async () => {
+    const setLibraryPanel = vi.fn();
+    const handler = createAppLibraryPanelDispatchHandler({
+      client: null,
+      controlClient: {
+        getActiveAgentVersionCatalog: vi.fn(async () => ({
+          data: [
+            {
+              agentVersionId: "agent-version-1",
+              model: { modelId: "gpt-5.6" },
+            },
+          ],
+        })),
+        listThreads: vi.fn(async () => ({
+          data: [
+            {
+              status: "active",
+              threadId: "thread-1",
+              title: "Daily summary",
+            },
+          ],
+        })),
+      } as unknown as ControlApiClient,
+      locale: "en",
+      setLibraryPanel,
+      setNotice: vi.fn(),
+    } as unknown as AppLibraryPanelDispatchHandlerParams);
+
+    await handler({
+      id: "prepare-control-automation",
+      label: "New automation",
+    });
+
+    expect(setLibraryPanel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        actions: [
+          { id: "submit-control-automation", label: "Save automation" },
+        ],
+        fields: expect.arrayContaining([
+          expect.objectContaining({
+            id: "control-automation-thread",
+            value: "thread-1",
+          }),
+          expect.objectContaining({ id: "control-automation-agent" }),
+        ]),
+      }),
+    );
+  });
+
   it("runs through Control and never needs a legacy client", async () => {
     const runAutomationNow = vi.fn(async () => ({
       automation: { automationId: "automation-1", threadId: "thread-1" },

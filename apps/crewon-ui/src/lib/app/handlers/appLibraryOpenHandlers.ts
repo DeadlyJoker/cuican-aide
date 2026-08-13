@@ -14,7 +14,10 @@ import type {
 import { demoLibraryPanel } from "../../demo/demoContent";
 import { loadMcpInventory } from "../../domain/domainCollaborationBackend";
 import { officeConfigRecordsToLibraryItems } from "../../domain/domainLibraryItems";
-import { listControlAutomationLibraryItems } from "../../automation/controlAutomationLibrary";
+import {
+  listControlAutomationLibraryItems,
+  readControlAutomationLibraryItem,
+} from "../../automation/controlAutomationLibrary";
 import type { Locale } from "../../i18n";
 import { createAppLibraryItemOpenHandlers } from "./appLibraryItemOpenHandlers";
 import {
@@ -173,6 +176,44 @@ export function createAppLibraryOpenHandlers(
       params.controlClient != null &&
       item.action?.type === "automation-detail" &&
       Boolean(item.action.controlAutomationId);
+    if (
+      controlAutomationSelected &&
+      item.action?.type === "automation-detail"
+    ) {
+      params.markLibraryLoad();
+      try {
+        const freshItem = await readControlAutomationLibraryItem(
+          params.controlClient!,
+          item.action.controlAutomationId!,
+          params.locale,
+        );
+        const action = freshItem.action;
+        if (action?.type !== "automation-detail") {
+          throw new Error("control_automation_read_response_invalid");
+        }
+        params.setLibraryPanel({
+          actions: [
+            {
+              automationThreadId: action.threadId,
+              controlAutomationId: action.controlAutomationId,
+              controlAutomationRevision: action.controlAutomationRevision,
+              id: "run-automation",
+              label: params.locale === "zh" ? "立即运行" : "Run now",
+            },
+          ],
+          body: action.body,
+          items: [],
+          kind: "automation",
+          subtitle: action.subtitle,
+          title: action.title,
+        });
+      } catch (error) {
+        params.setLibraryPanel(
+          libraryLoadFailurePanel("automation", error, params.locale),
+        );
+      }
+      return;
+    }
     await openLibraryItemAction({
       handlers: createAppLibraryItemOpenHandlers({
         client: params.client,
