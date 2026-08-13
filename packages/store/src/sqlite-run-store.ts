@@ -173,6 +173,12 @@ import {
   type WorkflowNodeContinuationStore,
   type WorkflowRunCompositionStore,
   type WorkflowRuntimeStore,
+  type CommitKnowledgeInput,
+  type KnowledgeCreateResult,
+  type KnowledgeListQuery,
+  type KnowledgeLocator,
+  type KnowledgePage,
+  type KnowledgeReceiptQuery,
 } from "@crewon/application";
 import {
   validateAutomationRecord,
@@ -340,6 +346,7 @@ import {
   decodeStoredThreadEvent,
   validateStoredThreadEventPage,
 } from "./thread-event-support.ts";
+import { SqliteKnowledgeStore } from "./knowledge-store.ts";
 
 type SnapshotRow = Readonly<{
   tenant_id: string;
@@ -540,6 +547,7 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
   readonly #clock: LeaseClock;
   readonly #workflowDigester: WorkflowContentDigester | null;
   readonly #automationAuthority: SqliteAutomationAuthority;
+  readonly #knowledge: SqliteKnowledgeStore;
   #workflowRuntime: SqliteWorkflowRunCompositionStore | null = null;
   #closed = false;
 
@@ -659,6 +667,7 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
       writeOutbox: (messages) => this.#writeOutbox(messages),
       writeWorkItems: (items) => this.#writeWorkItems(items),
     });
+    this.#knowledge = new SqliteKnowledgeStore(this.#database, () => this.#assertOpen());
     try {
       configureAndMigrateSqlite(this.#database);
       migrateSqliteWorkflowVersions(this.#database);
@@ -681,6 +690,19 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
     }
     this.#database.close();
     this.#closed = true;
+  }
+
+  loadKnowledgeReceipt(query: KnowledgeReceiptQuery): Promise<KnowledgeCreateResult | null> {
+    return this.#knowledge.loadKnowledgeReceipt(query);
+  }
+  commitKnowledge(input: CommitKnowledgeInput): Promise<KnowledgeCreateResult> {
+    return this.#knowledge.commitKnowledge(input);
+  }
+  loadKnowledge(locator: KnowledgeLocator) {
+    return this.#knowledge.loadKnowledge(locator);
+  }
+  listKnowledge(query: KnowledgeListQuery): Promise<KnowledgePage> {
+    return this.#knowledge.listKnowledge(query);
   }
 
   async loadAutomationCreateReceipt(

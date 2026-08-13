@@ -61,6 +61,12 @@ import {
   type WorkspaceOperationReceiptQuery,
   type WorkspaceOperationRecord,
   type WorkspaceOperationSnapshot,
+  type CommitKnowledgeInput,
+  type KnowledgeCreateResult,
+  type KnowledgeListQuery,
+  type KnowledgeLocator,
+  type KnowledgePage,
+  type KnowledgeReceiptQuery,
 } from "@crewon/application";
 import {
   ToolApprovalError,
@@ -151,6 +157,11 @@ import {
 import type { WorkflowContentDigester } from "@crewon/domain";
 import { PostgresWorkflowVersionStore } from "./workflow-version-store.ts";
 import { PostgresWorkflowRunCompositionStore } from "./postgres-workflow-run-composition-store.ts";
+import { PostgresKnowledgeStore } from "./knowledge-store.ts";
+import {
+  migratePostgresKnowledge,
+  POSTGRES_KNOWLEDGE_SCHEMA_VERSION,
+} from "./knowledge-schema.ts";
 
 const workflowDigester: WorkflowContentDigester = {
   sha256: (value) =>
@@ -162,8 +173,14 @@ export class PostgresDomainStore
   extends PostgresWorkflowRunCompositionStore
   implements DomainStore, WorkflowRuntimeStore
 {
+  readonly #knowledge: PostgresKnowledgeStore;
   constructor(options: PostgresThreadStoreOptions) {
     super({ ...options, digester: workflowDigester });
+    this.#knowledge = new PostgresKnowledgeStore(
+      this.pool,
+      this.schemaSql(),
+      () => this.assertOpen(),
+    );
   }
   workflowVersionStore(
     digester: WorkflowContentDigester,
@@ -265,6 +282,17 @@ export class PostgresDomainStore
       ) {
         throw new RunStoreError("postgres_schema_version_unsupported");
       }
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [
+        `crewon:${this.schema}:knowledge-authority`,
+      ]);
+      await migratePostgresKnowledge(client, this.schemaSql());
+      const knowledgeVersion = await client.query<{ version: number }>(
+        `SELECT version FROM ${this.schemaSql()}.schema_migrations WHERE component='knowledge_authority'`,
+      );
+      if (
+        knowledgeVersion.rows[0]?.version !== POSTGRES_KNOWLEDGE_SCHEMA_VERSION
+      )
+        throw new RunStoreError("postgres_schema_version_unsupported");
       await client.query("COMMIT");
     } catch (error) {
       await rollbackPostgres(client);
@@ -272,6 +300,21 @@ export class PostgresDomainStore
     } finally {
       client.release();
     }
+  }
+
+  loadKnowledgeReceipt(
+    query: KnowledgeReceiptQuery,
+  ): Promise<KnowledgeCreateResult | null> {
+    return this.#knowledge.loadKnowledgeReceipt(query);
+  }
+  commitKnowledge(input: CommitKnowledgeInput): Promise<KnowledgeCreateResult> {
+    return this.#knowledge.commitKnowledge(input);
+  }
+  loadKnowledge(locator: KnowledgeLocator) {
+    return this.#knowledge.loadKnowledge(locator);
+  }
+  listKnowledge(query: KnowledgeListQuery): Promise<KnowledgePage> {
+    return this.#knowledge.listKnowledge(query);
   }
 
   async loadAutomationCreateReceipt(

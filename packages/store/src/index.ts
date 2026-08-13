@@ -1,5 +1,6 @@
 export * from "@crewon/application";
 export * from "./in-memory-run-store.ts";
+export * from "./knowledge-store.ts";
 export * from "./in-memory-workspace-read-file-store.ts";
 export * from "./sqlite-workspace-read-file-store.ts";
 export * from "./lease-clock.ts";

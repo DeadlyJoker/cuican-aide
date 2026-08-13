@@ -14,8 +14,12 @@ import {
   migrateSqliteModelDispatchEvidence,
   sqliteModelDispatchEvidenceTableSql,
 } from "./sqlite-model-dispatch-evidence.ts";
+import {
+  migrateSqliteKnowledge,
+  sqliteKnowledgeTablesSql,
+} from "./knowledge-schema.ts";
 
-export const SQLITE_SCHEMA_VERSION = 24;
+export const SQLITE_SCHEMA_VERSION = 25;
 
 type LegacyRunRow = Readonly<{
   tenant_id: string;
@@ -44,6 +48,7 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
   }
   if (version === SQLITE_SCHEMA_VERSION) {
     migrateSqliteWorkspaceOperationAuthority(database);
+    migrateSqliteKnowledge(database);
     assertSqliteModelDispatchEvidenceSchema(database);
     return;
   }
@@ -130,6 +135,8 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
       // Version 22 has workspace operation v1 but predates durable delivery leases.
     } else if (version === 23) {
       // Version 23 has delivery leases but predates model dispatch evidence.
+    } else if (version === 24) {
+      // Version 24 has model dispatch evidence but predates Knowledge authority.
     } else {
       throw new RunStoreError("sqlite_schema_version_unsupported");
     }
@@ -178,6 +185,7 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
     if (version !== 0 && version <= 23) {
       migrateSqliteModelDispatchEvidence(database);
     }
+    if (version !== 0 && version <= 24) migrateSqliteKnowledge(database);
     database.exec(`PRAGMA user_version = ${SQLITE_SCHEMA_VERSION}`);
     database.exec("COMMIT");
   } catch (error) {
@@ -248,6 +256,8 @@ function createCurrentSchema(database: DatabaseSync): void {
     ${sqliteAutomationTablesSql()}
 
     ${sqliteWorkspaceOperationTablesSql()}
+
+    ${sqliteKnowledgeTablesSql()}
 
     CREATE TABLE run_events (
       tenant_id TEXT NOT NULL,
