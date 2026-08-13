@@ -311,21 +311,27 @@ export async function reconcilePostgresWorkflowNode(
       checkpointDigest: dispatch.responseCheckpointDigest,
     },
   });
+  const nodes = execution.nodes.map((item) =>
+    item.nodeId === input.nodeId
+      ? {
+          ...item,
+          status: "canceled" as const,
+          leaseExpiresAt: null,
+          resultDigest: null,
+          failureCode: null,
+        }
+      : item,
+  );
   const next = {
     ...execution,
     revision: execution.revision + 1,
-    nodes: execution.nodes.map((item) =>
-      item.nodeId === input.nodeId
-        ? {
-            ...item,
-            status: "canceled" as const,
-            leaseExpiresAt: null,
-            resultDigest: null,
-            failureCode: null,
-          }
-        : item,
-    ),
-    status: "canceled" as const,
+    nodes,
+    status: nodes.some((node) =>
+      ["queued", "running", "unknown"].includes(node.status))
+      ? "running" as const
+      : nodes.some((node) => node.status === "waitingHuman")
+        ? "waitingHuman" as const
+        : "canceled" as const,
     updatedAt: now,
   };
   await writePostgresWorkflowExecution(client, schema, next, now);

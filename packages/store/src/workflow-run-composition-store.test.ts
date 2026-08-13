@@ -1557,13 +1557,13 @@ if (postgresUrl === undefined) {
         reconciliationOperationId: "cancel-late:agent" });
       assert.deepEqual([reconciled.disposition, reconciled.evidenceStatus,
         reconciled.runDisposition, reconciled.execution.status],
-        ["settled", "responseObserved", "terminalConverged", "canceled"]);
+        ["settled", "responseObserved", "nonTerminal", "waitingHuman"]);
       const durable = await pool.query(`SELECT
         (SELECT state_json->>'status' FROM ${schema}.run_snapshots WHERE run_id='run-1') run_status,
         (SELECT status FROM ${schema}.run_attempts WHERE attempt_id=$1) attempt_status,
         (SELECT status FROM ${schema}.model_dispatch_receipts WHERE operation_id='dispatch-late') dispatch_status`,
         [attempt.attemptId]);
-      assert.deepEqual(durable.rows[0], { run_status: "canceled",
+      assert.deepEqual(durable.rows[0], { run_status: "running",
         attempt_status: "canceled", dispatch_status: "terminal" });
     } finally {
       await pool.query(`DROP SCHEMA ${schema} CASCADE`);
