@@ -60,6 +60,7 @@ describe("Control Automation library", () => {
       agentVersionId: null,
       client,
       idempotencyKey: "create-1",
+      locale: "en",
       prompt: "Summarize progress",
       threadId: "thread-1",
       title: "Created",

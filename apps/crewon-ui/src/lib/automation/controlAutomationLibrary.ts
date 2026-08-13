@@ -77,6 +77,7 @@ export async function createControlAutomation(params: {
   agentVersionId: string | null;
   client: ControlApiClient;
   idempotencyKey: string;
+  locale: Locale;
   prompt: string;
   threadId: string;
   title: string;
@@ -101,7 +102,7 @@ export async function createControlAutomation(params: {
   if (response.automation.threadId !== params.threadId) {
     throw new Error("control_automation_create_response_invalid");
   }
-  return controlAutomationLibraryItem(response.automation, "en");
+  return controlAutomationLibraryItem(response.automation, params.locale);
 }
 
 export async function runControlAutomationNow(params: {

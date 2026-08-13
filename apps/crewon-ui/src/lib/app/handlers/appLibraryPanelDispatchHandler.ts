@@ -120,6 +120,7 @@ export function createAppLibraryPanelDispatchHandler(
           agentVersionId: value("control-automation-agent") || null,
           client: params.controlClient,
           idempotencyKey: `automation.create:${crypto.randomUUID()}`,
+          locale: params.locale,
           prompt,
           threadId,
           title,
