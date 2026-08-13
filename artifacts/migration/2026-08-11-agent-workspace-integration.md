@@ -640,7 +640,10 @@ Gate 报告为通过。
   scheduler receipt 不执行节点；只有 fresh node admission 可执行副作用，replay/reconcileRequired 的 execute count 保持 0。
 - Node 24 组合验证通过：Contracts `88/88`、Control Client `66/66`、Store `351 pass + 60 PostgreSQL 环境条件 skip`、Control API
   `112 pass + 4 PostgreSQL 环境条件 skip`、Runtime Worker `332 pass + 1 PostgreSQL 环境条件 skip`，全部 typecheck 通过；最新 UI targeted
-  `26/26`、lint 与 production build 通过。PostgreSQL real-host 未配置，所有相关 skip 仍明确记为未验证，不能计作通过。
+  `26/26`、lint 与 production build 通过。随后使用真实 PostgreSQL 16
+  `postgresql://crewon:***@127.0.0.1:56737/crewon_test` 关闭条件项：W01 Store `33/33`、Runtime Worker PostgreSQL
+  `134/134`、Control PostgreSQL `12/12`，均为 0 skip / 0 fail。覆盖物理 migration、receipt/tamper、fan-out、Gate、cancel、reconcile、
+  双 Worker 唯一执行、另一进程接管和 `SIGKILL` 恢复。
 - 最新 `.app` 只包含 `crewon-ui`、`crewon-node`、`crewon-process-guardian` 以及 Control、Worker、Release、Provider Coordinator 四个 TS bundle。
   bundle 和 updater archive 已生成；命令随后只因缺少 `TAURI_SIGNING_PRIVATE_KEY` 返回 1，签名/notarization Gate 未绕过。
 - packaged Workflow smoke 使用隔离 HOME `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-0xVKJs`：Agent 节点完成后
@@ -650,5 +653,5 @@ Gate 报告为通过。
 - renderer 已强制 Control-only；Control bootstrap 失败直接阻断，不再创建或重连 `AppServerClient`。账号页改读 Control account snapshot，明确将
   usage/rate-limit 标为非当前 authority；Workspace drawer 已接入真实 Control content search 与 Git status，并用 abort + request identity 防止旧请求覆盖。
 
-当前 W01 的本地 SQLite 与 packaged crash-recovery Gate 已关闭；PostgreSQL 双连接/跨进程 real-host、发布签名/notarization 及尚未迁移的特定
-产品能力仍保持 active。Rust compatibility 已从矩阵删除，不再投入迁移成本。
+当前 W01 的 SQLite、PostgreSQL real-host 与 packaged crash-recovery Gate 已关闭；发布签名/notarization 及尚未迁移的特定产品能力仍保持
+active。Rust compatibility 已从矩阵删除，不再投入迁移成本。
