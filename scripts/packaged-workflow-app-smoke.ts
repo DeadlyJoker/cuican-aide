@@ -9,6 +9,7 @@ import { DatabaseSync } from "node:sqlite";
 
 import { DirectResponsesTransport } from "../packages/agent-responses/src/index.ts";
 import { compileAgentVersion, createAgentVersionAsset } from "../packages/agent-version/src/index.ts";
+import { ControlApiClient, streamRunEvents } from "../packages/control-client/src/index.ts";
 import { SqliteRunStore } from "../packages/store/src/index.ts";
 
 import { activateStandaloneRuntimeAgentVersionRelease } from "../apps/runtime-worker/src/agent-version-release-composition.ts";
@@ -106,12 +107,19 @@ let app = startApp();
 try {
   const authority = await waitForControlAuthority();
   await waitFor(() => portOpen(3210) || null);
+  const client = controlClient(authority);
   const thread = await post(authority, "/api/v1/threads", "slice7-thread", { title: "Slice 7" });
   await post(authority, "/api/v1/workflow-versions", "slice7-workflow-publish", workflow());
-  const started = await post(authority, "/api/v1/workflow-runs", "slice7-workflow-start", {
-    workflowVersionId: "slice7-workflow-v1", threadId: thread.thread.threadId, input: {},
-  });
+  const startInput = { workflowVersionId: "slice7-workflow-v1",
+    threadId: thread.thread.threadId, input: {} };
+  const started = await client.startWorkflowRun(startInput, "slice7-workflow-start");
   const runId = started.run.runId as string;
+  const replayed = await client.startWorkflowRun(startInput, "slice7-workflow-start");
+  assert.equal(started.disposition, "committed");
+  assert.equal(replayed.disposition, "replayed");
+  assert.equal(replayed.run.runId, runId);
+  assert.deepEqual(workflowAdmissionEvidence(runId), { receipts: 1, runs: 1 });
+  assert.equal((await client.getRun(runId)).run.runId, runId);
   await waitFor(() => completedAttemptCount(runId) === 1 && samples.length === 1);
   const workerPidsBeforeKill = workerPids();
   assert.ok(workerPidsBeforeKill.length > 0);
@@ -125,14 +133,22 @@ try {
   app = startApp();
   const restartedAuthority = await waitForControlAuthority();
   await waitFor(() => portOpen(3210) || null);
+  const restartedClient = controlClient(restartedAuthority);
   const terminal = await waitFor(async () => {
-    const value = await getJson(restartedAuthority, `/api/v1/runs/${runId}`);
+    const value = await restartedClient.getRun(runId);
     return value.run.status === "completed" ? value : null;
   });
   assert.equal(terminal.run.status, "completed");
   assert.equal(samples.length, 2);
   assert.notEqual(samples[0]!.body, samples[1]!.body);
   assert.equal(attemptCount(runId), 2);
+  const clientEvents = [];
+  for await (const event of streamRunEvents(restartedClient, { runId, view: "client" }))
+    clientEvents.push(event);
+  const clientEventTypes = clientEvents.map((event) => event.type);
+  assert.ok(clientEventTypes.includes("run.started"));
+  assert.equal(clientEventTypes.filter((type) => type === "run.completed").length, 1);
+  assert.equal(clientEvents.at(-1)?.type, "run.completed");
   const events = await getText(restartedAuthority, `/api/v1/runs/${runId}/events?view=audit`);
   assert.equal((events.match(/event: run\.completed/gu) ?? []).length, 1);
   assert.equal((events.match(/event: workflow\.node\.terminal/gu) ?? []).length, 0);
@@ -144,6 +160,8 @@ try {
   console.log(JSON.stringify({ home, runId, samples: samples.length,
     attempts: attemptCount(runId), terminal: terminal.run.status,
     workerPidsBeforeKill, liveBeforeGuiKill,
+    startDisposition: started.disposition, replayDisposition: replayed.disposition,
+    workflowAdmission: workflowAdmissionEvidence(runId), clientEventTypes,
     sampleBodyDigests: samples.map((sample) => digester.sha256(sample.body)),
     guardianCleanup: true, uniqueTerminalEvent: true }));
 } finally {
@@ -208,11 +226,6 @@ async function post(authority: { sessionToken: string; csrfToken: string }, path
   return value;
 }
 
-async function getJson(authority: { sessionToken: string; csrfToken: string }, path: string) {
-  const response = await fetch(`http://127.0.0.1:3210${path}`, { headers: headers(authority) });
-  assert.ok(response.ok); return response.json();
-}
-
 async function getText(authority: { sessionToken: string; csrfToken: string }, path: string) {
   const response = await fetch(`http://127.0.0.1:3210${path}`, { headers: headers(authority) });
   assert.ok(response.ok); return response.text();
@@ -220,6 +233,12 @@ async function getText(authority: { sessionToken: string; csrfToken: string }, p
 
 function headers(authority: { sessionToken: string }, extra: Record<string, string> = {}) {
   return { authorization: `Bearer ${authority.sessionToken}`, origin: "http://tauri.localhost", ...extra };
+}
+
+function controlClient(authority: { sessionToken: string; csrfToken: string }) {
+  return new ControlApiClient({ baseUrl: "http://127.0.0.1:3210",
+    accessToken: authority.sessionToken, csrfToken: authority.csrfToken,
+    origin: "http://tauri.localhost" });
 }
 
 async function waitFor<T>(probe: () => T | null | Promise<T | null>): Promise<T> {
@@ -247,6 +266,17 @@ function attemptCount(runId: string) {
 
 function completedAttemptCount(runId: string) {
   return attemptCountWhere(runId, " AND status='completed'");
+}
+
+function workflowAdmissionEvidence(runId: string) {
+  const database = new DatabaseSync(databasePath, { readOnly: true });
+  try {
+    const receipts = Number(database.prepare(
+      "SELECT count(*) count FROM workflow_run_admission_receipts WHERE run_id=?").get(runId).count);
+    const runs = Number(database.prepare(
+      "SELECT count(DISTINCT run_id) count FROM run_events WHERE run_id=?").get(runId).count);
+    return { receipts, runs };
+  } finally { database.close(); }
 }
 
 function attemptCountWhere(runId: string, suffix: string) {
