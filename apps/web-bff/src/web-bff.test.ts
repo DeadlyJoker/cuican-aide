@@ -341,6 +341,7 @@ test("production nginx routes the same-origin boundary to the BFF, not Vite", as
   assert.match(nginx, /proxy_set_header Authorization "";/u);
   assert.match(nginx, /proxy_set_header X-CrewON-BFF-Authorization "";/u);
   assert.match(nginx, /proxy_buffering off;/u);
+  assert.doesNotMatch(nginx, /app-server|6176/iu);
   assert.doesNotMatch(dockerfile, /vite|CREWON_CONTROL_SESSION_TOKEN/iu);
   assert.match(dockerfile, /src\/main\.ts/u);
 });

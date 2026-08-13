@@ -76,6 +76,22 @@ export function assertReleaseNodeMetadata({
   }
 }
 
+const REMOVED_RUNTIME_MARKERS = [
+  "CREWON_DEVICE_TOOL_CONFIG_PATH",
+  "crewon.device-tool-runtime.v0",
+  "deviceToolConfigPath",
+  "responsesLite",
+  "responses-lite",
+];
+
+export function assertNoRemovedRuntimeMarkers(bundleSource) {
+  for (const marker of REMOVED_RUNTIME_MARKERS) {
+    if (bundleSource.includes(marker)) {
+      throw new Error(`desktop runtime bundle contains removed marker: ${marker}`);
+    }
+  }
+}
+
 function sha256File(path) {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
@@ -203,6 +219,11 @@ function stageControlRuntime(target) {
     join(repoRoot, "apps", "runtime-worker", "src", "release-main.ts"),
     join(runtimeOutDir, "runtime-release.mjs"),
   );
+  for (const bundle of ["runtime-worker.mjs", "runtime-release.mjs"]) {
+    assertNoRemovedRuntimeMarkers(
+      readFileSync(join(runtimeOutDir, bundle), "utf8"),
+    );
+  }
 
   console.log(`staged ${stagedNode}`);
   console.log(`staged ${runtimeOutDir}`);

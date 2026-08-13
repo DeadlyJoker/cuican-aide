@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  assertNoRemovedRuntimeMarkers,
   assertNode24Version,
   assertReleaseNodeMetadata,
 } from "./stage-desktop-runtime.mjs";
@@ -15,6 +16,24 @@ test("accepts only the Node 24 runtime ABI", () => {
     () => assertNode24Version("v22.22.0\n"),
     /must be a Node 24 executable/u,
   );
+});
+
+test("rejects removed Device and Responses Lite compatibility markers", () => {
+  assert.doesNotThrow(() =>
+    assertNoRemovedRuntimeMarkers("standard Responses runtime"),
+  );
+  for (const marker of [
+    "CREWON_DEVICE_TOOL_CONFIG_PATH",
+    "crewon.device-tool-runtime.v0",
+    "deviceToolConfigPath",
+    "responsesLite",
+    "responses-lite",
+  ]) {
+    assert.throws(
+      () => assertNoRemovedRuntimeMarkers(`bundle:${marker}`),
+      new RegExp(marker, "u"),
+    );
+  }
 });
 
 test("release staging binds the distributable runtime to target and digest", () => {

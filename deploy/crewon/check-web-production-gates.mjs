@@ -10,6 +10,7 @@ const productionComposition = await readOptionalWorkspaceFile(
 const productionSecurity = await readOptionalWorkspaceFile(
   "apps/control-api/src/production-security-adapters.ts",
 );
+const nginx = await readWorkspaceFile("deploy/crewon/nginx.conf");
 
 const standaloneCompositionRemainsIsolated =
   controlComposition.includes("new StandaloneIdentity({") &&
@@ -33,10 +34,13 @@ const productionIdentityCompositionPresent =
   productionSecurity.includes("ControlTokenVerifierPort") &&
   productionSecurity.includes("PolicyDecisionPort") &&
   productionSecurity.includes("actor_header_forbidden");
+const legacyAppServerRouteRemoved =
+  !nginx.includes("/app-server") && !nginx.includes("6176");
 
 if (
   !standaloneCompositionRemainsIsolated ||
-  !productionIdentityCompositionPresent
+  !productionIdentityCompositionPresent ||
+  !legacyAppServerRouteRemoved
 ) {
   process.stderr.write(
     [
@@ -45,6 +49,7 @@ if (
       "Implement and wire production ControlApiIdentityPort and AuthorizationPort adapters before Web production cutover.",
       "The production composition must configure a trusted token verifier, expected issuer/audience and dynamic policy authority without a fixed ActorContext.",
       "It must also validate CREWON_CONTROL_BFF_TOKEN from X-CrewON-BFF-Authorization independently of the user token.",
+      "nginx must not publish the removed Rust App Server route or port 6176.",
       "The Web BFF boundary alone does not establish multi-user identity.",
     ].join("\n") + "\n",
   );
