@@ -2,7 +2,6 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import type { OfficeConfigRecordReference } from "../../lib/office/officePanelFromRecord";
-import type { ExpertTeamRecordReference } from "../../lib/experts/expertTeamRecord";
 import {
   CommandOfficeRoom,
   commandOfficeCardPresentation,
@@ -46,38 +45,6 @@ function record(
     },
   };
 }
-
-const expertTeam: ExpertTeamRecordReference = {
-  filePath: "/repo/.crewon/experts/review.json",
-  config: {
-    expertsId: "experts-review",
-    title: "代码审阅专家团",
-    goal: "由团长汇总审阅结论。",
-    leader: {
-      name: "审阅团长",
-      role: "分派审阅并汇总结论",
-      agentType: "worker",
-    },
-    experts: [
-      {
-        name: "风险专家",
-        role: "定位风险",
-        agentType: "explorer",
-      },
-    ],
-    recordRevision: "revision-1",
-    workspaceKey: "/repo/personal",
-    ownerSubject: "user-1",
-    tenantId: null,
-    spaceId: null,
-  },
-};
-
-const teamViewRuntimeProps = {
-  expertTeams: [],
-  expertTeamsStatus: "ready" as const,
-  onSelectExpert: vi.fn(),
-};
 
 describe("CommandOfficeRoom", () => {
   it("derives card status and current work from the canonical Office run", () => {
@@ -169,7 +136,6 @@ describe("CommandOfficeRoom", () => {
   it("mounts the unavailable Office landing through the Team view", () => {
     const markup = renderToStaticMarkup(
       <TeamView
-        {...teamViewRuntimeProps}
         active
         officeRuntime={{
           records: [],
@@ -200,7 +166,6 @@ describe("CommandOfficeRoom", () => {
   it("shows honest unavailable states instead of fake workflow and expert data", () => {
     const markup = renderToStaticMarkup(
       <TeamView
-        {...teamViewRuntimeProps}
         active
         officeRuntime={null}
         officeRoomId={null}
@@ -213,34 +178,6 @@ describe("CommandOfficeRoom", () => {
     expect(markup).toContain("CrewON Control 未提供 Workflow authority");
     expect(markup).not.toContain("创建协作流");
     expect(markup).not.toContain("页面交付协作流");
-    expect(markup).not.toContain("产品交付专家团");
-    expect(markup).toMatchSnapshot();
-  });
-
-  it("keeps Experts as a leader single-chat catalog independent from Office records", () => {
-    const markup = renderToStaticMarkup(
-      <TeamView
-        {...teamViewRuntimeProps}
-        active
-        expertTeams={[expertTeam]}
-        officeRuntime={{
-          records: [record("/repo/office-only.json", "running")],
-          room: null,
-          selectedRecordKey: null,
-          status: "ready",
-          onOpen: vi.fn(),
-        }}
-        officeRoomId={null}
-        teamMode="experts"
-        onTeamModeChange={vi.fn()}
-      />,
-    );
-
-    expect(markup).toContain("代码审阅专家团");
-    expect(markup).toContain("团长：审阅团长");
-    expect(markup).not.toContain("同名办公室");
-    expect(markup).not.toContain("<option");
-    expect(markup).not.toContain("team-workspace-scope");
     expect(markup).toMatchSnapshot();
   });
 

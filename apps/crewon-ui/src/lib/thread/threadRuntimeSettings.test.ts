@@ -67,27 +67,6 @@ describe("thread runtime settings", () => {
     });
   });
 
-  it("keeps an Experts selection as a distinct single-chat execution target", () => {
-    expect(
-      commandComposerRuntimeSettings({
-        executionTarget: "experts:experts-code-review",
-        model: "gpt-5.6-sol",
-        permission: "approve-for-me",
-        scene: "code",
-        sceneMode: "review",
-      }),
-    ).toMatchObject({
-      scene: {
-        sceneId: "code",
-        mode: "review",
-        executionTarget: {
-          kind: "experts",
-          id: "experts-code-review",
-        },
-      },
-    });
-  });
-
   it("keeps Provider Resource Agent authority outside ordinary thread settings", () => {
     expect(
       commandComposerRuntimeSettings({

@@ -18,15 +18,14 @@ export type SceneInteractionMode =
   | "produce"
   | "inspect";
 
-export type ExecutionTargetKind = "crewon" | "agent" | "team" | "experts";
+export type ExecutionTargetKind = "crewon" | "agent" | "team";
 
 export type ExecutionTargetOption = {
   detail: string;
   disabled?: boolean;
   /**
    * Section this target appears under in the composer selector. Derived from
-   * where the definition lives rather than from its execution strategy, since
-   * that is the distinction users pick along: local, cloud, or expert team.
+   * whether the target is one Agent or a durable Team definition.
    */
   group?: ExecutionTargetGroup;
   kind: ExecutionTargetKind;
@@ -35,13 +34,13 @@ export type ExecutionTargetOption = {
   value: string;
 };
 
-export type ExecutionTargetGroup = "single" | "experts";
+export type ExecutionTargetGroup = "single" | "team";
 
 /**
  * Section order and labels for the execution target selector.
  *
  * The split follows what actually differs when running a task: one agent that
- * completes it alone, or a team of experts reporting to a lead. Where the
+ * completes it alone, or a durable team. Where the
  * definition happens to live -- on this machine or on the platform -- does not
  * change how the task runs, so it is not a section.
  *
@@ -53,11 +52,11 @@ export function executionTargetGroups(
   return locale === "zh"
     ? [
         { id: "single", label: "单智能体" },
-        { id: "experts", label: "专家团" },
+        { id: "team", label: "团队" },
       ]
     : [
         { id: "single", label: "Single agent" },
-        { id: "experts", label: "Expert teams" },
+        { id: "team", label: "Teams" },
       ];
 }
 
@@ -550,9 +549,7 @@ export function executionTargetOptionsFromDomain({
             ? "小队尚未配置成员，不能开始任务"
             : "This team has no configured members and cannot start",
       disabled: !ready,
-      // A bounded Team Runtime is a team of agents reporting to a lead, which is
-      // the same choice users make when picking an expert team.
-      group: "experts" as const,
+      group: "team" as const,
       kind: "team" as const,
       label: title,
       strategy: "team" as const,

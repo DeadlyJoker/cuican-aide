@@ -1250,9 +1250,7 @@
 .shell-page-view .office-card-grid[hidden],
 .shell-page-view .office-room-inline[hidden],
 .shell-page-view .workflow-list[hidden],
-.shell-page-view .workflow-room-inline[hidden],
-.shell-page-view .expert-team-grid[hidden],
-.shell-page-view .expert-room-inline[hidden] {
+.shell-page-view .workflow-room-inline[hidden] {
   display: none !important;
 }
 .shell-page-view .office-card-grid {
@@ -1708,9 +1706,7 @@
   margin-bottom: 10px;
 }
 .shell-page-view .team-conversation,
-.shell-page-view .team-roster,
-.shell-page-view .expert-team-card,
-.shell-page-view .expert-run-strip {
+.shell-page-view .team-roster {
   border: 1px solid var(--n-250);
   border-radius: var(--radius-lg);
   background: var(--n-25);
@@ -1752,16 +1748,14 @@
   font-weight: 500;
 }
 .shell-page-view .team-message strong,
-.shell-page-view .team-member-row strong,
-.shell-page-view .expert-team-card strong {
+.shell-page-view .team-member-row strong {
   color: var(--n-950);
   font-size: calc(13px + var(--user-ui-font-delta));
   font-weight: 500;
   line-height: 1.25;
 }
 .shell-page-view .team-message p,
-.shell-page-view .team-member-row p,
-.shell-page-view .expert-team-card p {
+.shell-page-view .team-member-row p {
   margin-top: 3px;
   color: var(--n-700);
   font-size: calc(12px + var(--user-ui-font-delta));
@@ -1792,11 +1786,6 @@
   border: 1px solid var(--n-200);
   border-radius: var(--radius-md);
   background: var(--n-0);
-}
-.shell-page-view .team-experts-shell {
-  display: grid;
-  gap: 10px;
-  margin-bottom: 10px;
 }
 .shell-page-view .team-workflow-shell {
   margin-bottom: 10px;
@@ -2001,52 +1990,9 @@
   color: var(--danger);
   background: color-mix(in oklch, var(--danger) 8%, var(--n-0));
 }
-.shell-page-view .expert-team-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-.shell-page-view .expert-team-card {
-  display: grid;
-  align-content: space-between;
-  gap: 10px;
-  min-height: 184px;
-  padding: 14px;
-  border: 1px solid var(--n-250);
-  border-radius: var(--radius-xl);
-  background: var(--n-0);
-  box-shadow: var(--shadow-raised);
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
-}
-.shell-page-view .expert-team-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--n-500);
-  background: var(--n-25);
-  box-shadow: var(--shadow-raised);
-}
-/* Match the design artifact's Team responsive density. */
-.shell-page-view .expert-team-card .catalog-card-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-  margin: 0;
-}
-.shell-page-view .expert-team-card .catalog-card-head > span {
-  color: var(--n-800);
-  font-size: calc(11px + var(--user-ui-font-delta));
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
 /* Canvas-relative: the window stays wide while the canvas shrinks. */
 @container page-stack (max-width: 1180px) {
-  .shell-page-view .office-card-grid,
-  .shell-page-view .expert-team-grid {
+  .shell-page-view .office-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -2062,7 +2008,6 @@
     justify-content: flex-start;
   }
   .shell-page-view .office-card-grid,
-  .shell-page-view .expert-team-grid,
   .shell-page-view .workflow-list-item {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -2083,37 +2028,6 @@
     justify-content: flex-start;
   }
 }
-.shell-page-view .expert-member-stack {
-  display: grid;
-  gap: 3px;
-}
-.shell-page-view .expert-member-stack span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 24px;
-  padding: 2px 0;
-  color: var(--n-800);
-  font-size: calc(12px + var(--user-ui-font-delta));
-  font-weight: 500;
-}
-.shell-page-view .expert-member-stack span::before {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--n-400);
-  content: "";
-}
-.shell-page-view .expert-member-stack span:first-child::before {
-  background: color-mix(in oklch, var(--accent) 68%, var(--n-0));
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 12%, transparent);
-}
-.shell-page-view .expert-member-stack svg {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
 /* Canvas-relative: the window stays wide while the canvas shrinks. */
 @container page-stack (max-width: 860px) {
   .shell-page-view .team-capability-live-layout {
@@ -2124,27 +2038,6 @@
     flex-direction: column;
   }
 }
-.shell-page-view .expert-room-inline {
-  display: grid;
-  min-height: min(640px, calc(100vh - 190px));
-  overflow: hidden;
-  border: 1px solid var(--n-300);
-  border-radius: var(--radius-lg);
-  background: var(--n-0);
-}
-.shell-page-view .expert-room-layout {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(250px, 0.34fr);
-  gap: 12px;
-  min-height: 0;
-  padding: 12px;
-  background: var(--n-25);
-}
-.shell-page-view .expert-room-layout .team-conversation {
-  grid-template-rows: 1fr auto;
-  min-height: 430px;
-  overflow: auto;
-}
 .shell-page-view .team-composer-bar input {
   min-width: 0;
   flex: 1;
@@ -2154,38 +2047,11 @@
   color: var(--n-950);
   font: inherit;
 }
-.shell-page-view .expert-backstage-panel {
-  display: grid;
-  align-content: start;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid var(--n-300);
-  border-radius: var(--radius-lg);
-  background: var(--n-0);
-}
-.shell-page-view .expert-backstage-panel article {
-  padding: 9px;
-  border: 1px solid var(--n-250);
-  border-radius: var(--radius-md);
-  background: var(--n-25);
-}
-.shell-page-view .expert-backstage-panel strong {
-  color: var(--n-950);
-  font-size: calc(12px + var(--user-ui-font-delta));
-}
-.shell-page-view .expert-backstage-panel p,
 .workflow-room-title-block small {
   margin-top: 4px;
   color: var(--n-700);
   font-size: calc(12px + var(--user-ui-font-delta));
   line-height: 1.4;
-}
-.shell-page-view .expert-run-strip {
-  min-height: 42px;
-  padding: 12px;
-  color: var(--n-750);
-  font-size: calc(12px + var(--user-ui-font-delta));
-  line-height: 1.45;
 }
 .office-modal-card {
   display: grid;
@@ -2637,11 +2503,7 @@
 }
 .team-office-runtime-room
   > .office-workspace
-  :is(
-    .office-top,
-    .office-room-body,
-    .office-memory-panel
-  ) {
+  :is(.office-top, .office-room-body, .office-memory-panel) {
   max-width: none;
 }
 .team-office-room-loading,
@@ -6671,7 +6533,7 @@ body.modal-open {
   min-width: 288px;
   max-width: min(380px, calc(100vw - 48px));
   /*
-   * The shared 320px cap cut this menu off mid-list, so the "专家团" section sat
+   * The shared 320px cap cut this menu off mid-list, so the Team section sat
    * below the fold and the grouping was invisible until you scrolled. Tall enough
    * to show both section headers, still bounded by the viewport.
    */

@@ -22,9 +22,8 @@ import "./styles/appearance.css";
 /*
  * The surface decides whether the shell rounds its own corners, and it is a
  * property of the runtime rather than a user preference. Written here so the
- * first paint is already correct: the appearance pass runs after the app-server
- * connects, which would pop the corners in on connect and leave them square
- * whenever the connection fails.
+ * first paint is already correct before Control settings and React effects
+ * hydrate the rest of the shell.
  */
 document.documentElement.dataset.surface = detectRuntimeSurface();
 

@@ -65,8 +65,7 @@ export type ThreadSceneSelection = {
   executionTarget:
     | { kind: "crewon" }
     | { kind: "agent"; id: string }
-    | { kind: "team"; id: string }
-    | { kind: "experts"; id: string };
+    | { kind: "team"; id: string };
 };
 
 export const fallbackCommandModelOptions: CommandModelOption[] = [
@@ -138,9 +137,6 @@ function executionTargetSelection(
     return { kind, id };
   }
   if (separator > 0 && id && kind === "team") {
-    return { kind, id };
-  }
-  if (separator > 0 && id && kind === "experts") {
     return { kind, id };
   }
   return { kind: "crewon" };

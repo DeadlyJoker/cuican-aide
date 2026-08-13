@@ -33,7 +33,7 @@ actually requires it.
 | device-local locale and appearance settings                  | standalone Control API + atomic SQLite settings snapshot                   | Account/Appearance panels use the typed Control client; startup hydrates renderer state from Control | strict generated contract, CSRF mutation, revision CAS, cross-connection concurrency and stable 409/503 failures                     |
 | manual-only Automation                                       | Control API + Automation Application/Store                                 | Automation Library lists immutable definitions and `run-now` uses Automation/Thread revision CAS     | receipt-first create/run, idempotency, canonical Run binding and explicit absence of scheduling/toggle compatibility                 |
 | Tool output resources                                        | encrypted Artifact authority                                               | Tool Library validates current-Thread Run `outputRef` values through Control before display          | digest, source Run/Step, scan/sensitivity projection and bounded 50-Run/20-reference lookup                                          |
-| selected Workspace list/read/search/Git status               | local TypeScript Runtime Worker                                            | authenticated Control/Worker path; renderer exposes only bounded Search and Git status tools          | root/symlink/UTF-8 bounds, durable receipts, bounded read-only operations, restart and packaged smoke                                 |
+| selected Workspace list/read/search/Git status               | local TypeScript Runtime Worker                                            | authenticated Control/Worker path; renderer exposes only bounded Search and Git status tools         | root/symlink/UTF-8 bounds, durable receipts, bounded read-only operations, restart and packaged smoke                                |
 | Workflow including Human Gate                                | Control API + canonical Domain Store + TypeScript Runtime Worker           | Workflow start/gate APIs and Run events                                                              | atomic start/fan-out/admission/settlement/gate/reconcile/cancel/terminal convergence on SQLite/PostgreSQL                            |
 | Knowledge records                                            | Control API + canonical Domain Store                                       | Knowledge Library lists bounded memory/source records through the typed Control client               | receipt-first create, strict UTF-8/NFC/digest validation, tenant/space isolation and stable pagination                               |
 | Office definitions and explicit target Runs                  | Control API + canonical Domain Store + canonical Run service               | Office Library lists immutable versions; execution remains an ordinary AgentVersion-pinned Run       | receipt-first version CAS, published AgentVersion references, scoped pagination and no Office-specific scheduler/runtime             |
@@ -116,6 +116,14 @@ and their compatibility-only tests. The canonical Control Office room, Control
 Library, Workflow UI and Workspace read-only tools remain. Across this cutover
 stage, roughly 190 files changed and more than 49,000 lines of unreachable
 compatibility source and tests were deleted.
+
+The remaining Experts compatibility surface was then removed from the active
+Team workspace. Team now exposes only Control Office and Control Workflow; it
+does not query registered legacy workspaces, read or create Experts records, or
+serialize `experts:*` into Thread scene settings. Composer execution targets
+group real durable definitions as single Agent or Team, and the old Experts
+dialog, cards, DTO, styles, tests and snapshots were deleted rather than
+adapted.
 
 A fresh renderer build and the Tauri bundle manifest are now guarded together:
 the production bundle contains no `AppServerClient`, WebSocket/6176 transport,

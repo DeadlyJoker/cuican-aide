@@ -298,6 +298,19 @@ describe("App Workspace Control composition", () => {
     );
   });
 
+  it("does not expose the removed Experts compatibility runtime", () => {
+    const sources = [
+      "../../components/app/CommandWorkspace.tsx",
+      "../../components/app/CommandWorkspaceViews.tsx",
+      "../scene/sceneCatalog.ts",
+      "../thread/threadRuntimeSettings.ts",
+    ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
+
+    expect(sources.join("\n")).not.toMatch(
+      /listExpertTeams|createExpertTeam|ExpertTeam|experts:|kind:\s*"experts"|team-experts/iu,
+    );
+  });
+
   it("rehydrates Thread, Run, and Goal authority before Workspace recovery", () => {
     const source = readFileSync(
       new URL("../control-runtime/useControlThreadRuntime.ts", import.meta.url),

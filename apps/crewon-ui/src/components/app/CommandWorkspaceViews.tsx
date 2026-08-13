@@ -17,7 +17,6 @@ import {
   CommandOfficeRoom,
   type CommandOfficeRoomProps,
 } from "./CommandOfficeRoom";
-import { CommandExpertsPanel } from "./CommandExpertsPanel";
 import { ControlWorkflowPanel } from "./ControlWorkflowPanel";
 import { SegmentedTabs } from "./SegmentedTabs";
 import { classNames } from "./commandWorkspaceUtils";
@@ -43,7 +42,6 @@ import type {
   AgentPlatformResourceStates,
   AgentPlatformSnapshot,
 } from "../../lib/agent-platform/agentPlatformClient";
-import type { ExpertTeamRecordReference } from "../../lib/experts/expertTeamRecord";
 import type { ControlWorkflowAdapter } from "../../lib/workflow/controlWorkflowAdapter";
 
 type FilterOption = {
@@ -70,7 +68,7 @@ type CatalogItem = {
   resource?: CatalogResourceSummary;
 };
 
-type TeamMode = "office" | "workflow" | "experts";
+type TeamMode = "office" | "workflow";
 
 const resourceCategoryLabels: Record<AgentPlatformResourceCategory, string> = {
   agents: "Agent",
@@ -1373,12 +1371,8 @@ export function TeamView({
   teamMode,
   controlWorkflowAdapter,
   selectedThreadId,
-  expertTeams,
-  expertTeamsStatus,
   onCreateOffice,
-  onCreateExpertTeam,
   onRefresh,
-  onSelectExpert,
   onTeamModeChange,
 }: {
   active: boolean;
@@ -1387,12 +1381,8 @@ export function TeamView({
   teamMode: TeamMode;
   controlWorkflowAdapter?: ControlWorkflowAdapter | null;
   selectedThreadId?: string | null;
-  expertTeams: ExpertTeamRecordReference[];
-  expertTeamsStatus: "loading" | "ready" | "unavailable";
   onCreateOffice?: () => void;
-  onCreateExpertTeam?: () => void;
   onRefresh?: () => void;
-  onSelectExpert: (record: ExpertTeamRecordReference) => void;
   onTeamModeChange: (mode: TeamMode) => void;
 }) {
   const [searchQuery, setSearchQuery] = useState("");
@@ -1423,7 +1413,6 @@ export function TeamView({
             options={[
               { label: "办公室", value: "office" },
               { label: "协作流", value: "workflow" },
-              { label: "专家团", value: "experts" },
             ]}
             onChange={(value) => {
               const nextMode = value as TeamMode;
@@ -1460,16 +1449,6 @@ export function TeamView({
               onClick={onCreateOffice}
             >
               创建办公室
-            </button>
-            <button
-              className="button primary"
-              type="button"
-              data-team-action="experts"
-              disabled={!onCreateExpertTeam}
-              hidden={teamMode !== "experts"}
-              onClick={onCreateExpertTeam}
-            >
-              创建专家团
             </button>
           </div>
         </header>
@@ -1526,30 +1505,6 @@ export function TeamView({
               <p>CrewON Control 未提供 Workflow authority。</p>
             </section>
           )}
-        </section>
-
-        <section
-          className="team-experts-shell"
-          data-card-filter="experts"
-          data-od-id="team-experts-shell"
-          hidden={teamMode !== "experts"}
-        >
-          <CommandExpertsPanel
-            records={expertTeams}
-            onSelect={onSelectExpert}
-          />
-          {expertTeamsStatus === "loading" ? (
-            <div className="team-capability-inline-status" role="status">
-              正在读取专家团…
-            </div>
-          ) : expertTeamsStatus === "unavailable" ? (
-            <div
-              className="team-capability-inline-status is-error"
-              role="status"
-            >
-              专家团服务暂时不可用，请确认当前工作空间已注册。
-            </div>
-          ) : null}
         </section>
 
         <div id="team-log" className="sr-log" aria-live="polite" />

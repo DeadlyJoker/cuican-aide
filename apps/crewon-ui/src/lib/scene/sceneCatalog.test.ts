@@ -35,14 +35,16 @@ describe("sceneCatalog", () => {
 
   it("exposes persisted Agents and only ready Teams as execution targets", () => {
     const options = executionTargetOptionsFromDomain({
-      agents: [{
-        filePath: "/repo/.crewon/agents/reviewer.json",
-        config: {
-          agentId: "agent-reviewer",
-          name: "审阅智能体",
-          role: "检查实现风险",
-        } as never,
-      }],
+      agents: [
+        {
+          filePath: "/repo/.crewon/agents/reviewer.json",
+          config: {
+            agentId: "agent-reviewer",
+            name: "审阅智能体",
+            role: "检查实现风险",
+          } as never,
+        },
+      ],
       offices: [
         {
           filePath: "/repo/.crewon/offices/delivery.json",
@@ -125,7 +127,10 @@ describe("sceneCatalog", () => {
         },
         {
           filePath: "/repo/.crewon/agents/legacy.json",
-          config: { agentId: "agent-platform:7", name: "数据分析助手" } as never,
+          config: {
+            agentId: "agent-platform:7",
+            name: "数据分析助手",
+          } as never,
         },
       ],
       offices: [],
@@ -170,7 +175,7 @@ describe("sceneCatalog", () => {
     ).toEqual([
       { group: undefined, label: "CrewON" },
       { group: "single", label: "审阅员" },
-      { group: "experts", label: "交付小队" },
+      { group: "team", label: "交付小队" },
     ]);
   });
 
@@ -196,7 +201,6 @@ describe("sceneCatalog", () => {
         value: "team:审阅办公室",
       }),
     ]);
-    expect(options.some((option) => option.kind === "experts")).toBe(false);
   });
 
   it("marks only write-capable modes for the draft-only risk notice", () => {

@@ -6,7 +6,7 @@ import type { CommandComposerSelectOption } from "./CommandComposer";
 
 const GROUPS = [
   { id: "single", label: "单智能体" },
-  { id: "experts", label: "专家团" },
+  { id: "team", label: "团队" },
 ];
 
 function option(
@@ -21,11 +21,7 @@ function option(
 describe("composerSelectSections", () => {
   it("keeps an ungrouped option above every labelled section", () => {
     const sections = composerSelectSections(
-      [
-        option("experts-a", "experts"),
-        option("crewon"),
-        option("agent-a", "single"),
-      ],
+      [option("team-a", "team"), option("crewon"), option("agent-a", "single")],
       GROUPS,
     );
 
@@ -37,23 +33,20 @@ describe("composerSelectSections", () => {
         options: [option("agent-a", "single")],
       },
       {
-        id: "experts",
-        label: "专家团",
-        options: [option("experts-a", "experts")],
+        id: "team",
+        label: "团队",
+        options: [option("team-a", "team")],
       },
     ]);
   });
 
   it("orders sections by the declaration, not by the options", () => {
     const sections = composerSelectSections(
-      [option("experts-a", "experts"), option("agent-a", "single")],
+      [option("team-a", "team"), option("agent-a", "single")],
       GROUPS,
     );
 
-    expect(sections.map((section) => section.id)).toEqual([
-      "single",
-      "experts",
-    ]);
+    expect(sections.map((section) => section.id)).toEqual(["single", "team"]);
   });
 
   it("preserves the option order inside a section", () => {
@@ -115,7 +108,7 @@ describe("composerSelectSections", () => {
       option("crewon"),
       option("agent-a", "single"),
       option("agent-b", "single"),
-      option("experts-a", "experts"),
+      option("team-a", "team"),
       option("stray", "unknown"),
     ];
 

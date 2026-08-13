@@ -22,7 +22,7 @@ describe("command Office room style", () => {
     const responsiveContract = styles
       .slice(
         styles.indexOf(responsiveMarker),
-        styles.indexOf(".shell-page-view .expert-member-stack {"),
+        styles.indexOf("@container page-stack (max-width: 860px)"),
       )
       .trim();
 
@@ -45,13 +45,13 @@ describe("command Office room style", () => {
     expect(contract).toMatchSnapshot();
   });
 
-  it("snapshots the Workflow and Experts live-runtime layout contract", () => {
+  it("snapshots the Workflow live-runtime layout contract", () => {
     const styles = readFileSync(
       new URL("../../styles/original-shell-overrides.css", import.meta.url),
       "utf8",
     );
     const marker = ".shell-page-view .team-capability-live-layout {";
-    const endMarker = ".shell-page-view .expert-room-inline {";
+    const endMarker = ".office-modal-card {";
     const start = styles.indexOf(marker);
     const end = styles.indexOf(endMarker, start);
 
@@ -67,7 +67,6 @@ describe("command Office room style", () => {
     expect(contract).toContain(".team-capability-definition");
     expect(contract).toContain(".team-capability-run-panel");
     expect(contract).toContain(".team-capability-workspace");
-    expect(contract).toContain(".expert-member-stack");
     // Canvas-relative: the window stays wide while the canvas shrinks behind
     // the workbench, so a viewport query never matched here.
     expect(contract).toContain("@container page-stack (max-width: 860px)");
@@ -95,7 +94,10 @@ describe("command Office room style", () => {
       "utf8",
     );
     const listStart = styles.indexOf(".shell-page-view .workflow-list {");
-    const listEnd = styles.indexOf(".shell-page-view .team-mode-panel {", listStart);
+    const listEnd = styles.indexOf(
+      ".shell-page-view .team-mode-panel {",
+      listStart,
+    );
     const roomStart = styles.indexOf(
       ".shell-page-view.workflow-room-active .team-workflow-shell {",
     );

@@ -108,7 +108,11 @@ describe("theme parity", () => {
       }
       const body = source.slice(from, cursor);
 
-      if (/\.(?:office-card-grid|expert-team-grid|team-office-capability-grid|team-capability-live-layout)\b/.test(body)) {
+      if (
+        /\.(?:office-card-grid|team-office-capability-grid|team-capability-live-layout)\b/.test(
+          body,
+        )
+      ) {
         const line = source.slice(0, match.index).split("\n").length;
         offenders.push(`original-shell-overrides.css:${line}`);
       }

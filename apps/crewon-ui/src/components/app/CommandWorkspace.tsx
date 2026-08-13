@@ -12,10 +12,6 @@ import {
 } from "react";
 
 import { CommandOfficeCreateDialog } from "./CommandOfficeCreateDialog";
-import {
-  CommandTeamCapabilityCreateDialog,
-  type CommandTeamCapabilityCreateInput,
-} from "./CommandTeamCapabilityCreateDialog";
 import { useCommandOfficeCatalogAutoReconnect } from "./commandOfficeCatalogReconnect";
 import {
   createCommandOffice,
@@ -85,7 +81,6 @@ import {
 } from "../../lib/shared/composerMentions";
 import type { LocalResourceSelectionKind } from "../../lib/shared/localResourceAttachments";
 import { formatRelativeTime } from "../../lib/shared/text";
-import type { ExpertTeamRecordReference } from "../../lib/experts/expertTeamRecord";
 import {
   executionTargetGroups,
   executionTargetOptionsFromDomain,
@@ -203,19 +198,6 @@ type CommandWorkspaceProps = {
       config: AgentConfig,
     ) => Promise<unknown>;
     deleteAgentConfig?: (cwd: string, filePath: string) => Promise<unknown>;
-    listExpertTeams?: (
-      workspaceKey: string,
-    ) => Promise<{ data: ExpertTeamRecordReference[] }>;
-    listRegisteredWorkspaces?: () => Promise<{
-      data: Array<{ workspaceKey: string; displayName: string }>;
-    }>;
-    createExpertTeam?: (
-      workspaceKey: string,
-      input: Omit<
-        Extract<CommandTeamCapabilityCreateInput, { kind: "experts" }>,
-        "kind"
-      >,
-    ) => Promise<{ record: ExpertTeamRecordReference }>;
   } | null;
   workspaceOperations?: CommandWorkspaceOperationsSlot | null;
   /** `control` removes every legacy cwd/path authority surface. */
@@ -382,7 +364,7 @@ export type CommandOfficeRoomAdapter = {
 };
 
 type PlatformLoadState = "loading" | "ready" | "fallback";
-type TeamMode = "office" | "workflow" | "experts";
+type TeamMode = "office" | "workflow";
 type CommandDomainCatalog = {
   agents: Array<{ config: AgentConfig; filePath: string }>;
   officeStatus: "loading" | "ready" | "unavailable";
@@ -641,20 +623,6 @@ export function CommandWorkspace({
   const [officeCreateError, setOfficeCreateError] = useState<string | null>(
     null,
   );
-  const [expertTeams, setExpertTeams] = useState<ExpertTeamRecordReference[]>(
-    [],
-  );
-  const [expertTeamsStatus, setExpertTeamsStatus] = useState<
-    "loading" | "ready" | "unavailable"
-  >("loading");
-  const [expertCreateOpen, setExpertCreateOpen] = useState(false);
-  const [expertCreateError, setExpertCreateError] = useState<string | null>(
-    null,
-  );
-  const [expertCreateBusy, setExpertCreateBusy] = useState(false);
-  const [fallbackExpertWorkspaceKey, setFallbackExpertWorkspaceKey] = useState<
-    string | null
-  >(null);
   const [officeRoomWarning, setOfficeRoomWarning] = useState<string | null>(
     null,
   );
@@ -841,110 +809,6 @@ export function CommandWorkspace({
     status: teamCatalog.officeStatus,
     workspaceCwd: cwd,
   });
-
-  const providerExpertWorkspaceKey = useMemo(() => {
-    const workspaces = providerResource?.snapshot.workspaces ?? [];
-    const matching = workspaces.filter(
-      (workspace) => workspace.displayName === basename(cwd),
-    );
-    if (matching.length === 1) {
-      return matching[0]?.workspaceKey ?? null;
-    }
-    if (
-      providerResource?.selectedWorkspaceKey &&
-      workspaces.some(
-        (workspace) =>
-          workspace.workspaceKey === providerResource.selectedWorkspaceKey &&
-          workspace.availability === "available",
-      )
-    ) {
-      return providerResource.selectedWorkspaceKey;
-    }
-    return workspaces.length === 1
-      ? (workspaces[0]?.workspaceKey ?? null)
-      : null;
-  }, [
-    cwd,
-    providerResource?.selectedWorkspaceKey,
-    providerResource?.snapshot.workspaces,
-  ]);
-  const expertWorkspaceKey =
-    providerExpertWorkspaceKey ?? fallbackExpertWorkspaceKey;
-
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      connectionState !== "connected" ||
-      providerExpertWorkspaceKey ||
-      !executionTargetClient?.listRegisteredWorkspaces
-    ) {
-      setFallbackExpertWorkspaceKey(null);
-      return;
-    }
-    executionTargetClient
-      .listRegisteredWorkspaces()
-      .then((response) => {
-        if (cancelled) {
-          return;
-        }
-        const matching = response.data.filter(
-          (workspace) => workspace.displayName === basename(cwd),
-        );
-        setFallbackExpertWorkspaceKey(
-          matching.length === 1
-            ? (matching[0]?.workspaceKey ?? null)
-            : response.data.length === 1
-              ? (response.data[0]?.workspaceKey ?? null)
-              : null,
-        );
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setFallbackExpertWorkspaceKey(null);
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [connectionState, cwd, executionTargetClient, providerExpertWorkspaceKey]);
-
-  useEffect(() => {
-    let cancelled = false;
-    if (
-      connectionState !== "connected" ||
-      !expertWorkspaceKey ||
-      !executionTargetClient?.listExpertTeams
-    ) {
-      setExpertTeams([]);
-      setExpertTeamsStatus(
-        connectionState === "connecting" ? "loading" : "unavailable",
-      );
-      return;
-    }
-    setExpertTeamsStatus("loading");
-    executionTargetClient
-      .listExpertTeams(expertWorkspaceKey)
-      .then((response) => {
-        if (!cancelled) {
-          setExpertTeams(response.data);
-          setExpertTeamsStatus("ready");
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setExpertTeams([]);
-          setExpertTeamsStatus("unavailable");
-        }
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    connectionState,
-    executionTargetClient,
-    expertWorkspaceKey,
-    teamRefreshNonce,
-  ]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1225,30 +1089,10 @@ export function CommandWorkspace({
             executionTargetCatalog.agents,
           )
         : [];
-    const expertTargets = expertTeams.map((record) => ({
-      detail:
-        locale === "zh"
-          ? `${record.config.experts.length} 名后台专家 · 团长 ${record.config.leader.name}`
-          : `${record.config.experts.length} background experts · lead ${record.config.leader.name}`,
-      group: "experts" as const,
-      kind: "experts" as const,
-      label: record.config.title,
-      strategy: "team" as const,
-      value: `experts:${record.config.expertsId}`,
-    }));
-    // Natural order: the selector groups these into local, cloud, and expert
-    // sections, so the concat order no longer has to interleave cloud targets
-    // behind CrewON to keep them visible.
-    return [
-      ...domainTargets,
-      ...providerTargets,
-      ...platformTargets,
-      ...expertTargets,
-    ];
+    return [...domainTargets, ...providerTargets, ...platformTargets];
   }, [
     controlExecutionCatalog,
     executionTargetCatalog,
-    expertTeams,
     locale,
     platformSnapshot,
     providerResource?.executionAgents,
@@ -1878,17 +1722,6 @@ export function CommandWorkspace({
     }
   }
 
-  function openExpertTeam(record: ExpertTeamRecordReference) {
-    setExecutionTarget(`experts:${record.config.expertsId}`);
-    setScene("office");
-    setSceneMode("coordinate");
-    setActiveLinkedThreadId(null);
-    setNewTaskDraft(true);
-    onChangeComposerValue(record.config.goal);
-    switchView("command");
-    textareaRef.current?.focus();
-  }
-
   async function addPlatformAgentToWorkspace(agentId: number) {
     if (!executionTargetClient?.saveAgentConfig || !cwd) {
       throw new Error("CrewON Control 或当前工作区不可用，无法加入智能体");
@@ -1907,41 +1740,6 @@ export function CommandWorkspace({
     setTeamRefreshNonce((current) => current + 1);
   }
 
-  async function createExpertTeam(input: CommandTeamCapabilityCreateInput) {
-    if (
-      input.kind !== "experts" ||
-      !expertWorkspaceKey ||
-      !executionTargetClient?.createExpertTeam
-    ) {
-      return;
-    }
-    setExpertCreateBusy(true);
-    setExpertCreateError(null);
-    try {
-      const { kind: _kind, ...definition } = input;
-      const response = await executionTargetClient.createExpertTeam(
-        expertWorkspaceKey,
-        definition,
-      );
-      setExpertTeams((current) => [
-        response.record,
-        ...current.filter(
-          (record) =>
-            record.config.expertsId !== response.record.config.expertsId,
-        ),
-      ]);
-      setExpertTeamsStatus("ready");
-      setExpertCreateOpen(false);
-      openExpertTeam(response.record);
-    } catch (error) {
-      setExpertCreateError(
-        error instanceof Error ? error.message : "无法创建专家团",
-      );
-    } finally {
-      setExpertCreateBusy(false);
-    }
-  }
-
   const currentWorkspace =
     workspaceAuthority === "legacy"
       ? basename(cwd || (locale === "zh" ? "工作空间" : "Workspace"))
@@ -1952,11 +1750,6 @@ export function CommandWorkspace({
   const canCreateOffice = Boolean(
     officeRoomAdapter &&
       (officeRoomAdapter.create || (executionTargetClient && cwd)) &&
-      connectionState === "connected",
-  );
-  const canCreateExpertTeam = Boolean(
-    expertWorkspaceKey &&
-      executionTargetClient?.createExpertTeam &&
       connectionState === "connected",
   );
   const officeRuntime = officeRoomAdapter
@@ -2861,8 +2654,6 @@ export function CommandWorkspace({
             teamMode={teamMode}
             controlWorkflowAdapter={controlWorkflowAdapter}
             selectedThreadId={selectedThreadId}
-            expertTeams={expertTeams}
-            expertTeamsStatus={expertTeamsStatus}
             onCreateOffice={
               canCreateOffice
                 ? () => {
@@ -2872,15 +2663,6 @@ export function CommandWorkspace({
                 : undefined
             }
             onRefresh={() => setTeamRefreshNonce((current) => current + 1)}
-            onCreateExpertTeam={
-              canCreateExpertTeam
-                ? () => {
-                    setExpertCreateError(null);
-                    setExpertCreateOpen(true);
-                  }
-                : undefined
-            }
-            onSelectExpert={openExpertTeam}
             onTeamModeChange={(mode) => {
               setTeamMode(mode);
               setOfficeRoomId(null);
@@ -2902,21 +2684,6 @@ export function CommandWorkspace({
                 }
               }}
               onSubmit={createRuntimeOffice}
-            />
-          ) : null}
-          {expertCreateOpen ? (
-            <CommandTeamCapabilityCreateDialog
-              kind="experts"
-              busy={expertCreateBusy}
-              error={expertCreateError}
-              workspaceCwd={cwd}
-              onClose={() => {
-                if (!expertCreateBusy) {
-                  setExpertCreateOpen(false);
-                  setExpertCreateError(null);
-                }
-              }}
-              onSubmit={(input) => void createExpertTeam(input)}
             />
           ) : null}
         </section>

@@ -115,65 +115,11 @@ exports[`command Office room style > snapshots the Team card layout and responsi
 .shell-page-view .office-card-button:hover .office-card-foot em::after {
   transform: translateX(2px);
 }",
-  "responsiveContract": "/* Match the design artifact's Team responsive density. */
-.shell-page-view .expert-team-card .catalog-card-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-  margin: 0;
-}
-.shell-page-view .expert-team-card .catalog-card-head > span {
-  color: var(--n-800);
-  font-size: calc(11px + var(--user-ui-font-delta));
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
-/* Canvas-relative: the window stays wide while the canvas shrinks. */
-@container page-stack (max-width: 1180px) {
-  .shell-page-view .office-card-grid,
-  .shell-page-view .expert-team-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-/* Canvas-relative, and on the same 760px step as the agents header. */
-@container page-stack (max-width: 760px) {
-  .shell-page-view[data-shell-view="team"] .catalog-market-header {
-    grid-template-columns: minmax(0, 1fr);
-    align-items: start;
-    gap: 10px;
-  }
-  .shell-page-view[data-shell-view="team"] .catalog-header-actions {
-    flex-wrap: wrap;
-    justify-content: flex-start;
-  }
-  .shell-page-view .office-card-grid,
-  .shell-page-view .expert-team-grid,
-  .shell-page-view .workflow-list-item {
-    grid-template-columns: minmax(0, 1fr);
-  }
-  .shell-page-view .team-capability-live-layout {
-    grid-template-columns: minmax(0, 1fr);
-    min-height: 0;
-  }
-  .shell-page-view .team-capability-definition-list {
-    max-height: 320px;
-  }
-  .shell-page-view .team-capability-run-panel {
-    padding: 16px;
-  }
-  .shell-page-view .team-capability-run-panel > footer .button.primary {
-    width: 100%;
-  }
-  .shell-page-view .workflow-list-foot {
-    justify-content: flex-start;
-  }
-}",
+  "responsiveContract": "",
 }
 `;
 
-exports[`command Office room style > snapshots the Workflow and Experts live-runtime layout contract 1`] = `
+exports[`command Office room style > snapshots the Workflow live-runtime layout contract 1`] = `
 ".shell-page-view .team-capability-live-layout {
   display: grid;
   grid-template-columns: minmax(260px, 320px) minmax(0, 1fr);
@@ -374,52 +320,9 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
   color: var(--danger);
   background: color-mix(in oklch, var(--danger) 8%, var(--n-0));
 }
-.shell-page-view .expert-team-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 10px;
-}
-.shell-page-view .expert-team-card {
-  display: grid;
-  align-content: space-between;
-  gap: 10px;
-  min-height: 184px;
-  padding: 14px;
-  border: 1px solid var(--n-250);
-  border-radius: var(--radius-xl);
-  background: var(--n-0);
-  box-shadow: var(--shadow-raised);
-  transition:
-    border-color 0.15s ease,
-    background 0.15s ease,
-    transform 0.15s ease,
-    box-shadow 0.15s ease;
-}
-.shell-page-view .expert-team-card:hover {
-  transform: translateY(-2px);
-  border-color: var(--n-500);
-  background: var(--n-25);
-  box-shadow: var(--shadow-raised);
-}
-/* Match the design artifact's Team responsive density. */
-.shell-page-view .expert-team-card .catalog-card-head {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-  margin: 0;
-}
-.shell-page-view .expert-team-card .catalog-card-head > span {
-  color: var(--n-800);
-  font-size: calc(11px + var(--user-ui-font-delta));
-  font-weight: 600;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-}
 /* Canvas-relative: the window stays wide while the canvas shrinks. */
 @container page-stack (max-width: 1180px) {
-  .shell-page-view .office-card-grid,
-  .shell-page-view .expert-team-grid {
+  .shell-page-view .office-card-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -435,7 +338,6 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
     justify-content: flex-start;
   }
   .shell-page-view .office-card-grid,
-  .shell-page-view .expert-team-grid,
   .shell-page-view .workflow-list-item {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -456,37 +358,6 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
     justify-content: flex-start;
   }
 }
-.shell-page-view .expert-member-stack {
-  display: grid;
-  gap: 3px;
-}
-.shell-page-view .expert-member-stack span {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 24px;
-  padding: 2px 0;
-  color: var(--n-800);
-  font-size: calc(12px + var(--user-ui-font-delta));
-  font-weight: 500;
-}
-.shell-page-view .expert-member-stack span::before {
-  flex: 0 0 auto;
-  width: 6px;
-  height: 6px;
-  border-radius: var(--radius-pill);
-  background: var(--n-400);
-  content: "";
-}
-.shell-page-view .expert-member-stack span:first-child::before {
-  background: color-mix(in oklch, var(--accent) 68%, var(--n-0));
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--accent) 12%, transparent);
-}
-.shell-page-view .expert-member-stack svg {
-  width: 14px;
-  height: 14px;
-  flex: 0 0 auto;
-}
 /* Canvas-relative: the window stays wide while the canvas shrinks. */
 @container page-stack (max-width: 860px) {
   .shell-page-view .team-capability-live-layout {
@@ -496,6 +367,21 @@ exports[`command Office room style > snapshots the Workflow and Experts live-run
     align-items: stretch;
     flex-direction: column;
   }
+}
+.shell-page-view .team-composer-bar input {
+  min-width: 0;
+  flex: 1;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--n-950);
+  font: inherit;
+}
+.workflow-room-title-block small {
+  margin-top: 4px;
+  color: var(--n-700);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.4;
 }"
 `;
 
