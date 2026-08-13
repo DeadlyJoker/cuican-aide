@@ -663,6 +663,11 @@ Gate 报告为通过。
 - PostgreSQL 真实主机的更强完整回归也已通过：Store `558 pass + 1 probe placeholder skip`、Control API `116/116`；Runtime Worker 的 focused
   PostgreSQL production suite 为 `134/134`。这些结果与上面的 W01 定向矩阵共同证明单一 PG authority 的 transaction/replay/recovery 路径，不把
   未配置 provider 或发布凭据的能力外推为完成。
+- 合入上述 renderer cutover 后重新 staging 并构建 `.app`；官方 Node digest 仍为
+  `f480e325ee0ca9cb9eef00b5ca6057a2a104807a1b073f1bc373a55c67facff5`，bundle 内容仍只有 Tauri UI、Node、guardian 与四个 TS runtime。
+  最新 packaged Workflow smoke 使用 HOME `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-wMppre`，Run
+  `019ffafc-9cda-77a9-87f1-7a4b71a82ee5` 在 Worker `SIGKILL`/同 HOME 重启后完成：2 次不同模型采样、2 个 Attempt、唯一
+  `run.completed`，GUI `SIGKILL` 后 guardian 清理全部子进程。`.app` 与 updater archive 已产出，仍只被缺失 `TAURI_SIGNING_PRIVATE_KEY` 阻挡签名。
 
 当前 W01 的 SQLite、PostgreSQL real-host 与 packaged crash-recovery Gate 已关闭；发布签名/notarization 及尚未迁移的特定产品能力仍保持
 active。Rust compatibility 已从矩阵删除，不再投入迁移成本。
