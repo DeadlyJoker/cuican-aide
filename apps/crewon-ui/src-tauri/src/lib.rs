@@ -45,10 +45,7 @@ pub fn run() {
                 );
             }
             if let Err(error) = control_runtime::install(app.handle()) {
-                eprintln!(
-                    "failed to start the bundled control runtime: {}",
-                    error.code()
-                );
+                return Err(std::io::Error::other(error.code()).into());
             }
             Ok(())
         })

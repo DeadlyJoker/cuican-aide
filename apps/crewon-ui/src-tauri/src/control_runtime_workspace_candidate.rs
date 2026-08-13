@@ -13,16 +13,14 @@ impl StagedWorkspaceCandidate {
     pub(super) fn into_complete(
         mut self,
     ) -> Result<CompleteWorkspaceRuntime, DesktopWorkspaceError> {
-        let (context, device, device_events, gateway, gateway_events) = match self.foundation.take()
+        let (context, gateway, gateway_events) = match self.foundation.take()
         {
             Some(foundation) => (
                 Some(foundation.context),
-                Some(foundation.device),
-                Some(foundation.device_events),
                 Some(foundation.gateway),
                 Some(foundation.gateway_events),
             ),
-            None => (None, None, None, None, None),
+            None => (None, None, None),
         };
         let worker = self
             .worker
@@ -36,8 +34,8 @@ impl StagedWorkspaceCandidate {
             context,
             control: control.child,
             control_events: control.events,
-            device,
-            device_events,
+            device: None,
+            device_events: None,
             gateway,
             gateway_events,
             worker: worker.child,

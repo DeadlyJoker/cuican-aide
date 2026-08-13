@@ -171,57 +171,6 @@ fn spawn_node_with_bootstrap(
     spawn_guardian_managed(launch, event_thread_name)
 }
 
-pub(crate) fn spawn_guarded_sidecar(
-    app: &AppHandle,
-    sidecar: &str,
-    arguments: &[std::ffi::OsString],
-    current_dir: &Path,
-    event_thread_name: &'static str,
-) -> Result<(ProcessEvents, ManagedChild), ControlRuntimeStartError> {
-    let inherited_environment = std::env::vars_os().collect::<Vec<_>>();
-    let target = app
-        .shell()
-        .sidecar(sidecar)
-        .map_err(|_| ControlRuntimeStartError::ProcessSpawnFailed)?
-        .args(arguments)
-        .env_clear()
-        .envs(
-            inherited_environment
-                .iter()
-                .map(|(key, value)| (key, value)),
-        )
-        .current_dir(current_dir);
-    let launch = prepare_guardian_launch(app, target.into(), &[])?;
-    spawn_guardian_managed(launch, event_thread_name)
-}
-
-pub(super) fn spawn_sidecar_with_input(
-    app: &AppHandle,
-    _supervisor: Option<&ControlRuntimeSupervisor>,
-    sidecar: &str,
-    current_dir: &Path,
-    environment: ChildEnvironment,
-    event_thread_name: &'static str,
-    input: &[u8],
-) -> Result<(ProcessEvents, ManagedChild), ControlRuntimeStartError> {
-    let target = app
-        .shell()
-        .sidecar(sidecar)
-        .map_err(|_| ControlRuntimeStartError::ProcessSpawnFailed)?
-        .env_clear()
-        .envs(
-            environment
-                .iter()
-                .map(|variable| (&variable.key, variable.value.as_os_str())),
-        )
-        .current_dir(current_dir);
-    let mut line = Zeroizing::new(Vec::with_capacity(input.len().saturating_add(1)));
-    line.extend_from_slice(input);
-    line.push(b'\n');
-    let launch = prepare_guardian_launch(app, target.into(), &line)?;
-    spawn_guardian_managed(launch, event_thread_name)
-}
-
 include!("control_runtime_process_wait.rs");
 
 #[cfg(test)]

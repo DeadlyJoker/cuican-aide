@@ -9,13 +9,11 @@ use serde::Deserialize;
 use tauri::AppHandle;
 use zeroize::Zeroizing;
 
-use super::environment::device_environment;
 use super::environment::gateway_environment;
 use super::environment::worker_bootstrap_input_with_workspace_and_credentials;
 use super::environment::GatewayEnvironment;
 use super::private_credentials::PrivateCredentialBindings;
 use super::process::spawn_node;
-use super::process::spawn_sidecar_with_input;
 use super::process::wait_for_matching_ready;
 use super::process::ManagedChild as CommandChild;
 use super::provider_credentials::ActiveProviderRuntime;
@@ -34,7 +32,6 @@ use crate::workspace_native::WorkspaceNativeError;
 use crate::workspace_native::WorkspaceNativeLaunchSession;
 use crate::workspace_native::WorkspacePayloadConfig;
 
-const DEVICE_RUNTIME_SIDECAR: &str = "crewon-device-runtime";
 const GATEWAY_DEADLINE_MS: u32 = 40_000;
 
 pub(super) struct WorkspaceRuntimeContext {
@@ -52,8 +49,6 @@ impl std::fmt::Debug for WorkspaceRuntimeContext {
 
 pub(super) struct StartedWorkspaceFoundation {
     pub(super) context: Arc<WorkspaceRuntimeContext>,
-    pub(super) device: CommandChild,
-    pub(super) device_events: ProcessEvents,
     pub(super) gateway: CommandChild,
     pub(super) gateway_events: ProcessEvents,
 }
@@ -257,50 +252,7 @@ pub(super) fn start_workspace_foundation(
             return Err(map_workspace_error(error));
         }
     };
-    let runtime_payloads = match launch_session.runtime_launch(
-        &authority,
-        WorkspacePayloadConfig {
-            gateway_ready: gateway_ready.clone(),
-            journal_path: journal_path.clone(),
-            gateway_deadline_ms: GATEWAY_DEADLINE_MS,
-        },
-    ) {
-        Ok(payloads) => payloads,
-        Err(error) => {
-            stop_candidate_or_startup(supervisor, vec![gateway]);
-            return Err(map_workspace_error(error));
-        }
-    };
-    let device_bootstrap = match runtime_payloads.device_bootstrap_json() {
-        Ok(bootstrap) => bootstrap,
-        Err(error) => {
-            stop_candidate_or_startup(supervisor, vec![gateway]);
-            return Err(map_workspace_error(error));
-        }
-    };
-    let (device_events, device) = match spawn_sidecar_with_input(
-        app,
-        supervisor,
-        DEVICE_RUNTIME_SIDECAR,
-        &paths.root,
-        device_environment(),
-        "crewon-device-runtime-events",
-        &device_bootstrap,
-    ) {
-        Ok(started) => started,
-        Err(error) => {
-            stop_candidate_or_startup(supervisor, vec![gateway]);
-            return Err(error);
-        }
-    };
-    if wait_for_matching_ready(&device_events, READY_TIMEOUT, |line| {
-        project_device_ready(line, &device_id, &workspace_runtime_binding_id)
-    })
-    .is_err()
-    {
-        stop_candidate_or_startup(supervisor, vec![device, gateway]);
-        return Err(ControlRuntimeStartError::DeviceNotReady);
-    }
+    let _ = (device_id, workspace_runtime_binding_id);
     Ok(StartedWorkspaceFoundation {
         context: Arc::new(WorkspaceRuntimeContext {
             authority,
@@ -308,8 +260,6 @@ pub(super) fn start_workspace_foundation(
             gateway_ready,
             journal_path,
         }),
-        device,
-        device_events,
         gateway,
         gateway_events,
     })
@@ -329,7 +279,7 @@ pub(super) fn stop_workspace_foundation(foundation: Option<StartedWorkspaceFound
     let Some(foundation) = foundation else {
         return;
     };
-    super::process::terminate_startup_children(vec![foundation.device, foundation.gateway]);
+    super::process::terminate_startup_children(vec![foundation.gateway]);
 }
 
 pub(super) fn quarantine_workspace_foundation(
@@ -339,7 +289,7 @@ pub(super) fn quarantine_workspace_foundation(
     let Some(foundation) = foundation else {
         return;
     };
-    supervisor.quarantine_candidate_processes(vec![foundation.device, foundation.gateway]);
+    supervisor.quarantine_candidate_processes(vec![foundation.gateway]);
 }
 
 include!("control_runtime_workspace_material.rs");
@@ -352,21 +302,6 @@ fn project_gateway_ready(line: &[u8]) -> Option<u16> {
         return None;
     }
     port.parse::<u16>().ok().filter(|port| *port != 0)
-}
-
-fn project_device_ready(line: &[u8], device_id: &str, runtime_binding_id: &str) -> Option<()> {
-    let value = std::str::from_utf8(line).ok()?;
-    let epoch = value.strip_prefix(&format!(
-        "CrewON Device Runtime ready:{device_id}:{runtime_binding_id}:"
-    ))?;
-    if epoch.is_empty() || !epoch.bytes().all(|byte| byte.is_ascii_digit()) {
-        return None;
-    }
-    epoch
-        .parse::<u64>()
-        .ok()
-        .filter(|epoch| *epoch > 0)
-        .map(|_| ())
 }
 
 fn project_workspace_ready(line: &[u8], runtime_binding_id: &str) -> Option<String> {

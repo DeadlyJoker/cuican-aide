@@ -31,10 +31,6 @@ pub fn control_runtime_bootstrap(
 
 /// Installs managed state and starts both Node children for a packaged build.
 pub fn install(app: &AppHandle) -> Result<(), ControlRuntimeStartError> {
-    if std::env::var(SKIP_SIDECAR_ENV).is_ok_and(|value| !value.is_empty()) {
-        return manage_supervisor(app, ControlRuntimeSupervisor::unavailable());
-    }
-
     let started = match start(app) {
         Ok(started) => started,
         Err(error) => {
@@ -262,9 +258,9 @@ fn start(app: &AppHandle) -> Result<StartedRuntime, ControlRuntimeStartError> {
 
     let (workspace, gateway_events, device_events) = match workspace_foundation {
         Some(foundation) => (
-            Some((foundation.context, foundation.gateway, foundation.device)),
+            Some((foundation.context, foundation.gateway, None)),
             Some(foundation.gateway_events),
-            Some(foundation.device_events),
+            None,
         ),
         None => (None, None, None),
     };

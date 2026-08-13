@@ -38,7 +38,6 @@ pub(super) fn detach_current(
             .is_some_and(|context| !context.matches_authority(authority))
         || (authority.current_snapshot().is_some()
             && (lifecycle.workspace.is_none()
-                || lifecycle.device.is_none()
                 || lifecycle.gateway.is_none()))
     {
         return Err(ControlRuntimeStartError::RuntimeUnavailable);

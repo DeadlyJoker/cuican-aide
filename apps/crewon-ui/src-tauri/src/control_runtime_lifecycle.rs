@@ -121,12 +121,12 @@ impl ControlRuntimeSupervisor {
         workspace: Option<(
             Arc<workspace::WorkspaceRuntimeContext>,
             CommandChild,
-            CommandChild,
+            Option<CommandChild>,
         )>,
         workspace_authority_lease: Option<crate::workspace_native::WorkspaceAuthorityLease>,
     ) -> Self {
         let (workspace, gateway, device, workspace_generation) = match workspace {
-            Some((context, gateway, device)) => (Some(context), Some(gateway), Some(device), 1),
+            Some((context, gateway, device)) => (Some(context), Some(gateway), device, 1),
             None => (None, None, None, 0),
         };
         Self {

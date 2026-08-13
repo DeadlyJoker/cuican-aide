@@ -83,6 +83,8 @@ fn payloads_cross_correlate_every_workspace_runtime_and_signing_authority() {
         })
     );
     assert_eq!(worker["privateServer"]["port"], 0);
+    assert_eq!(worker["dispatchMode"], "local");
+    assert_eq!(worker["trustedLocalPath"], current.trusted_path());
     assert_eq!(worker["gateway"]["endpoint"], "https://127.0.0.1:18443");
     assert_eq!(device["gatewayWssUrl"], "wss://127.0.0.1:18443/device/v1");
     assert_eq!(
@@ -91,7 +93,14 @@ fn payloads_cross_correlate_every_workspace_runtime_and_signing_authority() {
     );
     assert_keys(
         &worker,
-        &["authority", "gateway", "privateServer", "signing"],
+        &[
+            "authority",
+            "dispatchMode",
+            "gateway",
+            "privateServer",
+            "signing",
+            "trustedLocalPath",
+        ],
     );
     assert_keys(
         &gateway,
@@ -114,7 +123,7 @@ fn payloads_cross_correlate_every_workspace_runtime_and_signing_authority() {
 }
 
 #[test]
-fn only_device_bootstrap_contains_native_paths_and_debug_is_redacted() {
+fn only_private_worker_bootstrap_contains_native_paths_and_debug_is_redacted() {
     let fixture = Fixture::new();
     let material = WorkspaceLaunchMaterial::generate(fixture.manager.authority()).unwrap();
     let gateway_launch =
@@ -130,7 +139,7 @@ fn only_device_bootstrap_contains_native_paths_and_debug_is_redacted() {
     let gateway = String::from_utf8(gateway_launch.gateway_registry_json().unwrap()).unwrap();
     let identity = String::from_utf8(gateway_launch.gateway_identity_json().unwrap()).unwrap();
     let device = String::from_utf8(payloads.device_bootstrap_json().unwrap().to_vec()).unwrap();
-    assert!(!worker.contains(trusted_path));
+    assert!(worker.contains(trusted_path));
     assert!(!gateway.contains(trusted_path));
     assert!(!identity.contains(trusted_path));
     assert!(device.contains(trusted_path));

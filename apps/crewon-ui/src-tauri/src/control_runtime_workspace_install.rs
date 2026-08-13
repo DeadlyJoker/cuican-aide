@@ -253,8 +253,7 @@ pub(super) fn commit_workspace_install(
             .as_ref()
             .is_some_and(|gateway| !gateway.is_running())
         || (authority.current_snapshot().is_some()
-            && (lifecycle.device.is_none()
-                || lifecycle.gateway.is_none()
+            && (lifecycle.gateway.is_none()
                 || lifecycle
                     .workspace
                     .as_ref()

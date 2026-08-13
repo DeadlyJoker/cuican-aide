@@ -169,6 +169,8 @@ impl<'a> WorkspaceLaunchPayloads<'a> {
         let gateway = material.gateway();
         Ok(Self {
             worker_workspace: WorkerWorkspaceBootstrap {
+                dispatch_mode: "local",
+                trusted_local_path: workspace.trusted_path(),
                 private_server: WorkerPrivateServer {
                     port: 0,
                     token: material.private_server_token(),
@@ -236,6 +238,8 @@ impl<'a> WorkspaceLaunchPayloads<'a> {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WorkerWorkspaceBootstrap<'a> {
+    dispatch_mode: &'static str,
+    trusted_local_path: &'a str,
     private_server: WorkerPrivateServer<'a>,
     authority: WorkerWorkspaceAuthority<'a>,
     signing: WorkerSigning<'a>,

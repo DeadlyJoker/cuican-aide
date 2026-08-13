@@ -164,10 +164,6 @@ pub(super) fn gateway_environment(config: GatewayEnvironment<'_>) -> ChildEnviro
     environment
 }
 
-pub(super) fn device_environment() -> ChildEnvironment {
-    child_environment()
-}
-
 pub(super) fn release_environment(
     paths: &RuntimePaths,
     provider: Option<&ActiveProviderBinding>,

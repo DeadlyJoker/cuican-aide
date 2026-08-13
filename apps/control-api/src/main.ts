@@ -25,6 +25,7 @@ import {
   watchActivationInput,
 } from "./paused-admission.ts";
 import { resolveStandaloneProviderProbeWorkers } from "./standalone-provider-probe-environment.ts";
+import { resolveStandaloneWorkspaceWorkerEnvironment } from "./standalone-workspace-environment.ts";
 import { WORKFLOW_PRODUCTION_STORE_CAPABILITIES } from "./workflow-production-composition-gate.ts";
 
 const securityMode = parseSecurityMode(
@@ -39,6 +40,10 @@ const providerProbeWorkers = resolveStandaloneProviderProbeWorkers(
   process.env,
   securityMode,
   standaloneTenantId,
+);
+const workspaceWorker = resolveStandaloneWorkspaceWorkerEnvironment(
+  process.env,
+  securityMode,
 );
 const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
 if (securityMode === "production" && connectionString === undefined) {
@@ -138,6 +143,7 @@ try {
       ),
       ...(activationGate === null ? {} : { activationGate }),
       ...(providerProbeWorkers === undefined ? {} : { providerProbeWorkers }),
+      ...(workspaceWorker === undefined ? {} : { workspaceWorker }),
       workflowComposition: {
         certification: {
           storeCapabilities: WORKFLOW_PRODUCTION_STORE_CAPABILITIES,

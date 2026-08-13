@@ -1,6 +1,5 @@
 use super::prepare_launch_root;
 use super::prepare_runtime_directory;
-use super::project_device_ready;
 use super::project_gateway_ready;
 use super::project_workspace_ready;
 use super::write_private;
@@ -12,14 +11,6 @@ fn readiness_projections_bind_exact_nonsecret_authority() {
             b"CrewON Device Gateway listening on wss://127.0.0.1:43125/device/v1"
         ),
         Some(43_125)
-    );
-    assert_eq!(
-        project_device_ready(
-            b"CrewON Device Runtime ready:device-1:runtime-1:7",
-            "device-1",
-            "runtime-1"
-        ),
-        Some(())
     );
     assert_eq!(
         project_workspace_ready(
@@ -58,14 +49,6 @@ fn runtime_and_launch_directories_reject_symlinks_and_non_directories() {
 fn readiness_projections_reject_wrong_binding_or_unbound_addresses() {
     assert_eq!(
         project_gateway_ready(b"CrewON Device Gateway listening on wss://0.0.0.0:43125/device/v1"),
-        None
-    );
-    assert_eq!(
-        project_device_ready(
-            b"CrewON Device Runtime ready:device-1:runtime-old:7",
-            "device-1",
-            "runtime-1"
-        ),
         None
     );
     assert_eq!(

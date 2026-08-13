@@ -92,7 +92,6 @@ const PROVIDER_PROBE_PORT: u16 = 3211;
 const PROVIDER_PROBE_ORIGIN: &str = "http://127.0.0.1:3211";
 const DESKTOP_ORIGIN: &str = "http://tauri.localhost";
 const ARTIFACT_KEY_ID: &str = "desktop-artifact-key-v1";
-const SKIP_SIDECAR_ENV: &str = "CREWON_DESKTOP_SKIP_SIDECAR";
 const READY_TIMEOUT: Duration = Duration::from_secs(20);
 const TERMINATION_TIMEOUT: Duration = Duration::from_secs(20);
 static STARTUP_QUARANTINE: Mutex<StartupQuarantine> = Mutex::new(StartupQuarantine {
@@ -119,7 +118,6 @@ pub enum ControlRuntimeStartError {
     RuntimeStateAlreadyInstalled,
     WorkerNotReady,
     GatewayNotReady,
-    DeviceNotReady,
     WorkspaceRuntimeFailed,
 }
 
@@ -145,7 +143,6 @@ impl ControlRuntimeStartError {
             Self::RuntimeStateAlreadyInstalled => "control_runtime_state_already_installed",
             Self::WorkerNotReady => "control_runtime_worker_not_ready",
             Self::GatewayNotReady => "control_runtime_gateway_not_ready",
-            Self::DeviceNotReady => "control_runtime_device_not_ready",
             Self::WorkspaceRuntimeFailed => "control_runtime_workspace_failed",
         }
     }
