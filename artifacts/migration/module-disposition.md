@@ -1,7 +1,7 @@
 # CrewON 迁移模块处置清单 v1
 
-状态：Initial inventory  
-日期：2026-08-08  
+状态：Pure TypeScript cutover
+日期：2026-08-14
 上级计划：[MIGRATION_PLAN.md](../../MIGRATION_PLAN.md)
 
 本清单是开始迁移的最小真实台账。它按行为所有权归类，不代表一个目录只能整体保留或整体删除。任何模块开始改写前
@@ -18,6 +18,9 @@
 | `GENERATE`      | 从 OpenAPI/JSON Schema 生成，不手写两套 DTO |
 | `IMPORT_ONLY`   | 只读旧格式或迁移，不能进入正常运行          |
 | `DELETE`        | 不迁移；达到调用和观察 Gate 后删除          |
+
+当前迁移不为 Rust 旧实现保留双读、双写、回退或行为兼容。旧数据 importer 仅在已确认必须保留生产数据时才允许单独立项；
+当前 Workflow 与 Office 数据均直接切到新 Store authority，不实现旧 `.crewon` 文件或 Rust snapshot importer。
 
 ## Agent、Context 与 Model
 
@@ -61,15 +64,15 @@
 
 ## Workflow、Office、Experts 与 Automation
 
-| ID  | 当前路径                                                                 | 处置                           | 最终所有者                      | 核心证据/删除 Gate                                      |
-| --- | ------------------------------------------------------------------------ | ------------------------------ | ------------------------------- | ------------------------------------------------------- |
-| W01 | `crewon_domain_workflow*.rs`、`workflow_node_dispatch.rs`                | `PORT_EXACT` + `PORT_REDESIGN` | workflow-runtime                | 六态、Human Gate、cancel/restart、本地 Agent thread     |
-| W02 | `.crewon/workflows/*.json` legacy definition                             | `IMPORT_ONLY`                  | workflow importer               | source digest/version/provenance；新格式只由新 Store 写 |
-| W03 | `crewon_domain_office_run.rs`、message/receipt/recovery/authority 文件族 | `PORT_REDESIGN`                | unified Run + Office projection | receipt、recovery、owner、message intent fixtures       |
-| W04 | Office legacy mutation、专用 scheduler state、旧 auto-dispatch           | `DELETE`                       | 无                              | 统一 Run cutover、零调用、drain/观察期                  |
-| W05 | Office migration importer/snapshot/targets                               | `IMPORT_ONLY`                  | migration tooling               | dry-run/idempotency/count/digest/invariant              |
-| W06 | `automation_scheduler.rs`、automation binding                            | `PORT_REDESIGN`                | application + workflow-runtime  | schedule/misfire/dedupe/timezone/owner tests            |
-| W07 | `experts_processor`、Office manager/member delegation                    | `PORT_REDESIGN`                | AgentVersion + Run/Step         | 委派 durable，不隐藏内存 handoff                        |
+| ID  | 当前路径                                                                 | 处置            | 最终所有者                      | 核心证据/删除 Gate                                  |
+| --- | ------------------------------------------------------------------------ | --------------- | ------------------------------- | --------------------------------------------------- |
+| W01 | `crewon_domain_workflow*.rs`、`workflow_node_dispatch.rs`                | `PORT_REDESIGN` | workflow-runtime                | 六态、Human Gate、cancel/restart、本地 Agent thread |
+| W02 | `.crewon/workflows/*.json` legacy definition                             | `DELETE`        | 无                              | 新 Store authority 生效；不实现 importer/dual-read  |
+| W03 | `crewon_domain_office_run.rs`、message/receipt/recovery/authority 文件族 | `PORT_REDESIGN` | unified Run + Office projection | receipt、recovery、owner、message intent fixtures   |
+| W04 | Office legacy mutation、专用 scheduler state、旧 auto-dispatch           | `DELETE`        | 无                              | 统一 Run cutover、零调用、drain/观察期              |
+| W05 | Office migration importer/snapshot/targets                               | `DELETE`        | 无                              | 新 Store authority 生效；不实现 importer/dual-read  |
+| W06 | `automation_scheduler.rs`、automation binding                            | `PORT_REDESIGN` | application + workflow-runtime  | schedule/misfire/dedupe/timezone/owner tests        |
+| W07 | `experts_processor`、Office manager/member delegation                    | `PORT_REDESIGN` | AgentVersion + Run/Step         | 委派 durable，不隐藏内存 handoff                    |
 
 ## Identity、Provider、Resource 与 Artifact
 
