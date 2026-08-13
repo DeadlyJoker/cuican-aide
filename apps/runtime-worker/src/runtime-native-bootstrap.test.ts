@@ -261,7 +261,8 @@ test("rejects a second unread bootstrap before parsing its credentials", () => {
 
 test("rejects partial Workspace secrets, extra keys, and invalid caps", () => {
   for (const mutate of [
-    (value: Record<string, any>) => delete value.workspace.signing.privateKeyPem,
+    (value: Record<string, any>) =>
+      delete value.workspace.signing.privateKeyPem,
     (value: Record<string, any>) => (value.workspace.signing.extra = true),
     (value: Record<string, any>) => (value.workspace.privateServer.port = -1),
     (value: Record<string, any>) => (value.workspace.deadlineMs = 999),

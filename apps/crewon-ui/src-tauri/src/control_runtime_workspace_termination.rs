@@ -108,13 +108,10 @@ pub(super) fn stop_failed_installed(
     .into_iter()
     .flatten()
     .collect::<Vec<_>>();
-    let processes = [
-        lifecycle.control_api.take(),
-        lifecycle.worker.take(),
-    ]
-    .into_iter()
-    .flatten()
-    .collect::<Vec<_>>();
+    let processes = [lifecycle.control_api.take(), lifecycle.worker.take()]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>();
     lifecycle.workspace = None;
     drop(lifecycle);
     if generations_match && terminate_managed_children(&processes, super::TERMINATION_TIMEOUT) {

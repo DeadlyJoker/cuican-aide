@@ -135,8 +135,10 @@ function stageGuardian(target) {
   if (!statSync(binary).isFile()) {
     throw new Error("CREWON_GUARDIAN_BINARY must resolve to a regular file");
   }
-  copyExecutable(binary,
-    join(outDir, `crewon-process-guardian-${target}${exeSuffix}`));
+  copyExecutable(
+    binary,
+    join(outDir, `crewon-process-guardian-${target}${exeSuffix}`),
+  );
 }
 
 function bundleRuntime(entry, outfile) {
@@ -176,7 +178,13 @@ function stageControlRuntime(target) {
     join(runtimeOutDir, "control-api.mjs"),
   );
   bundleRuntime(
-    join(repoRoot, "apps", "runtime-worker", "src", "provider-settings-coordinator-main.ts"),
+    join(
+      repoRoot,
+      "apps",
+      "runtime-worker",
+      "src",
+      "provider-settings-coordinator-main.ts",
+    ),
     join(runtimeOutDir, "provider-settings-coordinator.mjs"),
   );
   bundleRuntime(
