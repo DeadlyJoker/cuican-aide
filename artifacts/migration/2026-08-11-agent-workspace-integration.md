@@ -652,6 +652,16 @@ Gate 报告为通过。
   `SIGKILL` GUI 后进程树和 3210 均清空。
 - renderer 已强制 Control-only；Control bootstrap 失败直接阻断，不再创建或重连 `AppServerClient`。账号页改读 Control account snapshot，明确将
   usage/rate-limit 标为非当前 authority；Workspace drawer 已接入真实 Control content search 与 Git status，并用 abort + request identity 防止旧请求覆盖。
+- Automation Library 已改为 Control authority：列表、详情、创建与 run-now 均读取 canonical Automation/Thread/AgentVersion，使用 Thread revision CAS
+  与 idempotency；不再用演示记录或旧 App Server 读取。Office 列表、详情、创建与 start-run 同样改为 Control authority，仅暴露当前协议真实支持的
+  published AgentVersion、execution target 与 active Thread；尚未有 Control contract 的 Office chat、delegation、retry、memory、verification 明确显示为
+  unsupported，不用 legacy fallback 掩盖。
+- Command Workspace 的正常产品组合现在强制 `workspaceAuthority="control"`；空任务页只展示 Control `Tasks`，不再从 cwd 合成 legacy Workspace，旧
+  `teamCwd` authority 与 attach-context callback 已从该路径删除。三条 renderer cutover 合并后 UI 完整套件为 `286/286` files、`1798/1798`
+  tests，lint 与 production build 均通过；build 只保留既有 chunk-size warning。
+- PostgreSQL 真实主机的更强完整回归也已通过：Store `558 pass + 1 probe placeholder skip`、Control API `116/116`；Runtime Worker 的 focused
+  PostgreSQL production suite 为 `134/134`。这些结果与上面的 W01 定向矩阵共同证明单一 PG authority 的 transaction/replay/recovery 路径，不把
+  未配置 provider 或发布凭据的能力外推为完成。
 
 当前 W01 的 SQLite、PostgreSQL real-host 与 packaged crash-recovery Gate 已关闭；发布签名/notarization 及尚未迁移的特定产品能力仍保持
 active。Rust compatibility 已从矩阵删除，不再投入迁移成本。
