@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Stages every executable/resource required by the packaged desktop runtime.
+// Stages every executable/resource required by the desktop TypeScript runtime.
 //
 // The Control API and runtime-worker are bundled as self-contained ESM
 // resources and run under an explicitly supplied, open-source Node 24 binary.

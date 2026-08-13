@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   assertNode24Version,
   assertReleaseNodeMetadata,
-} from "./stage-app-server-sidecar.mjs";
+} from "./stage-desktop-runtime.mjs";
 
 test("accepts only the Node 24 runtime ABI", () => {
   assert.doesNotThrow(() => assertNode24Version("v24.18.1\n"));

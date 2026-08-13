@@ -4,7 +4,7 @@
 // The version used to live in three files that nobody kept in sync;
 // `tauri.conf.json` now reads `package.json`, but `Cargo.toml` still carries its
 // own, so one command owns both. Node rather than shell so it runs on Windows,
-// matching `stage-app-server-sidecar.mjs`.
+// matching `stage-desktop-runtime.mjs`.
 //
 //   node scripts/release-desktop.mjs 0.2.0          # write, commit, tag
 //   node scripts/release-desktop.mjs 0.2.0 --dry-run

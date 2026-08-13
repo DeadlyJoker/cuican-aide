@@ -13,9 +13,10 @@ and these TypeScript entry bundles:
 - Runtime Release (one-shot activation)
 - Provider Settings Coordinator
 
-The packaged startup path does not launch `crewon-app-server` or
-`crewon-device-runtime`, `crewon-app-server`, or Device Gateway. When a local Workspace is selected, list and read
-operations execute inside Runtime Worker against the authority-selected root.
+The packaged startup path does not launch `crewon-app-server`,
+`crewon-device-runtime`, or Device Gateway. When a local Workspace is selected,
+list and read operations execute inside Runtime Worker against the
+authority-selected root.
 The absolute root and private Worker token travel only in the one-shot stdin
 bootstrap owned by the Tauri shell.
 
@@ -30,9 +31,8 @@ pnpm --filter @crewon/ui sidecar:stage
 pnpm --filter @crewon/ui exec tauri build --bundles app
 ```
 
-`scripts/stage-app-server-sidecar.mjs` retains its historical filename, but now
-stages the Node/guardian executables and the TypeScript runtime bundles above.
-Generated binaries are ignored by Git.
+`scripts/stage-desktop-runtime.mjs` stages the Node/guardian executables and the
+TypeScript runtime bundles above. Generated binaries are ignored by Git.
 
 The app bundle can be produced without release credentials. Updater archives,
 code signing, notarization, and published installers still require their normal
@@ -40,7 +40,17 @@ platform and `TAURI_SIGNING_PRIVATE_KEY` credentials.
 
 ## Development
 
-`pnpm dev` and `tauri dev` remain development surfaces. The packaged Control API
-is loopback-only and authenticated with a per-launch session token and CSRF
-token; those credentials must never be placed in frontend build output, argv,
-logs, or ambient configuration files.
+Run the complete desktop development runtime from the repository root:
+
+```bash
+pnpm crewon:dev
+```
+
+The command incrementally builds the process guardian, stages the current Node
+24 executable and TypeScript runtime bundles, then starts `tauri dev`. It never
+starts the legacy Rust App Server or opens port 6176. `pnpm ui:dev` remains a
+frontend-only Vite surface and requires an independently configured Web BFF.
+
+The desktop Control API is loopback-only and authenticated with a per-launch
+session token and CSRF token; those credentials must never be placed in
+frontend build output, argv, logs, or ambient configuration files.

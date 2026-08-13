@@ -340,14 +340,13 @@ def validate_gitignore(path: Path) -> None:
 def validate_crewon_dev_script(path: Path) -> None:
     require_regular_file(path)
     content = path.read_text(encoding="utf-8")
-    if 'source "$repo_root/.crewon/dev-ui.env"' not in content:
-        raise HarnessError("scripts/crewon-dev.sh does not source .crewon/dev-ui.env")
-    if (
-        'source "$repo_root/.crewon/.env"' in content
-        or "agent-platform.env.sh" in content
-    ):
+    if '"dev-ui.env"' not in content:
         raise HarnessError(
-            "scripts/crewon-dev.sh sources a server-side environment file"
+            "scripts/crewon-desktop-dev.mjs does not load .crewon/dev-ui.env"
+        )
+    if '".crewon", ".env"' in content or "agent-platform.env.sh" in content:
+        raise HarnessError(
+            "scripts/crewon-desktop-dev.mjs loads a server-side environment file"
         )
 
 
@@ -430,7 +429,7 @@ def check(repo_root: Path, agent_platform_root: Path) -> None:
         crewon_environment_block(runtime_root.resolve()),
     )
     validate_gitignore(repo_root / ".gitignore")
-    validate_crewon_dev_script(repo_root / "scripts" / "crewon-dev.sh")
+    validate_crewon_dev_script(repo_root / "scripts" / "crewon-desktop-dev.mjs")
 
 
 def main(argv: list[str] | None = None) -> int:

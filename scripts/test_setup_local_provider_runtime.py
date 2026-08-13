@@ -32,8 +32,8 @@ class LocalProviderRuntimeHarnessTests(unittest.TestCase):
             "# fixture\n", encoding="utf-8"
         )
         (self.repo / ".gitignore").write_text(".crewon/.env\n", encoding="utf-8")
-        (self.repo / "scripts" / "crewon-dev.sh").write_text(
-            '#!/usr/bin/env bash\nsource "$repo_root/.crewon/dev-ui.env"\n',
+        (self.repo / "scripts" / "crewon-desktop-dev.mjs").write_text(
+            'join(repoRoot, ".crewon", "dev-ui.env");\n',
             encoding="utf-8",
         )
         (self.repo / ".crewon" / ".env").write_text(

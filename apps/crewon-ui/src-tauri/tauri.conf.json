@@ -30,10 +30,7 @@
   },
   "bundle": {
     "active": true,
-    "externalBin": [
-      "binaries/crewon-process-guardian",
-      "binaries/crewon-node"
-    ],
+    "externalBin": ["binaries/crewon-process-guardian", "binaries/crewon-node"],
     "resources": [
       "binaries/runtime/control-api.mjs",
       "binaries/runtime/provider-settings-coordinator.mjs",
@@ -43,7 +40,7 @@
     "targets": ["dmg", "app", "nsis"],
     "category": "DeveloperTool",
     "shortDescription": "Crewon desktop client",
-    "longDescription": "A desktop and web client for Crewon app-server.",
+    "longDescription": "A desktop client for the CrewON TypeScript agent runtime.",
     "createUpdaterArtifacts": true,
     "macOS": {
       "minimumSystemVersion": "10.15"

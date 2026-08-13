@@ -7,9 +7,9 @@
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
     "preview": "vite preview --host 127.0.0.1",
-    "desktop": "tauri dev",
+    "desktop": "node ../../scripts/crewon-desktop-dev.mjs",
     "desktop:build": "pnpm sidecar:stage && tauri build",
-    "sidecar:stage": "node ../../scripts/stage-app-server-sidecar.mjs",
+    "sidecar:stage": "node ../../scripts/stage-desktop-runtime.mjs",
     "lint": "tsc -b --noEmit",
     "test": "vitest run",
     "test:agent-platform-multiturn": "node scripts/agent-platform-multiturn-eval.mjs"
