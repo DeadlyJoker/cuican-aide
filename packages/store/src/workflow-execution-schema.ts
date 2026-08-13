@@ -2,7 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { RunStoreError } from "@crewon/application";
 import type { PoolClient } from "pg";
 
-const SQLITE_SCHEMA_VERSION = 8;
+const SQLITE_SCHEMA_VERSION = 9;
 const POSTGRES_SCHEMA_VERSION = 7;
 
 export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
@@ -96,6 +96,11 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
     }
     if (version === 7) {
       database.exec(sqliteContinuationTable);
+      database.prepare("UPDATE workflow_execution_schema SET version=? WHERE singleton=1").run(8);
+      version = 8;
+    }
+    if (version === 8) {
+      database.exec(sqliteToolApprovalHandoffTable);
       database
         .prepare(
           "UPDATE workflow_execution_schema SET version=? WHERE singleton=1",
@@ -274,9 +279,26 @@ const sqliteContinuationTable = `CREATE TABLE IF NOT EXISTS workflow_node_contin
     REFERENCES run_attempts(tenant_id,run_id,step_id,attempt_id)
 ) STRICT;`;
 
+const sqliteToolApprovalHandoffTable = `CREATE TABLE IF NOT EXISTS workflow_tool_approval_handoffs (
+  tenant_id TEXT NOT NULL, run_id TEXT NOT NULL, approval_id TEXT NOT NULL,
+  action_digest TEXT NOT NULL, receipt_id TEXT NOT NULL,
+  node_id TEXT NOT NULL, claim_id TEXT NOT NULL, claim_epoch INTEGER NOT NULL CHECK(claim_epoch >= 1),
+  step_id TEXT NOT NULL, attempt_id TEXT NOT NULL, agent_work_item_id TEXT NOT NULL,
+  resume_work_item_id TEXT NOT NULL UNIQUE, publication_operation_id TEXT NOT NULL,
+  publication_fingerprint TEXT NOT NULL, publication_result_json TEXT NOT NULL CHECK(json_valid(publication_result_json)),
+  consumption_operation_id TEXT, consumption_fingerprint TEXT,
+  consumption_result_json TEXT CHECK(consumption_result_json IS NULL OR json_valid(consumption_result_json)),
+  created_at TEXT NOT NULL, consumed_at TEXT,
+  PRIMARY KEY(tenant_id,run_id,approval_id),
+  UNIQUE(tenant_id,run_id,publication_operation_id),
+  FOREIGN KEY(approval_id) REFERENCES tool_approvals(approval_id),
+  FOREIGN KEY(tenant_id,run_id,step_id,attempt_id) REFERENCES run_attempts(tenant_id,run_id,step_id,attempt_id)
+) STRICT;`;
+
 const sqliteCompositionTables = `${sqliteValueTable}
 ${sqliteAdmissionTable}
 ${sqliteContinuationTable}
+${sqliteToolApprovalHandoffTable}
 CREATE TABLE workflow_composition_receipts (
   tenant_id TEXT NOT NULL,
   run_id TEXT NOT NULL,
@@ -400,6 +422,14 @@ const sqliteColumns = {
     "revision",
     "checkpoint_json",
     "updated_at",
+  ],
+  workflow_tool_approval_handoffs: [
+    "tenant_id", "run_id", "approval_id", "action_digest", "receipt_id",
+    "node_id", "claim_id", "claim_epoch", "step_id", "attempt_id",
+    "agent_work_item_id", "resume_work_item_id", "publication_operation_id",
+    "publication_fingerprint", "publication_result_json",
+    "consumption_operation_id", "consumption_fingerprint",
+    "consumption_result_json", "created_at", "consumed_at",
   ],
 } as const;
 

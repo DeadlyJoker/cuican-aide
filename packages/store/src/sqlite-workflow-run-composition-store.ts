@@ -10,6 +10,7 @@ import {
   type WorkflowNodeContinuationStore,
   type WorkflowCancellationResult,
   type WorkflowRunCompositionStore,
+  type WorkflowToolApprovalStore,
 } from "@crewon/application";
 import {
   composeWorkflowNodeInput,
@@ -65,6 +66,7 @@ import {
   workflowAuthorityId,
 } from "./workflow-run-composition-support.ts";
 import { SqliteWorkflowNodeContinuationAuthority } from "./sqlite-workflow-node-continuation.ts";
+import { SqliteWorkflowToolApprovalAuthority } from "./sqlite-workflow-tool-approval.ts";
 import { settleSqliteWorkflowNodeWithinTransaction } from "./sqlite-workflow-node-settlement.ts";
 import { settleSqliteWorkflowNodeModelTerminalWithinTransaction } from "./sqlite-workflow-model-settlement.ts";
 import type { SqliteWorkflowNodeSettlementContext } from "./sqlite-workflow-node-settlement.ts";
@@ -80,7 +82,7 @@ type Dependencies = Readonly<{
 
 /** SQLite production composition authority. Every admission is one IMMEDIATE transaction. */
 export class SqliteWorkflowRunCompositionStore
-  implements WorkflowRunCompositionStore
+  implements WorkflowRunCompositionStore, WorkflowToolApprovalStore
 {
   async loadWorkflowExecution(input: { tenantId: string; runId: string }) {
     return this.#loadExecution(input.tenantId, input.runId);
@@ -91,6 +93,7 @@ export class SqliteWorkflowRunCompositionStore
   readonly #clock: LeaseClock;
   readonly #ownsDatabase: boolean;
   readonly #continuations: SqliteWorkflowNodeContinuationAuthority;
+  readonly #toolApprovals: SqliteWorkflowToolApprovalAuthority;
 
   constructor(database: DatabaseSync, dependencies: Dependencies);
   constructor(path: string, dependencies: Dependencies);
@@ -112,6 +115,9 @@ export class SqliteWorkflowRunCompositionStore
       this.#clock,
       this.#digester,
     );
+    this.#toolApprovals = new SqliteWorkflowToolApprovalAuthority(
+      this.#database, this.#clock, this.#digester,
+    );
     configureAndMigrateSqlite(this.#database);
     migrateSqliteWorkflowVersions(this.#database);
     migrateSqliteWorkflowExecutions(this.#database);
@@ -120,6 +126,18 @@ export class SqliteWorkflowRunCompositionStore
 
   async close(): Promise<void> {
     if (this.#ownsDatabase) this.#database.close();
+  }
+
+  async publishWorkflowToolApproval(
+    input: Parameters<WorkflowToolApprovalStore["publishWorkflowToolApproval"]>[0],
+  ): ReturnType<WorkflowToolApprovalStore["publishWorkflowToolApproval"]> {
+    return this.#toolApprovals.publish(input);
+  }
+
+  async consumeWorkflowToolApproval(
+    input: Parameters<WorkflowToolApprovalStore["consumeWorkflowToolApproval"]>[0],
+  ): ReturnType<WorkflowToolApprovalStore["consumeWorkflowToolApproval"]> {
+    return this.#toolApprovals.consume(input);
   }
 
   async loadWorkflowNodeContinuation(

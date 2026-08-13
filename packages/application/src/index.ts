@@ -59,6 +59,7 @@ export * from "./workflow-run-admission-store-port.ts";
 export * from "./workflow-run-application-service.ts";
 export * from "./workflow-human-gate-application-service.ts";
 export * from "./workflow-node-terminal-settlement.ts";
+export * from "./workflow-tool-approval-store-port.ts";
 export * from "./tool-approval-store-port.ts";
 export * from "./tool-approval-replacement.ts";
 export * from "./tool-approval-application-service.ts";

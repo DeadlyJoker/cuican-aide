@@ -4,15 +4,20 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import {
   compileWorkflowVersion,
+  createToolApproval,
+  decideToolApproval,
   dispatchToolExecutionReceipt,
+  prepareToolExecutionReceipt,
   reduceRunLifecycleEvent,
   resolveToolExecutionReceipt,
   serializeCompiledWorkflowVersion,
+  terminateToolApproval,
   type RunState,
 } from "@crewon/domain";
 
 import { beginSqliteRunAttempt } from "./sqlite-execution-authority.ts";
 import { insertSqliteToolExecutionReceipt } from "./sqlite-tool-execution-receipts.ts";
+import { updateSqliteToolApproval } from "./sqlite-tool-approvals.ts";
 import { SqliteWorkflowRunCompositionStore } from "./sqlite-workflow-run-composition-store.ts";
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
 
@@ -336,6 +341,74 @@ test("invalid checkpoint and CAS conflict roll back every Tool continuation muta
   }
 });
 
+test("publishes and adopts a distinct Workflow approval resume authority", async () => {
+  const fixture = await approvalFixture();
+  const published = await fixture.store.publishWorkflowToolApproval(fixture.publish);
+  assert.equal(published.resumeWorkItemId, "approval-resume");
+  assert.equal(fixture.database.prepare(
+    "SELECT available_at_ms value FROM work_items WHERE work_item_id='approval-resume'",
+  ).get()?.value, nowMs + 5_000);
+  assert.equal((await fixture.store.publishWorkflowToolApproval(fixture.publish)).disposition,
+    "replay");
+  const approved = decideToolApproval(fixture.publish.approval, {
+    expectedRevision: 1, outcome: "approved", actorId: "approver",
+    comment: null, decidedAt: "2026-08-12T00:00:01.000Z" });
+  updateSqliteToolApproval(fixture.database, fixture.publish.approval, approved);
+  fixture.database.prepare(`UPDATE work_items SET status='leased',available_at_ms=0,
+    lease_owner_id='resume-worker',lease_id='resume-lease',lease_epoch=1,
+    lease_expires_at_ms=? WHERE work_item_id='approval-resume'`).run(nowMs + 60_000);
+  const consume = { lease: { workItemId: "approval-resume", ownerId: "resume-worker",
+    leaseId: "resume-lease", leaseEpoch: 1 }, binding,
+    authority: fixture.publish.authority, operationId: "consume-approval",
+    approvalId: approved.approvalId, actionDigest: approved.actionDigest };
+  const consumed = await fixture.store.consumeWorkflowToolApproval(consume);
+  assert.equal(consumed.outcome?.kind, "approved");
+  if (consumed.outcome?.kind !== "approved") assert.fail("approved outcome required");
+  assert.deepEqual(consumed.outcome.approval, approved);
+  assert.equal(consumed.outcome.authority.workItemId, "approval-resume");
+  assert.deepEqual((await fixture.store.loadWorkflowNodeContinuation(
+    consumed.outcome.authority))?.authority, consumed.outcome.authority);
+  assert.deepEqual((await fixture.store.consumeWorkflowToolApproval(consume)).outcome,
+    consumed.outcome);
+  fixture.database.prepare(`UPDATE work_items SET status='leased',
+    lease_owner_id='resume-worker-2',lease_id='resume-lease-2',lease_epoch=2,
+    lease_expires_at_ms=? WHERE work_item_id='approval-resume'`).run(nowMs + 60_000);
+  const reclaimed = await fixture.store.consumeWorkflowToolApproval({ ...consume,
+    lease: { workItemId: "approval-resume", ownerId: "resume-worker-2",
+      leaseId: "resume-lease-2", leaseEpoch: 2 } });
+  assert.equal(reclaimed.outcome?.authority.leaseEpoch, 2);
+  assert.equal(fixture.database.prepare(
+    "SELECT count(*) count FROM workflow_tool_approval_handoffs",
+  ).get()?.count, 1);
+  await assert.rejects(fixture.store.consumeWorkflowToolApproval({ ...consume,
+    operationId: "sibling" }), /workflow_tool_approval_already_consumed/u);
+});
+
+test("reject, expiry, and cancel adopt the same exact resume authority", async () => {
+  for (const status of ["rejected", "expired", "superseded"] as const) {
+    const fixture = await approvalFixture();
+    await fixture.store.publishWorkflowToolApproval(fixture.publish);
+    const terminal = status === "rejected"
+      ? decideToolApproval(fixture.publish.approval, { expectedRevision: 1,
+          outcome: "rejected", actorId: "approver", comment: null,
+          decidedAt: "2026-08-12T00:00:01.000Z" })
+      : terminateToolApproval(fixture.publish.approval, { status,
+          expectedRevision: 1, occurredAt: "2026-08-12T00:00:01.000Z",
+          reasonCode: status === "expired" ? "approval_expired" : "run_canceled" });
+    updateSqliteToolApproval(fixture.database, fixture.publish.approval, terminal);
+    fixture.database.prepare(`UPDATE work_items SET status='leased',available_at_ms=0,
+      lease_owner_id='resume-worker',lease_id='resume-lease',lease_epoch=1,
+      lease_expires_at_ms=? WHERE work_item_id='approval-resume'`).run(nowMs + 60_000);
+    const result = await fixture.store.consumeWorkflowToolApproval({ lease: {
+      workItemId: "approval-resume", ownerId: "resume-worker", leaseId: "resume-lease",
+      leaseEpoch: 1 }, binding, authority: fixture.publish.authority,
+      operationId: `consume-${status}`, approvalId: terminal.approvalId,
+      actionDigest: terminal.actionDigest });
+    assert.equal(result.outcome?.kind, status === "superseded" ? "canceled" : "failed");
+    assert.equal(result.outcome?.authority.workItemId, "approval-resume");
+  }
+});
+
 async function admittedFixture() {
   const database = new DatabaseSync(":memory:");
   const clock = { nowEpochMilliseconds: () => nowMs };
@@ -507,6 +580,53 @@ function continuationInput(
     committedAt: now,
     terminalResult: null,
   };
+}
+
+async function approvalFixture() {
+  const fixture = await admittedFixture();
+  const continuation = continuationInput(fixture);
+  await fixture.store.commitWorkflowAssistantContinuation({ ...continuation,
+    next: { ...continuation.next, history: [...continuation.next.history, {
+      type: "tool_call" as const, callId: "approval-call", kind: "function" as const,
+      name: "filesystem.write", input: "{}" }] } });
+  fixture.database.exec("BEGIN IMMEDIATE");
+  beginSqliteRunAttempt(fixture.database, { tenantId: "tenant-1", runId: "run-1",
+    lease: fixture.lease, stepId: "approval-tool-step", kind: "tool",
+    attemptId: "approval-tool-attempt", startedAt: now });
+  fixture.database.exec("COMMIT");
+  const actionDigest = digester.sha256("approval-action");
+  const receipt = prepareToolExecutionReceipt({ receiptId: "approval-receipt",
+    tenantId: "tenant-1", runId: "run-1", stepId: "approval-tool-step",
+    attemptId: "approval-tool-attempt", workItemId: fixture.lease.workItemId,
+    executionId: "approval-execution", idempotencyKey: "approval-idempotency",
+    actionDigest, actionIntent: { schemaVersion: "crewon.action-intent.v0",
+      runId: "run-1", segmentId: `segment:${fixture.authority.attempt.attemptId}`,
+      callId: "approval-call", tool: { kind: "function", name: "filesystem.write",
+        inputDigest: digester.sha256("{}") }, effect: "mutation", recovery: "reconcilable",
+      policySnapshotId: "policy-1", workspaceBindingId: null, resourceBindingId: null,
+      credentialBindingId: null, executionTarget: { kind: "control", bindingId: "tool-binding" },
+      capability: "workspace.write", approvalRequirement: "perAction",
+      limits: { timeoutMs: 30_000, maxOutputBytes: 65_536,
+        maxArtifactBytes: 1_048_576 } }, call: {
+      segmentId: `segment:${fixture.authority.attempt.attemptId}`,
+      callId: "approval-call", kind: "function", name: "filesystem.write",
+      inputDigest: digester.sha256("{}") }, effect: "mutation", recovery: "reconcilable",
+    preparedAt: now });
+  insertSqliteToolExecutionReceipt(fixture.database, receipt);
+  const approval = createToolApproval({ approvalId: "approval-1", tenantId: "tenant-1",
+    spaceId: "space-1", runId: "run-1", receiptId: receipt.receiptId,
+    workItemId: "approval-resume", actionDigest, policySnapshotId: "policy-1",
+    requestedByActorId: "actor-1", requiredAt: now, expiresAt: null });
+  const requiredEvent = { schemaVersion: "crewon.run-event.v0" as const,
+    identity: { runId: "run-1" }, eventId: "approval-required-event", sequence: 2,
+    occurredAt: now, type: "run.approval.required" as const,
+    data: { approvalId: approval.approvalId, actionDigest } };
+  return { ...fixture, publish: { lease: fixture.lease, binding,
+    authority: fixture.authority, operationId: "publish-approval",
+    expectedContinuationRevision: 1, receipt, approval, requiredEvent,
+    approvalRecheckMs: 5_000, publicationOutbox: { messageId: "approval-publication",
+      tenantId: "tenant-1", runId: "run-1", topic: "run.events",
+      payload: { eventType: requiredEvent.type }, createdAt: now } } };
 }
 
 async function toolFixture() {
