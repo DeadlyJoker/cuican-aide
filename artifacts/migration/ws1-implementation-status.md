@@ -24,6 +24,24 @@
 - 2026-08-13 当前 UI 证据：Node 24 TypeScript lint 通过；完整 Vitest `281/281` files、`1799/1799` tests；production build
   通过。签名、notarization、updater 凭据和 Windows 实包仍是外部发布边界。
 
+### 2026-08-13 Control-only renderer 与实包收口
+
+- Provider Settings 已从旧 `ConfigRead`/`writeConfigBatch` 兼容链切出：列表与探针只走 Control，密钥 mutation 只走桌面
+  credential authority 与受监督 Worker 切换事务；探针只允许当前 active binding，结果 Provider identity 必须匹配。旧 Config、
+  Personalization、Thread Settings action ID 不再被 production Settings coordinator 识别。
+- production capability dispatcher 不再实例化 `client: null` 的文件、终端、插件、后台进程、server-request 或 panel-item handler；
+  只保留 Control Settings、Control Thread lifecycle 与统一 fail-closed。null-client 线程元数据、文件附件和能力保存组合也已移除。
+- 当前 production renderer bundle 中 `AppServerClient`、`AppServerRpcError`、`new WebSocket`、`ws://`、`6176`、`App Server`、
+  `app-server`、`save-config`、`save-personalization`、`save-thread-settings` 均为 `0`；无 legacy transport、回退文案或旧保存动作。
+- Node 24 UI lint、production build 通过；完整 Vitest 为 `282/282` files、`1807/1807` tests，更新的 Control-only 用户可见文案已有
+  既有 snapshot 覆盖。主 renderer JS 约 `650.73 kB`（gzip `190.53 kB`；既有 chunk-size warning 仍在）。
+- macOS arm64 staging 只生成四个 TS resource bundle：Control API、Provider Settings Coordinator、Runtime Release、Runtime Worker；
+  `.app` 只包含 `crewon-ui`、官方 Node 24 `f480e325...facff5` 与 `crewon-process-guardian`，不含 Rust Device、Rust App Server 或
+  Device Gateway。隔离 HOME 实包启动后 Control live/ready 均返回 `{"status":"ok"}`，Worker 与 Control 均在 guardian 监督下运行，
+  `3210` 监听、`6176` 关闭；退出 GUI 后完整进程树和 `3210` 均被清理。
+- `.app` 与 updater tarball 已成功产出；Tauri 命令最后仍因缺少 `TAURI_SIGNING_PRIVATE_KEY` 返回失败。签名、notarization、正式
+  updater 与 Windows/NSIS 实包是外部发布边界，不是 Rust 兼容工作。
+
 本文下方涉及“下一步接 Rust Device/Gateway/Native dispatcher”或“Rust compatibility 未完成”的段落只保留为历史记录，
 不再驱动当前迁移。
 
