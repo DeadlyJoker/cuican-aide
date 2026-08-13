@@ -455,6 +455,13 @@ function shellViewFromHash(): CommandShellView {
   return isShellView(value) ? value : "command";
 }
 
+function shellViewForAuthority(
+  view: CommandShellView,
+  authority: CommandWorkspaceAuthority,
+): CommandShellView {
+  return authority === "control" && view === "schedule" ? "command" : view;
+}
+
 function basename(path: string) {
   const normalized = path.replace(/\\/g, "/");
   return normalized.split("/").filter(Boolean).pop() ?? path;
@@ -602,7 +609,7 @@ export function CommandWorkspace({
   const folderInputRef = useRef<HTMLInputElement>(null);
   const lastCommandThreadIdRef = useRef<string | null>(selectedThreadId);
   const [activeView, setActiveView] = useState<CommandShellView>(() =>
-    shellViewFromHash(),
+    shellViewForAuthority(shellViewFromHash(), workspaceAuthority),
   );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
@@ -713,7 +720,9 @@ export function CommandWorkspace({
 
   useEffect(() => {
     function syncRoute() {
-      setActiveView(shellViewFromHash());
+      setActiveView(
+        shellViewForAuthority(shellViewFromHash(), workspaceAuthority),
+      );
     }
     window.addEventListener("hashchange", syncRoute);
     window.addEventListener("popstate", syncRoute);
@@ -721,7 +730,7 @@ export function CommandWorkspace({
       window.removeEventListener("hashchange", syncRoute);
       window.removeEventListener("popstate", syncRoute);
     };
-  }, []);
+  }, [workspaceAuthority]);
 
   // An office is a long-lived chat inside one workspace, so switching the
   // workspace must close whatever room is open.
@@ -1586,14 +1595,15 @@ export function CommandWorkspace({
   }
 
   function switchView(view: CommandShellView) {
+    const nextView = shellViewForAuthority(view, workspaceAuthority);
     setOpenPalette(null);
     setPaletteQuery("");
-    setActiveView(view);
+    setActiveView(nextView);
     if (typeof window !== "undefined") {
       window.history.replaceState(
         null,
         "",
-        `${window.location.pathname}${window.location.search}#view-${view}`,
+        `${window.location.pathname}${window.location.search}#view-${nextView}`,
       );
     }
   }
@@ -2998,19 +3008,21 @@ export function CommandWorkspace({
             snapshot={platformSnapshot}
             onReload={reloadPlatformResources}
           />
-          <ScheduleView
-            active={activeView === "schedule"}
-            client={scheduleClient}
-            cwd={cwd}
-            modalOpen={scheduleModalOpen}
-            scheduleMode={scheduleMode}
-            scheduleSource={scheduleSource}
-            onCloseModal={() => setScheduleModalOpen(false)}
-            onModeChange={setScheduleMode}
-            onOpenModal={() => setScheduleModalOpen(true)}
-            onSourceChange={setScheduleSource}
-            onOpenThread={onSelectLinkedThread}
-          />
+          {workspaceAuthority === "legacy" ? (
+            <ScheduleView
+              active={activeView === "schedule"}
+              client={scheduleClient}
+              cwd={cwd}
+              modalOpen={scheduleModalOpen}
+              scheduleMode={scheduleMode}
+              scheduleSource={scheduleSource}
+              onCloseModal={() => setScheduleModalOpen(false)}
+              onModeChange={setScheduleMode}
+              onOpenModal={() => setScheduleModalOpen(true)}
+              onSourceChange={setScheduleSource}
+              onOpenThread={onSelectLinkedThread}
+            />
+          ) : null}
           <TeamView
             active={activeView === "team"}
             officeRuntime={officeRuntime}

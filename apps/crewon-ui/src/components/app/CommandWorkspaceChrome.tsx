@@ -339,6 +339,10 @@ export function CommandSidebar({
       .toLowerCase()
       .includes(query.trim().toLowerCase()),
   );
+  const visibleShellNavItems =
+    workspaceAuthority === "control"
+      ? shellNavItems.filter((item) => item.key !== "schedule")
+      : shellNavItems;
 
   function activateSearchResult(item: SidebarSearchResult) {
     if (item.action === "thread") {
@@ -414,7 +418,7 @@ export function CommandSidebar({
       </a>
 
       <nav className="sidebar-nav" data-od-id="desktop-nav">
-        {shellNavItems.map((item) => (
+        {visibleShellNavItems.map((item) => (
           <button
             aria-current={activeView === item.key ? "page" : undefined}
             className={classNames(activeView === item.key && "active")}

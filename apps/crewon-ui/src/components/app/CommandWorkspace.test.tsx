@@ -842,6 +842,8 @@ describe("CommandWorkspace", () => {
       hasNoWorkspace: markup.includes("No workspace"),
       hasSafeDisplayName: markup.includes("safe-project"),
       hasNativeSelectIntent: markup.includes("__select_native_workspace__"),
+      hasScheduleNav: markup.includes("<strong>Schedule</strong>"),
+      hasScheduleView: markup.includes('data-shell-view="schedule"'),
       hasTasksTree: markup.includes('aria-label="Tasks and conversations"'),
       hasTask: markup.includes("Control task"),
     }).toEqual({
@@ -852,6 +854,8 @@ describe("CommandWorkspace", () => {
       hasNoWorkspace: true,
       hasSafeDisplayName: true,
       hasNativeSelectIntent: true,
+      hasScheduleNav: false,
+      hasScheduleView: false,
       hasTasksTree: true,
       hasTask: true,
     });
