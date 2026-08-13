@@ -5,27 +5,22 @@ import type { AgentPlatformUser } from "../agent-platform/agentPlatformSession";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
 import {
-  handleModelProviderAction,
-  modelProviderActionForActionId,
-  refreshModelProvidersPanelAction,
-} from "../model-provider/modelProviderActions";
+  controlModelProviderActionForActionId,
+  handleControlModelProviderAction,
+  refreshControlModelProvidersPanel,
+} from "../model-provider/controlModelProviderActions";
 import {
   providerCredentialStore,
   type ProviderCredentialStorePort,
 } from "../model-provider/providerCredentialStore";
 import type { NoticeState } from "../shared/noticeState";
 import { trimmedPanelFieldValue } from "../shared/panelState";
-import {
-  settingsRefreshActionForActionId,
-  settingsSaveActionForActionId,
-  type SettingsSectionRefreshHandlers,
-} from "../settings/settingsActions";
+import type { SettingsSectionRefreshHandlers } from "../settings/settingsActions";
 import { controlSettingsUnavailablePanel } from "../settings/controlSettingsAdapter";
 import {
   SETTINGS_SECTIONS,
   type SettingsSection,
 } from "../settings/settingsCatalog";
-import { threadSettingsActionForActionId } from "../thread/threadSettingsActions";
 import type { Theme } from "../theme";
 
 type ControlSettingsClient = Pick<
@@ -145,19 +140,16 @@ export function createAppSettingsCoordinator(
     });
 
   const modelProviderParams = () => ({
-    client: null,
-    controlClient: params.client,
+    client: params.client,
     credentialStore,
     fieldValue: (fieldId: string) =>
       trimmedPanelFieldValue(params.getCapabilityPanel(), fieldId),
-    isConnected: true,
     locale: params.locale,
-    resolveBackendCwd: async () => null,
     setCapabilityPanel: params.setCapabilityPanel,
   });
 
   const refreshModelProviders = () =>
-    refreshModelProvidersPanelAction(modelProviderParams());
+    refreshControlModelProvidersPanel(modelProviderParams());
 
   const refreshSection = async (section: SettingsSection) => {
     switch (section) {
@@ -256,9 +248,10 @@ export function createAppSettingsCoordinator(
   return {
     commitField,
     handleAction: (actionId) => {
-      const modelProviderAction = modelProviderActionForActionId(actionId);
+      const modelProviderAction =
+        controlModelProviderActionForActionId(actionId);
       if (modelProviderAction) {
-        handleModelProviderAction(
+        handleControlModelProviderAction(
           modelProviderParams(),
           modelProviderAction.action,
           modelProviderAction.providerId,
@@ -275,14 +268,6 @@ export function createAppSettingsCoordinator(
       }
       if (actionId === "refresh-model-providers") {
         void refreshModelProviders();
-        return true;
-      }
-      if (
-        settingsRefreshActionForActionId(actionId) !== null ||
-        settingsSaveActionForActionId(actionId) !== null ||
-        threadSettingsActionForActionId(actionId) !== null
-      ) {
-        params.setNotice(unavailableNotice(params.locale));
         return true;
       }
       return false;

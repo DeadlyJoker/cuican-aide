@@ -157,13 +157,15 @@ describe("Control settings coordinator", () => {
     );
   });
 
-  it("fails closed for unsupported fields and stale legacy save actions", async () => {
+  it("fails closed for unsupported fields and does not recognize removed actions", async () => {
     const harness = createHarness();
     await harness.coordinator.commitField("appearance-accent", "#ff0000");
 
     expect(harness.client.putLocalSettings).not.toHaveBeenCalled();
-    expect(harness.coordinator.handleAction("save-config")).toBe(true);
-    expect(harness.coordinator.handleAction("save-thread-settings")).toBe(true);
+    expect(harness.coordinator.handleAction("save-config")).toBe(false);
+    expect(harness.coordinator.handleAction("save-thread-settings")).toBe(
+      false,
+    );
     expect(harness.setNotice).toHaveBeenCalledWith(
       expect.objectContaining({ tone: "warning" }),
     );
