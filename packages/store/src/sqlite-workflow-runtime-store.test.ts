@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import type { WorkflowRuntimeStore } from "@crewon/application";
+import type { WorkflowRuntimeStore, WorkflowToolApprovalStore } from "@crewon/application";
 
 import { SqliteRunStore } from "./sqlite-run-store.ts";
 import { SqliteWorkflowRunCompositionStore } from "./sqlite-workflow-run-composition-store.ts";
@@ -18,6 +18,11 @@ test("SqliteRunStore is the single compile-time WorkflowRuntimeStore identity", 
   assert.equal(authority, store);
   assert.equal(authority.prepareModelDispatch, store.prepareModelDispatch);
   assert.equal(authority.commitWorkflowRunStart, store.commitWorkflowRunStart);
+  const approvals: WorkflowToolApprovalStore = store;
+  assert.equal(approvals.publishWorkflowToolApproval,
+    store.publishWorkflowToolApproval);
+  assert.equal(approvals.consumeWorkflowToolApproval,
+    store.consumeWorkflowToolApproval);
   await store.close();
 });
 

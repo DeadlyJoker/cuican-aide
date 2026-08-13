@@ -174,6 +174,7 @@ import {
   type WorkflowNodeContinuationStore,
   type WorkflowRunCompositionStore,
   type WorkflowRuntimeStore,
+  type WorkflowToolApprovalStore,
   type CommitKnowledgeInput,
   type KnowledgeCreateResult,
   type KnowledgeListQuery,
@@ -543,7 +544,8 @@ type AutomationRow = Readonly<{
   updated_at: string;
 }>;
 
-export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
+export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
+  WorkflowToolApprovalStore {
   readonly #database: DatabaseSync;
   readonly #clock: LeaseClock;
   readonly #workflowDigester: WorkflowContentDigester | null;
@@ -562,6 +564,16 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore {
 
   async loadWorkflowExecution(input: { tenantId: string; runId: string }) {
     return this.#workflow().loadWorkflowExecution(input);
+  }
+  async publishWorkflowToolApproval(
+    input: Parameters<WorkflowToolApprovalStore["publishWorkflowToolApproval"]>[0],
+  ): ReturnType<WorkflowToolApprovalStore["publishWorkflowToolApproval"]> {
+    return this.#workflow().publishWorkflowToolApproval(input);
+  }
+  async consumeWorkflowToolApproval(
+    input: Parameters<WorkflowToolApprovalStore["consumeWorkflowToolApproval"]>[0],
+  ): ReturnType<WorkflowToolApprovalStore["consumeWorkflowToolApproval"]> {
+    return this.#workflow().consumeWorkflowToolApproval(input);
   }
 
   async scheduleWorkflowNodes(
