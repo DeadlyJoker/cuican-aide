@@ -155,18 +155,25 @@ export function settingsSectionLabel(
   if (section === "account") {
     return locale === "zh" ? "账号" : "Account";
   }
-  const item = settingsCatalogItem(section);
-  return item
-    ? sidebarCopy[locale][item.labelKey]
-    : locale === "zh"
-      ? "设置"
-      : "Settings";
+  const labelKeys: Record<Exclude<SettingsSection, "account">, SettingsCopyKey> = {
+    appearance: "appearance",
+    "app-snapshots": "appSnapshots",
+    browser: "browser",
+    "computer-control": "computerControl",
+    config: "config",
+    connections: "connections",
+    environment: "environment",
+    git: "git",
+    hooks: "hooks",
+    keyboard: "keyboard",
+    "mcp-servers": "mcpServers",
+    "model-providers": "modelProviders",
+    personalization: "personalization",
+    worktrees: "worktrees",
+  };
+  return sidebarCopy[locale][labelKeys[section]];
 }
 
-/**
- * Appearance writes one flat `desktop.*` key per control. Listing them here is
- * what lets commitSettingsFieldAction persist each field without special cases.
- */
 const APPEARANCE_CONFIG_FIELDS = [
   {
     fieldId: "appearance-locale",
@@ -180,78 +187,6 @@ const APPEARANCE_CONFIG_FIELDS = [
     valueKind: "select",
     writeActionId: "save-appearance",
   },
-  {
-    fieldId: "appearance-accent",
-    configPath: "desktop.appearanceAccent",
-    valueKind: "string",
-    writeActionId: "save-appearance",
-  },
-  {
-    fieldId: "appearance-background",
-    configPath: "desktop.appearanceBackground",
-    valueKind: "string",
-    writeActionId: "save-appearance",
-  },
-  {
-    fieldId: "appearance-foreground",
-    configPath: "desktop.appearanceForeground",
-    valueKind: "string",
-    writeActionId: "save-appearance",
-  },
-  {
-    fieldId: "appearance-ui-font",
-    configPath: "desktop.uiFontFamily",
-    valueKind: "string",
-    writeActionId: "save-appearance",
-  },
-  {
-    fieldId: "appearance-code-font",
-    configPath: "desktop.codeFontFamily",
-    valueKind: "string",
-    writeActionId: "save-appearance",
-  },
-  {
-    fieldId: "appearance-ui-font-size",
-    configPath: "desktop.uiFontSize",
-    valueKind: "string",
-    writeActionId: "save-appearance",
-  },
-  {
-    fieldId: "appearance-code-font-size",
-    configPath: "desktop.codeFontSize",
-    valueKind: "string",
-    writeActionId: "save-appearance",
-  },
-  {
-    fieldId: "appearance-contrast",
-    configPath: "desktop.appearanceContrast",
-    valueKind: "string",
-    writeActionId: "save-appearance",
-  },
-  {
-    fieldId: "appearance-reduce-motion",
-    configPath: "desktop.reduceMotion",
-    valueKind: "select",
-    writeActionId: "save-appearance",
-  },
-  {
-    fieldId: "appearance-diff-markers",
-    configPath: "desktop.diffMarkers",
-    valueKind: "select",
-    writeActionId: "save-appearance",
-  },
-  {
-    fieldId: "appearance-translucent-sidebar",
-    configPath: "desktop.translucentSidebar",
-    valueKind: "string",
-    writeActionId: "save-appearance",
-  },
-  {
-    fieldId: "appearance-font-smoothing",
-    configPath: "desktop.fontSmoothing",
-    valueKind: "string",
-    writeActionId: "save-appearance",
-  },
 ] as const satisfies readonly SettingsConfigField[];
 
 export const settingsCatalog = [
@@ -259,15 +194,6 @@ export const settingsCatalog = [
     id: "personal",
     labelKey: "personal",
     items: [
-      /*
-       * Listed before the general page because nothing else in the app works
-       * until a provider is reachable, and until now this could only be set up
-       * by hand-editing config.toml.
-       *
-       * `mode: "action"` because the panel manages a list of providers through
-       * its own actions rather than mapping one field to one config key, so it
-       * has no `fields` binding for commitSettingsFieldAction to drive.
-       */
       {
         id: "model-providers",
         labelKey: "modelProviders",
@@ -280,40 +206,6 @@ export const settingsCatalog = [
         backend: {
           refreshTarget: "model-providers",
           scope: "workspace",
-        },
-      },
-      {
-        id: "config",
-        labelKey: "general",
-        icon: "sliders-horizontal",
-        mode: "editable",
-        description: {
-          zh: "默认模型、审批策略与本地权限边界",
-          en: "Default model, approval policy, and local permissions",
-        },
-        backend: {
-          refreshTarget: "config",
-          scope: "workspace",
-          fields: [
-            {
-              fieldId: "config-model",
-              configPath: "model",
-              valueKind: "string",
-              writeActionId: "save-config",
-            },
-            {
-              fieldId: "config-approval-policy",
-              configPath: "approval_policy",
-              valueKind: "string",
-              writeActionId: "save-config",
-            },
-            {
-              fieldId: "config-sandbox-mode",
-              configPath: "sandbox_mode",
-              valueKind: "string",
-              writeActionId: "save-config",
-            },
-          ],
         },
       },
       {
@@ -332,40 +224,6 @@ export const settingsCatalog = [
         },
       },
       {
-        id: "personalization",
-        labelKey: "personalization",
-        icon: "sparkles",
-        mode: "editable",
-        description: {
-          zh: "角色、原则与长期记忆行为",
-          en: "Role, principles, and long-term memory behavior",
-        },
-        backend: {
-          refreshTarget: "personalization-settings",
-          scope: "desktop",
-          fields: [
-            {
-              fieldId: "personalization-instructions",
-              configPath: "instructions",
-              valueKind: "string",
-              writeActionId: "save-personalization",
-            },
-            {
-              fieldId: "personalization-developer-instructions",
-              configPath: "developer_instructions",
-              valueKind: "string",
-              writeActionId: "save-personalization",
-            },
-            {
-              fieldId: "personalization-memory-mode",
-              configPath: "features.memories",
-              valueKind: "select",
-              writeActionId: "save-personalization",
-            },
-          ],
-        },
-      },
-      {
         id: "account",
         labelKey: "general",
         icon: "shield-check",
@@ -377,90 +235,6 @@ export const settingsCatalog = [
         backend: {
           refreshTarget: "account",
           scope: "account",
-        },
-      },
-    ],
-  },
-  {
-    id: "integrations",
-    labelKey: "integrations",
-    items: [
-      {
-        id: "mcp-servers",
-        labelKey: "mcpServers",
-        icon: "bot",
-        mode: "action",
-        description: {
-          zh: "已连接的 MCP 服务、工具与重载状态",
-          en: "Connected MCP services, tools, and reload status",
-        },
-        backend: {
-          refreshTarget: "mcp-settings",
-          scope: "integration",
-        },
-      },
-      {
-        id: "browser",
-        labelKey: "browser",
-        icon: "globe",
-        mode: "status",
-        description: {
-          zh: "当前可用的浏览器应用与授权范围",
-          en: "Available browser apps and authorization scope",
-        },
-        backend: {
-          refreshTarget: "browser-settings",
-          scope: "integration",
-        },
-      },
-      {
-        id: "computer-control",
-        labelKey: "computerControl",
-        icon: "terminal-square",
-        mode: "action",
-        description: {
-          zh: "远程控制、设备配对与撤销",
-          en: "Remote control, device pairing, and revocation",
-        },
-        backend: {
-          refreshTarget: "computer-control-settings",
-          scope: "integration",
-          fields: [
-            {
-              fieldId: "remote-control-revoke-client",
-              configPath: "remote_control.clients[].client_id",
-              valueKind: "string",
-              writeActionId: "revoke-remote-client",
-            },
-          ],
-        },
-      },
-      {
-        id: "connections",
-        labelKey: "connections",
-        icon: "globe",
-        mode: "status",
-        description: {
-          zh: "账号、Provider、插件与应用连接总览",
-          en: "Account, provider, plugin, and app connection overview",
-        },
-        backend: {
-          refreshTarget: "connections-settings",
-          scope: "integration",
-        },
-      },
-      {
-        id: "environment",
-        labelKey: "environment",
-        icon: "terminal-square",
-        mode: "status",
-        description: {
-          zh: "沙箱、策略约束与运行时就绪状态",
-          en: "Sandbox, policy constraints, and runtime readiness",
-        },
-        backend: {
-          refreshTarget: "environment-settings",
-          scope: "runtime",
         },
       },
     ],

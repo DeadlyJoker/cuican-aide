@@ -68,7 +68,7 @@ describe("app view actions", () => {
       capabilityDockOpen: false,
       capabilityPanel: null,
       inspectorOpen: false,
-      settingsSection: "config",
+      settingsSection: "appearance",
     });
     expect(refreshDefaultSettingsPanel).toHaveBeenCalledOnce();
   });
@@ -91,7 +91,7 @@ describe("app view actions", () => {
       setSettingsSection: () => {},
     });
 
-    expect(capabilityPanel).toEqual({ title: "Demo config" });
+    expect(capabilityPanel).toEqual({ title: "Demo appearance" });
     expect(refreshDefaultSettingsPanel).not.toHaveBeenCalled();
   });
 

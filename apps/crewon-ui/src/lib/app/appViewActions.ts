@@ -45,12 +45,14 @@ export function openSettingsAction(params: {
   setInspectorOpen: BooleanSetter;
   setSettingsSection: SettingsSectionSetter;
 }): void {
-  params.setSettingsSection("config");
+  params.setSettingsSection("appearance");
   params.setAppView("settings");
   params.setCapabilityDockOpen(false);
   params.setInspectorOpen(false);
   if (params.isDemo) {
-    params.setCapabilityPanel(params.demoSettingsPanel("config", params.locale));
+    params.setCapabilityPanel(
+      params.demoSettingsPanel("appearance", params.locale),
+    );
     return;
   }
   void params.refreshDefaultSettingsPanel();
