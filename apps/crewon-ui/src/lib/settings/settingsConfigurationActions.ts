@@ -2,10 +2,7 @@ import type { ConfigReadResponse } from "@crewon-protocol/v2/ConfigReadResponse"
 import type { ConfigRequirementsReadResponse } from "@crewon-protocol/v2/ConfigRequirementsReadResponse";
 import type { ModelListResponse } from "@crewon-protocol/v2/ModelListResponse";
 
-import {
-  settledErrorMessages,
-  settledValue,
-} from "../shared/settledResults";
+import { settledErrorMessages, settledValue } from "../shared/settledResults";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
 import type { OperatingSystem, RuntimeSurface } from "../platform";
@@ -28,6 +25,7 @@ import {
   personalizationPanel,
 } from "./settingsPanelText";
 import type { Theme } from "../theme";
+import type { ControlApiClient } from "@crewon/control-client";
 
 type SettingsConfigurationClient = {
   listModels(): Promise<ModelListResponse>;
@@ -43,6 +41,7 @@ type SetCapabilityPanel = (
 ) => void;
 
 type BaseSettingsConfigurationParams = {
+  controlClient?: Pick<ControlApiClient, "getLocalSettings"> | null;
   client: SettingsConfigurationClient | null | undefined;
   connectionHint: string;
   isConnected: boolean;
@@ -64,7 +63,8 @@ export type RefreshAppearanceSettingsPanelParams =
 export type RefreshPersonalizationSettingsPanelParams =
   BaseSettingsConfigurationParams;
 
-export type RefreshKeyboardSettingsPanelParams = BaseSettingsConfigurationParams;
+export type RefreshKeyboardSettingsPanelParams =
+  BaseSettingsConfigurationParams;
 
 export async function refreshConfigPanelAction(
   params: RefreshConfigPanelParams,
@@ -123,7 +123,7 @@ export async function refreshAppearanceSettingsPanelAction(
   params: RefreshAppearanceSettingsPanelParams,
 ) {
   const {
-    client,
+    controlClient,
     connectionHint,
     currentLocale,
     currentTheme,
@@ -140,26 +140,31 @@ export async function refreshAppearanceSettingsPanelAction(
     return;
   }
 
-  const configCwd = await resolveBackendCwd();
-  setCapabilityPanel(appearanceLoadingPanel(configCwd ?? null, locale));
+  setCapabilityPanel(appearanceLoadingPanel(null, locale));
 
   try {
-    const configRead = (await client?.readConfig(configCwd ?? null)) ?? null;
+    if (controlClient == null) throw new Error("local_settings_unavailable");
+    const { settings } = await controlClient.getLocalSettings();
+    const configRead = {
+      config: {
+        desktop: { uiLocale: settings.locale, appearanceTheme: settings.theme },
+      },
+      layers: [],
+      origins: {},
+    } as unknown as import("@crewon-protocol/v2/ConfigReadResponse").ConfigReadResponse;
     setCapabilityPanel(
       appearancePanel({
         configRead,
         currentLocale,
         currentTheme,
-        cwd: configCwd ?? null,
+        cwd: null,
         locale,
         os,
         surface,
       }),
     );
   } catch (error) {
-    setCapabilityPanel(
-      appearanceErrorPanel({ cwd: configCwd ?? null, error, locale }),
-    );
+    setCapabilityPanel(appearanceErrorPanel({ cwd: null, error, locale }));
   }
 }
 
@@ -176,7 +181,9 @@ export async function refreshPersonalizationSettingsPanelAction(
   } = params;
 
   if (!isConnected) {
-    setCapabilityPanel(personalizationDisconnectedPanel(connectionHint, locale));
+    setCapabilityPanel(
+      personalizationDisconnectedPanel(connectionHint, locale),
+    );
     return;
   }
 

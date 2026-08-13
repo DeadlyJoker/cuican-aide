@@ -1,7 +1,5 @@
 import type { Locale } from "../i18n";
-import {
-  createAppSettingsSaveHandlers,
-} from "../capability/appCapabilityPanelActions";
+import { createAppSettingsSaveHandlers } from "../capability/appCapabilityPanelActions";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import {
   createAppSettingsRefreshHandlers,
@@ -34,11 +32,13 @@ export function createAppSettingsCoordinator(
 
   return {
     ...settingsRefreshBundle,
-    settingsRefreshHandlers:
-      createSettingsRefreshHandlers(settingsRefreshBundle),
+    settingsRefreshHandlers: createSettingsRefreshHandlers(
+      settingsRefreshBundle,
+    ),
     settingsSaveHandlers: createAppSettingsSaveHandlers({
       capabilityPanel: params.capabilityPanel,
       client: params.client,
+      controlClient: params.controlClient,
       isConnected: params.isConnected,
       locale: params.locale,
       persistLocale: params.persistLocale,
@@ -51,7 +51,8 @@ export function createAppSettingsCoordinator(
       setTheme: params.setTheme,
       theme: params.theme,
     }),
-    settingsSectionRefreshHandlers:
-      createSettingsSectionRefreshHandlers(settingsRefreshBundle),
+    settingsSectionRefreshHandlers: createSettingsSectionRefreshHandlers(
+      settingsRefreshBundle,
+    ),
   };
 }

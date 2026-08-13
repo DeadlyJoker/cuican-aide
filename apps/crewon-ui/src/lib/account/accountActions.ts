@@ -12,10 +12,8 @@ import type { AccountStatus } from "../shared/statusTypes";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
 import type { ConnectionState } from "../shared/connectionState";
-import {
-  settledErrorMessages,
-  settledValue,
-} from "../shared/settledResults";
+import type { ControlApiClient } from "@crewon/control-client";
+import { settledErrorMessages, settledValue } from "../shared/settledResults";
 import {
   accountAuthErrorPanel,
   accountChatGptLoginPanel,
@@ -30,7 +28,11 @@ import {
   workspaceCapabilitiesText,
 } from "./accountSummaryText";
 
-export type AccountAction = "loginChatGpt" | "loginDeviceCode" | "logout" | "refresh";
+export type AccountAction =
+  | "loginChatGpt"
+  | "loginDeviceCode"
+  | "logout"
+  | "refresh";
 
 type AccountClient = {
   getAccount(): Promise<AccountStatus>;
@@ -45,9 +47,7 @@ type AccountRefreshClient = {
   getAuthStatus(): Promise<GetAuthStatusResponse>;
   getModelProviderCapabilities(): Promise<ModelProviderCapabilitiesReadResponse>;
   listModels(): Promise<ModelListResponse>;
-  listPermissionProfiles(
-    cwd?: string,
-  ): Promise<PermissionProfileListResponse>;
+  listPermissionProfiles(cwd?: string): Promise<PermissionProfileListResponse>;
 };
 
 export type AccountActionHandlersParams = {
@@ -60,6 +60,7 @@ export type AccountActionHandlersParams = {
 };
 
 export type RefreshAccountPanelActionParams = {
+  controlClient?: Pick<ControlApiClient, "getLocalSettings"> | null;
   client: AccountRefreshClient | null | undefined;
   connectionHint: string;
   connectionState: ConnectionState;
@@ -72,7 +73,9 @@ export type RefreshAccountPanelActionParams = {
   setCapabilityPanel: (panel: CapabilityPanel) => void;
 };
 
-export function accountActionForActionId(actionId: string): AccountAction | null {
+export function accountActionForActionId(
+  actionId: string,
+): AccountAction | null {
   switch (actionId) {
     case "login-chatgpt":
       return "loginChatGpt";
@@ -102,6 +105,7 @@ export function createAccountActionHandlers(
 }
 
 export async function refreshAccountPanelAction({
+  controlClient,
   client,
   connectionHint,
   connectionState,
@@ -113,6 +117,44 @@ export async function refreshAccountPanelAction({
   setAccountStatus,
   setCapabilityPanel,
 }: RefreshAccountPanelActionParams) {
+  if (controlClient != null) {
+    try {
+      const { settings } = await controlClient.getLocalSettings();
+      setCapabilityPanel({
+        title: locale === "zh" ? "账号" : "Account",
+        subtitle:
+          locale === "zh"
+            ? "CrewON 身份与本机偏好"
+            : "CrewON identity and local preferences",
+        body: [
+          platformUser?.display_name ??
+            platformUser?.nickname ??
+            platformUser?.username ??
+            platformUser?.email ??
+            (locale === "zh" ? "未登录企业账号" : "No enterprise account"),
+          platformUser?.email
+            ? `${locale === "zh" ? "邮箱" : "Email"}: ${platformUser.email}`
+            : null,
+          `${locale === "zh" ? "语言" : "Language"}: ${settings.locale}`,
+          `${locale === "zh" ? "主题" : "Theme"}: ${settings.theme}`,
+          locale === "zh"
+            ? "本页不再连接 App Server；模型凭据在“模型接入”中管理。"
+            : "This page no longer connects to App Server; model credentials are managed under Model access.",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        actions: [
+          {
+            id: "refresh-account",
+            label: locale === "zh" ? "刷新" : "Refresh",
+          },
+        ],
+      });
+    } catch (error) {
+      setCapabilityPanel(accountReadErrorPanel(error, locale));
+    }
+    return;
+  }
   if (!isConnected) {
     setCapabilityPanel(
       accountDisconnectedPanel(

@@ -123,6 +123,28 @@ describe("settings save actions", () => {
     const persistedThemes: Theme[] = [];
     let refreshes = 0;
     const handlers = createSettingsSaveHandlers({
+      controlClient: {
+        async getLocalSettings() {
+          return {
+            settings: {
+              locale: "en" as const,
+              theme: "light" as const,
+              revision: 1,
+              updatedAt: null,
+            },
+          };
+        },
+        async putLocalSettings(input) {
+          return {
+            settings: {
+              locale: input.locale,
+              theme: input.theme,
+              revision: 2,
+              updatedAt: null,
+            },
+          };
+        },
+      },
       client: {
         async writeConfigBatch() {
           return { status: "ok", version: 2 };
@@ -164,7 +186,7 @@ describe("settings save actions", () => {
     expect(persistedThemes).toEqual(["dark"]);
     expect(refreshes).toBe(1);
     expect(panel).toMatchObject({
-      body: "Appearance saved\nversion: 2\nstatus: ok",
+      body: "Appearance saved\nversion: -\nstatus: ok",
       error: undefined,
     });
   });

@@ -52,6 +52,7 @@ import {
 } from "./provider-probe-worker-client.ts";
 import { LoopbackRuntimeWorkspaceWorkerClient } from "./workspace-runtime-worker-client.ts";
 import type { ProcessLocalActivationGate } from "./paused-admission.ts";
+import { LocalSettingsStore } from "./local-settings-store.ts";
 
 type ControlApiCompositionConfig = Readonly<{
   actor: ActorContext;
@@ -109,7 +110,8 @@ export function createStandaloneControlApi(
   const store = new SqliteRunStore(config.databasePath, {
     workflowDigester: new NodeSha256ContentDigester(),
   });
-  return composeControlApi(store, config);
+  const localSettings = new LocalSettingsStore(config.databasePath);
+  return composeControlApi(store, config, localSettings);
 }
 
 export async function createPostgresControlApi(
@@ -132,6 +134,7 @@ export async function createPostgresControlApi(
 function composeControlApi(
   store: ControlDomainStore,
   config: ControlApiCompositionConfig,
+  localSettings: LocalSettingsStore | null = null,
 ): StandaloneControlApiRuntime {
   const eventHub = new RunEventHub();
   const ids = new UuidV7ApplicationIdGenerator();
@@ -281,6 +284,7 @@ function composeControlApi(
       authorization,
     });
     const app = buildControlApi({
+      localSettings,
       application,
       offices,
       threads,
@@ -352,6 +356,7 @@ function composeControlApi(
       await workspaceWorker?.close();
       await config.artifactStore.close();
       await store.close();
+      localSettings?.close();
     });
     return {
       app,

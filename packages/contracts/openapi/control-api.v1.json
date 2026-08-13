@@ -7,6 +7,57 @@
   "servers": [{ "url": "/" }],
   "security": [{ "sessionCookie": [] }, { "mobileBearer": [] }],
   "paths": {
+    "/api/v1/local-settings": {
+      "get": {
+        "operationId": "getLocalSettings",
+        "responses": {
+          "200": {
+            "description": "Device-local account and appearance settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalSettingsResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "put": {
+        "operationId": "putLocalSettings",
+        "parameters": [{ "$ref": "#/components/parameters/RequiredCsrfToken" }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutLocalSettingsRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Updated device-local settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocalSettingsResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/api/v1/model-provider-settings": {
       "get": {
         "operationId": "getModelProviderSettings",
@@ -2222,6 +2273,35 @@
       }
     },
     "schemas": {
+      "LocalSettings": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["locale", "theme", "revision", "updatedAt"],
+        "properties": {
+          "locale": { "type": "string", "enum": ["en", "zh"] },
+          "theme": { "type": "string", "enum": ["dark", "light"] },
+          "revision": { "type": "integer", "minimum": 0 },
+          "updatedAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "LocalSettingsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["settings"],
+        "properties": {
+          "settings": { "$ref": "#/components/schemas/LocalSettings" }
+        }
+      },
+      "PutLocalSettingsRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["locale", "theme", "expectedRevision"],
+        "properties": {
+          "locale": { "type": "string", "enum": ["en", "zh"] },
+          "theme": { "type": "string", "enum": ["dark", "light"] },
+          "expectedRevision": { "type": "integer", "minimum": 0 }
+        }
+      },
       "OfficeMember": {
         "type": "object",
         "additionalProperties": false,

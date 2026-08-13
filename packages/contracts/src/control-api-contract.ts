@@ -4,6 +4,11 @@ import { ContractValidationError } from "./contract-validation-error.ts";
 
 export type ControlApiPaths = paths;
 export type ControlApiOperations = operations;
+export type LocalSettings = components["schemas"]["LocalSettings"];
+export type LocalSettingsResponse =
+  components["schemas"]["LocalSettingsResponse"];
+export type PutLocalSettingsRequest =
+  components["schemas"]["PutLocalSettingsRequest"];
 export type ModelProviderBindingView =
   components["schemas"]["ModelProviderBindingView"];
 export type ModelProviderSettingsSnapshot =

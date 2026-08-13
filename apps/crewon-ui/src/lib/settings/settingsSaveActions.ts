@@ -14,6 +14,7 @@ import {
   settingsSaveSuccessPanel,
 } from "./settingsSavePayloads";
 import type { Theme } from "../theme";
+import type { ControlApiClient } from "@crewon/control-client";
 
 type SettingsSaveClient = {
   writeConfigBatch(
@@ -26,6 +27,10 @@ type SetCapabilityPanel = (
 ) => void;
 
 export type SettingsSaveHandlersParams = {
+  controlClient?: Pick<
+    ControlApiClient,
+    "getLocalSettings" | "putLocalSettings"
+  > | null;
   client: SettingsSaveClient | null | undefined;
   fieldValue: (fieldId: string) => string;
   isConnected: boolean;
@@ -52,7 +57,8 @@ export function createSettingsSaveHandlers(
 }
 
 function saveConfigSettings(params: SettingsSaveHandlersParams) {
-  const { client, fieldValue, isConnected, locale, setCapabilityPanel } = params;
+  const { client, fieldValue, isConnected, locale, setCapabilityPanel } =
+    params;
   const edits = buildConfigEdits(fieldValue);
 
   if (!isConnected || edits.length === 0) {
@@ -87,7 +93,7 @@ function saveConfigSettings(params: SettingsSaveHandlersParams) {
 
 function saveAppearanceSettings(params: SettingsSaveHandlersParams) {
   const {
-    client,
+    controlClient,
     fieldValue,
     isConnected,
     locale,
@@ -98,13 +104,13 @@ function saveAppearanceSettings(params: SettingsSaveHandlersParams) {
     setTheme,
     theme,
   } = params;
-  const { edits, nextLocale, nextTheme } = buildAppearanceEdits(
+  const { nextLocale, nextTheme } = buildAppearanceEdits(
     fieldValue,
     locale,
     theme,
   );
 
-  if (!isConnected) {
+  if (!isConnected || controlClient == null) {
     setCapabilityPanel((currentPanel) =>
       settingsDisconnectedPanel(currentPanel, locale),
     );
@@ -117,7 +123,13 @@ function saveAppearanceSettings(params: SettingsSaveHandlersParams) {
     );
 
     try {
-      const response = await client?.writeConfigBatch(edits);
+      if (controlClient == null) throw new Error("local_settings_unavailable");
+      const current = await controlClient.getLocalSettings();
+      await controlClient.putLocalSettings({
+        locale: nextLocale === "en" ? "en" : "zh",
+        theme: nextTheme === "dark" ? "dark" : "light",
+        expectedRevision: current.settings.revision,
+      });
       if (nextLocale === "zh" || nextLocale === "en") {
         setLocale(nextLocale);
         persistLocale(nextLocale);
@@ -130,7 +142,7 @@ function saveAppearanceSettings(params: SettingsSaveHandlersParams) {
         settingsSaveSuccessPanel(currentPanel, {
           kind: "appearance",
           locale,
-          response,
+          response: null,
         }),
       );
       await params.refreshAppearanceSettingsPanel();
@@ -143,7 +155,8 @@ function saveAppearanceSettings(params: SettingsSaveHandlersParams) {
 }
 
 function savePersonalizationSettings(params: SettingsSaveHandlersParams) {
-  const { client, fieldValue, isConnected, locale, setCapabilityPanel } = params;
+  const { client, fieldValue, isConnected, locale, setCapabilityPanel } =
+    params;
   const edits = buildPersonalizationEdits(fieldValue);
 
   if (!isConnected) {

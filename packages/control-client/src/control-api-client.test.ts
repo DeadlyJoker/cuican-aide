@@ -8,6 +8,42 @@ import {
   ControlApiProtocolError,
 } from "./control-api-client.ts";
 
+test("reads and updates device-local settings through the typed client", async () => {
+  const requests: Array<{ input: string; init: RequestInit }> = [];
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    csrfToken: "csrf",
+    fetch: async (input, init = {}) => {
+      requests.push({ input: String(input), init });
+      return jsonResponse(200, {
+        settings: {
+          locale: "zh",
+          theme: "light",
+          revision: requests.length - 1,
+          updatedAt: null,
+        },
+      });
+    },
+  });
+  await client.getLocalSettings();
+  await client.putLocalSettings({
+    locale: "en",
+    theme: "dark",
+    expectedRevision: 0,
+  });
+  assert.deepEqual(
+    requests.map(({ input, init }) => [init.method, input]),
+    [
+      ["GET", "https://control.example/api/v1/local-settings"],
+      ["PUT", "https://control.example/api/v1/local-settings"],
+    ],
+  );
+  assert.equal(
+    new Headers(requests[1]!.init.headers).get("x-csrf-token"),
+    "csrf",
+  );
+});
+
 test("lists the active capability catalog with an opaque cursor", async () => {
   let requested = "";
   const response = {

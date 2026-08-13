@@ -4,6 +4,23 @@ import { describe, expect, it, vi } from "vitest";
 import { SettingsContent } from "./SettingsContent";
 
 describe("SettingsContent", () => {
+  it("renders the Control-owned account summary", () => {
+    const markup = renderToStaticMarkup(
+      <SettingsContent
+        activeSection="account"
+        locale="zh"
+        panel={{
+          title: "账号",
+          subtitle: "CrewON 身份与本机偏好",
+          body: "王小明\n邮箱: user@example.com\n语言: zh\n主题: light\n本页不再连接 App Server；模型凭据在“模型接入”中管理。",
+          actions: [{ id: "refresh-account", label: "刷新" }],
+        }}
+        onPanelAction={vi.fn()}
+        onPanelFieldChange={vi.fn()}
+      />,
+    );
+    expect(markup).toMatchSnapshot();
+  });
   it("renders the assistant role, soul, and memory controls", () => {
     const markup = renderToStaticMarkup(
       <SettingsContent

@@ -67,6 +67,8 @@ import type {
   KnowledgeMutationResponse,
   GetKnowledgeResponse,
   ListKnowledgeResponse,
+  LocalSettingsResponse,
+  PutLocalSettingsRequest,
 } from "@crewon/contracts";
 import { WorkspaceControlClient } from "./workspace-control-client.ts";
 import { readBoundedWorkspaceJson } from "./workspace-response-reader.ts";
@@ -110,6 +112,26 @@ export class ControlApiClient {
     );
     this.#origin = optionalOrigin(config.origin);
     this.#fetch = config.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  getLocalSettings(
+    options: ControlApiRequestOptions = {},
+  ): Promise<LocalSettingsResponse> {
+    return this.#json("GET", "/api/v1/local-settings", null, {
+      ...options,
+      expectedStatuses: [200],
+    });
+  }
+
+  putLocalSettings(
+    body: PutLocalSettingsRequest,
+    options: ControlApiRequestOptions = {},
+  ): Promise<LocalSettingsResponse> {
+    return this.#json("PUT", "/api/v1/local-settings", body, {
+      ...options,
+      requireCsrf: true,
+      expectedStatuses: [200],
+    });
   }
 
   createKnowledge(

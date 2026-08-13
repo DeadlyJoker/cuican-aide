@@ -191,6 +191,7 @@ export function createAppSettingsRefreshHandlers(params: {
     refreshAccountPanel: () =>
       refreshAccountPanelAction({
         ...baseParams,
+        controlClient: params.controlClient,
         connectionState: params.connectionState,
         fallbackAccount: params.accountStatus,
         platformUser: params.platformUser,

@@ -232,16 +232,23 @@ describe("settings configuration actions", () => {
     });
   });
 
-  it("loads appearance settings with current UI fallbacks", async () => {
+  it("loads appearance settings from the local Control authority", async () => {
     const sink = panelSink();
 
     await refreshAppearanceSettingsPanelAction({
       ...baseParams(),
-      client: baseClient({
-        async readConfig() {
-          return configRead({ desktop: null });
+      controlClient: {
+        async getLocalSettings() {
+          return {
+            settings: {
+              locale: "zh",
+              theme: "dark",
+              revision: 1,
+              updatedAt: null,
+            },
+          };
         },
-      }),
+      },
       currentLocale: "zh",
       currentTheme: "dark",
       os: "mac",
@@ -261,8 +268,8 @@ describe("settings configuration actions", () => {
       )?.value,
     }).toEqual({
       locale: "zh",
-      subtitle: "/repo",
-      theme: "system",
+      subtitle: "Global config",
+      theme: "dark",
       title: "Appearance",
     });
   });
@@ -328,11 +335,11 @@ describe("settings configuration actions", () => {
 
     await refreshAppearanceSettingsPanelAction({
       ...baseParams(),
-      client: baseClient({
-        async readConfig() {
+      controlClient: {
+        async getLocalSettings() {
           throw new Error("read failed");
         },
-      }),
+      },
       currentLocale: "en",
       currentTheme: "light",
       setCapabilityPanel: sink.setCapabilityPanel,
@@ -340,7 +347,7 @@ describe("settings configuration actions", () => {
 
     expect(sink.panel).toEqual({
       error: "read failed",
-      subtitle: "/repo",
+      subtitle: "Global config",
       title: "Appearance",
     });
   });
