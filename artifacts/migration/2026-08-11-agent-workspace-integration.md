@@ -680,6 +680,13 @@ Gate 报告为通过。
 - 最新 UI 验证为 `289/289` files、`1813/1813` tests，typecheck 与 production build 均通过；build 只保留既有 chunk-size warning。生产 JS bundle
   明确不含 `new WebSocket`、`127.0.0.1:6176`、`restart-app-server` 或 `AppServerClient`。仓库中仍有未被正常产品组合调用的 legacy App Server
   helper/type 源码，作为后续纯 TS capability cutover 的删除对象；它们不再是 packaged fallback 或运行依赖。
+- Thread 主路径已删除 `AppServerRpcError`、旧断线字符串分类和 `preserveThreadsAfterConnectionLoss` 回调，默认 Thread source 从 `app_server` 改为
+  `control-api`。通用 Apps catalog retry helper 也从 `lib/app-server` 移到 transport-neutral `shared`，production source 不再 value-import
+  `src/lib/app-server/**`。
+- Control Workspace 组合不再创建 `client: null` 的 legacy Workspace/Terminal/Apps handlers；没有 Control contract 的入口统一明确 unavailable，不能再把
+  `undefined` 渲染为空目录、空 catalog 或 terminal completed。始终断线的 legacy Provider Resource composer 也已从 `App` 删除，保留的资源发现只来自
+  Control active release。对应 UI 完整验证为 `289/289` files、`1816/1816` tests，typecheck 和 Node 24 production build 通过；fresh bundle 进一步确认
+  `AppServerRpcError`、`AppServerClient`、App Server WebSocket/6176/restart markers 均为 0。
 
 当前 W01 的 SQLite、PostgreSQL real-host 与 packaged crash-recovery Gate 已关闭；发布签名/notarization 及尚未迁移的特定产品能力仍保持
 active。Rust compatibility 已从矩阵删除，不再投入迁移成本。
