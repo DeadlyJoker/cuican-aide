@@ -135,6 +135,7 @@ function stageGuardian(target) {
   if (!statSync(binary).isFile()) {
     throw new Error("CREWON_GUARDIAN_BINARY must resolve to a regular file");
   }
+  mkdirSync(outDir, { recursive: true });
   copyExecutable(
     binary,
     join(outDir, `crewon-process-guardian-${target}${exeSuffix}`),
