@@ -21,8 +21,11 @@ import {
   type AutomationStore,
   type DomainStore,
   type ModelProviderSettingsStore,
+  type WorkflowVersionStore,
+  type WorkflowRuntimeStore,
 } from "@crewon/application";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
+import type { WorkflowContentDigester } from "@crewon/domain";
 import type { FastifyInstance } from "fastify";
 
 import { buildControlApi } from "./control-api.ts";
@@ -46,11 +49,6 @@ import {
 } from "./provider-probe-worker-client.ts";
 import { LoopbackRuntimeWorkspaceWorkerClient } from "./workspace-runtime-worker-client.ts";
 import type { ProcessLocalActivationGate } from "./paused-admission.ts";
-import {
-  selectWorkflowHumanGateFactory,
-  selectWorkflowRunStartFactory,
-  type WorkflowProductionCompositionCandidate,
-} from "./workflow-production-composition-gate.ts";
 
 type ControlApiCompositionConfig = Readonly<{
   actor: ActorContext;
@@ -64,14 +62,6 @@ type ControlApiCompositionConfig = Readonly<{
   artifactEncryptionKeyId: string;
   providerProbeWorkers?: TenantProviderProbeWorkerRegistry;
   activationGate?: ProcessLocalActivationGate;
-  workflowComposition?: Readonly<{
-    certification: Omit<
-      WorkflowProductionCompositionCandidate,
-      | "backend"
-      | "createWorkflowRunStartService"
-      | "createWorkflowHumanGateService"
-    >;
-  }>;
   workspaceWorker?: Readonly<{
     origin: string;
     token: string;
@@ -98,6 +88,16 @@ export type StandaloneControlApiRuntime = Readonly<{
   workspaceLists: WorkspaceListApplicationService | null;
   workspaceQueries: WorkspaceOperationQueryService;
 }>;
+
+type ControlDomainStore = DomainStore &
+  WorkflowRuntimeStore &
+  AutomationStore &
+  ModelProviderSettingsStore &
+  Readonly<{
+    workflowVersionStore(
+      digester: WorkflowContentDigester,
+    ): WorkflowVersionStore;
+  }>;
 
 export function createStandaloneControlApi(
   config: StandaloneControlApiConfig,
@@ -126,7 +126,7 @@ export async function createPostgresControlApi(
 }
 
 function composeControlApi(
-  store: SqliteRunStore | PostgresDomainStore,
+  store: ControlDomainStore,
   config: ControlApiCompositionConfig,
 ): StandaloneControlApiRuntime {
   const eventHub = new RunEventHub();
@@ -263,47 +263,6 @@ function composeControlApi(
       store,
       authorization,
     });
-    const workflowStore = store;
-    const workflowCandidate =
-      config.workflowComposition === undefined || workflowStore === null
-        ? null
-        : {
-            status: "candidate" as const,
-            candidate: {
-              backend: store instanceof SqliteRunStore
-                ? "sqlite" as const
-                : "postgres" as const,
-              ...config.workflowComposition.certification,
-              createWorkflowRunStartService: () =>
-                new WorkflowRunApplicationService({
-                  store: workflowStore,
-                  authorization,
-                  clock,
-                  ids,
-                  workflowDigester: digester,
-                  routeResolver,
-                }),
-              createWorkflowHumanGateService: () =>
-                new WorkflowHumanGateApplicationService({
-                  store: {
-                    async loadRun(input) {
-                      const run = await workflowStore.loadRun(input);
-                      if (run === null) return null;
-                      return {
-                        ...run,
-                        purpose: run.purpose ?? "turn",
-                        workflowVersionBinding:
-                          run.workflowVersionBinding ?? undefined,
-                      };
-                    },
-                    recordWorkflowHumanGateDecision: (input) =>
-                      workflowStore.recordWorkflowHumanGateDecision(input),
-                  },
-                  authorization,
-                  digester,
-                }),
-            },
-          };
     const app = buildControlApi({
       application,
       threads,
@@ -314,16 +273,31 @@ function composeControlApi(
       approvals,
       agentVersions,
       workflowVersions,
-      // Keep parity with production: no two-step WorkflowVersion load plus Run
-      // commit may masquerade as atomic Workflow start admission.
-      workflowRuns:
-        selectWorkflowRunStartFactory(
-          workflowCandidate ?? { status: "disabled" },
-        )?.() ?? null,
-      workflowHumanGates:
-        selectWorkflowHumanGateFactory(
-          workflowCandidate ?? { status: "disabled" },
-        )?.() ?? null,
+      workflowRuns: new WorkflowRunApplicationService({
+        store,
+        authorization,
+        clock,
+        ids,
+        workflowDigester: digester,
+        routeResolver,
+      }),
+      workflowHumanGates: new WorkflowHumanGateApplicationService({
+        store: {
+          async loadRun(input) {
+            const run = await store.loadRun(input);
+            if (run === null) return null;
+            return {
+              ...run,
+              purpose: run.purpose ?? "turn",
+              workflowVersionBinding: run.workflowVersionBinding ?? undefined,
+            };
+          },
+          recordWorkflowHumanGateDecision: (input) =>
+            store.recordWorkflowHumanGateDecision(input),
+        },
+        authorization,
+        digester,
+      }),
       agentVersionCatalogs,
       artifacts,
       automations,

@@ -36,14 +36,12 @@ import type {
 } from "@crewon/contracts";
 import type { FastifyInstance } from "fastify";
 import { Pool } from "pg";
-import { SqliteRunStore } from "@crewon/store";
 import {
   activateStandaloneRuntimeAgentVersionRelease,
   activatePostgresRuntimeAgentVersionRelease,
   ConfiguredAgentVersionRuntimeFactory,
   createPostgresRuntimeWorker,
   createStandaloneRuntimeWorker,
-  WORKFLOW_RUNTIME_CAPABILITIES,
 } from "@crewon/runtime-worker";
 import { InMemoryToolBroker, type ToolRuntimePort } from "@crewon/tool-broker";
 
@@ -53,7 +51,6 @@ import {
   type PostgresControlApiConfig,
   type StandaloneControlApiConfig,
 } from "./standalone-composition.ts";
-import { WORKFLOW_PRODUCTION_STORE_CAPABILITIES } from "./workflow-production-composition-gate.ts";
 
 const SESSION_TOKEN = "e2e-session-token-32-bytes-minimum-1";
 const CSRF_TOKEN = "e2e-csrf-token-32-bytes-minimum-val1";
@@ -63,12 +60,22 @@ const digest = {
     `sha256:${createHash("sha256").update(value).digest("hex")}`,
 };
 
-test("fails closed over real HTTP before Workflow Store/Worker composition is certified", async (context) => {
+test("routes Workflow admission through the canonical SQLite Store", async (context) => {
   const databasePath = temporaryDatabasePath(context);
   await activateSqliteReleaseProcess(databasePath);
   const control = createStandaloneControlApi(config(databasePath));
   context.after(() => closeIfListening(control.app));
   await control.app.listen({ host: "127.0.0.1", port: 0 });
+  const client = new ControlApiClient({
+    baseUrl: serverBaseUrl(control.app),
+    accessToken: SESSION_TOKEN,
+    csrfToken: CSRF_TOKEN,
+    origin: ORIGIN,
+  });
+  const thread = await client.createThread(
+    { title: "Canonical workflow admission" },
+    "workflow-canonical-store-thread",
+  );
 
   const response = await fetch(
     `${serverBaseUrl(control.app)}/api/v1/workflow-runs`,
@@ -77,17 +84,15 @@ test("fails closed over real HTTP before Workflow Store/Worker composition is ce
       headers: mutationHeaders("workflow-production-gate-1"),
       body: JSON.stringify({
         workflowVersionId: "workflow-version-not-admitted",
-        threadId: "thread-not-admitted",
+        threadId: thread.thread.threadId,
         input: { prompt: "must not reach a fake adapter" },
       }),
     },
   );
 
-  assert.equal(response.status, 503);
-  assert.equal(
-    ((await response.json()) as { error: { code: string } }).error.code,
-    "workspace_command_factory_unavailable",
-  );
+  const payload = (await response.json()) as { error: { code: string } };
+  assert.equal(response.status, 404, JSON.stringify(payload));
+  assert.equal(payload.error.code, "workflow_version_not_found");
   const database = new DatabaseSync(databasePath);
   context.after(() => database.close());
   assert.equal(
@@ -98,14 +103,10 @@ test("fails closed over real HTTP before Workflow Store/Worker composition is ce
 });
 
 for (const decision of ["approve", "reject"] as const)
-  test(`runs a certified SQLite Agent + Human Gate Workflow to ${decision} terminal over Control HTTP`, async (context) => {
+  test(`runs a SQLite Agent + Human Gate Workflow to ${decision} terminal over Control HTTP`, async (context) => {
     const databasePath = temporaryDatabasePath(context);
     await activateSqliteReleaseProcess(databasePath);
-    const controlConfig = config(
-      databasePath,
-      new InMemoryArtifactStore(),
-      true,
-    );
+    const controlConfig = config(databasePath, new InMemoryArtifactStore());
     const control = createStandaloneControlApi(controlConfig);
     context.after(() => closeIfListening(control.app));
     await control.app.listen({ host: "127.0.0.1", port: 0 });
@@ -161,9 +162,6 @@ for (const decision of ["approve", "reject"] as const)
     assert.equal(started.run.purpose, "workflow");
     assert.equal(started.run.status, "queued");
 
-    const workflowStore = new SqliteRunStore(databasePath, {
-      workflowDigester: digest,
-    });
     const worker = await createStandaloneRuntimeWorker({
       databasePath,
       runtimeTenantId: "tenant-e2e-1",
@@ -173,15 +171,6 @@ for (const decision of ["approve", "reject"] as const)
       agentVersionDeployments:
         runtimeFactory.deploymentBindings("tenant-e2e-1"),
       scanIntervalMs: null,
-      workflowComposition: {
-        certification: {
-          schemaVersion: "crewon.workflow-runtime-certification.v0",
-          capabilities: WORKFLOW_RUNTIME_CAPABILITIES,
-        },
-        versions: workflowStore.workflowVersionStore(digest),
-        store: workflowStore,
-        close: () => workflowStore.close(),
-      },
     });
     context.after(() => worker.close());
     await wakeUntil(
@@ -917,42 +906,62 @@ test(
     const admin = new Pool({ connectionString, max: 1 });
     context.after(() => closePostgresFixture(control.app, admin, schema));
     await control.app.listen({ host: "127.0.0.1", port: 0 });
-    const client = new ControlApiClient({ baseUrl: serverBaseUrl(control.app),
-      accessToken: SESSION_TOKEN, csrfToken: CSRF_TOKEN, origin: ORIGIN });
-    const verifierSource = { ...selectedAgentVersionSource(),
+    const client = new ControlApiClient({
+      baseUrl: serverBaseUrl(control.app),
+      accessToken: SESSION_TOKEN,
+      csrfToken: CSRF_TOKEN,
+      origin: ORIGIN,
+    });
+    const verifierSource = {
+      ...selectedAgentVersionSource(),
       agentVersionId: "workflow-postgres-verifier",
-      instructions: "Verify empty JSON." };
+      instructions: "Verify empty JSON.",
+    };
     const verifier = compileAgentVersion(verifierSource, digest);
     await client.publishAgentVersion(verifierSource);
-    const runtimeFactory = new ConfiguredAgentVersionRuntimeFactory([{
-      tenantId: "tenant-e2e-1", agentVersionId: verifier.agentVersionId,
-      contentDigest: verifier.contentDigest,
-      authorityId: "workflow-postgres-verifier-authority",
-      workspaceBindingId: null,
-      materializationDigest: digest.sha256("workflow-postgres-verifier"),
-      createTransport: workflowModelTransport,
-      createToolRuntime: () => new InMemoryToolBroker(),
-    }]);
+    const runtimeFactory = new ConfiguredAgentVersionRuntimeFactory([
+      {
+        tenantId: "tenant-e2e-1",
+        agentVersionId: verifier.agentVersionId,
+        contentDigest: verifier.contentDigest,
+        authorityId: "workflow-postgres-verifier-authority",
+        workspaceBindingId: null,
+        materializationDigest: digest.sha256("workflow-postgres-verifier"),
+        createTransport: workflowModelTransport,
+        createToolRuntime: () => new InMemoryToolBroker(),
+      },
+    ]);
     await activatePostgresRuntimeAgentVersionRelease({
-      connectionString, schema, runtimeTenantId: "tenant-e2e-1",
-      route: config(":unused:").route, transport: workflowModelTransport(),
+      connectionString,
+      schema,
+      runtimeTenantId: "tenant-e2e-1",
+      route: config(":unused:").route,
+      transport: workflowModelTransport(),
       agentVersionDeployments:
         runtimeFactory.deploymentBindings("tenant-e2e-1"),
-      actor: { principalId: "release-principal", actorId: "release-actor",
-        tenantId: "tenant-e2e-1", spaceId: "space-e2e-1" },
+      actor: {
+        principalId: "release-principal",
+        actorId: "release-actor",
+        tenantId: "tenant-e2e-1",
+        spaceId: "space-e2e-1",
+      },
       authorization: { authorize: async () => ({ outcome: "allow" }) },
       clock: { now: () => "2026-08-13T00:00:00.000Z" },
       activationId: "postgres-workflow-release",
     });
     const thread = await client.createThread(
-      { title: "PostgreSQL Workflow" }, "postgres-workflow-thread",
+      { title: "PostgreSQL Workflow" },
+      "postgres-workflow-thread",
     );
     await client.publishWorkflowVersion(workflowPostgresSource());
-    const started = await client.startWorkflowRun({
-      workflowVersionId: "workflow-postgres-v1",
-      threadId: thread.thread.threadId,
-      input: {},
-    }, "postgres-workflow-start");
+    const started = await client.startWorkflowRun(
+      {
+        workflowVersionId: "workflow-postgres-v1",
+        threadId: thread.thread.threadId,
+        input: {},
+      },
+      "postgres-workflow-start",
+    );
     const worker = await createPostgresRuntimeWorker({
       connectionString,
       schema,
@@ -965,8 +974,11 @@ test(
       scanIntervalMs: null,
     });
     context.after(() => worker.close());
-    await wakeUntil(worker.worker, async () =>
-      (await client.getRun(started.run.runId)).run.status === "completed");
+    await wakeUntil(
+      worker.worker,
+      async () =>
+        (await client.getRun(started.run.runId)).run.status === "completed",
+    );
     const terminal = (await client.getRun(started.run.runId)).run;
     assert.equal(terminal.status, "completed");
     const attempts = await admin.query<{ count: string }>(
@@ -1361,7 +1373,6 @@ function requiredBody(response: Response): ReadableStream<Uint8Array> {
 function config(
   databasePath: string,
   artifactStore: ArtifactStorePort = new InMemoryArtifactStore(),
-  certifyWorkflow = false,
 ): StandaloneControlApiConfig & Readonly<{ route: RunRoute }> {
   return {
     databasePath,
@@ -1386,17 +1397,6 @@ function config(
     allowedOrigins: [ORIGIN],
     heartbeatIntervalMs: null,
     outboxScanIntervalMs: null,
-    ...(certifyWorkflow
-      ? {
-          workflowComposition: {
-            certification: {
-              storeCapabilities: WORKFLOW_PRODUCTION_STORE_CAPABILITIES,
-              modelDispatchEvidence: "durable" as const,
-              agentRuntime: "WorkflowAgentRuntimeAdapter" as const,
-            },
-          },
-        }
-      : {}),
   };
 }
 
@@ -1458,21 +1458,45 @@ function workflowGateSource(decision: "approve" | "reject") {
 }
 
 function workflowPostgresSource() {
-  const empty = { type: "object" as const, properties: {}, required: [],
-    additionalProperties: false as const };
-  return { schemaVersion: "crewon.workflow-version-source.v0" as const,
-    workflowId: "workflow-postgres", workflowVersionId: "workflow-postgres-v1",
-    name: "PostgreSQL Workflow", description: "Production vertical",
-    inputSchema: empty, outputSchema: empty, entryNodeIds: ["agent"],
-    outputNodeIds: ["verification"], nodes: [
-      { nodeId: "agent", title: "Agent", instruction: "Return {}",
-        kind: "agent" as const, agentVersionId: "agent-version-e2e-1",
-        dependsOn: [], inputSchema: empty, outputSchema: empty },
-      { nodeId: "verification", title: "Verification", instruction: "Verify {}",
+  const empty = {
+    type: "object" as const,
+    properties: {},
+    required: [],
+    additionalProperties: false as const,
+  };
+  return {
+    schemaVersion: "crewon.workflow-version-source.v0" as const,
+    workflowId: "workflow-postgres",
+    workflowVersionId: "workflow-postgres-v1",
+    name: "PostgreSQL Workflow",
+    description: "Production vertical",
+    inputSchema: empty,
+    outputSchema: empty,
+    entryNodeIds: ["agent"],
+    outputNodeIds: ["verification"],
+    nodes: [
+      {
+        nodeId: "agent",
+        title: "Agent",
+        instruction: "Return {}",
+        kind: "agent" as const,
+        agentVersionId: "agent-version-e2e-1",
+        dependsOn: [],
+        inputSchema: empty,
+        outputSchema: empty,
+      },
+      {
+        nodeId: "verification",
+        title: "Verification",
+        instruction: "Verify {}",
         kind: "verification" as const,
         verifierAgentVersionId: "workflow-postgres-verifier",
-        dependsOn: ["agent"], inputSchema: empty, outputSchema: empty },
-    ] };
+        dependsOn: ["agent"],
+        inputSchema: empty,
+        outputSchema: empty,
+      },
+    ],
+  };
 }
 
 function workflowModelTransport(): ModelTransportPort {
@@ -1483,10 +1507,16 @@ function workflowModelTransport(): ModelTransportPort {
     supportsModelDispatchEvidence: true,
     async *stream(_request, _signal, options) {
       if (options?.dispatchEvidence !== undefined)
-        await options.controlSink?.dispatchBoundaryCrossed?.(options.dispatchEvidence);
-      const checkpoint = { schemaVersion: "crewon.provider-checkpoint.v0" as const,
-        adapterName: "deterministic-fake", adapterVersion: "1", modelId: "fake-model",
-        opaquePayload: { responseId: randomUUID() } };
+        await options.controlSink?.dispatchBoundaryCrossed?.(
+          options.dispatchEvidence,
+        );
+      const checkpoint = {
+        schemaVersion: "crewon.provider-checkpoint.v0" as const,
+        adapterName: "deterministic-fake",
+        adapterVersion: "1",
+        modelId: "fake-model",
+        opaquePayload: { responseId: randomUUID() },
+      };
       yield { type: "response.created" as const, checkpoint };
       yield { type: "output.delta" as const, delta: "{}" };
       yield { type: "completed" as const, checkpoint };
@@ -1524,7 +1554,9 @@ async function wakeUntil(
     if (await done()) return;
     results.push(await worker.wake());
   }
-  assert.fail(`workflow did not reach expected durable state: ${JSON.stringify(results)}`);
+  assert.fail(
+    `workflow did not reach expected durable state: ${JSON.stringify(results)}`,
+  );
 }
 
 async function activateStandaloneRelease(input: {
@@ -1600,7 +1632,7 @@ function postgresConfig(
   connectionString: string,
   schema: string,
 ): PostgresControlApiConfig {
-  const standalone = config(":unused:", new InMemoryArtifactStore(), true);
+  const standalone = config(":unused:", new InMemoryArtifactStore());
   const { databasePath: _, route: _route, ...common } = standalone;
   return { ...common, connectionString, schema };
 }
