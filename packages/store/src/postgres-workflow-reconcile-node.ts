@@ -29,6 +29,7 @@ import {
   validatePostgresWorkflowLease,
   writePostgresWorkflowExecution,
 } from "./postgres-workflow-run-composition-transactions.ts";
+import { appendPostgresCanceledWorkflowNodeEvent } from "./postgres-workflow-cancellation-lifecycle.ts";
 
 type Input = Parameters<
   WorkflowRunCompositionStore["reconcileWorkflowNode"]
@@ -311,6 +312,12 @@ export async function reconcilePostgresWorkflowNode(
       checkpointDigest: dispatch.responseCheckpointDigest,
     },
   });
+  await appendPostgresCanceledWorkflowNodeEvent(client, schema, {
+    tenantId: input.tenantId, runId: input.runId, binding: input.binding,
+    nodeId: input.nodeId, claimId: input.claimId, claimEpoch: input.claimEpoch,
+    attemptId: attempt.attemptId,
+    operationId: `reconcile:${input.reconciliationOperationId}:${input.nodeId}`,
+  }, now, digester);
   const nodes = execution.nodes.map((item) =>
     item.nodeId === input.nodeId
       ? {

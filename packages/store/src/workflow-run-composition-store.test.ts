@@ -1355,14 +1355,22 @@ if (postgresUrl === undefined) {
       assert.deepEqual([canceled.disposition, canceled.runDisposition, canceled.execution.status],
         ["canceled", "terminalConverged", "canceled"]);
       assert.ok(canceled.execution.nodes.every((node) => node.status === "canceled"));
+      assert.deepEqual((canceled as typeof canceled & { canceledNodeIds: string[] })
+        .canceledNodeIds, ["agent", "gate", "verify"]);
+      assert.deepEqual((canceled as typeof canceled & {
+        canceledGateRequestNodeIds: string[] }).canceledGateRequestNodeIds, ["gate"]);
       assert.equal((await store.cancelWorkflowExecution(input)).disposition, "replay");
       const durable = await pool.query(`SELECT
         (SELECT state_json->>'status' FROM ${schema}.run_snapshots WHERE run_id='run-1') run_status,
         (SELECT status FROM ${schema}.work_items WHERE work_item_id='cancel-work-1') cancel_status,
         (SELECT status FROM ${schema}.work_items WHERE work_item_json->'payload'->>'trigger'='workflowNode') node_status,
-        (SELECT status FROM ${schema}.workflow_gate_requests WHERE run_id='run-1') gate_status`);
+        (SELECT status FROM ${schema}.workflow_gate_requests WHERE run_id='run-1') gate_status,
+        (SELECT count(*)::int FROM ${schema}.run_events
+          WHERE event_json->>'type'='workflow.node.terminal') node_events,
+        (SELECT count(*)::int FROM ${schema}.outbox
+          WHERE message_json->'payload'->>'eventType'='workflow.node.terminal') node_outbox`);
       assert.deepEqual(durable.rows[0], { run_status: "canceled", cancel_status: "completed",
-        node_status: "completed", gate_status: "canceled" });
+        node_status: "completed", gate_status: "canceled", node_events: 3, node_outbox: 3 });
     } finally {
       await pool.query(`DROP SCHEMA ${schema} CASCADE`);
       await store.close();
@@ -1489,6 +1497,15 @@ if (postgresUrl === undefined) {
       const retained = await store.cancelWorkflowExecution(coordinatorInput);
       assert.deepEqual([retained.disposition, retained.handoff.currentWorkItem,
         retained.runDisposition], ["retryRequired", "retained", "nonTerminal"]);
+      const retainedDurability = await pool.query(`SELECT
+        (SELECT count(*)::int FROM ${schema}.workflow_composition_receipts
+          WHERE operation_id='cancel-parallel') cancellation_receipts,
+        (SELECT count(*)::int FROM ${schema}.run_events
+          WHERE event_json->>'type'='run.canceled') final_events,
+        (SELECT count(*)::int FROM ${schema}.outbox
+          WHERE message_json->'payload'->>'eventType'='run.canceled') final_outbox`);
+      assert.deepEqual(retainedDurability.rows[0],
+        { cancellation_receipts: 0, final_events: 0, final_outbox: 0 });
       const foreignLeases = await pool.query(`SELECT work_item_json->'payload'->>'nodeId' node_id,
         status,lease_owner_id,lease_id,lease_epoch::int lease_epoch FROM ${schema}.work_items
         WHERE work_item_json->'payload'->>'trigger'='workflowNode' ORDER BY node_id`);
@@ -1515,6 +1532,104 @@ if (postgresUrl === undefined) {
         (SELECT state_json->>'status' FROM ${schema}.run_snapshots WHERE run_id='run-1') run_status`);
       assert.deepEqual(durable.rows[0],
         { live_attempts: 0, stranded_work: 0, run_status: "canceled" });
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await store.close();
+    }
+  });
+
+  test("PostgreSQL cancellation coordinates multiple uncertain siblings in execution order", async () => {
+    const schema = `workflow_cancel_uncertain_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    const store = await PostgresWorkflowRunCompositionStore.open({ pool, schema, digester });
+    const parallelWorkflow = compileWorkflowVersion({ ...source,
+      workflowId: "uncertain-workflow", workflowVersionId: "uncertain-version",
+      entryNodeIds: ["left", "right"], outputNodeIds: ["join"], nodes: [
+        { ...common("left"), kind: "agent", agentVersionId: "agent-v1" },
+        { ...common("right"), kind: "agent", agentVersionId: "agent-v1" },
+        { ...common("join", ["left", "right"]), inputSchema: { ...fanInSchema,
+          properties: { left: objectSchema, right: objectSchema }, required: ["left", "right"] },
+          kind: "verification", verifierAgentVersionId: "verifier-v1" },
+      ] }, digester);
+    const parallelBinding = { workflowId: parallelWorkflow.workflowId,
+      workflowVersionId: parallelWorkflow.workflowVersionId,
+      contentDigest: parallelWorkflow.contentDigest };
+    try {
+      await seedPostgresComposition(pool, schema, parallelWorkflow, parallelBinding);
+      const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+        lease, binding: parallelBinding, schedulerOperationId: "schedule-uncertain",
+        workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+      const lanes = [];
+      for (const [index, work] of scheduled.nodeWorkItems.entries()) {
+        const ownerId = `uncertain-worker-${index}`;
+        const leaseId = `uncertain-lease-${index}`;
+        await pool.query(`UPDATE ${schema}.work_items SET status='leased',lease_owner_id=$1,
+          lease_id=$2,lease_epoch=1,lease_expires_at=clock_timestamp()+interval '1 minute'
+          WHERE work_item_id=$3`, [ownerId, leaseId, work.workItemId]);
+        const nodeLease = { workItemId: work.workItemId, ownerId, leaseId, leaseEpoch: 1 };
+        const admitted = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+          lease: nodeLease, binding: parallelBinding, nodeId: work.nodeId, claimId: work.claimId,
+          claimEpoch: work.claimEpoch, schedulerOperationId: "schedule-uncertain",
+          admissionOperationId: `admit-uncertain-${work.nodeId}`, attemptLeaseDurationMs: 30_000 });
+        const attempt = admitted.admission!.attempt;
+        const prepared = await store.prepareModelDispatch({ tenantId: "tenant-1", runId: "run-1",
+          lease: nodeLease, attempt: { stepId: attempt.stepId, attemptId: attempt.attemptId },
+          operationId: `dispatch-uncertain-${work.nodeId}`, requestSequence: 1,
+          operation: "dispatch", requestDigest: digester.sha256(work.nodeId), provider: {
+            agentVersionId: "agent-v1", adapterName: "responses", adapterVersion: "1",
+            modelId: "model-1" }, preparedAt: "2026-08-13T00:00:00.000Z" });
+        await store.markModelDispatchPossiblySent({ tenantId: "tenant-1", runId: "run-1",
+          lease: nodeLease, attempt: prepared, operationId: prepared.operationId,
+          requestSequence: 1, expectedRevision: prepared.revision,
+          transitionedAt: "2026-08-13T00:00:01.000Z" });
+        lanes.push({ work, nodeLease });
+      }
+      const run = await pool.query<{ state_json: Record<string, unknown> }>(
+        `SELECT state_json FROM ${schema}.run_snapshots WHERE run_id='run-1'`);
+      await pool.query(`UPDATE ${schema}.run_snapshots SET state_json=$1 WHERE run_id='run-1'`,
+        [{ ...run.rows[0]!.state_json, cancelRequested: true }]);
+      for (const lane of lanes) {
+        const canceled = await store.cancelWorkflowExecution({ tenantId: "tenant-1", runId: "run-1",
+          binding: parallelBinding, lease: lane.nodeLease,
+          operationId: `cancel-uncertain-${lane.work.nodeId}`, reasonCode: "user_requested" });
+        assert.equal(canceled.disposition, "reconciliationScheduled");
+      }
+      const priorReconcile = await pool.query<{ work_item_id: string }>(`SELECT work_item_id
+        FROM ${schema}.work_items WHERE work_item_json->'payload'->>'trigger'='workflowReconcile'
+        ORDER BY work_item_json->'payload'->>'nodeId'`);
+      assert.equal(priorReconcile.rows.length, 2);
+      await pool.query(`DELETE FROM ${schema}.work_items WHERE work_item_id=$1`,
+        [priorReconcile.rows[1]!.work_item_id]);
+      const cancelWork = { workItemId: "cancel-work-uncertain", tenantId: "tenant-1",
+        runId: "run-1", kind: "run.execute", payload: {
+          schemaVersion: "crewon.workflow-cancel-work-item.v0", trigger: "workflowCancel",
+          binding: parallelBinding, cancellationOperationId: "cancel-uncertain" },
+        createdAt: "2026-08-13T00:00:02.000Z" };
+      await pool.query(`INSERT INTO ${schema}.work_items
+        (work_item_id,tenant_id,run_id,kind,work_item_json,created_at,status,available_at,
+         lease_owner_id,lease_id,lease_epoch,lease_expires_at,attempt_count)
+        VALUES ($1,'tenant-1','run-1','run.execute',$2,$3,'leased',$3,
+          'cancel-worker','cancel-lease',1,clock_timestamp()+interval '1 minute',1)`,
+        [cancelWork.workItemId, cancelWork, cancelWork.createdAt]);
+      const cancelInput = { tenantId: "tenant-1", runId: "run-1", binding: parallelBinding,
+        operationId: "cancel-uncertain", reasonCode: "user_requested", lease: {
+          workItemId: cancelWork.workItemId, ownerId: "cancel-worker",
+          leaseId: "cancel-lease", leaseEpoch: 1 } } as const;
+      const coordinated = await store.cancelWorkflowExecution(cancelInput);
+      const typed = coordinated as typeof coordinated & { canceledNodeIds: string[];
+        reconciliationWorkItemIds: string[] };
+      assert.deepEqual([typed.disposition, typed.runDisposition, typed.canceledNodeIds],
+        ["reconciliationScheduled", "nonTerminal", ["join"]]);
+      assert.deepEqual(typed.reconciliationWorkItemIds,
+        [...typed.reconciliationWorkItemIds].sort());
+      const reconciliations = await pool.query<{ work_item_id: string; node_id: string }>(`SELECT
+        work_item_id,work_item_json->'payload'->>'nodeId' node_id FROM ${schema}.work_items
+        WHERE work_item_id=ANY($1::text[]) ORDER BY node_id`,
+        [typed.reconciliationWorkItemIds]);
+      assert.deepEqual(reconciliations.rows.map((row) => row.node_id), ["left", "right"]);
+      assert.ok(typed.reconciliationWorkItemIds.includes(priorReconcile.rows[0]!.work_item_id));
+      assert.equal(reconciliations.rows.length, 2);
+      assert.equal((await store.cancelWorkflowExecution(cancelInput)).disposition, "replay");
     } finally {
       await pool.query(`DROP SCHEMA ${schema} CASCADE`);
       await store.close();
@@ -1642,8 +1757,10 @@ if (postgresUrl === undefined) {
         `SELECT state_json FROM ${schema}.run_snapshots WHERE run_id='run-1'`);
       await pool.query(`UPDATE ${schema}.run_snapshots SET state_json=$1 WHERE run_id='run-1'`,
         [{ ...run.rows[0]!.state_json, cancelRequested: true }]);
-      const canceled = await store.cancelWorkflowExecution({ tenantId: "tenant-1", runId: "run-1",
-        lease: nodeLease, binding, operationId: "cancel-late", reasonCode: "user_requested" });
+      const cancelInput = { tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, binding, operationId: "cancel-late",
+        reasonCode: "user_requested" } as const;
+      const canceled = await store.cancelWorkflowExecution(cancelInput);
       await pool.query(`UPDATE ${schema}.work_items SET status='leased',
         lease_owner_id='reconcile-worker',lease_id='reconcile-lease',lease_epoch=1,
         lease_expires_at=clock_timestamp()+interval '1 minute' WHERE work_item_id=$1`,
@@ -1663,6 +1780,11 @@ if (postgresUrl === undefined) {
         [attempt.attemptId]);
       assert.deepEqual(durable.rows[0], { run_status: "running",
         attempt_status: "canceled", dispatch_status: "terminal" });
+      const replay = await store.cancelWorkflowExecution(cancelInput);
+      assert.deepEqual([replay.disposition, replay.execution.nodes[0]?.status,
+        (replay as typeof replay & { reconciliationWorkItemIds: string[] })
+          .reconciliationWorkItemIds],
+        ["replay", "unknown", [canceled.handoff.nextWorkItemId]]);
     } finally {
       await pool.query(`DROP SCHEMA ${schema} CASCADE`);
       await store.close();
