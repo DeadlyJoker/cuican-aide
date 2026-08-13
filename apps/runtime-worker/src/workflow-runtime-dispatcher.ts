@@ -223,6 +223,13 @@ export class ProductionWorkflowRuntimeDispatcher
       operationId: cancelOperationId,
       reasonCode: "user_requested",
     });
+    if (canceled.disposition === "retryRequired") {
+      if (canceled.handoff.currentWorkItem !== "retained" ||
+          canceled.handoff.nextWorkItemId !== null || canceled.handoff.kind !== "none")
+        throw new Error("workflow_cancellation_retry_handoff_invalid");
+      return { kind: "recovery", runId: input.run.runId,
+        code: "workflow_cancellation_retry_required" };
+    }
     assertCompletedHandoff(canceled.handoff);
     return canceled.runDisposition === "terminalConverged"
       ? { kind: "completed", runId: input.run.runId }

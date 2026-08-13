@@ -239,6 +239,20 @@ test("routes cancellation through composition authority", async () => {
   assert.equal(fixture.cancellations, 1);
 });
 
+test("retains a dedicated cancellation coordinator until sibling leases settle", async () => {
+  const fixture = composition();
+  fixture.store.cancelWorkflowExecution = async () => ({
+    disposition: "retryRequired", execution: {} as never,
+    handoff: { currentWorkItem: "retained", nextWorkItemId: null, kind: "none" },
+    runDisposition: "nonTerminal",
+  });
+  const outcome = await create(fixture.store, async () => {
+    throw new Error("agent must not execute");
+  }).cancel(input("scheduler"));
+  assert.deepEqual(outcome, { kind: "recovery", runId: "r",
+    code: "workflow_cancellation_retry_required" });
+});
+
 test("routes cancel-requested reconciliation without invoking cancellation", async () => {
   const fixture = composition();
   fixture.store.reconcileWorkflowNode = async () => ({

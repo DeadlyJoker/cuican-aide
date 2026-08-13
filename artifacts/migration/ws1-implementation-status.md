@@ -15,9 +15,10 @@
 - packaged bundle 当前只有 guardian、Node 与 Control API、Provider coordinator、Runtime Release、Runtime Worker 四个 TS
   bundle；不包含或启动 Rust Device、Rust App Server 或 Gateway sidecar。
 - W01 production transaction protocol、Workflow Start、scheduler fan-out、node admission、node settlement、Human Gate、
-  reconciliation、真实 PostgreSQL 双连接和 packaged crash recovery 均已有纵向证据。最新复审将 terminal convergence
-  重新标为实现中：两个及以上 sibling 同时 running/unknown 的 cancel 仍需每节点独立 reconcile authority；此前矩阵把单 active
-  node 的 Slice 5 证据外推为完整并行取消，现已纠正。这不代表整个产品迁移完成。
+  reconciliation、真实 PostgreSQL 双连接和 packaged crash recovery 均已有纵向证据。并行 cancel 已改为每节点独立 lease/
+  reconcile authority 与 dedicated cancellation coordinator；SQLite 双 running sibling 回归证明一个 worker 不能借自己的 lease
+  结算 sibling，最终也没有 stranded WorkItem。PostgreSQL 同构实现已完成 typecheck，当前环境缺少
+  `CREWON_TEST_POSTGRES_URL`，仍需 real-host 复验。这不代表整个产品迁移完成。
 - Renderer 已改为 Control-only bootstrap。Library 与 Settings 不再构造 App Server client：Library 的 Automation/Knowledge/
   Agent/Office/Tool 读取和允许的 mutation 走 Control；Settings 只公开 Account、Appearance、Model access 三个具有真实 Control
   authority 的页面。语言/主题使用 revision CAS，成功提交后才更新本地状态；旧 Config、Personalization、Thread Settings 和

@@ -237,7 +237,8 @@ export interface WorkflowRunCompositionStore {
     reasonCode: string;
   }): Promise<
     Readonly<{
-      disposition: "canceled" | "replay" | "reconciliationScheduled";
+      disposition: "canceled" | "cancellationPending" | "retryRequired" |
+        "replay" | "reconciliationScheduled";
       execution: WorkflowExecutionState;
       handoff: WorkflowAtomicHandoff;
       runDisposition: WorkflowRunDisposition;

@@ -90,18 +90,15 @@ test("SQLite cancellation atomically closes queued, pending and waiting gate nod
     operationId: "cancel-execution", reasonCode: "user_requested",
     lease: { workItemId: nodeWork.workItemId, ownerId: "cancel-worker",
       leaseId: "cancel-lease", leaseEpoch: claim!.lease.epoch } };
-  await assert.rejects(store.cancelWorkflowExecution(input),
-    (error: unknown) => error instanceof RunStoreError &&
-      error.code === "workflow_cancellation_wakeup_leased");
-  const rolledBack = new DatabaseSync(path);
-  assert.equal(rolledBack.prepare(`SELECT count(*) count FROM run_events
-    WHERE json_extract(event_json,'$.type')='workflow.node.terminal'`).get()!.count, 0);
-  rolledBack.close();
-  await competing.retryWorkItem({ workItemId: cancelClaim!.workItem.workItemId,
-    ownerId: "cancel-wake-worker", leaseId: "cancel-wake-lease",
-    leaseEpoch: cancelClaim!.lease.epoch, retryAfterMs: 0, reasonCode: "cancel_authority_yield" });
+  const nodeCanceled = await store.cancelWorkflowExecution(input);
+  assert.deepEqual([nodeCanceled.disposition, nodeCanceled.runDisposition],
+    ["cancellationPending", "nonTerminal"]);
+  const result = await competing.cancelWorkflowExecution({ tenantId: "tenant-1", runId: "run-1",
+    binding, operationId: String(cancelClaim!.workItem.payload.cancellationOperationId),
+    reasonCode: "user_requested", lease: { workItemId: cancelClaim!.workItem.workItemId,
+      ownerId: "cancel-wake-worker", leaseId: "cancel-wake-lease",
+      leaseEpoch: cancelClaim!.lease.epoch } });
   await competing.close();
-  const result = await store.cancelWorkflowExecution(input);
   const database = new DatabaseSync(path);
   assert.equal(result.runDisposition, "terminalConverged");
   assert.equal(result.execution.status, "canceled");
@@ -141,7 +138,7 @@ test("SQLite cancellation atomically closes queued, pending and waiting gate nod
   assert.equal(database.prepare("SELECT count(*) count FROM work_items WHERE status!='completed'")
     .get()!.count, 0);
   assert.deepEqual(await store.cancelWorkflowExecution(input), {
-    ...result, disposition: "replay",
+    ...nodeCanceled, disposition: "replay",
   });
   database.prepare(`UPDATE run_events SET event_json=json_set(event_json,'$.data.nodeId','forged')
     WHERE event_id=(SELECT event_id FROM run_events
@@ -199,7 +196,16 @@ test("SQLite cancellation terminalizes a running not-dispatched node", async (t)
   const cancelInput = { tenantId: "tenant-1", runId: "run-1",
     binding, operationId: "cancel-prepared", reasonCode: "user_requested", lease: nodeLease };
   const canceled = await store.cancelWorkflowExecution(cancelInput);
-  assert.equal(canceled.runDisposition, "terminalConverged");
+  assert.deepEqual([canceled.disposition, canceled.runDisposition],
+    ["cancellationPending", "nonTerminal"]);
+  const cancelClaim = await store.claimNextWorkItem({ ownerId: "cancel-worker",
+    leaseId: "cancel-lease", leaseDurationMs: 60_000 });
+  assert.equal(cancelClaim?.workItem.payload.trigger, "workflowCancel");
+  const converged = await store.cancelWorkflowExecution({ tenantId: "tenant-1", runId: "run-1",
+    binding, operationId: String(cancelClaim!.workItem.payload.cancellationOperationId),
+    reasonCode: "user_requested", lease: { workItemId: cancelClaim!.workItem.workItemId,
+      ownerId: "cancel-worker", leaseId: "cancel-lease", leaseEpoch: cancelClaim!.lease.epoch } });
+  assert.equal(converged.runDisposition, "terminalConverged");
   const database = new DatabaseSync(path);
   const terminal = loadSqliteModelDispatchReceipt(database, { tenantId: "tenant-1",
     runId: "run-1", stepId: "agent", attemptId: attempt.attemptId,
@@ -232,6 +238,90 @@ test("SQLite cancellation terminalizes a running not-dispatched node", async (t)
   await assert.rejects(store.cancelWorkflowExecution(cancelInput),
     (error: unknown) => error instanceof RunStoreError &&
       error.code === "workflow_cancellation_replay_corrupt");
+});
+
+test("SQLite cancellation fences parallel running siblings to their own leases", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-workflow-cancel-parallel-"));
+  const path = join(directory, "cancel.sqlite");
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  const store = new SqliteRunStore(path, { workflowDigester: digester, clock });
+  t.after(() => store.close());
+  await new ThreadApplicationService({ store,
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    ids: { nextId: () => "thread-1" }, digester }).createThread({ tenantId: "tenant-1",
+      principalId: "principal-1", spaceId: "space-1", actorId: "actor-1" }, {
+      kind: "thread.create", idempotencyKey: "parallel-thread", title: "Parallel cancel" });
+  const parallelWorkflow = compileWorkflowVersion({ ...source,
+    workflowId: "parallel-workflow", workflowVersionId: "parallel-version",
+    entryNodeIds: ["left", "right"], outputNodeIds: ["join"], nodes: [
+      { ...common("left"), kind: "agent", agentVersionId: "agent-v1" },
+      { ...common("right"), kind: "agent", agentVersionId: "agent-v1" },
+      { ...common("join", ["left", "right"]), inputSchema: { ...fanInSchema,
+        properties: { left: objectSchema, right: objectSchema }, required: ["left", "right"] },
+        kind: "verification", verifierAgentVersionId: "verifier-v1" },
+    ] }, digester);
+  const parallelBinding = { workflowId: parallelWorkflow.workflowId,
+    workflowVersionId: parallelWorkflow.workflowVersionId,
+    contentDigest: parallelWorkflow.contentDigest };
+  await seed(path, clock.nowEpochMilliseconds() + 60_000, parallelWorkflow, parallelBinding);
+  const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+    lease, binding: parallelBinding, schedulerOperationId: "schedule-fanout-1",
+    workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+  const admissions = [];
+  for (const [index, work] of scheduled.nodeWorkItems.entries()) {
+    const claim = await store.claimNextWorkItem({ ownerId: `node-worker-${index}`,
+      leaseId: `node-lease-${index}`, leaseDurationMs: 60_000 });
+    const nodeLease = { workItemId: work.workItemId, ownerId: `node-worker-${index}`,
+      leaseId: `node-lease-${index}`, leaseEpoch: claim!.lease.epoch };
+    const admitted = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+      lease: nodeLease, binding: parallelBinding, nodeId: work.nodeId, claimId: work.claimId,
+      claimEpoch: work.claimEpoch, schedulerOperationId: "schedule-fanout-1",
+      admissionOperationId: `admit-${work.nodeId}`, attemptLeaseDurationMs: 60_000 });
+    const database = new DatabaseSync(path);
+    prepareSqliteModelDispatch(database, { tenantId: "tenant-1", runId: "run-1", lease: nodeLease,
+      attempt: admitted.admission!.attempt, operationId: `dispatch-${work.nodeId}`,
+      requestSequence: 1, operation: "dispatch", requestDigest: digester.sha256(work.nodeId),
+      provider: { agentVersionId: "agent-v1", adapterName: "responses", adapterVersion: "1",
+        modelId: "model" }, preparedAt: "2026-08-12T00:00:00.000Z" });
+    database.close();
+    admissions.push({ work, nodeLease });
+  }
+  await new RunApplicationService({ store,
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-12T00:00:01.000Z" },
+    ids: { nextId: (kind) => `parallel-${kind}` } }).transitionRun({ tenantId: "tenant-1",
+      principalId: "principal-1", spaceId: "space-1", actorId: "actor-1" }, {
+      kind: "run.requestCancel", runId: "run-1", expectedRevision: 2,
+      idempotencyKey: "request-parallel-cancel" });
+  clock.set(Date.parse("2026-08-12T00:00:02.000Z"));
+  const first = await store.cancelWorkflowExecution({ tenantId: "tenant-1", runId: "run-1",
+    binding: parallelBinding, lease: admissions[0]!.nodeLease,
+    operationId: `cancel-${admissions[0]!.work.nodeId}`, reasonCode: "user_requested" });
+  assert.equal(first.disposition, "cancellationPending");
+  const afterFirst = new DatabaseSync(path);
+  assert.deepEqual(afterFirst.prepare(`SELECT step_id stepId,status FROM run_attempts
+    ORDER BY step_id`).all().map((row) => ({ ...row })), [
+      { stepId: "left", status: "canceled" }, { stepId: "right", status: "running" } ]);
+  afterFirst.close();
+  await store.cancelWorkflowExecution({ tenantId: "tenant-1", runId: "run-1",
+    binding: parallelBinding, lease: admissions[1]!.nodeLease,
+    operationId: `cancel-${admissions[1]!.work.nodeId}`, reasonCode: "user_requested" });
+  const cancelClaim = await store.claimNextWorkItem({ ownerId: "cancel-worker",
+    leaseId: "cancel-lease", leaseDurationMs: 60_000 });
+  const final = await store.cancelWorkflowExecution({ tenantId: "tenant-1", runId: "run-1",
+    binding: parallelBinding, operationId: String(cancelClaim!.workItem.payload.cancellationOperationId),
+    reasonCode: "user_requested", lease: { workItemId: cancelClaim!.workItem.workItemId,
+      ownerId: "cancel-worker", leaseId: "cancel-lease", leaseEpoch: cancelClaim!.lease.epoch } });
+  assert.deepEqual([final.disposition, final.runDisposition, final.execution.status],
+    ["canceled", "terminalConverged", "canceled"]);
+  const durable = new DatabaseSync(path);
+  assert.equal(durable.prepare("SELECT count(*) count FROM run_attempts WHERE status!='canceled'")
+    .get()!.count, 0);
+  assert.equal(durable.prepare("SELECT count(*) count FROM work_items WHERE status!='completed'")
+    .get()!.count, 0);
+  durable.close();
 });
 
 test("SQLite cancellation retains possibly-sent node reconciliation", async (t) => {
@@ -1314,7 +1404,7 @@ if (postgresUrl === undefined) {
         operationId: "cancel-running", reasonCode: "user_requested" } as const;
       const canceled = await store.cancelWorkflowExecution(input);
       assert.deepEqual([canceled.disposition, canceled.runDisposition, canceled.execution.status],
-        ["canceled", "terminalConverged", "canceled"]);
+        ["cancellationPending", "nonTerminal", "waitingHuman"]);
       const durable = await pool.query(`SELECT
         (SELECT status FROM ${schema}.model_dispatch_receipts
           WHERE operation_id='dispatch-cancel') dispatch_status,
@@ -1608,6 +1698,8 @@ async function seedPostgresSchedulerWork(
 async function seed(
   databaseOrPath: DatabaseSync | string,
   leaseExpiresAtMs: number,
+  workflowAsset = workflow,
+  bindingAsset = binding,
 ): Promise<void> {
   const database =
     typeof databaseOrPath === "string"
@@ -1617,13 +1709,13 @@ async function seed(
   await versions.registerWorkflowVersion({
     schemaVersion: "crewon.workflow-version-asset.v0",
     tenantId: "tenant-1",
-    workflowId: workflow.workflowId,
-    workflowVersionId: workflow.workflowVersionId,
-    contentDigest: workflow.contentDigest,
-    definitionJson: serializeCompiledWorkflowVersion(workflow),
+    workflowId: workflowAsset.workflowId,
+    workflowVersionId: workflowAsset.workflowVersionId,
+    contentDigest: workflowAsset.contentDigest,
+    definitionJson: serializeCompiledWorkflowVersion(workflowAsset),
     createdAt: "2026-08-12T00:00:00.000Z",
   });
-  const run = runState();
+  const run = runState(bindingAsset);
   database
     .prepare(
       `INSERT INTO run_snapshots
@@ -1680,7 +1772,7 @@ async function seed(
         payload: {
           schemaVersion: "crewon.workflow-scheduler-work-item.v1",
           trigger: "workflowScheduler",
-          binding,
+          binding: bindingAsset,
           schedulerOperationId: "schedule-fanout-1",
           workflowInput: {
             valueId: "root-value-1",
@@ -1705,7 +1797,7 @@ async function seed(
   if (typeof databaseOrPath === "string") database.close();
 }
 
-function runState(): RunState {
+function runState(bindingValue = binding): RunState {
   return {
     runId: "run-1",
     threadId: "thread-1",
@@ -1719,7 +1811,7 @@ function runState(): RunState {
     workspaceBindingId: null,
     collaborationMode: "default",
     purpose: "workflow",
-    workflowVersionBinding: binding,
+    workflowVersionBinding: bindingValue,
     origin: null,
     goalBinding: null,
     goalAccounting: null,
