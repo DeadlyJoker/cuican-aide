@@ -1,9 +1,19 @@
+import type { McpServerConfigRecord } from "@crewon-protocol/v2/McpServerConfigRecord";
 import type { McpServerStatus } from "@crewon-protocol/v2/McpServerStatus";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
-import type { McpInventory } from "../domain/domainCollaborationBackend";
 import type { Locale } from "../i18n";
 import { mcpConfigSummaryText } from "../mcp/mcpConfigFormatters";
+
+type McpInventory = {
+  configs: McpServerConfigRecord[];
+  servers: Array<{
+    config?: McpServerConfigRecord;
+    name: string;
+    status?: McpServerStatus;
+  }>;
+  statuses: McpServerStatus[];
+};
 
 export function mcpSettingsText(
   servers: McpServerStatus[],
