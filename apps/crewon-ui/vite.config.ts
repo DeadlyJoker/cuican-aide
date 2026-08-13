@@ -6,7 +6,7 @@ import { writeFile } from "node:fs/promises";
 const AGENT_PLATFORM_UNAVAILABLE_BODY = JSON.stringify({
   error: "agent-platform unavailable",
   message:
-    "Local agent-platform is not running. CrewON app-server conversations are still available.",
+    "Local agent-platform is not running. CrewON Control conversations are still available.",
 });
 const AGENT_PLATFORM_REACHABILITY_TTL_MS = 2_000;
 const AGENT_PLATFORM_REACHABILITY_TIMEOUT_MS = 8_000;
@@ -38,13 +38,6 @@ const MERMAID_CHUNK_PACKAGES = new Set([
 ]);
 const REACT_CHUNK_PACKAGES = new Set(["react", "react-dom", "scheduler"]);
 const LOOPBACK_ADDRESSES = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
-
-type WebSocketProxy = {
-  on(
-    event: "proxyReqWs",
-    callback: (proxyReq: { removeHeader: (name: string) => void }) => void,
-  ): void;
-};
 
 type HttpProxyResponse = {
   end?: (body?: string) => void;
@@ -271,19 +264,8 @@ function isMermaidChunkDependency(dependency: string): boolean {
   return filename.startsWith("mermaid-") && filename.endsWith(".js");
 }
 
-function appServerHttpTarget(target: string): string {
-  const url = new URL(target);
-  if (url.protocol === "ws:") {
-    url.protocol = "http:";
-  } else if (url.protocol === "wss:") {
-    url.protocol = "https:";
-  }
-  return url.toString();
-}
-
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
-  const appServerTarget = env.CREWON_APP_SERVER_TARGET ?? "ws://127.0.0.1:6176";
   const agentPlatformTarget =
     env.CREWON_AGENT_PLATFORM_TARGET ?? "http://127.0.0.1:8000";
   const controlTarget = env.CREWON_CONTROL_TARGET ?? "http://127.0.0.1:3210";
@@ -305,32 +287,6 @@ export default defineConfig(({ mode }) => {
       port: 5175,
       strictPort: false,
       proxy: {
-        "/app-server/principal-session": {
-          target: appServerHttpTarget(appServerTarget),
-          changeOrigin: false,
-          configure(proxy) {
-            (proxy as unknown as HttpProxy).on(
-              "proxyReq",
-              (proxyReq: { removeHeader: (name: string) => void }) => {
-                proxyReq.removeHeader("origin");
-              },
-            );
-          },
-          rewrite: (path) => path.replace(/^\/app-server/, ""),
-        },
-        "/app-server": {
-          target: appServerTarget,
-          ws: true,
-          changeOrigin: false,
-          configure(proxy) {
-            (proxy as unknown as WebSocketProxy).on(
-              "proxyReqWs",
-              (proxyReq) => {
-                proxyReq.removeHeader("origin");
-              },
-            );
-          },
-        },
         "/agent-platform-api": {
           target: agentPlatformTarget,
           changeOrigin: true,
