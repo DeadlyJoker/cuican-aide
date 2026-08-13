@@ -1,13 +1,7 @@
 import type { CapabilityPanel, CapabilityPanelItem } from "./capabilityPanelTypes";
 import type { LibraryPanel } from "../domain/crewonDomain";
 import { pathBaseName } from "../shared/pathUtils";
-import { trimmedPanelFieldValue, updatePanelFieldValue } from "../shared/panelState";
-import type { SettingsSaveAction } from "../settings/settingsActions";
-import {
-  createSettingsSaveHandlers,
-  type SettingsSaveHandlersParams,
-} from "../settings/settingsSaveActions";
-export { createSettingsRefreshHandlers } from "../settings/settingsRefreshHandlers";
+import { updatePanelFieldValue } from "../shared/panelState";
 
 export function openPluginPathFromPanelAction(params: {
   openCapabilityPanelItem: (item: CapabilityPanelItem) => void | Promise<void>;
@@ -17,18 +11,6 @@ export function openPluginPathFromPanelAction(params: {
     label: pathBaseName(params.path),
     path: params.path,
     kind: "directory",
-  });
-}
-
-export function createAppSettingsSaveHandlers(
-  params: Omit<SettingsSaveHandlersParams, "fieldValue"> & {
-    capabilityPanel: CapabilityPanel | null;
-  },
-): Record<SettingsSaveAction, () => void> {
-  return createSettingsSaveHandlers({
-    ...params,
-    fieldValue: (fieldId) =>
-      trimmedPanelFieldValue(params.capabilityPanel, fieldId),
   });
 }
 

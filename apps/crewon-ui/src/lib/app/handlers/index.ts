@@ -5,7 +5,6 @@ export * from "./appLibraryOpenHandlers";
 export * from "./appLibraryPanelActionHandlers";
 export * from "./appLibraryPanelDispatchHandler";
 export * from "./appOfficeRuntimeHandlers";
-export * from "./appSettingsRefreshHandlers";
 export * from "./appShellActionHandlers";
 export * from "./appThreadRuntimeHandlers";
 export * from "./appWorkspaceCapabilityHandlers";
