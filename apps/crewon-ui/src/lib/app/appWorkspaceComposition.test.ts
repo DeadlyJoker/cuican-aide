@@ -99,6 +99,8 @@ describe("App Workspace Control composition", () => {
     expect(source).toContain("openControlLibraryItem");
     expect(source).not.toContain("createAppLibraryOpenCoordinator");
     expect(source).not.toContain("createAppLibraryPanelDispatchCoordinator");
+    expect(source).not.toContain("createAppOfficeRuntimeCoordinator");
+    expect(source).not.toContain("createAppDomainActionCoordinator");
   });
 
   it("composes Settings from a non-null Control client", () => {

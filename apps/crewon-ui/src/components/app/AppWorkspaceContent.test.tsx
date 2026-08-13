@@ -24,32 +24,19 @@ describe("AppWorkspaceContent", () => {
         slashCommands={[]}
         streamingTextByThread={{}}
         workMode="code"
-        onApprovalDecision={vi.fn()}
-        onArtifact={vi.fn()}
         onAttachContext={vi.fn()}
         onBackLibrary={vi.fn()}
         onChangeComposerValue={vi.fn()}
         onItemAction={vi.fn()}
         onLibraryPanelAction={vi.fn()}
         onModeChange={vi.fn()}
-        onOfficeDelegationCancel={vi.fn()}
-        onOfficeDelegationDispatch={vi.fn()}
-        onOfficeDelegationRetry={vi.fn()}
-        onOfficeVerificationCancel={vi.fn()}
-        onOfficeVerificationRetry={vi.fn()}
-        onOfficeRunCancel={vi.fn()}
-        onOfficeRunRetry={vi.fn()}
         onPanelAction={vi.fn()}
         onPanelFieldChange={vi.fn()}
         onRetryConnection={vi.fn()}
-        onSaveAgentConfig={vi.fn()}
         onSend={vi.fn()}
         onSlashCommandSelect={vi.fn()}
-        onSendOfficeMessage={vi.fn()}
         onStop={vi.fn()}
         onThreadSettings={vi.fn()}
-        onToggleAgentCapability={vi.fn()}
-        onUpdateAgentConfig={vi.fn()}
       />,
     );
 

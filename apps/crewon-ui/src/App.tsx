@@ -20,10 +20,8 @@ import {
 } from "./lib/shared/rpcErrors";
 import {
   createAppCapabilityPanelHandlers,
-  createAppDomainActionCoordinator,
   createAppDomainBackendCoordinator,
   createAppCommandShellHandlers,
-  createAppOfficeRuntimeCoordinator,
   createAppSettingsCoordinator,
   createAppShellActionHandlers,
   createAppThreadRuntimeHandlers,
@@ -40,7 +38,6 @@ import {
   useAppChromeState,
   useAppThreadState,
   useAppStateRefsEffect,
-  useAppRunTrackingRefs,
   useAppComposerState,
   useAppWorkspaceStatusState,
   useAppShellRuntimeState,
@@ -129,8 +126,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
    */
   const threadState = useAppThreadState();
   const {
-    activeTurnByThread,
-    activeTurnByThreadRef,
     isSearchingThreads,
     loadedThreadIds,
     selectedThreadId,
@@ -153,7 +148,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     threadGoal,
     threadGoalBusy,
   } = workspaceStatus;
-  const { officeRunByTurnRef } = useAppRunTrackingRefs();
   const {
     connected: controlRuntimeConnected,
     rehydrateThreadAuthority: rehydrateControlThreadAuthority,
@@ -351,47 +345,13 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       : "",
   });
 
-  const {
-    listRecruitableAgentConfigs,
-    persistOfficeMessage,
-    resolveBackendCwd,
-    startBackendDomainThread,
-    writeAgentConfigFile,
-  } = createAppDomainBackendCoordinator({
+  const { resolveBackendCwd } = createAppDomainBackendCoordinator({
     client: null,
     currentCwd: cwd,
     isConnected,
     isDemoPreview,
     locale,
     ...threadState,
-  });
-  const {
-    ensureOfficeThread,
-    handleOfficeDelegationCancel,
-    handleOfficeDelegationDispatch,
-    handleOfficeDelegationDispatchNext,
-    handleOfficeDelegationRetry,
-    handleOfficeVerificationCancel,
-    handleOfficeVerificationRetry,
-    listOfficeMemories,
-    decideOfficeMemory,
-    handleOfficeRunCancel,
-    handleOfficeRunRetry,
-    sendOfficeMessage,
-    previewOfficeMemberContext,
-  } = createAppOfficeRuntimeCoordinator({
-    client: null,
-    getActiveTurnByThread: () => activeTurnByThreadRef.current,
-    isConnected,
-    isMissingThreadError,
-    libraryPanelRef,
-    locale,
-    officeRunByTurnRef,
-    persistOfficeMessage,
-    resolveBackendCwd,
-    ...threadState,
-    setLibraryPanel,
-    setNotice,
   });
   const openLibrary = async (kind: LibraryKind) => {
     const requestId = libraryLoadRequestRef.current + 1;
@@ -430,31 +390,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       resolveBackendCwd,
       setNotice,
     });
-
-  const {
-    handleApprovalDecision,
-    handleOfficeArtifact,
-    saveAgentConfig,
-    toggleAgentCapability,
-    updateAgentConfig,
-  } = createAppDomainActionCoordinator({
-    ...workspaceStatus,
-    client: null,
-    ensureOfficeThread,
-    getCapabilityPanelItemHandler: () => handleCapabilityPanelItem,
-    isConnected,
-    isMissingThreadError,
-    libraryPanel,
-    locale,
-    resolveBackendCwd,
-    ...threadState,
-    ...chromeState,
-    setCapabilityPanel,
-    setLibraryPanel,
-    setNotice,
-    startBackendDomainThread,
-    writeAgentConfig: writeAgentConfigFile,
-  });
 
   const handleLibraryPanelAction = createControlLibraryPanelActionHandler({
     client: controlClient,
@@ -939,7 +874,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         onToggleArchived={toggleArchivedThreads}
       />
       <AppWorkspaceContent
-        activeTurnByThread={activeTurnByThread}
         activeTurnId={activeTurnId}
         appView={appView}
         capabilityPanel={capabilityPanel}
@@ -960,8 +894,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         settingsSection={settingsSection}
         streamingTextByThread={streamingTextByThread}
         workMode={workMode}
-        onApprovalDecision={handleApprovalDecision}
-        onArtifact={handleOfficeArtifact}
         onAttachContext={attachWorkspaceContext}
         onBackLibrary={() => {
           setWorkMode("code");
@@ -972,36 +904,14 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         onLibraryPanelAction={handleLibraryPanelAction}
         onModeChange={setWorkMode}
         onSaveCapability={saveCapability}
-        onOfficeDelegationDispatch={handleOfficeDelegationDispatch}
-        onOfficeDelegationCancel={handleOfficeDelegationCancel}
-        onOfficeDelegationRetry={handleOfficeDelegationRetry}
-        onOfficeDelegationDispatchNext={handleOfficeDelegationDispatchNext}
-        onOfficeVerificationCancel={handleOfficeVerificationCancel}
-        onOfficeVerificationRetry={handleOfficeVerificationRetry}
-        onOfficeMemoryDecision={async (memoryId, status) =>
-          (await decideOfficeMemory(memoryId, status))?.response?.memory ?? null
-        }
-        onOfficeMemoryList={async (status, cursor) =>
-          (await listOfficeMemories(status, cursor))?.response ?? null
-        }
-        onOfficeMemberContextPreview={async (run, member) =>
-          (await previewOfficeMemberContext(run, member))?.response ?? null
-        }
-        onRecruitableAgentList={listRecruitableAgentConfigs}
-        onOfficeRunCancel={handleOfficeRunCancel}
-        onOfficeRunRetry={handleOfficeRunRetry}
         onPanelAction={handleCapabilityPanelAction}
         onPanelFieldCommit={handleSettingsFieldCommit}
         onPanelFieldChange={handleCapabilityPanelFieldChange}
         onRetryConnection={retryConnection}
-        onSaveAgentConfig={saveAgentConfig}
         onSend={sendMessage}
         onSlashCommandSelect={handleComposerSlashCommand}
-        onSendOfficeMessage={sendOfficeMessage}
         onStop={interruptActiveTurn}
         onThreadSettings={openThreadSettingsPanel}
-        onToggleAgentCapability={toggleAgentCapability}
-        onUpdateAgentConfig={updateAgentConfig}
       />
       <AppWorkspaceSidePanels
         {...workspaceStatus}
