@@ -43,6 +43,22 @@ export type WorkflowWorkItemPayload =
       claimId: string | null;
       claimEpoch: number | null;
       reconciliationOperationId: string;
+    }>
+  | Readonly<{
+      schemaVersion: "crewon.workflow-tool-approval-resume-work-item.v0";
+      trigger: "workflowToolApprovalResume";
+      binding: FrozenWorkflowVersionBinding;
+      nodeId: string;
+      claimId: string;
+      claimEpoch: number;
+      stepId: string;
+      attemptId: string;
+      agentVersionId: string;
+      agentWorkItemId: string;
+      agentLeaseEpoch: number;
+      approvalId: string;
+      receiptId: string;
+      actionDigest: string;
     }>;
 
 export function parseWorkflowWorkItemPayload(
@@ -50,11 +66,20 @@ export function parseWorkflowWorkItemPayload(
 ): WorkflowWorkItemPayload {
   const trigger = input.trigger;
   if (trigger === "workflowCancel") {
-    exact(input, ["binding", "cancellationOperationId", "schemaVersion", "trigger"]);
-    if (input.schemaVersion !== "crewon.workflow-cancel-work-item.v0") invalid();
-    return { schemaVersion: input.schemaVersion, trigger,
+    exact(input, [
+      "binding",
+      "cancellationOperationId",
+      "schemaVersion",
+      "trigger",
+    ]);
+    if (input.schemaVersion !== "crewon.workflow-cancel-work-item.v0")
+      invalid();
+    return {
+      schemaVersion: input.schemaVersion,
+      trigger,
       binding: binding(input.binding),
-      cancellationOperationId: id(input.cancellationOperationId) };
+      cancellationOperationId: id(input.cancellationOperationId),
+    };
   }
   if (trigger === "workflowScheduler") {
     exact(input, [
@@ -148,6 +173,45 @@ export function parseWorkflowWorkItemPayload(
       claimId: input.claimId === null ? null : id(input.claimId),
       claimEpoch: input.claimEpoch === null ? null : epoch(input.claimEpoch),
       reconciliationOperationId: id(input.reconciliationOperationId),
+    };
+  }
+  if (trigger === "workflowToolApprovalResume") {
+    exact(input, [
+      "actionDigest",
+      "agentLeaseEpoch",
+      "agentVersionId",
+      "agentWorkItemId",
+      "approvalId",
+      "attemptId",
+      "binding",
+      "claimEpoch",
+      "claimId",
+      "nodeId",
+      "receiptId",
+      "schemaVersion",
+      "stepId",
+      "trigger",
+    ]);
+    if (
+      input.schemaVersion !==
+      "crewon.workflow-tool-approval-resume-work-item.v0"
+    )
+      invalid();
+    return {
+      schemaVersion: input.schemaVersion,
+      trigger,
+      binding: binding(input.binding),
+      nodeId: id(input.nodeId),
+      claimId: id(input.claimId),
+      claimEpoch: epoch(input.claimEpoch),
+      stepId: id(input.stepId),
+      attemptId: id(input.attemptId),
+      agentVersionId: id(input.agentVersionId),
+      agentWorkItemId: id(input.agentWorkItemId),
+      agentLeaseEpoch: epoch(input.agentLeaseEpoch),
+      approvalId: id(input.approvalId),
+      receiptId: id(input.receiptId),
+      actionDigest: id(input.actionDigest),
     };
   }
   invalid();

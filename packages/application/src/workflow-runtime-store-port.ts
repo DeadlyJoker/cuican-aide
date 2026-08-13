@@ -2,6 +2,7 @@ import type { ModelDispatchEvidenceStore } from "./model-dispatch-evidence-store
 import type { WorkflowNodeContinuationStore } from "./workflow-node-continuation-store-port.ts";
 import type { WorkflowRunAdmissionStore } from "./workflow-run-admission-store-port.ts";
 import type { WorkflowRunCompositionStore } from "./workflow-run-composition-port.ts";
+import type { WorkflowToolApprovalStore } from "./workflow-tool-approval-store-port.ts";
 import type { WorkflowExecutionState } from "./workflow-execution-types.ts";
 
 /**
@@ -15,7 +16,8 @@ export interface WorkflowRuntimeStore
   extends WorkflowRunAdmissionStore,
     WorkflowRunCompositionStore,
     WorkflowNodeContinuationStore,
-    ModelDispatchEvidenceStore {
+    ModelDispatchEvidenceStore,
+    WorkflowToolApprovalStore {
   loadWorkflowExecution(input: {
     tenantId: string;
     runId: string;

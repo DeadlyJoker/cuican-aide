@@ -138,6 +138,11 @@ export type RequireToolApprovalResult = Readonly<{
   disposition: "required" | "existing";
   approval: ToolApprovalState;
 }>;
+export type PreparedWorkflowToolApproval = Readonly<{
+  approval: ToolApprovalState;
+  requiredEvent: RunLifecycleEvent;
+  publicationOutbox: OutboxMessage;
+}>;
 
 export type ToolCompletedAgentEvent = Readonly<
   Omit<CanonicalAgentEvent, "type" | "data"> & {
@@ -859,6 +864,60 @@ export class RunExecutionService {
       throw mapExecutionError(error);
     }
     return { disposition: "required", approval };
+  }
+
+  async prepareWorkflowToolApproval(
+    claim: WorkItemClaim,
+    receipt: ToolExecutionReceiptState,
+    input: Readonly<{ expiresAfterMs: number | null }>,
+  ): Promise<PreparedWorkflowToolApproval> {
+    const state = await this.loadRun(claim);
+    const intent = receipt.actionIntent;
+    if (
+      state.status !== "running" ||
+      state.cancelRequested ||
+      intent === null ||
+      intent.approvalRequirement !== "perAction" ||
+      receipt.status !== "prepared" ||
+      receipt.tenantId !== state.tenantId ||
+      receipt.runId !== state.runId ||
+      receipt.workItemId !== claim.workItem.workItemId
+    )
+      throw new ApplicationError(
+        "conflict",
+        "workflow_tool_approval_preparation_invalid",
+      );
+    const requiredAt = this.#now();
+    const approval = createToolApproval({
+      approvalId: this.#nextId("approval"),
+      tenantId: state.tenantId,
+      spaceId: state.spaceId,
+      runId: state.runId,
+      receiptId: receipt.receiptId,
+      workItemId: this.#nextId("workItem"),
+      actionDigest: receipt.actionDigest,
+      policySnapshotId: intent.policySnapshotId,
+      requestedByActorId: state.createdByActorId,
+      requiredAt,
+      expiresAt: approvalExpiresAt(requiredAt, input.expiresAfterMs),
+    });
+    const requiredEvent: RunLifecycleEvent = {
+      schemaVersion: "crewon.run-event.v0",
+      identity: { runId: state.runId },
+      eventId: this.#nextId("runEvent"),
+      sequence: state.lastSequence + 1,
+      occurredAt: requiredAt,
+      type: "run.approval.required",
+      data: {
+        approvalId: approval.approvalId,
+        actionDigest: approval.actionDigest,
+      },
+    };
+    return {
+      approval,
+      requiredEvent,
+      publicationOutbox: this.#outbox(state.tenantId, requiredEvent),
+    };
   }
 
   async expireToolApproval(
