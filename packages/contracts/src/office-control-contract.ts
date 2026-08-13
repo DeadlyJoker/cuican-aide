@@ -1,5 +1,7 @@
 import { ContractValidationError } from "./contract-validation-error.ts";
 
+const OFFICE_CURSOR_PREFIX = "crewon.office.cursor.v1:";
+
 export type OfficeMemberContract = Readonly<{
   memberId: string;
   displayName: string;
@@ -65,8 +67,8 @@ export function parseCreateOfficeRequest(value: unknown): CreateOfficeRequest {
     ...(officeId === undefined ? {} : { officeId }),
     expectedRevision: object.expectedRevision as number,
     title: text(object.title, 160, "office_title_invalid"),
-    members: array(object.members, 32, member),
-    executionTargets: array(object.executionTargets, 32, target),
+    members: array(object.members, 0, 32, member),
+    executionTargets: array(object.executionTargets, 1, 32, target),
   };
 }
 export function parseStartOfficeRunRequest(
@@ -90,17 +92,20 @@ export function parseOfficeListQuery(value: unknown) {
     fail("office_list_limit_invalid");
   let before = null;
   if (object.before !== undefined) {
-    const decoded = Buffer.from(
-      text(object.before, 1024, "office_cursor_invalid"),
-      "base64url",
-    )
-      .toString("utf8")
-      .split("\0");
-    if (decoded.length !== 2) fail("office_cursor_invalid");
-    before = {
-      createdAt: text(decoded[0], 64, "office_cursor_invalid"),
-      officeVersionId: text(decoded[1], 128, "office_cursor_invalid"),
-    };
+    try {
+      const input = text(object.before, 1024, "office_cursor_invalid");
+      const decoded = decodeBase64Url(input);
+      if (!decoded.startsWith(OFFICE_CURSOR_PREFIX)) fail("office_cursor_invalid");
+      const tuple: unknown = JSON.parse(decoded.slice(OFFICE_CURSOR_PREFIX.length));
+      if (!Array.isArray(tuple) || tuple.length !== 2) fail("office_cursor_invalid");
+      before = {
+        createdAt: timestamp(tuple[0], "office_cursor_invalid"),
+        officeVersionId: text(tuple[1], 128, "office_cursor_invalid"),
+      };
+      if (formatOfficeCursor(before) !== input) fail("office_cursor_invalid");
+    } catch {
+      fail("office_cursor_invalid");
+    }
   }
   return { limit, before };
 }
@@ -108,10 +113,12 @@ export function formatOfficeCursor(value: {
   createdAt: string;
   officeVersionId: string;
 }) {
-  return Buffer.from(
-    `${value.createdAt}\0${value.officeVersionId}`,
-    "utf8",
-  ).toString("base64url");
+  return encodeBase64Url(
+    `${OFFICE_CURSOR_PREFIX}${JSON.stringify([
+      timestamp(value.createdAt, "office_cursor_invalid"),
+      text(value.officeVersionId, 128, "office_cursor_invalid"),
+    ])}`,
+  );
 }
 function member(value: unknown): OfficeMemberContract {
   const object = record(value, "office_member_invalid");
@@ -130,8 +137,13 @@ function target(value: unknown): OfficeExecutionTargetContract {
     agentVersionId: text(object.agentVersionId, 128, "office_target_invalid"),
   };
 }
-function array<T>(value: unknown, max: number, parse: (item: unknown) => T) {
-  if (!Array.isArray(value) || value.length > max)
+function array<T>(
+  value: unknown,
+  min: number,
+  max: number,
+  parse: (item: unknown) => T,
+) {
+  if (!Array.isArray(value) || value.length < min || value.length > max)
     fail("office_collection_bounds_invalid");
   return value.map(parse);
 }
@@ -153,6 +165,33 @@ function text(value: unknown, max: number, code: string) {
   )
     fail(code);
   return value;
+}
+function timestamp(value: unknown, code: string): string {
+  const parsed = text(value, 64, code);
+  if (
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(parsed) ||
+    Number.isNaN(Date.parse(parsed))
+  )
+    fail(code);
+  return parsed;
+}
+function encodeBase64Url(value: string): string {
+  const bytes = new TextEncoder().encode(value);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary)
+    .replaceAll("+", "-")
+    .replaceAll("/", "_")
+    .replace(/=+$/u, "");
+}
+function decodeBase64Url(value: string): string {
+  if (!/^[A-Za-z0-9_-]+$/u.test(value)) fail("office_cursor_invalid");
+  const base64 = value.replaceAll("-", "+").replaceAll("_", "/");
+  const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, "=");
+  const binary = atob(padded);
+  return new TextDecoder(undefined, { fatal: true }).decode(
+    Uint8Array.from(binary, (character) => character.charCodeAt(0)),
+  );
 }
 function fail(code: string): never {
   throw new ContractValidationError(code);
