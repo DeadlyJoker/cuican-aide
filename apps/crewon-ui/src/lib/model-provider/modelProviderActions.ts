@@ -80,7 +80,10 @@ type SetCapabilityPanel = (
  */
 export type ModelProviderRefreshParams = {
   client: ModelProviderClient | null | undefined;
-  controlClient?: Pick<ControlApiClient, "getModelProviderSettings"> | null;
+  controlClient?:
+    | (Pick<ControlApiClient, "getModelProviderSettings"> &
+        Partial<Pick<ControlApiClient, "probeModelProvider">>)
+    | null;
   /** Shown as the subtitle when disconnected; the action dispatcher has none. */
   connectionHint?: string;
   isConnected: boolean;
@@ -148,6 +151,9 @@ async function syncCompatibilityConfig(
   params: ModelProviderRefreshParams,
   edits: Parameters<ModelProviderClient["writeConfigBatch"]>[0],
 ): Promise<boolean> {
+  if (params.controlClient !== null && params.controlClient !== undefined) {
+    return true;
+  }
   if (!params.client || !params.isConnected) return false;
   try {
     await params.client.writeConfigBatch(edits);
@@ -437,6 +443,56 @@ async function probeProvider(
   providerId: string,
 ) {
   const { client, locale, setCapabilityPanel } = params;
+
+  const controlProbe = params.controlClient?.probeModelProvider;
+  if (controlProbe !== undefined) {
+    setCapabilityPanel((currentPanel) =>
+      currentPanel
+        ? {
+            ...currentPanel,
+            body:
+              locale === "zh"
+                ? `正在通过 CrewON Control 测试 ${providerId}...`
+                : `Testing ${providerId} through CrewON Control...`,
+            error: undefined,
+          }
+        : currentPanel,
+    );
+    try {
+      const probe = await controlProbe(
+        `settings.provider-probe:${crypto.randomUUID()}`,
+      );
+      const text = [
+        probe.status === "ok"
+          ? locale === "zh"
+            ? "连接成功"
+            : "Connected"
+          : locale === "zh"
+            ? `连接测试结果：${probe.status}`
+            : `Connection test result: ${probe.status}`,
+        `Provider: ${probe.providerId}`,
+        `${locale === "zh" ? "模型数" : "Models"}: ${probe.modelCount ?? "-"}`,
+        `${locale === "zh" ? "耗时" : "Latency"}: ${probe.latencyMs}ms`,
+        probe.retryable
+          ? locale === "zh"
+            ? "该错误可重试。"
+            : "This failure is retryable."
+          : null,
+      ]
+        .filter((line): line is string => line !== null)
+        .join("\n");
+      await refreshModelProvidersPanelAction(params, text);
+    } catch (error) {
+      await refreshModelProvidersPanelAction(
+        params,
+        [
+          locale === "zh" ? "连接测试未能完成" : "Connection test failed",
+          error instanceof Error ? error.message : String(error),
+        ].join("\n"),
+      );
+    }
+    return;
+  }
 
   if (credentialStoreFor(params) !== null) {
     await refreshModelProvidersPanelAction(
