@@ -1,7 +1,8 @@
 # W01 production transaction protocol
 
-Status: accepted for the TypeScript runtime. Production Workflow composition is enabled only when
-one physical SQLite or PostgreSQL Store implements every transaction below.
+Status: accepted for the TypeScript runtime. Control and Worker now construct Workflow services
+directly from one physical SQLite or PostgreSQL Store implementing every transaction below; there
+is no optional candidate/certification composition path.
 
 ## Global authority rules
 
@@ -88,16 +89,17 @@ cannot overwrite canceled. Only an exact `terminalConverged` result authorizes W
 
 ## Production gate
 
-Production export/composition fails closed when any method is absent, throws
-`workflow_composition_contract_incomplete`, is backed only by a mock/conditional skip, or is supplied
-by a different Store instance. SQLite and PostgreSQL production composition are enabled only from
-their canonical `DomainStore`; no second pool/Store or fake adapter may claim an end-to-end slice.
+SQLite and PostgreSQL production composition is structurally bound to their canonical
+`DomainStore`; Control constructs Workflow start/Human Gate services from that Store, and Worker
+unconditionally constructs the production dispatcher from the same Store it uses for Run execution.
+There is no public disabled/candidate gate, second pool/Store, fake adapter, or certification switch.
+An incomplete Store therefore fails at construction/typecheck instead of silently omitting Workflow.
 
 ## W01 acceptance matrix (2026-08-13)
 
 | Capability | Status | Current evidence / gap |
 | --- | --- | --- |
-| transaction contract | 通过 | this protocol plus discriminated Application ports |
+| transaction contract | 通过 | this protocol plus discriminated Application ports; obsolete optional certification/candidate gates were removed from Control and Worker |
 | Workflow Start | 通过（SQLite Control） | real HTTP Control admission uses the certified `SqliteRunStore`; public RunView/audit events prove queued→running→terminal, and exact Application replay remains covered |
 | Scheduler fan-out | 通过（SQLite Slices 1–2） | real Worker persists `run.started`; two-connection Slice 2 creates frozen-order sibling WorkItems with distinct claims and no scheduler Attempt |
 | Node admission | 通过（SQLite Slices 1–2） | two real Workers hold distinct sibling leases and simultaneously running Steps/Attempts; mock adversarial suite separately covers replay and response-loss fencing |
@@ -106,5 +108,5 @@ their canonical `DomainStore`; no second pool/Store or fake adapter may claim an
 | Reconciliation | 通过（TS SQLite Slice 4） | real second-connection Worker restart covers `possiblySent`, `notDispatched`, checkpoint-only `responseObserved`, and Store-owned terminal candidates. Candidate recovery settles from frozen schema authority with one model sample; exact receipt replay is observation-only and mismatched candidate IDs fail closed |
 | Terminal convergence | 通过（TS SQLite Slices 1–5） | success、Verification、gate、reconcile 与 cancel 均由 Store 单事务收敛；queued、running/notSent、waitingHuman、unknown/possiblySent 以及 responseObserved late outcome 已覆盖，provider 终态仅保留审计证据且不能覆盖 canceled canonical DAG/Step/Attempt/Run |
 | PostgreSQL real-host | 通过 | real PostgreSQL ran the complete Store suite (556 pass, 0 fail; one unrelated Provider skip), Worker suite (355/355), and Control suite (112/112). One `PostgresDomainStore` now owns Run, Attempt, dispatch evidence, Workflow composition, and terminal convergence; the public production Control→Worker→Agent→Verification vertical completed with two Attempts. Earlier two-process/SIGKILL tests also preserved lease epochs and unique receipt/continuation authority |
-| Packaged crash recovery | 通过 | packaged `.app` used only the TS Control/Gateway/Worker/Release runtime: after Worker and GUI `SIGKILL`, guardian cleared the process tree and the same HOME resumed Agent→Verification to one canonical `run.completed`; two distinct node requests produced exactly two Attempts with no repeated model side effect |
+| Packaged crash recovery | 通过 | packaged `.app` uses the TS Control/Worker runtime and one-shot TS Release bootstrap, with no Gateway, Device, or app-server process: after Worker and GUI `SIGKILL`, guardian cleared the process tree and the same HOME resumed Agent→Verification to one canonical `run.completed`; two distinct node requests produced exactly two Attempts with no repeated model side effect |
 | Rust compatibility | 不适用（纯 TS 迁移边界） | migration uses the TS runtime only; Rust is not used during migration, and no compatibility layer, dual-write, fallback, or parity gate will be built; only a hard TS build dependency may receive minimal decoupling |
