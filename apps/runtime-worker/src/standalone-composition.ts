@@ -11,11 +11,7 @@ import {
   RunExecutionService,
   type AgentVersionDeploymentCandidate,
   type ArtifactStorePort,
-  type DomainStore,
-  type ModelProviderSettingsStore,
   type RunRoute,
-  type WorkflowRuntimeStore,
-  type WorkflowVersionStore,
 } from "@crewon/application";
 import {
   PostgresDomainStore,
@@ -143,27 +139,6 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   }>;
   workspaceReadFile?: RuntimeWorkspaceReadFileConfig;
   nativeWorkspaceReadCatalog?: NativeWorkspaceReadCatalog;
-  workflowComposition?: WorkflowRuntimeCompositionCandidate;
-}>;
-
-export const WORKFLOW_RUNTIME_CAPABILITIES = [
-  "receiptFirstAdmission",
-  "exactNodeRuntimeAuthority",
-  "durableModelDispatchEvidence",
-  "atomicNodeSettlement",
-  "durableHumanGate",
-  "evidenceBasedReconciliation",
-  "atomicCancellation",
-] as const;
-
-export type WorkflowRuntimeCompositionCandidate = Readonly<{
-  certification: Readonly<{
-    schemaVersion: "crewon.workflow-runtime-certification.v0";
-    capabilities: typeof WORKFLOW_RUNTIME_CAPABILITIES;
-  }>;
-  versions: WorkflowVersionStore;
-  store: WorkflowRuntimeStore & DomainStore;
-  close(): Promise<void>;
 }>;
 
 export type StandaloneRuntimeWorkerConfig = RuntimeWorkerCompositionConfig &
@@ -194,9 +169,9 @@ export async function createStandaloneRuntimeWorker(
   let workspaceReadStore: SqliteWorkspaceReadFileStore | undefined;
   try {
     releasePlan = compileRuntimeAgentVersionRelease(config);
-    store = config.workflowComposition?.store instanceof SqliteRunStore
-      ? config.workflowComposition.store
-      : new SqliteRunStore(config.databasePath);
+    store = new SqliteRunStore(config.databasePath, {
+      workflowDigester: new NodeSha256ContentDigester(),
+    });
     workspaceReadStore =
       config.workspaceReadFile === undefined
         ? undefined
@@ -204,36 +179,18 @@ export async function createStandaloneRuntimeWorker(
   } catch (error) {
     await Promise.allSettled([
       workspaceReadStore?.close() ?? Promise.resolve(),
-      closeStandaloneRoots(config, store),
-      closeStartupResources(config, false),
+      store?.close() ?? Promise.resolve(),
+      closeStartupResources(config),
     ]);
     throw error;
   }
   try {
-    return await composeRuntimeWorker(
-      store,
-      workspaceReadStore,
-      {
-        ...config,
-        workflowComposition: config.workflowComposition ?? {
-          certification: {
-            schemaVersion: "crewon.workflow-runtime-certification.v0",
-            capabilities: WORKFLOW_RUNTIME_CAPABILITIES,
-          },
-          versions: store.workflowVersionStore(
-            new NodeSha256ContentDigester(),
-          ),
-          store,
-          close: () => store.close(),
-        },
-      },
-      releasePlan,
-    );
+    return await composeRuntimeWorker(store, workspaceReadStore, config, releasePlan);
   } catch (error) {
     await Promise.allSettled([
       workspaceReadStore?.close() ?? Promise.resolve(),
-      closeStandaloneRoots(config, store),
-      closeStartupResources(config, false),
+      store.close(),
+      closeStartupResources(config),
     ]);
     throw error;
   }
@@ -269,25 +226,7 @@ export async function createPostgresRuntimeWorker(
     throw error;
   }
   try {
-    return await composeRuntimeWorker(
-      store,
-      workspaceReadStore,
-      {
-        ...config,
-        workflowComposition: config.workflowComposition ?? {
-          certification: {
-            schemaVersion: "crewon.workflow-runtime-certification.v0",
-            capabilities: WORKFLOW_RUNTIME_CAPABILITIES,
-          },
-          versions: store.workflowVersionStore(
-            new NodeSha256ContentDigester(),
-          ),
-          store,
-          close: () => store.close(),
-        },
-      },
-      releasePlan,
-    );
+    return await composeRuntimeWorker(store, workspaceReadStore, config, releasePlan);
   } catch (error) {
     await Promise.allSettled([
       workspaceReadStore?.close() ?? Promise.resolve(),
@@ -299,7 +238,7 @@ export async function createPostgresRuntimeWorker(
 }
 
 async function composeRuntimeWorker(
-  store: DomainStore & ModelProviderSettingsStore,
+  store: SqliteRunStore | PostgresDomainStore,
   workspaceReadStore:
     | SqliteWorkspaceReadFileStore
     | PostgresWorkspaceReadFileStore
@@ -407,35 +346,29 @@ async function composeRuntimeWorker(
       config.agentVersionRuntimeFactory ??
       staticAgentVersionRuntimeFactory(config, toolRuntime),
   });
-  const workflow = certifyWorkflowComposition(config.workflowComposition, store);
   const execution = new RunExecutionService({
     store,
     clock,
     ids,
     digester,
-    ...(workflow === null
-      ? {}
-      : { workflowExecutions: workflow.store }),
+    workflowExecutions: store,
   });
-  const workflowDispatcher =
-    workflow === null
-      ? undefined
-      : new ProductionWorkflowRuntimeDispatcher({
-          versions: workflow.versions,
-          store: workflow.store,
-          digester,
-          agent: new WorkflowAgentRuntimeAdapter({
-            runtimes: runtimeResolver,
-            engine: new SharedWorkflowAdmittedAgentExecutionEngine({
-              execution,
-              store: workflow.store,
-              leaseDurationMs: config.leaseDurationMs ?? 30_000,
-              afterTerminalCandidateCommitted:
-                config.afterWorkflowTerminalCandidateCommitted,
-            }),
-          }),
-          leaseDurationMs: config.leaseDurationMs ?? 30_000,
-        });
+  const workflowDispatcher = new ProductionWorkflowRuntimeDispatcher({
+    versions: store.workflowVersionStore(digester),
+    store,
+    digester,
+    agent: new WorkflowAgentRuntimeAdapter({
+      runtimes: runtimeResolver,
+      engine: new SharedWorkflowAdmittedAgentExecutionEngine({
+        execution,
+        store,
+        leaseDurationMs: config.leaseDurationMs ?? 30_000,
+        afterTerminalCandidateCommitted:
+          config.afterWorkflowTerminalCandidateCommitted,
+      }),
+    }),
+    leaseDurationMs: config.leaseDurationMs ?? 30_000,
+  });
   const worker = new RuntimeWorker(
     {
       store,
@@ -555,7 +488,7 @@ async function composeRuntimeWorker(
           agentVersionRegistry.close(),
           artifactStore?.close() ?? Promise.resolve(),
           workspaceReadStore?.close() ?? Promise.resolve(),
-          closeRuntimeRoots(config, store),
+          store.close(),
         ])),
       );
       const failures = results.flatMap((result) =>
@@ -566,43 +499,6 @@ async function composeRuntimeWorker(
       }
     },
   };
-}
-
-function certifyWorkflowComposition(
-  candidate: WorkflowRuntimeCompositionCandidate | undefined,
-  store: DomainStore & ModelProviderSettingsStore,
-): WorkflowRuntimeCompositionCandidate | null {
-  if (candidate === undefined) return null;
-  if (
-    !hasExactKeys(candidate, ["certification", "close", "store", "versions"]) ||
-    !hasExactKeys(candidate.certification, ["capabilities", "schemaVersion"]) ||
-    candidate.certification.schemaVersion !==
-      "crewon.workflow-runtime-certification.v0" ||
-    candidate.certification.capabilities.length !==
-      WORKFLOW_RUNTIME_CAPABILITIES.length ||
-    candidate.certification.capabilities.some(
-      (capability, index) =>
-        capability !== WORKFLOW_RUNTIME_CAPABILITIES[index],
-    ) ||
-    !Object.is(candidate.store, store)
-  ) {
-    throw new Error("workflow_runtime_composition_not_certified");
-  }
-  return candidate;
-}
-
-function hasExactKeys(
-  value: unknown,
-  expected: readonly string[],
-): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null || Array.isArray(value))
-    return false;
-  const keys = Object.keys(value).sort();
-  const sortedExpected = [...expected].sort();
-  return (
-    keys.length === sortedExpected.length &&
-    keys.every((key, index) => key === sortedExpected[index])
-  );
 }
 
 function validateWorkspaceDeployment(
@@ -627,50 +523,12 @@ function validateWorkspaceDeployment(
 
 async function closeStartupResources(
   config: RuntimeWorkerCompositionConfig,
-  includeWorkflow = true,
 ): Promise<void> {
   await Promise.allSettled([
     config.workspacePrivate?.gateway.close() ?? Promise.resolve(),
     config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
     config.artifactStore?.close() ?? Promise.resolve(),
-    includeWorkflow
-      ? config.workflowComposition?.close() ?? Promise.resolve()
-      : Promise.resolve(),
   ]);
-}
-
-async function closeStandaloneRoots(
-  config: StandaloneRuntimeWorkerConfig,
-  store: { close(): Promise<void> } | undefined,
-): Promise<void> {
-  const candidate = config.workflowComposition;
-  const results = await Promise.allSettled([
-    candidate?.close() ?? Promise.resolve(),
-    store !== undefined && !Object.is(candidate?.store, store)
-      ? store.close()
-      : Promise.resolve(),
-  ]);
-  const failures = results.flatMap((result) =>
-    result.status === "rejected" ? [result.reason] : []);
-  if (failures.length > 0)
-    throw new AggregateError(failures, "runtime_root_close_failed");
-}
-
-async function closeRuntimeRoots(
-  config: StandaloneRuntimeWorkerConfig | PostgresRuntimeWorkerConfig,
-  store: { close(): Promise<void> },
-): Promise<void> {
-  if ("databasePath" in config) return closeStandaloneRoots(config, store);
-  const results = await Promise.allSettled([
-    config.workflowComposition?.close() ?? Promise.resolve(),
-    Object.is(config.workflowComposition?.store, store)
-      ? Promise.resolve()
-      : store.close(),
-  ]);
-  const failures = results.flatMap((result) =>
-    result.status === "rejected" ? [result.reason] : []);
-  if (failures.length > 0)
-    throw new AggregateError(failures, "runtime_root_close_failed");
 }
 
 function staticAgentVersionRuntimeFactory(

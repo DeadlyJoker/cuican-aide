@@ -20,7 +20,6 @@ import {
 } from "@crewon/application";
 import {
   createStandaloneRuntimeWorker,
-  WORKFLOW_RUNTIME_CAPABILITIES,
 } from "./standalone-composition.ts";
 import { activateStandaloneRuntimeAgentVersionRelease } from "./agent-version-release-composition.ts";
 
@@ -57,7 +56,7 @@ const parallelWorkflow = compileWorkflowVersion({
         required: ["left", "right"], additionalProperties: false }, outputSchema: schema },
   ],
 }, digester);
-test("certified standalone SQLite Slice 1 converges real shared Agent to Verification", async (t) => {
+test("standalone SQLite Slice 1 converges real shared Agent to Verification", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-slice-one-"));
   const path = join(directory, "runtime.sqlite");
   let runtime: Awaited<ReturnType<typeof createStandaloneRuntimeWorker>> | undefined;
@@ -97,6 +96,7 @@ test("certified standalone SQLite Slice 1 converges real shared Agent to Verific
     tenantId: "tenant-1", spaceId: "space-1" }, {
     kind: "thread.create", idempotencyKey: "create-thread", title: "Slice",
   });
+  t.after(() => store.close());
   await store.workflowVersionStore(digester).registerWorkflowVersion({
     schemaVersion: "crewon.workflow-version-asset.v0", tenantId: "tenant-1",
     workflowId: workflow.workflowId, workflowVersionId: workflow.workflowVersionId,
@@ -129,18 +129,11 @@ test("certified standalone SQLite Slice 1 converges real shared Agent to Verific
   assert.deepEqual({ routeCalls, generatedIds }, { routeCalls: 1,
     generatedIds: idsAfterFresh });
   const runId = freshStart.run.state.runId;
-  let closes = 0;
-  const versions = store.workflowVersionStore(digester);
   runtime = await createStandaloneRuntimeWorker({ ...config,
     databasePath: path, scanIntervalMs: null, ownerId: "slice-worker",
     additionalAgentVersionRuntimes: ["agent-v1", "verification-v1"].map(
       (agentVersionId) => ({ tenantId: "tenant-1",
         runtime: nodeRuntime(agentVersionId, samples) })),
-    workflowComposition: { certification: {
-      schemaVersion: "crewon.workflow-runtime-certification.v0",
-      capabilities: WORKFLOW_RUNTIME_CAPABILITIES }, versions,
-      store: store as never,
-      async close() { closes += 1; await store.close(); } },
   });
   const outcomes = [];
   for (let index = 0; index < 5; index += 1) {
@@ -173,10 +166,9 @@ test("certified standalone SQLite Slice 1 converges real shared Agent to Verific
   database.close();
   await runtime.close();
   runtime = undefined;
-  assert.equal(closes, 1);
 });
 
-test("certified SQLite Slice 2 preserves parallel sibling authority and frozen ordering", async (t) => {
+test("SQLite Slice 2 preserves parallel sibling authority and frozen ordering", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-slice-two-"));
   const path = join(directory, "runtime.sqlite");
   const runtimes: Array<Awaited<ReturnType<typeof createStandaloneRuntimeWorker>>> = [];
@@ -237,7 +229,6 @@ test("certified SQLite Slice 2 preserves parallel sibling authority and frozen o
   let bothEntered!: () => void;
   const bothEnteredGate = new Promise<void>((resolve) => { bothEntered = resolve; });
   const makeRuntime = async (ownerId: string) => {
-    const store = new SqliteRunStore(path, { workflowDigester: digester });
     const runtime = await createStandaloneRuntimeWorker({ ...config, databasePath: path,
       scanIntervalMs: null, ownerId,
       additionalAgentVersionRuntimes: versions.map(({ agentVersionId }) => ({
@@ -247,10 +238,6 @@ test("certified SQLite Slice 2 preserves parallel sibling authority and frozen o
             entered.add(agentVersionId);
             if (entered.has("left-v1") && entered.has("right-v1")) bothEntered();
           }) })),
-      workflowComposition: { certification: {
-        schemaVersion: "crewon.workflow-runtime-certification.v0",
-        capabilities: WORKFLOW_RUNTIME_CAPABILITIES }, versions: store.workflowVersionStore(digester),
-        store: store as never, close: () => store.close() },
     });
     runtimes.push(runtime);
     return runtime;

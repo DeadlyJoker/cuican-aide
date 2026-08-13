@@ -15,7 +15,7 @@ import { compileWorkflowVersion, serializeCompiledWorkflowVersion } from "@crewo
 import { SqliteRunStore } from "@crewon/store";
 import { activateStandaloneRuntimeAgentVersionRelease } from "./agent-version-release-composition.ts";
 import { WorkflowNodeSideEffectUncertainError } from "./workflow-runtime-dispatcher.ts";
-import { createStandaloneRuntimeWorker, WORKFLOW_RUNTIME_CAPABILITIES } from "./standalone-composition.ts";
+import { createStandaloneRuntimeWorker } from "./standalone-composition.ts";
 
 const digester = { sha256: (value: string) =>
   `sha256:${createHash("sha256").update(value).digest("hex")}` };
@@ -539,35 +539,26 @@ function restoreDecisionReceipt(path: string, operationId: string, resultJson: s
 
 async function openRuntime(path: string, config: ReturnType<typeof baseConfig> & Record<string, unknown>,
   samples: Map<string, number>, ownerId: string) {
-  const store = new SqliteRunStore(path, { workflowDigester: digester });
   return createStandaloneRuntimeWorker({ ...config, databasePath: path, scanIntervalMs: null, ownerId,
     additionalAgentVersionRuntimes: ["gate-agent-v1", "gate-verification-v1"].map((agentVersionId) => ({
       tenantId: "tenant-1", runtime: nodeRuntime(agentVersionId, samples) })),
-    workflowComposition: { certification: { schemaVersion: "crewon.workflow-runtime-certification.v0",
-      capabilities: WORKFLOW_RUNTIME_CAPABILITIES }, versions: store.workflowVersionStore(digester),
-      store: store as never, close: () => store.close() } });
+  });
 }
 async function openUncertainRuntime(path: string,
   config: ReturnType<typeof baseConfig> & Record<string, unknown>, samples: Map<string, number>,
   ownerId: string) {
-  const store = new SqliteRunStore(path, { workflowDigester: digester });
   return createStandaloneRuntimeWorker({ ...config, databasePath: path, scanIntervalMs: null, ownerId,
     additionalAgentVersionRuntimes: ["gate-agent-v1", "gate-verification-v1"].map(
       (agentVersionId) => ({ tenantId: "tenant-1",
         runtime: uncertainNodeRuntime(agentVersionId, samples) })),
-    workflowComposition: { certification: { schemaVersion: "crewon.workflow-runtime-certification.v0",
-      capabilities: WORKFLOW_RUNTIME_CAPABILITIES }, versions: store.workflowVersionStore(digester),
-      store: store as never, close: () => store.close() } });
+  });
 }
 async function openPreparedOnlyRuntime(path: string,
   config: ReturnType<typeof baseConfig> & Record<string, unknown>, ownerId: string) {
-  const store = new SqliteRunStore(path, { workflowDigester: digester });
   return createStandaloneRuntimeWorker({ ...config, databasePath: path, scanIntervalMs: null, ownerId,
     additionalAgentVersionRuntimes: ["gate-agent-v1", "gate-verification-v1"].map(
       (agentVersionId) => ({ tenantId: "tenant-1", runtime: preparedOnlyNodeRuntime(agentVersionId) })),
-    workflowComposition: { certification: { schemaVersion: "crewon.workflow-runtime-certification.v0",
-      capabilities: WORKFLOW_RUNTIME_CAPABILITIES }, versions: store.workflowVersionStore(digester),
-      store: store as never, close: () => store.close() } });
+  });
 }
 function inspectReconciliation(path: string, runId: string) {
   const database = new DatabaseSync(path);
