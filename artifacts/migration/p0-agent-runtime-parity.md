@@ -1,12 +1,17 @@
-# P0 基础 Agent Runtime 对齐矩阵
+# P0 基础 Agent Runtime 历史对齐矩阵
+
+> 状态：归档参考，非当前迁移或发布门禁。生产 authority 已切换为 TypeScript
+> Control/Worker Runtime；不再要求 Rust 行为兼容、双轨执行、双写、fallback 或新增
+> parity fixture。下列记录只保留既有决策的来源，后续实现以冻结的 TypeScript
+> Domain/Application contract、事务不变量和真实 crash recovery 为验收依据。
 
 日期：2026-08-09  
-状态：In progress  
-Rust source of truth：`codex-rs/core/src/session/turn.rs`、`codex-rs/core/src/responses_retry.rs` 与下表列出的
+状态：Archived 2026-08-13
+历史 Rust reference：`codex-rs/core/src/session/turn.rs`、`codex-rs/core/src/responses_retry.rs` 与下表列出的
 `codex-rs/core/tests/suite` integration tests
 
-本矩阵把“TS 看起来能聊天”与“基础 Agent 行为已和 Rust 对齐”严格分开。只有同一 fixture 的 request、稳定事件顺序、
-terminal state、usage、错误分类与恢复结果都通过自动差分，状态才能标为 `PARITY`。
+本矩阵记录迁移早期如何区分“TS 看起来能聊天”和当时的 Rust 对照证据。表内
+`PARITY` 只描述已有历史验证，不约束新的 TypeScript production contract。
 
 状态定义：
 

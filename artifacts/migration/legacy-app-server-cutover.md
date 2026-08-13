@@ -6,16 +6,26 @@ replacement has a durable owner, generated contract, recovery semantics and a
 production composition test. A failed Control path must never silently fall
 back to the legacy Rust authority.
 
+## Active migration rule
+
+The production target is the TypeScript Control/Worker runtime. Rust Runtime
+behavioral parity, dual execution, dual write, fallback routing and compatibility
+fixtures are not release gates. Existing Rust comparison fixtures are historical
+evidence only and may be retained while useful, but new TypeScript work must be
+judged against the frozen domain/transaction contracts and production recovery
+invariants. Rust remains in scope only where the Tauri shell or process guardian
+actually requires it.
+
 ## Already cut over
 
 | Capability                                                   | Current authority                                                          | Renderer path                                                                                    | Deletion evidence                                                                                                                    |
 | ------------------------------------------------------------ | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------ |
 | Thread list/read/create/fork/archive/unarchive/rename/delete | Control API + Domain Store                                                 | `ControlThreadRuntime` selected whenever a Control session is configured                         | generated HTTP client, revision CAS, same-key retry, Thread SSE, SQLite/PostgreSQL conformance                                       |
 | Turn admission and Run lifecycle                             | Control API + Runtime Worker                                               | one atomic `startTurn`, Run SSE and durable refresh                                              | route-pinned admission, Work Item lease, Attempt/Step, restart and PostgreSQL worker competition                                     |
-| persistent Goal                                              | Thread Goal snapshot/event authority                                       | Goal GET/mutation + independent Goal SSE                                                         | snapshot/event cursor handoff, accounting cursor, Rust/TS shared fixtures                                                            |
+| persistent Goal                                              | Thread Goal snapshot/event authority                                       | Goal GET/mutation + independent Goal SSE                                                         | snapshot/event cursor handoff and accounting cursor                                                                                  |
 | one-Run Plan                                                 | terminal Message with `ProposedPlan`                                       | dedicated transcript Plan item                                                                   | atomic Message/history/event/outbox commit, refresh recovery, read-only Tool policy                                                  |
 | manual context compaction                                    | Control API + Runtime Worker maintenance Run                               | settings action uses `ControlThreadRuntime.compactThread`; Run SSE owns progress                 | receipt-first command replay, Thread/history/active-Run/Goal admission fence, atomic compaction terminal commit on SQLite/PostgreSQL |
-| Thread transcript rollback                                   | append-only Thread event, Model History marker and invalidation read model | settings action uses `ControlThreadRuntime.rollbackThread`; Thread SSE refreshes standard view   | receipt-first CAS command, active-Run/Work fences, audit-preserving projection, SQLite/PostgreSQL conformance and Rust/TS fixture    |
+| Thread transcript rollback                                   | append-only Thread event, Model History marker and invalidation read model | settings action uses `ControlThreadRuntime.rollbackThread`; Thread SSE refreshes standard view   | receipt-first CAS command, active-Run/Work fences, audit-preserving projection and SQLite/PostgreSQL conformance                     |
 | desktop Provider secret                                      | operating-system credential store through the open-source `keyring` crate  | typed Tauri credential catalog; secret is injected only into the supervised Worker environment   | catalog/keyring compensation, real macOS Keychain round trip, active-Run admission fence                                             |
 | Provider settings and probe                                  | Control API + Provider coordinator/Worker                                  | Settings reads the redacted Control snapshot; probe uses the typed Control client                | non-secret contract, runtime availability, idempotent bounded probe and production egress fence                                      |
 | active Agent catalog                                         | immutable AgentVersion release authority                                   | Agent Library reads the active Control catalog                                                   | release/digest admission, active default selection and bounded public projection                                                     |
@@ -64,9 +74,9 @@ legacy path can be deleted when all of the following are true:
 3. Each mutation family has idempotency, authorization, durable receipt,
    unknown-outcome reconciliation and crash recovery. Read-only families have
    bounded pagination/streaming and scope isolation.
-4. Standalone SQLite and Team PostgreSQL migration counts, digests and
-   invariants match; rollback is a release/authority pointer operation, not
-   dual-write fallback. A suite skipped because no real PostgreSQL URL is
+4. Standalone SQLite and Team PostgreSQL each satisfy the canonical TypeScript
+   transaction invariants; rollback is a release/authority pointer operation,
+   not dual-write fallback. A suite skipped because no real PostgreSQL URL is
    configured remains recorded as unverified.
 5. macOS, Windows and Web production packages pass their signed release gates;
    real Identity/PIM and at least one live Provider canary are verified.
