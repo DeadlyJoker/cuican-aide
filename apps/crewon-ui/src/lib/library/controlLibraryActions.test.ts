@@ -134,11 +134,36 @@ describe("openControlLibraryAction", () => {
     });
   });
 
-  it("keeps Knowledge fail-closed without a Control contract", async () => {
+  it("maps Control Knowledge memory and source records into the existing Knowledge view", async () => {
     let panel: LibraryPanel | null = null;
+    const listKnowledge = vi.fn(async () => ({
+      data: [
+        {
+          schemaVersion: "crewon.knowledge.v0" as const,
+          knowledgeId: "knowledge-1",
+          kind: "memory" as const,
+          sourceId: "thread:1",
+          title: "Decision",
+          content: "Ship Control only",
+          contentDigest: "sha256:1",
+          createdAt: "2026-08-13T00:00:00.000Z",
+        },
+        {
+          schemaVersion: "crewon.knowledge.v0" as const,
+          knowledgeId: "knowledge-2",
+          kind: "source" as const,
+          sourceId: "source:handbook",
+          title: "Handbook",
+          content: "Reference",
+          contentDigest: "sha256:2",
+          createdAt: "2026-08-13T00:00:00.000Z",
+        },
+      ],
+      nextCursor: null,
+    }));
 
     await openControlLibraryAction({
-      client: {} as ControlApiClient,
+      client: { listKnowledge } as unknown as ControlApiClient,
       kind: "knowledge",
       locale: "en",
       selectedThreadId: "thread-1",
@@ -147,10 +172,78 @@ describe("openControlLibraryAction", () => {
       },
     });
 
+    expect(listKnowledge).toHaveBeenCalledWith({ limit: 100 });
     expect(panel).toMatchObject({
       kind: "knowledge",
       items: [],
-      error: expect.stringContaining("legacy app-server fallback is blocked"),
+      knowledge: {
+        memories: [
+          {
+            title: "Decision",
+            preview: "Ship Control only",
+            kind: "Control memory",
+          },
+        ],
+        sources: [
+          { name: "Handbook", meta: "source:handbook", status: "indexed" },
+        ],
+      },
     });
+  });
+
+  it("maps Control Office definitions into existing library cards", async () => {
+    let panel: LibraryPanel | null = null;
+    const listOffices = vi.fn(async () => ({
+      data: [
+        {
+          schemaVersion: "crewon.office-definition.v0" as const,
+          tenantId: "tenant-1",
+          spaceId: "space-1",
+          officeId: "office-1",
+          officeVersionId: "office-v1",
+          revision: 2,
+          title: "Delivery office",
+          members: [
+            {
+              memberId: "member-1",
+              displayName: "Reviewer",
+              agentVersionId: "agent-v1",
+            },
+          ],
+          executionTargets: [
+            { targetId: "review", agentVersionId: "agent-v1" },
+          ],
+          createdByActorId: "actor-1",
+          createdAt: "2026-08-13T00:00:00.000Z",
+        },
+      ],
+      nextCursor: null,
+    }));
+
+    await openControlLibraryAction({
+      client: { listOffices } as unknown as ControlApiClient,
+      kind: "office",
+      locale: "en",
+      selectedThreadId: null,
+      setLibraryPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+      },
+    });
+
+    expect(listOffices).toHaveBeenCalledWith({ limit: 100 });
+    expect(panel).toMatchObject({
+      kind: "office",
+      items: [
+        {
+          title: "Delivery office",
+          meta: "1 members · r2",
+          description: "1 Control execution targets",
+        },
+      ],
+      actions: [],
+    });
+    expect((panel as LibraryPanel | null)?.body).toContain(
+      "requires a published AgentVersion selection",
+    );
   });
 });
