@@ -53,6 +53,7 @@ function baseParams(
     isDemoPreview: false,
     locale: "en",
     loadBrowserApps: () => {},
+    handleSettingsAction: () => false,
     openPluginPath: () => {},
     openThreadSettingsPanel: () => {},
     pendingApprovalRequest: null,
@@ -63,11 +64,6 @@ function baseParams(
     pendingUserInputRequest: null,
     previewAwareThreadId: "thread-1",
     readWorkspaceFiles: () => {},
-    refreshAccountPanel: () => {},
-    refreshComputerControlSettingsPanel: async () => {},
-    refreshEnvironmentSettingsPanel: async () => {},
-    refreshMcpSettingsPanel: async () => {},
-    refreshWorktreesSettingsPanel: async () => {},
     resolveBackendCwd: async () => "/repo",
     selectedThread: thread(),
     selectedThreadId: "thread-1",
@@ -91,28 +87,6 @@ function baseParams(
     setStreamingTextByThread: () => {},
     setThreadGoal: () => {},
     setThreads: () => {},
-    settingsRefreshHandlers: {
-      appearance: () => {},
-      appSnapshots: () => {},
-      browserApps: () => {},
-      computerControl: () => {},
-      config: () => {},
-      connections: () => {},
-      environment: () => {},
-      git: () => {},
-      hooks: () => {},
-      integrations: () => {},
-      keyboard: () => {},
-      mcpSettings: () => {},
-      modelProviders: () => {},
-      personalization: () => {},
-      worktrees: () => {},
-    },
-    settingsSaveHandlers: {
-      appearance: () => {},
-      config: () => {},
-      personalization: () => {},
-    },
     terminalCommand: "",
     terminalProcessId: null,
     threadId: "thread-1",
@@ -176,11 +150,6 @@ describe("capability panel action dispatcher", () => {
               ? panelOrUpdater(panel)
               : panelOrUpdater;
         },
-        settingsSaveHandlers: {
-          appearance: () => {},
-          config: () => {},
-          personalization: () => {},
-        },
       }),
     );
 
@@ -192,36 +161,21 @@ describe("capability panel action dispatcher", () => {
     });
   });
 
-  it("routes settings refresh actions", () => {
-    const refreshed: string[] = [];
+  it("routes settings actions only through the Control handler", () => {
+    const settingsActions: string[] = [];
 
     const handled = handleCapabilityPanelActionDispatch(
       baseParams({
         actionId: "refresh-config",
-        settingsRefreshHandlers: {
-          appearance: () => {},
-          appSnapshots: () => {},
-          browserApps: () => {},
-          computerControl: () => {},
-          config: () => {
-            refreshed.push("config");
-          },
-          connections: () => {},
-          environment: () => {},
-          git: () => {},
-          hooks: () => {},
-          integrations: () => {},
-          keyboard: () => {},
-          mcpSettings: () => {},
-          modelProviders: () => {},
-          personalization: () => {},
-          worktrees: () => {},
+        handleSettingsAction: (actionId) => {
+          settingsActions.push(actionId);
+          return true;
         },
       }),
     );
 
     expect(handled).toBe(true);
-    expect(refreshed).toEqual(["config"]);
+    expect(settingsActions).toEqual(["refresh-config"]);
   });
 
   it("does not send legacy Goal mutations after the composer cutover", () => {

@@ -1,10 +1,6 @@
 import type { Thread } from "@crewon-protocol/v2/Thread";
 import type { ThreadGoal } from "@crewon-protocol/v2/ThreadGoal";
 
-import {
-  accountActionForActionId,
-  createAccountActionHandlers,
-} from "../account/accountActions";
 import type { AccountStatus } from "../shared/statusTypes";
 import type {
   PendingApprovalRequest,
@@ -32,11 +28,6 @@ import {
   type FilePanelActionHandlersParams,
 } from "../file/filePanelActions";
 import type { Locale, ToolId } from "../i18n";
-import {
-  handleModelProviderAction,
-  modelProviderActionForActionId,
-  type ModelProviderActionParams,
-} from "../model-provider/modelProviderActions";
 import type { NoticeState } from "../shared/noticeState";
 import {
   handlePluginPanelAction,
@@ -44,30 +35,14 @@ import {
   type PluginPanelActionHandlersParams,
 } from "../plugin/pluginPanelActions";
 import {
-  createRemoteControlActionHandlers,
-  remoteControlActionForActionId,
-  type RemoteControlActionHandlersParams,
-} from "../remote/remoteControlActions";
-import {
   createServerRequestActionHandlers,
   serverRequestActionForActionId,
   type ServerRequestActionHandlersParams,
 } from "../server-request/serverRequestActions";
 import {
-  settingsRefreshActionForActionId,
-  settingsSaveActionForActionId,
-  type SettingsRefreshAction,
-  type SettingsSaveAction,
-} from "../settings/settingsActions";
-import {
   demoCapabilityActionPanel,
   demoThreadSettingsSavedPanel,
 } from "../settings/settingsDemoPanels";
-import {
-  handleSettingsRuntimeAction,
-  settingsRuntimeActionForActionId,
-  type SettingsRuntimeActionHandlersParams,
-} from "../settings/settingsRuntimeActions";
 import {
   createTerminalActionHandlers,
   terminalActionForActionId,
@@ -83,32 +58,17 @@ import {
   type ThreadLifecycleActionHandlersParams,
   type ThreadLifecycleClient,
 } from "../thread/threadLifecycleActions";
-import {
-  createThreadSettingsActionHandlers,
-  threadSettingsActionForActionId,
-  type ThreadSettingsActionHandlersParams,
-} from "../thread/threadSettingsActions";
-import {
-  createWorktreeSessionActionHandlers,
-  worktreeSessionActionForActionId,
-  type WorktreeSessionActionHandlersParams,
-} from "../worktree/worktreeSessionActions";
 
 type DispatcherClient = NonNullable<
   BackgroundTerminalActionHandlersParams["client"]
 > &
   NonNullable<ContextThreadActionHandlersParams["client"]> &
   NonNullable<FilePanelActionHandlersParams["client"]> &
-  NonNullable<ModelProviderActionParams["client"]> &
   NonNullable<PluginPanelActionHandlersParams["client"]> &
-  NonNullable<RemoteControlActionHandlersParams["client"]> &
   NonNullable<ServerRequestActionHandlersParams["client"]> &
-  NonNullable<SettingsRuntimeActionHandlersParams["client"]> &
   NonNullable<TerminalActionHandlersParams["client"]> &
   NonNullable<ThreadGoalActionHandlersParams["client"]> &
-  NonNullable<ThreadLifecycleActionHandlersParams["client"]> &
-  NonNullable<ThreadSettingsActionHandlersParams["client"]> &
-  NonNullable<WorktreeSessionActionHandlersParams["client"]>;
+  NonNullable<ThreadLifecycleActionHandlersParams["client"]>;
 
 type PendingContextFile =
   ContextThreadActionHandlersParams["pendingContextFile"];
@@ -138,6 +98,7 @@ export type CapabilityPanelActionDispatcherParams = {
   isDemoPreview: boolean;
   locale: Locale;
   loadBrowserApps: () => Promise<void> | void;
+  handleSettingsAction?: (actionId: string) => boolean;
   openPluginPath: (path: string) => void;
   openThreadSettingsPanel: () => void;
   pendingApprovalRequest: PendingApprovalRequest | null;
@@ -147,11 +108,6 @@ export type CapabilityPanelActionDispatcherParams = {
   pendingMcpElicitationRequest: PendingMcpElicitationRequest | null;
   pendingUserInputRequest: PendingUserInputRequest | null;
   readWorkspaceFiles: () => Promise<void> | void;
-  refreshAccountPanel: () => Promise<void> | void;
-  refreshComputerControlSettingsPanel: () => Promise<void>;
-  refreshEnvironmentSettingsPanel: () => Promise<void>;
-  refreshMcpSettingsPanel: () => Promise<void>;
-  refreshWorktreesSettingsPanel: () => Promise<void>;
   resolveBackendCwd: () => Promise<string | null | undefined>;
   selectedThread: Thread | null;
   selectedThreadId: string | null;
@@ -180,8 +136,6 @@ export type CapabilityPanelActionDispatcherParams = {
   ) => void;
   setThreadGoal: (goal: ThreadGoal | null) => void;
   setThreads: (updater: (currentThreads: Thread[]) => Thread[]) => void;
-  settingsRefreshHandlers: Record<SettingsRefreshAction, () => void>;
-  settingsSaveHandlers: Record<SettingsSaveAction, () => void>;
   terminalCommand: string;
   terminalProcessId: string | null;
   threadId: string | null;
@@ -213,11 +167,6 @@ export function handleCapabilityPanelActionDispatch(
     pendingMcpElicitationRequest,
     pendingUserInputRequest,
     readWorkspaceFiles,
-    refreshAccountPanel,
-    refreshComputerControlSettingsPanel,
-    refreshEnvironmentSettingsPanel,
-    refreshMcpSettingsPanel,
-    refreshWorktreesSettingsPanel,
     resolveBackendCwd,
     selectedThread,
     selectedThreadId,
@@ -235,8 +184,6 @@ export function handleCapabilityPanelActionDispatch(
     setSelectedThreadId,
     setStreamingTextByThread,
     setThreads,
-    settingsRefreshHandlers,
-    settingsSaveHandlers,
     terminalCommand,
     terminalProcessId,
     threadId,
@@ -256,6 +203,10 @@ export function handleCapabilityPanelActionDispatch(
     }
   }
 
+  if (params.handleSettingsAction?.(actionId) === true) {
+    return true;
+  }
+
   const pluginPanelAction = pluginPanelActionForActionId(actionId);
   if (pluginPanelAction) {
     handlePluginPanelAction(
@@ -268,103 +219,6 @@ export function handleCapabilityPanelActionDispatch(
         setNotice,
       },
       pluginPanelAction,
-    );
-    return true;
-  }
-
-  /*
-   * Checked before the generic settings lookup because the per-row ids carry
-   * their target provider (`model-provider-edit:my-gateway`) and would not
-   * match any fixed action name.
-   */
-  const modelProviderAction = modelProviderActionForActionId(actionId);
-  if (modelProviderAction) {
-    handleModelProviderAction(
-      {
-        client,
-        fieldValue,
-        isConnected,
-        locale,
-        resolveBackendCwd,
-        setCapabilityPanel,
-      },
-      modelProviderAction.action,
-      modelProviderAction.providerId,
-    );
-    return true;
-  }
-
-  const refreshAction = settingsRefreshActionForActionId(actionId);
-  if (refreshAction) {
-    settingsRefreshHandlers[refreshAction]();
-    return true;
-  }
-
-  const saveAction = settingsSaveActionForActionId(actionId);
-  if (saveAction) {
-    settingsSaveHandlers[saveAction]();
-    return true;
-  }
-
-  const threadSettingsAction = threadSettingsActionForActionId(actionId);
-  if (threadSettingsAction) {
-    createThreadSettingsActionHandlers({
-      busyToolId,
-      client,
-      fieldValue,
-      isConnected,
-      isDemo,
-      locale,
-      selectedThread,
-      setBusyToolId,
-      setCapabilityPanel,
-      setThreads,
-      threadId,
-    })[threadSettingsAction]();
-    return true;
-  }
-
-  const worktreeSessionAction = worktreeSessionActionForActionId(actionId);
-  if (worktreeSessionAction) {
-    createWorktreeSessionActionHandlers({
-      client,
-      locale,
-      refreshWorktreesSettingsPanel,
-      resolveBackendCwd,
-      selectedThreadId,
-      setCapabilityPanel,
-      setSelectedThreadId,
-      setThreads,
-    })[worktreeSessionAction]();
-    return true;
-  }
-
-  const remoteControlAction = remoteControlActionForActionId(actionId);
-  if (remoteControlAction) {
-    createRemoteControlActionHandlers({
-      client,
-      fieldValue,
-      locale,
-      refreshComputerControlSettingsPanel,
-      setCapabilityPanel,
-      setNotice,
-    })[remoteControlAction]();
-    return true;
-  }
-
-  const settingsRuntimeAction = settingsRuntimeActionForActionId(actionId);
-  if (settingsRuntimeAction) {
-    handleSettingsRuntimeAction(
-      {
-        client,
-        locale,
-        refreshEnvironmentSettingsPanel,
-        refreshMcpSettingsPanel,
-        resolveBackendCwd,
-        setCapabilityPanel,
-        setNotice,
-      },
-      settingsRuntimeAction,
     );
     return true;
   }
@@ -477,14 +331,6 @@ export function handleCapabilityPanelActionDispatch(
       stdinValue: fieldValue("terminal-stdin"),
       threadId,
     })[terminalAction]();
-    return true;
-  }
-
-  const accountAction = accountActionForActionId(actionId);
-  if (accountAction) {
-    createAccountActionHandlers({
-      refreshAccountPanel,
-    })[accountAction]();
     return true;
   }
 
