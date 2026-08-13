@@ -67,8 +67,12 @@ describe("AppWorkspaceContent", () => {
     expect(markup).toContain(">Code</button>");
     expect(markup).toContain(">Design</button>");
     expect(markup).not.toContain("创建可编排的 Agent 小队");
-    expect(markup).toContain("Workspaces");
-    expect(markup).toContain("frontend");
+    expect(markup).toContain("Tasks");
+    expect(markup).toContain(
+      "Conversations will appear here after you start a task.",
+    );
+    expect(markup).not.toContain("Workspaces");
+    expect(markup).not.toContain("frontend");
     expect(markup).not.toContain("建议任务");
     expect(markup).not.toContain("agents0");
   });
