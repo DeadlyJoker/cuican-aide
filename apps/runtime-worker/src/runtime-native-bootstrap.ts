@@ -12,6 +12,8 @@ const MAX_PEM_BYTES = 128 * 1024;
 const MAX_CREDENTIAL_BINDINGS = 32;
 
 export type RuntimeNativeWorkspaceBootstrap = Readonly<{
+  dispatchMode: "local";
+  trustedLocalPath: string;
   privateServer: Readonly<{ port: number; token: string }>;
   authority: RuntimeWorkspaceDispatchAuthority;
   signing: Readonly<{ keyId: string; privateKeyPem: string }>;
@@ -279,16 +281,35 @@ function bearer(value: unknown): value is string {
 function parseWorkspace(value: unknown): RuntimeNativeWorkspaceBootstrap {
   if (
     !object(value) ||
-    !exactKeys(value, ["authority", "gateway", "privateServer", "signing"])
+    !exactKeys(value, [
+      "authority",
+      "dispatchMode",
+      "gateway",
+      "privateServer",
+      "signing",
+      "trustedLocalPath",
+    ]) ||
+    value.dispatchMode !== "local" ||
+    !absolutePath(value.trustedLocalPath)
   ) {
     throw invalid();
   }
   return redact({
+    dispatchMode: "local",
+    trustedLocalPath: value.trustedLocalPath,
     privateServer: parseWorkspacePrivateServer(value.privateServer),
     authority: parseWorkspaceAuthority(value.authority),
     signing: parseWorkspaceSigning(value.signing),
     gateway: parseWorkspaceGateway(value.gateway),
   });
+}
+
+function absolutePath(value: unknown): value is string {
+  if (typeof value !== "string" || value.length < 1 || value.length > 16_384)
+    return false;
+  if (process.platform === "win32")
+    return /^[A-Za-z]:[\\/]/u.test(value) || /^\\\\[^\\]+\\[^\\]+/u.test(value);
+  return value.startsWith("/");
 }
 
 function parseWorkspacePrivateServer(

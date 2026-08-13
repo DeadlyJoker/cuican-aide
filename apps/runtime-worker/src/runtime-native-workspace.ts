@@ -4,18 +4,20 @@ import type { RunRoute } from "@crewon/application";
 import {
   Ed25519DeviceCommandSigner,
   Ed25519DeviceWorkspaceListCommandSigner,
-  HttpsDeviceWorkspaceListDispatchClient,
 } from "@crewon/device-dispatch";
 
 import type { RuntimeNativeWorkspaceBootstrap } from "./runtime-native-bootstrap.ts";
-import { HttpsRuntimeWorkspaceReadGatewayClient } from "./runtime-workspace-read-gateway-client.ts";
+import {
+  LocalWorkspaceListDispatchClient,
+  LocalWorkspaceReadGatewayClient,
+} from "./runtime-local-workspace.ts";
 import type { RuntimeWorkerCompositionConfig } from "./standalone-composition.ts";
 
 export type RuntimeNativeWorkspaceResources = Readonly<{
   config: NonNullable<RuntimeWorkerCompositionConfig["workspacePrivate"]>;
-  gateway: HttpsDeviceWorkspaceListDispatchClient;
+  gateway: LocalWorkspaceListDispatchClient;
   readFile: NonNullable<RuntimeWorkerCompositionConfig["workspaceReadFile"]>;
-  readGateway: HttpsRuntimeWorkspaceReadGatewayClient;
+  readGateway: LocalWorkspaceReadGatewayClient;
 }>;
 
 /** Constructs the packaged Workspace resources without ambient routes or secrets. */
@@ -26,6 +28,7 @@ export function createRuntimeNativeWorkspaceResources(input: {
 }): RuntimeNativeWorkspaceResources {
   const { authority } = input.bootstrap;
   if (
+    input.bootstrap.dispatchMode !== "local" ||
     authority.tenantId !== input.runtimeTenantId ||
     authority.workspaceBindingId !== input.route.workspaceBindingId ||
     authority.runtimeBindingId !== input.route.runtimeGeneration ||
@@ -50,25 +53,13 @@ export function createRuntimeNativeWorkspaceResources(input: {
   } finally {
     signingKey.fill(0);
   }
-  const gateway = new HttpsDeviceWorkspaceListDispatchClient({
-    endpoint: input.bootstrap.gateway.endpoint,
-    tls: {
-      key: input.bootstrap.gateway.tls.keyPem,
-      cert: input.bootstrap.gateway.tls.certificatePem,
-      ca: input.bootstrap.gateway.tls.caCertificatePem,
-      servername: input.bootstrap.gateway.tls.servername,
-    },
-    requestTimeoutMs: input.bootstrap.gateway.deadlineMs,
+  const gateway = new LocalWorkspaceListDispatchClient({
+    root: input.bootstrap.trustedLocalPath,
+    authority,
   });
-  const readGateway = new HttpsRuntimeWorkspaceReadGatewayClient({
-    endpoint: input.bootstrap.gateway.endpoint,
-    tls: {
-      key: input.bootstrap.gateway.tls.keyPem,
-      cert: input.bootstrap.gateway.tls.certificatePem,
-      ca: input.bootstrap.gateway.tls.caCertificatePem,
-      servername: input.bootstrap.gateway.tls.servername,
-    },
-    requestTimeoutMs: input.bootstrap.gateway.deadlineMs,
+  const readGateway = new LocalWorkspaceReadGatewayClient({
+    root: input.bootstrap.trustedLocalPath,
+    authority,
   });
   return {
     gateway,

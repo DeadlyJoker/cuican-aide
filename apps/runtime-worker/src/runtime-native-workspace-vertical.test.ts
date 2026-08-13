@@ -1,44 +1,35 @@
 import assert from "node:assert/strict";
 import { generateKeyPairSync } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
-import { createServer } from "node:https";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { TLSSocket } from "node:tls";
 import test, { type TestContext } from "node:test";
 
 import type { ModelTransportPort } from "@crewon/agent-kernel";
 import type { RuntimeWorkerCompositionConfig } from "./standalone-composition.ts";
 import {
-  DEVICE_GATEWAY_WORKER_WORKSPACE_LIST_DISPATCH_PATH,
   RUNTIME_WORKER_WORKSPACE_DISPATCH_PATH,
   RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH,
-  parseDeviceWorkspaceListWorkerDispatchRequest,
   parseRuntimeWorkerWorkspaceDispatchResponse,
   parseRuntimeWorkerWorkspaceFreezeCommandResponse,
-  type DeviceWorkspaceListCommand,
-  type DeviceWorkspaceListWorkerDispatchResponse,
   type RuntimeWorkerWorkspaceDispatchRequest,
   type RuntimeWorkerFrozenWorkspaceCommand,
   type RuntimeWorkerWorkspaceFreezeCommandRequest,
 } from "@crewon/contracts";
 import { SqliteRunStore } from "@crewon/store";
 
-import {
-  TEST_CA_CERT,
-  TEST_SERVER_CERT,
-  TEST_SERVER_KEY,
-  TEST_WORKER_CERT,
-  TEST_WORKER_KEY,
-} from "../../device-gateway/src/mtls-test-certificates.test-support.ts";
 import { activateStandaloneRuntimeAgentVersionRelease } from "./agent-version-release-composition.ts";
 import type { RuntimeNativeWorkspaceBootstrap } from "./runtime-native-bootstrap.ts";
 import { createRuntimeNativeWorkspaceResources } from "./runtime-native-workspace.ts";
 import { createStandaloneRuntimeWorker } from "./standalone-composition.ts";
 import { StoreBackedRuntimeWorkspaceAuthority } from "./runtime-workspace-binding-resolver.ts";
 
-test("runs SQLite Thread freeze through private loopback and real mTLS Gateway", async (context) => {
-  const gateway = await startGateway(context);
+test("runs SQLite Thread freeze through private loopback and local TS Workspace", async (context) => {
+  const workspace = mkdtempSync(join(tmpdir(), "crewon-local-workspace-"));
+  await import("node:fs/promises").then(({ writeFile }) =>
+    writeFile(join(workspace, "README.md"), "local workspace"),
+  );
+  context.after(() => rmSync(workspace, { recursive: true, force: true }));
   const databasePath = temporaryDatabasePath(context);
   const config = runtimeConfig();
   await activateRelease(databasePath, config);
@@ -46,7 +37,7 @@ test("runs SQLite Thread freeze through private loopback and real mTLS Gateway",
   const commandKey = generateKeyPairSync("ed25519");
   const native = createRuntimeNativeWorkspaceResources({
     bootstrap: workspaceBootstrap(
-      gateway.origin,
+      workspace,
       commandKey.privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
     ),
     runtimeTenantId: config.runtimeTenantId,
@@ -104,12 +95,10 @@ test("runs SQLite Thread freeze through private loopback and real mTLS Gateway",
     executionId: freeze.command.executionId,
     actionDigest: freeze.command.actionDigest,
     commandDigest: freeze.command.commandDigest,
-    providerReceiptId: "gateway-receipt-1",
+    providerReceiptId: `local-list:${freeze.command.executionId}`,
     entries: [{ name: "README.md", kind: "file" }],
     truncated: false,
   });
-  assert.equal(gateway.received.length, 1);
-  assert.equal(gateway.received[0]?.authorization.keyId, "workspace-key-1");
   await runtime.close();
   await runtime.close();
 });
@@ -181,73 +170,6 @@ test("real SQLite resolver fences wrong space, revision, and deleted Thread", as
   );
   await store.close();
 });
-
-async function startGateway(context: TestContext): Promise<{
-  origin: string;
-  received: DeviceWorkspaceListCommand[];
-}> {
-  const received: DeviceWorkspaceListCommand[] = [];
-  const server = createServer(
-    {
-      key: TEST_SERVER_KEY,
-      cert: TEST_SERVER_CERT,
-      ca: TEST_CA_CERT,
-      requestCert: true,
-      rejectUnauthorized: true,
-      minVersion: "TLSv1.3",
-    },
-    (request, response) => {
-      void (async () => {
-        assert.equal(
-          request.url,
-          DEVICE_GATEWAY_WORKER_WORKSPACE_LIST_DISPATCH_PATH,
-        );
-        assert.equal(request.method, "POST");
-        assert.ok(request.socket instanceof TLSSocket);
-        assert.equal(request.socket.authorized, true);
-        const chunks: Buffer[] = [];
-        for await (const chunk of request) {
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-        }
-        const input = parseDeviceWorkspaceListWorkerDispatchRequest(
-          JSON.parse(Buffer.concat(chunks).toString("utf8")),
-        );
-        if (input.operation !== "execute") {
-          return assert.fail("execute expected");
-        }
-        received.push(input.command);
-        const body: DeviceWorkspaceListWorkerDispatchResponse = {
-          schemaVersion: "crewon.device-workspace-list-dispatch-response.v0",
-          apiVersion: 1,
-          operation: "execute",
-          resolution: completed(input.command),
-        };
-        const encoded = Buffer.from(JSON.stringify(body));
-        response.writeHead(200, {
-          "content-length": String(encoded.byteLength),
-          "content-type": "application/json; charset=utf-8",
-        });
-        response.end(encoded);
-      })().catch((error: unknown) => response.destroy(error as Error));
-    },
-  );
-  await new Promise<void>((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      server.off("error", reject);
-      resolve();
-    });
-  });
-  context.after(
-    () =>
-      new Promise<void>((resolve, reject) => {
-        server.close((error) => (error ? reject(error) : resolve()));
-      }),
-  );
-  const address = server.address();
-  assert.ok(address !== null && typeof address !== "string");
-  return { origin: `https://127.0.0.1:${address.port}`, received };
-}
 
 async function post(
   origin: string,
@@ -348,57 +270,23 @@ function workspaceDispatchRequest(
   };
 }
 
-function completed(command: DeviceWorkspaceListCommand) {
-  return {
-    status: "completed" as const,
-    executionId: command.executionId,
-    receiptId: "gateway-receipt-1",
-    terminal: {
-      schemaVersion: "crewon.device-workspace-list-event.v0" as const,
-      protocolVersion: 1 as const,
-      commandKind: "workspaceList" as const,
-      deviceId: command.deviceId,
-      executionId: command.executionId,
-      receiptId: "gateway-receipt-1",
-      connectionEpoch: 1,
-      workspaceBindingId: command.workspaceBindingId,
-      incarnationId: command.incarnationId,
-      deviceBindingId: command.deviceBindingId,
-      runtimeBindingId: command.runtimeBindingId,
-      actionDigest: command.actionDigest,
-      commandDigest: command.commandDigest,
-      sequence: 2,
-      observedAt: new Date().toISOString(),
-      type: "workspace_list.completed" as const,
-      data: {
-        result: {
-          schemaVersion: "crewon.workspace-list-result.v0" as const,
-          executionId: command.executionId,
-          actionDigest: command.actionDigest,
-          commandDigest: command.commandDigest,
-          entries: [{ name: "README.md", kind: "file" as const }],
-          truncated: false,
-        },
-      },
-    },
-  };
-}
-
 function workspaceBootstrap(
-  endpoint: string,
+  trustedLocalPath: string,
   signingPrivateKeyPem: string,
 ): RuntimeNativeWorkspaceBootstrap {
   return {
+    dispatchMode: "local",
+    trustedLocalPath,
     privateServer: { port: 0, token: WORKSPACE_TOKEN },
     authority: staticAuthority(),
     signing: { keyId: "workspace-key-1", privateKeyPem: signingPrivateKeyPem },
     gateway: {
-      endpoint,
+      endpoint: "https://127.0.0.1:443",
       deadlineMs: 35_000,
       tls: {
-        keyPem: TEST_WORKER_KEY,
-        certificatePem: TEST_WORKER_CERT,
-        caCertificatePem: TEST_CA_CERT,
+        keyPem: signingPrivateKeyPem,
+        certificatePem: "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----",
+        caCertificatePem: "-----BEGIN CERTIFICATE-----\nAA==\n-----END CERTIFICATE-----",
         servername: "localhost",
       },
     },

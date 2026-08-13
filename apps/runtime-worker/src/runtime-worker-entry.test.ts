@@ -56,6 +56,8 @@ test("packaged entry starts v2 Workspace listener and emits only non-secret read
       apiKey: null,
       probe: { port: 3211, token: "unused-provider-probe-token" },
       workspace: {
+        dispatchMode: "local",
+        trustedLocalPath: process.cwd(),
         privateServer: { port: 0, token },
         authority: {
           tenantId: config.runtimeTenantId,
@@ -266,6 +268,8 @@ function v3Bootstrap(bearerToken: string) {
     apiKey: null,
     probe: { port: 3211, token: "unused-provider-probe-token" },
     workspace: {
+      dispatchMode: "local",
+      trustedLocalPath: process.cwd(),
       privateServer: {
         port: 0,
         token: "packaged-workspace-private-token-at-least-32-bytes",
