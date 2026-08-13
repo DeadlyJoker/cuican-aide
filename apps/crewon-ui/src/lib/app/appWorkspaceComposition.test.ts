@@ -44,7 +44,6 @@ describe("App Workspace Control composition", () => {
       /useAppConnectionEffects|selectThreadRuntimeAuthority|legacyDomainClientForAuthority|clientRef/u,
     );
     expect(source).not.toContain("./lib/app-server/");
-    expect(source).not.toContain("AppServerClient");
     expect(source).toContain("export function App({ controlClient }");
     expect(source).not.toContain("client: null");
     expect(source).toContain("scheduleClient={null}");
@@ -110,7 +109,6 @@ describe("App Workspace Control composition", () => {
     for (const [path, portName] of sources) {
       const source = readFileSync(new URL(path, import.meta.url), "utf8");
       expect(source).toContain(portName);
-      expect(source).not.toMatch(/AppServerClient|app-server\/appServer/u);
     }
   });
 
@@ -215,7 +213,7 @@ describe("App Workspace Control composition", () => {
     expect(source).toContain('"getAccountSnapshot" | "getLocalSettings"');
     expect(source).toContain("Control account unavailable");
     expect(source).not.toMatch(
-      /AppServerClient|App Server|app-server|loginAccount|logoutAccount|getAccountRateLimits|getAccountUsage/u,
+      /App Server|app-server|loginAccount|logoutAccount|getAccountRateLimits|getAccountUsage/u,
     );
   });
 

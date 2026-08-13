@@ -2,7 +2,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { Thread } from "@crewon-protocol/v2/Thread";
 
-import type { AppServerClient } from "../../app-server/appServer";
 import type { AppThreadRuntimeHandlersParams } from "./appThreadRuntimeHandlers";
 import type {
   ArchiveThreadActionParams,
@@ -104,8 +103,14 @@ const { createAppThreadRuntimeHandlers } = await import(
   "./appThreadRuntimeHandlers"
 );
 
-function client(overrides: Partial<AppServerClient> = {}): AppServerClient {
-  return overrides as AppServerClient;
+type AppThreadRuntimeTestClient = NonNullable<
+  AppThreadRuntimeHandlersParams["client"]
+>;
+
+function client(
+  overrides: Partial<AppThreadRuntimeTestClient> = {},
+): AppThreadRuntimeTestClient {
+  return overrides as AppThreadRuntimeTestClient;
 }
 
 function thread(id = "thread-1"): Thread {
