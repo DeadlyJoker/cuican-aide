@@ -7,4 +7,3 @@ export * from "./appLibraryPanelDispatchHandler";
 export * from "./appOfficeRuntimeHandlers";
 export * from "./appShellActionHandlers";
 export * from "./appThreadRuntimeHandlers";
-export * from "./appWorkspaceCapabilityHandlers";
