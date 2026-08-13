@@ -175,15 +175,14 @@ function validateInputAuthority(
   const item = row === undefined ? null : JSON.parse(row.work_item_json) as {
     payload?: unknown;
   };
-  if (stableJson(item?.payload) !== stableJson({
-    schemaVersion: "crewon.workflow-node-work-item.v0",
-    trigger: "workflowNode",
-    binding: input.binding,
-    nodeId: authority.nodeId,
-    claimId: authority.claimId,
-    claimEpoch: authority.claimEpoch,
-    schedulerOperationId: node.claimOperationId,
-  })) mismatch();
+  if (
+    !validSettlementWorkItemPayload(
+      context,
+      input,
+      node.claimOperationId,
+      item?.payload,
+    )
+  ) mismatch();
 }
 
 function loadDispatch(
@@ -301,15 +300,6 @@ function validateReplay(
     const expectedFailure = evidence.status === "failed"
       ? { code: evidence.failureCode, retryable: false }
       : null;
-    const expectedWorkPayload = {
-      schemaVersion: "crewon.workflow-node-work-item.v0",
-      trigger: "workflowNode",
-      binding: input.binding,
-      nodeId: input.authority.nodeId,
-      claimId: input.authority.claimId,
-      claimEpoch: input.authority.claimEpoch,
-      schedulerOperationId: node?.claimOperationId,
-    };
     const workItem = work === undefined ? null :
       JSON.parse(String(work.work_item_json)) as { payload?: unknown };
     const terminalExecution = execution !== null &&
@@ -353,7 +343,12 @@ function validateReplay(
       continuation !== undefined ||
       work?.tenant_id !== input.authority.tenantId ||
       work.run_id !== input.authority.runId || work.kind !== "run.execute" ||
-      stableJson(workItem?.payload) !== stableJson(expectedWorkPayload) ||
+      !validSettlementWorkItemPayload(
+        context,
+        input,
+        node?.claimOperationId,
+        workItem?.payload,
+      ) ||
       work.status !== "completed" || work.lease_owner_id !== null ||
       work.lease_id !== null || work.lease_expires_at_ms !== null
       || work.completed_at_ms !== Date.parse(dispatch.terminalAt!) ||
@@ -421,6 +416,79 @@ function validateHandoff(
     { work_item_id: string }[];
   if (stableJson(pendingSchedulers.map((row) => row.work_item_id).sort()) !==
       stableJson(schedulerId === null ? [] : [schedulerId])) corrupt();
+}
+
+function validSettlementWorkItemPayload(
+  context: SqliteWorkflowNodeSettlementContext,
+  input: SettleWorkflowNodeModelTerminalInput,
+  schedulerOperationId: string | null | undefined,
+  value: unknown,
+): boolean {
+  const authority = input.authority;
+  const nodePayload = {
+    schemaVersion: "crewon.workflow-node-work-item.v0",
+    trigger: "workflowNode",
+    binding: input.binding,
+    nodeId: authority.nodeId,
+    claimId: authority.claimId,
+    claimEpoch: authority.claimEpoch,
+    schedulerOperationId,
+  };
+  if (stableJson(value) === stableJson(nodePayload)) return true;
+  if (typeof value !== "object" || value === null) return false;
+  const payload = value as Record<string, unknown>;
+  const handoff = context.database
+    .prepare(
+      `SELECT approval_id,action_digest,receipt_id,node_id,claim_id,claim_epoch,
+              step_id,attempt_id,agent_work_item_id
+       FROM workflow_tool_approval_handoffs
+       WHERE tenant_id=? AND run_id=? AND resume_work_item_id=?
+         AND consumption_operation_id IS NOT NULL`,
+    )
+    .get(authority.tenantId, authority.runId, authority.workItemId) as
+    | Record<string, unknown>
+    | undefined;
+  return (
+    handoff !== undefined &&
+    stableJson(Object.keys(payload).sort()) ===
+      stableJson([
+        "actionDigest",
+        "agentLeaseEpoch",
+        "agentVersionId",
+        "agentWorkItemId",
+        "approvalId",
+        "attemptId",
+        "binding",
+        "claimEpoch",
+        "claimId",
+        "nodeId",
+        "receiptId",
+        "schemaVersion",
+        "stepId",
+        "trigger",
+      ]) &&
+    payload.schemaVersion ===
+      "crewon.workflow-tool-approval-resume-work-item.v0" &&
+    payload.trigger === "workflowToolApprovalResume" &&
+    stableJson(payload.binding) === stableJson(input.binding) &&
+    payload.nodeId === authority.nodeId &&
+    payload.claimId === authority.claimId &&
+    payload.claimEpoch === authority.claimEpoch &&
+    payload.stepId === authority.attempt.stepId &&
+    payload.attemptId === authority.attempt.attemptId &&
+    payload.agentVersionId === authority.agentVersionId &&
+    payload.agentWorkItemId === handoff.agent_work_item_id &&
+    Number.isSafeInteger(payload.agentLeaseEpoch) &&
+    Number(payload.agentLeaseEpoch) >= 1 &&
+    payload.approvalId === handoff.approval_id &&
+    payload.receiptId === handoff.receipt_id &&
+    payload.actionDigest === handoff.action_digest &&
+    handoff.node_id === authority.nodeId &&
+    handoff.claim_id === authority.claimId &&
+    handoff.claim_epoch === authority.claimEpoch &&
+    handoff.step_id === authority.attempt.stepId &&
+    handoff.attempt_id === authority.attempt.attemptId
+  );
 }
 
 function mismatch(): never {

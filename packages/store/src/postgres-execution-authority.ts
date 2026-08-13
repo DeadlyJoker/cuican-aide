@@ -320,6 +320,7 @@ export async function checkpointPostgresRunAttempt(
   checkpoint: RunAttemptState["providerCheckpoint"],
   checkpointDigest: string,
   checkpointedAt: string,
+  mode: "initialOnly" | "replace",
 ): Promise<RunAttemptState> {
   const attempt = await loadPostgresRunAttempt(client, schema, locator, true);
   if (attempt === null || attempt.status !== "running") {
@@ -328,7 +329,7 @@ export async function checkpointPostgresRunAttempt(
   if (attempt.workItemId !== workItemId || attempt.leaseEpoch !== leaseEpoch) {
     throw new RunStoreError("stale_attempt_epoch");
   }
-  if (attempt.providerCheckpoint !== null) {
+  if (attempt.providerCheckpoint !== null && mode === "initialOnly") {
     throw new RunStoreError("attempt_provider_checkpoint_conflict");
   }
   const next = {

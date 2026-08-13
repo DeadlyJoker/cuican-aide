@@ -270,6 +270,7 @@ export class PostgresAttemptStore extends PostgresRunStore {
         input.checkpoint,
         input.checkpointDigest,
         input.checkpointedAt,
+        input.modelDispatch === undefined ? "initialOnly" : "replace",
       );
       if (input.modelDispatch !== undefined) {
         await transitionPostgresModelDispatch(
@@ -732,6 +733,7 @@ export class PostgresAttemptStore extends PostgresRunStore {
             input.continuation.checkpoint,
             input.attempt.checkpointDigest!,
             input.attempt.finishedAt,
+            "initialOnly",
           );
         } else if (
           storedAttempt === null ||

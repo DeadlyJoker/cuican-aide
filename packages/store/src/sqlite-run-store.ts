@@ -2825,6 +2825,7 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
         input.checkpoint,
         input.checkpointDigest,
         input.checkpointedAt,
+        input.modelDispatch === undefined ? "initialOnly" : "replace",
       );
       if (input.modelDispatch !== undefined) {
         observeSqliteModelDispatchResponse(this.#database, {
@@ -4029,6 +4030,7 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
             input.continuation.checkpoint,
             input.attempt.checkpointDigest!,
             input.attempt.finishedAt,
+            "initialOnly",
           );
         } else if (
           storedAttempt === null ||

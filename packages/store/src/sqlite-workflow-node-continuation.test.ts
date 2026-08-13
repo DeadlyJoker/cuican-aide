@@ -247,7 +247,7 @@ test("fresh Tool continuation atomically commits all four durable authorities", 
   const fresh = await fixture.store.commitWorkflowToolContinuation(
     fixture.input,
   );
-  assert.deepEqual(fresh.receipt, fixture.input.receipt);
+  assert.deepEqual(fresh.receipt, fixture.completedReceipt);
   assert.equal(fresh.continuation.revision, 1);
   assert.deepEqual(toolAtomicCounts(fixture.database), {
     completedAttempts: 1,
@@ -742,7 +742,7 @@ async function toolFixture() {
     output: "tool-output", outputDigest: digester.sha256("tool-output"),
     isError: false, artifactRef: null,
   };
-  const receipt = resolveToolExecutionReceipt(dispatched, {
+  const completedReceipt = resolveToolExecutionReceipt(dispatched, {
     status: "completed",
     resolvedAt: "2026-08-12T00:00:02.000Z",
     providerReceiptId: "provider-receipt",
@@ -751,7 +751,7 @@ async function toolFixture() {
   const input = {
     lease: fixture.lease,
     authority: fixture.authority,
-    receipt,
+    receipt: dispatched,
     toolAttempt: { stepId: toolAttempt.attempt.stepId,
       attemptId: toolAttempt.attempt.attemptId },
     completedEvent: {
@@ -775,7 +775,7 @@ async function toolFixture() {
     },
     committedAt: "2026-08-12T00:00:02.000Z",
   };
-  return { ...fixture, input };
+  return { ...fixture, input, completedReceipt };
 }
 
 function toolAtomicCounts(database: DatabaseSync) {

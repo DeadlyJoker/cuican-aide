@@ -186,10 +186,8 @@ export class SqliteWorkflowNodeContinuationAuthority {
         status: "completed",
         resolvedAt: input.committedAt,
         providerReceiptId: input.providerReceiptId,
-        result: requireToolResult(input),
+        result: toolResult(input, this.#digester),
       });
-      if (stableJson(receipt) !== stableJson(input.receipt))
-        throw new RunStoreError("workflow_tool_completion_mismatch");
       const event = this.#toolCompletedEvent(input);
       const currentRun = this.#loadRun(input.authority);
       const nextRun = reduceRunLifecycleEvent(currentRun, event);
@@ -381,6 +379,7 @@ export class SqliteWorkflowNodeContinuationAuthority {
     });
     const event = input.completedEvent;
     if (
+      stableJson(receipt) !== stableJson(input.receipt) ||
       receipt.tenantId !== input.authority.tenantId ||
       receipt.runId !== input.authority.runId ||
       receipt.workItemId !== input.authority.workItemId ||
@@ -535,7 +534,13 @@ export class SqliteWorkflowNodeContinuationAuthority {
     continuation: WorkflowNodeContinuationCheckpoint;
   } {
     try {
-      if (stableJson(receipt) !== stableJson(input.receipt))
+      const expectedReceipt = resolveToolExecutionReceipt(input.receipt, {
+        status: "completed",
+        resolvedAt: input.committedAt,
+        providerReceiptId: input.providerReceiptId,
+        result: toolResult(input, this.#digester),
+      });
+      if (stableJson(receipt) !== stableJson(expectedReceipt))
         throw new Error("receipt mismatch");
       const attempt = loadSqliteRunAttempt(this.#database, {
         tenantId: input.authority.tenantId,
@@ -761,17 +766,16 @@ export class SqliteWorkflowNodeContinuationAuthority {
   }
 }
 
-function requireToolResult(input: CommitWorkflowToolContinuationInput) {
-  const result = input.receipt.result;
-  if (
-    result === null ||
-    result.output !== input.completedEvent.data.output ||
-    result.isError !== input.completedEvent.data.isError ||
-    result.artifactRef !== input.completedEvent.data.artifactRef ||
-    input.receipt.providerReceiptId !== input.providerReceiptId
-  )
-    throw new RunStoreError("workflow_tool_completion_mismatch");
-  return result;
+function toolResult(
+  input: CommitWorkflowToolContinuationInput,
+  digester: WorkflowContentDigester,
+) {
+  return {
+    output: input.completedEvent.data.output,
+    outputDigest: digester.sha256(input.completedEvent.data.output),
+    isError: input.completedEvent.data.isError,
+    artifactRef: input.completedEvent.data.artifactRef,
+  };
 }
 
 function toolSegmentMatches(
