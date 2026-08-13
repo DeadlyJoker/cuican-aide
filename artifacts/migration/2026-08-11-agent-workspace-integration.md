@@ -668,6 +668,14 @@ Gate 报告为通过。
   最新 packaged Workflow smoke 使用 HOME `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-wMppre`，Run
   `019ffafc-9cda-77a9-87f1-7a4b71a82ee5` 在 Worker `SIGKILL`/同 HOME 重启后完成：2 次不同模型采样、2 个 Attempt、唯一
   `run.completed`，GUI `SIGKILL` 后 guardian 清理全部子进程。`.app` 与 updater archive 已产出，仍只被缺失 `TAURI_SIGNING_PRIVATE_KEY` 阻挡签名。
+- Knowledge Library 已完成 Control-only 交互：有界分页列表不投影正文，创建使用 caller-owned idempotency key，详情按 immutable
+  `knowledgeId` 显式读取；Control 模式隐藏旧 global-memory reset。Settings authority adapter 只开放已有 Control contract 的 account、appearance
+  与 model-provider settings，其余 section 明确 unavailable，不再借空的 App Server client 伪装在线。
+- Composer 只发现 active release 中 digest 与 AgentVersion catalog 一致的 Skill/MCP/Tool metadata；选择后写入普通 prompt token，能力执行仍由
+  frozen AgentVersion release 授权。它不创建 `control://` mention、不携带 schema/instructions/secrets，也不会触发 Control 当前明确拒绝的 structured
+  mention。Knowledge 在 `turn/start` 具备 durable reference contract 前继续只从 Library 使用，不把标题或私有正文伪装成 execution binding。
+- 最新 UI 验证为 `289/289` files、`1814/1814` tests，typecheck 与 production build 均通过；build 只保留既有 chunk-size warning。仓库中仍有
+  未被正常产品组合调用的 legacy App Server helper/type 源码，作为后续纯 TS capability cutover 的删除对象；它们不再是 packaged fallback 或运行依赖。
 
 当前 W01 的 SQLite、PostgreSQL real-host 与 packaged crash-recovery Gate 已关闭；发布签名/notarization 及尚未迁移的特定产品能力仍保持
 active。Rust compatibility 已从矩阵删除，不再投入迁移成本。
