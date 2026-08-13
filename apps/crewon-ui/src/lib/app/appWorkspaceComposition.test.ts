@@ -4,6 +4,36 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("App Workspace Control composition", () => {
+  it("packages only the TypeScript runtime sidecars", () => {
+    const tauriConfig = JSON.parse(
+      readFileSync(
+        new URL("../../../src-tauri/tauri.conf.json", import.meta.url),
+        "utf8",
+      ),
+    ) as {
+      bundle: { externalBin: string[]; resources: string[] };
+    };
+    const webManifest = readFileSync(
+      new URL("../../../public/site.webmanifest", import.meta.url),
+      "utf8",
+    );
+
+    expect(tauriConfig.bundle.externalBin).toEqual([
+      "binaries/crewon-process-guardian",
+      "binaries/crewon-node",
+    ]);
+    expect(tauriConfig.bundle.resources).toEqual([
+      "binaries/runtime/control-api.mjs",
+      "binaries/runtime/provider-settings-coordinator.mjs",
+      "binaries/runtime/runtime-release.mjs",
+      "binaries/runtime/runtime-worker.mjs",
+    ]);
+    expect(JSON.stringify(tauriConfig.bundle)).not.toMatch(
+      /app.server|device.gateway|crewon-device|6176/iu,
+    );
+    expect(webManifest).not.toMatch(/app.server|device.gateway|6176/iu);
+  });
+
   it("does not compose the legacy App Server connection or authorities", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),
