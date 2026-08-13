@@ -1,5 +1,4 @@
 export * from "./appCapabilityPanelHandlers";
-export * from "./appConnectionHandlers";
 export * from "./appDomainActionHandlers";
 export * from "./appDomainBackendHandlers";
 export * from "./appLibraryItemOpenHandlers";
@@ -7,7 +6,6 @@ export * from "./appLibraryOpenHandlers";
 export * from "./appLibraryPanelActionHandlers";
 export * from "./appLibraryPanelDispatchHandler";
 export * from "./appOfficeRuntimeHandlers";
-export * from "./appServerEventHandlers";
 export * from "./appSettingsRefreshHandlers";
 export * from "./appShellActionHandlers";
 export * from "./appThreadRuntimeHandlers";

@@ -1,5 +1,4 @@
 export { useAppChromeEffects } from "./useAppChromeEffects";
-export { useAppConnectionEffects } from "./useAppConnectionEffects";
 export { useAppDocumentPreferenceEffects } from "./useAppDocumentPreferenceEffects";
 export { useAppKeyboardShortcutEffects } from "./useAppKeyboardShortcutEffects";
 export { useAppModelResponseTimeoutEffect } from "./useAppModelResponseTimeoutEffect";

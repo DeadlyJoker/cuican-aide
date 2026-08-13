@@ -9,7 +9,6 @@ export {
 } from "./workspaceUiAuthority";
 export {
   useAppChromeEffects,
-  useAppConnectionEffects,
   useAppDocumentPreferenceEffects,
   useAppKeyboardShortcutEffects,
   useAppModelResponseTimeoutEffect,
@@ -45,14 +44,12 @@ export { useAppCommandModelOptions } from "./useAppCommandModelOptions";
 export { useAppCommandShellRoute } from "./useAppCommandShellRoute";
 export { useAppComposerState } from "./useAppComposerState";
 export { useAppConfirmDialog } from "./useAppConfirmDialog";
-export { useAppConnectionHandlerSet } from "./useAppConnectionHandlerSet";
 export { useAppCoordinatorRefs } from "./useAppCoordinatorRefs";
 export { useAppDraftWorkspaceState } from "./useAppDraftWorkspaceState";
 export { useAppEnvironment } from "./useAppEnvironment";
 export { useAppPanelState } from "./useAppPanelState";
 export { useAppPendingServerRequests } from "./useAppPendingServerRequests";
 export { useAppRunTrackingRefs } from "./useAppRunTrackingRefs";
-export { useAppServerEventHandlerSet } from "./useAppServerEventHandlerSet";
 export { useAppShellRuntimeState } from "./useAppShellRuntimeState";
 export { useAppSlashCommands } from "./useAppSlashCommands";
 export { useAppTerminalState } from "./useAppTerminalState";
