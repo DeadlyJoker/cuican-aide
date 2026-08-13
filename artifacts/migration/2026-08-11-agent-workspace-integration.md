@@ -555,6 +555,30 @@ Gate 报告为通过。
 
 因此本轮证明的是基础 Agent P0 completed-item 边界和 Native Workspace 四进程纵切已在当前分支落地，而不是完整产品迁移或生产发布已经完成。
 
+## 2026-08-13 纯 TypeScript 快速切换
+
+- 后续迁移不再实现 Rust Device/App Server 的协议兼容、双写、回退或 parity；迁移期间这些 Rust runtime 不参与运行。Tauri 仅保留桌面生命周期、
+  authority、私有 stdin bootstrap 和进程托管所必需的最小 Rust shell。
+- selected Workspace 的 `list` / `read_file` 已改为 Runtime Worker 内的有界本地 TypeScript 执行。根目录只来自 authority-selected absolute path；
+  list 保持 UTF-8 byte sort、扫描/名称/输出硬上限并拒绝 link/特殊文件，read 逐段拒绝 symlink、限制 root containment、文件类型、UTF-8 与输出大小。
+- Tauri packaged startup 已删除 `crewon-device-runtime` sidecar、bootstrap、ready wait、lifecycle role 和 termination dependency。随后删除本地
+  Workspace 已无人消费的 Device Gateway 进程、bundle、mTLS/registry/device bootstrap；Worker stdin 只保留 trusted root、authority、签名、私有服务
+  与 deadline。当前 bundle 的 `externalBin` 只有 guardian + official Node，resources 只有 Control、Worker、Release、Provider Coordinator 四个
+  TypeScript bundle。
+- packaged renderer 不再静默回退 Rust App Server：桌面 Control bootstrap 失败会中止启动，Control authority 存在时不会构造或重连
+  `AppServerClient`，packaged 默认 `ws://127.0.0.1:6176` 与 `CREWON_DESKTOP_SKIP_SIDECAR` 已删除。
+- Control 入口现在显式读取 Tauri 注入的 loopback Workspace Worker route；此前虽然 Worker ready，但 Control 未装配该 route 而以
+  `workspace_command_factory_unavailable` 返回 503。补齐后 Control API 完整套件为 108 pass、4 个 PostgreSQL 环境条件 skip、0 fail。
+- official Node `v24.18.1` 和 guardian staging 成功，`.app` 位于
+  `apps/crewon-ui/src-tauri/target/release/bundle/macos/Crewon.app`。bundle 已生成；命令只在生成 updater tarball 后因缺少
+  `TAURI_SIGNING_PRIVATE_KEY` 返回 1，签名/notarization Gate 没有绕过。
+- 隔离 HOME `/private/tmp/crewon-ts-final-bundle.FbX19o` 的最新真实 packaged smoke 启动 GUI、TS Worker、Control 和 guardians，
+  没有 Rust Device/App Server 进程。真实 `POST /workspace-list` 返回 `201 completed`，结果为 `README.md`、`alpha`、`beta`、
+  `truncated=false`；进程树与 bundle 均无 Device Gateway。随后 `SIGKILL` GUI，guardian 清空全部 managed children，3210/6176 均释放。
+
+这关闭的是 packaged local Workspace 的 Rust runtime 和旧 Gateway 硬依赖，不代表完整产品迁移或发布 Gate 已完成。远端/设备路由若未来需要，
+应按纯 TypeScript 当前架构重新引入明确需求，而不是保留迁移期兼容进程。
+
 ## Immutable WorkflowVersion、frozen Run provenance 与 durable DAG authority
 
 - `b8023f9e5`、`56e491247` 将 Workflow Run 的版本来源冻结为唯一三元组

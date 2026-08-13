@@ -1,84 +1,46 @@
 # Crewon desktop shell
 
-The desktop client is the shipping surface, targeting Windows and macOS.
+The desktop client is the shipping surface for macOS and Windows. Tauri is a
+thin lifecycle and credential shell; the active Agent runtime is TypeScript.
 
-## How the app reaches the backend
+## Packaged runtime
 
-The frontend resolves its app-server URL in `src/lib/platform.ts` (`defaultServerUrl`).
-Two cases matter, and they used to be conflated:
+`tauri.conf.json` bundles only the process guardian, the official Node runtime,
+and these TypeScript entry bundles:
 
-| Context                        | Page origin              | Resolves to                 |
-| ------------------------------ | ------------------------ | --------------------------- |
-| `pnpm dev` / `tauri dev`       | `http://127.0.0.1:5175`  | `ws://…:5175/app-server`    |
-| Packaged build (macOS)         | `tauri://localhost`      | `ws://127.0.0.1:6176`       |
-| Packaged build (Windows)       | `http://tauri.localhost` | `ws://127.0.0.1:6176`       |
+- Control API
+- Runtime Worker
+- Runtime Release (one-shot activation)
+- Provider Settings Coordinator
 
-`/app-server` is a Vite dev-server proxy path. It does not exist in a packaged
-bundle, so resolving it there left the app waiting on a socket that was never
-served. `hasDevServerProxy()` distinguishes the two; note that Windows serves the
-packaged bundle over a synthetic `http` host, so protocol alone is not enough.
+The packaged startup path does not launch `crewon-app-server` or
+`crewon-device-runtime`, `crewon-app-server`, or Device Gateway. When a local Workspace is selected, list and read
+operations execute inside Runtime Worker against the authority-selected root.
+The absolute root and private Worker token travel only in the one-shot stdin
+bootstrap owned by the Tauri shell.
 
-An explicit `?server=` or `VITE_CREWON_APP_SERVER_URL` still wins over both.
-
-## The app-server sidecar
-
-A packaged build ships `crewon-app-server` as a Tauri sidecar (`externalBin` in
-`tauri.conf.json`), supervised by `src/sidecar.rs`. The shell owns the backend's
-lifetime for two reasons:
-
-- The previous workflow started it by hand, which routinely left orphaned
-  processes and silently dropped the backend mid-session.
-- Windows delivers no POSIX signals, so a child cannot be relied on to notice its
-  parent exited. `RunEvent::Exit` kills it explicitly.
-
-If port 6176 is already served, the sidecar is skipped and the existing backend is
-reused rather than failing to bind. Set `CREWON_DESKTOP_SKIP_SIDECAR=1` to always
-skip it, which is what you want when running your own app-server alongside
-`tauri dev`.
+Every long-lived Node child is supervised by `crewon-process-guardian`, so an
+abrupt GUI exit still tears down the complete managed process tree on macOS and
+Windows.
 
 ## Building
 
 ```bash
-# Stage the sidecar for the host triple, then bundle.
-pnpm --filter @crewon/ui desktop:build
+pnpm --filter @crewon/ui sidecar:stage
+pnpm --filter @crewon/ui exec tauri build --bundles app
 ```
 
-`scripts/stage-app-server-sidecar.mjs` builds the backend and copies it to
-`src-tauri/binaries/crewon-app-server-<triple><exe>`, which is the name Tauri
-resolves `externalBin` against. It is written in Node rather than shell so it runs
-on Windows without a POSIX environment; the existing `scripts/*.sh` do not.
+`scripts/stage-app-server-sidecar.mjs` retains its historical filename, but now
+stages the Node/guardian executables and the TypeScript runtime bundles above.
+Generated binaries are ignored by Git.
 
-Env knobs: `CREWON_SIDECAR_TARGET` (cross builds), `CREWON_SIDECAR_PROFILE=debug`.
+The app bundle can be produced without release credentials. Updater archives,
+code signing, notarization, and published installers still require their normal
+platform and `TAURI_SIGNING_PRIVATE_KEY` credentials.
 
-The staged binary is a build artifact and is gitignored.
+## Development
 
-## Releasing
-
-`pnpm release:desktop <version>` then pushing the tag builds and publishes both
-platforms. See `docs/desktop-release.md` for the release, install, and
-self-update flow, including the updater signing key and the build machines it
-needs.
-
-The version has one source: `tauri.conf.json` reads it from `package.json`, and
-the release script keeps `Cargo.toml` in step.
-
-## CI
-
-There is none for the bundle. Tauri cannot cross-compile it, so hosted Linux
-runners cannot build it, and self-hosted machines were more infrastructure than
-this release cadence justifies. Releases are built locally and uploaded to GitHub
-Releases; see `docs/desktop-release.md`.
-
-The cost: nothing verifies the bundle except the person cutting the release.
-
-`ci.yml` also typechecks and runs the UI test suite, which nothing did before.
-
-## Not yet verified
-
-- The packaged bundle has not been run end to end on either platform; CI green is
-  the current bar.
-- Startup robustness is still open: a misconfigured MCP server without credentials
-  can stall app-server initialisation, and port conflicts are only skipped, not
-  recovered from.
-- Path handling in the frontend is inconsistent. `workspaceName` normalises
-  backslashes, but roughly a dozen other call sites split on `/` directly.
+`pnpm dev` and `tauri dev` remain development surfaces. The packaged Control API
+is loopback-only and authenticated with a per-launch session token and CSRF
+token; those credentials must never be placed in frontend build output, argv,
+logs, or ambient configuration files.
