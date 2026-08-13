@@ -89,6 +89,18 @@ describe("App Workspace Control composition", () => {
     expect(source).not.toContain("providerResourceComposer");
   });
 
+  it("routes Library interactions only through Control", () => {
+    const source = readFileSync(
+      new URL("../../App.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("createControlLibraryPanelActionHandler");
+    expect(source).toContain("openControlLibraryItem");
+    expect(source).not.toContain("createAppLibraryOpenCoordinator");
+    expect(source).not.toContain("createAppLibraryPanelDispatchCoordinator");
+  });
+
   it("sources the packaged command target and model catalogs only from Control", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),

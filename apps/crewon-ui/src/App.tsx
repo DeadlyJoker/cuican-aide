@@ -9,6 +9,10 @@ import {
 } from "./components/app";
 import type { ControlApiClient } from "@crewon/control-client";
 import { openControlLibraryAction } from "./lib/library/controlLibraryActions";
+import {
+  createControlLibraryPanelActionHandler,
+  openControlLibraryItem,
+} from "./lib/library/controlLibraryInteraction";
 import { CommandSettingsLazyRoute } from "./components/app/CommandSettingsLazyRoute";
 import {
   isMissingThreadError,
@@ -19,8 +23,6 @@ import {
   createAppDomainActionCoordinator,
   createAppDomainBackendCoordinator,
   createAppCommandShellHandlers,
-  createAppLibraryOpenCoordinator,
-  createAppLibraryPanelDispatchCoordinator,
   createAppOfficeRuntimeCoordinator,
   createAppSettingsCoordinator,
   createAppShellActionHandlers,
@@ -80,6 +82,7 @@ import {
 } from "./lib/thread/assistantThread";
 import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate";
 import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
+import type { LibraryKind } from "./lib/domain/crewonDomain";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
 import { useControlCommandCatalog } from "./lib/control-runtime/useControlCommandCatalog";
 import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWorkspaceRuntime";
@@ -151,8 +154,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     threadGoal,
     threadGoalBusy,
   } = workspaceStatus;
-  const { automationRunByTurnRef, officeRunByTurnRef } =
-    useAppRunTrackingRefs();
+  const { officeRunByTurnRef } = useAppRunTrackingRefs();
   const {
     connected: controlRuntimeConnected,
     rehydrateThreadAuthority: rehydrateControlThreadAuthority,
@@ -351,29 +353,11 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   });
 
   const {
-    automationConfigRecordsToLibraryItems,
-    createBackendAgentConfig,
-    createBackendKnowledgeData,
-    loadAgentLibraryItems,
-    loadToolLibraryItems,
     listRecruitableAgentConfigs,
-    persistOfficeMember,
     persistOfficeMessage,
-    persistOfficeWorkspace,
-    readAutomationRunItems,
-    readLatestOfficeConfig,
-    readRecruitableAgentConfig,
-    refreshToolActionFromBackend,
     resolveBackendCwd,
-    runAutomationConfig,
-    optionalBackendWorkspace,
-    requireBackendWorkspace,
     startBackendDomainThread,
-    updateAutomationRun,
     writeAgentConfigFile,
-    writeAutomationConfigFile,
-    writeKnowledgeMemory,
-    writeOfficeConfigFile,
   } = createAppDomainBackendCoordinator({
     client: null,
     currentCwd: cwd,
@@ -394,7 +378,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     decideOfficeMemory,
     handleOfficeRunCancel,
     handleOfficeRunRetry,
-    recordOfficeRunTurn,
     sendOfficeMessage,
     previewOfficeMemberContext,
   } = createAppOfficeRuntimeCoordinator({
@@ -411,38 +394,9 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     setLibraryPanel,
     setNotice,
   });
-  const { openLibrary: openBackendLibrary, openLibraryItem } =
-    createAppLibraryOpenCoordinator({
-      connectionHint: t.connectionHints[threadConnectionState],
-      controlClient,
-      createBackendAgentConfig,
-      cwd,
-      ensureOfficeThread,
-      getClient: () => null,
-      isConnected,
-      isDemo,
-      isDemoPreview,
-      isUnsupportedRpcError,
-      libraryLoadRequestRef,
-      loadAgentLibraryItems,
-      loadToolLibraryItems,
-      locale,
-      optionalBackendWorkspace,
-      readAutomationRunItems,
-      readKnowledgeData: createBackendKnowledgeData,
-      refreshToolActionFromBackend,
-      resolveBackendCwd,
-      ...threadState,
-      setAppView,
-      ...chromeState,
-      setLibraryPanel,
-      setNotice,
-      storedAutomationItems: automationConfigRecordsToLibraryItems,
-      writeAgentConfig: writeAgentConfigFile,
-    });
-  const openLibrary = async (
-    kind: Parameters<typeof openBackendLibrary>[0],
-  ) => {
+  const openLibrary = async (kind: LibraryKind) => {
+    const requestId = libraryLoadRequestRef.current + 1;
+    libraryLoadRequestRef.current = requestId;
     setAppView("library");
     setCapabilityDockOpen(false);
     chromeState.setInspectorOpen(false);
@@ -452,6 +406,21 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       locale,
       selectedThreadId,
       setLibraryPanel,
+      isCurrent: () => libraryLoadRequestRef.current === requestId,
+    });
+  };
+  const openLibraryItem = async (
+    item: Parameters<typeof openControlLibraryItem>[0]["item"],
+  ) => {
+    const requestId = libraryLoadRequestRef.current + 1;
+    libraryLoadRequestRef.current = requestId;
+    await openControlLibraryItem({
+      client: controlClient,
+      item,
+      isCurrent: () => libraryLoadRequestRef.current === requestId,
+      locale,
+      setLibraryPanel,
+      setNotice,
     });
   };
   const saveCapability = (draft: CapabilityEditorDraft) =>
@@ -464,10 +433,8 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     });
 
   const {
-    ensureBackendToolThread,
     handleApprovalDecision,
     handleOfficeArtifact,
-    recordBackendToolEvent,
     saveAgentConfig,
     toggleAgentCapability,
     updateAgentConfig,
@@ -490,45 +457,14 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     writeAgentConfig: writeAgentConfigFile,
   });
 
-  const handleLibraryPanelAction = createAppLibraryPanelDispatchCoordinator({
-    automationRunByTurnRef,
-    client: null,
-    controlClient,
-    confirm: requestConfirm,
-    createBackendAgentConfig,
-    ensureBackendToolThread,
-    ensureOfficeThread,
-    handleCapabilityPanelItem: (item) => handleCapabilityPanelItem(item),
-    isConnected,
-    isDemo,
-    isDemoPreview,
-    isMissingThreadError,
-    isUnsupportedRpcError,
+  const handleLibraryPanelAction = createControlLibraryPanelActionHandler({
+    client: controlClient,
     libraryPanel,
     locale,
     openLibrary,
-    optionalBackendWorkspace,
-    persistOfficeMember,
-    readAutomationRunItems,
-    readLatestOfficeConfig,
-    readRecruitableAgentConfig,
-    recordBackendToolEvent,
-    requireBackendWorkspace,
-    resolveBackendCwd,
-    recordOfficeRunTurn,
-    runAutomationConfig,
-    ...threadState,
-    setAppView,
-    ...chromeState,
-    setCapabilityPanel,
+    selectedThreadId,
     setLibraryPanel,
     setNotice,
-    startBackendDomainThread,
-    updateAutomationRun,
-    writeAgentConfigFile,
-    writeAutomationConfigFile,
-    writeKnowledgeMemory,
-    writeOfficeConfigFile,
   });
 
   useAppChromeEffects({
