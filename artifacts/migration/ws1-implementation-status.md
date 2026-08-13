@@ -15,8 +15,9 @@
 - packaged bundle 当前只有 guardian、Node 与 Control API、Provider coordinator、Runtime Release、Runtime Worker 四个 TS
   bundle；不包含或启动 Rust Device、Rust App Server 或 Gateway sidecar。
 - W01 production transaction protocol、Workflow Start、scheduler fan-out、node admission、node settlement、Human Gate、
-  reconciliation、terminal convergence、真实 PostgreSQL 双连接和 packaged crash recovery 均已有纵向证据，状态为通过。
-  这不代表整个产品迁移完成。
+  reconciliation、真实 PostgreSQL 双连接和 packaged crash recovery 均已有纵向证据。最新复审将 terminal convergence
+  重新标为实现中：两个及以上 sibling 同时 running/unknown 的 cancel 仍需每节点独立 reconcile authority；此前矩阵把单 active
+  node 的 Slice 5 证据外推为完整并行取消，现已纠正。这不代表整个产品迁移完成。
 - Renderer 已改为 Control-only bootstrap。Library 与 Settings 不再构造 App Server client：Library 的 Automation/Knowledge/
   Agent/Office/Tool 读取和允许的 mutation 走 Control；Settings 只公开 Account、Appearance、Model access 三个具有真实 Control
   authority 的页面。语言/主题使用 revision CAS，成功提交后才更新本地状态；旧 Config、Personalization、Thread Settings 和
@@ -41,6 +42,18 @@
   `3210` 监听、`6176` 关闭；退出 GUI 后完整进程树和 `3210` 均被清理。
 - `.app` 与 updater tarball 已成功产出；Tauri 命令最后仍因缺少 `TAURI_SIGNING_PRIVATE_KEY` 返回失败。签名、notarization、正式
   updater 与 Windows/NSIS 实包是外部发布边界，不是 Rust 兼容工作。
+
+### 2026-08-13 Control Workflow 产品切片
+
+- `GET /api/v1/workflow-versions` 现在允许省略 `workflowId` 浏览 tenant 内不可变版本目录；保留精确 workflow filter，复合 cursor
+  按 `(workflowId, workflowVersionId)` 做 UTF-8/C collation 稳定分页。SQLite、Application、Contract、Control 和 Client 已验证；
+  本次环境没有 `CREWON_TEST_POSTGRES_URL`，新增 PostgreSQL catalog query 明确记为未做 real-host 重跑。
+- Command Team 新增纯 Control Workflow surface：读取版本目录和完整定义，以选中 Control Thread 启动 JSON input Run，固定使用
+  client-view SSE 续传并重新读取 canonical Run，展示真实 Run status/failure/outputRef，并通过 revisioned Control mutation 取消。
+  节点条明确是静态定义，不把 `run.started` 伪装成某个节点进度；Human Gate claim、节点输出与创建/编辑没有公共 contract，入口不展示。
+- `CommandWorkspace` 已删除旧 local/App Server Workflow 列表、文件通知、创建、执行、Gate、取消与 DTO mapping，不保留 fallback。
+  Node 24 完整 UI 为 `284/284` files、`1810/1810` tests，lint 与 production build 通过；主 renderer JS 从约
+  `650.73 kB` 降至 `641.95 kB`（既有 chunk-size warning）。
 
 本文下方涉及“下一步接 Rust Device/Gateway/Native dispatcher”或“Rust compatibility 未完成”的段落只保留为历史记录，
 不再驱动当前迁移。
