@@ -4,6 +4,18 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 describe("App Workspace Control composition", () => {
+  it("never gives packaged Office or Automation a legacy client", () => {
+    const source = readFileSync(
+      new URL("../../App.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain("legacyDomainClientForAuthority({");
+    expect(source).toContain("client: legacyDomainClient");
+    expect(source).toContain("scheduleClient={legacyDomainClient}");
+    expect(source).toContain("const client = legacyDomainClient");
+  });
+
   it("derives the visible slot only from Control and native authority", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),

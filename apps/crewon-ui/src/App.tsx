@@ -88,6 +88,7 @@ import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
 import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWorkspaceRuntime";
 import { selectThreadRuntimeAuthority } from "./lib/control-runtime/threadRuntimeAuthority";
+import { legacyDomainClientForAuthority } from "./lib/control-runtime/legacyDomainAuthority";
 import { desktopWorkspaceAuthority } from "./lib/desktop/desktopWorkspaceAuthorityAdapter";
 
 export function App({
@@ -267,6 +268,10 @@ export function App({
   const threadRuntimeClient = threadAuthority.client;
   const threadRuntimeConnected = threadAuthority.connected;
   const threadConnectionState = threadAuthority.connectionState;
+  const legacyDomainClient = legacyDomainClientForAuthority({
+    controlClientConfigured: controlClient !== null,
+    legacyClient: clientRef.current,
+  });
   const commandModelOptions = useAppCommandModelOptions({
     client: clientRef.current,
     connectionAttempt,
@@ -422,7 +427,7 @@ export function App({
     writeKnowledgeMemory,
     writeOfficeConfigFile,
   } = createAppDomainBackendCoordinator({
-    client: clientRef.current,
+    client: legacyDomainClient,
     currentCwd: cwd,
     isConnected,
     isDemoPreview,
@@ -445,7 +450,7 @@ export function App({
     sendOfficeMessage,
     previewOfficeMemberContext,
   } = createAppOfficeRuntimeCoordinator({
-    client: clientRef.current,
+    client: legacyDomainClient,
     getActiveTurnByThread: () => activeTurnByThreadRef.current,
     isConnected,
     isMissingThreadError,
@@ -936,7 +941,7 @@ export function App({
     libraryPanel,
     locale,
     refreshRecord: async (record) => {
-      const client = clientRef.current;
+      const client = legacyDomainClient;
       const workspaceCwd = record.workspaceCwd?.trim() || cwd.trim();
       if (!client || !workspaceCwd) {
         return null;
@@ -1027,7 +1032,7 @@ export function App({
         workMode={workMode}
         modelOptions={commandModelOptions}
         executionTargetClient={clientRef.current}
-        scheduleClient={clientRef.current}
+        scheduleClient={legacyDomainClient}
         workspaceAuthority={workspaceUiAuthority}
         workspaceOperations={
           controlClient === null
