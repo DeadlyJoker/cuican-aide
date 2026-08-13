@@ -71,7 +71,7 @@ import type { ModelHistoryAppend } from "./model-history-store-port.ts";
 import type { TurnStartGoalMutation } from "./thread-goal-store-port.ts";
 import type { ToolExecutionTransition } from "./tool-execution-store-port.ts";
 import type { CommitToolExecutionCompletionResult } from "./tool-execution-store-port.ts";
-import type { WorkflowExecutionStore } from "./workflow-execution-store-port.ts";
+import type { WorkflowRuntimeStore } from "./workflow-runtime-store-port.ts";
 import {
   executionIdempotency,
   leaseInput,
@@ -176,7 +176,7 @@ export class RunExecutionService {
   readonly #ids: ApplicationIdGenerator;
   readonly #digester: ContentDigester;
   readonly #workflowExecutions: Pick<
-    WorkflowExecutionStore,
+    WorkflowRuntimeStore,
     "loadWorkflowExecution"
   > | null;
 
@@ -185,7 +185,7 @@ export class RunExecutionService {
     clock: ApplicationClock;
     ids: ApplicationIdGenerator;
     digester: ContentDigester;
-    workflowExecutions?: Pick<WorkflowExecutionStore, "loadWorkflowExecution">;
+    workflowExecutions?: Pick<WorkflowRuntimeStore, "loadWorkflowExecution">;
   }) {
     this.#store = dependencies.store;
     this.#clock = dependencies.clock;

@@ -39,7 +39,7 @@ import { normalizeStoredRunState } from "./stored-run-state.ts";
 import {
   decodeWorkflowExecutionState,
   validateWorkflowExecutionState,
-} from "./workflow-execution-store.ts";
+} from "./workflow-execution-state.ts";
 
 export class SqliteWorkflowNodeContinuationAuthority {
   readonly #database: DatabaseSync;

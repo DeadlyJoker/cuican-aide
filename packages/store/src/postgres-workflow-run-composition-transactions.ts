@@ -25,7 +25,7 @@ import { normalizeStoredRunState } from "./stored-run-state.ts";
 import {
   decodeWorkflowExecutionState,
   validateWorkflowExecutionState,
-} from "./workflow-execution-store.ts";
+} from "./workflow-execution-state.ts";
 import {
   assertExecutionBinding,
   assertAdmissionReplayAuthority,

@@ -51,7 +51,7 @@ import { rollbackPostgres } from "./postgres-store-support.ts";
 import type { PostgresThreadStoreOptions } from "./postgres-thread-store.ts";
 import {
   decodeWorkflowExecutionState,
-} from "./workflow-execution-store.ts";
+} from "./workflow-execution-state.ts";
 import { parseBoundWorkflow } from "./workflow-run-composition-support.ts";
 import { migratePostgresWorkflowExecutions } from "./workflow-execution-schema.ts";
 import { migratePostgresWorkflowVersions } from "./workflow-version-schema.ts";

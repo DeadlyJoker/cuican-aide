@@ -69,14 +69,14 @@ export interface WorkflowAdmittedAgentExecutionEngine {
   >;
 }
 
-type WorkflowExecutionStore = DomainStore & DurableQueueStore & WorkflowRuntimeStore;
+type RuntimeWorkerStore = DomainStore & DurableQueueStore & WorkflowRuntimeStore;
 
 /** Executes one already-admitted Workflow Agent attempt without owning root Run settlement. */
 export class SharedWorkflowAdmittedAgentExecutionEngine
   implements WorkflowAdmittedAgentExecutionEngine
 {
   readonly #execution: RunExecutionService;
-  readonly #store: WorkflowExecutionStore;
+  readonly #store: RuntimeWorkerStore;
   readonly #leaseDurationMs: number;
   readonly #segments = new AgentSegmentExecutionEngine();
   readonly #afterTerminalCandidateCommitted?: () => Promise<void>;
@@ -87,7 +87,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
 
   constructor(dependencies: {
     execution: RunExecutionService;
-    store: WorkflowExecutionStore;
+    store: RuntimeWorkerStore;
     leaseDurationMs: number;
     afterTerminalCandidateCommitted?: () => Promise<void>;
   }) {

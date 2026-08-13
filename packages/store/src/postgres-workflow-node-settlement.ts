@@ -19,7 +19,7 @@ import {
 } from "./postgres-execution-authority.ts";
 import { stableJson } from "./store-invariants.ts";
 import { normalizeStoredRunState } from "./stored-run-state.ts";
-import { validateWorkflowExecutionState } from "./workflow-execution-store.ts";
+import { validateWorkflowExecutionState } from "./workflow-execution-state.ts";
 import {
   assertExecutionBinding,
   settleWorkflowClaim,

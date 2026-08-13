@@ -10,8 +10,10 @@ import type {
   WorkflowRunInputRef,
   WorkItemLeaseInput,
 } from "./durable-queue-port.ts";
-import type { WorkflowExecutionState } from "./workflow-execution-store-port.ts";
-import type { WorkflowNodeClaim } from "./workflow-execution-service.ts";
+import type {
+  WorkflowExecutionState,
+  WorkflowNodeClaim,
+} from "./workflow-execution-types.ts";
 
 export type WorkflowAtomicNodeOutcome =
   | Readonly<{ status: "completed"; value: WorkflowSchemaValue }>

@@ -20,7 +20,7 @@ export * from "./postgres-run-store.ts";
 export * from "./postgres-thread-store.ts";
 export * from "./sqlite-run-store.ts";
 export * from "./workflow-version-store.ts";
-export * from "./workflow-execution-store.ts";
+export * from "./workflow-execution-state.ts";
 export * from "./sqlite-workflow-run-composition-store.ts";
 export * from "./postgres-workflow-run-composition-store.ts";
 export { SQLITE_SCHEMA_VERSION } from "./sqlite-schema.ts";

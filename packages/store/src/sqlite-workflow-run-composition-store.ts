@@ -43,7 +43,7 @@ import { normalizeStoredRunState } from "./stored-run-state.ts";
 import {
   decodeWorkflowExecutionState,
   validateWorkflowExecutionState,
-} from "./workflow-execution-store.ts";
+} from "./workflow-execution-state.ts";
 import { migrateSqliteWorkflowExecutions } from "./workflow-execution-schema.ts";
 import { migrateSqliteWorkflowVersions } from "./workflow-version-schema.ts";
 import {
