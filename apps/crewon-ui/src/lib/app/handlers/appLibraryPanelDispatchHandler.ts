@@ -8,6 +8,10 @@ import {
   createControlAutomation,
   runControlAutomationNow,
 } from "../../automation/controlAutomationLibrary";
+import {
+  createControlKnowledge,
+  readControlKnowledge,
+} from "../../knowledge/controlKnowledgeLibrary";
 
 export type AppLibraryPanelDispatchHandlerParams = Omit<
   AppLibraryPanelActionHandlersParams,
@@ -143,13 +147,115 @@ export function createAppLibraryPanelDispatchHandler(
       return true;
     }
     if (params.controlClient && action.id === "create-knowledge-memory") {
-      params.setNotice({
-        text:
+      params.setLibraryPanel({
+        actions: [
+          {
+            id: "submit-control-knowledge",
+            label: params.locale === "zh" ? "保存记忆" : "Save memory",
+          },
+        ],
+        body:
           params.locale === "zh"
-            ? "当前 Knowledge UI 没有真实内容输入；未创建 Control 记忆。"
-            : "The current Knowledge UI has no real content input; no Control memory was created.",
-        tone: "warning",
+            ? "记忆将写入当前 Control authority；保存后内容不可原地覆盖。"
+            : "The memory is written to the current Control authority and is immutable after creation.",
+        catalogMode: "controlKnowledge",
+        fields: [
+          {
+            id: "control-knowledge-title",
+            label: params.locale === "zh" ? "标题" : "Title",
+            value: "",
+          },
+          {
+            id: "control-knowledge-content",
+            label: params.locale === "zh" ? "内容" : "Content",
+            value: "",
+          },
+        ],
+        items: [],
+        kind: "knowledge",
+        subtitle: "Control API",
+        title: params.locale === "zh" ? "写入记忆" : "Write memory",
       });
+      return true;
+    }
+    if (params.controlClient && action.id === "submit-control-knowledge") {
+      const value = (id: string) =>
+        params.libraryPanel?.fields
+          ?.find((field) => field.id === id)
+          ?.value.trim() ?? "";
+      const title = value("control-knowledge-title");
+      const content = value("control-knowledge-content");
+      if (!title || !content) {
+        params.setNotice({
+          text:
+            params.locale === "zh"
+              ? "标题和内容不能为空。"
+              : "Title and content are required.",
+          tone: "warning",
+        });
+        return true;
+      }
+      try {
+        await createControlKnowledge(params.controlClient, {
+          content,
+          idempotencyKey: `knowledge.create:${crypto.randomUUID()}`,
+          kind: "memory",
+          sourceId: params.selectedThreadId
+            ? `thread:${params.selectedThreadId}`
+            : "manual:user",
+          title,
+        });
+        await params.openLibrary("knowledge");
+        params.setNotice({
+          text:
+            params.locale === "zh" ? "记忆已写入。" : "Memory saved.",
+          tone: "success",
+        });
+      } catch {
+        params.setNotice({
+          text:
+            params.locale === "zh"
+              ? "Control 记忆写入失败。"
+              : "Unable to save the Control memory.",
+          tone: "warning",
+        });
+      }
+      return true;
+    }
+    if (
+      params.controlClient &&
+      action.id === "open-control-knowledge" &&
+      action.knowledgePath
+    ) {
+      try {
+        const knowledge = await readControlKnowledge(
+          params.controlClient,
+          action.knowledgePath,
+        );
+        params.setLibraryPanel({
+          actions: [
+            {
+              id: "refresh-knowledge",
+              label:
+                params.locale === "zh" ? "返回知识库" : "Back to knowledge",
+            },
+          ],
+          body: knowledge.content,
+          catalogMode: "controlKnowledge",
+          items: [],
+          kind: "knowledge",
+          subtitle: `${knowledge.kind} · ${knowledge.sourceId} · ${new Date(knowledge.createdAt).toLocaleString()}`,
+          title: knowledge.title,
+        });
+      } catch {
+        params.setNotice({
+          text:
+            params.locale === "zh"
+              ? "Control Knowledge 详情读取失败。"
+              : "Unable to read Control Knowledge details.",
+          tone: "warning",
+        });
+      }
       return true;
     }
     if (params.controlClient && action.id === "reset-memory") {

@@ -27,6 +27,7 @@ export function KnowledgeView({
   const data = panel.knowledge;
   if (!data) return null;
   const isZh = locale === "zh";
+  const controlAuthority = panel.catalogMode === "controlKnowledge";
   const actions: LibraryPanelAction[] = [
     {
       id: "create-knowledge-memory",
@@ -37,11 +38,19 @@ export function KnowledgeView({
       id: "refresh-knowledge",
       label: libraryLabel(locale, "刷新知识库", "Refresh knowledge"),
     },
-    {
-      id: "reset-memory",
-      label: libraryLabel(locale, "重置全局记忆", "Reset global memory"),
-      tone: "danger",
-    },
+    ...(controlAuthority
+      ? []
+      : [
+          {
+            id: "reset-memory" as const,
+            label: libraryLabel(
+              locale,
+              "重置全局记忆",
+              "Reset global memory",
+            ),
+            tone: "danger" as const,
+          },
+        ]),
   ];
 
   return (

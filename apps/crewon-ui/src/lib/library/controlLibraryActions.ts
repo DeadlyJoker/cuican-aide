@@ -71,6 +71,7 @@ export async function openControlLibraryAction(params: {
       subtitle:
         locale === "zh" ? "Control API 读取失败" : "Control API read failed",
       items: [],
+      catalogMode: "controlKnowledge",
       error: error instanceof Error ? error.message : String(error),
     });
   }
@@ -107,6 +108,7 @@ async function openControlKnowledge(params: {
 
 function controlKnowledgeMemory(item: KnowledgeView, index: number) {
   return {
+    knowledgeId: item.knowledgeId,
     title: item.title,
     glyph: ["◆", "★", "✓", "▣"][index % 4],
     accent: (["blue", "violet", "cyan", "slate"] as const)[index % 4],
@@ -119,6 +121,7 @@ function controlKnowledgeMemory(item: KnowledgeView, index: number) {
 
 function controlKnowledgeSource(item: KnowledgeView, index: number) {
   return {
+    knowledgeId: item.knowledgeId,
     name: item.title,
     glyph: ["▦", "▤", "◍", "◎"][index % 4],
     accent: (["green", "amber", "cyan", "slate"] as const)[index % 4],

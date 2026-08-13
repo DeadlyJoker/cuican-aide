@@ -26,13 +26,21 @@ export function KnowledgeMemoryList({
             data-pinned={mem.pinned ? "true" : "false"}
             key={mem.title}
             onClick={() =>
-              mem.threadId
+              mem.knowledgeId
                 ? onPanelAction({
-                    id: "open-thread",
-                    label: isZh ? "打开后端线程" : "Open backend thread",
-                    threadId: mem.threadId,
+                    id: "open-control-knowledge",
+                    label: isZh ? "查看记忆详情" : "View memory details",
+                    knowledgePath: mem.knowledgeId,
+                    knowledgeTitle: mem.title,
+                    knowledgeKind: "file",
                   })
-                : mem.path
+                : mem.threadId
+                  ? onPanelAction({
+                      id: "open-thread",
+                      label: isZh ? "打开后端线程" : "Open backend thread",
+                      threadId: mem.threadId,
+                    })
+                  : mem.path
                   ? onPanelAction({
                       id: "open-knowledge-file",
                       label: isZh ? "打开知识文件" : "Open knowledge file",

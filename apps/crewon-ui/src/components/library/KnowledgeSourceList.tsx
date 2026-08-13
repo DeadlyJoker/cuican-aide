@@ -54,15 +54,23 @@ export function KnowledgeSourceList({
             data-status={src.status}
             key={src.name}
             onClick={() =>
-              src.path
+              src.knowledgeId
                 ? onPanelAction({
-                    id: "open-knowledge-file",
-                    label: isZh ? "打开知识源" : "Open knowledge source",
-                    knowledgePath: src.path,
+                    id: "open-control-knowledge",
+                    label: isZh ? "查看知识源详情" : "View source details",
+                    knowledgePath: src.knowledgeId,
                     knowledgeTitle: src.name,
-                    knowledgeKind: src.isDirectory ? "directory" : "file",
+                    knowledgeKind: "file",
                   })
-                : undefined
+                : src.path
+                  ? onPanelAction({
+                      id: "open-knowledge-file",
+                      label: isZh ? "打开知识源" : "Open knowledge source",
+                      knowledgePath: src.path,
+                      knowledgeTitle: src.name,
+                      knowledgeKind: src.isDirectory ? "directory" : "file",
+                    })
+                  : undefined
             }
           >
             <span

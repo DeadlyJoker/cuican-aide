@@ -24,7 +24,7 @@ export type LibraryPanel = {
   workspace?: OfficeWorkspace;
   agentConfig?: AgentConfig;
   knowledge?: KnowledgeData;
-  catalogMode?: "skillMcp" | "controlCapabilities";
+  catalogMode?: "skillMcp" | "controlCapabilities" | "controlKnowledge";
 };
 
 export type LibraryPanelField = {
@@ -44,6 +44,7 @@ export type LibraryPanelAction = {
     | "prepare-control-automation"
     | "submit-control-automation"
     | "create-knowledge-memory"
+    | "submit-control-knowledge"
     | "create-mcp"
     | "create-office"
     | "create-skill"
@@ -51,6 +52,7 @@ export type LibraryPanelAction = {
     | "delete-mcp-config"
     | "install-plugin"
     | "open-knowledge-file"
+    | "open-control-knowledge"
     | "login-mcp-oauth"
     | "open-path"
     | "open-thread"
@@ -661,6 +663,7 @@ export type ActivityData = {
 };
 
 export type KnowledgeEntry = {
+  knowledgeId?: string;
   title: string;
   glyph: string;
   accent: LibraryAccent;
@@ -673,6 +676,7 @@ export type KnowledgeEntry = {
 };
 
 export type KnowledgeSource = {
+  knowledgeId?: string;
   name: string;
   glyph: string;
   accent: LibraryAccent;
