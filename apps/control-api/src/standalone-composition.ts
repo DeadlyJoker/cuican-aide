@@ -3,6 +3,7 @@ import {
   AgentVersionCatalogApplicationService,
   ArtifactApplicationService,
   AutomationApplicationService,
+  OfficeApplicationService,
   RunApplicationService,
   ThreadApplicationService,
   ThreadGoalApplicationService,
@@ -153,6 +154,12 @@ function composeControlApi(
       clock,
       ids,
     });
+    const offices = new OfficeApplicationService({
+      store,
+      authorization,
+      clock,
+      ids,
+    });
     const threads = new ThreadApplicationService({
       store,
       authorization,
@@ -275,6 +282,7 @@ function composeControlApi(
     });
     const app = buildControlApi({
       application,
+      offices,
       threads,
       goals,
       turns,

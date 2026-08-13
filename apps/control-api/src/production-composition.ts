@@ -4,6 +4,7 @@ import {
   ArtifactApplicationService,
   AutomationApplicationService,
   KnowledgeApplicationService,
+  OfficeApplicationService,
   RunApplicationService,
   ThreadApplicationService,
   ThreadGoalApplicationService,
@@ -103,6 +104,12 @@ async function composeProductionControlApi(
     const workflowVersionStore = store.workflowVersionStore(digester);
     await workflowVersionStore.migrate();
     const application = new RunApplicationService({
+      store,
+      authorization: config.authorization,
+      clock,
+      ids,
+    });
+    const offices = new OfficeApplicationService({
       store,
       authorization: config.authorization,
       clock,
@@ -213,6 +220,7 @@ async function composeProductionControlApi(
     });
     const app = buildControlApi({
       application,
+      offices,
       threads,
       goals,
       turns,

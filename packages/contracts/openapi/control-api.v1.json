@@ -1071,6 +1071,145 @@
         }
       }
     },
+    "/api/v1/offices": {
+      "post": {
+        "operationId": "createOffice",
+        "parameters": [
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/CreateOfficeRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replayed Office version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficeMutationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Created Office version",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OfficeMutationResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      },
+      "get": {
+        "operationId": "listOffices",
+        "parameters": [
+          { "$ref": "#/components/parameters/ResourceCursor" },
+          { "$ref": "#/components/parameters/Limit" }
+        ],
+        "responses": {
+          "200": {
+            "description": "Office versions",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ListOfficesResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/offices/{officeVersionId}": {
+      "get": {
+        "operationId": "getOffice",
+        "parameters": [
+          {
+            "name": "officeVersionId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "maxLength": 128 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Office version",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/GetOfficeResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/offices/{officeVersionId}:runs": {
+      "post": {
+        "operationId": "startOfficeRun",
+        "parameters": [
+          {
+            "name": "officeVersionId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "maxLength": 128 }
+          },
+          { "$ref": "#/components/parameters/IdempotencyKey" },
+          { "$ref": "#/components/parameters/CsrfToken" }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/StartOfficeRunRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Replayed canonical Run",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+              }
+            }
+          },
+          "201": {
+            "description": "Created canonical Run",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/api/v1/runs": {
       "post": {
         "operationId": "createRun",
@@ -2046,6 +2185,127 @@
       }
     },
     "schemas": {
+      "OfficeMember": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["memberId", "displayName", "agentVersionId"],
+        "properties": {
+          "memberId": { "type": "string", "maxLength": 128 },
+          "displayName": { "type": "string", "maxLength": 160 },
+          "agentVersionId": { "type": "string", "maxLength": 128 }
+        }
+      },
+      "OfficeExecutionTarget": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["targetId", "agentVersionId"],
+        "properties": {
+          "targetId": { "type": "string", "maxLength": 128 },
+          "agentVersionId": { "type": "string", "maxLength": 128 }
+        }
+      },
+      "Office": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "tenantId",
+          "spaceId",
+          "officeId",
+          "officeVersionId",
+          "revision",
+          "title",
+          "members",
+          "executionTargets",
+          "createdByActorId",
+          "createdAt"
+        ],
+        "properties": {
+          "schemaVersion": { "const": "crewon.office-definition.v0" },
+          "tenantId": { "type": "string" },
+          "spaceId": { "type": "string" },
+          "officeId": { "type": "string" },
+          "officeVersionId": { "type": "string" },
+          "revision": { "type": "integer", "minimum": 1 },
+          "title": { "type": "string", "maxLength": 160 },
+          "members": {
+            "type": "array",
+            "maxItems": 32,
+            "items": { "$ref": "#/components/schemas/OfficeMember" }
+          },
+          "executionTargets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "items": { "$ref": "#/components/schemas/OfficeExecutionTarget" }
+          },
+          "createdByActorId": { "type": "string" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CreateOfficeRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "expectedRevision",
+          "title",
+          "members",
+          "executionTargets"
+        ],
+        "properties": {
+          "officeId": { "type": "string", "maxLength": 128 },
+          "expectedRevision": { "type": "integer", "minimum": 0 },
+          "title": { "type": "string", "maxLength": 160 },
+          "members": {
+            "type": "array",
+            "maxItems": 32,
+            "items": { "$ref": "#/components/schemas/OfficeMember" }
+          },
+          "executionTargets": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "items": { "$ref": "#/components/schemas/OfficeExecutionTarget" }
+          }
+        }
+      },
+      "OfficeMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "office"],
+        "properties": {
+          "disposition": { "type": "string", "enum": ["created", "replayed"] },
+          "office": { "$ref": "#/components/schemas/Office" }
+        }
+      },
+      "GetOfficeResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["office"],
+        "properties": { "office": { "$ref": "#/components/schemas/Office" } }
+      },
+      "ListOfficesResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "nextCursor"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "$ref": "#/components/schemas/Office" }
+          },
+          "nextCursor": { "type": ["string", "null"] }
+        }
+      },
+      "StartOfficeRunRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["targetId", "threadId"],
+        "properties": {
+          "targetId": { "type": "string", "maxLength": 128 },
+          "threadId": { "type": "string", "maxLength": 128 }
+        }
+      },
       "HealthResponse": {
         "type": "object",
         "additionalProperties": false,

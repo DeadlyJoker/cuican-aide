@@ -7,6 +7,7 @@ import type {
   ApplicationClock,
   ContentDigester,
   RunApplicationService,
+  OfficeApplicationService,
   ThreadApplicationService,
   ThreadCompactionApplicationService,
   ThreadGoalApplicationService,
@@ -43,6 +44,11 @@ import {
   parseApprovalId,
   parseArtifactId,
   parseAutomationId,
+  parseCreateOfficeRequest,
+  parseStartOfficeRunRequest,
+  parseOfficeVersionId,
+  parseOfficeListQuery,
+  formatOfficeCursor,
   parseAutomationListQuery,
   parseCancelRunRequest,
   parseCompactThreadRequest,
@@ -118,6 +124,9 @@ import {
   type KnowledgeMutationResponse,
   type GetKnowledgeResponse,
   type ListKnowledgeResponse,
+  type OfficeMutationResponse,
+  type GetOfficeResponse,
+  type ListOfficesResponse,
 } from "@crewon/contracts";
 import Fastify, { type FastifyInstance } from "fastify";
 
@@ -188,6 +197,7 @@ import {
 
 export type ControlApiDependencies = Readonly<{
   application: RunApplicationService;
+  offices?: OfficeApplicationService | null;
   threads: ThreadApplicationService;
   goals: ThreadGoalApplicationService;
   turns: TurnApplicationService;
@@ -1190,6 +1200,105 @@ export function buildControlApi(
       .code(result.disposition === "committed" ? 201 : 200)
       .send(response);
   });
+
+  app.post<{ Body: unknown }>("/api/v1/offices", async (request, reply) => {
+    if (dependencies.offices == null)
+      throw new WorkspaceControlUnavailableError();
+    const actor = await dependencies.identity.resolveActor(
+      requestContext(request),
+    );
+    const body = parseCreateOfficeRequest(request.body);
+    const result = await dependencies.offices.create(actor, {
+      idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
+      officeId: body.officeId ?? null,
+      expectedRevision: body.expectedRevision,
+      title: body.title,
+      members: body.members,
+      executionTargets: body.executionTargets,
+    });
+    const response: OfficeMutationResponse = {
+      disposition: result.disposition,
+      office: result.definition,
+    };
+    return reply
+      .code(result.disposition === "created" ? 201 : 200)
+      .send(response);
+  });
+
+  app.get<{ Params: { officeVersionId: string } }>(
+    "/api/v1/offices/:officeVersionId",
+    async (request) => {
+      if (dependencies.offices == null)
+        throw new WorkspaceControlUnavailableError();
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const office = await dependencies.offices.get(
+        actor,
+        parseOfficeVersionId(request.params.officeVersionId),
+      );
+      const response: GetOfficeResponse = { office };
+      return response;
+    },
+  );
+
+  app.get<{ Querystring: unknown }>("/api/v1/offices", async (request) => {
+    if (dependencies.offices == null)
+      throw new WorkspaceControlUnavailableError();
+    const actor = await dependencies.identity.resolveActor(
+      requestContext(request),
+    );
+    const query = parseOfficeListQuery(request.query);
+    const data = await dependencies.offices.list(actor, query);
+    const last = data.at(-1);
+    const response: ListOfficesResponse = {
+      data,
+      nextCursor:
+        last === undefined || data.length < query.limit
+          ? null
+          : formatOfficeCursor({
+              createdAt: last.createdAt,
+              officeVersionId: last.officeVersionId,
+            }),
+    };
+    return response;
+  });
+
+  app.post<{ Params: { officeVersionId: string }; Body: unknown }>(
+    "/api/v1/offices/:officeVersionId([^:]+)::runs",
+    async (request, reply) => {
+      if (dependencies.offices == null)
+        throw new WorkspaceControlUnavailableError();
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const body = parseStartOfficeRunRequest(request.body);
+      const target = await dependencies.offices.authorizeRun(
+        actor,
+        parseOfficeVersionId(request.params.officeVersionId),
+        body.targetId,
+      );
+      const route = await dependencies.routeResolver.resolveRoute({
+        actor,
+        threadId: body.threadId,
+        agentVersionId: target.agentVersionId,
+      });
+      const result = await dependencies.application.createRun(actor, {
+        kind: "run.create",
+        idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
+        threadId: body.threadId,
+        route,
+      });
+      wakeOutbox(dependencies.outboxWakeup);
+      const response: RunMutationResponse = {
+        disposition: result.disposition,
+        run: projectRun(result.state),
+      };
+      return reply
+        .code(result.disposition === "committed" ? 201 : 200)
+        .send(response);
+    },
+  );
 
   app.post<{ Body: unknown }>(
     "/api/v1/workflow-runs",

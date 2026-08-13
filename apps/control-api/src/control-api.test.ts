@@ -14,6 +14,7 @@ import {
   ArtifactApplicationService,
   AutomationApplicationService,
   ModelProviderSettingsApplicationService,
+  OfficeApplicationService,
   compileAgentVersionReleaseBundle,
   RunApplicationService,
   RunExecutionService,
@@ -55,6 +56,7 @@ import type {
   ListThreadRunsResponse,
   ListThreadsResponse,
   RunMutationResponse,
+  OfficeMutationResponse,
   RunAutomationNowResponse,
   StartTurnResponse,
   ThreadEventView,
@@ -233,6 +235,60 @@ test("fenced Control admission exposes only exact health activation surfaces", a
     headers: readHeaders(),
   });
   assert.equal(activated.statusCode, 200, activated.body);
+});
+
+test("Office receipt replay is stable and selected target starts a canonical Run", async (context) => {
+  const runtime = await testRuntime(context);
+  const threadResponse = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/threads",
+    headers: jsonMutationHeaders("office-thread"),
+    payload: { title: "Office run" },
+  });
+  const threadId =
+    threadResponse.json<ThreadMutationResponse>().thread.threadId;
+  const create = () =>
+    runtime.app.inject({
+      method: "POST",
+      url: "/api/v1/offices",
+      headers: jsonMutationHeaders("office-create"),
+      payload: {
+        expectedRevision: 0,
+        title: "Delivery",
+        members: [],
+        executionTargets: [
+          { targetId: "primary", agentVersionId: "agent-version-1" },
+        ],
+      },
+    });
+  const first = await create();
+  const replay = await create();
+  assert.equal(first.statusCode, 201, first.body);
+  assert.equal(replay.statusCode, 200, replay.body);
+  const created = first.json<OfficeMutationResponse>();
+  assert.deepEqual(
+    replay.json<OfficeMutationResponse>().office,
+    created.office,
+  );
+  const started = await runtime.app.inject({
+    method: "POST",
+    url: `/api/v1/offices/${created.office.officeVersionId}:runs`,
+    headers: jsonMutationHeaders("office-run"),
+    payload: { targetId: "primary", threadId },
+  });
+  assert.equal(started.statusCode, 201, started.body);
+  const run = started.json<RunMutationResponse>().run;
+  assert.equal(run.threadId, threadId);
+  assert.equal(run.purpose, "turn");
+  assert.equal(
+    (
+      await runtime.store.loadRun({
+        tenantId: created.office.tenantId,
+        runId: run.runId,
+      })
+    )?.agentVersionId,
+    "agent-version-1",
+  );
 });
 
 test("exposes a safe Provider snapshot and replays one bounded probe", async (context) => {
@@ -2563,6 +2619,12 @@ async function testRuntime(
     clock,
     ids,
   });
+  const offices = new OfficeApplicationService({
+    store,
+    authorization,
+    clock,
+    ids,
+  });
   const execution = new RunExecutionService({
     store,
     clock,
@@ -2728,6 +2790,7 @@ async function testRuntime(
   });
   const dependencies = {
     application,
+    offices,
     threads,
     goals,
     turns,

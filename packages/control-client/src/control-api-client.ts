@@ -10,6 +10,11 @@ import type {
   CompactThreadRequest,
   CreateAutomationRequest,
   CreateRunRequest,
+  CreateOfficeRequest,
+  OfficeMutationResponse,
+  GetOfficeResponse,
+  ListOfficesResponse,
+  StartOfficeRunRequest,
   StartWorkflowRunRequest,
   DecideWorkflowHumanGateRequest,
   WorkflowHumanGateDecisionResponse,
@@ -563,6 +568,58 @@ export class ControlApiClient {
       idempotencyKey,
       expectedStatuses: [200, 201],
     });
+  }
+
+  createOffice(
+    body: CreateOfficeRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<OfficeMutationResponse> {
+    return this.#json("POST", "/api/v1/offices", body, {
+      ...options,
+      idempotencyKey,
+      expectedStatuses: [200, 201],
+    });
+  }
+
+  getOffice(
+    officeVersionId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetOfficeResponse> {
+    return this.#json(
+      "GET",
+      `/api/v1/offices/${resourceId(officeVersionId)}`,
+      null,
+      { ...options, expectedStatuses: [200] },
+    );
+  }
+
+  listOffices(
+    query: { limit?: number; before?: string } = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<ListOfficesResponse> {
+    const search = new URLSearchParams();
+    if (query.limit !== undefined) search.set("limit", String(query.limit));
+    if (query.before !== undefined) search.set("before", query.before);
+    const suffix = search.size === 0 ? "" : `?${search}`;
+    return this.#json("GET", `/api/v1/offices${suffix}`, null, {
+      ...options,
+      expectedStatuses: [200],
+    });
+  }
+
+  startOfficeRun(
+    officeVersionId: string,
+    body: StartOfficeRunRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<RunMutationResponse> {
+    return this.#json(
+      "POST",
+      `/api/v1/offices/${resourceId(officeVersionId)}:runs`,
+      body,
+      { ...options, idempotencyKey, expectedStatuses: [200, 201] },
+    );
   }
 
   startWorkflowRun(
