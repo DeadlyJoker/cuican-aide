@@ -118,6 +118,25 @@ describe("settings refresh handlers", () => {
   });
 
   it("passes account refresh through to Control", async () => {
+    const getAccountSnapshot = vi.fn(async () => ({
+      account: {
+        identity: {
+          principalId: "principal-1",
+          actorId: "actor-1",
+          tenantId: "tenant-1",
+          spaceId: "space-1",
+        },
+        authentication: {
+          status: "authenticated" as const,
+          authority: "control" as const,
+        },
+        usage: { status: "unavailable" as const, reason: "notOwned" as const },
+        rateLimits: {
+          status: "unavailable" as const,
+          reason: "notOwned" as const,
+        },
+      },
+    }));
     const getLocalSettings = vi.fn(async () => ({
       settings: {
         locale: "en" as const,
@@ -128,13 +147,17 @@ describe("settings refresh handlers", () => {
     }));
     const handlers = createAppSettingsRefreshHandlers(
       baseParams({
-        controlClient: { getLocalSettings } as unknown as ControlApiClient,
+        controlClient: {
+          getAccountSnapshot,
+          getLocalSettings,
+        } as unknown as ControlApiClient,
         isConnected: true,
       }),
     );
 
     await handlers.refreshAccountPanel();
 
+    expect(getAccountSnapshot).toHaveBeenCalledOnce();
     expect(getLocalSettings).toHaveBeenCalledOnce();
   });
 
