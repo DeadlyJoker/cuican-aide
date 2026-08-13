@@ -25,6 +25,11 @@ export type WorkflowStreamState =
   | Readonly<{ kind: "reconnecting"; attempt: number; limit: number }>
   | Readonly<{ kind: "terminal" }>;
 
+export type WorkflowStartAttempt = Readonly<{
+  fingerprint: string;
+  idempotencyKey: string;
+}>;
+
 export class ControlWorkflowInputError extends Error {
   constructor(readonly code: "invalid_json" | "invalid_input") {
     super(code);
@@ -58,6 +63,28 @@ export function createWorkflowStartIdempotencyKey(
   randomUUID: () => string = () => globalThis.crypto.randomUUID(),
 ): string {
   return `workflow.start:${randomUUID()}`;
+}
+
+export function retainWorkflowStartAttempt(
+  current: WorkflowStartAttempt | null,
+  input: {
+    raw: string;
+    threadId: string;
+    workflowVersionId: string;
+  },
+  randomUUID?: () => string,
+): WorkflowStartAttempt {
+  const fingerprint = JSON.stringify([
+    input.workflowVersionId,
+    input.threadId,
+    input.raw,
+  ]);
+  return current?.fingerprint === fingerprint
+    ? current
+    : {
+        fingerprint,
+        idempotencyKey: createWorkflowStartIdempotencyKey(randomUUID),
+      };
 }
 
 export async function startControlWorkflowRun(

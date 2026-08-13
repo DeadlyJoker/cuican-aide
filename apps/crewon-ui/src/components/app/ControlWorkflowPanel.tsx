@@ -9,7 +9,9 @@ import type { ControlWorkflowAdapter } from "../../lib/workflow/controlWorkflowA
 import {
   ControlWorkflowInputError,
   followControlWorkflowRun,
+  retainWorkflowStartAttempt,
   startControlWorkflowRun,
+  type WorkflowStartAttempt,
   type WorkflowStreamState,
 } from "../../lib/workflow/controlWorkflowRun";
 import {
@@ -46,6 +48,7 @@ export function ControlWorkflowPanel({
   const catalogAbortRef = useRef<AbortController | null>(null);
   const detailAbortRef = useRef<AbortController | null>(null);
   const runAbortRef = useRef<AbortController | null>(null);
+  const startAttemptRef = useRef<WorkflowStartAttempt | null>(null);
   const threadRef = useRef(selectedThreadId);
 
   async function reload(signal: AbortSignal) {
@@ -103,6 +106,7 @@ export function ControlWorkflowPanel({
     threadRef.current = selectedThreadId;
     runAbortRef.current?.abort();
     runAbortRef.current = null;
+    startAttemptRef.current = null;
     setRun(null);
     setBusy(false);
     setError(null);
@@ -125,6 +129,7 @@ export function ControlWorkflowPanel({
       if (request !== requestRef.current || abort.signal.aborted) return;
       setSelected(version);
       setRun(null);
+      startAttemptRef.current = null;
       setStreamState({ kind: "idle" });
       onRoomOpenChange?.(true);
     } catch (readError) {
@@ -146,12 +151,23 @@ export function ControlWorkflowPanel({
     setError(null);
     setStreamState({ kind: "connecting" });
     try {
-      const started = await startControlWorkflowRun(adapter, {
+      const attempt = retainWorkflowStartAttempt(startAttemptRef.current, {
         raw: input,
-        workflowVersionId: selected.workflowVersionId,
         threadId: selectedThreadId,
-        signal: abort.signal,
+        workflowVersionId: selected.workflowVersionId,
       });
+      startAttemptRef.current = attempt;
+      const started = await startControlWorkflowRun(
+        adapter,
+        {
+          raw: input,
+          workflowVersionId: selected.workflowVersionId,
+          threadId: selectedThreadId,
+          signal: abort.signal,
+        },
+        attempt.idempotencyKey,
+      );
+      startAttemptRef.current = null;
       if (runAbortRef.current !== abort || abort.signal.aborted) return;
       setRun(started);
       setBusy(false);
@@ -184,6 +200,7 @@ export function ControlWorkflowPanel({
     setSelected(null);
     setRun(null);
     setBusy(false);
+    startAttemptRef.current = null;
     setError(null);
     setStreamState({ kind: "idle" });
     onRoomOpenChange?.(false);

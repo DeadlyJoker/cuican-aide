@@ -8,6 +8,7 @@ import {
   followControlWorkflowRun,
   parseControlWorkflowInput,
   publicWorkflowRunStatus,
+  retainWorkflowStartAttempt,
   startControlWorkflowRun,
 } from "./controlWorkflowRun";
 
@@ -61,6 +62,33 @@ describe("Control Workflow Run", () => {
       value: { prompt: "ship" },
       idempotencyKey: "workflow.start:stable-attempt",
       signal: undefined,
+    });
+  });
+
+  it("retains an unknown start key until the logical input changes", () => {
+    const uuids = ["first", "second"];
+    const randomUUID = () => uuids.shift()!;
+    const input = {
+      raw: '{"prompt":"ship"}',
+      threadId: "thread-1",
+      workflowVersionId: "workflow-version-1",
+    };
+    const first = retainWorkflowStartAttempt(null, input, randomUUID);
+
+    expect(retainWorkflowStartAttempt(first, input, randomUUID)).toBe(first);
+    expect(
+      retainWorkflowStartAttempt(
+        first,
+        { ...input, raw: '{"prompt":"review"}' },
+        randomUUID,
+      ),
+    ).toEqual({
+      fingerprint: JSON.stringify([
+        "workflow-version-1",
+        "thread-1",
+        '{"prompt":"review"}',
+      ]),
+      idempotencyKey: "workflow.start:second",
     });
   });
 
