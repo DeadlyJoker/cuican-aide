@@ -1336,6 +1336,8 @@ test("configures WAL and foreign keys and applies the current schema once", (con
       { name: "automation_invocation_receipts" },
       { name: "automations" },
       { name: "idempotency_receipts" },
+      { name: "knowledge_create_receipts" },
+      { name: "knowledge_records" },
       { name: "message_invalidations" },
       { name: "messages" },
       { name: "model_dispatch_receipts" },

@@ -37,7 +37,7 @@ export class SqliteOfficeStore implements OfficeDefinitionStore {
   async commitOfficeDefinition(
     input: CommitOfficeDefinitionInput,
   ): Promise<CommitOfficeDefinitionResult> {
-    const value = input.definition;
+    const value = validateCommit(input);
     this.#database.exec("BEGIN IMMEDIATE");
     try {
       const receipt = this.#database
@@ -152,4 +152,14 @@ export class SqliteOfficeStore implements OfficeDefinitionStore {
       ? null
       : parseOfficeDefinition(JSON.parse(row.definition_json));
   }
+}
+
+function validateCommit(input: CommitOfficeDefinitionInput) {
+  const value = parseOfficeDefinition(input.definition);
+  if (
+    value.revision !== input.expectedRevision + 1 ||
+    value.createdByActorId !== input.receipt.actorId
+  )
+    throw new Error("office_commit_authority_mismatch");
+  return value;
 }

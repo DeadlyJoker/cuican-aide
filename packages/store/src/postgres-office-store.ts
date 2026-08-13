@@ -23,7 +23,7 @@ export class PostgresOfficeStore implements OfficeDefinitionStore {
   async commitOfficeDefinition(
     input: CommitOfficeDefinitionInput,
   ): Promise<CommitOfficeDefinitionResult> {
-    const value = input.definition;
+    const value = validateCommit(input);
     const client = await this.#pool.connect();
     try {
       await client.query("BEGIN");
@@ -129,4 +129,14 @@ export class PostgresOfficeStore implements OfficeDefinitionStore {
     );
     return result.rows.map((row) => parseOfficeDefinition(row.definition_json));
   }
+}
+
+function validateCommit(input: CommitOfficeDefinitionInput) {
+  const value = parseOfficeDefinition(input.definition);
+  if (
+    value.revision !== input.expectedRevision + 1 ||
+    value.createdByActorId !== input.receipt.actorId
+  )
+    throw new Error("office_commit_authority_mismatch");
+  return value;
 }

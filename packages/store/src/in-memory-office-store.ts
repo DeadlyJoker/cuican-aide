@@ -4,7 +4,7 @@ import type {
   OfficeListCursor,
   OfficeLocator,
 } from "@crewon/application";
-import type { OfficeDefinition } from "@crewon/domain";
+import { parseOfficeDefinition, type OfficeDefinition } from "@crewon/domain";
 
 export class InMemoryOfficeStore implements OfficeDefinitionStore {
   private readonly definitions = new Map<string, OfficeDefinition>();
@@ -13,7 +13,12 @@ export class InMemoryOfficeStore implements OfficeDefinitionStore {
     { digest: string; officeVersionId: string }
   >();
   async commitOfficeDefinition(input: CommitOfficeDefinitionInput) {
-    const value = input.definition;
+    const value = parseOfficeDefinition(input.definition);
+    if (
+      value.revision !== input.expectedRevision + 1 ||
+      value.createdByActorId !== input.receipt.actorId
+    )
+      throw new Error("office_commit_authority_mismatch");
     const key = [
       value.tenantId,
       value.spaceId,

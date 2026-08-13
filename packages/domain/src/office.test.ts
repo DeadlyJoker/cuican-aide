@@ -42,4 +42,15 @@ test("rejects unknown fields and non-canonical bounded text", () => {
       }),
     /office_definition_invalid/,
   );
+  assert.throws(
+    () =>
+      parseOfficeDefinition({
+        ...definition,
+        executionTargets: [
+          ...definition.executionTargets,
+          definition.executionTargets[0],
+        ],
+      }),
+    /office_definition_invalid/,
+  );
 });

@@ -66,8 +66,8 @@ export function parseOfficeDefinition(value: unknown): OfficeDefinition {
     strings.some((key) => !validText(item[key], key === "title" ? OFFICE_LIMITS.title : 128)) ||
     !Number.isSafeInteger(item.revision) ||
     (item.revision as number) < 1 ||
-    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/u.test(item.createdAt as string) ||
-    new Date(item.createdAt as string).toISOString() !== item.createdAt ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(item.createdAt as string) ||
+    Number.isNaN(Date.parse(item.createdAt as string)) ||
     !Array.isArray(item.members) ||
     item.members.length > OFFICE_LIMITS.members ||
     !Array.isArray(item.executionTargets) ||
@@ -75,12 +75,22 @@ export function parseOfficeDefinition(value: unknown): OfficeDefinition {
     item.executionTargets.length > OFFICE_LIMITS.targets
   )
     throw new Error("office_definition_invalid");
-  for (const member of item.members)
+  const memberIds = new Set<string>();
+  for (const member of item.members) {
     if (!validFields(member, { memberId: 128, displayName: 160, agentVersionId: 128 }))
       throw new Error("office_definition_invalid");
-  for (const target of item.executionTargets)
+    const memberId = (member as Record<string, string>).memberId;
+    if (memberIds.has(memberId)) throw new Error("office_definition_invalid");
+    memberIds.add(memberId);
+  }
+  const targetIds = new Set<string>();
+  for (const target of item.executionTargets) {
     if (!validFields(target, { targetId: 128, agentVersionId: 128 }))
       throw new Error("office_definition_invalid");
+    const targetId = (target as Record<string, string>).targetId;
+    if (targetIds.has(targetId)) throw new Error("office_definition_invalid");
+    targetIds.add(targetId);
+  }
   return structuredClone(value) as OfficeDefinition;
 }
 
