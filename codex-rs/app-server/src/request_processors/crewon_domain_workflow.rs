@@ -38,8 +38,6 @@ const MAX_INSTRUCTION_CHARS: usize = 2_000;
 const MAX_INPUT_CHARS: usize = 10_000;
 const MAX_OUTPUT_CHARS: usize = 10_000;
 const MAX_RUNS: usize = 20;
-const LEGACY_WORKFLOW_SCHEMA_VERSION: &str = "crewon.legacy-serial-workflow.v0";
-const LEGACY_WORKFLOW_RUNTIME_AUTHORITY: &str = "rustLegacySerial";
 
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct PreparedWorkflowNodeDispatch {
@@ -143,8 +141,6 @@ impl CrewonDomainRequestProcessor {
         }
         let now = Utc::now().timestamp();
         let config = json!({
-            "schemaVersion": LEGACY_WORKFLOW_SCHEMA_VERSION,
-            "runtimeAuthority": LEGACY_WORKFLOW_RUNTIME_AUTHORITY,
             "workflowId": Uuid::now_v7().to_string(),
             "name": params.name.trim(),
             "description": params.description.trim(),
@@ -177,7 +173,6 @@ impl CrewonDomainRequestProcessor {
         let record = read_workflow(&params.cwd, &params.workflow_id)
             .await?
             .ok_or_else(|| invalid_params("Workflow does not exist in the current workspace"))?;
-        require_legacy_workflow_runtime(&record.config)?;
         let nodes = parse_nodes(&record.config)?;
         if workflow_has_active_run(&record.config) {
             return Err(invalid_params(
@@ -427,9 +422,6 @@ impl CrewonDomainRequestProcessor {
         .await?;
         let mut transitions = Vec::new();
         for record in records {
-            if require_legacy_workflow_runtime(&record.config).is_err() {
-                continue;
-            }
             let Some((run_id, node_id)) = matching_active_node(&record.config, thread_id, &turn.id)
             else {
                 continue;
@@ -537,22 +529,6 @@ async fn read_workflow(
     Ok(records.into_iter().find(|record| {
         record.config.get("workflowId").and_then(JsonValue::as_str) == Some(workflow_id.as_str())
     }))
-}
-
-fn require_legacy_workflow_runtime(config: &JsonValue) -> Result<(), JSONRPCErrorError> {
-    match config.get("schemaVersion") {
-        None => Ok(()),
-        Some(JsonValue::String(schema_version))
-            if schema_version == LEGACY_WORKFLOW_SCHEMA_VERSION
-                && config.get("runtimeAuthority").and_then(JsonValue::as_str)
-                    == Some(LEGACY_WORKFLOW_RUNTIME_AUTHORITY) =>
-        {
-            Ok(())
-        }
-        _ => Err(invalid_params(
-            "Canonical WorkflowVersion is owned by the TypeScript DAG runtime; Rust only imports and executes legacy serial Workflow records",
-        )),
-    }
 }
 
 fn string_field(value: &JsonValue, field: &str) -> Result<String, JSONRPCErrorError> {
