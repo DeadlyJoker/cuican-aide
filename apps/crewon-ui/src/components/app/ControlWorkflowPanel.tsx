@@ -116,8 +116,7 @@ export function ControlWorkflowPanel({
       setBusy(false);
       await followRun(adapter, started, abort.signal, setRun);
     } catch (runError) {
-      if (!abort.signal.aborted)
-        setError(message(runError, "协作流执行失败"));
+      if (!abort.signal.aborted) setError(message(runError, "协作流执行失败"));
     } finally {
       if (runAbortRef.current === abort) {
         runAbortRef.current = null;
@@ -214,7 +213,11 @@ export function ControlWorkflowPanel({
               <span>{String(index + 1).padStart(2, "0")}</span>
               <div>
                 <strong>{node.title}</strong>
-                <p>{node.kind === "humanGate" ? "人工确认（当前 UI 只读）" : node.kind}</p>
+                <p>
+                  {node.kind === "humanGate"
+                    ? "人工确认（当前 UI 只读）"
+                    : node.kind}
+                </p>
               </div>
               <em className="status">定义节点</em>
             </article>
@@ -243,12 +246,18 @@ export function ControlWorkflowPanel({
             <button
               className="button primary"
               type="button"
-              disabled={busy || selectedThreadId === null || (run !== null && !terminal(run.status))}
+              disabled={
+                busy ||
+                selectedThreadId === null ||
+                (run !== null && !terminal(run.status))
+              }
               onClick={() => void start()}
             >
               {busy ? "执行中…" : "启动协作流"}
             </button>
-            {selectedThreadId === null ? <small>请先打开一个 Control 会话。</small> : null}
+            {selectedThreadId === null ? (
+              <small>请先打开一个 Control 会话。</small>
+            ) : null}
           </label>
         </section>
       </main>
@@ -264,7 +273,11 @@ async function followRun(
 ) {
   let cursor = started.lastSequence;
   let current = started;
-  for (let reconnect = 0; reconnect < 3 && !terminal(current.status); reconnect += 1) {
+  for (
+    let reconnect = 0;
+    reconnect < 3 && !terminal(current.status);
+    reconnect += 1
+  ) {
     for await (const event of adapter.events({
       runId: started.runId,
       afterSequence: cursor,

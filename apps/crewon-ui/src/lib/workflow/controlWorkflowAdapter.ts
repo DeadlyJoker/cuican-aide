@@ -48,9 +48,8 @@ export function createControlWorkflowAdapter(
         { signal: input.signal },
       ),
     async readVersion(workflowVersionId, signal) {
-      return (
-        await client.getWorkflowVersion(workflowVersionId, { signal })
-      ).workflowVersion;
+      return (await client.getWorkflowVersion(workflowVersionId, { signal }))
+        .workflowVersion;
     },
     async start(input) {
       const run = (
