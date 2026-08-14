@@ -13,6 +13,10 @@ import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
 import { migrateSqliteWorkflowExecutions } from "./workflow-execution-schema.ts";
 import { migrateSqliteWorkflowVersions } from "./workflow-version-schema.ts";
 import { migrateSqliteOffices, SqliteOfficeStore } from "./sqlite-office-store.ts";
+import {
+  migrateSqliteOfficeDelegations,
+  SqliteOfficeDelegationStore,
+} from "./sqlite-office-delegation-store.ts";
 
 import {
   RunLifecycleError,
@@ -552,6 +556,7 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
   readonly #automationAuthority: SqliteAutomationAuthority;
   readonly #knowledge: SqliteKnowledgeStore;
   readonly #officeAuthority: SqliteOfficeStore;
+  readonly #officeDelegationAuthority: SqliteOfficeDelegationStore;
   #workflowRuntime: SqliteWorkflowRunCompositionStore | null = null;
   #closed = false;
 
@@ -683,11 +688,23 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
     });
     this.#knowledge = new SqliteKnowledgeStore(this.#database, () => this.#assertOpen());
     this.#officeAuthority = new SqliteOfficeStore(this.#database);
+    this.#officeDelegationAuthority = new SqliteOfficeDelegationStore(
+      this.#database,
+      {
+        assertOpen: () => this.#assertOpen(),
+        loadThread: (input) => this.#loadThread(input),
+        loadRun: (input) => this.#loadRun(input),
+        replayWorkflowRun: (input) => this.commitWorkflowRunStart(input),
+        commitWorkflowRunWithinTransaction: (input, route) =>
+          this.#commitWorkflowRunStartWithRoute(input, route, false),
+      },
+    );
     try {
       configureAndMigrateSqlite(this.#database);
       migrateSqliteOffices(this.#database);
       migrateSqliteWorkflowVersions(this.#database);
       migrateSqliteWorkflowExecutions(this.#database);
+      migrateSqliteOfficeDelegations(this.#database);
       if (this.#workflowDigester !== null)
         this.#workflowRuntime = new SqliteWorkflowRunCompositionStore(
           this.#database,
@@ -724,6 +741,8 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
   commitOfficeDefinition(input: Parameters<SqliteOfficeStore["commitOfficeDefinition"]>[0]) { return this.#officeAuthority.commitOfficeDefinition(input); }
   loadOfficeDefinition(input: Parameters<SqliteOfficeStore["loadOfficeDefinition"]>[0]) { return this.#officeAuthority.loadOfficeDefinition(input); }
   listOfficeDefinitions(input: Parameters<SqliteOfficeStore["listOfficeDefinitions"]>[0]) { return this.#officeAuthority.listOfficeDefinitions(input); }
+  commitOfficeDelegationStart(input: Parameters<SqliteOfficeDelegationStore["commitOfficeDelegationStart"]>[0]) { return this.#officeDelegationAuthority.commitOfficeDelegationStart(input); }
+  listOfficeDelegations(input: Parameters<SqliteOfficeDelegationStore["listOfficeDelegations"]>[0]) { return this.#officeDelegationAuthority.listOfficeDelegations(input); }
 
   async loadAutomationCreateReceipt(
     query: AutomationCreateReceiptQuery,
@@ -3660,15 +3679,25 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
     this.#assertOpen();
     if (this.#workflowDigester === null)
       throw new RunStoreError("workflow_run_admission_not_configured");
-    const workflowDigester = this.#workflowDigester;
     const replay = this.#readWorkflowAdmissionReplay(input);
     if (replay !== null) return replay;
     const candidateRoute = await input.resolveCandidateRoute();
+    return this.#commitWorkflowRunStartWithRoute(input, candidateRoute, true);
+  }
+
+  #commitWorkflowRunStartWithRoute(
+    input: CommitWorkflowRunStartInput,
+    candidateRoute: import("@crewon/application").RunRoute,
+    ownsTransaction: boolean,
+  ): CommitWorkflowRunStartResult {
+    if (this.#workflowDigester === null)
+      throw new RunStoreError("workflow_run_admission_not_configured");
+    const workflowDigester = this.#workflowDigester;
     try {
-      this.#database.exec("BEGIN IMMEDIATE");
+      if (ownsTransaction) this.#database.exec("BEGIN IMMEDIATE");
       const concurrentReplay = this.#loadWorkflowAdmissionReplay(input);
       if (concurrentReplay !== null) {
-        this.#database.exec("COMMIT");
+        if (ownsTransaction) this.#database.exec("COMMIT");
         return concurrentReplay;
       }
       const thread = this.#loadThread({ tenantId: input.tenantId,
@@ -3780,10 +3809,10 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
          VALUES (?,?,?,?,?,?)`,
       ).run(input.tenantId, input.idempotency.scope, input.idempotency.key,
         input.idempotency.requestFingerprint, run.state.runId, stableJson(result));
-      this.#database.exec("COMMIT");
+      if (ownsTransaction) this.#database.exec("COMMIT");
       return clone(result);
     } catch (error) {
-      rollback(this.#database);
+      if (ownsTransaction) rollback(this.#database);
       throw normalizeSqliteError(error);
     }
   }

@@ -12,7 +12,9 @@ import {
   type AgentVersionSource,
 } from "@crewon/agent-version";
 import {
+  ApplicationError,
   RunStoreError,
+  type CommitOfficeDelegationStartInput,
   type CommitWorkflowRunStartInput,
   type RunRoute,
 } from "@crewon/application";
@@ -170,6 +172,127 @@ test("SQLite Workflow admission concurrent loser rechecks the receipt after reso
   await second.close();
 });
 
+test("SQLite Office delegation is receipt-first and bypasses both callbacks on replay", async (context) => {
+  const path = await temporaryPath(context, "office-replay");
+  const store = new SqliteRunStore(path, { workflowDigester: digester });
+  await seedOfficeAuthority(store, path);
+  let resolverCalls = 0;
+  let prepareCalls = 0;
+  const input = officeAdmissionInput("1", "2026-08-12T00:00:01.000Z", {
+    resolveCandidateRoute: async () => {
+      resolverCalls += 1;
+      return route("default-v1");
+    },
+    onPrepare: () => {
+      prepareCalls += 1;
+    },
+  });
+  const fresh = await store.commitOfficeDelegationStart(input);
+  const replay = await store.commitOfficeDelegationStart({
+    ...input,
+    resolveCandidateRoute: async () => {
+      resolverCalls += 1;
+      throw new Error("route must not run");
+    },
+    prepare: () => {
+      prepareCalls += 1;
+      throw new Error("prepare must not run");
+    },
+  });
+  assert.equal(fresh.disposition, "committed");
+  assert.equal(replay.disposition, "replayed");
+  assert.deepEqual(replay.delegation, fresh.delegation);
+  assert.deepEqual({ resolverCalls, prepareCalls }, { resolverCalls: 1, prepareCalls: 1 });
+  await assert.rejects(
+    store.commitOfficeDelegationStart({
+      ...input,
+      idempotency: { ...input.idempotency, requestFingerprint: "changed" },
+    }),
+    hasCode("idempotency_conflict"),
+  );
+  await store.close();
+});
+
+test("SQLite Office delegation rolls back every Workflow write when prepare rejects membership", async (context) => {
+  const path = await temporaryPath(context, "office-rollback");
+  const store = new SqliteRunStore(path, { workflowDigester: digester });
+  await seedOfficeAuthority(store, path);
+  const input = officeAdmissionInput("1", "2026-08-12T00:00:01.000Z", {
+    onPrepare: () => {
+      throw new ApplicationError("validation", "office_workflow_agent_not_member");
+    },
+  });
+  await assert.rejects(
+    store.commitOfficeDelegationStart(input),
+    (error) =>
+      error instanceof ApplicationError &&
+      error.code === "office_workflow_agent_not_member",
+  );
+  const database = new DatabaseSync(path);
+  for (const table of [
+    "run_snapshots",
+    "run_events",
+    "outbox",
+    "work_items",
+    "workflow_execution_values",
+    "workflow_run_admission_receipts",
+    "office_delegations",
+    "office_delegation_receipts",
+  ])
+    assert.equal(
+      database.prepare(`SELECT count(*) count FROM ${table}`).get()!.count,
+      0,
+      table,
+    );
+  database.close();
+  await store.close();
+});
+
+test("SQLite Office delegation lists canonical Runs with a stable tie-break cursor", async (context) => {
+  const path = await temporaryPath(context, "office-list");
+  const store = new SqliteRunStore(path, { workflowDigester: digester });
+  await seedOfficeAuthority(store, path);
+  for (const [suffix, createdAt] of [
+    ["a", "2026-08-12T00:00:02.000Z"],
+    ["b", "2026-08-12T00:00:02.000Z"],
+    ["c", "2026-08-12T00:00:01.000Z"],
+  ] as const)
+    await store.commitOfficeDelegationStart(
+      officeAdmissionInput(suffix, createdAt),
+    );
+  const first = await store.listOfficeDelegations({
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    officeVersionId: "office-v1",
+    before: null,
+    limit: 2,
+  });
+  assert.deepEqual(
+    first.items.map((item) => [item.delegation.delegationId, item.run.runId]),
+    [
+      ["delegation-b", "workflow-run-b"],
+      ["delegation-a", "workflow-run-a"],
+    ],
+  );
+  assert.deepEqual(first.next, {
+    createdAt: "2026-08-12T00:00:02.000Z",
+    delegationId: "delegation-a",
+  });
+  const second = await store.listOfficeDelegations({
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    officeVersionId: "office-v1",
+    before: first.next,
+    limit: 2,
+  });
+  assert.deepEqual(
+    second.items.map((item) => item.delegation.delegationId),
+    ["delegation-c"],
+  );
+  assert.equal(second.next, null);
+  await store.close();
+});
+
 async function seedAuthority(store: SqliteRunStore, path: string): Promise<void> {
   await seedThread(store);
   const database = new DatabaseSync(path);
@@ -185,6 +308,25 @@ async function seedAuthority(store: SqliteRunStore, path: string): Promise<void>
   await activateRelease(store, "node-v1", "a", `sha256:${"a".repeat(64)}`, null,
     "default-v1", ["verifier-v1"]);
   database.close();
+}
+
+async function seedOfficeAuthority(store: SqliteRunStore, path: string) {
+  await seedAuthority(store, path);
+  await store.commitOfficeDefinition({
+    expectedRevision: 0,
+    receipt: { actorId: "actor", idempotencyKey: "office-1", requestDigest: "office-fp-1" },
+    definition: {
+      schemaVersion: "crewon.office-definition.v0",
+      tenantId: "tenant-1", spaceId: "space-1", officeId: "office-1",
+      officeVersionId: "office-v1", revision: 1, title: "Office",
+      members: [
+        { memberId: "node", displayName: "Node", agentVersionId: "node-v1" },
+        { memberId: "verifier", displayName: "Verifier", agentVersionId: "verifier-v1" },
+      ],
+      executionTargets: [{ targetId: "node", agentVersionId: "node-v1" }],
+      createdByActorId: "actor", createdAt: "2026-08-12T00:00:00.000Z",
+    },
+  });
 }
 
 async function temporaryPath(context: { after(callback: () => unknown): void }, label: string) {
@@ -221,17 +363,18 @@ async function activateRelease(
 }
 
 function admissionInput(options: { resolveCandidateRoute?: () => Promise<RunRoute>;
-  onPrepare?: () => void } = {}): CommitWorkflowRunStartInput {
+  onPrepare?: () => void; suffix?: string; occurredAt?: string } = {}): CommitWorkflowRunStartInput {
   return { tenantId: "tenant-1", spaceId: "space-1", threadId: "thread-1",
     workflowVersionId: "workflow-v1", workflowInput: rootValue,
     idempotency: { scope: "workflow-start", key: "start-1", requestFingerprint: "fp-1" },
     resolveCandidateRoute: options.resolveCandidateRoute ?? (async () => route("default-v1")),
     prepare: (authority) => {
       options.onPrepare?.();
-      const runId = "workflow-run-1";
-      const occurredAt = "2026-08-12T00:00:01.000Z";
+      const suffix = options.suffix ?? "1";
+      const runId = `workflow-run-${suffix}`;
+      const occurredAt = options.occurredAt ?? "2026-08-12T00:00:01.000Z";
       const event = { schemaVersion: "crewon.run-event.v0" as const, identity: { runId },
-        eventId: "workflow-created-1", sequence: 1, occurredAt, type: "run.created" as const,
+        eventId: `workflow-created-${suffix}`, sequence: 1, occurredAt, type: "run.created" as const,
         data: { threadId: "thread-1", tenantId: "tenant-1", spaceId: "space-1",
           createdByActorId: "actor", ...authority.route, collaborationMode: "default" as const,
           origin: null, goalBinding: null, purpose: "workflow" as const,
@@ -239,19 +382,56 @@ function admissionInput(options: { resolveCandidateRoute?: () => Promise<RunRout
             workflowVersionId: authority.workflowVersion.workflowVersionId,
             contentDigest: authority.workflowVersion.contentDigest } } };
       return { workflowInputValue: { schemaVersion: "crewon.workflow-execution-value.v0",
-        valueId: "root-value-1", value: rootValue, valueDigest: rootDigest },
+        valueId: `root-value-${suffix}`, value: rootValue, valueDigest: rootDigest },
         commit: { tenantId: "tenant-1", expectedRevision: 0,
-          idempotency: { scope: "run-create", key: "run-1", requestFingerprint: "run-fp-1" },
-          events: [event], outbox: [{ messageId: "outbox-1", tenantId: "tenant-1", runId,
+          idempotency: { scope: "run-create", key: `run-${suffix}`, requestFingerprint: `run-fp-${suffix}` },
+          events: [event], outbox: [{ messageId: `outbox-${suffix}`, tenantId: "tenant-1", runId,
             topic: "run.updated", payload: { eventId: event.eventId, eventType: event.type,
               throughSequence: 1 }, createdAt: occurredAt }],
-          workItems: [{ workItemId: "work-1", tenantId: "tenant-1", runId,
+          workItems: [{ workItemId: `work-${suffix}`, tenantId: "tenant-1", runId,
             kind: "run.execute", createdAt: occurredAt,
             payload: { schemaVersion: "crewon.workflow-scheduler-work-item.v1",
-              trigger: "workflowScheduler", schedulerOperationId: "scheduler-1",
+              trigger: "workflowScheduler", schedulerOperationId: `scheduler-${suffix}`,
               binding: event.data.workflowVersionBinding,
-              workflowInput: { valueId: "root-value-1", valueDigest: rootDigest } } }] } };
+              workflowInput: { valueId: `root-value-${suffix}`, valueDigest: rootDigest } } }] } };
     } };
+}
+
+function officeAdmissionInput(
+  suffix: string,
+  occurredAt: string,
+  options: {
+    resolveCandidateRoute?: () => Promise<RunRoute>;
+    onPrepare?: () => void;
+  } = {},
+): CommitOfficeDelegationStartInput {
+  const workflow = admissionInput({ suffix, occurredAt });
+  return {
+    tenantId: "tenant-1", spaceId: "space-1", officeVersionId: "office-v1",
+    workflowVersionId: "workflow-v1", threadId: "thread-1", workflowInput: rootValue,
+    idempotency: { scope: "office-start", key: `office-${suffix}`, requestFingerprint: `office-fp-${suffix}` },
+    resolveCandidateRoute: options.resolveCandidateRoute ?? (async () => route("default-v1")),
+    prepare: (authority) => {
+      options.onPrepare?.();
+      const prepared = workflow.prepare(authority);
+      const runId = prepared.commit.events[0]!.identity.runId;
+      return {
+        runCommit: prepared.commit,
+        workflowInputValue: prepared.workflowInputValue,
+        delegation: {
+          schemaVersion: "crewon.office-delegation.v0", delegationId: `delegation-${suffix}`,
+          tenantId: "tenant-1", spaceId: "space-1", officeId: "office-1",
+          officeVersionId: "office-v1", threadId: "thread-1", runId,
+          requestedByActorId: "actor", createdAt: occurredAt,
+          workflowVersionBinding: {
+            workflowId: authority.workflowVersion.workflowId,
+            workflowVersionId: authority.workflowVersion.workflowVersionId,
+            contentDigest: authority.workflowVersion.contentDigest,
+          },
+        },
+      };
+    },
+  };
 }
 
 function workflowSource(): WorkflowVersionSource {

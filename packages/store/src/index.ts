@@ -3,6 +3,7 @@ export * from "./in-memory-run-store.ts";
 export * from "./knowledge-store.ts";
 export * from "./in-memory-office-store.ts";
 export * from "./sqlite-office-store.ts";
+export * from "./sqlite-office-delegation-store.ts";
 export * from "./postgres-office-store.ts";
 export * from "./in-memory-workspace-read-file-store.ts";
 export * from "./sqlite-workspace-read-file-store.ts";
