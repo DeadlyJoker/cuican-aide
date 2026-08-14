@@ -11,7 +11,7 @@ import { projectRun } from "./run-projection.ts";
 export function projectAutomation(
   definition: AutomationDefinition,
 ): AutomationView {
-  if (definition.executionMode !== "manualOnly" || definition.revision !== 1) {
+  if (definition.revision !== 1) {
     throw new Error("automation_projection_state_invalid");
   }
   return {
@@ -20,8 +20,8 @@ export function projectAutomation(
     title: definition.title,
     prompt: definition.prompt,
     agentVersionId: definition.agentVersionId,
-    executionMode: "manualOnly",
-    automaticScheduling: false,
+    schedule: definition.schedule,
+    misfirePolicy: definition.misfirePolicy,
     revision: 1,
     createdAt: definition.createdAt,
     updatedAt: definition.updatedAt,

@@ -17,6 +17,7 @@ const binding = {
   invocationId: "invocation-1",
   runId: "run-1",
   routeDigest: `sha256:${"b".repeat(64)}`,
+  trigger: { kind: "manual" },
 } as const;
 
 test("accepts only the canonical automation invocation Work Item payload", () => {
@@ -26,7 +27,7 @@ test("accepts only the canonical automation invocation Work Item payload", () =>
     runId: "run-1",
     kind: "run.execute",
     payload: {
-      schemaVersion: "crewon.automation-invocation-work-item.v0",
+      schemaVersion: "crewon.automation-invocation-work-item.v1",
       trigger: "automationInvocation",
       throughSequence: 1,
       binding,

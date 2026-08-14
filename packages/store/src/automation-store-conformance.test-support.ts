@@ -33,7 +33,7 @@ export function registerAutomationStoreConformance(
     | Promise<AutomationConformanceStore>,
 ): void {
   describe(name, () => {
-    test("atomically creates and invokes one manual-only Automation", async (context) => {
+    test("atomically creates and invokes one scheduled Automation", async (context) => {
       const store = await managedStore(context, createStore);
       await seedAutomationThread(store);
       const service = automationApplicationService(store);
@@ -390,6 +390,9 @@ export function automationApplicationService(store: AutomationStore) {
         workspaceBindingId: null,
       }),
     },
+    scheduleCalculator: {
+      nextOccurrence: () => "2026-08-10T10:00:00Z",
+    },
   });
 }
 
@@ -422,11 +425,8 @@ export function automationCreateCommand() {
     prompt: "Summarize the project.",
     requestedAgentVersionId: null,
     schedule: {
-      scheduleType: "daily" as const,
-      nextRunAt: "2026-08-10T10:00:00Z",
-      intervalSeconds: 86_400,
-      time: "18:00",
-      weekday: 0,
+      kind: "daily" as const,
+      localTime: "18:00",
       timezone: "Asia/Shanghai",
     },
   };

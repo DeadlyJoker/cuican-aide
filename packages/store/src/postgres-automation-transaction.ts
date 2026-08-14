@@ -154,8 +154,8 @@ export async function commitPostgresAutomationCreate(
     await client.query(
       `INSERT INTO ${schema}.automations (
          tenant_id, space_id, automation_id, thread_id, revision,
-         definition_digest, definition_json, updated_at
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+         definition_digest, definition_json, schedule_state_json, updated_at
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
       [
         record.definition.tenantId,
         record.definition.spaceId,
@@ -164,6 +164,7 @@ export async function commitPostgresAutomationCreate(
         record.definition.revision,
         record.definitionDigest,
         stableJson(record.definition),
+        stableJson(record.scheduleState),
         record.definition.updatedAt,
       ],
     );

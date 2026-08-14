@@ -10,6 +10,7 @@ export function sqliteAutomationTablesSql(): string {
       revision INTEGER NOT NULL CHECK (revision = 1),
       definition_digest TEXT NOT NULL,
       definition_json TEXT NOT NULL CHECK (json_valid(definition_json)),
+      schedule_state_json TEXT NOT NULL CHECK (json_valid(schedule_state_json)),
       updated_at TEXT NOT NULL,
       UNIQUE (tenant_id, automation_id),
       FOREIGN KEY (tenant_id, thread_id)

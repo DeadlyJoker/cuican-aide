@@ -147,8 +147,8 @@ async function prepareAutomation(params: ControlLibraryInteraction) {
       ],
       body:
         params.locale === "zh"
-          ? "创建仅支持手动立即运行的 Control 自动化。"
-          : "Create a manual run-now Control automation.",
+          ? "创建由 Control 持久调度的每日自动化，也可手动立即运行。"
+          : "Create a daily Automation durably scheduled by Control; it can also run now.",
       fields: [
         {
           id: "control-automation-name",
@@ -159,6 +159,16 @@ async function prepareAutomation(params: ControlLibraryInteraction) {
           id: "control-automation-prompt",
           label: params.locale === "zh" ? "任务提示" : "Prompt",
           value: "",
+        },
+        {
+          id: "control-automation-local-time",
+          label: params.locale === "zh" ? "每日时间" : "Daily time",
+          value: "09:00",
+        },
+        {
+          id: "control-automation-timezone",
+          label: params.locale === "zh" ? "时区" : "Timezone",
+          value: Intl.DateTimeFormat().resolvedOptions().timeZone,
         },
         {
           id: "control-automation-thread",
@@ -202,13 +212,15 @@ async function submitAutomation(params: ControlLibraryInteraction) {
   const value = fieldValue(params.libraryPanel, "control-automation");
   const title = value("name");
   const prompt = value("prompt");
+  const localTime = value("local-time");
+  const timezone = value("timezone");
   const threadId = value("thread");
-  if (!title || !prompt || !threadId) {
+  if (!title || !prompt || !localTime || !timezone || !threadId) {
     warning(
       params,
       params.locale === "zh"
-        ? "名称、任务提示和任务不能为空。"
-        : "Name, prompt, and task are required.",
+        ? "名称、任务提示、每日时间、时区和任务不能为空。"
+        : "Name, prompt, daily time, timezone, and task are required.",
     );
     return;
   }
@@ -219,6 +231,7 @@ async function submitAutomation(params: ControlLibraryInteraction) {
       idempotencyKey: `automation.create:${crypto.randomUUID()}`,
       locale: params.locale,
       prompt,
+      schedule: { kind: "daily", localTime, timezone },
       threadId,
       title,
     });

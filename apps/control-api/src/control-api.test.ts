@@ -228,7 +228,7 @@ test("authorizes and bounds the public Workspace read-only route", async (contex
   );
 });
 
-test("creates, reads, lists and invokes one redacted manual-only Automation", async (context) => {
+test("creates, reads, lists and invokes one redacted scheduled Automation", async (context) => {
   const runtime = await testRuntime(context);
   const threadResponse = await runtime.app.inject({
     method: "POST",
@@ -244,6 +244,11 @@ test("creates, reads, lists and invokes one redacted manual-only Automation", as
     title: "Review changes",
     prompt: "Review the current changes and summarize risks.",
     agentVersionId: null,
+    schedule: {
+      kind: "daily" as const,
+      localTime: "18:00",
+      timezone: "Asia/Shanghai",
+    },
   };
   const createdResponse = await runtime.app.inject({
     method: "POST",
@@ -261,8 +266,8 @@ test("creates, reads, lists and invokes one redacted manual-only Automation", as
       title: request.title,
       prompt: request.prompt,
       agentVersionId: "agent-version-1",
-      executionMode: "manualOnly",
-      automaticScheduling: false,
+      schedule: request.schedule,
+      misfirePolicy: "coalesceLatest",
       revision: 1,
       createdAt: created.automation.createdAt,
       updatedAt: created.automation.createdAt,
@@ -275,7 +280,7 @@ test("creates, reads, lists and invokes one redacted manual-only Automation", as
     "definitionDigest",
     "instructionDigest",
     "routeDigest",
-    "schedule",
+    "owner",
   ]) {
     assert.equal(createdResponse.body.includes(privateField), false);
   }
@@ -3222,6 +3227,9 @@ async function testRuntime(
     ids,
     digester,
     routeResolver,
+    scheduleCalculator: {
+      nextOccurrence: () => "2026-08-10T10:00:00.000Z",
+    },
   });
   const providerSettings = new ModelProviderSettingsApplicationService({
     store,

@@ -173,8 +173,8 @@ export class SqliteAutomationAuthority {
         .prepare(
           `INSERT INTO automations (
         tenant_id, space_id, automation_id, thread_id, revision,
-        definition_digest, definition_json, updated_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        definition_digest, definition_json, schedule_state_json, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           record.definition.tenantId,
@@ -184,6 +184,7 @@ export class SqliteAutomationAuthority {
           record.definition.revision,
           record.definitionDigest,
           stableJson(record.definition),
+          stableJson(record.scheduleState),
           record.definition.updatedAt,
         );
       this.#database
@@ -238,7 +239,7 @@ export class SqliteAutomationAuthority {
       const rows = this.#database
         .prepare(
           `SELECT tenant_id, space_id, automation_id, thread_id, revision,
-        definition_digest, definition_json, updated_at FROM automations
+        definition_digest, definition_json, schedule_state_json, updated_at FROM automations
         WHERE tenant_id = ? AND space_id = ? AND (? IS NULL OR updated_at < ? OR (updated_at = ? AND automation_id < ?))
         ORDER BY updated_at DESC, automation_id DESC LIMIT ?`,
         )
@@ -448,7 +449,7 @@ export class SqliteAutomationAuthority {
   #loadRecord(id: string): AutomationDefinitionRecord | null {
     const row = this.#database
       .prepare(
-        `SELECT tenant_id, space_id, automation_id, thread_id, revision, definition_digest, definition_json, updated_at FROM automations WHERE automation_id = ?`,
+        `SELECT tenant_id, space_id, automation_id, thread_id, revision, definition_digest, definition_json, schedule_state_json, updated_at FROM automations WHERE automation_id = ?`,
       )
       .get(id) as SqliteAutomationRow | undefined;
     return row === undefined ? null : decodeSqliteAutomationRecord(row);
@@ -458,7 +459,7 @@ export class SqliteAutomationAuthority {
   ): AutomationDefinitionRecord | null {
     const row = this.#database
       .prepare(
-        `SELECT tenant_id, space_id, automation_id, thread_id, revision, definition_digest, definition_json, updated_at FROM automations WHERE tenant_id = ? AND space_id = ? AND automation_id = ?`,
+        `SELECT tenant_id, space_id, automation_id, thread_id, revision, definition_digest, definition_json, schedule_state_json, updated_at FROM automations WHERE tenant_id = ? AND space_id = ? AND automation_id = ?`,
       )
       .get(locator.tenantId, locator.spaceId, locator.automationId) as
       | SqliteAutomationRow

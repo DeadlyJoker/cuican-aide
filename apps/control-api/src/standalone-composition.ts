@@ -3,6 +3,7 @@ import {
   AgentVersionCatalogApplicationService,
   ArtifactApplicationService,
   AutomationApplicationService,
+  CompatibleAutomationScheduleCalculator,
   OfficeApplicationService,
   OfficeDelegationApplicationService,
   RunApplicationService,
@@ -230,6 +231,7 @@ function composeControlApi(
       ids,
       digester,
       routeResolver,
+      scheduleCalculator: new CompatibleAutomationScheduleCalculator(),
     });
     const knowledge = new KnowledgeApplicationService({
       store,

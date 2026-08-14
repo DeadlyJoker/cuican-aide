@@ -15,12 +15,16 @@ import {
 function automation(overrides: Partial<AutomationView> = {}): AutomationView {
   return {
     agentVersionId: "agent-version-1",
-    automaticScheduling: false,
     automationId: "automation-1",
     createdAt: "2026-08-13T00:00:00.000Z",
-    executionMode: "manualOnly",
+    misfirePolicy: "coalesceLatest",
     prompt: "Summarize progress",
     revision: 1,
+    schedule: {
+      kind: "daily",
+      localTime: "18:00",
+      timezone: "Asia/Shanghai",
+    },
     threadId: "thread-1",
     title: "Daily summary",
     updatedAt: "2026-08-13T00:00:00.000Z",
@@ -62,6 +66,11 @@ describe("Control Automation library", () => {
       idempotencyKey: "create-1",
       locale: "en",
       prompt: "Summarize progress",
+      schedule: {
+        kind: "daily",
+        localTime: "18:00",
+        timezone: "Asia/Shanghai",
+      },
       threadId: "thread-1",
       title: "Created",
     });
@@ -71,6 +80,11 @@ describe("Control Automation library", () => {
         agentVersionId: null,
         expectedThreadRevision: 8,
         prompt: "Summarize progress",
+        schedule: {
+          kind: "daily",
+          localTime: "18:00",
+          timezone: "Asia/Shanghai",
+        },
         threadId: "thread-1",
         title: "Created",
       },
@@ -78,7 +92,7 @@ describe("Control Automation library", () => {
     );
   });
 
-  it("lists manual-only definitions without scheduler actions", async () => {
+  it("lists scheduled definitions", async () => {
     const listAutomations = vi
       .fn()
       .mockResolvedValueOnce({ data: [automation()], nextCursor: "next" })
@@ -98,14 +112,16 @@ describe("Control Automation library", () => {
       limit: 100,
     });
     expect(items).toHaveLength(2);
-    expect(items[0]?.tags).toEqual(["manual only"]);
+    expect(items[0]?.tags).toEqual(["scheduled"]);
     expect(items[0]?.action).toMatchObject({
       type: "automation-detail",
       controlAutomationId: "automation-1",
       controlAutomationRevision: 1,
       threadId: "thread-1",
     });
-    expect(JSON.stringify(items)).not.toMatch(/schedule|enabled|disabled/iu);
+    expect(JSON.stringify(items)).not.toMatch(
+      /scheduleState|enabled|disabled/u,
+    );
   });
 
   it("runs with canonical Thread CAS and validates the response binding", async () => {

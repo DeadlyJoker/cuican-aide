@@ -18,6 +18,7 @@ import {
 import {
   parseAutomationInvocationBinding,
   parseAutomationInvocationOrigin,
+  parseAutomationScheduleState,
   reduceRunLifecycleEvent,
   reduceThreadLifecycleEvent,
   renderAutomationInstruction,
@@ -117,17 +118,19 @@ export function validateAutomationRecord(
 ): void {
   requireExactObject(
     record,
-    ["definition", "definitionDigest"],
+    ["definition", "definitionDigest", "scheduleState"],
     "automation_record_invalid",
   );
   try {
     validateAutomationDefinition(record.definition);
+    parseAutomationScheduleState(record.scheduleState);
   } catch (error) {
     throw new AutomationStoreError("automation_record_invalid", {
       cause: error instanceof Error ? error : undefined,
     });
   }
   if (
+    record.scheduleState.automationId !== record.definition.automationId ||
     !isDigest(record.definitionDigest) ||
     digest(stableJson(record.definition)) !== record.definitionDigest
   ) {

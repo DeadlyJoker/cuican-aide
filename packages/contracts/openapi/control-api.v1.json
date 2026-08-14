@@ -265,7 +265,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Authorized manual-only Automation definitions ordered by durable update",
+            "description": "Authorized scheduled Automation definitions ordered by durable update",
             "content": {
               "application/json": {
                 "schema": {
@@ -310,7 +310,7 @@
         },
         "responses": {
           "200": {
-            "description": "An idempotently replayed manual-only Automation definition",
+            "description": "An idempotently replayed scheduled Automation definition",
             "content": {
               "application/json": {
                 "schema": {
@@ -320,7 +320,7 @@
             }
           },
           "201": {
-            "description": "A newly committed manual-only Automation definition",
+            "description": "A newly committed scheduled Automation definition",
             "content": {
               "application/json": {
                 "schema": {
@@ -363,7 +363,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Authorized redacted manual-only Automation definition",
+            "description": "Authorized redacted scheduled Automation definition",
             "content": {
               "application/json": {
                 "schema": {
@@ -2856,6 +2856,60 @@
           }
         }
       },
+      "AutomationScheduleSpec": {
+        "oneOf": [
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "at"],
+            "properties": {
+              "kind": { "type": "string", "const": "once" },
+              "at": { "type": "string", "format": "date-time" }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "anchorAt", "everySeconds"],
+            "properties": {
+              "kind": { "type": "string", "const": "interval" },
+              "anchorAt": { "type": "string", "format": "date-time" },
+              "everySeconds": {
+                "type": "integer",
+                "minimum": 300,
+                "maximum": 31622400
+              }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "localTime", "timezone"],
+            "properties": {
+              "kind": { "type": "string", "const": "daily" },
+              "localTime": {
+                "type": "string",
+                "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+              },
+              "timezone": { "type": "string", "minLength": 1, "maxLength": 128 }
+            }
+          },
+          {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kind", "isoWeekday", "localTime", "timezone"],
+            "properties": {
+              "kind": { "type": "string", "const": "weekly" },
+              "isoWeekday": { "type": "integer", "minimum": 1, "maximum": 7 },
+              "localTime": {
+                "type": "string",
+                "pattern": "^(?:[01][0-9]|2[0-3]):[0-5][0-9]$"
+              },
+              "timezone": { "type": "string", "minLength": 1, "maxLength": 128 }
+            }
+          }
+        ]
+      },
       "CreateAutomationRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -2864,7 +2918,8 @@
           "expectedThreadRevision",
           "title",
           "prompt",
-          "agentVersionId"
+          "agentVersionId",
+          "schedule"
         ],
         "properties": {
           "threadId": {
@@ -2890,7 +2945,8 @@
             "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 512
-          }
+          },
+          "schedule": { "$ref": "#/components/schemas/AutomationScheduleSpec" }
         }
       },
       "RunAutomationNowRequest": {
@@ -2981,15 +3037,15 @@
       "AutomationView": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Redacted immutable manual-only Automation definition. Tenant, actor, schedules, digests and invocation routes are private.",
+        "description": "Redacted immutable scheduled Automation definition. Tenant, owner, digests and invocation routes are private.",
         "required": [
           "automationId",
           "threadId",
           "title",
           "prompt",
           "agentVersionId",
-          "executionMode",
-          "automaticScheduling",
+          "schedule",
+          "misfirePolicy",
           "revision",
           "createdAt",
           "updatedAt"
@@ -3020,14 +3076,8 @@
             "minLength": 1,
             "maxLength": 512
           },
-          "executionMode": {
-            "type": "string",
-            "const": "manualOnly"
-          },
-          "automaticScheduling": {
-            "type": "boolean",
-            "const": false
-          },
+          "schedule": { "$ref": "#/components/schemas/AutomationScheduleSpec" },
+          "misfirePolicy": { "type": "string", "const": "coalesceLatest" },
           "revision": {
             "type": "integer",
             "const": 1

@@ -223,7 +223,7 @@ describe("library collection panel helpers", () => {
     });
   });
 
-  it("snapshots the Control manual-only Automation collection", () => {
+  it("snapshots the Control scheduled Automation collection", () => {
     expect(
       controlAutomationCollectionContent({
         items: [item("Manual audit")],

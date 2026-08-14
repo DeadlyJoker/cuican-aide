@@ -67,7 +67,7 @@ export function validateAutomationInvocationArtifacts(
     stableJson(input.historyItem.origin) !== origin ||
     stableJson(input.runEvent.data.origin) !== origin ||
     stableJson(input.workItem.payload) !== stableJson({
-      schemaVersion: "crewon.automation-invocation-work-item.v0",
+      schemaVersion: "crewon.automation-invocation-work-item.v1",
       trigger: "automationInvocation",
       throughSequence: 1,
       binding: input.binding,

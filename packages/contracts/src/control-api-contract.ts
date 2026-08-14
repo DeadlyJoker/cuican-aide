@@ -313,6 +313,7 @@ export function parseCreateAutomationRequest(
       "agentVersionId",
       "expectedThreadRevision",
       "prompt",
+      "schedule",
       "threadId",
       "title",
     ])
@@ -346,7 +347,85 @@ export function parseCreateAutomationRequest(
       input.agentVersionId === null
         ? null
         : parseAgentVersionId(input.agentVersionId),
+    schedule: parseAutomationSchedule(input.schedule),
   };
+}
+
+function parseAutomationSchedule(
+  input: unknown,
+): CreateAutomationRequest["schedule"] {
+  if (typeof input !== "object" || input === null || Array.isArray(input)) {
+    throw new ContractValidationError("automation_schedule_invalid");
+  }
+  const value = input as Record<string, unknown>;
+  if (value.kind === "once" && hasExactKeys(value, ["at", "kind"])) {
+    return { kind: "once", at: automationTimestamp(value.at) };
+  }
+  if (
+    value.kind === "interval" &&
+    hasExactKeys(value, ["anchorAt", "everySeconds", "kind"]) &&
+    Number.isSafeInteger(value.everySeconds) &&
+    Number(value.everySeconds) >= 300 &&
+    Number(value.everySeconds) <= 31_622_400
+  ) {
+    return {
+      kind: "interval",
+      anchorAt: automationTimestamp(value.anchorAt),
+      everySeconds: Number(value.everySeconds),
+    };
+  }
+  if (
+    (value.kind === "daily" || value.kind === "weekly") &&
+    hasExactKeys(
+      value,
+      value.kind === "daily"
+        ? ["kind", "localTime", "timezone"]
+        : ["isoWeekday", "kind", "localTime", "timezone"],
+    ) &&
+    typeof value.localTime === "string" &&
+    /^(?:[01][0-9]|2[0-3]):[0-5][0-9]$/u.test(value.localTime) &&
+    typeof value.timezone === "string" &&
+    value.timezone.length > 0 &&
+    value.timezone.length <= 128 &&
+    validTimezone(value.timezone)
+  ) {
+    if (value.kind === "daily") {
+      return {
+        kind: "daily",
+        localTime: value.localTime,
+        timezone: value.timezone,
+      };
+    }
+    if (
+      Number.isSafeInteger(value.isoWeekday) &&
+      Number(value.isoWeekday) >= 1 &&
+      Number(value.isoWeekday) <= 7
+    ) {
+      return {
+        kind: "weekly",
+        isoWeekday: Number(value.isoWeekday) as 1 | 2 | 3 | 4 | 5 | 6 | 7,
+        localTime: value.localTime,
+        timezone: value.timezone,
+      };
+    }
+  }
+  throw new ContractValidationError("automation_schedule_invalid");
+}
+
+function automationTimestamp(input: unknown): string {
+  if (typeof input !== "string" || !Number.isFinite(Date.parse(input))) {
+    throw new ContractValidationError("automation_schedule_invalid");
+  }
+  return input;
+}
+
+function validTimezone(input: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-US", { timeZone: input }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function parseRunAutomationNowRequest(

@@ -311,13 +311,18 @@ test("parses only bounded Workflow Run start authority", () => {
   );
 });
 
-test("freezes strict manual-only Automation commands and pagination", () => {
+test("freezes strict scheduled Automation commands and pagination", () => {
   const create = {
     threadId: "thread-1",
     expectedThreadRevision: 3,
     title: "Review changes",
     prompt: "Review the current changes and summarize risks.",
     agentVersionId: null,
+    schedule: {
+      kind: "daily" as const,
+      localTime: "18:00",
+      timezone: "Asia/Shanghai",
+    },
   };
   assert.deepEqual(parseCreateAutomationRequest(create), create);
   assert.deepEqual(
@@ -388,14 +393,13 @@ test("freezes strict manual-only Automation commands and pagination", () => {
     "title",
     "prompt",
     "agentVersionId",
-    "executionMode",
-    "automaticScheduling",
+    "schedule",
+    "misfirePolicy",
     "revision",
     "createdAt",
     "updatedAt",
   ]);
-  assert.equal(automationView.properties.executionMode.const, "manualOnly");
-  assert.equal(automationView.properties.automaticScheduling.const, false);
+  assert.equal(automationView.properties.misfirePolicy.const, "coalesceLatest");
   assert.deepEqual(
     (
       openApi.components.schemas.ListAutomationsResponse as {

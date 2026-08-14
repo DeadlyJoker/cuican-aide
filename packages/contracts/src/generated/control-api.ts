@@ -1018,12 +1018,40 @@ export interface components {
       retryable: boolean;
       retryAfterMs: number | null;
     };
+    AutomationScheduleSpec:
+      | {
+          /** @constant */
+          kind: "once";
+          /** Format: date-time */
+          at: string;
+        }
+      | {
+          /** @constant */
+          kind: "interval";
+          /** Format: date-time */
+          anchorAt: string;
+          everySeconds: number;
+        }
+      | {
+          /** @constant */
+          kind: "daily";
+          localTime: string;
+          timezone: string;
+        }
+      | {
+          /** @constant */
+          kind: "weekly";
+          isoWeekday: number;
+          localTime: string;
+          timezone: string;
+        };
     CreateAutomationRequest: {
       threadId: string;
       expectedThreadRevision: number;
       title: string;
       prompt: string;
       agentVersionId: string | null;
+      schedule: components["schemas"]["AutomationScheduleSpec"];
     };
     RunAutomationNowRequest: {
       /** @constant */
@@ -1062,17 +1090,16 @@ export interface components {
       data: components["schemas"]["KnowledgeView"][];
       nextCursor: string | null;
     };
-    /** @description Redacted immutable manual-only Automation definition. Tenant, actor, schedules, digests and invocation routes are private. */
+    /** @description Redacted immutable scheduled Automation definition. Tenant, owner, digests and invocation routes are private. */
     AutomationView: {
       automationId: string;
       threadId: string;
       title: string;
       prompt: string;
       agentVersionId: string;
+      schedule: components["schemas"]["AutomationScheduleSpec"];
       /** @constant */
-      executionMode: "manualOnly";
-      /** @constant */
-      automaticScheduling: false;
+      misfirePolicy: "coalesceLatest";
       /** @constant */
       revision: 1;
       /** Format: date-time */
@@ -2449,7 +2476,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Authorized manual-only Automation definitions ordered by durable update */
+      /** @description Authorized scheduled Automation definitions ordered by durable update */
       200: {
         headers: {
           [name: string]: unknown;
@@ -2481,7 +2508,7 @@ export interface operations {
       };
     };
     responses: {
-      /** @description An idempotently replayed manual-only Automation definition */
+      /** @description An idempotently replayed scheduled Automation definition */
       200: {
         headers: {
           [name: string]: unknown;
@@ -2490,7 +2517,7 @@ export interface operations {
           "application/json": components["schemas"]["AutomationMutationResponse"];
         };
       };
-      /** @description A newly committed manual-only Automation definition */
+      /** @description A newly committed scheduled Automation definition */
       201: {
         headers: {
           [name: string]: unknown;
@@ -2519,7 +2546,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
-      /** @description Authorized redacted manual-only Automation definition */
+      /** @description Authorized redacted scheduled Automation definition */
       200: {
         headers: {
           [name: string]: unknown;

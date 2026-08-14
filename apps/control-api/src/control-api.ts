@@ -30,6 +30,7 @@ import {
   createAgentVersionAsset,
   type AgentVersionSource,
 } from "@crewon/agent-version";
+import { parseAutomationScheduleSpec } from "@crewon/domain";
 import {
   ContractValidationError,
   formatCapabilityCursor,
@@ -305,15 +306,6 @@ function requiredKnowledge(
   return service;
 }
 
-const MANUAL_ONLY_AUTOMATION_SCHEDULE = {
-  scheduleType: "once",
-  nextRunAt: "9999-12-31T23:59:59Z",
-  intervalSeconds: 0,
-  time: "00:00",
-  weekday: 0,
-  timezone: "UTC",
-} as const;
-
 export function buildControlApi(
   dependencies: ControlApiDependencies,
 ): FastifyInstance {
@@ -565,7 +557,7 @@ export function buildControlApi(
       title: body.title,
       prompt: body.prompt,
       requestedAgentVersionId: body.agentVersionId,
-      schedule: MANUAL_ONLY_AUTOMATION_SCHEDULE,
+      schedule: parseAutomationScheduleSpec(body.schedule),
     });
     const response: AutomationMutationResponse = projectAutomationMutation({
       disposition: result.disposition,

@@ -94,6 +94,7 @@ export type AutomationRow = Readonly<{
   revision: string | number;
   definition_digest: string;
   definition_json: unknown;
+  schedule_state_json: unknown;
   updated_at: Date | string;
 }>;
 
@@ -113,7 +114,7 @@ export async function loadAutomationRecord(
 ): Promise<AutomationDefinitionRecord | null> {
   const result = await client.query<AutomationRow>(
     `SELECT tenant_id, space_id, automation_id, thread_id, revision,
-            definition_digest, definition_json, updated_at
+            definition_digest, definition_json, schedule_state_json, updated_at
      FROM ${schema}.automations WHERE automation_id=$1${forUpdate ? " FOR UPDATE" : ""}`,
     [automationId],
   );
@@ -129,7 +130,7 @@ export async function loadAutomationRecordInSpace(
 ): Promise<AutomationDefinitionRecord | null> {
   const result = await client.query<AutomationRow>(
     `SELECT tenant_id, space_id, automation_id, thread_id, revision,
-            definition_digest, definition_json, updated_at
+            definition_digest, definition_json, schedule_state_json, updated_at
      FROM ${schema}.automations
      WHERE tenant_id=$1 AND space_id=$2 AND automation_id=$3`,
     [locator.tenantId, locator.spaceId, locator.automationId],
@@ -146,7 +147,14 @@ export function decodeAutomationRow(
     row.definition_json,
     "automation_record_invalid",
   );
-  const record = { definition, definitionDigest: row.definition_digest };
+  const scheduleState = storedObject<
+    AutomationDefinitionRecord["scheduleState"]
+  >(row.schedule_state_json, "automation_record_invalid");
+  const record = {
+    definition,
+    definitionDigest: row.definition_digest,
+    scheduleState,
+  };
   validateAutomationRecord(record);
   if (
     row.tenant_id !== definition.tenantId ||

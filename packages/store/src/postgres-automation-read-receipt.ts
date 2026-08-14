@@ -159,7 +159,7 @@ export async function listPostgresAutomations(
   try {
     const rows = await pool.query<AutomationRow>(
       `SELECT tenant_id, space_id, automation_id, thread_id, revision,
-              definition_digest, definition_json, updated_at
+              definition_digest, definition_json, schedule_state_json, updated_at
        FROM ${schema}.automations
        WHERE tenant_id=$1 AND space_id=$2
          AND ($3::timestamptz IS NULL OR updated_at < $3::timestamptz

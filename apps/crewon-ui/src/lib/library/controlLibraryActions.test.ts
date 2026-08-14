@@ -560,13 +560,18 @@ describe("openControlLibraryAction", () => {
     const listAutomations = vi.fn(async () => ({
       data: [
         {
-          schemaVersion: "crewon.automation.v0" as const,
           automationId: "automation-1",
           revision: 1 as const,
           threadId: "thread-1",
           agentVersionId: null,
           title: "Daily summary",
           prompt: "Summarize the current task",
+          schedule: {
+            kind: "daily" as const,
+            localTime: "18:00",
+            timezone: "Asia/Shanghai",
+          },
+          misfirePolicy: "coalesceLatest" as const,
           createdAt: "2026-08-13T00:00:00.000Z",
           updatedAt: "2026-08-13T00:00:00.000Z",
         },

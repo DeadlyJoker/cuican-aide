@@ -1,7 +1,7 @@
 import { RunStoreError } from "@crewon/application";
 import { type PoolClient } from "pg";
 
-export const POSTGRES_AUTOMATION_SCHEMA_VERSION = 1;
+export const POSTGRES_AUTOMATION_SCHEMA_VERSION = 2;
 
 export async function migratePostgresAutomationSchema(
   client: PoolClient,
@@ -40,6 +40,7 @@ export function postgresAutomationSchemaSql(schema: string): string {
       revision bigint NOT NULL CHECK (revision = 1),
       definition_digest text NOT NULL,
       definition_json jsonb NOT NULL CHECK (jsonb_typeof(definition_json) = 'object'),
+      schedule_state_json jsonb NOT NULL CHECK (jsonb_typeof(schedule_state_json) = 'object'),
       updated_at timestamptz NOT NULL,
       UNIQUE (tenant_id, automation_id),
       FOREIGN KEY (tenant_id, thread_id)
@@ -118,6 +119,7 @@ async function assertPostgresAutomationSchema(
     "automations:revision:bigint:NO",
     "automations:definition_digest:text:NO",
     "automations:definition_json:jsonb:NO",
+    "automations:schedule_state_json:jsonb:NO",
     "automations:updated_at:timestamp with time zone:NO",
     "automation_create_receipts:tenant_id:text:NO",
     "automation_create_receipts:scope:text:NO",

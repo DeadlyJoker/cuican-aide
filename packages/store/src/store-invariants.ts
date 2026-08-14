@@ -3187,7 +3187,7 @@ export function validateWorkItems(
       payloadKind === "automationInvocation" &&
       (workItem.payload.trigger !== "automationInvocation" ||
         workItem.payload.schemaVersion !==
-          "crewon.automation-invocation-work-item.v0")
+          "crewon.automation-invocation-work-item.v1")
     ) {
       throw new RunStoreError("work_item_payload_invalid");
     }

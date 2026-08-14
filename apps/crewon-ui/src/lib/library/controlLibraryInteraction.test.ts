@@ -11,12 +11,16 @@ import {
 function automation(overrides: Partial<AutomationView> = {}): AutomationView {
   return {
     agentVersionId: "agent-version-1",
-    automaticScheduling: false,
     automationId: "automation-1",
     createdAt: "2026-08-13T00:00:00.000Z",
-    executionMode: "manualOnly",
+    misfirePolicy: "coalesceLatest",
     prompt: "Fresh prompt",
     revision: 1,
+    schedule: {
+      kind: "daily",
+      localTime: "18:00",
+      timezone: "Asia/Shanghai",
+    },
     threadId: "thread-fresh",
     title: "Fresh title",
     updatedAt: "2026-08-13T00:00:00.000Z",
@@ -250,6 +254,11 @@ describe("Control Library interactions", () => {
             id: "control-automation-thread",
             value: "thread-1",
           }),
+          expect.objectContaining({
+            id: "control-automation-local-time",
+            value: "09:00",
+          }),
+          expect.objectContaining({ id: "control-automation-timezone" }),
           expect.objectContaining({ id: "control-automation-agent" }),
         ]),
       }),

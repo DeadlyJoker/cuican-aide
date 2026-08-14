@@ -548,6 +548,7 @@ type AutomationRow = Readonly<{
   revision: number;
   definition_digest: string;
   definition_json: string;
+  schedule_state_json: string;
   updated_at: string;
 }>;
 
@@ -6131,7 +6132,7 @@ export class SqliteRunStore
     const row = this.#database
       .prepare(
         `SELECT tenant_id, space_id, automation_id, thread_id, revision,
-                definition_digest, definition_json, updated_at
+                definition_digest, definition_json, schedule_state_json, updated_at
          FROM automations WHERE automation_id = ?`,
       )
       .get(automationId) as AutomationRow | undefined;
@@ -7294,6 +7295,10 @@ function parseSqliteAutomationRow(
       "automation_record_invalid",
     ),
     definitionDigest: row.definition_digest,
+    scheduleState: parseStoredJson<AutomationDefinitionRecord["scheduleState"]>(
+      row.schedule_state_json,
+      "automation_record_invalid",
+    ),
   };
   validateAutomationRecord(record);
   if (

@@ -38,21 +38,21 @@ export function controlAutomationLibraryItem(
     title: automation.title,
     meta:
       locale === "zh"
-        ? `手动自动化 · ${new Date(automation.updatedAt).toLocaleString("zh-CN")}`
-        : `Manual automation · ${new Date(automation.updatedAt).toLocaleString("en-US")}`,
+        ? `定时自动化 · ${scheduleLabel(automation, "zh")}`
+        : `Scheduled automation · ${scheduleLabel(automation, "en")}`,
     description: promptPreview(automation.prompt),
     glyph: "⏱",
     accent: "cyan",
     badge: { label: "Control", tone: "planning" },
-    tags: [locale === "zh" ? "仅手动" : "manual only"],
+    tags: [locale === "zh" ? "定时" : "scheduled"],
     action: {
       type: "automation-detail",
       title: automation.title,
-      subtitle: locale === "zh" ? "Control · 仅手动" : "Control · manual only",
+      subtitle: locale === "zh" ? "Control · 定时" : "Control · scheduled",
       body:
         locale === "zh"
-          ? "由 Control API 管理；不支持定时、启停或客户端修改。"
-          : "Managed by Control API; scheduling, toggles, and client edits are unavailable.",
+          ? `由 Control API 按 ${scheduleLabel(automation, "zh")} 调度；也可手动立即运行。`
+          : `Scheduled by Control API (${scheduleLabel(automation, "en")}); it can also run immediately.`,
       prompt: automation.prompt,
       threadId: automation.threadId,
       controlAutomationId: automation.automationId,
@@ -79,6 +79,7 @@ export async function createControlAutomation(params: {
   idempotencyKey: string;
   locale: Locale;
   prompt: string;
+  schedule: AutomationView["schedule"];
   threadId: string;
   title: string;
 }): Promise<LibraryItem> {
@@ -94,6 +95,7 @@ export async function createControlAutomation(params: {
       agentVersionId: params.agentVersionId,
       expectedThreadRevision: threadResponse.thread.revision,
       prompt: params.prompt,
+      schedule: params.schedule,
       threadId: params.threadId,
       title: params.title,
     },
@@ -103,6 +105,20 @@ export async function createControlAutomation(params: {
     throw new Error("control_automation_create_response_invalid");
   }
   return controlAutomationLibraryItem(response.automation, params.locale);
+}
+
+function scheduleLabel(automation: AutomationView, locale: Locale): string {
+  const schedule = automation.schedule;
+  if (schedule.kind === "once") return schedule.at;
+  if (schedule.kind === "interval") {
+    return locale === "zh"
+      ? `每 ${schedule.everySeconds} 秒`
+      : `every ${schedule.everySeconds} seconds`;
+  }
+  if (schedule.kind === "daily") {
+    return `${locale === "zh" ? "每天" : "daily"} ${schedule.localTime} · ${schedule.timezone}`;
+  }
+  return `${locale === "zh" ? `每周 ${schedule.isoWeekday}` : `weekly ${schedule.isoWeekday}`} ${schedule.localTime} · ${schedule.timezone}`;
 }
 
 export async function runControlAutomationNow(params: {

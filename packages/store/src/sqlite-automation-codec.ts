@@ -2,6 +2,7 @@ import {
   RunStoreError,
   type AutomationDefinitionRecord,
 } from "@crewon/application";
+import { parseAutomationScheduleState } from "@crewon/domain";
 import { validateAutomationRecord } from "./automation-store-support.ts";
 import { stableJson } from "./store-invariants.ts";
 
@@ -13,6 +14,7 @@ export type SqliteAutomationRow = Readonly<{
   revision: number;
   definition_digest: string;
   definition_json: string;
+  schedule_state_json: string;
   updated_at: string;
 }>;
 
@@ -20,15 +22,23 @@ export function decodeSqliteAutomationRecord(
   row: SqliteAutomationRow,
 ): AutomationDefinitionRecord {
   let definition: AutomationDefinitionRecord["definition"];
+  let scheduleState: AutomationDefinitionRecord["scheduleState"];
   try {
     definition = JSON.parse(
       row.definition_json,
     ) as AutomationDefinitionRecord["definition"];
     stableJson(definition);
+    scheduleState = parseAutomationScheduleState(
+      JSON.parse(row.schedule_state_json),
+    );
   } catch (error) {
     throw new RunStoreError("automation_record_invalid", { cause: error });
   }
-  const record = { definition, definitionDigest: row.definition_digest };
+  const record = {
+    definition,
+    definitionDigest: row.definition_digest,
+    scheduleState,
+  };
   validateAutomationRecord(record);
   if (
     row.tenant_id !== definition.tenantId ||
