@@ -12,6 +12,7 @@ import type { PoolClient } from "pg";
 
 import {
   loadPostgresModelDispatchReceipt,
+  terminatePostgresModelDispatchForAttempt,
   transitionPostgresModelDispatch,
 } from "./postgres-model-dispatch-evidence.ts";
 import { settlePostgresWorkflowNode } from "./postgres-workflow-node-settlement.ts";
@@ -30,12 +31,14 @@ export async function settlePostgresWorkflowNodeModelTerminal(
   schema: string,
   input: SettleWorkflowNodeModelTerminalInput,
   digester: WorkflowContentDigester,
+  source: "liveNode" | "reconciliation" = "liveNode",
 ): Promise<Result> {
   const { authority } = input;
   if (
     input.nodeId !== authority.nodeId ||
-    input.lease.workItemId !== authority.workItemId ||
-    input.lease.leaseEpoch !== authority.leaseEpoch
+    (source === "liveNode" &&
+      (input.lease.workItemId !== authority.workItemId ||
+        input.lease.leaseEpoch !== authority.leaseEpoch))
   )
     throw new RunStoreError("workflow_composition_attempt_mismatch");
   const scope = {
@@ -60,13 +63,11 @@ export async function settlePostgresWorkflowNodeModelTerminal(
     dispatch: input.dispatchTerminalOutcome,
     evidence,
   });
-  const replay = await loadPostgresWorkflowReceipt(
-    client,
-    schema,
-    scope,
-    "settleNode",
-    postgresWorkflowFingerprint("settleNode", input, digester),
-  );
+  const replay = source === "liveNode"
+    ? await loadPostgresWorkflowReceipt(
+        client, schema, scope, "settleNode",
+        postgresWorkflowFingerprint("settleNode", input, digester))
+    : null;
   const locator = {
     tenantId: authority.tenantId,
     runId: authority.runId,
@@ -81,7 +82,9 @@ export async function settlePostgresWorkflowNodeModelTerminal(
   );
   if (
     dispatch === null ||
-    dispatch.requestSequence !== input.dispatch.requestSequence
+    dispatch.requestSequence !== input.dispatch.requestSequence ||
+    dispatch.workItemId !== authority.workItemId ||
+    dispatch.leaseEpoch !== authority.leaseEpoch
   )
     mismatch();
   if (replay === null) {
@@ -93,22 +96,25 @@ export async function settlePostgresWorkflowNodeModelTerminal(
     const clock = await client.query<{ now: Date }>(
       "SELECT clock_timestamp() AS now",
     );
-    dispatch = await transitionPostgresModelDispatch(
-      client,
-      schema,
-      {
-        tenantId: authority.tenantId,
-        runId: authority.runId,
-        lease: input.lease,
-        attempt: authority.attempt,
-        operationId: input.dispatch.operationId,
-        requestSequence: input.dispatch.requestSequence,
-        expectedRevision: input.dispatch.expectedRevision,
-        transitionedAt: clock.rows[0]!.now.toISOString(),
-        outcome: input.dispatchTerminalOutcome,
-      },
-      "terminal",
-    );
+    const terminalInput = {
+      tenantId: authority.tenantId,
+      runId: authority.runId,
+      lease: input.lease,
+      attempt: authority.attempt,
+      operationId: input.dispatch.operationId,
+      requestSequence: input.dispatch.requestSequence,
+      expectedRevision: input.dispatch.expectedRevision,
+      transitionedAt: clock.rows[0]!.now.toISOString(),
+      outcome: input.dispatchTerminalOutcome,
+    };
+    dispatch = source === "liveNode"
+      ? await transitionPostgresModelDispatch(
+          client, schema, terminalInput, "terminal")
+      : await terminatePostgresModelDispatchForAttempt(client, schema, {
+          ...terminalInput,
+          attemptWorkItemId: authority.workItemId,
+          attemptLeaseEpoch: authority.leaseEpoch,
+        });
   } else if (
     dispatch.revision !== input.dispatch.expectedRevision + 1 ||
     dispatch.status !== "terminal" ||
@@ -145,7 +151,17 @@ export async function settlePostgresWorkflowNodeModelTerminal(
             : { status: "canceled" },
     },
     digester,
-    { fingerprintAuthority: input, agentVersionId: authority.agentVersionId },
+    {
+      fingerprintAuthority: input,
+      agentVersionId: authority.agentVersionId,
+      attemptCheckpointDigest: dispatch.responseCheckpointDigest,
+      ...(source === "liveNode"
+        ? {}
+        : { reconciliationAttempt: {
+            workItemId: authority.workItemId,
+            leaseEpoch: authority.leaseEpoch,
+          } }),
+    },
   );
   return {
     disposition: settled.disposition,

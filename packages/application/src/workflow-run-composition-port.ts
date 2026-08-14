@@ -1,7 +1,10 @@
 import type {
   FrozenWorkflowVersionBinding,
+  ModelDispatchReceipt,
+  ModelDispatchTerminalOutcome,
   RunAttemptState,
   RunStepState,
+  WorkflowNodeTerminalEvidence,
   WorkflowSchemaValue,
 } from "@crewon/domain";
 
@@ -28,6 +31,19 @@ export type WorkflowNodeAttemptAdmission = Readonly<{
   step: RunStepState;
   attempt: RunAttemptState;
   inputValue: WorkflowExecutionValue;
+}>;
+
+/** Exact durable evidence that permits a read-only provider response recovery. */
+export type WorkflowNodeResponseRecovery = Readonly<{
+  claim: WorkflowNodeClaim;
+  step: RunStepState;
+  attempt: RunAttemptState &
+    Readonly<{
+      checkpointDigest: string;
+      providerCheckpoint: NonNullable<RunAttemptState["providerCheckpoint"]>;
+    }>;
+  inputValue: WorkflowExecutionValue;
+  dispatch: ModelDispatchReceipt & Readonly<{ status: "responseObserved" }>;
 }>;
 
 export type WorkflowNodeWorkAuthority = Readonly<{
@@ -127,12 +143,31 @@ export type WorkflowReconciliationResult =
       runDisposition: "nonTerminal";
     }>
   | Readonly<{
+      /** Grants only provider GET/retrieve; it never authorizes a new dispatch. */
+      disposition: "retrieveRequired";
+      evidenceStatus: "responseObserved";
+      recovery: WorkflowNodeResponseRecovery;
+      execution: WorkflowExecutionState;
+      handoff: WorkflowRetainedHandoff;
+      runDisposition: "nonTerminal";
+    }>
+  | Readonly<{
       disposition: "retryScheduled" | "evidenceInsufficient" | "settled" | "replay";
       evidenceStatus: WorkflowDispatchEvidenceStatus;
       execution: WorkflowExecutionState;
       handoff: WorkflowAtomicHandoff;
       runDisposition: WorkflowRunDisposition;
     }>;
+
+export type WorkflowRetrievedNodeSettlementResult = Readonly<{
+  disposition: "settled" | "replay";
+  evidenceStatus: "responseObserved";
+  evidence: WorkflowNodeTerminalEvidence;
+  dispatchTerminalOutcome: ModelDispatchTerminalOutcome;
+  execution: WorkflowExecutionState;
+  handoff: WorkflowAtomicHandoff;
+  runDisposition: WorkflowRunDisposition;
+}>;
 
 /** Atomically publishes durable Human Gate authority through its exact Outbox lease. */
 export interface WorkflowHumanGatePublicationStore {
@@ -311,6 +346,32 @@ export interface WorkflowRunCompositionStore {
     claimEpoch: number;
     reconciliationOperationId: string;
   }): Promise<WorkflowReconciliationResult>;
+
+  settleRetrievedWorkflowNode(input: {
+    tenantId: string;
+    runId: string;
+    lease: WorkItemLeaseInput;
+    binding: FrozenWorkflowVersionBinding;
+    nodeId: string;
+    claimId: string;
+    claimEpoch: number;
+    reconciliationOperationId: string;
+    agentVersionId: string;
+    attempt: Readonly<{
+      stepId: string;
+      attemptId: string;
+      workItemId: string;
+      leaseEpoch: number;
+    }>;
+    dispatch: Readonly<{
+      operationId: string;
+      requestSequence: number;
+      expectedRevision: number;
+      status: "responseObserved";
+    }>;
+    evidence: WorkflowNodeTerminalEvidence;
+    dispatchTerminalOutcome: ModelDispatchTerminalOutcome;
+  }): Promise<WorkflowRetrievedNodeSettlementResult>;
 
   cancelWorkflowExecution(input: {
     tenantId: string;

@@ -43,6 +43,7 @@ import {
 } from "./postgres-workflow-run-admission.ts";
 import { schedulePostgresWorkflowReconciliation } from "./postgres-workflow-reconciliation.ts";
 import { reconcilePostgresWorkflowNode } from "./postgres-workflow-reconcile-node.ts";
+import { settlePostgresRetrievedWorkflowNode } from "./postgres-workflow-retrieved-settlement.ts";
 import { settlePreparedPostgresWorkflowNodeTerminal } from "./postgres-workflow-terminal-candidate.ts";
 import {
   admitPostgresWorkflowNodeWork,
@@ -378,6 +379,19 @@ export class PostgresWorkflowRunCompositionStore
   ): ReturnType<WorkflowRunCompositionStore["reconcileWorkflowNode"]> {
     return this.#transaction(input, (client) =>
       reconcilePostgresWorkflowNode(
+        client,
+        this.schemaSql(),
+        input,
+        this.#digester,
+      ),
+    );
+  }
+
+  async settleRetrievedWorkflowNode(
+    input: Parameters<WorkflowRunCompositionStore["settleRetrievedWorkflowNode"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["settleRetrievedWorkflowNode"]> {
+    return this.#transaction(input, (client) =>
+      settlePostgresRetrievedWorkflowNode(
         client,
         this.schemaSql(),
         input,

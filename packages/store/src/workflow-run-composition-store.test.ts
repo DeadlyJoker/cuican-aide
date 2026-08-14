@@ -7,6 +7,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { Pool } from "pg";
 import {
+  canonicalJson,
   RunApplicationService,
   RunStoreError,
   ThreadApplicationService,
@@ -21,6 +22,7 @@ import {
 } from "@crewon/domain";
 
 import type { LeaseClock } from "./lease-clock.ts";
+import { checkpointSqliteRunAttempt } from "./sqlite-execution-authority.ts";
 import { PostgresWorkflowRunCompositionStore } from "./postgres-workflow-run-composition-store.ts";
 import { SqliteWorkflowRunCompositionStore } from "./sqlite-workflow-run-composition-store.ts";
 import { SqliteRunStore } from "./sqlite-run-store.ts";
@@ -756,6 +758,7 @@ test("SQLite composition prototype exposes only the current Store contract", () 
     "settleWorkflowHumanGate",
     "scheduleWorkflowReconciliation",
     "reconcileWorkflowNode",
+    "settleRetrievedWorkflowNode",
     "cancelWorkflowExecution",
   ]) {
     assert.equal(typeof prototype[method], "function", method);
@@ -781,6 +784,32 @@ test("SQLite reclaimed running node atomically hands off to reconciliation", asy
     schedulerOperationId: "schedule-fanout-1", admissionOperationId: "node-admit-first",
     attemptLeaseDurationMs: 60_000 });
   assert.equal(admitted.disposition, "fresh");
+  const attempt = admitted.admission!.attempt;
+  const checkpoint = { schemaVersion: "crewon.provider-checkpoint.v0" as const,
+    adapterName: "responses", adapterVersion: "1", modelId: "model-1",
+    opaquePayload: { responseId: "response-reclaimed" } };
+  const checkpointDigest = digester.sha256(canonicalJson(checkpoint));
+  const nodeLease = { workItemId: work.workItemId, ownerId: "node-worker-1",
+    leaseId: "node-lease-1", leaseEpoch: 1 } as const;
+  const prepared = prepareSqliteModelDispatch(database, { tenantId: "tenant-1", runId: "run-1",
+    lease: nodeLease, attempt: { stepId: attempt.stepId, attemptId: attempt.attemptId },
+    operationId: "reclaimed-dispatch", requestSequence: 1, operation: "dispatch",
+    requestDigest: digester.sha256("request"), provider: { agentVersionId: "agent-v1",
+      adapterName: "responses", adapterVersion: "1", modelId: "model-1" },
+    preparedAt: "2026-08-12T00:00:00.000Z" });
+  const sent = markSqliteModelDispatchPossiblySent(database, { tenantId: "tenant-1",
+    runId: "run-1", lease: nodeLease, attempt: prepared,
+    operationId: prepared.operationId, requestSequence: 1,
+    expectedRevision: prepared.revision,
+    transitionedAt: "2026-08-12T00:00:00.000Z" });
+  observeSqliteModelDispatchResponse(database, { tenantId: "tenant-1", runId: "run-1",
+    lease: nodeLease, attempt: prepared, operationId: prepared.operationId,
+    requestSequence: 1, expectedRevision: sent.revision, checkpointDigest,
+    transitionedAt: "2026-08-12T00:00:00.000Z" });
+  checkpointSqliteRunAttempt(database, { tenantId: "tenant-1", runId: "run-1",
+    stepId: attempt.stepId, attemptId: attempt.attemptId }, attempt.workItemId,
+    attempt.leaseEpoch, checkpoint, checkpointDigest,
+    "2026-08-12T00:00:00.000Z", "initialOnly");
   database.prepare(`UPDATE work_items SET lease_owner_id='node-worker-2',
     lease_id='node-lease-2',lease_epoch=2,lease_expires_at_ms=?,attempt_count=2
     WHERE work_item_id=?`).run(clock.nowEpochMilliseconds() + 60_000, work.workItemId);
@@ -804,6 +833,42 @@ test("SQLite reclaimed running node atomically hands off to reconciliation", asy
   assert.deepEqual({ ...database.prepare(`SELECT status,lease_epoch leaseEpoch
     FROM run_attempts WHERE attempt_id=?`).get(admitted.admission!.attempt.attemptId) },
     { status: "running", leaseEpoch: 1 });
+  const reconcileItem = database.prepare(
+    "SELECT work_item_json FROM work_items WHERE work_item_id=?").get(
+      recovery.handoff.nextWorkItemId) as { work_item_json: string };
+  const reconcilePayload = JSON.parse(reconcileItem.work_item_json).payload;
+  database.prepare(`UPDATE work_items SET status='leased',lease_owner_id='reconcile-worker',
+    lease_id='reconcile-lease',lease_epoch=1,lease_expires_at_ms=?,attempt_count=1
+    WHERE work_item_id=?`).run(clock.nowEpochMilliseconds() + 60_000,
+      recovery.handoff.nextWorkItemId);
+  const reconcileInput = { tenantId: "tenant-1", runId: "run-1", binding,
+    lease: { workItemId: recovery.handoff.nextWorkItemId!, ownerId: "reconcile-worker",
+      leaseId: "reconcile-lease", leaseEpoch: 1 }, nodeId: work.nodeId,
+    claimId: work.claimId, claimEpoch: work.claimEpoch,
+    reconciliationOperationId: reconcilePayload.reconciliationOperationId } as const;
+  const retrieval = await store.reconcileWorkflowNode(reconcileInput);
+  assert.equal(retrieval.disposition, "retrieveRequired");
+  if (retrieval.disposition !== "retrieveRequired") assert.fail("retrieval required");
+  assert.deepEqual(retrieval.recovery.attempt.providerCheckpoint, checkpoint);
+  assert.equal(retrieval.recovery.dispatch.status, "responseObserved");
+  const evidence = createWorkflowNodeTerminalEvidence({ workflow, nodeId: work.nodeId,
+    outcome: { status: "completed", value: {} }, digester });
+  const terminalOutcome = { kind: "completed" as const, code: null,
+    certainty: "responseObserved" as const };
+  const settled = await store.settleRetrievedWorkflowNode({ ...reconcileInput,
+    agentVersionId: "agent-v1", attempt: { stepId: attempt.stepId,
+      attemptId: attempt.attemptId, workItemId: attempt.workItemId,
+      leaseEpoch: attempt.leaseEpoch }, dispatch: {
+      operationId: retrieval.recovery.dispatch.operationId, requestSequence: 1,
+      expectedRevision: retrieval.recovery.dispatch.revision,
+      status: "responseObserved" }, evidence,
+    dispatchTerminalOutcome: terminalOutcome });
+  assert.deepEqual([settled.disposition, settled.execution.nodes[0]?.status,
+    settled.handoff.currentWorkItem], ["settled", "completed", "completed"]);
+  assert.deepEqual(loadSqliteModelDispatchReceipt(database, { tenantId: "tenant-1",
+    runId: "run-1", stepId: attempt.stepId, attemptId: attempt.attemptId,
+    operationId: prepared.operationId })?.terminalOutcome, terminalOutcome);
+  assert.equal((await store.reconcileWorkflowNode(reconcileInput)).disposition, "replay");
   database.close();
 });
 
@@ -1114,6 +1179,30 @@ if (postgresUrl === undefined) {
         schedulerOperationId: "schedule-fanout-1", admissionOperationId: "node-admit-first",
         attemptLeaseDurationMs: 60_000 });
       assert.equal(admitted.disposition, "fresh");
+      const admittedAttempt = admitted.admission!.attempt;
+      const checkpoint = { schemaVersion: "crewon.provider-checkpoint.v0" as const,
+        adapterName: "responses", adapterVersion: "1", modelId: "model-1",
+        opaquePayload: { responseId: "response-reclaimed" } };
+      const checkpointDigest = digester.sha256(canonicalJson(checkpoint));
+      const nodeLease = { workItemId: work.workItemId, ownerId: "node-worker-1",
+        leaseId: "node-lease-1", leaseEpoch: 1 } as const;
+      const prepared = await store.prepareModelDispatch({ tenantId: "tenant-1",
+        runId: "run-1", lease: nodeLease, attempt: { stepId: admittedAttempt.stepId,
+          attemptId: admittedAttempt.attemptId }, operationId: "reclaimed-dispatch",
+        requestSequence: 1, operation: "dispatch", requestDigest: digester.sha256("request"),
+        provider: { agentVersionId: "agent-v1", adapterName: "responses",
+          adapterVersion: "1", modelId: "model-1" },
+        preparedAt: "2026-08-12T00:00:00.000Z" });
+      const sent = await store.markModelDispatchPossiblySent({ tenantId: "tenant-1",
+        runId: "run-1", lease: nodeLease, attempt: prepared,
+        operationId: prepared.operationId, requestSequence: 1,
+        expectedRevision: prepared.revision,
+        transitionedAt: "2026-08-12T00:00:00.000Z" });
+      await store.checkpointRunAttempt({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, attempt: prepared, checkpoint, checkpointDigest,
+        checkpointedAt: "2026-08-12T00:00:00.000Z", modelDispatch: {
+          operationId: prepared.operationId, requestSequence: 1,
+          expectedRevision: sent.revision } });
       await pool.query(`UPDATE ${schema}.work_items SET lease_owner_id='node-worker-2',
         lease_id='node-lease-2',lease_epoch=2,
         lease_expires_at=clock_timestamp()+interval '1 minute',attempt_count=2
@@ -1139,6 +1228,39 @@ if (postgresUrl === undefined) {
         `SELECT status,lease_epoch::int lease_epoch FROM ${schema}.run_attempts
          WHERE attempt_id=$1`, [admitted.admission!.attempt.attemptId]);
       assert.deepEqual(attempt.rows, [{ status: "running", lease_epoch: 1 }]);
+      await pool.query(`UPDATE ${schema}.work_items SET status='leased',
+        lease_owner_id='reconcile-worker',lease_id='reconcile-lease',lease_epoch=1,
+        lease_expires_at=clock_timestamp()+interval '1 minute',attempt_count=1
+        WHERE work_item_id=$1`, [recovery.handoff.nextWorkItemId]);
+      const reconcileWork = await pool.query<{
+        work_item_json: { payload: { reconciliationOperationId: string } };
+      }>(`SELECT work_item_json FROM ${schema}.work_items WHERE work_item_id=$1`,
+        [recovery.handoff.nextWorkItemId]);
+      const reconcileInput = { tenantId: "tenant-1", runId: "run-1", binding,
+        lease: { workItemId: recovery.handoff.nextWorkItemId!, ownerId: "reconcile-worker",
+          leaseId: "reconcile-lease", leaseEpoch: 1 }, nodeId: work.nodeId,
+        claimId: work.claimId, claimEpoch: work.claimEpoch,
+        reconciliationOperationId:
+          reconcileWork.rows[0]!.work_item_json.payload.reconciliationOperationId } as const;
+      const retrieval = await store.reconcileWorkflowNode(reconcileInput);
+      assert.equal(retrieval.disposition, "retrieveRequired");
+      if (retrieval.disposition !== "retrieveRequired") assert.fail("retrieval required");
+      assert.deepEqual(retrieval.recovery.attempt.providerCheckpoint, checkpoint);
+      const evidence = createWorkflowNodeTerminalEvidence({ workflow, nodeId: work.nodeId,
+        outcome: { status: "completed", value: {} }, digester });
+      const terminalOutcome = { kind: "completed" as const, code: null,
+        certainty: "responseObserved" as const };
+      const settled = await store.settleRetrievedWorkflowNode({ ...reconcileInput,
+        agentVersionId: "agent-v1", attempt: { stepId: admittedAttempt.stepId,
+          attemptId: admittedAttempt.attemptId, workItemId: admittedAttempt.workItemId,
+          leaseEpoch: admittedAttempt.leaseEpoch }, dispatch: {
+          operationId: retrieval.recovery.dispatch.operationId, requestSequence: 1,
+          expectedRevision: retrieval.recovery.dispatch.revision,
+          status: "responseObserved" }, evidence,
+        dispatchTerminalOutcome: terminalOutcome });
+      assert.deepEqual([settled.disposition, settled.execution.nodes[0]?.status,
+        settled.handoff.currentWorkItem], ["settled", "completed", "completed"]);
+      assert.equal((await store.reconcileWorkflowNode(reconcileInput)).disposition, "replay");
     } finally {
       await pool.query(`DROP SCHEMA ${schema} CASCADE`);
       await store.close();

@@ -650,6 +650,11 @@ export class SqliteRunStore
   ): ReturnType<WorkflowRunCompositionStore["reconcileWorkflowNode"]> {
     return this.#workflow().reconcileWorkflowNode(input);
   }
+  async settleRetrievedWorkflowNode(
+    input: Parameters<WorkflowRunCompositionStore["settleRetrievedWorkflowNode"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["settleRetrievedWorkflowNode"]> {
+    return this.#workflow().settleRetrievedWorkflowNode(input);
+  }
   async cancelWorkflowExecution(
     input: Parameters<
       WorkflowRunCompositionStore["cancelWorkflowExecution"]

@@ -17,7 +17,6 @@ import {
 import {
   composeWorkflowNodeInput,
   composeWorkflowOutput,
-  createWorkflowNodeTerminalEvidence,
   reduceRunLifecycleEvent,
   replayRunLifecycle,
   validateWorkflowSchemaValue,
@@ -837,14 +836,43 @@ export class SqliteWorkflowRunCompositionStore
             stepId: input.nodeId, attemptId: attempt.attemptId } };
         const checkpoint = await this.#continuations.loadForReconciliation(authority);
         const candidate = checkpoint?.terminalCandidate ?? null;
-        const dispatchOutcome = candidate?.dispatchTerminalOutcome ?? {
-          kind: "failed" as const, certainty: "responseObserved" as const,
-          code: "workflow_response_evidence_unavailable" };
         const workflow = this.#loadWorkflow(input);
-        const evidence = candidate?.evidence ?? createWorkflowNodeTerminalEvidence({
-          workflow, nodeId: input.nodeId, outcome: { status: "failed",
-            failureCode: dispatchOutcome.code!, certainty: dispatchOutcome.certainty },
-          digester: this.#digester });
+        if (candidate === null) {
+          const providerCheckpoint = attempt.providerCheckpoint;
+          const checkpointDigest = attempt.checkpointDigest;
+          const inputValue = this.#loadExecutionValue(
+            input.tenantId, input.runId, "nodeInput", input.nodeId);
+          const definition = workflow.nodes.find(
+            (candidate) => candidate.nodeId === input.nodeId);
+          if (providerCheckpoint === null || checkpointDigest === null ||
+              this.#digester.sha256(canonicalJson(providerCheckpoint)) !== checkpointDigest ||
+              dispatch.responseCheckpointDigest !== checkpointDigest ||
+              dispatch.operation !== "dispatch" ||
+              dispatch.provider.agentVersionId !== node.agentVersionId ||
+              dispatch.provider.adapterName !== providerCheckpoint.adapterName ||
+              dispatch.provider.adapterVersion !== providerCheckpoint.adapterVersion ||
+              dispatch.provider.modelId !== providerCheckpoint.modelId ||
+              inputValue === null || inputValue.valueDigest !== node.inputDigest ||
+              definition === undefined || definition.kind === "humanGate")
+            throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
+          this.#database.exec("COMMIT");
+          return structuredClone({ disposition: "retrieveRequired" as const,
+            evidenceStatus: "responseObserved" as const, execution: execution!,
+            recovery: { claim: { node: definition, claimId: input.claimId,
+              claimEpoch: input.claimEpoch, gateRequestId: null,
+              inputDigest: node.inputDigest! }, step, attempt: {
+                ...attempt, checkpointDigest, providerCheckpoint },
+              inputValue: { schemaVersion: "crewon.workflow-execution-value.v0" as const,
+                ...inputValue,
+                value: structuredClone(inputValue.value) as
+                  WorkflowExecutionValue["value"] },
+              dispatch: { ...dispatch, status: "responseObserved" as const } },
+            handoff: { currentWorkItem: "retained" as const,
+              nextWorkItemId: null, kind: "none" as const },
+            runDisposition: "nonTerminal" as const });
+        }
+        const dispatchOutcome = candidate.dispatchTerminalOutcome;
+        const evidence = candidate.evidence;
         if (run!.cancelRequested && candidate !== null) {
           const terminal = terminateSqliteModelDispatchForAttempt(this.#database, {
             tenantId: input.tenantId, runId: input.runId,
@@ -992,6 +1020,85 @@ export class SqliteWorkflowRunCompositionStore
         this.#insertReceipt(receiptInput, "reconcileNode", fingerprint, result);
         this.#completeLease(input, nowMs);
       }
+      this.#database.exec("COMMIT");
+      return structuredClone(result);
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeCompositionError(error);
+    }
+  }
+
+  async settleRetrievedWorkflowNode(
+    input: Parameters<WorkflowRunCompositionStore["settleRetrievedWorkflowNode"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["settleRetrievedWorkflowNode"]> {
+    const nowMs = readLeaseClock(this.#clock);
+    const now = new Date(nowMs).toISOString();
+    const reconcileInput = {
+      tenantId: input.tenantId, runId: input.runId, lease: input.lease,
+      binding: input.binding, nodeId: input.nodeId, claimId: input.claimId,
+      claimEpoch: input.claimEpoch,
+      reconciliationOperationId: input.reconciliationOperationId,
+    };
+    const fingerprint = this.#fingerprint("reconcileNode", reconcileInput);
+    const receiptInput = { ...reconcileInput,
+      operationId: `reconcile:${input.reconciliationOperationId}` };
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const replay = this.#receipt(receiptInput, "reconcileNode", fingerprint) as
+        Awaited<ReturnType<WorkflowRunCompositionStore["settleRetrievedWorkflowNode"]>> | null;
+      if (replay !== null) {
+        if (stableJson(replay.evidence) !== stableJson(input.evidence) ||
+            stableJson(replay.dispatchTerminalOutcome) !==
+              stableJson(input.dispatchTerminalOutcome))
+          throw new RunStoreError("workflow_reconciliation_receipt_corrupt");
+        this.#database.exec("COMMIT");
+        return structuredClone({ ...replay, disposition: "replay" });
+      }
+      const expectedPayload = {
+        schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+        trigger: "workflowReconcile", binding: input.binding,
+        nodeId: input.nodeId, claimId: input.claimId,
+        claimEpoch: input.claimEpoch,
+        reconciliationOperationId: input.reconciliationOperationId,
+      };
+      if (stableJson(this.#loadWorkItemPayload(input.lease.workItemId)) !==
+          stableJson(expectedPayload))
+        throw new RunStoreError("workflow_composition_work_item_mismatch");
+      const execution = this.#loadExecution(input.tenantId, input.runId);
+      const node = executionNode(input, execution);
+      if (node.status !== "unknown" || node.agentVersionId !== input.agentVersionId)
+        throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
+      const authority = {
+        tenantId: input.tenantId, runId: input.runId,
+        workItemId: input.attempt.workItemId,
+        leaseEpoch: input.attempt.leaseEpoch,
+        nodeId: input.nodeId,
+        nodeKind: node.kind === "verification" ? "verification" as const : "agent" as const,
+        claimId: input.claimId, claimEpoch: input.claimEpoch,
+        agentVersionId: input.agentVersionId,
+        attempt: { stepId: input.attempt.stepId,
+          attemptId: input.attempt.attemptId },
+      };
+      const settled = settleSqliteWorkflowNodeModelTerminalWithinTransaction(
+        { ...this.#nodeSettlementContext(), receipt: () => null,
+          insertReceipt: () => undefined },
+        { binding: input.binding, nodeId: input.nodeId,
+          operationId: `node-model-terminal:${input.claimId}`,
+          evidence: input.evidence, lease: input.lease, authority,
+          dispatch: input.dispatch,
+          dispatchTerminalOutcome: input.dispatchTerminalOutcome },
+        this.#fingerprint("settleRetrievedNode", input),
+        now, nowMs, "reconciliation");
+      const result = {
+        disposition: "settled" as const,
+        evidenceStatus: "responseObserved" as const,
+        evidence: structuredClone(input.evidence),
+        dispatchTerminalOutcome: structuredClone(input.dispatchTerminalOutcome),
+        execution: this.#loadExecution(input.tenantId, input.runId)!,
+        handoff: settled.handoff,
+        runDisposition: settled.runDisposition,
+      };
+      this.#insertReceipt(receiptInput, "reconcileNode", fingerprint, result);
       this.#database.exec("COMMIT");
       return structuredClone(result);
     } catch (error) {

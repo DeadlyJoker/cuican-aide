@@ -46,20 +46,25 @@ export async function settlePostgresWorkflowNode(
   schema: string,
   input: Input,
   digester: WorkflowContentDigester,
-  model?: Readonly<{ fingerprintAuthority: unknown; agentVersionId: string }>,
+  model?: Readonly<{
+    fingerprintAuthority: unknown;
+    agentVersionId: string;
+    attemptCheckpointDigest?: string | null;
+    reconciliationAttempt?: Readonly<{
+      workItemId: string;
+      leaseEpoch: number;
+    }>;
+  }>,
 ): Promise<Result> {
   const fingerprint = postgresWorkflowFingerprint(
     "settleNode",
     model?.fingerprintAuthority ?? input,
     digester,
   );
-  const replay = await loadPostgresWorkflowReceipt(
-    client,
-    schema,
-    input,
-    "settleNode",
-    fingerprint,
-  );
+  const replay = model?.reconciliationAttempt === undefined
+    ? await loadPostgresWorkflowReceipt(
+        client, schema, input, "settleNode", fingerprint)
+    : null;
   if (replay !== null)
     return validateReplay(client, schema, input, replay, digester);
   const now = await validatePostgresWorkflowLease(client, schema, input);
@@ -77,14 +82,15 @@ export async function settlePostgresWorkflowNode(
   );
   const step = await loadPostgresRunStep(client, schema, input, true);
   const attempt = await loadPostgresRunAttempt(client, schema, input, true);
+  const attemptAuthority = model?.reconciliationAttempt ?? input.lease;
   if (
     execution === null ||
     step === null ||
     attempt === null ||
     input.stepId !== input.nodeId ||
     step.currentAttemptId !== input.attemptId ||
-    attempt.workItemId !== input.lease.workItemId ||
-    attempt.leaseEpoch !== input.lease.leaseEpoch ||
+    attempt.workItemId !== attemptAuthority.workItemId ||
+    attempt.leaseEpoch !== attemptAuthority.leaseEpoch ||
     attempt.status !== "running"
   )
     throw new RunStoreError("workflow_composition_attempt_mismatch");
@@ -103,7 +109,8 @@ export async function settlePostgresWorkflowNode(
     definition.kind === "humanGate" ||
     step.kind !== expectedKind ||
     step.status !== "running" ||
-    node.status !== "running" ||
+    node.status !==
+      (model?.reconciliationAttempt === undefined ? "running" : "unknown") ||
     node.claimId !== input.claimId ||
     node.claimEpoch !== input.claimEpoch ||
     (model !== undefined && node.agentVersionId !== model.agentVersionId) ||
@@ -152,9 +159,10 @@ export async function settlePostgresWorkflowNode(
     await finishPostgresRunAttempt(client, schema, {
       tenantId: input.tenantId,
       runId: input.runId,
-      workItemId: input.lease.workItemId,
-      leaseEpoch: input.lease.leaseEpoch,
-      attempt: terminalAttempt(input, now),
+      workItemId: attemptAuthority.workItemId,
+      leaseEpoch: attemptAuthority.leaseEpoch,
+      attempt: terminalAttempt(
+        input, now, model?.attemptCheckpointDigest ?? null),
     });
   await writePostgresWorkflowExecution(client, schema, next, now);
   const runDisposition = await convergePostgresWorkflowRun(
@@ -254,14 +262,9 @@ export async function settlePostgresWorkflowNode(
     handoff: { currentWorkItem: "completed" as const, nextWorkItemId, kind },
     runDisposition,
   };
-  await insertPostgresWorkflowReceipt(
-    client,
-    schema,
-    input,
-    "settleNode",
-    fingerprint,
-    result,
-  );
+  if (model?.reconciliationAttempt === undefined)
+    await insertPostgresWorkflowReceipt(
+      client, schema, input, "settleNode", fingerprint, result);
   await completePostgresWorkflowLease(client, schema, input, now);
   return structuredClone(result);
 }
@@ -692,12 +695,16 @@ async function insertValue(
     [input.tenantId, input.runId, valueId, role, nodeId, digest, value, now],
   );
 }
-function terminalAttempt(input: Input, now: string) {
+function terminalAttempt(
+  input: Input,
+  now: string,
+  checkpointDigest: string | null,
+) {
   const common = {
     stepId: input.stepId,
     attemptId: input.attemptId,
     finishedAt: now,
-    checkpointDigest: null,
+    checkpointDigest,
   };
   if (
     input.outcome.status === "completed" ||
