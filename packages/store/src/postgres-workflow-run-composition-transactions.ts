@@ -1,6 +1,7 @@
 import {
   canonicalJson,
   RunStoreError,
+  type WorkflowExecutionValue,
   type WorkflowRunCompositionStore,
 } from "@crewon/application";
 import {
@@ -1167,7 +1168,7 @@ async function composeNodeInputValue(
   return {
     schemaVersion: "crewon.workflow-execution-value.v0" as const,
     valueId,
-    value: structuredClone(value) as import("@crewon/contracts").JsonValue,
+    value: structuredClone(value) as WorkflowExecutionValue["value"],
     valueDigest,
   };
 }

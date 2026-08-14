@@ -1,5 +1,4 @@
 import { parseCompiledAgentVersion } from "@crewon/agent-version";
-import type { JsonValue } from "@crewon/contracts/runtime";
 import {
   canonicalJson,
   RunStoreError,
@@ -402,7 +401,7 @@ async function validateReplay(
     schemaVersion: "crewon.workflow-execution-value.v0" as const,
     valueId: rootRow.value_id,
     valueDigest: rootRow.value_digest,
-    value: rootRow.value_json as JsonValue,
+    value: rootRow.value_json as CommitWorkflowRunStartInput["workflowInput"],
   };
   if (canonicalJson(rootRow.value_json) !== canonicalJson(input.workflowInput))
     replayCorrupt();

@@ -23,8 +23,17 @@ const boundaries: readonly Boundary[] = [
   },
   {
     packageName: "agent-kernel",
-    allowedBareImports: ["@crewon/contracts", "@crewon/tool-broker"],
-    allowedRuntimeDependencies: ["@crewon/contracts", "@crewon/tool-broker"],
+    allowedBareImports: [
+      "node:crypto",
+      "@crewon/contracts",
+      "@crewon/domain",
+      "@crewon/tool-broker",
+    ],
+    allowedRuntimeDependencies: [
+      "@crewon/contracts",
+      "@crewon/domain",
+      "@crewon/tool-broker",
+    ],
   },
   {
     packageName: "agent-responses",
@@ -97,11 +106,19 @@ const boundaries: readonly Boundary[] = [
     allowedBareImports: [
       "node:crypto",
       "node:sqlite",
+      "@crewon/agent-version",
       "@crewon/application",
+      "@crewon/contracts/runtime",
       "@crewon/domain",
       "pg",
     ],
-    allowedRuntimeDependencies: ["@crewon/application", "@crewon/domain", "pg"],
+    allowedRuntimeDependencies: [
+      "@crewon/agent-version",
+      "@crewon/application",
+      "@crewon/contracts",
+      "@crewon/domain",
+      "pg",
+    ],
   },
   {
     packageName: "tool-broker",

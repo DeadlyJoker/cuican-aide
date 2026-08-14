@@ -9,6 +9,7 @@ import {
   type CommitWorkflowAssistantContinuationInput,
   type WorkflowNodeContinuationStore,
   type WorkflowCancellationResult,
+  type WorkflowExecutionValue,
   type WorkflowRunCompositionStore,
   type WorkflowToolApprovalStore,
 } from "@crewon/application";
@@ -2252,13 +2253,13 @@ export class SqliteWorkflowRunCompositionStore
         throw new RunStoreError("workflow_execution_value_conflict");
       return { schemaVersion: "crewon.workflow-execution-value.v0",
         valueId: existing.valueId, valueDigest: existing.valueDigest,
-        value: structuredClone(existing.value) as import("@crewon/contracts").JsonValue };
+        value: structuredClone(existing.value) as WorkflowExecutionValue["value"] };
     }
     const authority = { schemaVersion: "crewon.workflow-execution-value.v0" as const,
       valueId: workflowAuthorityId("value", { tenantId: input.tenantId,
         runId: input.runId, nodeId: input.nodeId, claimId: input.claimId,
         claimEpoch: input.claimEpoch, valueDigest }, this.#digester),
-      value: structuredClone(value) as import("@crewon/contracts").JsonValue, valueDigest };
+      value: structuredClone(value) as WorkflowExecutionValue["value"], valueDigest };
     if (now !== undefined) this.#insertExecutionValue({ ...input,
       valueId: authority.valueId, role: "nodeInput", nodeId: input.nodeId,
       valueDigest, valueJson, now });
