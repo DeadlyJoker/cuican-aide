@@ -87,6 +87,7 @@ const boundaries: readonly Boundary[] = [
   {
     packageName: "mcp-runtime",
     allowedBareImports: [
+      "node:crypto",
       "node:path",
       "@crewon/tool-broker",
       "@modelcontextprotocol/sdk",
@@ -98,7 +99,7 @@ const boundaries: readonly Boundary[] = [
   },
   {
     packageName: "application",
-    allowedBareImports: ["@crewon/contracts", "@crewon/domain"],
+    allowedBareImports: ["node:crypto", "@crewon/contracts", "@crewon/domain"],
     allowedRuntimeDependencies: ["@crewon/contracts", "@crewon/domain"],
   },
   {
