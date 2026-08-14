@@ -227,9 +227,6 @@ importers:
       '@crewon/contracts':
         specifier: workspace:*
         version: link:../../packages/contracts
-      '@crewon/device-dispatch':
-        specifier: workspace:*
-        version: link:../../packages/device-dispatch
       '@crewon/domain':
         specifier: workspace:*
         version: link:../../packages/domain

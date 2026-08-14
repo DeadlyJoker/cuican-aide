@@ -23,7 +23,6 @@
     "@crewon/contracts": "workspace:*",
     "@crewon/context": "workspace:*",
     "@crewon/domain": "workspace:*",
-    "@crewon/device-dispatch": "workspace:*",
     "@crewon/mcp-runtime": "workspace:*",
     "@crewon/store": "workspace:*",
     "@crewon/tool-broker": "workspace:*",
