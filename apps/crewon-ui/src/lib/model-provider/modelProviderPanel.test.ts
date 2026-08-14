@@ -60,10 +60,7 @@ describe("modelProviderListPanel", () => {
     );
   });
 
-  /*
-   * Both caveats have to be readable before a provider is saved: the key really
-   * is written in cleartext, and a Chat Completions endpoint cannot work at all.
-   */
+  /* Both caveats are visible before the desktop credential authority mutates. */
   it("states the OS credential storage and supervised-reload caveats", () => {
     const panel = modelProviderListPanel({
       configRead: twoProviders,
@@ -119,6 +116,42 @@ describe("modelProviderListPanel", () => {
     });
 
     expect(panel.body).toContain("连接正常：返回 12 个模型");
+  });
+
+  it("keeps the Web surface read-only under deployment authority", () => {
+    const panel = modelProviderListPanel({
+      configRead: twoProviders,
+      credentialMutationsAvailable: false,
+      cwd: null,
+      locale: "en",
+    });
+
+    expect({
+      actions: panel.actions,
+      body: panel.body,
+      subtitle: panel.subtitle,
+    }).toMatchInlineSnapshot(`
+      {
+        "actions": [
+          {
+            "id": "model-provider-test:gateway",
+            "label": "Test gateway",
+          },
+          {
+            "id": "refresh-model-providers",
+            "label": "Refresh",
+          },
+        ],
+        "body": "Configured model services
+      - My gateway (gateway) · https://api.example.com/v1 · key stored · in use
+      - local (local) · Ollama · http://127.0.0.1:11434/v1 · no credential
+
+      Notes
+      - Responses-compatible APIs only; Chat Completions endpoints are not supported.
+      - The provider catalog and credentials are managed by the deployment authority. The Web app can only refresh and test the active binding.",
+        "subtitle": "Deployment-managed catalog",
+      }
+    `);
   });
 });
 

@@ -108,6 +108,7 @@ export async function refreshControlModelProvidersPanel(
     params.setCapabilityPanel(
       modelProviderListPanel({
         credentialCatalog: await readCatalog(params),
+        credentialMutationsAvailable: credentialStoreFor(params) !== null,
         configRead: null,
         cwd: null,
         locale: params.locale,

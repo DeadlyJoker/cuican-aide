@@ -130,6 +130,18 @@ describe("Control model provider actions", () => {
     });
   });
 
+  it("does not offer credential mutations without a desktop authority", async () => {
+    const test = harness({ credentialStore: null });
+
+    await refreshControlModelProvidersPanel(test.params);
+
+    expect(test.panel()?.actions?.map((action) => action.id)).toEqual([
+      "model-provider-test:gateway",
+      "refresh-model-providers",
+    ]);
+    expect(test.panel()?.body).toContain("managed by the deployment authority");
+  });
+
   it("writes provider credentials through the desktop authority", async () => {
     const test = harness({ fields: validFields });
 

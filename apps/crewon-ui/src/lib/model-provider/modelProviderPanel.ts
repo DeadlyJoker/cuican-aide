@@ -124,19 +124,30 @@ export function modelProviderLoadingPanel(locale: Locale): CapabilityPanel {
 
 /** Body text for the list view. */
 function modelProviderListBody(params: {
+  credentialMutationsAvailable: boolean;
   entries: ModelProviderEntry[];
   locale: Locale;
   probeText: string | null;
   selectedId: string;
 }): string {
-  const { entries, locale, probeText, selectedId } = params;
+  const {
+    credentialMutationsAvailable,
+    entries,
+    locale,
+    probeText,
+    selectedId,
+  } = params;
   const sections: string[] = [];
 
   if (entries.length === 0) {
     sections.push(
-      locale === "zh"
-        ? "还没有配置任何模型服务。点击下方“新增 Provider”填写服务地址和密钥。"
-        : "No model service is configured yet. Use \u201cAdd provider\u201d below to enter an address and credential.",
+      credentialMutationsAvailable
+        ? locale === "zh"
+          ? "还没有配置任何模型服务。点击下方“新增 Provider”填写服务地址和密钥。"
+          : "No model service is configured yet. Use \u201cAdd provider\u201d below to enter an address and credential."
+        : locale === "zh"
+          ? "尚未由部署管理员配置模型服务。Web 不接收或保存 Provider 密钥。"
+          : "No model service has been provisioned by a deployment administrator. The Web app does not accept or store provider credentials.",
     );
   } else {
     sections.push(
@@ -165,20 +176,29 @@ function modelProviderListBody(params: {
   }
 
   /* Security and protocol boundaries are stated before the user saves. */
-  sections.push(
-    [
-      locale === "zh" ? "说明" : "Notes",
-      locale === "zh"
-        ? "- 只支持 Responses 兼容接口，不支持 Chat Completions 格式的服务。"
-        : "- Responses-compatible APIs only; Chat Completions endpoints are not supported.",
+  const notes = [
+    locale === "zh" ? "说明" : "Notes",
+    locale === "zh"
+      ? "- 只支持 Responses 兼容接口，不支持 Chat Completions 格式的服务。"
+      : "- Responses-compatible APIs only; Chat Completions endpoints are not supported.",
+  ];
+  if (credentialMutationsAvailable) {
+    notes.push(
       locale === "zh"
         ? "- 直接填写的 API Key 只保存在系统密钥库：macOS Keychain、Windows Credential Manager 或 Linux Secret Service；桌面 catalog 只保存 Provider ID 与地址。"
         : "- An API key entered here is stored only in the OS credential store: macOS Keychain, Windows Credential Manager, or Linux Secret Service. The desktop catalog stores only provider identity and endpoint.",
       locale === "zh"
         ? "- 保存或切换后会在无活动任务时受监督重启 Worker；有任务运行时会拒绝切换，不会中断任务。"
         : "- Saving or switching performs a supervised Worker restart only while no task is active; an active task rejects the switch instead of being interrupted.",
-    ].join("\n"),
-  );
+    );
+  } else {
+    notes.push(
+      locale === "zh"
+        ? "- Provider catalog 与密钥由服务端部署 authority 管理；Web 仅允许刷新和测试当前 active binding。"
+        : "- The provider catalog and credentials are managed by the deployment authority. The Web app can only refresh and test the active binding.",
+    );
+  }
+  sections.push(notes.join("\n"));
 
   return sections.join("\n\n");
 }
@@ -186,6 +206,7 @@ function modelProviderListBody(params: {
 export function modelProviderListPanel(params: {
   configRead: ConfigReadResponse | null;
   credentialCatalog?: ProviderCredentialCatalog | null;
+  credentialMutationsAvailable?: boolean;
   cwd: string | null;
   locale: Locale;
   probeText?: string | null;
@@ -193,6 +214,7 @@ export function modelProviderListPanel(params: {
   const {
     configRead,
     credentialCatalog = null,
+    credentialMutationsAvailable = true,
     cwd,
     locale,
     probeText = null,
@@ -204,42 +226,60 @@ export function modelProviderListPanel(params: {
     title: panelTitle(locale),
     subtitle:
       cwd ||
-      (credentialCatalog !== null
+      (!credentialMutationsAvailable
         ? locale === "zh"
-          ? "桌面凭据 catalog"
-          : "Desktop credential catalog"
-        : locale === "zh"
-          ? "全局配置"
-          : "Global config"),
-    body: modelProviderListBody({ entries, locale, probeText, selectedId }),
+          ? "服务端部署 catalog"
+          : "Deployment-managed catalog"
+        : credentialCatalog !== null
+          ? locale === "zh"
+            ? "桌面凭据 catalog"
+            : "Desktop credential catalog"
+          : locale === "zh"
+            ? "全局配置"
+            : "Global config"),
+    body: modelProviderListBody({
+      credentialMutationsAvailable,
+      entries,
+      locale,
+      probeText,
+      selectedId,
+    }),
     actions: [
-      {
-        id: MODEL_PROVIDER_ACTION_IDS.add,
-        label: locale === "zh" ? "新增 Provider" : "Add provider",
-        tone: "primary",
-      },
+      ...(credentialMutationsAvailable
+        ? [
+            {
+              id: MODEL_PROVIDER_ACTION_IDS.add,
+              label: locale === "zh" ? "新增 Provider" : "Add provider",
+              tone: "primary" as const,
+            },
+          ]
+        : []),
       ...entries.flatMap((entry) => {
-        const rowActions: CapabilityPanelAction[] = [
-          {
+        const rowActions: CapabilityPanelAction[] = [];
+        if (credentialMutationsAvailable || entry.id === selectedId) {
+          rowActions.push({
             id: modelProviderRowActionId("test", entry.id),
             label: locale === "zh" ? `测试 ${entry.id}` : `Test ${entry.id}`,
-          },
-          {
-            id: modelProviderRowActionId("edit", entry.id),
-            label: locale === "zh" ? `编辑 ${entry.id}` : `Edit ${entry.id}`,
-          },
-        ];
-        if (entry.id !== selectedId) {
-          rowActions.push({
-            id: modelProviderRowActionId("select", entry.id),
-            label: locale === "zh" ? `设为默认 ${entry.id}` : `Use ${entry.id}`,
           });
         }
-        rowActions.push({
-          id: modelProviderRowActionId("delete", entry.id),
-          label: locale === "zh" ? `删除 ${entry.id}` : `Delete ${entry.id}`,
-          tone: "danger",
-        });
+        if (credentialMutationsAvailable) {
+          rowActions.push({
+            id: modelProviderRowActionId("edit", entry.id),
+            label: locale === "zh" ? `编辑 ${entry.id}` : `Edit ${entry.id}`,
+          });
+          if (entry.id !== selectedId) {
+            rowActions.push({
+              id: modelProviderRowActionId("select", entry.id),
+              label:
+                locale === "zh" ? `设为默认 ${entry.id}` : `Use ${entry.id}`,
+            });
+          }
+          rowActions.push({
+            id: modelProviderRowActionId("delete", entry.id),
+            label: locale === "zh" ? `删除 ${entry.id}` : `Delete ${entry.id}`,
+            tone: "danger",
+          });
+        }
         return rowActions;
       }),
       {
