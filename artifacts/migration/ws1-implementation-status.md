@@ -33,6 +33,20 @@
   idempotency key 返回 `committed -> replayed` 且保持同一 Run，SQLite admission receipt 与 canonical Run 均为一条。
   Worker `SIGKILL` 后 guardian 清理受管进程，同一 HOME 重启完成 Agent -> Verification；GUI `SIGKILL` 后再次清理并释放
   Control 端口。
+- W06 Automation scheduler 已按纯 TypeScript breaking cutover 接入真实 Control：严格 schedule v1、owner freeze、
+  `coalesceLatest`、稳定 occurrence receipt、fenced due lease，以及 Message/History/Run/Outbox/WorkItem/next schedule state
+  的单事务提交均由 SQLite/PostgreSQL canonical Store 持有。Control 内置有界轮询并把 admitted Run 交给现有 TS Worker，
+  不再依赖 Rust scheduler、Device/Gateway、dual-write 或旧 schema migration；PostgreSQL authority 直接提升到 schema v3，旧版本
+  fail closed。Node 24 当前验证为 Store `346 pass / 61 PostgreSQL 环境条件 skip`、Control `122 pass / 4 PostgreSQL 环境条件
+skip`、Runtime Worker `306 pass / 1 PostgreSQL 环境条件 skip`。本机未配置 `CREWON_TEST_POSTGRES_URL`，因此新增 PG scheduler
+  双 claim/atomic admission 行为测试只作为条件测试存在，不能记为本轮 real-host 通过。
+- 本轮重新 staging 与构建后的 `.app` 仍只包含 Tauri shell、官方 Node 24、guardian 与四个 TS runtime bundle；Device Tool、
+  Gateway、Responses Lite、Rust App Server、6176 与旧 restart/client marker 扫描均为 0。最新隔离 HOME smoke
+  `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-svjMds` 中，Workflow Run
+  `019fff79-11be-708e-9df5-40daa462c0d2` 在 Worker `SIGKILL` 后由同一 HOME 重启恢复为 `completed`：2 次不同模型采样、
+  2 个 Attempt、唯一 `run.completed`，同 key `committed -> replayed` 且 admission receipt/Run 各一；GUI `SIGKILL` 后
+  guardian 清理全部子进程和 3210。`.app` 与 updater archive 已生成，Tauri 命令只因缺少
+  `TAURI_SIGNING_PRIVATE_KEY` 最终返回失败，未绕过发布签名边界。
 - Renderer 已改为 Control-only bootstrap。Library 与 Settings 不再构造 App Server client：Library 的 Automation/Knowledge/
   Agent/Office/Tool 读取和允许的 mutation 走 Control；Settings 只公开 Account、Appearance、Model access 三个具有真实 Control
   authority 的页面。语言/主题使用 revision CAS，成功提交后才更新本地状态；旧 Config、Personalization、Thread Settings 和
