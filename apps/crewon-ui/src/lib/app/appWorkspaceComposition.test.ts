@@ -34,6 +34,42 @@ describe("App Workspace Control composition", () => {
     expect(webManifest).not.toMatch(/app.server|device.gateway|6176/iu);
   });
 
+  it("limits the desktop HTTP bridge to the loopback Control API", () => {
+    const capability = JSON.parse(
+      readFileSync(
+        new URL(
+          "../../../src-tauri/capabilities/default.json",
+          import.meta.url,
+        ),
+        "utf8",
+      ),
+    ) as {
+      permissions: Array<
+        | string
+        | {
+            identifier: string;
+            allow?: Array<{ url: string }>;
+          }
+      >;
+    };
+    const httpPermission = capability.permissions.find(
+      (permission) =>
+        typeof permission !== "string" &&
+        permission.identifier === "http:default",
+    );
+
+    expect(httpPermission).toEqual({
+      identifier: "http:default",
+      allow: [
+        { url: "http://127.0.0.1:3210/*" },
+        { url: "http://localhost:3210/*" },
+      ],
+    });
+    expect(JSON.stringify(capability)).not.toMatch(
+      /127\.0\.0\.1:8000|localhost:8000|agent-platform-api/u,
+    );
+  });
+
   it("owns its TypeScript view model without Rust schema inputs", () => {
     const tsconfig = readFileSync(
       new URL("../../../tsconfig.json", import.meta.url),

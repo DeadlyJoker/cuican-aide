@@ -22,9 +22,7 @@
       "identifier": "http:default",
       "allow": [
         { "url": "http://127.0.0.1:3210/*" },
-        { "url": "http://localhost:3210/*" },
-        { "url": "http://127.0.0.1:8000/*" },
-        { "url": "http://localhost:8000/*" }
+        { "url": "http://localhost:3210/*" }
       ]
     }
   ]
