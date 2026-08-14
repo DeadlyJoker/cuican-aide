@@ -1,0 +1,122 @@
+name: crewon
+
+x-node-service: &node-service
+  init: true
+  network_mode: host
+  read_only: true
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+
+x-runtime-volumes: &runtime-volumes
+  - crewon-artifacts:/var/lib/crewon/artifacts
+  - ${CREWON_ARTIFACT_KEY_FILE:?set CREWON_ARTIFACT_KEY_FILE}:/run/secrets/crewon-artifact-key:ro
+  - ${CREWON_AGENT_BINDINGS_FILE:?set CREWON_AGENT_BINDINGS_FILE}:/run/config/agent-version-runtime-bindings.json:ro
+
+services:
+  runtime-release:
+    <<: *node-service
+    env_file:
+      - ${CREWON_RUNTIME_ENV_FILE:-./runtime.production.env}
+    image: ${CREWON_RUNTIME_WORKER_IMAGE:-crewon-runtime-worker:local}
+    build:
+      context: ../..
+      dockerfile: deploy/crewon/runtime-worker.Dockerfile
+    command: ["node", "/app/init/release-main.mjs"]
+    restart: "no"
+    volumes: *runtime-volumes
+
+  runtime-worker:
+    <<: *node-service
+    env_file:
+      - ${CREWON_RUNTIME_ENV_FILE:-./runtime.production.env}
+    image: ${CREWON_RUNTIME_WORKER_IMAGE:-crewon-runtime-worker:local}
+    build:
+      context: ../..
+      dockerfile: deploy/crewon/runtime-worker.Dockerfile
+    depends_on:
+      runtime-release:
+        condition: service_completed_successfully
+    volumes:
+      - crewon-artifacts:/var/lib/crewon/artifacts
+      - ${CREWON_ARTIFACT_KEY_FILE:?set CREWON_ARTIFACT_KEY_FILE}:/run/secrets/crewon-artifact-key:ro
+      - ${CREWON_AGENT_BINDINGS_FILE:?set CREWON_AGENT_BINDINGS_FILE}:/run/config/agent-version-runtime-bindings.json:ro
+      - ${CREWON_WORKSPACE_ROOT:?set CREWON_WORKSPACE_ROOT}:/workspace:ro
+
+  control-api:
+    <<: *node-service
+    env_file:
+      - ${CREWON_CONTROL_ENV_FILE:-./control.production.env}
+    image: ${CREWON_CONTROL_API_IMAGE:-crewon-control-api:local}
+    build:
+      context: ../..
+      dockerfile: deploy/crewon/control-api.Dockerfile
+    depends_on:
+      runtime-worker:
+        condition: service_started
+    volumes:
+      - crewon-artifacts:/var/lib/crewon/artifacts
+      - ${CREWON_ARTIFACT_KEY_FILE:?set CREWON_ARTIFACT_KEY_FILE}:/run/secrets/crewon-artifact-key:ro
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3210/api/v1/health/live').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  web-bff:
+    <<: *node-service
+    env_file:
+      - ${CREWON_WEB_BFF_ENV_FILE:-./web-bff.production.env}
+    image: ${CREWON_WEB_BFF_IMAGE:-crewon-web-bff:local}
+    build:
+      context: ../..
+      dockerfile: deploy/crewon/web-bff.Dockerfile
+    depends_on:
+      control-api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3211/control-api/health/live').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+
+  web:
+    image: ${CREWON_WEB_IMAGE:-crewon-web:local}
+    build:
+      context: ../..
+      dockerfile: deploy/crewon/web.Dockerfile
+    depends_on:
+      web-bff:
+        condition: service_healthy
+    network_mode: host
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ${CREWON_TLS_CERT_FILE:?set CREWON_TLS_CERT_FILE}:/etc/crewon/tls/crewon-ip.pem:ro
+      - ${CREWON_TLS_KEY_FILE:?set CREWON_TLS_KEY_FILE}:/etc/crewon/tls/crewon-ip.key:ro
+    tmpfs:
+      - /var/cache/nginx:size=64m
+      - /var/run:size=1m
+
+volumes:
+  crewon-artifacts:
