@@ -75,7 +75,7 @@ import { importControlKnowledgeFiles } from "./lib/knowledge/controlKnowledgeFil
 import type { LocalResourceSelectionKind } from "./lib/shared/localResourceAttachments";
 
 export function App({ controlClient }: { controlClient: ControlApiClient }) {
-  const { platform } = useAppEnvironment();
+  const { platform, runtimeSurface } = useAppEnvironment();
   const { libraryLoadRequestRef, openLibraryRef, refreshSettingsSectionRef } =
     useAppCoordinatorRefs();
   const { locale, localeRef, notice, setLocale, setNotice, setTheme, theme } =
@@ -239,6 +239,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     controlRuntimeConnected,
     locale,
     localeRef,
+    preferenceAuthority: runtimeSurface === "desktop" ? "control" : "browser",
     setLocale,
     setNotice,
     setTheme,
@@ -460,11 +461,13 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     client: controlClient,
     getCapabilityPanel: () => capabilityPanelRef.current,
     locale,
+    preferenceAuthority: runtimeSurface === "desktop" ? "control" : "browser",
     platformUser: null,
     setCapabilityPanel,
     setLocale,
     setNotice,
     setTheme,
+    theme,
     persistLocale,
     persistTheme,
   });

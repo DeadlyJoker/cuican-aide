@@ -44,6 +44,7 @@ type AppSettingsCoordinatorParams = {
   credentialStore?: ProviderCredentialStorePort | null;
   getCapabilityPanel: () => CapabilityPanel | null;
   locale: Locale;
+  preferenceAuthority: "browser" | "control";
   persistLocale: (locale: Locale) => void;
   persistTheme: (theme: Theme) => void;
   platformUser: AgentPlatformUser | null;
@@ -51,6 +52,7 @@ type AppSettingsCoordinatorParams = {
   setLocale: (locale: Locale) => void;
   setNotice: (notice: NoticeState | null) => void;
   setTheme: (theme: Theme) => void;
+  theme: Theme;
 };
 
 export type AppSettingsCoordinator = {
@@ -63,13 +65,18 @@ export type AppSettingsCoordinator = {
 function appearancePanel(
   locale: Locale,
   settings: { locale: Locale; theme: Theme },
+  authority: "browser" | "control",
 ): CapabilityPanel {
   return {
     title: locale === "zh" ? "外观" : "Appearance",
     subtitle:
-      locale === "zh"
-        ? "由 CrewON Control 保存的本机偏好"
-        : "Local preferences saved by CrewON Control",
+      authority === "browser"
+        ? locale === "zh"
+          ? "仅保存在此浏览器中的本地偏好"
+          : "Preferences stored only in this browser"
+        : locale === "zh"
+          ? "由 CrewON Control 保存的本机偏好"
+          : "Local preferences saved by CrewON Control",
     fields: [
       {
         commitOnChange: true,
@@ -116,15 +123,28 @@ export function createAppSettingsCoordinator(
       : params.credentialStore;
 
   const refreshAppearance = async () => {
+    if (params.preferenceAuthority === "browser") {
+      params.setCapabilityPanel(
+        appearancePanel(
+          params.locale,
+          { locale: params.locale, theme: params.theme },
+          "browser",
+        ),
+      );
+      return;
+    }
     try {
       const { settings } = await params.client.getLocalSettings();
-      params.setCapabilityPanel(appearancePanel(params.locale, settings));
+      params.setCapabilityPanel(
+        appearancePanel(params.locale, settings, "control"),
+      );
     } catch (error) {
       params.setCapabilityPanel({
-        ...appearancePanel(params.locale, {
-          locale: params.locale,
-          theme: "dark",
-        }),
+        ...appearancePanel(
+          params.locale,
+          { locale: params.locale, theme: params.theme },
+          "control",
+        ),
         error: error instanceof Error ? error.message : String(error),
       });
     }
@@ -191,6 +211,24 @@ export function createAppSettingsCoordinator(
       return;
     }
 
+    if (params.preferenceAuthority === "browser") {
+      const nextLocale: Locale = isLocale ? (value as Locale) : params.locale;
+      const nextTheme: Theme = isTheme ? (value as Theme) : params.theme;
+      params.setLocale(nextLocale);
+      params.setTheme(nextTheme);
+      params.persistLocale(nextLocale);
+      params.persistTheme(nextTheme);
+      params.setCapabilityPanel(
+        appearancePanel(
+          nextLocale,
+          { locale: nextLocale, theme: nextTheme },
+          "browser",
+        ),
+      );
+      params.setNotice(null);
+      return;
+    }
+
     try {
       const { settings: current } = await params.client.getLocalSettings();
       const nextLocale: Locale =
@@ -208,7 +246,9 @@ export function createAppSettingsCoordinator(
       params.setTheme(settings.theme);
       params.persistLocale(settings.locale);
       params.persistTheme(settings.theme);
-      params.setCapabilityPanel(appearancePanel(settings.locale, settings));
+      params.setCapabilityPanel(
+        appearancePanel(settings.locale, settings, "control"),
+      );
       params.setNotice(null);
     } catch (error) {
       params.setCapabilityPanel((current) =>

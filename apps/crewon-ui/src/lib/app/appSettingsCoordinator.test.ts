@@ -7,7 +7,10 @@ import { createAppSettingsCoordinator } from "./appSettingsCoordinator";
 type Params = Parameters<typeof createAppSettingsCoordinator>[0];
 type Client = Params["client"];
 
-function createHarness(overrides: Partial<Client> = {}) {
+function createHarness(
+  overrides: Partial<Client> = {},
+  preferenceAuthority: "browser" | "control" = "control",
+) {
   let panel: CapabilityPanel | null = null;
   const setLocale = vi.fn();
   const setTheme = vi.fn();
@@ -70,6 +73,7 @@ function createHarness(overrides: Partial<Client> = {}) {
     credentialStore: null,
     getCapabilityPanel: () => panel,
     locale: "en",
+    preferenceAuthority,
     persistLocale,
     persistTheme,
     platformUser: null,
@@ -79,6 +83,7 @@ function createHarness(overrides: Partial<Client> = {}) {
     setLocale,
     setNotice,
     setTheme,
+    theme: "dark",
   });
   return {
     client,
@@ -137,6 +142,62 @@ describe("Control settings coordinator", () => {
     expect(harness.setTheme).toHaveBeenCalledWith("dark");
     expect(harness.persistLocale).toHaveBeenCalledWith("zh");
     expect(harness.persistTheme).toHaveBeenCalledWith("dark");
+  });
+
+  it("keeps Web appearance in browser-local authority without Control calls", async () => {
+    const harness = createHarness({}, "browser");
+
+    await harness.coordinator.refreshSection("appearance");
+    await harness.coordinator.commitField("appearance-locale", "zh");
+
+    expect(harness.client.getLocalSettings).not.toHaveBeenCalled();
+    expect(harness.client.putLocalSettings).not.toHaveBeenCalled();
+    expect(harness.setLocale).toHaveBeenCalledWith("zh");
+    expect(harness.setTheme).toHaveBeenCalledWith("dark");
+    expect(harness.persistLocale).toHaveBeenCalledWith("zh");
+    expect(harness.persistTheme).toHaveBeenCalledWith("dark");
+    expect(harness.panel()).toMatchInlineSnapshot(`
+      {
+        "fields": [
+          {
+            "commitOnChange": true,
+            "control": "segmented",
+            "id": "appearance-locale",
+            "label": "语言",
+            "options": [
+              {
+                "label": "English",
+                "value": "en",
+              },
+              {
+                "label": "简体中文",
+                "value": "zh",
+              },
+            ],
+            "value": "zh",
+          },
+          {
+            "commitOnChange": true,
+            "control": "segmented",
+            "id": "appearance-theme",
+            "label": "主题",
+            "options": [
+              {
+                "label": "浅色",
+                "value": "light",
+              },
+              {
+                "label": "深色",
+                "value": "dark",
+              },
+            ],
+            "value": "dark",
+          },
+        ],
+        "subtitle": "仅保存在此浏览器中的本地偏好",
+        "title": "外观",
+      }
+    `);
   });
 
   it("does not apply local state when the Control CAS fails", async () => {

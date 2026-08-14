@@ -16,6 +16,7 @@ export type AppDocumentPreferenceEffectsParams = {
   controlRuntimeConnected: boolean;
   locale: Locale;
   localeRef: MutableRefObject<Locale>;
+  preferenceAuthority: "browser" | "control";
   setLocale: (locale: Locale) => void;
   setNotice: (notice: NoticeState | null) => void;
   setTheme: (theme: Theme) => void;
@@ -30,6 +31,7 @@ export function useAppDocumentPreferenceEffects({
   controlRuntimeConnected,
   locale,
   localeRef,
+  preferenceAuthority,
   setLocale,
   setNotice,
   setTheme,
@@ -55,7 +57,7 @@ export function useAppDocumentPreferenceEffects({
   }, [composerValue, thread, untitledThreadLabel]);
 
   useEffect(() => {
-    if (!controlRuntimeConnected) {
+    if (preferenceAuthority !== "control" || !controlRuntimeConnected) {
       return;
     }
 
@@ -88,5 +90,13 @@ export function useAppDocumentPreferenceEffects({
     return () => {
       cancelled = true;
     };
-  }, [client, controlRuntimeConnected, locale, setLocale, setNotice, setTheme]);
+  }, [
+    client,
+    controlRuntimeConnected,
+    locale,
+    preferenceAuthority,
+    setLocale,
+    setNotice,
+    setTheme,
+  ]);
 }
