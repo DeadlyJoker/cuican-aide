@@ -1,7 +1,7 @@
 import { RunStoreError } from "@crewon/application";
 import { type PoolClient } from "pg";
 
-export const POSTGRES_AUTOMATION_SCHEMA_VERSION = 2;
+export const POSTGRES_AUTOMATION_SCHEMA_VERSION = 3;
 
 export async function migratePostgresAutomationSchema(
   client: PoolClient,
@@ -74,12 +74,58 @@ export function postgresAutomationSchemaSql(schema: string): string {
         REFERENCES ${schema}.run_snapshots(tenant_id, run_id) ON DELETE RESTRICT
     );
 
+    CREATE TABLE IF NOT EXISTS ${schema}.automation_schedule_claims (
+      tenant_id text NOT NULL,
+      automation_id text NOT NULL,
+      schedule_revision bigint NOT NULL CHECK (schedule_revision = 1),
+      scheduled_for timestamptz NOT NULL,
+      occurrence_digest text NOT NULL,
+      observed_at timestamptz NOT NULL,
+      lease_owner_id text NOT NULL,
+      lease_id text NOT NULL,
+      lease_epoch bigint NOT NULL CHECK (lease_epoch >= 1),
+      lease_expires_at timestamptz NOT NULL,
+      PRIMARY KEY (tenant_id, automation_id),
+      UNIQUE (tenant_id, lease_id),
+      CONSTRAINT automation_schedule_claims_automation_fk
+        FOREIGN KEY (tenant_id, automation_id)
+        REFERENCES ${schema}.automations(tenant_id, automation_id) ON DELETE RESTRICT
+    );
+
+    CREATE TABLE IF NOT EXISTS ${schema}.automation_scheduled_invocation_receipts (
+      tenant_id text NOT NULL,
+      automation_id text NOT NULL,
+      schedule_revision bigint NOT NULL CHECK (schedule_revision = 1),
+      scheduled_for timestamptz NOT NULL,
+      occurrence_digest text NOT NULL,
+      invocation_scope text NOT NULL,
+      invocation_key text NOT NULL,
+      run_id text NOT NULL,
+      PRIMARY KEY (tenant_id, automation_id, schedule_revision, scheduled_for),
+      CONSTRAINT automation_scheduled_receipts_occurrence_key
+        UNIQUE (tenant_id, occurrence_digest),
+      CONSTRAINT automation_scheduled_receipts_automation_fk
+        FOREIGN KEY (tenant_id, automation_id)
+        REFERENCES ${schema}.automations(tenant_id, automation_id) ON DELETE RESTRICT,
+      CONSTRAINT automation_scheduled_receipts_invocation_fk
+        FOREIGN KEY (tenant_id, invocation_scope, invocation_key)
+        REFERENCES ${schema}.automation_invocation_receipts(tenant_id, scope, idempotency_key)
+        ON DELETE RESTRICT,
+      CONSTRAINT automation_scheduled_receipts_run_fk
+        FOREIGN KEY (tenant_id, run_id)
+        REFERENCES ${schema}.run_snapshots(tenant_id, run_id) ON DELETE RESTRICT
+    );
+
     CREATE INDEX IF NOT EXISTS automations_tenant_space_updated_idx
       ON ${schema}.automations(tenant_id, space_id, updated_at DESC, automation_id DESC);
     CREATE INDEX IF NOT EXISTS automations_tenant_thread_idx
       ON ${schema}.automations(tenant_id, thread_id, automation_id);
     CREATE INDEX IF NOT EXISTS automation_invocation_receipts_run_idx
       ON ${schema}.automation_invocation_receipts(tenant_id, run_id);
+    CREATE INDEX IF NOT EXISTS automation_schedule_claims_due_idx
+      ON ${schema}.automation_schedule_claims(lease_expires_at, automation_id);
+    CREATE INDEX IF NOT EXISTS automation_scheduled_receipts_run_idx
+      ON ${schema}.automation_scheduled_invocation_receipts(tenant_id, run_id);
   `;
 }
 
@@ -104,6 +150,8 @@ async function assertPostgresAutomationSchema(
         "automations",
         "automation_create_receipts",
         "automation_invocation_receipts",
+        "automation_schedule_claims",
+        "automation_scheduled_invocation_receipts",
       ],
     ],
   );
@@ -134,6 +182,24 @@ async function assertPostgresAutomationSchema(
     "automation_invocation_receipts:run_id:text:NO",
     "automation_invocation_receipts:fingerprint:text:NO",
     "automation_invocation_receipts:result_json:jsonb:NO",
+    "automation_schedule_claims:tenant_id:text:NO",
+    "automation_schedule_claims:automation_id:text:NO",
+    "automation_schedule_claims:schedule_revision:bigint:NO",
+    "automation_schedule_claims:scheduled_for:timestamp with time zone:NO",
+    "automation_schedule_claims:occurrence_digest:text:NO",
+    "automation_schedule_claims:observed_at:timestamp with time zone:NO",
+    "automation_schedule_claims:lease_owner_id:text:NO",
+    "automation_schedule_claims:lease_id:text:NO",
+    "automation_schedule_claims:lease_epoch:bigint:NO",
+    "automation_schedule_claims:lease_expires_at:timestamp with time zone:NO",
+    "automation_scheduled_invocation_receipts:tenant_id:text:NO",
+    "automation_scheduled_invocation_receipts:automation_id:text:NO",
+    "automation_scheduled_invocation_receipts:schedule_revision:bigint:NO",
+    "automation_scheduled_invocation_receipts:scheduled_for:timestamp with time zone:NO",
+    "automation_scheduled_invocation_receipts:occurrence_digest:text:NO",
+    "automation_scheduled_invocation_receipts:invocation_scope:text:NO",
+    "automation_scheduled_invocation_receipts:invocation_key:text:NO",
+    "automation_scheduled_invocation_receipts:run_id:text:NO",
   ].sort();
   if (actual.sort().join("\0") !== expected.join("\0")) {
     throw new RunStoreError("postgres_schema_version_unsupported");
@@ -154,6 +220,8 @@ async function assertPostgresAutomationSchema(
         "automations",
         "automation_create_receipts",
         "automation_invocation_receipts",
+        "automation_schedule_claims",
+        "automation_scheduled_invocation_receipts",
       ],
     ],
   );
@@ -172,6 +240,14 @@ async function assertPostgresAutomationSchema(
     "automation_invocation_receipts:automation_invocation_receipts_pkey:PRIMARY KEY",
     "automation_invocation_receipts:automation_invocation_receipts_tenant_id_automation_id_fkey:FOREIGN KEY",
     "automation_invocation_receipts:automation_invocation_receipts_tenant_id_run_id_fkey:FOREIGN KEY",
+    "automation_schedule_claims:automation_schedule_claims_pkey:PRIMARY KEY",
+    "automation_schedule_claims:automation_schedule_claims_tenant_id_lease_id_key:UNIQUE",
+    "automation_schedule_claims:automation_schedule_claims_automation_fk:FOREIGN KEY",
+    "automation_scheduled_invocation_receipts:automation_scheduled_invocation_receipts_pkey:PRIMARY KEY",
+    "automation_scheduled_invocation_receipts:automation_scheduled_receipts_occurrence_key:UNIQUE",
+    "automation_scheduled_invocation_receipts:automation_scheduled_receipts_automation_fk:FOREIGN KEY",
+    "automation_scheduled_invocation_receipts:automation_scheduled_receipts_invocation_fk:FOREIGN KEY",
+    "automation_scheduled_invocation_receipts:automation_scheduled_receipts_run_fk:FOREIGN KEY",
   ];
   if (requiredConstraints.some((value) => !actualConstraints.has(value))) {
     throw new RunStoreError("postgres_schema_version_unsupported");
@@ -186,10 +262,12 @@ async function assertPostgresAutomationSchema(
         "automations_tenant_space_updated_idx",
         "automations_tenant_thread_idx",
         "automation_invocation_receipts_run_idx",
+        "automation_schedule_claims_due_idx",
+        "automation_scheduled_receipts_run_idx",
       ],
     ],
   );
-  if (indexes.rowCount !== 3) {
+  if (indexes.rowCount !== 5) {
     throw new RunStoreError("postgres_schema_version_unsupported");
   }
 
