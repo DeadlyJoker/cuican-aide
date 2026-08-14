@@ -133,6 +133,105 @@ test("routes Workflow admission through the canonical SQLite Store", async (cont
   );
 });
 
+test("admits a due Automation in Control and completes it in the TS Worker", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  let now = "2026-08-14T00:00:00.000Z";
+  const controlConfig = {
+    ...config(databasePath),
+    clock: { now: () => now },
+  };
+  const transport: ModelTransportPort = {
+    adapterName: "deterministic-fake",
+    adapterVersion: "1",
+    modelId: "fake-model",
+    async *stream() {
+      yield { type: "output.delta", delta: "scheduled run completed" };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  await activateStandaloneRelease({
+    databasePath,
+    route: controlConfig.route,
+    transport,
+  });
+  const control = createStandaloneControlApi(controlConfig);
+  context.after(() => closeIfListening(control.app));
+  await control.app.listen({ host: "127.0.0.1", port: 0 });
+  const client = new ControlApiClient({
+    baseUrl: serverBaseUrl(control.app),
+    accessToken: SESSION_TOKEN,
+    csrfToken: CSRF_TOKEN,
+    origin: ORIGIN,
+  });
+  const thread = await client.createThread(
+    { title: "Scheduled Automation" },
+    "scheduled-automation-thread",
+  );
+  const automation = await client.createAutomation(
+    {
+      threadId: thread.thread.threadId,
+      expectedThreadRevision: thread.thread.revision,
+      title: "Scheduled review",
+      prompt: "Review the scheduled changes.",
+      agentVersionId: null,
+      schedule: { kind: "once", at: "2026-08-14T00:01:00.000Z" },
+    },
+    "scheduled-automation-create",
+  );
+  assert.equal(automation.disposition, "committed");
+  now = "2026-08-14T00:02:00.000Z";
+  assert.ok(control.automationScheduler);
+
+  await control.automationScheduler.wake();
+
+  assert.equal(control.automationScheduler.lastFailureCode(), null);
+  const database = new DatabaseSync(databasePath);
+  const scheduled = database
+    .prepare(
+      `SELECT run_id AS runId, scheduled_for AS scheduledFor
+       FROM automation_scheduled_invocation_receipts
+       WHERE tenant_id = ? AND automation_id = ?`,
+    )
+    .get("tenant-e2e-1", automation.automation.automationId) as
+    | { runId: string; scheduledFor: string }
+    | undefined;
+  database.close();
+  assert.ok(scheduled);
+  assert.deepEqual(
+    { ...scheduled },
+    {
+      runId: scheduled.runId,
+      scheduledFor: "2026-08-14T00:01:00.000Z",
+    },
+  );
+  const worker = await createStandaloneRuntimeWorker({
+    databasePath,
+    runtimeTenantId: "tenant-e2e-1",
+    route: controlConfig.route,
+    transport,
+    scanIntervalMs: null,
+  });
+  context.after(() => worker.close());
+
+  assert.deepEqual(await worker.worker.wake(), {
+    kind: "completed",
+    runId: scheduled.runId,
+  });
+  assert.equal((await client.getRun(scheduled.runId)).run.status, "completed");
+  assert.deepEqual(
+    (await client.listThreadMessages(thread.thread.threadId)).data.map(
+      ({ role, content }) => ({ role, content }),
+    ),
+    [
+      {
+        role: "user",
+        content: `<automation_run automation_id="${automation.automation.automationId}" automation_revision="1">\n<title>Scheduled review</title>\n<task>Review the scheduled changes.</task>\nRecord the result, next steps, and risks in this Automation result thread.\n</automation_run>`,
+      },
+      { role: "assistant", content: "scheduled run completed" },
+    ],
+  );
+});
+
 for (const decision of ["approve", "reject"] as const)
   test(`runs a SQLite Office-delegated Agent + Human Gate Workflow to ${decision} terminal over Control HTTP`, async (context) => {
     const databasePath = temporaryDatabasePath(context);

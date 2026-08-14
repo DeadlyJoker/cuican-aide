@@ -66,6 +66,10 @@ const sharedConfig = {
     process.env.CREWON_OUTBOX_SCAN_INTERVAL_MS ?? "1000",
     "CREWON_OUTBOX_SCAN_INTERVAL_MS_invalid",
   ),
+  automationSchedulerIntervalMs: parsePositiveInteger(
+    process.env.CREWON_AUTOMATION_SCHEDULER_INTERVAL_MS ?? "1000",
+    "CREWON_AUTOMATION_SCHEDULER_INTERVAL_MS_invalid",
+  ),
 };
 let runtime;
 try {

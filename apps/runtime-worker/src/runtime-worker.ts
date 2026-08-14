@@ -43,6 +43,10 @@ import type {
   ToolExecutionReceiptState,
 } from "@crewon/domain";
 import {
+  parseAutomationInvocationBinding,
+  parseAutomationInvocationOrigin,
+} from "@crewon/domain";
+import {
   InMemoryToolBroker,
   modelVisibleToolOutput,
   type ToolExecutionCommand,
@@ -685,6 +689,22 @@ export class RuntimeWorker {
       };
     }
 
+    const automationInvocationError = automationInvocationPayloadError(
+      claim,
+      run,
+    );
+    if (automationInvocationError !== null) {
+      await this.#execution.failRun(
+        claim,
+        { code: automationInvocationError, retryable: false },
+        null,
+      );
+      return {
+        kind: "failed",
+        runId: run.runId,
+        code: automationInvocationError,
+      };
+    }
     const goalContinuationError = await this.#goalContinuationError(claim, run);
     if (goalContinuationError !== null) {
       await this.#execution.failRun(
@@ -1286,6 +1306,7 @@ export class RuntimeWorker {
     const payload = claim.workItem.payload;
     if (payload.trigger === undefined) return null;
     if (payload.trigger === "manualCompaction") return null;
+    if (payload.trigger === "automationInvocation") return null;
     if (
       payload.trigger !== "goalContinuation" &&
       payload.trigger !== "goalActivation"
@@ -2392,6 +2413,36 @@ export class RuntimeWorker {
     });
     return stored?.status === "running";
   }
+}
+
+function automationInvocationPayloadError(
+  claim: WorkItemClaim,
+  run: RunState,
+): string | null {
+  const payload = claim.workItem.payload;
+  if (payload.trigger !== "automationInvocation") return null;
+  if (
+    payload.schemaVersion !== "crewon.automation-invocation-work-item.v1" ||
+    payload.throughSequence !== 1 ||
+    Object.keys(payload).sort().join(",") !==
+      "binding,schemaVersion,throughSequence,trigger"
+  ) {
+    return "automation_invocation_payload_invalid";
+  }
+  try {
+    const binding = parseAutomationInvocationBinding(payload.binding);
+    const origin = parseAutomationInvocationOrigin(run.origin);
+    if (
+      run.purpose === "workflow" ||
+      binding.runId !== run.runId ||
+      JSON.stringify(binding) !== JSON.stringify(origin.binding)
+    ) {
+      return "automation_invocation_payload_invalid";
+    }
+  } catch {
+    return "automation_invocation_payload_invalid";
+  }
+  return null;
 }
 
 function selectContinuation(

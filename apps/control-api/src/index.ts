@@ -4,6 +4,7 @@ export * from "./control-api-errors.ts";
 export * from "./capability-projection.ts";
 export * from "./artifact-projection.ts";
 export * from "./outbox-dispatcher.ts";
+export * from "./automation-scheduler-loop.ts";
 export * from "./production-adapters.ts";
 export * from "./production-composition.ts";
 export * from "./production-http-security-ports.ts";

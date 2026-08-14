@@ -298,6 +298,7 @@ async function composeProductionControlApi(
       app,
       eventHub,
       outboxDispatcher,
+      automationScheduler: null,
       providerProbes,
       workspaceLists: null,
       workspaceQueries,
