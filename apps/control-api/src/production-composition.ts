@@ -11,6 +11,7 @@ import {
   RunApplicationService,
   ThreadApplicationService,
   ThreadGoalApplicationService,
+  WorkspaceListApplicationService,
   WorkspaceOperationQueryService,
   ThreadRollbackApplicationService,
   ToolApprovalApplicationService,
@@ -50,6 +51,10 @@ import {
   TenantRoutedProviderProbeWorker,
   type TenantProviderProbeWorkerRegistry,
 } from "./provider-probe-worker-client.ts";
+import {
+  TenantRoutedProductionWorkspaceWorker,
+  type ProductionWorkspaceWorkerRegistry,
+} from "./workspace-runtime-worker-client.ts";
 
 export type ProductionPostgresControlApiConfig = Readonly<{
   connectionString: string;
@@ -64,6 +69,7 @@ export type ProductionPostgresControlApiConfig = Readonly<{
   artifactStore: ArtifactStorePort;
   artifactEncryptionKeyId: string;
   providerProbeWorkers: TenantProviderProbeWorkerRegistry;
+  workspaceWorkers: ProductionWorkspaceWorkerRegistry;
 }>;
 
 /**
@@ -103,6 +109,7 @@ async function composeProductionControlApi(
     },
   );
   let automationScheduler: AutomationSchedulerLoop | null = null;
+  let workspaceWorkers: TenantRoutedProductionWorkspaceWorker | null = null;
   try {
     const clock = new SystemApplicationClock();
     const digester = new NodeSha256ContentDigester();
@@ -239,6 +246,18 @@ async function composeProductionControlApi(
       settings: providerSettings,
       workers: new TenantRoutedProviderProbeWorker(config.providerProbeWorkers),
     });
+    workspaceWorkers = new TenantRoutedProductionWorkspaceWorker(
+      config.workspaceWorkers,
+    );
+    const workspaceLists = new WorkspaceListApplicationService({
+      store,
+      authorization: config.authorization,
+      digester,
+      commands: workspaceWorkers,
+      dispatcher: workspaceWorkers,
+      deliveryOwnerId: `workspace-delivery:${ids.nextId("outboxLease")}`,
+      deliveryLeaseDurationMs: 65_000,
+    });
     const workspaceQueries = new WorkspaceOperationQueryService({
       store,
       authorization: config.authorization,
@@ -284,7 +303,7 @@ async function composeProductionControlApi(
       artifacts,
       automations,
       knowledge,
-      workspaceLists: null,
+      workspaceLists,
       workspaceQueries,
       providerSettings,
       providerProbes,
@@ -307,6 +326,7 @@ async function composeProductionControlApi(
       await automationScheduler?.close();
       await outboxDispatcher.close();
       eventHub.close();
+      await workspaceWorkers?.close();
       await config.artifactStore.close();
       await store.close();
     });
@@ -316,13 +336,14 @@ async function composeProductionControlApi(
       outboxDispatcher,
       automationScheduler,
       providerProbes,
-      workspaceLists: null,
+      workspaceLists,
       workspaceQueries,
     };
   } catch (error) {
     void automationScheduler?.close();
     void outboxDispatcher.close();
     eventHub.close();
+    void workspaceWorkers?.close();
     void config.artifactStore.close();
     void store.close();
     throw error;
@@ -351,6 +372,16 @@ function validateProductionConfig(
     "resolve",
     "production_provider_probe_registry_invalid",
   );
+  if (config.workspaceWorkers === undefined) {
+    throw new Error("production_workspace_worker_registry_required");
+  }
+  for (const method of ["resolveForCreate", "resolve", "close"]) {
+    requireMethod(
+      config.workspaceWorkers,
+      method,
+      "production_workspace_worker_registry_invalid",
+    );
+  }
   requireBounded(
     config.connectionString,
     8 * 1_024,

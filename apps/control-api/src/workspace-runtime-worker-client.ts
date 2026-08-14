@@ -50,11 +50,35 @@ export interface RuntimeWorkspaceClientDeadlineSchedulerPort {
   schedule(delayMs: number, callback: () => void): () => void;
 }
 
-/**
- * Authenticated PC-only adapter for the private Runtime Worker Workspace API.
- * It owns no Device, Workspace, runtime, or signing authority.
- */
-export class LoopbackRuntimeWorkspaceWorkerClient
+export type ProductionWorkspaceWorkerRoute = Readonly<{
+  tenantId: string;
+  runtimeBindingId: string;
+  workspaceBindingId: string;
+}>;
+
+/** Server-owned routing authority; implementations derive routes from verified scope. */
+export interface ProductionWorkspaceWorkerRegistry {
+  resolveForCreate(
+    input: Readonly<{
+      tenantId: string;
+      spaceId: string;
+      threadId: string;
+    }>,
+  ):
+    | ProductionWorkspaceWorkerClient
+    | null
+    | Promise<ProductionWorkspaceWorkerClient | null>;
+  resolve(
+    route: ProductionWorkspaceWorkerRoute,
+  ):
+    | ProductionWorkspaceWorkerClient
+    | null
+    | Promise<ProductionWorkspaceWorkerClient | null>;
+  close(): void | Promise<void>;
+}
+
+/** Authenticated strict-wire transport shared without sharing route authority. */
+class AuthenticatedRuntimeWorkspaceWorkerClient
   implements WorkspaceListCommandFactoryPort, WorkspaceListDispatcherPort
 {
   readonly #freezeUrl: URL;
@@ -63,6 +87,7 @@ export class LoopbackRuntimeWorkspaceWorkerClient
   readonly #deadlineMs: number;
   readonly #fetch: typeof globalThis.fetch;
   readonly #scheduler: RuntimeWorkspaceClientDeadlineSchedulerPort;
+  readonly #expectedRoute: ProductionWorkspaceWorkerRoute | null;
   readonly #active = new Set<AbortController>();
   #closed = false;
 
@@ -75,9 +100,16 @@ export class LoopbackRuntimeWorkspaceWorkerClient
     dependencies: Readonly<{
       fetch?: typeof globalThis.fetch;
       scheduler?: RuntimeWorkspaceClientDeadlineSchedulerPort;
+      allowTestLoopback?: boolean;
     }> = {},
+    expectedRoute: ProductionWorkspaceWorkerRoute | null = null,
+    originMode: "loopback" | "production" = "loopback",
   ) {
-    const origin = loopbackOrigin(config.origin);
+    const origin = workerOrigin(
+      config.origin,
+      originMode,
+      dependencies.allowTestLoopback === true,
+    );
     this.#freezeUrl = new URL(
       RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH,
       origin,
@@ -92,6 +124,7 @@ export class LoopbackRuntimeWorkspaceWorkerClient
     );
     this.#fetch = dependencies.fetch ?? globalThis.fetch.bind(globalThis);
     this.#scheduler = dependencies.scheduler ?? systemScheduler;
+    this.#expectedRoute = expectedRoute;
   }
 
   async create(
@@ -149,10 +182,12 @@ export class LoopbackRuntimeWorkspaceWorkerClient
       );
     }
     try {
-      return parseRuntimeWorkerWorkspaceFreezeCommandResponse(
+      const command = parseRuntimeWorkerWorkspaceFreezeCommandResponse(
         response.value,
         request,
       ).command;
+      this.#assertRoute(input.actor.tenantId, command);
+      return command;
     } catch (error) {
       throw commandFactoryError("invalidAuthority", error);
     }
@@ -225,6 +260,7 @@ export class LoopbackRuntimeWorkspaceWorkerClient
     let crossedBoundary = false;
     try {
       const operation = validateWorkspaceOperationRecord(operationInput);
+      this.#assertRoute(operation.tenantId, operation.command);
       const deliveryLease = validateWorkspaceDeliveryLease(leaseInput);
       const request = parseRuntimeWorkerWorkspaceDispatchRequest({
         schemaVersion: "crewon.runtime-worker-workspace-dispatch-request.v0",
@@ -275,6 +311,26 @@ export class LoopbackRuntimeWorkspaceWorkerClient
       throw new WorkspaceListDispatchError(clientError.certainty, {
         cause: clientError,
       });
+    }
+  }
+
+  #assertRoute(
+    tenantId: string,
+    command: Readonly<{
+      runtimeBindingId: string;
+      workspaceBindingId: string;
+    }>,
+  ): void {
+    if (
+      this.#expectedRoute !== null &&
+      (tenantId !== this.#expectedRoute.tenantId ||
+        command.runtimeBindingId !== this.#expectedRoute.runtimeBindingId ||
+        command.workspaceBindingId !== this.#expectedRoute.workspaceBindingId)
+    ) {
+      throw new RuntimeWorkspaceWorkerClientError(
+        "runtime_workspace_worker_route_mismatch",
+        "notSent",
+      );
     }
   }
 
@@ -346,7 +402,142 @@ export class LoopbackRuntimeWorkspaceWorkerClient
   }
 }
 
-function loopbackOrigin(value: string): URL {
+/** PC-only client preserving the raw IPv4 loopback boundary. */
+export class LoopbackRuntimeWorkspaceWorkerClient extends AuthenticatedRuntimeWorkspaceWorkerClient {
+  constructor(
+    config: Readonly<{ origin: string; token: string; deadlineMs?: number }>,
+    dependencies: Readonly<{
+      fetch?: typeof globalThis.fetch;
+      scheduler?: RuntimeWorkspaceClientDeadlineSchedulerPort;
+    }> = {},
+  ) {
+    super(config, dependencies);
+  }
+}
+
+/** Team/Cloud client pinned to one authenticated tenant and frozen route. */
+export class ProductionWorkspaceWorkerClient extends AuthenticatedRuntimeWorkspaceWorkerClient {
+  readonly route: ProductionWorkspaceWorkerRoute;
+
+  constructor(
+    config: ProductionWorkspaceWorkerRoute &
+      Readonly<{ origin: string; token: string; deadlineMs?: number }>,
+    dependencies: Readonly<{
+      fetch?: typeof globalThis.fetch;
+      scheduler?: RuntimeWorkspaceClientDeadlineSchedulerPort;
+      allowTestLoopback?: boolean;
+    }> = {},
+  ) {
+    const route = productionRoute(config);
+    super(config, dependencies, route, "production");
+    this.route = route;
+  }
+}
+
+/** Routes freeze by verified thread scope and delivery by the frozen route. */
+export class TenantRoutedProductionWorkspaceWorker
+  implements WorkspaceListCommandFactoryPort, WorkspaceListDispatcherPort
+{
+  readonly #registry: ProductionWorkspaceWorkerRegistry;
+  #closed = false;
+
+  constructor(registry: ProductionWorkspaceWorkerRegistry) {
+    this.#registry = registry;
+  }
+
+  async create(
+    input: Parameters<WorkspaceListCommandFactoryPort["create"]>[0],
+    signal: AbortSignal,
+  ): Promise<FrozenWorkspaceListCommand> {
+    this.#requireOpen();
+    const worker = await abortable(
+      Promise.resolve(
+        this.#registry.resolveForCreate({
+          tenantId: input.actor.tenantId,
+          spaceId: input.actor.spaceId,
+          threadId: input.threadId,
+        }),
+      ),
+      signal,
+    );
+    if (worker === null) throw commandFactoryError("unavailable");
+    return worker.create(input, signal);
+  }
+
+  execute(
+    operation: WorkspaceOperationRecord,
+    lease: WorkspaceDeliveryLease,
+    signal: AbortSignal,
+  ): Promise<WorkspaceListResolution> {
+    return this.#dispatch("execute", operation, lease, signal);
+  }
+
+  reconcile(
+    operation: WorkspaceOperationRecord,
+    lease: WorkspaceDeliveryLease,
+    signal: AbortSignal,
+  ): Promise<WorkspaceListResolution> {
+    return this.#dispatch("reconcile", operation, lease, signal);
+  }
+
+  cancel(
+    operation: WorkspaceOperationRecord,
+    lease: WorkspaceDeliveryLease,
+    signal: AbortSignal,
+  ): Promise<WorkspaceListResolution> {
+    return this.#dispatch("cancel", operation, lease, signal);
+  }
+
+  async close(): Promise<void> {
+    if (this.#closed) return;
+    this.#closed = true;
+    await this.#registry.close();
+  }
+
+  async #dispatch(
+    phase: RuntimeWorkerWorkspacePhase,
+    operationInput: WorkspaceOperationRecord,
+    lease: WorkspaceDeliveryLease,
+    signal: AbortSignal,
+  ): Promise<WorkspaceListResolution> {
+    this.#requireOpen();
+    const operation = validateWorkspaceOperationRecord(operationInput);
+    const worker = await abortable(
+      Promise.resolve(
+        this.#registry.resolve({
+          tenantId: operation.tenantId,
+          runtimeBindingId: operation.command.runtimeBindingId,
+          workspaceBindingId: operation.command.workspaceBindingId,
+        }),
+      ),
+      signal,
+    );
+    if (worker === null) {
+      throw new WorkspaceListDispatchError("notSent", {
+        cause: new RuntimeWorkspaceWorkerClientError(
+          "runtime_workspace_worker_route_unavailable",
+          "notSent",
+        ),
+      });
+    }
+    return worker[phase](operation, lease, signal);
+  }
+
+  #requireOpen(): void {
+    if (this.#closed) {
+      throw new RuntimeWorkspaceWorkerClientError(
+        "runtime_workspace_worker_closed",
+        "notSent",
+      );
+    }
+  }
+}
+
+function workerOrigin(
+  value: string,
+  mode: "loopback" | "production",
+  allowTestLoopback: boolean,
+): URL {
   let url: URL;
   try {
     url = new URL(value);
@@ -357,11 +548,15 @@ function loopbackOrigin(value: string): URL {
       { cause: error },
     );
   }
+  const rawLoopback =
+    url.protocol === "http:" &&
+    url.hostname === "127.0.0.1" &&
+    url.port !== "" &&
+    Number(url.port) >= 1;
   if (
-    url.protocol !== "http:" ||
-    url.hostname !== "127.0.0.1" ||
-    url.port === "" ||
-    Number(url.port) < 1 ||
+    (mode === "loopback"
+      ? !rawLoopback
+      : url.protocol !== "https:" && !(allowTestLoopback && rawLoopback)) ||
     url.username !== "" ||
     url.password !== "" ||
     url.pathname !== "/" ||
@@ -375,6 +570,31 @@ function loopbackOrigin(value: string): URL {
     );
   }
   return url;
+}
+
+function productionRoute(input: ProductionWorkspaceWorkerRoute) {
+  for (const value of [
+    input.tenantId,
+    input.runtimeBindingId,
+    input.workspaceBindingId,
+  ]) {
+    if (
+      value.length === 0 ||
+      value !== value.trim() ||
+      Buffer.byteLength(value, "utf8") > 512 ||
+      /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(value)
+    ) {
+      throw new RuntimeWorkspaceWorkerClientError(
+        "runtime_workspace_worker_route_invalid",
+        "notSent",
+      );
+    }
+  }
+  return {
+    tenantId: input.tenantId,
+    runtimeBindingId: input.runtimeBindingId,
+    workspaceBindingId: input.workspaceBindingId,
+  };
 }
 
 async function readBoundedJson(
@@ -470,6 +690,24 @@ function boundedInteger(
     throw new RuntimeWorkspaceWorkerClientError(code, "notSent");
   }
   return value;
+}
+
+async function abortable<T>(promise: Promise<T>, signal: AbortSignal) {
+  if (signal.aborted) throw signal.reason;
+  return new Promise<T>((resolve, reject) => {
+    const abort = () => reject(signal.reason);
+    signal.addEventListener("abort", abort, { once: true });
+    void promise.then(
+      (value) => {
+        signal.removeEventListener("abort", abort);
+        resolve(value);
+      },
+      (error) => {
+        signal.removeEventListener("abort", abort);
+        reject(error);
+      },
+    );
+  });
 }
 
 const systemScheduler: RuntimeWorkspaceClientDeadlineSchedulerPort = {

@@ -24,6 +24,7 @@ import {
 } from "./paused-admission.ts";
 import { resolveStandaloneProviderProbeWorkers } from "./standalone-provider-probe-environment.ts";
 import { resolveProductionProviderProbeWorkers } from "./production-provider-probe-environment.ts";
+import { resolveProductionWorkspaceWorkers } from "./production-workspace-environment.ts";
 import { resolveStandaloneWorkspaceWorkerEnvironment } from "./standalone-workspace-environment.ts";
 
 const securityMode = parseSecurityMode(
@@ -114,6 +115,7 @@ try {
       identity,
       authorization,
       providerProbeWorkers: resolveProductionProviderProbeWorkers(process.env),
+      workspaceWorkers: resolveProductionWorkspaceWorkers(process.env),
       ...(process.env.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
         ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
         : {}),

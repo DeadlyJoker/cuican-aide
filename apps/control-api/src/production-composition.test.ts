@@ -70,6 +70,23 @@ test("production composition rejects missing security authorities before opening
     } as unknown as ProductionPostgresControlApiConfig),
     /production_provider_probe_registry_invalid/u,
   );
+  await assert.rejects(
+    createProductionPostgresControlApi({
+      ...base,
+      identity: {
+        async resolveActor() {
+          throw new Error("unused");
+        },
+      },
+      authorization: {
+        async authorize() {
+          return { outcome: "allow" };
+        },
+      },
+      providerProbeWorkers: { resolve: () => null },
+    } as unknown as ProductionPostgresControlApiConfig),
+    /production_workspace_worker_registry_required/u,
+  );
 });
 
 test("production composes Workflow commands from the single PostgreSQL Store", () => {
@@ -94,6 +111,8 @@ test("production binds the required tenant Worker registry directly", () => {
   );
   assert.match(source, /providerRuntimeAvailability: "available"/u);
   assert.doesNotMatch(source, /UnavailableTenantProviderProbeWorkerRegistry/u);
-  assert.match(source, /workspaceLists: null/u);
+  assert.match(source, /new WorkspaceListApplicationService/u);
+  assert.match(source, /workspaceLists,/u);
+  assert.doesNotMatch(source, /workspaceLists: null/u);
   assert.doesNotMatch(source, /LoopbackRuntimeWorkspaceWorkerClient/u);
 });
