@@ -51,12 +51,18 @@ skip`、Runtime Worker `306 pass / 1 PostgreSQL 环境条件 skip`。本机未�
 - Renderer production entry 已切断 agent-platform/PIM 直连：不再挂载独立登录 Gate、捕获 launch token、请求
   `127.0.0.1:8000`/`agent-platform-api` 或在首页加载旧 catalog snapshot。Control session 是 App 挂载的唯一条件；缺失 Control
   contract 的 Agent/Knowledge catalog mutation 显式 fail closed。packaged desktop 继续在 Control client 构造前安装 Tauri HTTP
-  transport，仅用于 authenticated loopback Control 的 CORS 边界。当前 full UI `1256/1256`、lint、production build 与 fresh
+  transport，仅用于 authenticated loopback Control 的 CORS 边界。当前 full UI `1264/1264`、lint、production build 与 fresh
   bundle marker scan 通过。
+- Control 主页执行资源现共用 active AgentVersion release authority：Agent target 对重复/未发布/未授权 catalog fail closed，Skill/MCP
+  资源库与主页 `+`/`/` 菜单复用同一有界 capability projection，不读取 preset/demo 或 agent-platform fallback。Knowledge 从
+  Control immutable catalog 选择，最多四项；选择产生 `{knowledgeId, contentDigest}` 结构化引用，Turn start 在 receipt-first replay
+  之前授权并冻结 exact Knowledge 内容。Knowledge 与用户消息在同一事务追加到 Model History，rollback/compaction 保持同一 turn
+  边界，模型投影明确把内容包装为不可信参考数据。真实 Control HTTP→SQLite→TS Worker 验收已观察到该冻结输入；同 key replay
+  不重新读取 Knowledge，digest 漂移与超限均 fail closed。
 - 本轮重新 staging 与构建后的 `.app` 仍只包含 Tauri shell、官方 Node 24、guardian 与四个 TS runtime bundle；Device Tool、
   Gateway、Responses Lite、Rust App Server、6176 与旧 restart/client marker 扫描均为 0。最新隔离 HOME smoke
-  `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-svjMds` 中，Workflow Run
-  `019fff79-11be-708e-9df5-40daa462c0d2` 在 Worker `SIGKILL` 后由同一 HOME 重启恢复为 `completed`：2 次不同模型采样、
+  `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-jEMknn` 中，Workflow Run
+  `019fffc1-c531-7222-a116-5650a45b537a` 在 Worker `SIGKILL` 后由同一 HOME 重启恢复为 `completed`：2 次不同模型采样、
   2 个 Attempt、唯一 `run.completed`，同 key `committed -> replayed` 且 admission receipt/Run 各一；GUI `SIGKILL` 后
   guardian 清理全部子进程和 3210。`.app` 与 updater archive 已生成，Tauri 命令只因缺少
   `TAURI_SIGNING_PRIVATE_KEY` 最终返回失败，未绕过发布签名边界。
