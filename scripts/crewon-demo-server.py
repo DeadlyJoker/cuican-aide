@@ -25,7 +25,7 @@ def strip_proxy_prefix(path: str) -> str | None:
     """Return the path with the first matching proxy prefix removed, or None."""
     for prefix in PROXY_PREFIXES:
         if path.startswith(prefix):
-            return path[len(prefix) - 1:]  # keep leading /
+            return path[len(prefix) - 1 :]  # keep leading /
     return None
 
 
@@ -52,7 +52,10 @@ class CrewonDemoHandler(http.server.SimpleHTTPRequestHandler):
                 self.send_response(resp.status)
                 for key, value in resp.headers.items():
                     if key.lower() not in (
-                        "transfer-encoding", "connection", "server", "date",
+                        "transfer-encoding",
+                        "connection",
+                        "server",
+                        "date",
                     ):
                         self.send_header(key, value)
                 self.send_header("Access-Control-Allow-Origin", "*")

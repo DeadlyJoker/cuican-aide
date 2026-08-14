@@ -333,7 +333,11 @@ fn append_rollback_parity_items(
     items: Vec<RollbackParityItem>,
 ) {
     for item in items {
-        assert_eq!(item.sequence, through_sequence.saturating_add(1), "{case_id}");
+        assert_eq!(
+            item.sequence,
+            through_sequence.saturating_add(1),
+            "{case_id}"
+        );
         *through_sequence = item.sequence;
         let response = match item.kind.as_str() {
             "user" => user_input_text_msg(&item.item_id),
@@ -694,8 +698,8 @@ fn rollback_matches_shared_provider_neutral_parity_fixture() {
                         .count();
                     let removed_turns =
                         instruction_turns_before.saturating_sub(instruction_turns_after);
-                    let history_from_sequence = (removed_turns > 0)
-                        .then(|| tracked[remaining_len].item.sequence);
+                    let history_from_sequence =
+                        (removed_turns > 0).then(|| tracked[remaining_len].item.sequence);
                     assert_eq!(removed_turns, expected.removed_turns, "{case_id}");
                     assert_eq!(
                         history_from_sequence, expected.history_from_sequence,

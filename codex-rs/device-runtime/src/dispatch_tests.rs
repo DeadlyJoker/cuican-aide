@@ -159,9 +159,7 @@ async fn accepted_only_raw_tool_cancel_is_safe_and_lease_exact() {
         .runtime
         .state
         .journal
-        .prepare_tool_with_admission(&command.command, || {
-            Ok::<_, ()>((accepted, ()))
-        })
+        .prepare_tool_with_admission(&command.command, || Ok::<_, ()>((accepted, ())))
         .await
         .expect("record accepted raw Tool execution");
     let cancel = DeviceExecutionCancel {
