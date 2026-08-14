@@ -504,6 +504,7 @@ async function insertCanceledStep(
   now: string,
 ) {
   const step = {
+    schemaVersion: "crewon.run-step.v0" as const,
     tenantId: input.tenantId,
     runId: input.runId,
     stepId: nodeId,

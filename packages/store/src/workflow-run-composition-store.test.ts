@@ -1722,7 +1722,13 @@ if (postgresUrl === undefined) {
       workflowVersionId: parallelWorkflow.workflowVersionId,
       contentDigest: parallelWorkflow.contentDigest };
     try {
-      await seedPostgresComposition(pool, schema, parallelWorkflow, parallelBinding);
+      await seedPostgresComposition(
+        pool,
+        schema,
+        parallelWorkflow,
+        parallelBinding,
+        "schedule-uncertain",
+      );
       const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
         lease, binding: parallelBinding, schedulerOperationId: "schedule-uncertain",
         workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
@@ -2023,6 +2029,7 @@ async function seedPostgresComposition(
   schema: string,
   workflowAsset = workflow,
   bindingAsset = binding,
+  schedulerOperationId = "schedule-fanout-1",
 ): Promise<void> {
   const run = runState(bindingAsset);
   await pool.query(
@@ -2051,7 +2058,13 @@ async function seedPostgresComposition(
     [digester.sha256("{}"), run.createdAt],
   );
   await seedPostgresSchedulerWork(
-    pool, schema, "work-1", "schedule-fanout-1", "1 minute", bindingAsset);
+    pool,
+    schema,
+    "work-1",
+    schedulerOperationId,
+    "1 minute",
+    bindingAsset,
+  );
 }
 
 async function seedPostgresSchedulerWork(
