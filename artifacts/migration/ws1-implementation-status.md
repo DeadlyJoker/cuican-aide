@@ -77,11 +77,13 @@ skip`、Runtime Worker `306 pass / 1 PostgreSQL 环境条件 skip`。本机未�
   type，Store 的 value type 由 Application port 持有；Kernel/Store 只精确承认模型请求证据、Provider turn invariant、冻结
   AgentVersion 与 canonical Agent event 验证所需依赖。Control API 仅保留 standalone Local Settings 必需的 `node:sqlite`；MCP、
   Application 的 SHA-256 authority 只精确允许 `node:crypto`，没有宽泛放行 Node 内置模块。
-- Team/Cloud production Provider Probe 已删除 `Unavailable` 占位 registry。`CREWON_PROVIDER_PROBE_TENANT_ROUTES_JSON` 现在是生产
-  必填 authority，按 `tenantId + runtimeBindingId` 精确绑定 HTTPS/loopback bearer Worker；缺失、短 token、不安全 origin、重复
-  route 或 standalone ambient 配置都在 PostgreSQL open 前 fail closed。Control 全量为
-  `127 pass / 4 PostgreSQL 环境条件 skip / 0 fail`。Team Workspace List 仍明确 unavailable：现有 PC loopback transport 只有单
-  workspace binding，不能冒充多租户 registry。
+- Team/Cloud production Provider Probe 与 Workspace List 均已删除 `Unavailable` 占位 registry。
+  `CREWON_PROVIDER_PROBE_TENANT_ROUTES_JSON` 按 `tenantId + runtimeBindingId` 精确绑定认证 Worker；
+  `CREWON_WORKSPACE_TENANT_ROUTES_JSON` 的冻结阶段只接受 verified tenant/space/thread scope，dispatch 再按冻结的
+  `tenantId + runtimeBindingId + workspaceBindingId` 精确路由。两条生产 transport 都要求 HTTPS bearer、限制响应体与 deadline，校验
+  binding/generation echo，并在缺失、短 token、不安全 origin、重复 route 或 standalone ambient 配置时于 PostgreSQL open 前 fail
+  closed；PC loopback client 没有被复用或放宽。合并后的 Control 全量为
+  `132 pass / 4 PostgreSQL 环境条件 skip / 0 fail`。
 - Production Runtime Release/Worker 已删除 `CREWON_MODEL_ADAPTER` 和 deterministic fake factory，只能构造真实 Responses transport；
   Tauri 不再继承 fake 配置，staging marker 同时拒绝 `deterministic-fake`、`DeterministicFakeModelTransport` 与 `CREWON_FAKE_`。Runtime
   Worker 全量为 `306 pass / 1 PostgreSQL 环境条件 skip / 0 fail`；Control 子进程 E2E 改用真实 loopback Responses SSE transport，
@@ -99,10 +101,15 @@ skip`、Runtime Worker `306 pass / 1 PostgreSQL 环境条件 skip`。本机未�
   timestamp、NSIS 隔离安装及 3210/guardian launch-cleanup smoke。两平台 artifact 齐全后才上传 `latest.json` 并发布 draft。
   Release/staging contract `10/10`、YAML 与 smoke syntax 通过；真实签名、公证、Windows installer 和 GitHub Release publish 仍需
   hosted runner 与仓库凭据，当前不得冒充实包通过。
-- Web static image 已改为 root-context multi-stage fresh build，不再 `COPY` 一个被 gitignore 的预生成 `dist`。required CI 现执行 Web
-  BFF typecheck、`15/15` tests、production identity source gate，并从 fresh source 构建 nginx 与 BFF 两个 image；本机两个真实 Docker
-  build 均通过。Identity Center、PostgreSQL Control/Worker、多租户认证 smoke 与部署发布仍属于外部环境验收，不由 source gate
-  冒充 live production。
+- Web static image 已改为 root-context multi-stage fresh build，不再 `COPY` 一个被 gitignore 的预生成 `dist`，并把 checked-in
+  production nginx configuration 安装为镜像的 `default.conf`。旧 `/agent-platform-api -> 127.0.0.1:8000`、App Server 与 6176 路由
+  已从生产 nginx 删除。required CI 现执行 Web BFF typecheck、`15/15` tests、production identity source gate，fresh 构建 nginx/BFF
+  两个 image，并直接检查静态镜像内的 Control session 与 `/api/v1` 路由及 legacy marker；本机实际 Docker build 和同一镜像内容扫描
+  通过。Identity Center、PostgreSQL Control/Worker、多租户认证 smoke 与部署发布仍属于外部环境验收，不由 source gate 冒充 live
+  production。
+- required CI 的本地确定性红灯已收口：`just fmt-check` 的 Rust/Python 机械漂移和 Prettier 的两份文档漂移已提交；全部 packages
+  typecheck 通过。Contracts 不再把 DOM ambient `CryptoKey` 泄漏给无 DOM 的 AgentVersion 转译上下文，Contracts 行为测试为
+  `91/91`。这不替代 GitHub hosted runner 上的整条 required workflow。
 - Renderer 已改为 Control-only bootstrap。Library 与 Settings 不再构造 App Server client：Library 的 Automation/Knowledge/
   Agent/Office/Tool 读取和允许的 mutation 走 Control；Settings 只公开 Account、Appearance、Model access 三个具有真实 Control
   authority 的页面。语言/主题使用 revision CAS，成功提交后才更新本地状态；旧 Config、Personalization、Thread Settings 和
