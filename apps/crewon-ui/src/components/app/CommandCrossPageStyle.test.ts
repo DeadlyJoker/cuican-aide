@@ -507,11 +507,16 @@ describe("segmented tabs", () => {
  */
 describe("team room header", () => {
   it("renders the room tab strip through the shared segmented control", () => {
-    const rooms = new URL("../office/", import.meta.url);
+    const rooms = new URL("./", import.meta.url);
     const offenders: string[] = [];
 
     for (const entry of readdirSync(rooms)) {
-      if (!entry.endsWith(".tsx") || entry.includes(".test.")) continue;
+      if (
+        !/(?:OfficeRoom|WorkflowPanelView)\.tsx$/.test(entry) ||
+        entry.includes(".test.")
+      ) {
+        continue;
+      }
       const source = readFileSync(new URL(entry, rooms).pathname, "utf8");
       // A role="tablist" of buttons is a segmented control, so it belongs to the
       // shared component rather than a per-room strip.
