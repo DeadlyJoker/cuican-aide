@@ -16,6 +16,45 @@ function capability(name: string) {
   };
 }
 
+function capabilityClient(
+  listActiveCapabilities: ControlApiClient["listActiveCapabilities"],
+): ControlApiClient {
+  return {
+    getActiveAgentVersionCatalog: vi.fn(async () => ({
+      releaseId: "release-1",
+      activatedAt: "2026-08-13T00:00:00.000Z",
+      defaultAgentVersionId: "agent-v1",
+      data: [
+        {
+          agentVersionId: "agent-v1",
+          contentDigest: "sha256:agent",
+          runtimeGeneration: "runtime-1",
+          policySnapshotId: "policy-1",
+          model: {
+            adapterName: "openai",
+            adapterVersion: "1",
+            modelId: "gpt-5",
+          },
+          createdAt: "2026-08-13T00:00:00.000Z",
+        },
+        {
+          agentVersionId: "agent-v2",
+          contentDigest: "sha256:agent-2",
+          runtimeGeneration: "runtime-1",
+          policySnapshotId: "policy-1",
+          model: {
+            adapterName: "openai",
+            adapterVersion: "1",
+            modelId: "gpt-5",
+          },
+          createdAt: "2026-08-13T00:00:00.000Z",
+        },
+      ],
+    })),
+    listActiveCapabilities,
+  } as unknown as ControlApiClient;
+}
+
 describe("openControlLibraryAction", () => {
   it("loads active Agent versions from Control API", async () => {
     let panel: LibraryPanel | null = null;
@@ -100,7 +139,7 @@ describe("openControlLibraryAction", () => {
       });
 
     await openControlLibraryAction({
-      client: { listActiveCapabilities } as unknown as ControlApiClient,
+      client: capabilityClient(listActiveCapabilities),
       kind: "tools",
       locale: "en",
       selectedThreadId: null,
@@ -152,7 +191,7 @@ describe("openControlLibraryAction", () => {
       });
 
     await openControlLibraryAction({
-      client: { listActiveCapabilities } as unknown as ControlApiClient,
+      client: capabilityClient(listActiveCapabilities),
       kind: "tools",
       locale: "en",
       selectedThreadId: null,
@@ -187,7 +226,7 @@ describe("openControlLibraryAction", () => {
       });
 
     await openControlLibraryAction({
-      client: { listActiveCapabilities } as unknown as ControlApiClient,
+      client: capabilityClient(listActiveCapabilities),
       kind: "tools",
       locale: "en",
       selectedThreadId: null,
@@ -199,7 +238,7 @@ describe("openControlLibraryAction", () => {
     expect(panel).toMatchObject({
       kind: "tools",
       items: [],
-      error: "Control capability release changed during pagination",
+      error: "Control capability release does not match active catalog",
     });
   });
 
@@ -220,7 +259,7 @@ describe("openControlLibraryAction", () => {
     );
 
     await openControlLibraryAction({
-      client: { listActiveCapabilities } as unknown as ControlApiClient,
+      client: capabilityClient(listActiveCapabilities),
       kind: "tools",
       locale: "en",
       selectedThreadId: null,

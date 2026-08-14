@@ -104,6 +104,31 @@ describe("discoverControlComposerResources", () => {
     ).rejects.toThrow("release does not match active catalog");
   });
 
+  it("fails closed when capability metadata is not owned by an active AgentVersion", async () => {
+    await expect(
+      discoverControlComposerResources(
+        client({
+          listActiveCapabilities: vi.fn(async () => ({
+            releaseId: "release-1",
+            activatedAt: "2026-08-13T00:00:00.000Z",
+            data: [
+              {
+                agentVersionId: "agent-v1",
+                agentVersionDigest: "sha256:stale-agent-v1",
+                kind: "function",
+                name: "mcp__github__search",
+                description: "Search GitHub metadata",
+                execution: "parallel",
+                inputFormat: "jsonSchema",
+              },
+            ],
+            nextCursor: null,
+          })),
+        }),
+      ),
+    ).rejects.toThrow("outside the active AgentVersion catalog");
+  });
+
   it("rejects repeated cursors and caps renderer items", async () => {
     const listActiveCapabilities = vi.fn(async () => ({
       releaseId: "release-1",

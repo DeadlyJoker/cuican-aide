@@ -1,7 +1,7 @@
 import type { ControlApiClient } from "@crewon/control-client";
+import { readControlCapabilityCatalog } from "../control-runtime/controlCapabilityCatalog";
 import type {
   ActiveAgentVersionCatalogResponse,
-  CapabilitySummaryView,
   KnowledgeView,
 } from "@crewon/contracts";
 
@@ -271,44 +271,13 @@ async function openControlCapabilityCatalog(params: {
 }): Promise<void> {
   const { client, locale, setLibraryPanel } = params;
   try {
-    const capabilities: CapabilitySummaryView[] = [];
-    const seenCursors = new Set<string>();
-    let cursor: string | null = null;
-    let releaseId: string | null = null;
-    let truncated = false;
-    for (
-      let pageIndex = 0;
-      pageIndex < CONTROL_CAPABILITY_MAX_PAGES;
-      pageIndex += 1
-    ) {
-      const page = await client.listActiveCapabilities(
-        cursor === null
-          ? { limit: CONTROL_CAPABILITY_PAGE_SIZE }
-          : { cursor, limit: CONTROL_CAPABILITY_PAGE_SIZE },
-      );
-      if (releaseId !== null && page.releaseId !== releaseId) {
-        throw new Error("Control capability release changed during pagination");
-      }
-      releaseId = page.releaseId;
-      const remaining = CONTROL_CAPABILITY_MAX_ITEMS - capabilities.length;
-      capabilities.push(...page.data.slice(0, remaining));
-      truncated = page.data.length > remaining;
-      if (page.nextCursor === null) {
-        break;
-      }
-      if (seenCursors.has(page.nextCursor)) {
-        throw new Error("Control capability cursor repeated during pagination");
-      }
-      seenCursors.add(page.nextCursor);
-      cursor = page.nextCursor;
-      if (
-        capabilities.length === CONTROL_CAPABILITY_MAX_ITEMS ||
-        pageIndex === CONTROL_CAPABILITY_MAX_PAGES - 1
-      ) {
-        truncated = true;
-        break;
-      }
-    }
+    const { capabilities, releaseId, truncated } =
+      await readControlCapabilityCatalog({
+        client,
+        maxItems: CONTROL_CAPABILITY_MAX_ITEMS,
+        maxPages: CONTROL_CAPABILITY_MAX_PAGES,
+        pageSize: CONTROL_CAPABILITY_PAGE_SIZE,
+      });
     setLibraryPanel({
       kind: "tools",
       title: libraryTitle("tools", locale),
