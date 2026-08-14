@@ -8710,6 +8710,7 @@ async function createFixture(
   });
   const turns = new TurnApplicationService({
     store,
+    knowledge: { loadKnowledge: async () => null },
     authorization,
     clock,
     ids,
@@ -8764,6 +8765,7 @@ async function createFixture(
       threadId: createdThread.state.threadId,
       expectedThreadRevision: 1,
       content: "hello",
+      knowledgeReferences: [],
       requestedAgentVersionId: route.agentVersionId,
       executionIntent,
       route,

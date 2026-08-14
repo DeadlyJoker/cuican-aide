@@ -661,6 +661,7 @@ test("starts a Turn through one atomic typed mutation", async () => {
       {
         expectedRevision: 1,
         content: "hello atomically",
+        knowledgeReferences: [],
         agentVersionId: null,
         executionIntent: "plan",
       },
@@ -679,6 +680,7 @@ test("starts a Turn through one atomic typed mutation", async () => {
   assert.deepEqual(JSON.parse(String(requests[0]?.init.body)), {
     expectedRevision: 1,
     content: "hello atomically",
+    knowledgeReferences: [],
     agentVersionId: null,
     executionIntent: "plan",
   });

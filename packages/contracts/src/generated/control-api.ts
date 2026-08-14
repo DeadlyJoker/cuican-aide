@@ -1537,6 +1537,11 @@ export interface components {
     StartTurnRequest: {
       expectedRevision: number;
       content: string;
+      /** @description Immutable Knowledge selections. The server re-authorizes each item and rejects digest drift before atomically freezing model context. */
+      knowledgeReferences: {
+        knowledgeId: string;
+        contentDigest: string;
+      }[];
       /** @description Requested immutable AgentVersion; null uses the active default. The resolved route is server-owned. */
       agentVersionId: string | null;
       /**

@@ -4310,12 +4310,35 @@
         "required": [
           "expectedRevision",
           "content",
+          "knowledgeReferences",
           "agentVersionId",
           "executionIntent"
         ],
         "properties": {
           "expectedRevision": { "type": "integer", "minimum": 1 },
           "content": { "type": "string", "minLength": 1, "maxLength": 32768 },
+          "knowledgeReferences": {
+            "type": "array",
+            "maxItems": 4,
+            "uniqueItems": true,
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["knowledgeId", "contentDigest"],
+              "properties": {
+                "knowledgeId": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "contentDigest": {
+                  "type": "string",
+                  "pattern": "^sha256:[0-9a-f]{64}$"
+                }
+              }
+            },
+            "description": "Immutable Knowledge selections. The server re-authorizes each item and rejects digest drift before atomically freezing model context."
+          },
           "agentVersionId": {
             "type": ["string", "null"],
             "minLength": 1,

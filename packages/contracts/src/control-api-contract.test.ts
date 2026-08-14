@@ -1319,12 +1319,24 @@ test("parses strict Run requests and rejects authority injection", () => {
     parseStartTurnRequest({
       expectedRevision: 1,
       content: "start atomically",
+      knowledgeReferences: [
+        {
+          knowledgeId: "knowledge-1",
+          contentDigest: `sha256:${"a".repeat(64)}`,
+        },
+      ],
       agentVersionId: null,
       executionIntent: "goal",
     }),
     {
       expectedRevision: 1,
       content: "start atomically",
+      knowledgeReferences: [
+        {
+          knowledgeId: "knowledge-1",
+          contentDigest: `sha256:${"a".repeat(64)}`,
+        },
+      ],
       agentVersionId: null,
       executionIntent: "goal",
     },
@@ -1359,15 +1371,33 @@ test("parses strict Run requests and rejects authority injection", () => {
     {
       expectedRevision: 0,
       content: "invalid revision",
+      knowledgeReferences: [],
       agentVersionId: null,
       executionIntent: "none",
     },
     {
       expectedRevision: 1,
       content: "injected",
+      knowledgeReferences: [],
       agentVersionId: null,
       executionIntent: "none",
       authorityId: "attacker",
+    },
+    {
+      expectedRevision: 1,
+      content: "duplicate Knowledge",
+      knowledgeReferences: [
+        {
+          knowledgeId: "knowledge-1",
+          contentDigest: `sha256:${"a".repeat(64)}`,
+        },
+        {
+          knowledgeId: "knowledge-1",
+          contentDigest: `sha256:${"a".repeat(64)}`,
+        },
+      ],
+      agentVersionId: null,
+      executionIntent: "none",
     },
   ]) {
     assert.throws(() => parseStartTurnRequest(input), isContractError);

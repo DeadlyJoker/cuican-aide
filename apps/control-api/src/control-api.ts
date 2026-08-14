@@ -1161,6 +1161,7 @@ export function buildControlApi(
         threadId,
         expectedThreadRevision: body.expectedRevision,
         content: body.content,
+        knowledgeReferences: body.knowledgeReferences,
         requestedAgentVersionId: body.agentVersionId,
         executionIntent: body.executionIntent,
       };

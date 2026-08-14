@@ -10,6 +10,7 @@ import type {
   RunEventView,
   RunView,
   SetThreadGoalRequest,
+  StartTurnRequest,
   ThreadEventView,
   ThreadView,
 } from "@crewon/contracts";
@@ -476,7 +477,11 @@ export class ControlThreadRuntime {
     settings?: ThreadRuntimeSettings,
     images: ComposerImageInput[] = [],
   ): Promise<TurnStartResponse> {
-    validateSupportedTurnInput(mentions, settings, images);
+    const knowledgeReferences = validateSupportedTurnInput(
+      mentions,
+      settings,
+      images,
+    );
     const [current, catalog] = await Promise.all([
       this.#client.getThread(threadId),
       this.#client.getActiveAgentVersionCatalog(),
@@ -487,6 +492,7 @@ export class ControlThreadRuntime {
       {
         expectedRevision: current.thread.revision,
         content: text,
+        knowledgeReferences,
         agentVersionId: agentVersion.agentVersionId,
         executionIntent: settings?.executionIntent ?? "none",
       },
@@ -910,10 +916,7 @@ function validateSupportedTurnInput(
   mentions: readonly PendingComposerMention[],
   settings: ThreadRuntimeSettings | undefined,
   images: readonly ComposerImageInput[],
-): void {
-  if (mentions.length > 0) {
-    throw new Error("control_mentions_not_supported");
-  }
+): StartTurnRequest["knowledgeReferences"] {
   if (images.length > 0) {
     throw new Error("control_images_not_supported");
   }
@@ -925,6 +928,29 @@ function validateSupportedTurnInput(
   ) {
     throw new Error("control_execution_target_not_supported");
   }
+  if (mentions.length > 4) {
+    throw new Error("control_knowledge_reference_limit_exceeded");
+  }
+  const knowledgeIds = new Set<string>();
+  return mentions.map((mention) => {
+    const reference = mention.knowledgeReference;
+    if (
+      mention.resourceKind !== "knowledge" ||
+      reference === undefined ||
+      typeof reference.knowledgeId !== "string" ||
+      reference.knowledgeId.length < 1 ||
+      reference.knowledgeId.length > 128 ||
+      knowledgeIds.has(reference.knowledgeId) ||
+      !/^sha256:[a-f0-9]{64}$/u.test(reference.contentDigest)
+    ) {
+      throw new Error("control_mentions_not_supported");
+    }
+    knowledgeIds.add(reference.knowledgeId);
+    return {
+      knowledgeId: reference.knowledgeId,
+      contentDigest: reference.contentDigest,
+    };
+  });
 }
 
 function selectAgentVersion(

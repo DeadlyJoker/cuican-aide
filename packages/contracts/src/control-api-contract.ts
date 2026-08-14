@@ -846,6 +846,7 @@ export function parseStartTurnRequest(input: unknown): StartTurnRequest {
       "content",
       "executionIntent",
       "expectedRevision",
+      "knowledgeReferences",
     ])
   ) {
     throw new ContractValidationError("start_turn_fields_invalid");
@@ -871,9 +872,32 @@ export function parseStartTurnRequest(input: unknown): StartTurnRequest {
   ) {
     throw new ContractValidationError("execution_intent_invalid");
   }
+  if (
+    !Array.isArray(input.knowledgeReferences) ||
+    input.knowledgeReferences.length > 4
+  ) {
+    throw new ContractValidationError("knowledge_references_invalid");
+  }
+  const knowledgeIds = new Set<string>();
+  const knowledgeReferences = input.knowledgeReferences.map((reference) => {
+    if (!hasExactKeys(reference, ["contentDigest", "knowledgeId"])) {
+      throw new ContractValidationError("knowledge_reference_invalid");
+    }
+    const knowledgeId = parseKnowledgeId(reference.knowledgeId);
+    if (
+      knowledgeIds.has(knowledgeId) ||
+      typeof reference.contentDigest !== "string" ||
+      !/^sha256:[0-9a-f]{64}$/u.test(reference.contentDigest)
+    ) {
+      throw new ContractValidationError("knowledge_reference_invalid");
+    }
+    knowledgeIds.add(knowledgeId);
+    return { knowledgeId, contentDigest: reference.contentDigest };
+  });
   return {
     expectedRevision: Number(input.expectedRevision),
     content,
+    knowledgeReferences,
     agentVersionId:
       input.agentVersionId === null
         ? null

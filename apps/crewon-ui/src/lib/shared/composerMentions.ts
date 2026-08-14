@@ -16,6 +16,10 @@ export type PendingComposerResourceKind =
 
 export type PendingComposerMention = {
   kind?: PendingComposerMentionKind;
+  knowledgeReference?: Readonly<{
+    knowledgeId: string;
+    contentDigest: string;
+  }>;
   name: string;
   path: string;
   resourceKind?: PendingComposerResourceKind;

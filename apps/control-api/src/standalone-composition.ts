@@ -184,6 +184,7 @@ function composeControlApi(
     });
     const turns = new TurnApplicationService({
       store,
+      knowledge: store,
       authorization,
       clock,
       ids,

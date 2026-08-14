@@ -130,6 +130,7 @@ async function composeProductionControlApi(
     });
     const turns = new TurnApplicationService({
       store,
+      knowledge: store,
       authorization: config.authorization,
       clock,
       ids,

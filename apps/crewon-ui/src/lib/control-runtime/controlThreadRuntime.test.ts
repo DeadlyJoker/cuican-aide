@@ -811,6 +811,7 @@ describe("Control thread runtime", () => {
       {
         expectedRevision: 1,
         content: "Do the work",
+        knowledgeReferences: [],
         agentVersionId: "agent-version-1",
         executionIntent: "none",
       },
@@ -1095,6 +1096,7 @@ describe("Control thread runtime", () => {
       {
         expectedRevision: 1,
         content: "Question",
+        knowledgeReferences: [],
         agentVersionId: "agent-version-2",
         executionIntent: "none",
       },
@@ -1130,6 +1132,47 @@ describe("Control thread runtime", () => {
       }),
     ).rejects.toThrow("control_model_selection_mismatch");
     expect(client.startTurn).not.toHaveBeenCalled();
+    runtime.close();
+  });
+
+  it("sends only immutable Control Knowledge references", async () => {
+    const client = fakeClient({
+      messages: [messageView(1, "user", "Question")],
+      runs: [runView()],
+    });
+    const runtime = new ControlThreadRuntime(
+      { client, eventStream: idleRunEventStream },
+      callbacks(),
+    );
+    const reference = {
+      knowledgeId: "knowledge-1",
+      contentDigest: `sha256:${"a".repeat(64)}`,
+    };
+
+    await runtime.startTurn("thread-1", "Question", [
+      {
+        name: "Reference",
+        path: "control-knowledge:knowledge-1",
+        resourceKind: "knowledge",
+        knowledgeReference: reference,
+      },
+    ]);
+
+    expect(client.startTurn).toHaveBeenCalledWith(
+      "thread-1",
+      expect.objectContaining({ knowledgeReferences: [reference] }),
+      expect.any(String),
+    );
+    await expect(
+      runtime.startTurn("thread-1", "Question", [
+        {
+          name: "Legacy",
+          path: "agent-platform://knowledge/legacy",
+          resourceKind: "knowledge",
+        },
+      ]),
+    ).rejects.toThrow("control_mentions_not_supported");
+    expect(client.startTurn).toHaveBeenCalledTimes(1);
     runtime.close();
   });
 });

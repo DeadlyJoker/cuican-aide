@@ -796,6 +796,7 @@ test("atomically starts one Goal Turn and replays the original durable result", 
       payload: {
         expectedRevision: 1,
         content: "hello atomically",
+        knowledgeReferences: [],
         agentVersionId: null,
         executionIntent: "goal",
       },
@@ -845,6 +846,7 @@ test("atomically starts one Goal Turn and replays the original durable result", 
     payload: {
       expectedRevision: 2,
       content: "must not create a parallel Run",
+      knowledgeReferences: [],
       agentVersionId: null,
       executionIntent: "none",
     },
@@ -1250,6 +1252,7 @@ test("admits Plan as a one-Run mode without creating a persistent Goal", async (
     payload: {
       expectedRevision: 1,
       content: "plan the migration",
+      knowledgeReferences: [],
       agentVersionId: null,
       executionIntent: "plan",
     },
@@ -1862,6 +1865,7 @@ test("restores, renames and tombstones a Thread while atomically clearing its id
       payload: {
         expectedRevision: 6,
         content: "must not run",
+        knowledgeReferences: [],
         agentVersionId: null,
         executionIntent: "none",
       },
@@ -3126,6 +3130,7 @@ async function testRuntime(
   const digester = new NodeSha256ContentDigester();
   const turns = new TurnApplicationService({
     store,
+    knowledge: { loadKnowledge: async () => null },
     authorization,
     clock,
     ids,
