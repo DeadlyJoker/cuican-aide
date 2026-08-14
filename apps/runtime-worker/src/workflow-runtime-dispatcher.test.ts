@@ -1,9 +1,13 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
-import type { WorkflowRuntimeStore } from "@crewon/application";
+import type {
+  WorkflowNodeResponseRecovery,
+  WorkflowRuntimeStore,
+} from "@crewon/application";
 import {
   compileWorkflowVersion,
+  createWorkflowNodeTerminalEvidence,
   serializeCompiledWorkflowVersion,
 } from "@crewon/domain";
 import {
@@ -125,6 +129,91 @@ test("node reconcileRequired admission performs zero execution", async () => {
   }).dispatch(input("node"));
   assert.equal(executions, 0);
   assert.equal(fixture.settlements + fixture.atomicSettlements, 0);
+});
+
+test("responseObserved reconciliation retrieves once and atomically settles evidence", async () => {
+  const fixture = composition();
+  fixture.recovery = retrievalRecovery();
+  let executions = 0;
+  let retrieves = 0;
+  const dispatcher = create(
+    fixture.store,
+    async () => {
+      executions += 1;
+      return { status: "unknown" };
+    },
+    fixture.store,
+    async ({ recovery }) => {
+      retrieves += 1;
+      assert.equal(recovery, fixture.recovery);
+      return { status: "completed", value: {} };
+    },
+  );
+
+  assert.deepEqual(await dispatcher.dispatch(input("reconcile")), {
+    kind: "completed",
+    runId: "r",
+  });
+  assert.equal(executions, 0);
+  assert.equal(retrieves, 1);
+  assert.equal(fixture.retrievedSettlements, 1);
+  assert.deepEqual(fixture.retrievedInputs[0], {
+    tenantId: "t",
+    runId: "r",
+    lease: {
+      workItemId: "work-claim-1",
+      ownerId: "o",
+      leaseId: "l",
+      leaseEpoch: 1,
+    },
+    binding,
+    nodeId: "a",
+    claimId: "claim-1",
+    claimEpoch: 1,
+    reconciliationOperationId: "reconcile-1",
+    agentVersionId: "agent-a",
+    attempt: {
+      stepId: "a",
+      attemptId: "attempt-1",
+      workItemId: "node-work",
+      leaseEpoch: 4,
+    },
+    dispatch: {
+      operationId: "segment:attempt-1:request:1",
+      requestSequence: 1,
+      expectedRevision: 3,
+      status: "responseObserved",
+    },
+    evidence: createWorkflowNodeTerminalEvidence({
+      workflow,
+      nodeId: "a",
+      outcome: { status: "completed", value: {} },
+      digester: { sha256: digest },
+    }),
+    dispatchTerminalOutcome: {
+      kind: "completed",
+      code: null,
+      certainty: "responseObserved",
+    },
+  });
+});
+
+test("GET reconciliation unknown outcome retains work for retry without settlement", async () => {
+  const fixture = composition();
+  fixture.recovery = retrievalRecovery();
+  const dispatcher = create(
+    fixture.store,
+    async () => ({ status: "unknown" }),
+    fixture.store,
+    async () => ({ status: "unknown" }),
+  );
+
+  assert.deepEqual(await dispatcher.dispatch(input("reconcile")), {
+    kind: "retry",
+    runId: "r",
+    code: "workflow_response_retrieve_retry_required",
+  });
+  assert.equal(fixture.retrievedSettlements, 0);
 });
 
 test("rejects a split Workflow Store identity", () => {
@@ -362,6 +451,9 @@ function composition() {
     atomicInputs: [] as unknown[],
     reconciliations: 0,
     cancellations: 0,
+    retrievedSettlements: 0,
+    retrievedInputs: [] as unknown[],
+    recovery: null as WorkflowNodeResponseRecovery | null,
     outcomes: [] as unknown[],
     workflowInputs: [] as unknown[],
     nodeDisposition: "fresh" as "fresh" | "replay" | "reconcileRequired",
@@ -502,7 +594,37 @@ function composition() {
       };
     },
     async reconcileWorkflowNode() {
-      throw new Error("reconciliation evidence provider is not composed");
+      if (fixture.recovery === null)
+        throw new Error("reconciliation evidence provider is not composed");
+      return {
+        disposition: "retrieveRequired",
+        evidenceStatus: "responseObserved",
+        recovery: fixture.recovery,
+        execution: state(),
+        handoff: {
+          currentWorkItem: "retained",
+          nextWorkItemId: null,
+          kind: "none",
+        },
+        runDisposition: "nonTerminal",
+      };
+    },
+    async settleRetrievedWorkflowNode(input) {
+      fixture.retrievedSettlements += 1;
+      fixture.retrievedInputs.push(input);
+      return {
+        disposition: "settled",
+        execution: state("completed"),
+        handoff: {
+          currentWorkItem: "completed",
+          nextWorkItemId: null,
+          kind: "none",
+        },
+        runDisposition: "terminalConverged",
+        evidenceStatus: "responseObserved",
+        evidence: input.evidence,
+        dispatchTerminalOutcome: input.dispatchTerminalOutcome,
+      };
     },
     async cancelWorkflowExecution() {
       fixture.cancellations += 1;
@@ -605,6 +727,9 @@ function create(
     typeof ProductionWorkflowRuntimeDispatcher
   >[0]["agent"]["execute"],
   agentStore: WorkflowRuntimeStore = store,
+  reconcile: ConstructorParameters<
+    typeof ProductionWorkflowRuntimeDispatcher
+  >[0]["agent"]["reconcile"] = async () => ({ status: "unknown" }),
 ) {
   return new ProductionWorkflowRuntimeDispatcher({
     versions: {
@@ -631,12 +756,73 @@ function create(
     agent: {
       workflowStore: agentStore,
       execute,
+      reconcile,
       async resumeToolApproval() {
         throw new Error("not used");
       },
     },
     leaseDurationMs: 30_000,
   });
+}
+
+function retrievalRecovery(): WorkflowNodeResponseRecovery {
+  const checkpoint = {
+    schemaVersion: "crewon.provider-checkpoint.v0",
+    adapterName: "responses",
+    adapterVersion: "1",
+    modelId: "model-1",
+    opaquePayload: { responseId: "resp-1" },
+  } as const;
+  return {
+    claim: {
+      node: workflow.nodes[0]!,
+      claimId: "claim-1",
+      claimEpoch: 1,
+      gateRequestId: null,
+      inputDigest: digest("input"),
+    },
+    step: { stepId: "a", currentAttemptId: "attempt-1" } as never,
+    attempt: {
+      attemptId: "attempt-1",
+      tenantId: "t",
+      runId: "r",
+      stepId: "a",
+      workItemId: "node-work",
+      attemptNumber: 1,
+      retryOfAttemptId: null,
+      leaseEpoch: 4,
+      status: "running",
+      checkpointDigest: digest(JSON.stringify(checkpoint)),
+      providerCheckpoint: checkpoint,
+    } as never,
+    inputValue: {
+      schemaVersion: "crewon.workflow-execution-value.v0",
+      valueId: "value-1",
+      valueDigest: digest("input"),
+      value: {},
+    },
+    dispatch: {
+      tenantId: "t",
+      runId: "r",
+      stepId: "a",
+      attemptId: "attempt-1",
+      operationId: "segment:attempt-1:request:1",
+      requestSequence: 1,
+      operation: "dispatch",
+      workItemId: "node-work",
+      leaseEpoch: 4,
+      requestDigest: digest("request"),
+      provider: {
+        agentVersionId: "agent-a",
+        adapterName: "responses",
+        adapterVersion: "1",
+        modelId: "model-1",
+      },
+      status: "responseObserved",
+      revision: 3,
+      responseCheckpointDigest: digest(JSON.stringify(checkpoint)),
+    } as never,
+  };
 }
 function input(kind: "scheduler" | "node" | "reconcile", claimId = "claim-1") {
   const payload =

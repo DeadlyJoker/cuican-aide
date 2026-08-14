@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { CrewONAgentKernel } from "@crewon/agent-kernel";
+import { DirectResponsesTransport } from "@crewon/agent-responses";
 import {
   SharedWorkflowAdmittedAgentExecutionEngine,
   WorkflowAgentRuntimeAdapter,
@@ -32,6 +34,9 @@ test("resolves the frozen node runtime and preserves admitted authority and actu
     },
     engine: {
       workflowStore: {} as never,
+      async reconcile() {
+        throw new Error("not used");
+      },
       async resumeToolApproval() {
         throw new Error("not used");
       },
@@ -79,6 +84,9 @@ test("fails closed instead of substituting the root Agent runtime", async () => 
     },
     engine: {
       workflowStore: {} as never,
+      async reconcile() {
+        throw new Error("not used");
+      },
       async resumeToolApproval() {
         throw new Error("not used");
       },
@@ -109,6 +117,172 @@ test("fails closed instead of substituting the root Agent runtime", async () => 
     }),
     /workflow_node_agent_runtime_unavailable/,
   );
+});
+
+test("responseObserved recovery performs exactly one GET and no dispatch mutation", async () => {
+  const methods: string[] = [];
+  const checkpoint = {
+    schemaVersion: "crewon.provider-checkpoint.v0",
+    adapterName: "direct-responses",
+    adapterVersion: "1",
+    modelId: "model",
+    opaquePayload: { responseId: "resp-observed" },
+  } as const;
+  const attempt = {
+    attemptId: "attempt-old",
+    tenantId: "tenant-1",
+    runId: "run-1",
+    stepId: "node-1",
+    workItemId: "node-work-old",
+    attemptNumber: 1,
+    retryOfAttemptId: null,
+    leaseEpoch: 4,
+    status: "running",
+    checkpointDigest: `sha256:${"a".repeat(64)}`,
+    providerCheckpoint: checkpoint,
+    providerTurnState: null,
+  } as const;
+  const step = {
+    stepId: "node-1",
+    tenantId: "tenant-1",
+    runId: "run-1",
+    status: "running",
+    currentAttemptId: attempt.attemptId,
+  } as const;
+  const dispatch = {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    stepId: "node-1",
+    attemptId: attempt.attemptId,
+    operationId: "segment:attempt-old:request:1",
+    requestSequence: 1,
+    operation: "dispatch",
+    workItemId: attempt.workItemId,
+    leaseEpoch: attempt.leaseEpoch,
+    requestDigest: `sha256:${"b".repeat(64)}`,
+    provider: {
+      agentVersionId: "node-agent",
+      adapterName: checkpoint.adapterName,
+      adapterVersion: checkpoint.adapterVersion,
+      modelId: checkpoint.modelId,
+    },
+    status: "responseObserved",
+    revision: 3,
+    responseCheckpointDigest: attempt.checkpointDigest,
+  } as const;
+  const transport = new DirectResponsesTransport(
+    {
+      endpoint: "https://provider.example/v1/responses",
+      model: checkpoint.modelId,
+      storeResponses: true,
+    },
+    {
+      async fetch(input, init) {
+        methods.push(init?.method ?? "GET");
+        assert.equal(
+          String(input),
+          "https://provider.example/v1/responses/resp-observed",
+        );
+        return Response.json({
+          id: "resp-observed",
+          status: "completed",
+          output: [
+            {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "{}" }],
+            },
+          ],
+          usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        });
+      },
+    },
+  );
+  const claim = {
+    workItem: {
+      workItemId: "reconcile-work",
+      tenantId: "tenant-1",
+      runId: "run-1",
+    },
+    lease: { ownerId: "worker", leaseId: "lease-current", epoch: 2 },
+  } as never;
+  let renewals = 0;
+  const execution = {
+    async loadRun() {
+      return { cancelRequested: false };
+    },
+    async recordAgentEvent() {
+      throw new Error("reconciliation must not persist Agent events");
+    },
+    async checkpointModelAttempt() {
+      throw new Error("reconciliation must not checkpoint again");
+    },
+    async recordProviderTurnState() {
+      throw new Error("reconciliation must not mutate turn state");
+    },
+  } as never;
+  const store = {
+    async loadRunAttempt() {
+      return attempt;
+    },
+    async loadRunStep() {
+      return step;
+    },
+    async loadModelDispatchReceipt() {
+      return dispatch;
+    },
+    async renewWorkItemLease() {
+      renewals += 1;
+    },
+    async prepareModelDispatch() {
+      throw new Error("GET recovery must not prepare dispatch evidence");
+    },
+    async markModelDispatchPossiblySent() {
+      throw new Error("GET recovery must not cross a dispatch boundary");
+    },
+  } as never;
+  const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
+    execution,
+    store,
+    leaseDurationMs: 30_000,
+  });
+
+  assert.deepEqual(
+    await engine.reconcile({
+      runtime: {
+        version: {
+          agentVersionId: "node-agent",
+          policySnapshotId: "node-policy",
+          execution: { maxToolRounds: 4 },
+          tools: [],
+        },
+        kernel: new CrewONAgentKernel({ transport }),
+      } as never,
+      claim,
+      binding,
+      recovery: {
+        claim: {
+          node: agentNode(),
+          claimId: "claim-1",
+          claimEpoch: 1,
+          gateRequestId: null,
+          inputDigest: "sha256:value",
+        },
+        step,
+        attempt,
+        inputValue: {
+          schemaVersion: "crewon.workflow-execution-value.v0",
+          valueId: "value-1",
+          value: { task: "run" },
+          valueDigest: "sha256:value",
+        },
+        dispatch,
+      } as never,
+    }),
+    { status: "completed", value: {} },
+  );
+  assert.deepEqual(methods, ["GET"]);
+  assert.ok(renewals > 0);
 });
 
 test("shared engine consumes the supplied attempt and actual value without beginning another attempt", async () => {
@@ -528,11 +702,14 @@ test("workflow approval retry reloads unknown receipt and reconciles without exe
     },
   });
   assert.deepEqual(outcome, { status: "unknown" });
-  assert.deepEqual({ executes, reconciles, transitions }, {
-    executes: 0,
-    reconciles: 1,
-    transitions: 0,
-  });
+  assert.deepEqual(
+    { executes, reconciles, transitions },
+    {
+      executes: 0,
+      reconciles: 1,
+      transitions: 0,
+    },
+  );
 });
 
 test("workflow executes a durable Tool sub-attempt and continues the same Agent node", async () => {
