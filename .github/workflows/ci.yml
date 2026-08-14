@@ -97,5 +97,32 @@ jobs:
             ! grep -E "app-server|6176|agent-platform-api|127\\.0\\.0\\.1:8000" /etc/nginx/conf.d/default.conf
           '
 
+      - name: Build pure TypeScript Control and Runtime images
+        run: |
+          node --test deploy/crewon/control-runtime-images.test.mjs
+          node deploy/crewon/check-production-topology.mjs
+          docker build -t crewon-control-api:ci -f deploy/crewon/control-api.Dockerfile .
+          docker build -t crewon-runtime-worker:ci -f deploy/crewon/runtime-worker.Dockerfile .
+          test "$(docker image inspect -f '{{.Config.User}}' crewon-control-api:ci)" = node
+          test "$(docker image inspect -f '{{.Config.User}}' crewon-runtime-worker:ci)" = node
+          docker run --rm --entrypoint sh crewon-control-api:ci -c '
+            test -f /app/control-api.mjs &&
+            ! grep -aEi "deterministic[ _-]?fake|device[ _-]?gateway|app[ _-]?server|6176" /app/control-api.mjs
+          '
+          docker run --rm --entrypoint sh crewon-runtime-worker:ci -c '
+            test -f /app/runtime-worker.mjs &&
+            test -f /app/init/release-main.mjs &&
+            ! grep -aEi "deterministic[ _-]?fake|device[ _-]?gateway|app[ _-]?server|6176" /app/runtime-worker.mjs /app/init/release-main.mjs
+          '
+          CREWON_CONTROL_ENV_FILE=control.production.env.example \
+          CREWON_RUNTIME_ENV_FILE=runtime.production.env.example \
+          CREWON_WEB_BFF_ENV_FILE=web-bff.production.env.example \
+          CREWON_CONTROL_API_IMAGE=crewon-control-api:ci \
+          CREWON_RUNTIME_WORKER_IMAGE=crewon-runtime-worker:ci \
+          CREWON_WEB_BFF_IMAGE=crewon-web-bff:ci \
+          CREWON_WEB_IMAGE=crewon-web:ci \
+          docker compose --env-file deploy/crewon/compose.host.env.example \
+            -f deploy/crewon/compose.production.yml config --quiet
+
       - name: Test the UI
         run: pnpm --filter @crewon/ui test

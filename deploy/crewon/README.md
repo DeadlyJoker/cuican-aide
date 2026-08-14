@@ -55,27 +55,71 @@ transport errors fail closed.
 
 ## Build and process layout
 
-Build both images from their required contexts:
+Build all four production images from the repository root:
 
 ```bash
 docker build -t crewon-web:local -f deploy/crewon/web.Dockerfile .
 docker build -t crewon-web-bff:local -f deploy/crewon/web-bff.Dockerfile .
+docker build -t crewon-control-api:local -f deploy/crewon/control-api.Dockerfile .
+docker build -t crewon-runtime-worker:local -f deploy/crewon/runtime-worker.Dockerfile .
 ```
+
+The Control and Runtime images contain self-contained Node 24 bundles and run as the image's `node` user. The Runtime image
+also contains `/app/init/release-main.mjs`; production startup must run this finite release authority successfully before the
+long-lived Worker. Neither image contains a Rust Runtime, Device/Gateway/App Server, deterministic fake transport, or port
+6176 compatibility path.
 
 The checked-in nginx configuration and BFF both assume the existing host-network deployment: nginx, Web BFF and Control API
 share the host loopback namespace, with BFF on `127.0.0.1:3211` and Control on `127.0.0.1:3210`. Do not run them as separate
 default bridge-network containers without changing this topology; publishing a loopback-only Control port externally would
 weaken the boundary.
 
-Start the BFF with the values documented in `apps/web-bff/.env.example`. Real secret values must be injected by the deployment
-secret manager and must never be baked into either image or written into frontend variables. A release gate should verify:
+`compose.production.yml` is the checked-in single-host topology. It uses host networking because Control, BFF, Provider Probe
+and Workspace private listeners deliberately bind only loopback; it never publishes one of those ports onto a bridge network.
+The fixed port allocation is Control `3210`, Web BFF `3211`, Provider Probe `3221`, Workspace private `3222`, and public TLS
+nginx `6175`.
+
+Copy the three process-specific examples outside source control and inject their real values from the deployment secret
+manager:
+
+```bash
+cp deploy/crewon/control.production.env.example deploy/crewon/control.production.env
+cp deploy/crewon/runtime.production.env.example deploy/crewon/runtime.production.env
+cp deploy/crewon/web-bff.production.env.example deploy/crewon/web-bff.production.env
+cp deploy/crewon/compose.host.env.example deploy/crewon/compose.host.env
+```
+
+Do not merge these files. Control receives database/identity/policy and private route credentials; Runtime receives database,
+Provider, Workspace and model credentials; BFF receives only browser-session credentials. `compose.host.env` contains paths and
+immutable image identities, not secret contents. The artifact encryption key, reviewed AgentVersion bindings, Workspace root
+and TLS material are mounted read-only. The shared artifact volume is required because Control and Worker use the same local
+artifact authority in this single-host deployment.
+
+Validate interpolation before touching processes, then start the release/Worker/Control/BFF/Web dependency chain:
+
+```bash
+docker compose --env-file deploy/crewon/compose.host.env \
+  -f deploy/crewon/compose.production.yml config --quiet
+docker compose --env-file deploy/crewon/compose.host.env \
+  -f deploy/crewon/compose.production.yml up -d --build
+```
+
+The release job has `restart: "no"`; Worker starts only after it exits successfully. Control starts after Worker, BFF only after
+Control liveness, and nginx only after BFF liveness. A production secret manager or orchestrator may project the same contract,
+but must preserve the process-specific secret scopes, loopback topology and release completion fence.
+
+The repository gates verify:
 
 ```bash
 pnpm --filter @crewon/web-bff test
 pnpm --filter @crewon/web-bff typecheck
 pnpm --filter @crewon/web-bff production:gate
+node --test deploy/crewon/control-runtime-images.test.mjs
+node deploy/crewon/check-production-topology.mjs
 docker build -t crewon-web:verify -f deploy/crewon/web.Dockerfile .
 docker build -t crewon-web-bff:verify -f deploy/crewon/web-bff.Dockerfile .
+docker build -t crewon-control-api:verify -f deploy/crewon/control-api.Dockerfile .
+docker build -t crewon-runtime-worker:verify -f deploy/crewon/runtime-worker.Dockerfile .
 ```
 
 `production:gate` becomes green only when PostgreSQL production startup selects an explicit production composition with
