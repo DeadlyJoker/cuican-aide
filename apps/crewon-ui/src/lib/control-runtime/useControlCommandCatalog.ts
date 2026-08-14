@@ -14,13 +14,21 @@ export function controlCommandCatalog(
   agentVersions: readonly AgentVersionView[],
   defaultAgentVersionId: string,
 ): ControlCommandCatalog {
+  const duplicateVersionIds = new Set<string>();
+  const seenVersionIds = new Set<string>();
+  for (const version of agentVersions) {
+    if (seenVersionIds.has(version.agentVersionId)) {
+      duplicateVersionIds.add(version.agentVersionId);
+    }
+    seenVersionIds.add(version.agentVersionId);
+  }
+  if (duplicateVersionIds.size > 0) {
+    return { modelOptionsByTarget: {}, targets: [] };
+  }
   const activeVersions = agentVersions.filter(
-    (version, index, all) =>
-      version.agentVersionId.length > 0 &&
-      version.model.modelId.length > 0 &&
-      all.findIndex(
-        (candidate) => candidate.agentVersionId === version.agentVersionId,
-      ) === index,
+    (version) =>
+      version.agentVersionId.trim().length > 0 &&
+      version.model.modelId.trim().length > 0,
   );
   const defaultVersion = activeVersions.find(
     (version) => version.agentVersionId === defaultAgentVersionId,
@@ -57,6 +65,21 @@ export function controlCommandCatalog(
       })),
     ],
   };
+}
+
+export function authorizedControlCommandCatalog(params: {
+  activeProviderAuthorized: boolean;
+  agentVersions: readonly AgentVersionView[];
+  defaultAgentVersionId: string;
+  runtimeAvailable: boolean;
+}): ControlCommandCatalog {
+  if (!params.runtimeAvailable || !params.activeProviderAuthorized) {
+    return { modelOptionsByTarget: {}, targets: [] };
+  }
+  return controlCommandCatalog(
+    params.agentVersions,
+    params.defaultAgentVersionId,
+  );
 }
 
 function modelOption(
@@ -98,12 +121,12 @@ export function useControlCommandCatalog(params: {
             provider.isActive,
         );
         setCatalog(
-          settings.runtimeAvailability === "available" && activeProvider
-            ? controlCommandCatalog(
-                agentCatalog.data,
-                agentCatalog.defaultAgentVersionId,
-              )
-            : { modelOptionsByTarget: {}, targets: [] },
+          authorizedControlCommandCatalog({
+            activeProviderAuthorized: activeProvider !== undefined,
+            agentVersions: agentCatalog.data,
+            defaultAgentVersionId: agentCatalog.defaultAgentVersionId,
+            runtimeAvailable: settings.runtimeAvailability === "available",
+          }),
         );
       },
       () => {

@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import { controlCommandCatalog } from "./useControlCommandCatalog";
+import {
+  authorizedControlCommandCatalog,
+  controlCommandCatalog,
+} from "./useControlCommandCatalog";
 
 describe("Control command catalog", () => {
   it("exposes only active Agent versions and their exact bound models", () => {
@@ -94,5 +97,61 @@ describe("Control command catalog", () => {
       modelOptionsByTarget: {},
       targets: [],
     });
+  });
+
+  it("fails closed when the active release contains duplicate Agent version identities", () => {
+    const version = {
+      agentVersionId: "agent-version-duplicate",
+      contentDigest: "sha256:duplicate",
+      runtimeGeneration: "ts-v0",
+      policySnapshotId: "policy-duplicate",
+      model: {
+        adapterName: "responses-http",
+        adapterVersion: "1",
+        modelId: "gpt-control-duplicate",
+      },
+      createdAt: "2026-08-13T00:00:00.000Z",
+    };
+
+    expect(
+      controlCommandCatalog(
+        [version, { ...version, contentDigest: "sha256:other" }],
+        version.agentVersionId,
+      ),
+    ).toEqual({ modelOptionsByTarget: {}, targets: [] });
+  });
+
+  it("does not expose active versions when runtime provider authorization is unavailable", () => {
+    const agentVersions = [
+      {
+        agentVersionId: "agent-version-active",
+        contentDigest: "sha256:active",
+        runtimeGeneration: "ts-v0",
+        policySnapshotId: "policy-active",
+        model: {
+          adapterName: "responses-http",
+          adapterVersion: "1",
+          modelId: "gpt-control-active",
+        },
+        createdAt: "2026-08-13T00:00:00.000Z",
+      },
+    ];
+
+    expect(
+      authorizedControlCommandCatalog({
+        activeProviderAuthorized: false,
+        agentVersions,
+        defaultAgentVersionId: "agent-version-active",
+        runtimeAvailable: true,
+      }),
+    ).toEqual({ modelOptionsByTarget: {}, targets: [] });
+    expect(
+      authorizedControlCommandCatalog({
+        activeProviderAuthorized: true,
+        agentVersions,
+        defaultAgentVersionId: "agent-version-active",
+        runtimeAvailable: false,
+      }),
+    ).toEqual({ modelOptionsByTarget: {}, targets: [] });
   });
 });
