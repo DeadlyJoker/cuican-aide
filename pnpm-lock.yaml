@@ -432,28 +432,6 @@ importers:
         specifier: ^5.9.3
         version: 5.9.3
 
-  packages/legacy-rollout-importer:
-    dependencies:
-      '@crewon/application':
-        specifier: workspace:*
-        version: link:../application
-      '@crewon/domain':
-        specifier: workspace:*
-        version: link:../domain
-    devDependencies:
-      '@crewon/context':
-        specifier: workspace:*
-        version: link:../context
-      '@crewon/store':
-        specifier: workspace:*
-        version: link:../store
-      '@types/node':
-        specifier: ^24.10.1
-        version: 24.13.3
-      typescript:
-        specifier: ^5.9.3
-        version: 5.9.3
-
   packages/mcp-runtime:
     dependencies:
       '@crewon/tool-broker':

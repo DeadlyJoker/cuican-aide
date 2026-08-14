@@ -76,11 +76,6 @@ const boundaries: readonly Boundary[] = [
     allowedRuntimeDependencies: ["@crewon/contracts", "@crewon/tool-broker"],
   },
   {
-    packageName: "legacy-rollout-importer",
-    allowedBareImports: ["@crewon/application", "@crewon/domain"],
-    allowedRuntimeDependencies: ["@crewon/application", "@crewon/domain"],
-  },
-  {
     packageName: "mcp-runtime",
     allowedBareImports: [
       "node:path",
