@@ -8,6 +8,20 @@
 本文把最终态拆成可实施、可验收、可回滚的迁移序列。它不表示迁移已经开始上线，也不把局部 PoC、mock、
 focused test 或双栈运行当作完成。
 
+## 2026-08-14 执行方式覆盖：pure TypeScript breaking cutover
+
+以下规则覆盖本文较早的 Rust parity、双栈 cohort、legacy importer 与兼容观察期要求：
+
+- Agent Runtime、Workflow、Workspace、Control、Store 与产品 API 只继续落在 TypeScript；不再实现 Rust App Server、
+  Device、Gateway 或业务 Runtime 的兼容、回退、双写和行为对齐。Rust 只保留 Tauri 桌面壳与无业务语义的进程 guardian。
+- 当前迁移期间不会使用 legacy Workflow/Office/PIM 运行路径或旧数据；直接删除其 production 入口，不实现 importer、
+  dual-read、shadow execution 或同一 Run 的 cohort routing。若未来确认存在必须保留的生产数据，再以独立数据迁移任务处理。
+- 不因取消兼容而降低新 authority 的正确性 Gate：事务原子性、receipt-first 幂等、lease/epoch fencing、unknown outcome、
+  cancel/reconcile、tenant/space/secret 边界与 crash recovery 仍必须通过 SQLite/PostgreSQL 和 packaged 纵向验收。
+- 迁移进度只按当前 TypeScript production graph 与真实行为证据判断；仓库中未进入 build/runtime graph 的历史 Rust 文件
+  不是当前 cutover blocker，也不能成为重新接入 fallback 的理由。
+- updater 签名/notarization 与 Windows installer/guardian canary 是发布凭据和平台验证 Gate，和业务 Runtime 兼容分开管理。
+
 ## 1. 最终结果与迁移边界
 
 迁移完成后：
@@ -16,7 +30,7 @@ focused test 或双栈运行当作完成。
   TypeScript 拥有。
 - CrewON 自有 TypeScript Agent Kernel 是默认 Agent loop；Direct Responses Adapter 是默认模型传输。
 - `@openai/agents` 是可关闭的可选 Adapter，不是 session、tool、approval、handoff、trace 或数据权威。
-- PC 保留 Tauri + React；Rust 只保留最小 Tauri shell 和无产品领域的 Device Native Runtime。
+- PC 保留 Tauri + React；Rust 只保留最小 Tauri shell 和无产品领域的进程 guardian。
 - PC、Web、Mobile 只访问版本化 Control API/SSE；UI 不再直连 Agent Platform 或 Provider execution path。
 - Standalone 使用 SQLite 唯一写 Authority；Team/Cloud 使用 PostgreSQL 唯一写 Authority。
 - Single、Workflow、Office、Experts、Automation 共用 Run/Step/Attempt/Event/Approval 模型。
