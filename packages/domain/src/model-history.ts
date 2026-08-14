@@ -3,6 +3,11 @@ import {
   parseAutomationInvocationOrigin,
   type AutomationInvocationOrigin,
 } from "./automation.ts";
+import {
+  MAX_TURN_KNOWLEDGE_CONTENT_BYTES,
+  parseKnowledgeContextBinding,
+  type KnowledgeContextBinding,
+} from "./knowledge.ts";
 
 export const MODEL_HISTORY_MESSAGE_ROLES = [
   "user",
@@ -18,6 +23,7 @@ export const MODEL_HISTORY_MESSAGE_SOURCES = [
   "goal_continuation",
   "goal_steering",
   "automation_invocation",
+  "knowledge_context",
 ] as const;
 export const MODEL_HISTORY_COMPACTION_MODES = ["auto", "manual"] as const;
 export const MAX_MODEL_HISTORY_ROLLBACK_TURNS = 0xffff_ffff;
@@ -38,10 +44,7 @@ export type ModelHistoryMessageItem = Extract<
 >;
 export type ModelHistoryMessageBackedItem = ModelHistoryMessageItem &
   Readonly<{
-    source:
-      | "thread_message"
-      | "automation_invocation"
-      | "assistant_completion";
+    source: "thread_message" | "automation_invocation" | "assistant_completion";
   }>;
 export type ModelHistoryInstructionBoundaryItem =
   ModelHistoryMessageBackedItem &
@@ -70,13 +73,18 @@ type ModelHistoryMessageBase = ModelHistoryItemBase & {
 
 type OrdinaryModelHistoryMessageSource = Exclude<
   ModelHistoryMessageSource,
-  "automation_invocation"
+  "automation_invocation" | "knowledge_context"
 >;
 
 export type ModelHistoryItem =
   | (ModelHistoryMessageBase & {
       source: "automation_invocation";
       origin: AutomationInvocationOrigin;
+    })
+  | (ModelHistoryMessageBase & {
+      source: "knowledge_context";
+      role: "user";
+      knowledge: KnowledgeContextBinding;
     })
   | (ModelHistoryMessageBase & {
       source: OrdinaryModelHistoryMessageSource;
@@ -213,6 +221,31 @@ export function validateModelHistoryItem(item: ModelHistoryItem): void {
       requireDigest(item.contentDigest, "model_history_content_digest_invalid");
       if (item.source === "automation_invocation") {
         validateAutomationInvocationMessage(item);
+      } else if (item.source === "knowledge_context") {
+        if (
+          item.role !== "user" ||
+          item.runId !== null ||
+          item.segmentId !== null ||
+          !Object.hasOwn(item, "knowledge")
+        ) {
+          throw new ModelHistoryError("model_history_knowledge_invalid");
+        }
+        requireBounded(
+          item.content,
+          MAX_TURN_KNOWLEDGE_CONTENT_BYTES,
+          "model_history_knowledge_content_invalid",
+        );
+        try {
+          const binding = parseKnowledgeContextBinding(item.knowledge);
+          if (binding.contentDigest !== item.contentDigest) {
+            throw new ModelHistoryError(
+              "model_history_knowledge_digest_mismatch",
+            );
+          }
+        } catch (error) {
+          if (error instanceof ModelHistoryError) throw error;
+          throw new ModelHistoryError("model_history_knowledge_invalid");
+        }
       } else if (Object.hasOwn(item, "origin")) {
         throw new ModelHistoryError("model_history_message_origin_invalid");
       }

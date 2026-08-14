@@ -38,6 +38,50 @@ test("derives turn boundaries and absorbs only non-initial contextual updates", 
   });
 });
 
+test("rolls back the Knowledge context atomically with its user turn", () => {
+  const knowledge: Extract<
+    ModelHistoryItem,
+    { type: "message"; source: "knowledge_context" }
+  > = {
+    schemaVersion: "crewon.model-history-item.v0",
+    type: "message",
+    itemId: "history-3",
+    tenantId: "tenant-1",
+    threadId: "thread-1",
+    sequence: 3,
+    runId: null,
+    segmentId: null,
+    createdAt: "2026-08-08T00:00:00Z",
+    role: "user",
+    source: "knowledge_context",
+    content: "reference",
+    contentDigest: `sha256:${"a".repeat(64)}`,
+    knowledge: {
+      schemaVersion: "crewon.knowledge-context.v0",
+      knowledgeId: "knowledge-1",
+      kind: "source",
+      sourceId: "source-1",
+      title: "Reference",
+      contentDigest: `sha256:${"a".repeat(64)}`,
+    },
+  };
+  const history = [
+    message(1, "user", "thread_message", "first"),
+    message(2, "assistant", "assistant_completion", "answer one"),
+    knowledge,
+    message(4, "user", "thread_message", "second"),
+    message(5, "assistant", "assistant_completion", "answer two"),
+  ] satisfies readonly ModelHistoryItem[];
+
+  assert.deepEqual(planModelHistoryRollback(history, 1), {
+    requestedTurns: 1,
+    removedTurns: 1,
+    historyFromSequence: 3,
+    historyThroughSequence: 5,
+    markerHistorySequence: 6,
+  });
+});
+
 test("does not treat assistant or contextual-only history as an instruction turn", () => {
   const history = [
     message(1, "assistant", "assistant_completion", "answer"),

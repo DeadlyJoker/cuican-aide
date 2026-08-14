@@ -118,6 +118,50 @@ test("accepts Goal steering only as a user-visible history message", () => {
   );
 });
 
+test("accepts only a bounded provenance-bound Knowledge context message", () => {
+  const item: Extract<
+    ModelHistoryItem,
+    { type: "message"; source: "knowledge_context" }
+  > = {
+    ...messageItem(),
+    source: "knowledge_context",
+    knowledge: {
+      schemaVersion: "crewon.knowledge-context.v0",
+      knowledgeId: "knowledge-1",
+      kind: "source",
+      sourceId: "source-1",
+      title: "Reference",
+      contentDigest: `sha256:${"a".repeat(64)}`,
+    },
+  };
+
+  assert.doesNotThrow(() => validateModelHistoryItem(item));
+  assert.throws(
+    () =>
+      validateModelHistoryItem({
+        ...item,
+        role: "system",
+      } as unknown as ModelHistoryItem),
+    hasHistoryCode("model_history_knowledge_invalid"),
+  );
+  assert.throws(
+    () =>
+      validateModelHistoryItem({
+        ...item,
+        contentDigest: `sha256:${"b".repeat(64)}`,
+      }),
+    hasHistoryCode("model_history_knowledge_digest_mismatch"),
+  );
+  assert.throws(
+    () =>
+      validateModelHistoryItem({
+        ...item,
+        content: "x".repeat(8 * 1024 + 1),
+      }),
+    hasHistoryCode("model_history_knowledge_content_invalid"),
+  );
+});
+
 test("accepts only a provenance-bound user Automation invocation", () => {
   const item = automationInvocationItem("Run the daily summary.");
 

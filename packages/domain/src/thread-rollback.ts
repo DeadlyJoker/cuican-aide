@@ -280,7 +280,9 @@ function isContextualUpdate(item: EffectiveModelHistoryItem): boolean {
   return (
     item.type === "message" &&
     item.role === "user" &&
-    (item.source === "goal_continuation" || item.source === "goal_steering")
+    (item.source === "goal_continuation" ||
+      item.source === "goal_steering" ||
+      item.source === "knowledge_context")
   );
 }
 

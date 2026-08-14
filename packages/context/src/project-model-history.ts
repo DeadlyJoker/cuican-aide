@@ -1,5 +1,6 @@
 import {
   projectEffectiveModelHistory,
+  renderKnowledgeContext,
   type ModelHistoryItem,
 } from "@crewon/domain";
 
@@ -143,7 +144,14 @@ function projectItem(
       if (item.role === "tool") {
         throw new ContextHistoryError("legacy_tool_message_unsupported");
       }
-      return { type: "message", role: item.role, content: item.content };
+      return {
+        type: "message",
+        role: item.role,
+        content:
+          item.source === "knowledge_context"
+            ? renderKnowledgeContext(item.knowledge, item.content)
+            : item.content,
+      };
     case "tool_call":
       return {
         type: "tool_call",
