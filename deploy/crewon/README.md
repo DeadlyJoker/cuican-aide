@@ -58,7 +58,7 @@ transport errors fail closed.
 Build both images from their required contexts:
 
 ```bash
-docker build -t crewon-web:local -f deploy/crewon/web.Dockerfile apps/crewon-ui
+docker build -t crewon-web:local -f deploy/crewon/web.Dockerfile .
 docker build -t crewon-web-bff:local -f deploy/crewon/web-bff.Dockerfile .
 ```
 
@@ -74,6 +74,7 @@ secret manager and must never be baked into either image or written into fronten
 pnpm --filter @crewon/web-bff test
 pnpm --filter @crewon/web-bff typecheck
 pnpm --filter @crewon/web-bff production:gate
+docker build -t crewon-web:verify -f deploy/crewon/web.Dockerfile .
 docker build -t crewon-web-bff:verify -f deploy/crewon/web-bff.Dockerfile .
 ```
 

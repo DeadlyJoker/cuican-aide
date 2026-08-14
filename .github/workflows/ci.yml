@@ -48,6 +48,12 @@ jobs:
       - name: Test the Control API
         run: pnpm --filter @crewon/control-api test
 
+      - name: Verify the Web BFF production boundary
+        run: |
+          pnpm --filter @crewon/web-bff typecheck
+          pnpm --filter @crewon/web-bff test
+          pnpm --filter @crewon/web-bff production:gate
+
       - name: Typecheck the Runtime Worker
         run: pnpm --filter @crewon/runtime-worker typecheck
 
@@ -80,6 +86,11 @@ jobs:
 
       - name: Build the web production bundle
         run: pnpm --filter @crewon/ui build
+
+      - name: Build fresh Web production images
+        run: |
+          docker build -t crewon-web:ci -f deploy/crewon/web.Dockerfile .
+          docker build -t crewon-web-bff:ci -f deploy/crewon/web-bff.Dockerfile .
 
       - name: Test the UI
         run: pnpm --filter @crewon/ui test
