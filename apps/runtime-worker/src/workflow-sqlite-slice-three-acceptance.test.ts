@@ -93,6 +93,7 @@ test("SQLite workflow cancel wake closes a pure waitingHuman run", async (t) => 
   await setup.close();
   runtime = await openRuntime(path, config, samples, "gate-only-scheduler");
   await runtime.worker.wake();
+  await publishWorkflowGate(path, runId, "gate-only-publisher");
   assert.deepEqual(inspectGateOnlyCancel(path, runId), {
     gateStatus: "published", gateStepStatus: "waitingApproval", pendingTriggers: [],
     runStatus: "running", cancelEvents: 0,
@@ -171,6 +172,7 @@ for (const decision of ["approve", "reject"] as const) test(
     runtime = await openRuntime(path, config, samples, `gate-worker-${decision}`);
 
     await runtime.worker.wake();
+    await publishWorkflowGate(path, runId, `gate-publisher-${decision}`);
     const published = inspect(path, runId);
     assert.deepEqual(published.schedulerStatuses, ["completed"]);
     assert.equal(published.agentWorkItems, 1);
@@ -300,14 +302,14 @@ test("SQLite Slice 4 completes checkpoint-only reconciliation without resampling
 
   const reconciled = await runtime.worker.wake();
   assert.deepEqual(reconciled, { kind: "workflowRecovery", runId,
-    code: "workflow_reconciliation_settled" });
+    code: "workflow_retrieved_node_settled" });
   assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
   assert.deepEqual(inspectReconciliation(path, runId), {
     dispatchStatus: "terminal", continuationCount: 0,
-    terminalEventCount: 0, nodeStatus: "failed", reconcilePending: 0,
+    terminalEventCount: 1, nodeStatus: "completed", reconcilePending: 0,
   });
   assert.deepEqual(inspectTerminalRecovery(path, runId), {
-    stepStatus: "failed", attemptStatus: "failed", reconcileCompleted: 1,
+    stepStatus: "completed", attemptStatus: "completed", reconcileCompleted: 1,
     nodeCompleted: 1, failedEventCount: 0, runStatus: "running",
   });
 
@@ -316,7 +318,7 @@ test("SQLite Slice 4 completes checkpoint-only reconciliation without resampling
   assert.deepEqual(samples, new Map([["gate-agent-v1", 1]]));
   assert.deepEqual(inspectReconciliation(path, runId), {
     dispatchStatus: "terminal", continuationCount: 0,
-    terminalEventCount: 0, nodeStatus: "failed", reconcilePending: 0,
+    terminalEventCount: 1, nodeStatus: "completed", reconcilePending: 0,
   });
 });
 
@@ -544,6 +546,25 @@ async function openRuntime(path: string, config: ReturnType<typeof baseConfig> &
       tenantId: "tenant-1", runtime: nodeRuntime(agentVersionId, samples) })),
   });
 }
+async function publishWorkflowGate(path: string, runId: string, ownerId: string) {
+  const store = new SqliteRunStore(path, { workflowDigester: digester });
+  try {
+    for (let index = 0; index < 32; index += 1) {
+      const claim = await store.claimNextOutbox({ ownerId,
+        leaseId: `${ownerId}-lease-${index}`, leaseDurationMs: 30_000 });
+      assert.ok(claim, "expected a pending Human Gate publication");
+      const lease = { messageId: claim.message.messageId, ownerId: claim.lease.ownerId,
+        leaseId: claim.lease.leaseId, leaseEpoch: claim.lease.epoch };
+      if (claim.message.topic === "workflow.gate.requested") {
+        assert.equal(claim.message.runId, runId);
+        await store.publishWorkflowHumanGate({ lease, message: claim.message });
+        return;
+      }
+      await store.acknowledgeOutbox(lease);
+    }
+    assert.fail("Human Gate publication was not found within the bounded Outbox scan");
+  } finally { await store.close(); }
+}
 async function openUncertainRuntime(path: string,
   config: ReturnType<typeof baseConfig> & Record<string, unknown>, samples: Map<string, number>,
   ownerId: string) {
@@ -680,16 +701,25 @@ function uncertainNodeRuntime(agentVersionId: string, samples: Map<string, numbe
     reconcile: async () => { throw new Error("tool forbidden"); } },
     kernel: { supportsModelDispatchEvidence: true,
       modelIdentity: { adapterName: "test", adapterVersion: "1", modelId: "model" },
-    async *runSegment(contract: { runId: string; segmentId: string }, _signal: AbortSignal,
+    async *runSegment(contract: { runId: string; segmentId: string; reconcileCheckpoint?: {
+      schemaVersion: "crewon.provider-checkpoint.v0"; adapterName: string; adapterVersion: string;
+      modelId: string; opaquePayload: Record<string, unknown> } }, _signal: AbortSignal,
       options: { controlSink?: Record<string, (value: unknown) => Promise<void>> }) {
+      const base = { schemaVersion: "crewon.agent-event.v0", runId: contract.runId,
+        segmentId: contract.segmentId } as const;
+      if (contract.reconcileCheckpoint !== undefined) {
+        yield { ...base, sequence: 1, type: "segment.provider_response_created", data: {
+          checkpoint: contract.reconcileCheckpoint } };
+        yield { ...base, sequence: 2, type: "model.output.delta", data: { delta: "{}" } };
+        yield { ...base, sequence: 3, type: "segment.completed", data: { output: "{}" } };
+        return;
+      }
       samples.set(agentVersionId, (samples.get(agentVersionId) ?? 0) + 1);
       const evidence = { operationId: `${contract.segmentId}:dispatch`, requestSequence: 1,
         operation: "dispatch", requestDigest: digester.sha256(agentVersionId), provider: {
           agentVersionId, adapterName: "test", adapterVersion: "1", modelId: "model" } };
       await options.controlSink?.modelRequestPrepared?.(evidence);
       await options.controlSink?.dispatchBoundaryCrossed?.(evidence);
-      const base = { schemaVersion: "crewon.agent-event.v0", runId: contract.runId,
-        segmentId: contract.segmentId } as const;
       yield { ...base, sequence: 1, type: "segment.started", data: { attempt: 1, model: "model" } };
       yield { ...base, sequence: 2, type: "segment.provider_response_created", data: { checkpoint: {
         schemaVersion: "crewon.provider-checkpoint.v0", adapterName: "test", adapterVersion: "1",
