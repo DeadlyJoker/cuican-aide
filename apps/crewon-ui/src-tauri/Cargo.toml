@@ -30,6 +30,7 @@ keyring = { version = "3.6.3", default-features = false, features = [
   "windows-native",
 ] }
 libc = "0.2"
+minisign-verify = "=0.2.5"
 rcgen = { version = "0.14.7", default-features = false, features = [
   "pem",
   "ring",

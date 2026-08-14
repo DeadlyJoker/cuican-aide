@@ -519,6 +519,7 @@ dependencies = [
  "hex",
  "keyring",
  "libc",
+ "minisign-verify",
  "pretty_assertions",
  "rcgen",
  "rusqlite",
