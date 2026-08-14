@@ -103,13 +103,23 @@
 
 ## React 客户端
 
-| ID  | 当前路径                                                      | 处置                        | 最终所有者                        | 核心证据/删除 Gate                                |
-| --- | ------------------------------------------------------------- | --------------------------- | --------------------------------- | ------------------------------------------------- |
-| U01 | `src/lib/app-server/**`                                       | `PORT_REDESIGN` 后删除      | generated Control API client      | PC/Web 同 schema；SSE resume；旧 WS 调用为 0      |
-| U02 | `src/lib/agent-platform/**`、direct session/catalog/execution | `DELETE` 或 UI-only Adapter | Control API resource queries      | 浏览器网络审计无 direct execution/secret          |
-| U03 | `src/lib/thread/**`                                           | 保留 presentation，重写 I/O | feature/thread + generated client | projection/interaction snapshot                   |
-| U04 | `src/lib/workflow/**`、`src/lib/office/**`、automation        | 保留 presentation，重写 I/O | feature packages                  | fail-closed parsing、统一 Run/Approval projection |
-| U05 | large app workspace coordinators                              | 分 feature `PORT_REDESIGN`  | feature composition               | 无 domain authority、无 provider direct path      |
+| ID  | 当前路径                                                      | 处置                          | 最终所有者                        | 核心证据/删除 Gate                                |
+| --- | ------------------------------------------------------------- | ----------------------------- | --------------------------------- | ------------------------------------------------- |
+| U01 | `src/lib/app-server/**`                                       | `DELETE`（已关闭）            | generated Control API client      | PC/Web 同 schema；SSE resume；旧 WS 调用为 0      |
+| U02 | `src/lib/agent-platform/**`、direct session/catalog/execution | `DELETE`（production 已关闭） | Control API resource queries      | 浏览器网络审计无 direct execution/secret          |
+| U03 | `src/lib/thread/**`                                           | 保留 presentation，重写 I/O   | feature/thread + generated client | projection/interaction snapshot                   |
+| U04 | `src/lib/workflow/**`、`src/lib/office/**`、automation        | 保留 presentation，重写 I/O   | feature packages                  | fail-closed parsing、统一 Run/Approval projection |
+| U05 | large app workspace coordinators                              | 分 feature `PORT_REDESIGN`    | feature composition               | 无 domain authority、无 provider direct path      |
+
+### Renderer Control-only cutover evidence（2026-08-14）
+
+- **U01**：Renderer 不再导入 App Server transport/authority，fresh production bundle 的 AppServer、WebSocket 6176 与 restart
+  marker 为 0；Thread、Run、Workflow、Office、Automation、Settings 与 Workspace 均使用 generated Control client。
+- **U02**：production entry 不再挂载 `AgentPlatformAuthGate`、PIM launch token 或默认 `127.0.0.1:8000` /
+  `/agent-platform-api` proxy；首页不再 mount-time 读取 agent-platform catalog。Agent/Knowledge 旧 catalog mutation 在没有 Control
+  contract 时明确 fail closed，不能直连 Provider/PIM 冒充迁移完成。遗留未导入模块可继续机械删除，但不属于 runtime authority。
+- packaged desktop 仍在 Control client 构造前安装 Tauri HTTP transport。这只为 `tauri.localhost` 到 authenticated loopback
+  Control API 绕过 webview CORS，不是 Rust App Server/PIM fallback，也不拥有产品语义。
 
 ## 必须新增但不从旧代码复制的模块
 
