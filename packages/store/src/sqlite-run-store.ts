@@ -12,7 +12,10 @@ import {
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
 import { migrateSqliteWorkflowExecutions } from "./workflow-execution-schema.ts";
 import { migrateSqliteWorkflowVersions } from "./workflow-version-schema.ts";
-import { migrateSqliteOffices, SqliteOfficeStore } from "./sqlite-office-store.ts";
+import {
+  migrateSqliteOffices,
+  SqliteOfficeStore,
+} from "./sqlite-office-store.ts";
 import {
   migrateSqliteOfficeDelegations,
   SqliteOfficeDelegationStore,
@@ -548,8 +551,9 @@ type AutomationRow = Readonly<{
   updated_at: string;
 }>;
 
-export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
-  WorkflowToolApprovalStore {
+export class SqliteRunStore
+  implements DomainStore, WorkflowRuntimeStore, WorkflowToolApprovalStore
+{
   readonly #database: DatabaseSync;
   readonly #clock: LeaseClock;
   readonly #workflowDigester: WorkflowContentDigester | null;
@@ -571,12 +575,16 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
     return this.#workflow().loadWorkflowExecution(input);
   }
   async publishWorkflowToolApproval(
-    input: Parameters<WorkflowToolApprovalStore["publishWorkflowToolApproval"]>[0],
+    input: Parameters<
+      WorkflowToolApprovalStore["publishWorkflowToolApproval"]
+    >[0],
   ): ReturnType<WorkflowToolApprovalStore["publishWorkflowToolApproval"]> {
     return this.#workflow().publishWorkflowToolApproval(input);
   }
   async consumeWorkflowToolApproval(
-    input: Parameters<WorkflowToolApprovalStore["consumeWorkflowToolApproval"]>[0],
+    input: Parameters<
+      WorkflowToolApprovalStore["consumeWorkflowToolApproval"]
+    >[0],
   ): ReturnType<WorkflowToolApprovalStore["consumeWorkflowToolApproval"]> {
     return this.#workflow().consumeWorkflowToolApproval(input);
   }
@@ -597,17 +605,25 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
     return this.#workflow().settleWorkflowNode(input);
   }
   async recordWorkflowHumanGateDecision(
-    input: Parameters<WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]>[0],
-  ): ReturnType<WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]> {
+    input: Parameters<
+      WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]
+    >[0],
+  ): ReturnType<
+    WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]
+  > {
     return this.#workflow().recordWorkflowHumanGateDecision(input);
   }
   async settleWorkflowHumanGate(
-    input: Parameters<WorkflowRunCompositionStore["settleWorkflowHumanGate"]>[0],
+    input: Parameters<
+      WorkflowRunCompositionStore["settleWorkflowHumanGate"]
+    >[0],
   ): ReturnType<WorkflowRunCompositionStore["settleWorkflowHumanGate"]> {
     return this.#workflow().settleWorkflowHumanGate(input);
   }
   async scheduleWorkflowReconciliation(
-    input: Parameters<WorkflowRunCompositionStore["scheduleWorkflowReconciliation"]>[0],
+    input: Parameters<
+      WorkflowRunCompositionStore["scheduleWorkflowReconciliation"]
+    >[0],
   ): ReturnType<WorkflowRunCompositionStore["scheduleWorkflowReconciliation"]> {
     return this.#workflow().scheduleWorkflowReconciliation(input);
   }
@@ -617,40 +633,62 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
     return this.#workflow().reconcileWorkflowNode(input);
   }
   async cancelWorkflowExecution(
-    input: Parameters<WorkflowRunCompositionStore["cancelWorkflowExecution"]>[0],
+    input: Parameters<
+      WorkflowRunCompositionStore["cancelWorkflowExecution"]
+    >[0],
   ): ReturnType<WorkflowRunCompositionStore["cancelWorkflowExecution"]> {
     return this.#workflow().cancelWorkflowExecution(input);
   }
   async loadWorkflowNodeContinuation(
-    authority: Parameters<WorkflowNodeContinuationStore["loadWorkflowNodeContinuation"]>[0],
+    authority: Parameters<
+      WorkflowNodeContinuationStore["loadWorkflowNodeContinuation"]
+    >[0],
   ): ReturnType<WorkflowNodeContinuationStore["loadWorkflowNodeContinuation"]> {
     return this.#workflow().loadWorkflowNodeContinuation(authority);
   }
   async commitWorkflowAssistantContinuation(
-    input: Parameters<WorkflowNodeContinuationStore["commitWorkflowAssistantContinuation"]>[0],
-  ): ReturnType<WorkflowNodeContinuationStore["commitWorkflowAssistantContinuation"]> {
+    input: Parameters<
+      WorkflowNodeContinuationStore["commitWorkflowAssistantContinuation"]
+    >[0],
+  ): ReturnType<
+    WorkflowNodeContinuationStore["commitWorkflowAssistantContinuation"]
+  > {
     return this.#workflow().commitWorkflowAssistantContinuation(input);
   }
   async commitWorkflowToolContinuation(
-    input: Parameters<WorkflowNodeContinuationStore["commitWorkflowToolContinuation"]>[0],
-  ): ReturnType<WorkflowNodeContinuationStore["commitWorkflowToolContinuation"]> {
+    input: Parameters<
+      WorkflowNodeContinuationStore["commitWorkflowToolContinuation"]
+    >[0],
+  ): ReturnType<
+    WorkflowNodeContinuationStore["commitWorkflowToolContinuation"]
+  > {
     return this.#workflow().commitWorkflowToolContinuation(input);
   }
   async settleWorkflowNodeModelTerminal(
-    input: Parameters<WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]>[0],
-  ): ReturnType<WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]> {
+    input: Parameters<
+      WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]
+    >[0],
+  ): ReturnType<
+    WorkflowNodeContinuationStore["settleWorkflowNodeModelTerminal"]
+  > {
     return this.#workflow().settleWorkflowNodeModelTerminal(input);
   }
 
-  async settlePreparedWorkflowNodeTerminal(input: Parameters<
-    WorkflowNodeContinuationStore["settlePreparedWorkflowNodeTerminal"]>[0]) {
+  async settlePreparedWorkflowNodeTerminal(
+    input: Parameters<
+      WorkflowNodeContinuationStore["settlePreparedWorkflowNodeTerminal"]
+    >[0],
+  ) {
     return this.#workflow().settlePreparedWorkflowNodeTerminal(input);
   }
 
-  constructor(path: string, options: {
-    clock?: LeaseClock;
-    workflowDigester?: WorkflowContentDigester;
-  } = {}) {
+  constructor(
+    path: string,
+    options: {
+      clock?: LeaseClock;
+      workflowDigester?: WorkflowContentDigester;
+    } = {},
+  ) {
     requireNonEmpty(path, "sqlite_path_invalid");
     this.#clock = options.clock ?? new SystemLeaseClock();
     this.#workflowDigester = options.workflowDigester ?? null;
@@ -686,7 +724,9 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
       writeOutbox: (messages) => this.#writeOutbox(messages),
       writeWorkItems: (items) => this.#writeWorkItems(items),
     });
-    this.#knowledge = new SqliteKnowledgeStore(this.#database, () => this.#assertOpen());
+    this.#knowledge = new SqliteKnowledgeStore(this.#database, () =>
+      this.#assertOpen(),
+    );
     this.#officeAuthority = new SqliteOfficeStore(this.#database);
     this.#officeDelegationAuthority = new SqliteOfficeDelegationStore(
       this.#database,
@@ -725,7 +765,9 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
     this.#closed = true;
   }
 
-  loadKnowledgeReceipt(query: KnowledgeReceiptQuery): Promise<KnowledgeCreateResult | null> {
+  loadKnowledgeReceipt(
+    query: KnowledgeReceiptQuery,
+  ): Promise<KnowledgeCreateResult | null> {
     return this.#knowledge.loadKnowledgeReceipt(query);
   }
   commitKnowledge(input: CommitKnowledgeInput): Promise<KnowledgeCreateResult> {
@@ -738,11 +780,33 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
     return this.#knowledge.listKnowledge(query);
   }
 
-  commitOfficeDefinition(input: Parameters<SqliteOfficeStore["commitOfficeDefinition"]>[0]) { return this.#officeAuthority.commitOfficeDefinition(input); }
-  loadOfficeDefinition(input: Parameters<SqliteOfficeStore["loadOfficeDefinition"]>[0]) { return this.#officeAuthority.loadOfficeDefinition(input); }
-  listOfficeDefinitions(input: Parameters<SqliteOfficeStore["listOfficeDefinitions"]>[0]) { return this.#officeAuthority.listOfficeDefinitions(input); }
-  commitOfficeDelegationStart(input: Parameters<SqliteOfficeDelegationStore["commitOfficeDelegationStart"]>[0]) { return this.#officeDelegationAuthority.commitOfficeDelegationStart(input); }
-  listOfficeDelegations(input: Parameters<SqliteOfficeDelegationStore["listOfficeDelegations"]>[0]) { return this.#officeDelegationAuthority.listOfficeDelegations(input); }
+  commitOfficeDefinition(
+    input: Parameters<SqliteOfficeStore["commitOfficeDefinition"]>[0],
+  ) {
+    return this.#officeAuthority.commitOfficeDefinition(input);
+  }
+  loadOfficeDefinition(
+    input: Parameters<SqliteOfficeStore["loadOfficeDefinition"]>[0],
+  ) {
+    return this.#officeAuthority.loadOfficeDefinition(input);
+  }
+  listOfficeDefinitions(
+    input: Parameters<SqliteOfficeStore["listOfficeDefinitions"]>[0],
+  ) {
+    return this.#officeAuthority.listOfficeDefinitions(input);
+  }
+  commitOfficeDelegationStart(
+    input: Parameters<
+      SqliteOfficeDelegationStore["commitOfficeDelegationStart"]
+    >[0],
+  ) {
+    return this.#officeDelegationAuthority.commitOfficeDelegationStart(input);
+  }
+  listOfficeDelegations(
+    input: Parameters<SqliteOfficeDelegationStore["listOfficeDelegations"]>[0],
+  ) {
+    return this.#officeDelegationAuthority.listOfficeDelegations(input);
+  }
 
   async loadAutomationCreateReceipt(
     query: AutomationCreateReceiptQuery,
@@ -3700,115 +3764,217 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
         if (ownsTransaction) this.#database.exec("COMMIT");
         return concurrentReplay;
       }
-      const thread = this.#loadThread({ tenantId: input.tenantId,
-        threadId: input.threadId });
-      if (thread === null || thread.spaceId !== input.spaceId ||
-          thread.status !== "active")
+      const thread = this.#loadThread({
+        tenantId: input.tenantId,
+        threadId: input.threadId,
+      });
+      if (
+        thread === null ||
+        thread.spaceId !== input.spaceId ||
+        thread.status !== "active"
+      )
         throw new RunStoreError("thread_not_active");
-      const row = this.#database.prepare(
-        `SELECT tenant_id,workflow_id,workflow_version_id,content_digest,
+      const row = this.#database
+        .prepare(
+          `SELECT tenant_id,workflow_id,workflow_version_id,content_digest,
                 definition_json,created_at FROM workflow_versions
          WHERE tenant_id=? AND workflow_version_id=?`,
-      ).get(input.tenantId, input.workflowVersionId) as
-        | { tenant_id: string; workflow_id: string; workflow_version_id: string;
-            content_digest: string; definition_json: string; created_at: string }
+        )
+        .get(input.tenantId, input.workflowVersionId) as
+        | {
+            tenant_id: string;
+            workflow_id: string;
+            workflow_version_id: string;
+            content_digest: string;
+            definition_json: string;
+            created_at: string;
+          }
         | undefined;
-      if (row === undefined) throw new RunStoreError("workflow_version_not_found");
+      if (row === undefined)
+        throw new RunStoreError("workflow_version_not_found");
       const compiled = parseCompiledWorkflowVersion(
-        row.definition_json, workflowDigester);
-      if (compiled.workflowId !== row.workflow_id ||
-          compiled.workflowVersionId !== row.workflow_version_id ||
-          compiled.contentDigest !== row.content_digest)
+        row.definition_json,
+        workflowDigester,
+      );
+      if (
+        compiled.workflowId !== row.workflow_id ||
+        compiled.workflowVersionId !== row.workflow_version_id ||
+        compiled.contentDigest !== row.content_digest
+      )
         throw new RunStoreError("workflow_version_corrupt");
-      const workflowVersion = { schemaVersion: "crewon.workflow-version-asset.v0" as const,
-        tenantId: row.tenant_id, workflowId: row.workflow_id,
-        workflowVersionId: row.workflow_version_id, contentDigest: row.content_digest,
-        definitionJson: row.definition_json, createdAt: row.created_at };
+      const workflowVersion = {
+        schemaVersion: "crewon.workflow-version-asset.v0" as const,
+        tenantId: row.tenant_id,
+        workflowId: row.workflow_id,
+        workflowVersionId: row.workflow_version_id,
+        contentDigest: row.content_digest,
+        definitionJson: row.definition_json,
+        createdAt: row.created_at,
+      };
       const activeRelease = this.#loadActiveAgentVersionRelease(input.tenantId);
-      if (activeRelease === null) throw new RunStoreError("agent_version_release_not_active");
-      const ids = [...new Set(compiled.nodes.flatMap((node) =>
-        node.kind === "humanGate" ? []
-          : [node.kind === "verification" ? node.verifierAgentVersionId : node.agentVersionId]))];
+      if (activeRelease === null)
+        throw new RunStoreError("agent_version_release_not_active");
+      const ids = [
+        ...new Set(
+          compiled.nodes.flatMap((node) =>
+            node.kind === "humanGate"
+              ? []
+              : [
+                  node.kind === "verification"
+                    ? node.verifierAgentVersionId
+                    : node.agentVersionId,
+                ],
+          ),
+        ),
+      ];
       const deployments = ids.map((agentVersionId) => {
-        const deployment = this.#loadAgentVersionDeployment({ tenantId: input.tenantId,
-          agentVersionId });
-        const asset = this.#loadAgentVersion({ tenantId: input.tenantId, agentVersionId });
+        const deployment = this.#loadAgentVersionDeployment({
+          tenantId: input.tenantId,
+          agentVersionId,
+        });
+        const asset = this.#loadAgentVersion({
+          tenantId: input.tenantId,
+          agentVersionId,
+        });
         const candidate = activeRelease.bundle.deployments.find(
-          (item) => item.agentVersionId === agentVersionId);
-        if (deployment === null || asset === null || candidate === undefined ||
-            deployment.contentDigest !== asset.contentDigest)
+          (item) => item.agentVersionId === agentVersionId,
+        );
+        if (
+          deployment === null ||
+          asset === null ||
+          candidate === undefined ||
+          deployment.contentDigest !== asset.contentDigest
+        )
           throw new RunStoreError("workflow_agent_deployment_mismatch");
         if (!sameAgentVersionDeploymentCandidate(candidate, deployment))
           throw new RunStoreError("workflow_agent_deployment_mismatch");
         const compiledAgent = parseCompiledAgentVersion(
-          asset.definitionJson, workflowDigester);
-        if (compiledAgent.agentVersionId !== asset.agentVersionId ||
-            compiledAgent.contentDigest !== asset.contentDigest)
+          asset.definitionJson,
+          workflowDigester,
+        );
+        if (
+          compiledAgent.agentVersionId !== asset.agentVersionId ||
+          compiledAgent.contentDigest !== asset.contentDigest
+        )
           throw new RunStoreError("workflow_agent_deployment_mismatch");
         return deployment;
       });
       const defaultId = activeRelease.bundle.defaultAgentVersionId;
-      const defaultDeployment = this.#loadAgentVersionDeployment({ tenantId: input.tenantId,
-        agentVersionId: defaultId });
-      const defaultAsset = this.#loadAgentVersion({ tenantId: input.tenantId,
-        agentVersionId: defaultId });
+      const defaultDeployment = this.#loadAgentVersionDeployment({
+        tenantId: input.tenantId,
+        agentVersionId: defaultId,
+      });
+      const defaultAsset = this.#loadAgentVersion({
+        tenantId: input.tenantId,
+        agentVersionId: defaultId,
+      });
       const defaultCandidate = activeRelease.bundle.deployments.find(
-        (item) => item.agentVersionId === defaultId);
-      if (defaultDeployment === null || defaultAsset === null || defaultCandidate === undefined ||
-          defaultDeployment.contentDigest !== defaultAsset.contentDigest ||
-          !sameAgentVersionDeploymentCandidate(defaultCandidate, defaultDeployment))
+        (item) => item.agentVersionId === defaultId,
+      );
+      if (
+        defaultDeployment === null ||
+        defaultAsset === null ||
+        defaultCandidate === undefined ||
+        defaultDeployment.contentDigest !== defaultAsset.contentDigest ||
+        !sameAgentVersionDeploymentCandidate(
+          defaultCandidate,
+          defaultDeployment,
+        )
+      )
         throw new RunStoreError("workflow_agent_deployment_mismatch");
       const compiledDefault = parseCompiledAgentVersion(
-        defaultAsset.definitionJson, workflowDigester);
-      if (compiledDefault.agentVersionId !== defaultAsset.agentVersionId ||
-          compiledDefault.contentDigest !== defaultAsset.contentDigest)
+        defaultAsset.definitionJson,
+        workflowDigester,
+      );
+      if (
+        compiledDefault.agentVersionId !== defaultAsset.agentVersionId ||
+        compiledDefault.contentDigest !== defaultAsset.contentDigest
+      )
         throw new RunStoreError("workflow_run_route_mismatch");
       const route = candidateRoute;
-      if (route.agentVersionId !== defaultDeployment.agentVersionId ||
-          route.authorityId !== defaultDeployment.authorityId ||
-          route.workspaceBindingId !== defaultDeployment.workspaceBindingId ||
-          route.runtimeGeneration !== compiledDefault.runtimeGeneration ||
-          route.policySnapshotId !== compiledDefault.policySnapshotId)
+      if (
+        route.agentVersionId !== defaultDeployment.agentVersionId ||
+        route.authorityId !== defaultDeployment.authorityId ||
+        route.workspaceBindingId !== defaultDeployment.workspaceBindingId ||
+        route.runtimeGeneration !== compiledDefault.runtimeGeneration ||
+        route.policySnapshotId !== compiledDefault.policySnapshotId
+      )
         throw new RunStoreError("workflow_run_route_mismatch");
       const prepared = input.prepare({ workflowVersion, route });
       const rootJson = canonicalJson(prepared.workflowInputValue.value);
-      if (prepared.workflowInputValue.schemaVersion !==
+      if (
+        prepared.workflowInputValue.schemaVersion !==
           "crewon.workflow-execution-value.v0" ||
-          !/^[-A-Za-z0-9:._]{1,200}$/u.test(prepared.workflowInputValue.valueId) ||
-          !/^sha256:[a-f0-9]{64}$/u.test(prepared.workflowInputValue.valueDigest) ||
-          rootJson !== canonicalJson(input.workflowInput) ||
-          new TextEncoder().encode(rootJson).byteLength > MAX_WORKFLOW_VALUE_BYTES ||
-          workflowDigester.sha256(rootJson) !== prepared.workflowInputValue.valueDigest)
+        !/^[-A-Za-z0-9:._]{1,200}$/u.test(
+          prepared.workflowInputValue.valueId,
+        ) ||
+        !/^sha256:[a-f0-9]{64}$/u.test(
+          prepared.workflowInputValue.valueDigest,
+        ) ||
+        rootJson !== canonicalJson(input.workflowInput) ||
+        new TextEncoder().encode(rootJson).byteLength >
+          MAX_WORKFLOW_VALUE_BYTES ||
+        workflowDigester.sha256(rootJson) !==
+          prepared.workflowInputValue.valueDigest
+      )
         throw new RunStoreError("workflow_execution_value_invalid");
-      this.#validateWorkflowPreparedCommit(input, prepared.commit,
-        workflowVersion, route, prepared.workflowInputValue);
+      this.#validateWorkflowPreparedCommit(
+        input,
+        prepared.commit,
+        workflowVersion,
+        route,
+        prepared.workflowInputValue,
+      );
       const run = this.#commitRun(prepared.commit, null, null, true, true);
       const work = run.workItems[0];
-      const ref = { valueId: prepared.workflowInputValue.valueId,
-        valueDigest: prepared.workflowInputValue.valueDigest };
+      const ref = {
+        valueId: prepared.workflowInputValue.valueId,
+        valueDigest: prepared.workflowInputValue.valueDigest,
+      };
       const payload = work?.payload as Record<string, unknown> | undefined;
-      if (work === undefined || payload?.schemaVersion !==
-          "crewon.workflow-scheduler-work-item.v1" ||
-          payload.trigger !== "workflowScheduler" ||
-          stableJson(payload.workflowInput) !== stableJson(ref) ||
-          stableJson(payload.binding) !== stableJson({ workflowId: compiled.workflowId,
+      if (
+        work === undefined ||
+        payload?.schemaVersion !== "crewon.workflow-scheduler-work-item.v1" ||
+        payload.trigger !== "workflowScheduler" ||
+        stableJson(payload.workflowInput) !== stableJson(ref) ||
+        stableJson(payload.binding) !==
+          stableJson({
+            workflowId: compiled.workflowId,
             workflowVersionId: compiled.workflowVersionId,
-            contentDigest: compiled.contentDigest }) ||
-          typeof payload.schedulerOperationId !== "string")
+            contentDigest: compiled.contentDigest,
+          }) ||
+        typeof payload.schedulerOperationId !== "string"
+      )
         throw new RunStoreError("workflow_scheduler_work_item_mismatch");
-      this.#database.prepare(
-        `INSERT INTO workflow_execution_values
+      this.#database
+        .prepare(
+          `INSERT INTO workflow_execution_values
          (tenant_id,run_id,value_id,role,node_id,value_digest,value_json,created_at)
          VALUES (?,?,?,'rootInput',NULL,?,?,?)`,
-      ).run(input.tenantId, run.state.runId, ref.valueId, ref.valueDigest,
-        rootJson, run.state.createdAt);
+        )
+        .run(
+          input.tenantId,
+          run.state.runId,
+          ref.valueId,
+          ref.valueDigest,
+          rootJson,
+          run.state.createdAt,
+        );
       const result = { authority: { workflowVersion, route }, run };
-      this.#database.prepare(
-        `INSERT INTO workflow_run_admission_receipts
+      this.#database
+        .prepare(
+          `INSERT INTO workflow_run_admission_receipts
          (tenant_id,scope,idempotency_key,fingerprint,run_id,result_json)
          VALUES (?,?,?,?,?,?)`,
-      ).run(input.tenantId, input.idempotency.scope, input.idempotency.key,
-        input.idempotency.requestFingerprint, run.state.runId, stableJson(result));
+        )
+        .run(
+          input.tenantId,
+          input.idempotency.scope,
+          input.idempotency.key,
+          input.idempotency.requestFingerprint,
+          run.state.runId,
+          stableJson(result),
+        );
       if (ownsTransaction) this.#database.exec("COMMIT");
       return clone(result);
     } catch (error) {
@@ -4269,15 +4435,23 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
         input.tenantId,
         input.events.at(-1)?.sequence ?? 0,
         (workItemId) => this.#workItemIdExists(workItemId),
-        workflowScheduler ? "workflowScheduler"
-          : input.events.length === 1 && input.events[0]?.type === "run.cancel.requested" &&
-              next.purpose === "workflow" ? "workflowCancel"
-          : input.threadAdmission === undefined ? "default" : "manualCompaction",
+        workflowScheduler
+          ? "workflowScheduler"
+          : input.events.length === 1 &&
+              input.events[0]?.type === "run.cancel.requested" &&
+              next.purpose === "workflow"
+            ? "workflowCancel"
+            : input.threadAdmission === undefined
+              ? "default"
+              : "manualCompaction",
       );
-      if (input.events.length === 1 && input.events[0]?.type === "run.cancel.requested" &&
-          next.purpose === "workflow" &&
-          stableJson(input.workItems[0]?.payload.binding) !==
-            stableJson(next.workflowVersionBinding))
+      if (
+        input.events.length === 1 &&
+        input.events[0]?.type === "run.cancel.requested" &&
+        next.purpose === "workflow" &&
+        stableJson(input.workItems[0]?.payload.binding) !==
+          stableJson(next.workflowVersionBinding)
+      )
         throw new RunStoreError("work_item_payload_invalid");
 
       this.#writeSnapshot(current, next, input.expectedRevision);
@@ -5592,38 +5766,62 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
     receiptRunId: string,
     result: CommitWorkflowRunStartResult,
   ): void {
-    if (result.run.disposition !== "committed" ||
-        receiptRunId !== result.run.state.runId ||
-        result.run.state.tenantId !== input.tenantId ||
-        result.run.state.spaceId !== input.spaceId ||
-        result.run.state.threadId !== input.threadId ||
-        result.authority.workflowVersion.tenantId !== input.tenantId ||
-        result.authority.workflowVersion.workflowVersionId !== input.workflowVersionId)
+    if (
+      result.run.disposition !== "committed" ||
+      receiptRunId !== result.run.state.runId ||
+      result.run.state.tenantId !== input.tenantId ||
+      result.run.state.spaceId !== input.spaceId ||
+      result.run.state.threadId !== input.threadId ||
+      result.authority.workflowVersion.tenantId !== input.tenantId ||
+      result.authority.workflowVersion.workflowVersionId !==
+        input.workflowVersionId
+    )
       throw new RunStoreError("workflow_run_admission_receipt_corrupt");
-    const run = this.#loadRun({ tenantId: result.run.state.tenantId,
-      runId: result.run.state.runId });
-    const versionRow = this.#database.prepare(
-      `SELECT tenant_id,workflow_id,workflow_version_id,content_digest,
+    const run = this.#loadRun({
+      tenantId: result.run.state.tenantId,
+      runId: result.run.state.runId,
+    });
+    const versionRow = this.#database
+      .prepare(
+        `SELECT tenant_id,workflow_id,workflow_version_id,content_digest,
               definition_json,created_at FROM workflow_versions
        WHERE tenant_id=? AND workflow_version_id=?`,
-    ).get(input.tenantId, input.workflowVersionId) as
-      | { tenant_id: string; workflow_id: string; workflow_version_id: string;
-          content_digest: string; definition_json: string; created_at: string }
+      )
+      .get(input.tenantId, input.workflowVersionId) as
+      | {
+          tenant_id: string;
+          workflow_id: string;
+          workflow_version_id: string;
+          content_digest: string;
+          definition_json: string;
+          created_at: string;
+        }
       | undefined;
-    const durableVersion = versionRow === undefined ? null : {
-      schemaVersion: "crewon.workflow-version-asset.v0" as const,
-      tenantId: versionRow.tenant_id, workflowId: versionRow.workflow_id,
-      workflowVersionId: versionRow.workflow_version_id,
-      contentDigest: versionRow.content_digest,
-      definitionJson: versionRow.definition_json, createdAt: versionRow.created_at,
-    };
-    const compiled = durableVersion === null || this.#workflowDigester === null
-      ? null : parseCompiledWorkflowVersion(
-          durableVersion.definitionJson, this.#workflowDigester);
-    const roots = this.#database.prepare(
-      `SELECT value_id,value_digest,value_json FROM workflow_execution_values
+    const durableVersion =
+      versionRow === undefined
+        ? null
+        : {
+            schemaVersion: "crewon.workflow-version-asset.v0" as const,
+            tenantId: versionRow.tenant_id,
+            workflowId: versionRow.workflow_id,
+            workflowVersionId: versionRow.workflow_version_id,
+            contentDigest: versionRow.content_digest,
+            definitionJson: versionRow.definition_json,
+            createdAt: versionRow.created_at,
+          };
+    const compiled =
+      durableVersion === null || this.#workflowDigester === null
+        ? null
+        : parseCompiledWorkflowVersion(
+            durableVersion.definitionJson,
+            this.#workflowDigester,
+          );
+    const roots = this.#database
+      .prepare(
+        `SELECT value_id,value_digest,value_json FROM workflow_execution_values
        WHERE tenant_id=? AND run_id=? AND role='rootInput' AND node_id IS NULL`,
-    ).all(result.run.state.tenantId, result.run.state.runId) as unknown as {
+      )
+      .all(result.run.state.tenantId, result.run.state.runId) as unknown as {
       value_id: string;
       value_digest: string;
       value_json: string;
@@ -5632,25 +5830,45 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
     const work = result.run.workItems[0];
     const event = result.run.events[0];
     const outbox = result.run.outbox[0];
-    const storedEvent = event === undefined ? undefined : this.#database.prepare(
-      `SELECT tenant_id,run_id,sequence,event_id,event_json FROM run_events
+    const storedEvent =
+      event === undefined
+        ? undefined
+        : (this.#database
+            .prepare(
+              `SELECT tenant_id,run_id,sequence,event_id,event_json FROM run_events
        WHERE tenant_id=? AND event_id=?`,
-    ).get(result.run.state.tenantId, event.eventId) as
-      | EventRow | undefined;
-    const storedOutbox = outbox === undefined ? undefined : this.#database.prepare(
-      `SELECT message_id,tenant_id,run_id,topic,created_at,message_json FROM outbox
+            )
+            .get(result.run.state.tenantId, event.eventId) as
+            | EventRow
+            | undefined);
+    const storedOutbox =
+      outbox === undefined
+        ? undefined
+        : (this.#database
+            .prepare(
+              `SELECT message_id,tenant_id,run_id,topic,created_at,message_json FROM outbox
        WHERE tenant_id=? AND message_id=?`,
-    ).get(result.run.state.tenantId, outbox.messageId) as
-      | OutboxRow | undefined;
-    const storedWork = work === undefined ? undefined : this.#database.prepare(
-      `SELECT work_item_id,tenant_id,run_id,kind,created_at,work_item_json
+            )
+            .get(result.run.state.tenantId, outbox.messageId) as
+            | OutboxRow
+            | undefined);
+    const storedWork =
+      work === undefined
+        ? undefined
+        : (this.#database
+            .prepare(
+              `SELECT work_item_id,tenant_id,run_id,kind,created_at,work_item_json
        FROM work_items WHERE tenant_id=? AND work_item_id=?`,
-    ).get(result.run.state.tenantId, work.workItemId) as
-      | WorkItemRow | undefined;
-    const generalReceipt = this.#database.prepare(
-      `SELECT count(*) AS count FROM idempotency_receipts
+            )
+            .get(result.run.state.tenantId, work.workItemId) as
+            | WorkItemRow
+            | undefined);
+    const generalReceipt = this.#database
+      .prepare(
+        `SELECT count(*) AS count FROM idempotency_receipts
        WHERE tenant_id=? AND run_id=? AND result_json=?`,
-    ).get(input.tenantId, receiptRunId, stableJson(result.run)) as
+      )
+      .get(input.tenantId, receiptRunId, stableJson(result.run)) as
       | { count: number }
       | undefined;
     const ref = work?.payload.workflowInput as
@@ -5661,66 +5879,88 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
       workflowVersionId: durableVersion?.workflowVersionId,
       contentDigest: durableVersion?.contentDigest,
     };
-    if (run === null || durableVersion === null || compiled === null ||
-        stableJson(durableVersion) !== stableJson(result.authority.workflowVersion) ||
-        compiled.contentDigest !== durableVersion.contentDigest ||
-        compiled.workflowId !== durableVersion.workflowId ||
-        result.run.events.length !== 1 || result.run.outbox.length !== 1 ||
-        result.run.workItems.length !== 1 || event?.type !== "run.created" ||
-        event.sequence !== 1 || event.identity.runId !== receiptRunId ||
-        event.data.tenantId !== input.tenantId ||
-        event.data.spaceId !== input.spaceId ||
-        event.data.threadId !== input.threadId ||
-        event.data.purpose !== "workflow" || event.data.goalBinding !== null ||
-        stableJson(run) !== stableJson(result.run.state) ||
-        run.agentVersionId !== result.authority.route.agentVersionId ||
-        run.authorityId !== result.authority.route.authorityId ||
-        run.runtimeGeneration !== result.authority.route.runtimeGeneration ||
-        run.policySnapshotId !== result.authority.route.policySnapshotId ||
-        run.workspaceBindingId !== result.authority.route.workspaceBindingId ||
-        roots.length !== 1 || root === undefined ||
-        ref?.valueId !== root.value_id ||
-        ref.valueDigest !== root.value_digest ||
-        this.#workflowDigester === null ||
-        canonicalJson(JSON.parse(root.value_json)) !== root.value_json ||
-        canonicalJson(input.workflowInput) !== root.value_json ||
-        this.#workflowDigester.sha256(root.value_json) !== root.value_digest ||
-        stableJson(validateWorkflowSchemaValue(
-          JSON.parse(root.value_json), compiled.inputSchema)) !== root.value_json ||
-        stableJson(event.data.workflowVersionBinding) !== stableJson(binding) ||
-        event.data.agentVersionId !== result.authority.route.agentVersionId ||
-        event.data.authorityId !== result.authority.route.authorityId ||
-        event.data.runtimeGeneration !== result.authority.route.runtimeGeneration ||
-        event.data.policySnapshotId !== result.authority.route.policySnapshotId ||
-        event.data.workspaceBindingId !== result.authority.route.workspaceBindingId ||
-        storedEvent?.tenant_id !== input.tenantId ||
-        storedEvent.run_id !== receiptRunId || storedEvent.sequence !== 1 ||
-        storedEvent.event_id !== event.eventId ||
-        storedEvent.event_json !== stableJson(event) ||
-        outbox?.tenantId !== input.tenantId || outbox.runId !== receiptRunId ||
-        outbox.topic !== "run.updated" ||
-        stableJson(outbox.payload) !== stableJson({
+    if (
+      run === null ||
+      durableVersion === null ||
+      compiled === null ||
+      stableJson(durableVersion) !==
+        stableJson(result.authority.workflowVersion) ||
+      compiled.contentDigest !== durableVersion.contentDigest ||
+      compiled.workflowId !== durableVersion.workflowId ||
+      result.run.events.length !== 1 ||
+      result.run.outbox.length !== 1 ||
+      result.run.workItems.length !== 1 ||
+      event?.type !== "run.created" ||
+      event.sequence !== 1 ||
+      event.identity.runId !== receiptRunId ||
+      event.data.tenantId !== input.tenantId ||
+      event.data.spaceId !== input.spaceId ||
+      event.data.threadId !== input.threadId ||
+      event.data.purpose !== "workflow" ||
+      event.data.goalBinding !== null ||
+      !sameWorkflowAdmissionRunIdentity(run, result.run.state) ||
+      run.agentVersionId !== result.authority.route.agentVersionId ||
+      run.authorityId !== result.authority.route.authorityId ||
+      run.runtimeGeneration !== result.authority.route.runtimeGeneration ||
+      run.policySnapshotId !== result.authority.route.policySnapshotId ||
+      run.workspaceBindingId !== result.authority.route.workspaceBindingId ||
+      roots.length !== 1 ||
+      root === undefined ||
+      ref?.valueId !== root.value_id ||
+      ref.valueDigest !== root.value_digest ||
+      this.#workflowDigester === null ||
+      canonicalJson(JSON.parse(root.value_json)) !== root.value_json ||
+      canonicalJson(input.workflowInput) !== root.value_json ||
+      this.#workflowDigester.sha256(root.value_json) !== root.value_digest ||
+      stableJson(
+        validateWorkflowSchemaValue(
+          JSON.parse(root.value_json),
+          compiled.inputSchema,
+        ),
+      ) !== root.value_json ||
+      stableJson(event.data.workflowVersionBinding) !== stableJson(binding) ||
+      event.data.agentVersionId !== result.authority.route.agentVersionId ||
+      event.data.authorityId !== result.authority.route.authorityId ||
+      event.data.runtimeGeneration !==
+        result.authority.route.runtimeGeneration ||
+      event.data.policySnapshotId !== result.authority.route.policySnapshotId ||
+      event.data.workspaceBindingId !==
+        result.authority.route.workspaceBindingId ||
+      storedEvent?.tenant_id !== input.tenantId ||
+      storedEvent.run_id !== receiptRunId ||
+      storedEvent.sequence !== 1 ||
+      storedEvent.event_id !== event.eventId ||
+      storedEvent.event_json !== stableJson(event) ||
+      outbox?.tenantId !== input.tenantId ||
+      outbox.runId !== receiptRunId ||
+      outbox.topic !== "run.updated" ||
+      stableJson(outbox.payload) !==
+        stableJson({
           eventId: event.eventId,
           eventType: event.type,
           throughSequence: event.sequence,
         }) ||
-        storedOutbox?.tenant_id !== input.tenantId ||
-        storedOutbox.run_id !== receiptRunId ||
-        storedOutbox.message_id !== outbox.messageId ||
-        storedOutbox?.topic !== outbox?.topic ||
-        storedOutbox.created_at !== outbox.createdAt ||
-        storedOutbox?.message_json !== stableJson(outbox) ||
-        work?.tenantId !== input.tenantId || work.runId !== receiptRunId ||
-        work.kind !== "run.execute" ||
-        work.payload.schemaVersion !== "crewon.workflow-scheduler-work-item.v1" ||
-        work.payload.trigger !== "workflowScheduler" ||
-        stableJson(work.payload.binding) !== stableJson(binding) ||
-        storedWork?.tenant_id !== input.tenantId ||
-        storedWork.run_id !== receiptRunId || storedWork.kind !== work.kind ||
-        storedWork.work_item_id !== work.workItemId ||
-        storedWork.created_at !== work.createdAt ||
-        storedWork?.work_item_json !== stableJson(work) ||
-        generalReceipt === undefined || generalReceipt.count !== 1)
+      storedOutbox?.tenant_id !== input.tenantId ||
+      storedOutbox.run_id !== receiptRunId ||
+      storedOutbox.message_id !== outbox.messageId ||
+      storedOutbox?.topic !== outbox?.topic ||
+      storedOutbox.created_at !== outbox.createdAt ||
+      storedOutbox?.message_json !== stableJson(outbox) ||
+      work?.tenantId !== input.tenantId ||
+      work.runId !== receiptRunId ||
+      work.kind !== "run.execute" ||
+      work.payload.schemaVersion !== "crewon.workflow-scheduler-work-item.v1" ||
+      work.payload.trigger !== "workflowScheduler" ||
+      stableJson(work.payload.binding) !== stableJson(binding) ||
+      storedWork?.tenant_id !== input.tenantId ||
+      storedWork.run_id !== receiptRunId ||
+      storedWork.kind !== work.kind ||
+      storedWork.work_item_id !== work.workItemId ||
+      storedWork.created_at !== work.createdAt ||
+      storedWork?.work_item_json !== stableJson(work) ||
+      generalReceipt === undefined ||
+      generalReceipt.count !== 1
+    )
       throw new RunStoreError("workflow_run_admission_receipt_corrupt");
   }
 
@@ -5741,20 +5981,34 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
   #loadWorkflowAdmissionReplay(
     input: CommitWorkflowRunStartInput,
   ): CommitWorkflowRunStartResult | null {
-    const prior = this.#database.prepare(
-      `SELECT tenant_id,run_id,fingerprint,result_json FROM workflow_run_admission_receipts
+    const prior = this.#database
+      .prepare(
+        `SELECT tenant_id,run_id,fingerprint,result_json FROM workflow_run_admission_receipts
        WHERE scope=? AND idempotency_key=?`,
-    ).get(input.idempotency.scope, input.idempotency.key) as
-      | { tenant_id: string; run_id: string; fingerprint: string; result_json: string }
+      )
+      .get(input.idempotency.scope, input.idempotency.key) as
+      | {
+          tenant_id: string;
+          run_id: string;
+          fingerprint: string;
+          result_json: string;
+        }
       | undefined;
     if (prior === undefined) return null;
-    if (prior.tenant_id !== input.tenantId ||
-        prior.fingerprint !== input.idempotency.requestFingerprint)
+    if (
+      prior.tenant_id !== input.tenantId ||
+      prior.fingerprint !== input.idempotency.requestFingerprint
+    )
       throw new RunStoreError("idempotency_conflict");
     const result = parseStoredJson<CommitWorkflowRunStartResult>(
-      prior.result_json, "workflow_run_admission_receipt_invalid");
+      prior.result_json,
+      "workflow_run_admission_receipt_invalid",
+    );
     this.#validateWorkflowAdmissionReplay(input, prior.run_id, result);
-    return clone({ ...result, run: { ...result.run, disposition: "replayed" } });
+    return clone({
+      ...result,
+      run: { ...result.run, disposition: "replayed" },
+    });
   }
 
   #validateWorkflowPreparedCommit(
@@ -5767,28 +6021,45 @@ export class SqliteRunStore implements DomainStore, WorkflowRuntimeStore,
     const event = commit.events[0];
     const outbox = commit.outbox[0];
     const work = commit.workItems[0];
-    if (commit.tenantId !== input.tenantId || commit.expectedRevision !== 0 ||
-        commit.events.length !== 1 || event?.type !== "run.created" ||
-        event.sequence !== 1 || event.data.tenantId !== input.tenantId ||
-        event.data.spaceId !== input.spaceId || event.data.threadId !== input.threadId ||
-        event.data.purpose !== "workflow" || event.data.goalBinding !== null ||
-        event.data.authorityId !== route.authorityId ||
-        event.data.runtimeGeneration !== route.runtimeGeneration ||
-        event.data.agentVersionId !== route.agentVersionId ||
-        event.data.policySnapshotId !== route.policySnapshotId ||
-        event.data.workspaceBindingId !== route.workspaceBindingId ||
-        stableJson(event.data.workflowVersionBinding) !== stableJson({
+    if (
+      commit.tenantId !== input.tenantId ||
+      commit.expectedRevision !== 0 ||
+      commit.events.length !== 1 ||
+      event?.type !== "run.created" ||
+      event.sequence !== 1 ||
+      event.data.tenantId !== input.tenantId ||
+      event.data.spaceId !== input.spaceId ||
+      event.data.threadId !== input.threadId ||
+      event.data.purpose !== "workflow" ||
+      event.data.goalBinding !== null ||
+      event.data.authorityId !== route.authorityId ||
+      event.data.runtimeGeneration !== route.runtimeGeneration ||
+      event.data.agentVersionId !== route.agentVersionId ||
+      event.data.policySnapshotId !== route.policySnapshotId ||
+      event.data.workspaceBindingId !== route.workspaceBindingId ||
+      stableJson(event.data.workflowVersionBinding) !==
+        stableJson({
           workflowId: workflowVersion.workflowId,
           workflowVersionId: workflowVersion.workflowVersionId,
-          contentDigest: workflowVersion.contentDigest }) ||
-        commit.outbox.length !== 1 || outbox?.topic !== "run.updated" ||
-        outbox.tenantId !== input.tenantId || outbox.runId !== event.identity.runId ||
-        stableJson(outbox.payload) !== stableJson({ eventId: event.eventId,
-          eventType: event.type, throughSequence: 1 }) ||
-        commit.workItems.length !== 1 || work?.kind !== "run.execute" ||
-        work.tenantId !== input.tenantId || work.runId !== event.identity.runId ||
-        stableJson((work.payload as Record<string, unknown>).workflowInput) !==
-          stableJson({ valueId: root.valueId, valueDigest: root.valueDigest }))
+          contentDigest: workflowVersion.contentDigest,
+        }) ||
+      commit.outbox.length !== 1 ||
+      outbox?.topic !== "run.updated" ||
+      outbox.tenantId !== input.tenantId ||
+      outbox.runId !== event.identity.runId ||
+      stableJson(outbox.payload) !==
+        stableJson({
+          eventId: event.eventId,
+          eventType: event.type,
+          throughSequence: 1,
+        }) ||
+      commit.workItems.length !== 1 ||
+      work?.kind !== "run.execute" ||
+      work.tenantId !== input.tenantId ||
+      work.runId !== event.identity.runId ||
+      stableJson((work.payload as Record<string, unknown>).workflowInput) !==
+        stableJson({ valueId: root.valueId, valueDigest: root.valueDigest })
+    )
       throw new RunStoreError("workflow_run_prepare_invalid");
   }
 
@@ -7237,6 +7508,34 @@ function normalizeToolApprovalError(error: unknown): Error {
     : error instanceof Error
       ? error
       : new RunStoreError("tool_approval_error", { cause: error });
+}
+
+function sameWorkflowAdmissionRunIdentity(
+  current: RunState,
+  admitted: RunState,
+): boolean {
+  return (
+    current.revision >= admitted.revision &&
+    current.lastSequence >= admitted.lastSequence &&
+    current.runId === admitted.runId &&
+    current.threadId === admitted.threadId &&
+    current.tenantId === admitted.tenantId &&
+    current.spaceId === admitted.spaceId &&
+    current.createdByActorId === admitted.createdByActorId &&
+    current.authorityId === admitted.authorityId &&
+    current.runtimeGeneration === admitted.runtimeGeneration &&
+    current.agentVersionId === admitted.agentVersionId &&
+    current.policySnapshotId === admitted.policySnapshotId &&
+    current.workspaceBindingId === admitted.workspaceBindingId &&
+    stableJson(current.workflowVersionBinding) ===
+      stableJson(admitted.workflowVersionBinding) &&
+    current.collaborationMode === admitted.collaborationMode &&
+    current.purpose === admitted.purpose &&
+    stableJson(current.origin ?? null) ===
+      stableJson(admitted.origin ?? null) &&
+    stableJson(current.goalBinding) === stableJson(admitted.goalBinding) &&
+    current.createdAt === admitted.createdAt
+  );
 }
 
 function normalizeSqliteError(error: unknown): Error {
