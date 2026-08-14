@@ -40,6 +40,7 @@ test("production Dockerfiles pin a reproducible non-root TypeScript runtime", as
       new RegExp(`com\\.crewon\\.component="${fixture.component}"`, "u"),
     );
     assert.match(content, /com\.crewon\.runtime="typescript"/u);
+    assert.match(content, /chown node:node \/var\/lib\/crewon\/artifacts/u);
     assert.match(content, /^USER node$/mu);
     assert.equal(content.match(/^CMD /gmu)?.length, 1);
     assert.ok(content.includes(fixture.command));

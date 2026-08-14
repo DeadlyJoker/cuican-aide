@@ -34,6 +34,7 @@ WORKDIR /app
 
 COPY --from=builder --chown=node:node /out/runtime-worker.mjs ./runtime-worker.mjs
 COPY --from=builder --chown=node:node /out/release-main.mjs ./init/release-main.mjs
+RUN mkdir -p /var/lib/crewon/artifacts && chown node:node /var/lib/crewon/artifacts
 
 USER node
 CMD ["node", "/app/runtime-worker.mjs"]

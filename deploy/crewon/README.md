@@ -93,7 +93,9 @@ Do not merge these files. Control receives database/identity/policy and private 
 Provider, Workspace and model credentials; BFF receives only browser-session credentials. `compose.host.env` contains paths and
 immutable image identities, not secret contents. The artifact encryption key, reviewed AgentVersion bindings, Workspace root
 and TLS material are mounted read-only. The shared artifact volume is required because Control and Worker use the same local
-artifact authority in this single-host deployment.
+artifact authority in this single-host deployment. Both images initialize that named volume from a directory owned by the
+non-root Node user (UID/GID `1000`). Bind-mounted artifact keys, TLS material and Workspace roots must be readable by that UID;
+do not grant container root or broaden host permissions to work around an unreadable mount.
 
 Validate interpolation before touching processes, then start the release/Worker/Control/BFF/Web dependency chain:
 

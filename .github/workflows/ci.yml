@@ -114,6 +114,20 @@ jobs:
             test -f /app/init/release-main.mjs &&
             ! grep -aEi "deterministic[ _-]?fake|device[ _-]?gateway|app[ _-]?server|6176" /app/runtime-worker.mjs /app/init/release-main.mjs
           '
+          volume="crewon-artifacts-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          docker volume create "$volume"
+          cleanup_artifact_volume() {
+            docker volume rm -f "$volume" >/dev/null 2>&1 || true
+          }
+          trap cleanup_artifact_volume EXIT
+          docker run --rm -v "$volume:/var/lib/crewon/artifacts" \
+            --entrypoint sh crewon-control-api:ci -c \
+            'test -w /var/lib/crewon/artifacts && touch /var/lib/crewon/artifacts/control-write'
+          docker run --rm -v "$volume:/var/lib/crewon/artifacts" \
+            --entrypoint sh crewon-runtime-worker:ci -c \
+            'test -w /var/lib/crewon/artifacts && test -f /var/lib/crewon/artifacts/control-write && touch /var/lib/crewon/artifacts/worker-write'
+          docker volume rm "$volume"
+          trap - EXIT
           CREWON_CONTROL_ENV_FILE=control.production.env.example \
           CREWON_RUNTIME_ENV_FILE=runtime.production.env.example \
           CREWON_WEB_BFF_ENV_FILE=web-bff.production.env.example \

@@ -26,6 +26,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 
 COPY --from=builder --chown=node:node /out/control-api.mjs ./control-api.mjs
+RUN mkdir -p /var/lib/crewon/artifacts && chown node:node /var/lib/crewon/artifacts
 
 USER node
 CMD ["node", "/app/control-api.mjs"]
