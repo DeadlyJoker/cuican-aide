@@ -76,6 +76,9 @@ import {
   type InvalidatedMessage,
   type ModelProviderSettingsCatalog,
   type ModelProviderSettingsState,
+  OfficeDelegationStoreError,
+  type CommitOfficeDelegationStartInput,
+  type OfficeDelegationListCursor,
   type PendingModelProviderSettings,
   type ModelHistoryAppend,
   type OutboxClaim,
@@ -477,9 +480,39 @@ export class InMemoryRunStore implements DomainStore {
     });
   }
 
-  commitOfficeDefinition(input: Parameters<InMemoryOfficeStore["commitOfficeDefinition"]>[0]) { return this.#officeAuthority.commitOfficeDefinition(input); }
-  loadOfficeDefinition(input: Parameters<InMemoryOfficeStore["loadOfficeDefinition"]>[0]) { return this.#officeAuthority.loadOfficeDefinition(input); }
-  listOfficeDefinitions(input: Parameters<InMemoryOfficeStore["listOfficeDefinitions"]>[0]) { return this.#officeAuthority.listOfficeDefinitions(input); }
+  commitOfficeDefinition(
+    input: Parameters<InMemoryOfficeStore["commitOfficeDefinition"]>[0],
+  ) {
+    return this.#officeAuthority.commitOfficeDefinition(input);
+  }
+  loadOfficeDefinition(
+    input: Parameters<InMemoryOfficeStore["loadOfficeDefinition"]>[0],
+  ) {
+    return this.#officeAuthority.loadOfficeDefinition(input);
+  }
+  listOfficeDefinitions(
+    input: Parameters<InMemoryOfficeStore["listOfficeDefinitions"]>[0],
+  ) {
+    return this.#officeAuthority.listOfficeDefinitions(input);
+  }
+  async commitOfficeDelegationStart(
+    _input: CommitOfficeDelegationStartInput,
+  ): Promise<never> {
+    throw new OfficeDelegationStoreError(
+      "office_delegation_store_not_configured",
+    );
+  }
+  async listOfficeDelegations(_input: {
+    tenantId: string;
+    spaceId: string;
+    officeVersionId: string;
+    before: OfficeDelegationListCursor | null;
+    limit: number;
+  }): Promise<never> {
+    throw new OfficeDelegationStoreError(
+      "office_delegation_store_not_configured",
+    );
+  }
 
   async close(): Promise<void> {}
 
@@ -3065,9 +3098,13 @@ export class InMemoryRunStore implements DomainStore {
       input.tenantId,
       input.events.at(-1)?.sequence ?? 0,
       (workItemId) => this.#workItems.has(workItemId),
-      input.events.length === 1 && input.events[0]?.type === "run.cancel.requested" &&
-        next.purpose === "workflow" ? "workflowCancel"
-        : input.threadAdmission === undefined ? "default" : "manualCompaction",
+      input.events.length === 1 &&
+        input.events[0]?.type === "run.cancel.requested" &&
+        next.purpose === "workflow"
+        ? "workflowCancel"
+        : input.threadAdmission === undefined
+          ? "default"
+          : "manualCompaction",
     );
 
     const committedEvents = clone(input.events);

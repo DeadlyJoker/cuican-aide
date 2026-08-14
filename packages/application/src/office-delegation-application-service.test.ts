@@ -5,11 +5,13 @@ import type { OfficeDefinition, ThreadState } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
 import { OfficeDelegationApplicationService } from "./office-delegation-application-service.ts";
-import type {
-  CommitOfficeDelegationStartInput,
-  OfficeDelegationPreparation,
-  OfficeDelegationStore,
+import {
+  OfficeDelegationStoreError,
+  type CommitOfficeDelegationStartInput,
+  type OfficeDelegationPreparation,
+  type OfficeDelegationStore,
 } from "./office-delegation-store-port.ts";
+import { RunStoreError } from "./run-store-port.ts";
 
 const actor = {
   principalId: "principal-1",
@@ -64,14 +66,140 @@ test("rolls back when any Workflow AgentVersion is outside Office membership", a
   assert.equal(store.writes, 0);
 });
 
+test("lists only the requested OfficeVersion after exact read authorization", async () => {
+  const store = new RecordingStore(["worker-version", "verifier-version"]);
+  const { service, actions } = harness(store);
+  assert.deepEqual(
+    await service.list(actor, {
+      officeVersionId: "office-version-1",
+      before: {
+        createdAt: "2026-08-14T00:00:00.000Z",
+        delegationId: "delegation-1",
+      },
+      limit: 25,
+    }),
+    { items: [], next: null },
+  );
+  assert.deepEqual(actions, ["office:read"]);
+  assert.deepEqual(store.listInput, {
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    officeVersionId: "office-version-1",
+    before: {
+      createdAt: "2026-08-14T00:00:00.000Z",
+      delegationId: "delegation-1",
+    },
+    limit: 25,
+  });
+});
+
+test("maps the SQLite idempotency conflict to an Application conflict", async () => {
+  const store = new RecordingStore(["worker-version", "verifier-version"]);
+  store.startError = new RunStoreError("idempotency_conflict");
+  await assert.rejects(
+    harness(store).service.start(actor, command),
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.category === "conflict" &&
+      error.code === "office_delegation_idempotency_conflict",
+  );
+});
+
+test("projects provider-specific Office misses to one Application code", async () => {
+  for (const storeError of [
+    new RunStoreError("office_version_not_found"),
+    new OfficeDelegationStoreError("office_delegation_office_not_found"),
+  ]) {
+    const store = new RecordingStore(["worker-version", "verifier-version"]);
+    store.startError = storeError;
+    await assert.rejects(
+      harness(store).service.start(actor, command),
+      (error: unknown) =>
+        error instanceof ApplicationError &&
+        error.category === "notFound" &&
+        error.code === "office_version_not_found",
+    );
+  }
+});
+
+test("rejects malformed list queries before authorization or Store access", async () => {
+  for (const query of [
+    {
+      officeVersionId: "office-version-1",
+      before: null,
+      limit: 25,
+      unexpected: true,
+    },
+    {
+      officeVersionId: "office-version-1",
+      before: {
+        createdAt: "2026-08-14T00:00:00Z",
+        delegationId: "delegation-1",
+      },
+      limit: 25,
+    },
+  ]) {
+    const store = new RecordingStore(["worker-version", "verifier-version"]);
+    const { service, actions } = harness(store);
+    await assert.rejects(
+      service.list(actor, query),
+      (error: unknown) =>
+        error instanceof ApplicationError &&
+        error.code === "office_delegation_list_invalid",
+    );
+    assert.deepEqual(actions, []);
+    assert.equal(store.listInput, null);
+  }
+});
+
+test("fails closed before Store access when any scoped authorization is denied", async () => {
+  for (const action of ["office:run", "run:create", "office:read"] as const) {
+    const store = new RecordingStore(["worker-version", "verifier-version"]);
+    const { service } = harness(store, { [action]: "deny" });
+    const operation =
+      action === "office:read"
+        ? service.list(actor, {
+            officeVersionId: "office-version-1",
+            before: null,
+            limit: 25,
+          })
+        : service.start(actor, command);
+    await assert.rejects(
+      operation,
+      (error: unknown) =>
+        error instanceof ApplicationError &&
+        error.code === "authorization_denied",
+    );
+    assert.equal(store.writes, 0);
+    assert.equal(store.listInput, null);
+  }
+});
+
+test("fails closed before Store access when authorization is unavailable", async () => {
+  const store = new RecordingStore(["worker-version", "verifier-version"]);
+  const { service } = harness(store, { "office:run": "unavailable" });
+  await assert.rejects(
+    service.start(actor, command),
+    (error: unknown) =>
+      error instanceof ApplicationError &&
+      error.code === "authorization_unavailable",
+  );
+  assert.equal(store.writes, 0);
+});
+
 class RecordingStore implements OfficeDelegationStore {
+  listInput:
+    | Parameters<OfficeDelegationStore["listOfficeDelegations"]>[0]
+    | null = null;
   preparation: OfficeDelegationPreparation | null = null;
+  startError: Error | null = null;
   writes = 0;
   readonly members: readonly string[];
   constructor(members: readonly string[]) {
     this.members = members;
   }
   async commitOfficeDelegationStart(input: CommitOfficeDelegationStartInput) {
+    if (this.startError !== null) throw this.startError;
     this.preparation = input.prepare({
       ...authority(this.members),
       route: await input.resolveCandidateRoute(),
@@ -83,12 +211,18 @@ class RecordingStore implements OfficeDelegationStore {
       run: {} as never,
     };
   }
-  async listOfficeDelegations() {
+  async listOfficeDelegations(
+    input: Parameters<OfficeDelegationStore["listOfficeDelegations"]>[0],
+  ) {
+    this.listInput = input;
     return { items: [], next: null };
   }
 }
 
-function harness(store: RecordingStore) {
+function harness(
+  store: RecordingStore,
+  authorization: Readonly<Record<string, "deny" | "unavailable">> = {},
+) {
   const actions: string[] = [];
   const ids = [
     "value-1",
@@ -106,6 +240,12 @@ function harness(store: RecordingStore) {
       authorization: {
         async authorize(request) {
           actions.push(request.action);
+          if (authorization[request.action] === "unavailable") {
+            throw new Error("authorization service unavailable");
+          }
+          if (authorization[request.action] === "deny") {
+            return { outcome: "deny" as const, reasonCode: "test-denied" };
+          }
           return { outcome: "allow" };
         },
       },

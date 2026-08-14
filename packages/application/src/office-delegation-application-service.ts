@@ -1,6 +1,7 @@
 import type { JsonValue } from "@crewon/contracts/runtime";
 import {
   WorkflowVersionError,
+  OFFICE_DELEGATION_LIMITS,
   parseCompiledWorkflowVersion,
   parseOfficeDefinition,
   parseOfficeDelegation,
@@ -18,17 +19,21 @@ import type {
 import type { ActorContext, AuthorizationPort } from "./authorization-port.ts";
 import { canonicalJson } from "./canonical-json.ts";
 import type { WorkflowSchedulerWorkItemPayload } from "./durable-queue-port.ts";
+import { OfficeDelegationStoreError } from "./office-delegation-store-port.ts";
 import type {
   CommitOfficeDelegationStartInput,
+  ListOfficeDelegationsQuery,
+  ListOfficeDelegationsResult,
   OfficeDelegationAdmissionAuthority,
   OfficeDelegationStartResult,
   OfficeDelegationStore,
   StartOfficeDelegationCommand,
 } from "./office-delegation-store-port.ts";
-import type { RunRoute, RunRouteResolverPort } from "./run-commands.ts";
-import type {
-  CommitRunInput,
-  IdempotencyDescriptor,
+import type { RunRouteResolverPort } from "./run-commands.ts";
+import {
+  RunStoreError,
+  type CommitRunInput,
+  type IdempotencyDescriptor,
 } from "./run-store-port.ts";
 import { validateWorkflowRunInput } from "./workflow-run-application-service.ts";
 import { hasExactKeys } from "./workspace-operation-validation-common.ts";
@@ -87,23 +92,79 @@ export class OfficeDelegationApplicationService {
       },
     });
     const idempotency = startIdempotency(actor, command, workflowInput);
-    return this.#store.commitOfficeDelegationStart({
-      tenantId: actor.tenantId,
-      spaceId: actor.spaceId,
-      officeVersionId: command.officeVersionId,
-      workflowVersionId: command.workflowVersionId,
-      threadId: command.threadId,
-      workflowInput,
-      idempotency,
-      resolveCandidateRoute: () =>
-        this.#routeResolver.resolveRoute({
-          actor,
-          threadId: command.threadId,
-          agentVersionId: null,
-        }),
-      prepare: (authority) =>
-        this.#prepare(actor, command, workflowInput, idempotency, authority),
+    try {
+      return await this.#store.commitOfficeDelegationStart({
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        officeVersionId: command.officeVersionId,
+        workflowVersionId: command.workflowVersionId,
+        threadId: command.threadId,
+        workflowInput,
+        idempotency,
+        resolveCandidateRoute: () =>
+          this.#routeResolver.resolveRoute({
+            actor,
+            threadId: command.threadId,
+            agentVersionId: null,
+          }),
+        prepare: (authority) =>
+          this.#prepare(actor, command, workflowInput, idempotency, authority),
+      });
+    } catch (error) {
+      throw mapStoreError(error);
+    }
+  }
+
+  async list(
+    actor: ActorContext,
+    query: ListOfficeDelegationsQuery,
+  ): Promise<ListOfficeDelegationsResult> {
+    validateActor(actor);
+    if (
+      !hasExactKeys(query, ["before", "limit", "officeVersionId"]) ||
+      !Number.isSafeInteger(query.limit) ||
+      query.limit < 1 ||
+      query.limit > OFFICE_DELEGATION_LIMITS.list ||
+      (query.before !== null &&
+        (!hasExactKeys(query.before, ["createdAt", "delegationId"]) ||
+          typeof query.before.createdAt !== "string" ||
+          !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/u.test(
+            query.before.createdAt,
+          ) ||
+          !Number.isFinite(Date.parse(query.before.createdAt)) ||
+          new Date(query.before.createdAt).toISOString() !==
+            query.before.createdAt ||
+          typeof query.before.delegationId !== "string" ||
+          !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/u.test(
+            query.before.delegationId,
+          )))
+    ) {
+      throw new ApplicationError(
+        "validation",
+        "office_delegation_list_invalid",
+      );
+    }
+    requireId(query.officeVersionId, "office_version_id_invalid");
+    await authorize(this.#authorization, {
+      actor,
+      action: "office:read",
+      resource: {
+        kind: "office",
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        officeId: null,
+        officeVersionId: query.officeVersionId,
+      },
     });
+    try {
+      return await this.#store.listOfficeDelegations({
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        ...query,
+      });
+    } catch (error) {
+      throw mapStoreError(error);
+    }
   }
 
   #prepare(
@@ -379,4 +440,46 @@ async function authorize(
       cause: error instanceof Error ? error : undefined,
     });
   }
+}
+
+function mapStoreError(error: unknown): ApplicationError {
+  if (error instanceof ApplicationError) return error;
+  if (
+    error instanceof OfficeDelegationStoreError ||
+    error instanceof RunStoreError
+  ) {
+    const code = canonicalStoreCode(error.code);
+    if (code === "office_delegation_idempotency_conflict") {
+      return new ApplicationError("conflict", code, { cause: error });
+    }
+    if (
+      code === "office_version_not_found" ||
+      code === "workflow_version_not_found" ||
+      code === "thread_not_active"
+    ) {
+      return new ApplicationError("notFound", code, { cause: error });
+    }
+  }
+  return new ApplicationError("internal", "office_delegation_store_failed", {
+    cause: error instanceof Error ? error : undefined,
+  });
+}
+
+function canonicalStoreCode(code: string): string {
+  if (code.includes("idempotency_conflict")) {
+    return "office_delegation_idempotency_conflict";
+  }
+  if (
+    code === "office_version_not_found" ||
+    code === "office_delegation_office_not_found"
+  ) {
+    return "office_version_not_found";
+  }
+  if (
+    code === "thread_not_active" ||
+    code === "office_delegation_thread_not_active"
+  ) {
+    return "thread_not_active";
+  }
+  return code;
 }
