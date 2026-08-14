@@ -6,8 +6,11 @@ import {
   WorkspaceListDispatchError,
 } from "@crewon/application";
 import {
+  ContractValidationError,
   RUNTIME_WORKER_WORKSPACE_DISPATCH_PATH,
   RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH,
+  WORKSPACE_NATIVE_READONLY_PATH,
+  parseWorkspaceNativeReadonlyRequest,
 } from "@crewon/contracts";
 
 import { resolveProductionWorkspaceWorkers } from "./production-workspace-environment.ts";
@@ -151,6 +154,158 @@ test("registry resolution preserves caller cancellation", async () => {
   const abort = new AbortController();
   const reason = new Error("caller-cancelled");
   const pending = routed.create(factoryInput(), abort.signal);
+  abort.abort(reason);
+  await assert.rejects(pending, (error) => error === reason);
+});
+
+test("registry derives readonly authority from verified tenant, space, and thread", async () => {
+  const selected: unknown[] = [];
+  const requests: unknown[] = [];
+  const worker = client(async (input, init = {}) => {
+    assert.equal(
+      new URL(String(input)).pathname,
+      WORKSPACE_NATIVE_READONLY_PATH,
+    );
+    assert.equal(
+      new Headers(init.headers).get("authorization"),
+      `Bearer ${TOKEN}`,
+    );
+    const request = parseWorkspaceNativeReadonlyRequest(
+      JSON.parse(Buffer.from(init.body as Uint8Array).toString("utf8")),
+    );
+    requests.push(request);
+    return jsonResponse({
+      schemaVersion: "crewon.workspace-native-readonly-response.v0",
+      operation: "contentSearch",
+      workspaceBindingId: ROUTE.workspaceBindingId,
+      matches: [],
+      scannedFiles: 0,
+      scannedBytes: 0,
+      truncated: false,
+    });
+  });
+  const routed = new TenantRoutedProductionWorkspaceWorker({
+    resolveForCreate: (scope) => {
+      selected.push(scope);
+      return worker;
+    },
+    resolve: () => null,
+    close: () => worker.close(),
+  });
+  const result = await routed.executeReadonly(
+    {
+      actor: { tenantId: "tenant-1", spaceId: "space-1" },
+      threadId: "thread-1",
+      request: {
+        schemaVersion: "crewon.workspace-native-readonly-request.v0",
+        operation: "contentSearch",
+        query: "needle",
+        pathSegments: [],
+        maxMatches: 10,
+      },
+    },
+    new AbortController().signal,
+  );
+  assert.deepEqual(selected, [
+    { tenantId: "tenant-1", spaceId: "space-1", threadId: "thread-1" },
+  ]);
+  assert.deepEqual(requests, [
+    {
+      schemaVersion: "crewon.workspace-native-readonly-request.v0",
+      operation: "contentSearch",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      workspaceBindingId: "workspace-1",
+      query: "needle",
+      pathSegments: [],
+      maxMatches: 10,
+    },
+  ]);
+  assert.deepEqual(result, {
+    schemaVersion: "crewon.workspace-native-readonly-response.v0",
+    operation: "contentSearch",
+    matches: [],
+    scannedFiles: 0,
+    scannedBytes: 0,
+    truncated: false,
+  });
+  await routed.close();
+});
+
+test("readonly fails closed on route, binding, authentication, and abort drift", async (context) => {
+  const input = {
+    actor: { tenantId: "tenant-1", spaceId: "space-1" },
+    threadId: "thread-1",
+    request: {
+      schemaVersion: "crewon.workspace-native-readonly-request.v0" as const,
+      operation: "gitStatus" as const,
+    },
+  };
+  const wrongTenant = new ProductionWorkspaceWorkerClient(
+    {
+      ...ROUTE,
+      tenantId: "tenant-other",
+      origin: "http://127.0.0.1:3211",
+      token: TOKEN,
+    },
+    { fetch: async () => assert.fail("fetch not expected") },
+  );
+  context.after(() => wrongTenant.close());
+  await assert.rejects(
+    new TenantRoutedProductionWorkspaceWorker({
+      resolveForCreate: () => wrongTenant,
+      resolve: () => null,
+      close: () => wrongTenant.close(),
+    }).executeReadonly(input, new AbortController().signal),
+    (error) =>
+      error instanceof RuntimeWorkspaceWorkerClientError &&
+      error.code === "runtime_workspace_worker_route_mismatch",
+  );
+
+  const bindingDrift = client(async () =>
+    jsonResponse({
+      schemaVersion: "crewon.workspace-native-readonly-response.v0",
+      operation: "gitStatus",
+      workspaceBindingId: "workspace-drift",
+      branch: null,
+      head: null,
+      entries: [],
+      truncated: false,
+    }),
+  );
+  context.after(() => bindingDrift.close());
+  await assert.rejects(
+    new TenantRoutedProductionWorkspaceWorker({
+      resolveForCreate: () => bindingDrift,
+      resolve: () => null,
+      close: () => bindingDrift.close(),
+    }).executeReadonly(input, new AbortController().signal),
+    (error) => error instanceof ContractValidationError,
+  );
+
+  const unauthorized = client(async () =>
+    jsonResponse({ code: "workspace_worker_authentication_failed" }, 401),
+  );
+  context.after(() => unauthorized.close());
+  await assert.rejects(
+    new TenantRoutedProductionWorkspaceWorker({
+      resolveForCreate: () => unauthorized,
+      resolve: () => null,
+      close: () => unauthorized.close(),
+    }).executeReadonly(input, new AbortController().signal),
+    (error) =>
+      error instanceof RuntimeWorkspaceWorkerClientError &&
+      error.code === "workspace_worker_authentication_failed",
+  );
+
+  const abort = new AbortController();
+  const reason = new Error("readonly-cancelled");
+  const pending = new TenantRoutedProductionWorkspaceWorker({
+    resolveForCreate: () =>
+      new Promise<ProductionWorkspaceWorkerClient | null>(() => {}),
+    resolve: () => null,
+    close: () => {},
+  }).executeReadonly(input, abort.signal);
   abort.abort(reason);
   await assert.rejects(pending, (error) => error === reason);
 });

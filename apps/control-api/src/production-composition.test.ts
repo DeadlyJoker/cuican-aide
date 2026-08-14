@@ -115,6 +115,8 @@ test("production binds the required tenant Worker registry directly", () => {
   assert.doesNotMatch(source, /UnavailableTenantProviderProbeWorkerRegistry/u);
   assert.match(source, /new WorkspaceListApplicationService/u);
   assert.match(source, /workspaceLists,/u);
+  assert.match(source, /workspaceReadonly: workspaceWorkers/u);
   assert.doesNotMatch(source, /workspaceLists: null/u);
+  assert.doesNotMatch(source, /workspaceBindingId:\s*config\.workspaceWorker/u);
   assert.doesNotMatch(source, /LoopbackRuntimeWorkspaceWorkerClient/u);
 });

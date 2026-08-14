@@ -34,6 +34,7 @@ import {
   type WorkflowHumanGatePublicationStore,
 } from "@crewon/application";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
+import { projectWorkspaceNativeReadonlyControlResponse } from "@crewon/contracts";
 import type { WorkflowContentDigester } from "@crewon/domain";
 import type { FastifyInstance } from "fastify";
 
@@ -375,9 +376,19 @@ function composeControlApi(
         workspaceWorker === null || config.workspaceWorker === undefined
           ? null
           : {
-              workspaceBindingId: config.workspaceWorker.workspaceBindingId,
-              executeReadonly: (input, signal) =>
-                workspaceWorker!.executeReadonly(input, signal),
+              async executeReadonly(input, signal) {
+                const request = {
+                  ...input.request,
+                  tenantId: input.actor.tenantId,
+                  spaceId: input.actor.spaceId,
+                  workspaceBindingId:
+                    config.workspaceWorker!.workspaceBindingId,
+                } as const;
+                return projectWorkspaceNativeReadonlyControlResponse(
+                  await workspaceWorker!.executeReadonly(request, signal),
+                  request,
+                );
+              },
             },
       workspaceQueries,
       providerSettings,

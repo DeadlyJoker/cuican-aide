@@ -76,6 +76,74 @@ test("fails startup closed for an invalid Workspace route and releases SQLite", 
   await reopened.close();
 });
 
+test("keeps standalone readonly on its explicit loopback Workspace binding", async (context) => {
+  const observed: unknown[] = [];
+  const worker = await startRuntimeWorkspacePrivateServer({
+    port: 0,
+    authentication: { kind: "loopbackToken", token: WORKER_TOKEN },
+    freeze: { freeze: async () => assert.fail("freeze not expected") },
+    dispatch: { dispatch: async () => assert.fail("dispatch not expected") },
+    readonly: {
+      execute: async (input) => {
+        observed.push(input);
+        return {
+          schemaVersion: "crewon.workspace-native-readonly-response.v0",
+          operation: "gitStatus",
+          workspaceBindingId: "workspace-binding-1",
+          branch: "main",
+          head: "a".repeat(40),
+          entries: [],
+          truncated: false,
+        };
+      },
+    },
+  });
+  context.after(() => worker.close());
+  const runtime = createStandaloneControlApi({
+    ...config(databasePath(context)),
+    workspaceWorker: {
+      origin: worker.origin,
+      token: WORKER_TOKEN,
+      workspaceBindingId: "workspace-binding-1",
+    },
+  });
+  context.after(() => runtime.app.close());
+  const created = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/threads",
+    headers: mutationHeaders("workspace-readonly-thread"),
+    payload: { title: "Standalone readonly" },
+  });
+  const threadId = created.json<ThreadMutationResponse>().thread.threadId;
+  const response = await runtime.app.inject({
+    method: "POST",
+    url: `/api/v1/threads/${threadId}/workspace-readonly`,
+    headers: { ...readHeaders(), "x-csrf-token": CSRF_TOKEN },
+    payload: {
+      schemaVersion: "crewon.workspace-native-readonly-request.v0",
+      operation: "gitStatus",
+    },
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json(), {
+    schemaVersion: "crewon.workspace-native-readonly-response.v0",
+    operation: "gitStatus",
+    branch: "main",
+    head: "a".repeat(40),
+    entries: [],
+    truncated: false,
+  });
+  assert.deepEqual(observed, [
+    {
+      schemaVersion: "crewon.workspace-native-readonly-request.v0",
+      operation: "gitStatus",
+      tenantId: ACTOR.tenantId,
+      spaceId: ACTOR.spaceId,
+      workspaceBindingId: "workspace-binding-1",
+    },
+  ]);
+});
+
 test("maps a malformed successful freeze response to internal instead of unavailable", async (context) => {
   const worker = createServer((_request, response) => {
     response.writeHead(200, { "content-type": "application/json" });

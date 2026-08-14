@@ -23,6 +23,7 @@ import type {
   CommitThreadResult,
   CommitTurnStartResult,
   KnowledgeApplicationService,
+  ActorContext,
 } from "@crewon/application";
 import {
   AgentVersionError,
@@ -91,7 +92,6 @@ import {
   parseWorkspaceOperationLastEventSequence,
   parseWorkspaceOperationListQuery,
   parseWorkspaceNativeReadonlyControlRequest,
-  projectWorkspaceNativeReadonlyControlResponse,
   parsePublishWorkflowVersionRequest,
   parseWorkflowVersionId,
   parseWorkflowVersionListQuery,
@@ -126,8 +126,8 @@ import {
   type ThreadMutationResponse,
   type ToolApprovalMutationResponse,
   type GetWorkspaceOperationResponse,
-  type WorkspaceNativeReadonlyRequest,
-  type WorkspaceNativeReadonlyResponse,
+  type WorkspaceNativeReadonlyControlRequest,
+  type WorkspaceNativeReadonlyControlResponse,
   type ListWorkspaceOperationsResponse,
   type WorkspaceOperationMutationResponse,
   type WorkflowVersionMutationResponse,
@@ -262,11 +262,14 @@ export type ControlApiDependencies = Readonly<{
   workspaceQueries: WorkspaceOperationQueryService;
   workspaceLists: WorkspaceListApplicationService | null;
   workspaceReadonly?: Readonly<{
-    workspaceBindingId: string;
     executeReadonly(
-      input: WorkspaceNativeReadonlyRequest,
+      input: Readonly<{
+        actor: ActorContext;
+        threadId: string;
+        request: WorkspaceNativeReadonlyControlRequest;
+      }>,
       signal: AbortSignal,
-    ): Promise<WorkspaceNativeReadonlyResponse>;
+    ): Promise<WorkspaceNativeReadonlyControlResponse>;
   }> | null;
   agentVersionDigester: ContentDigester;
   workflowVersionDigester: ContentDigester;
@@ -885,31 +888,20 @@ export function buildControlApi(
       const body = parseWorkspaceNativeReadonlyControlRequest(request.body);
       const requestAbort = requestAbortSignal(request.raw);
       try {
-        const workerRequest = {
-          ...body,
-          tenantId: actor.tenantId,
-          spaceId: actor.spaceId,
-          workspaceBindingId: service.workspaceBindingId,
-        } as const;
         let result;
         try {
           result = await service.executeReadonly(
             {
-              ...workerRequest,
+              actor,
+              threadId,
+              request: body,
             },
             requestAbort.signal,
           );
         } catch (error) {
           throw new WorkspaceNativeReadonlyUnavailableError({ cause: error });
         }
-        return reply
-          .code(200)
-          .send(
-            projectWorkspaceNativeReadonlyControlResponse(
-              result,
-              workerRequest,
-            ),
-          );
+        return reply.code(200).send(result);
       } finally {
         requestAbort.dispose();
       }

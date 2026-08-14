@@ -24,7 +24,10 @@ import {
   parseRuntimeWorkerWorkspaceFreezeCommandResponse,
   parseWorkspaceNativeReadonlyRequest,
   parseWorkspaceNativeReadonlyResponse,
+  projectWorkspaceNativeReadonlyControlResponse,
   type WorkspaceNativeReadonlyRequest,
+  type WorkspaceNativeReadonlyControlRequest,
+  type WorkspaceNativeReadonlyControlResponse,
   type WorkspaceNativeReadonlyResponse,
   type RuntimeWorkerWorkspaceDispatchRequest,
   type RuntimeWorkerWorkspacePhase,
@@ -444,18 +447,50 @@ export class TenantRoutedProductionWorkspaceWorker
     signal: AbortSignal,
   ): Promise<FrozenWorkspaceListCommand> {
     this.#requireOpen();
-    const worker = await abortable(
-      Promise.resolve(
-        this.#registry.resolveForCreate({
-          tenantId: input.actor.tenantId,
-          spaceId: input.actor.spaceId,
-          threadId: input.threadId,
-        }),
-      ),
+    const worker = await this.#resolveForCreate(
+      {
+        tenantId: input.actor.tenantId,
+        spaceId: input.actor.spaceId,
+        threadId: input.threadId,
+      },
       signal,
     );
-    if (worker === null) throw commandFactoryError("unavailable");
     return worker.create(input, signal);
+  }
+
+  async executeReadonly(
+    input: Readonly<{
+      actor: Readonly<{ tenantId: string; spaceId: string }>;
+      threadId: string;
+      request: WorkspaceNativeReadonlyControlRequest;
+    }>,
+    signal: AbortSignal,
+  ): Promise<WorkspaceNativeReadonlyControlResponse> {
+    this.#requireOpen();
+    const worker = await this.#resolveForCreate(
+      {
+        tenantId: input.actor.tenantId,
+        spaceId: input.actor.spaceId,
+        threadId: input.threadId,
+      },
+      signal,
+    );
+    if (worker.route.tenantId !== input.actor.tenantId) {
+      throw new RuntimeWorkspaceWorkerClientError(
+        "runtime_workspace_worker_route_mismatch",
+        "notSent",
+      );
+    }
+    const request = parseWorkspaceNativeReadonlyRequest({
+      ...input.request,
+      tenantId: input.actor.tenantId,
+      spaceId: input.actor.spaceId,
+      workspaceBindingId: worker.route.workspaceBindingId,
+    });
+    return projectWorkspaceNativeReadonlyControlResponse(
+      await worker.executeReadonly(request, signal),
+      request,
+    );
   }
 
   execute(
@@ -486,6 +521,18 @@ export class TenantRoutedProductionWorkspaceWorker
     if (this.#closed) return;
     this.#closed = true;
     await this.#registry.close();
+  }
+
+  async #resolveForCreate(
+    scope: Readonly<{ tenantId: string; spaceId: string; threadId: string }>,
+    signal: AbortSignal,
+  ): Promise<ProductionWorkspaceWorkerClient> {
+    const worker = await abortable(
+      Promise.resolve(this.#registry.resolveForCreate(scope)),
+      signal,
+    );
+    if (worker === null) throw commandFactoryError("unavailable");
+    return worker;
   }
 
   async #dispatch(

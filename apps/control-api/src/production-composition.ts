@@ -306,6 +306,7 @@ async function composeProductionControlApi(
       automations,
       knowledge,
       workspaceLists,
+      workspaceReadonly: workspaceWorkers,
       workspaceQueries,
       providerSettings,
       providerProbes,

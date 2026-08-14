@@ -68,7 +68,6 @@ import type {
   ThreadGoalMutationResponse,
   ThreadMutationResponse,
   ToolApprovalMutationResponse,
-  WorkspaceNativeReadonlyRequest,
 } from "@crewon/contracts";
 import {
   formatCapabilityCursor,
@@ -82,6 +81,7 @@ import {
   type WorkflowVersionSource,
 } from "@crewon/domain";
 import { InMemoryRunStore } from "@crewon/store";
+import { startRuntimeWorkspacePrivateServer } from "@crewon/runtime-worker";
 import type { FastifyInstance } from "fastify";
 
 import { buildControlApi, type ControlApiDependencies } from "./control-api.ts";
@@ -97,6 +97,10 @@ import {
   projectRunEventForView,
 } from "./run-projection.ts";
 import { projectMessage } from "./thread-projection.ts";
+import {
+  ProductionWorkspaceWorkerClient,
+  TenantRoutedProductionWorkspaceWorker,
+} from "./workspace-runtime-worker-client.ts";
 import {
   AdmittedAgentVersionRunRouteResolver,
   StandaloneAuthorization,
@@ -114,9 +118,12 @@ test("authorizes and bounds the public Workspace read-only route", async (contex
   let failWorker = false;
   const observed: unknown[] = [];
   const workspaceReadonly = {
-    workspaceBindingId: "server-workspace-binding",
     async executeReadonly(
-      input: WorkspaceNativeReadonlyRequest,
+      input: Parameters<
+        NonNullable<
+          ControlApiDependencies["workspaceReadonly"]
+        >["executeReadonly"]
+      >[0],
       _signal: AbortSignal,
     ) {
       observed.push(input);
@@ -124,7 +131,6 @@ test("authorizes and bounds the public Workspace read-only route", async (contex
       return {
         schemaVersion: "crewon.workspace-native-readonly-response.v0" as const,
         operation: "contentSearch" as const,
-        workspaceBindingId: "server-workspace-binding",
         matches: [],
         scannedFiles: 0,
         scannedBytes: 0,
@@ -195,10 +201,14 @@ test("authorizes and bounds the public Workspace read-only route", async (contex
   });
   assert.deepEqual(observed, [
     {
-      ...payload,
-      tenantId: "standalone-tenant",
-      spaceId: "standalone-space",
-      workspaceBindingId: "server-workspace-binding",
+      actor: {
+        principalId: "standalone-principal",
+        actorId: "standalone-actor",
+        tenantId: "standalone-tenant",
+        spaceId: "standalone-space",
+      },
+      threadId,
+      request: payload,
     },
   ]);
 
@@ -226,6 +236,97 @@ test("authorizes and bounds the public Workspace read-only route", async (contex
     "deviceUnavailable",
     "workspace_native_readonly_unavailable",
   );
+});
+
+test("routes Control readonly through an authenticated production Workspace Worker", async (context) => {
+  const workerToken = "production-workspace-readonly-token-0001";
+  const observed: unknown[] = [];
+  const server = await startRuntimeWorkspacePrivateServer({
+    port: 0,
+    authentication: { kind: "loopbackToken", token: workerToken },
+    freeze: { freeze: async () => assert.fail("freeze not expected") },
+    dispatch: { dispatch: async () => assert.fail("dispatch not expected") },
+    readonly: {
+      execute: async (input) => {
+        observed.push(input);
+        return {
+          schemaVersion: "crewon.workspace-native-readonly-response.v0",
+          operation: "contentSearch",
+          workspaceBindingId: "workspace-team-1",
+          matches: [{ path: "README.md", line: 1, preview: "needle" }],
+          scannedFiles: 1,
+          scannedBytes: 6,
+          truncated: false,
+        };
+      },
+    },
+  });
+  context.after(() => server.close());
+  const client = new ProductionWorkspaceWorkerClient({
+    tenantId: "standalone-tenant",
+    runtimeBindingId: "runtime-team-1",
+    workspaceBindingId: "workspace-team-1",
+    origin: server.origin,
+    token: workerToken,
+  });
+  const selected: unknown[] = [];
+  const workspaceReadonly = new TenantRoutedProductionWorkspaceWorker({
+    resolveForCreate: (scope) => {
+      selected.push(scope);
+      return client;
+    },
+    resolve: () => null,
+    close: () => client.close(),
+  });
+  context.after(() => workspaceReadonly.close());
+  const runtime = await testRuntime(context, { workspaceReadonly });
+  const created = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/threads",
+    headers: jsonMutationHeaders("workspace-team-readonly-thread"),
+    payload: { title: "Team Workspace read-only" },
+  });
+  const threadId = created.json<ThreadMutationResponse>().thread.threadId;
+  const response = await runtime.app.inject({
+    method: "POST",
+    url: `/api/v1/threads/${threadId}/workspace-readonly`,
+    headers: { ...readHeaders(), "x-csrf-token": CSRF_TOKEN },
+    payload: {
+      schemaVersion: "crewon.workspace-native-readonly-request.v0",
+      operation: "contentSearch",
+      query: "needle",
+      pathSegments: [],
+      maxMatches: 10,
+    },
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json(), {
+    schemaVersion: "crewon.workspace-native-readonly-response.v0",
+    operation: "contentSearch",
+    matches: [{ path: "README.md", line: 1, preview: "needle" }],
+    scannedFiles: 1,
+    scannedBytes: 6,
+    truncated: false,
+  });
+  assert.deepEqual(selected, [
+    {
+      tenantId: "standalone-tenant",
+      spaceId: "standalone-space",
+      threadId,
+    },
+  ]);
+  assert.deepEqual(observed, [
+    {
+      schemaVersion: "crewon.workspace-native-readonly-request.v0",
+      operation: "contentSearch",
+      tenantId: "standalone-tenant",
+      spaceId: "standalone-space",
+      workspaceBindingId: "workspace-team-1",
+      query: "needle",
+      pathSegments: [],
+      maxMatches: 10,
+    },
+  ]);
 });
 
 test("creates, reads, lists and invokes one redacted scheduled Automation", async (context) => {
