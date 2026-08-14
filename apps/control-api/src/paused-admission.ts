@@ -1,5 +1,3 @@
-import type { Readable, Writable } from "node:stream";
-
 import type { ErrorEnvelope } from "@crewon/contracts/runtime";
 
 export const PAUSED_ADMISSION_ENV = "CREWON_CONTROL_PAUSED_ADMISSION";
@@ -11,6 +9,21 @@ const HEALTH_PATHS = new Set(["/api/v1/health/live", "/api/v1/health/ready"]);
 
 type Environment = Readonly<Record<string, string | undefined>>;
 type AdmissionState = "active" | "failed" | "fenced";
+type ActivationInput = Readonly<{
+  on(
+    event: "data",
+    listener: (chunk: string | Buffer | Uint8Array) => void,
+  ): void;
+  on(event: "end" | "error" | "close", listener: () => void): void;
+  off(
+    event: "data",
+    listener: (chunk: string | Buffer | Uint8Array) => void,
+  ): void;
+  off(event: "end" | "error" | "close", listener: () => void): void;
+}>;
+type ActivationOutput = Readonly<{
+  write(chunk: string): unknown;
+}>;
 
 /** Process-local fence used only while a standalone native candidate is prepared. */
 export class ProcessLocalActivationGate {
@@ -77,8 +90,8 @@ export type ActivationInputController = Readonly<{ close(): void }>;
 /** Reads exactly one bounded activation record without waiting for EOF. */
 export function watchActivationInput(
   gate: ProcessLocalActivationGate,
-  input: Readable,
-  output: Pick<Writable, "write">,
+  input: ActivationInput,
+  output: ActivationOutput,
   onInvalid: () => void,
 ): ActivationInputController {
   let buffered = Buffer.alloc(0);

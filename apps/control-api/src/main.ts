@@ -1,5 +1,3 @@
-import type { AddressInfo } from "node:net";
-
 import {
   FilesystemArtifactStore,
   loadArtifactEncryptionKey,
@@ -242,7 +240,9 @@ function parsePort(value: string, allowEphemeral: boolean): number {
   return port;
 }
 
-function controlListeningPort(address: AddressInfo | string | null): number {
+function controlListeningPort(
+  address: Readonly<{ port: number }> | string | null,
+): number {
   if (
     address === null ||
     typeof address === "string" ||

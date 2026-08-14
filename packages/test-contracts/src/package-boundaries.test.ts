@@ -119,6 +119,7 @@ const controlApiBoundary = {
   allowedBareImports: [
     "node:crypto",
     "node:http",
+    "node:sqlite",
     "@crewon/agent-version",
     "@crewon/application",
     "@crewon/artifacts",
