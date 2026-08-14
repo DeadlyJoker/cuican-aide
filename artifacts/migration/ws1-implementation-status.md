@@ -5,6 +5,36 @@
 
 本文件记录当前 source tree 已验证的事实，不把局部测试外推为 WS1 或完整迁移完成。
 
+## 2026-08-14 当前 HEAD 收口证据
+
+- Runtime/Control/Workspace/Workflow 的 production execution path 已按 breaking cutover 收敛到 TypeScript。当前 macOS
+  `.app` 只包含 `crewon-ui`、官方 Node 24.18.1、`crewon-process-guardian` 与 Control API、Provider coordinator、Runtime
+  Release、Runtime Worker 四个 TS bundle；发布期 minisign verifier 改为 CI 显式构建的 Cargo example，不进入 `.app`。
+  对 Device Tool、Gateway、Responses Lite、Rust App Server、6176、deterministic fake、demo Thread/Turn 的 staged/package
+  marker 扫描均为 0。
+- Human Gate 已有独立 durable publication authority。SQLite/PostgreSQL 在同一事务中严格校验 exact Outbox lease 与 Gate
+  payload，把 `publicationPending -> published` 并 ACK Outbox；失败由 dispatcher retry，完整内部 payload 不进入 RunEventHub。
+  公共 `GET /api/v1/runs/{runId}/workflow-gates` 只返回有界审批字段，Control UI 从该 authority 展示批准/驳回并用稳定
+  idempotency key 提交决策。真实 PostgreSQL 16 全 Store 为 `564 passed / 1 反向缺 URL skip / 0 failed`。
+- production Runtime Release/Worker 使用 mode-exact database authority：production 强制显式 PostgreSQL URL/schema，并禁止
+  SQLite/default standalone identity；standalone 禁止 PostgreSQL。Provider catalog 在同一个 `PostgresDomainStore` 上用确定性
+  prepare/finalize CAS 引导；设置页的 runtime availability 不再是全局常量，而是按已认证 actor 的
+  `tenantId + runtimeBindingId` 精确查询 Worker registry。合并后 Control 为 `137 passed / 4 PostgreSQL 环境条件 skip / 0 failed`。
+- Team Workspace list 与 read-only 共用认证 tenant route registry。创建阶段只根据 verified tenant/space/thread 选 route，执行阶段
+  再校验冻结的 tenant/runtime/workspace binding、generation echo、auth、deadline 与 abort。真实 authenticated Control ->
+  tenant-routed production client -> loopback Runtime Worker read-only 纵向已通过；standalone loopback 行为保持独立。
+- 当前未签名 `.app` 的隔离 HOME smoke 为
+  `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-QIQnif`，Run
+  `01a000a9-a23d-72fb-aefe-25f14a5fd0bb` 实际完成 Agent -> Human Gate -> Verification：start 同 key
+  `committed -> replayed`，Gate 决策 `recorded -> replay`，Worker `SIGKILL` 后同一 HOME 重启恢复，2 次真实 loopback Responses、
+  2 个 Attempt、唯一 `run.completed`，GUI `SIGKILL` 后 guardian 清理全部受管进程并释放 3210。
+- desktop release workflow 现在同时绑定 immutable tag、`origin/main` ancestry、远端 tag/main 无漂移以及 exact commit SHA/App ID 的
+  required checks；macOS/Windows 均验证实际 updater 签名后才允许上传，Windows launch smoke 还按本次 install root/app binary
+  精确检测 GUI/Node/guardian orphan。确定性 release/staging/Windows process tests 为 `16/16`，YAML 与 smoke syntax 通过。
+- 当前仍是 `In progress`：正式 Apple Developer ID/notarization/staple、Windows PFX/AuthentiCode timestamp/NSIS 实机、GitHub hosted
+  release publish、真实 Identity/PIM 多租户部署、跨主机 PostgreSQL/Worker 网络分区、备份恢复与 SLO 仍需外部 runner、凭据和环境。
+  本地 Tauri 已生成 `.app` 与 updater archive，但因没有 `TAURI_SIGNING_PRIVATE_KEY` 按设计返回失败，未使用 unsigned fallback。
+
 ## 2026-08-13 执行方向覆盖：纯 TypeScript 快速切换
 
 以下规则覆盖本文后续较早的 Rust parity、Device/Gateway、legacy App Server 和多轨兼容计划：
