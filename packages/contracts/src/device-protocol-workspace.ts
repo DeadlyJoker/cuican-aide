@@ -152,7 +152,7 @@ export function canonicalUnsignedDeviceWorkspaceListCommandSigningPayload(
 export async function verifyDeviceWorkspaceListCommandAuthorization(
   input: unknown,
   trustedKeyId: string,
-  verifyingKey: CryptoKey,
+  verifyingKey: Parameters<typeof globalThis.crypto.subtle.verify>[1],
   now: Date,
   maxClockSkewMs: number,
 ): Promise<DeviceWorkspaceListCommand> {
