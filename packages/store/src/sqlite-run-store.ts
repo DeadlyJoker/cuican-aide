@@ -61,10 +61,16 @@ import {
   type AutomationInvocationContext,
   type AutomationInvocationReceiptQuery,
   type AutomationInvocationResult,
+  type AutomationScheduleClaim,
+  type AutomationScheduleClaimInput,
+  type AutomationScheduleLeaseInput,
   type AutomationListQuery,
   type AutomationLocator,
   type CommitAutomationCreateInput,
   type CommitAutomationInvocationInput,
+  type CommitScheduledAutomationInvocationInput,
+  type RetryAutomationScheduleClaimInput,
+  type ScheduledAutomationReceiptQuery,
   type BeginRunAttemptInput,
   type BeginRunAttemptResult,
   type CheckpointRunAttemptInput,
@@ -843,6 +849,31 @@ export class SqliteRunStore
     input: CommitAutomationInvocationInput,
   ): Promise<AutomationInvocationResult> {
     return this.#automationAuthority.commitInvocation(input);
+  }
+  async claimNextDueAutomation(
+    input: AutomationScheduleClaimInput,
+  ): Promise<AutomationScheduleClaim | null> {
+    return this.#automationAuthority.claimNextDueAutomation(input);
+  }
+  async loadScheduledAutomationReceipt(
+    query: ScheduledAutomationReceiptQuery,
+  ): Promise<AutomationInvocationResult | null> {
+    return this.#automationAuthority.loadScheduledAutomationReceipt(query);
+  }
+  async commitScheduledAutomationInvocation(
+    input: CommitScheduledAutomationInvocationInput,
+  ): Promise<AutomationInvocationResult> {
+    return this.#automationAuthority.commitScheduledAutomationInvocation(input);
+  }
+  async retryAutomationScheduleClaim(
+    input: RetryAutomationScheduleClaimInput,
+  ): Promise<void> {
+    return this.#automationAuthority.retryAutomationScheduleClaim(input);
+  }
+  async disableAutomationScheduleClaim(
+    input: AutomationScheduleLeaseInput & Readonly<{ reasonCode: string }>,
+  ): Promise<void> {
+    return this.#automationAuthority.disableAutomationScheduleClaim(input);
   }
 
   async loadModelProviderSettingsState(input: {

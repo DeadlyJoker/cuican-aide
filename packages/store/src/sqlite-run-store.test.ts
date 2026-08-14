@@ -1334,6 +1334,8 @@ test("configures WAL and foreign keys and applies the current schema once", (con
       { name: "agent_versions" },
       { name: "automation_create_receipts" },
       { name: "automation_invocation_receipts" },
+      { name: "automation_schedule_claims" },
+      { name: "automation_scheduled_invocation_receipts" },
       { name: "automations" },
       { name: "idempotency_receipts" },
       { name: "knowledge_create_receipts" },
