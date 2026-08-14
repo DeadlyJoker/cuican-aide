@@ -1,9 +1,13 @@
-import type { OfficeContract } from "@crewon/contracts";
+import type {
+  OfficeContract,
+  StartOfficeDelegationRequest,
+  WorkflowVersionSummaryView,
+} from "@crewon/contracts";
 import type { ControlApiClient } from "@crewon/control-client";
 import { useEffect, useState } from "react";
 
 import type { Locale } from "../../lib/i18n";
-import { startControlOfficeRun } from "../../lib/office/controlOfficeRuntime";
+import { startControlOfficeDelegation } from "../../lib/office/controlOfficeRuntime";
 
 export function ControlOfficeRoom({
   client,
@@ -21,6 +25,11 @@ export function ControlOfficeRoom({
   const [office, setOffice] = useState<OfficeContract | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
+  const [workflows, setWorkflows] = useState<
+    readonly WorkflowVersionSummaryView[]
+  >([]);
+  const [workflowVersionId, setWorkflowVersionId] = useState("");
+  const [input, setInput] = useState("{}");
   const [busy, setBusy] = useState(false);
   const zh = locale === "zh";
 
@@ -28,8 +37,20 @@ export function ControlOfficeRoom({
     let current = true;
     setOffice(null);
     setError(null);
-    void client.getOffice(officeVersionId).then(
-      ({ office: nextOffice }) => current && setOffice(nextOffice),
+    setRunId(null);
+    setWorkflows([]);
+    setWorkflowVersionId("");
+    setInput("{}");
+    void Promise.all([
+      client.getOffice(officeVersionId),
+      client.listWorkflowVersions({ limit: 100 }),
+    ]).then(
+      ([{ office: nextOffice }, workflowPage]) => {
+        if (!current) return;
+        setOffice(nextOffice);
+        setWorkflows(workflowPage.data);
+        setWorkflowVersionId(workflowPage.data[0]?.workflowVersionId || "");
+      },
       (cause) =>
         current &&
         setError(cause instanceof Error ? cause.message : String(cause)),
@@ -53,17 +74,18 @@ export function ControlOfficeRoom({
       </div>
     );
   }
-  const target = office.executionTargets[0] ?? null;
   async function startRun() {
-    if (!target || !threadId) return;
+    if (!workflowVersionId || !threadId) return;
     setBusy(true);
     setError(null);
     try {
-      const response = await startControlOfficeRun({
+      const workflowInput: unknown = JSON.parse(input);
+      const response = await startControlOfficeDelegation({
         client,
         officeVersionId,
-        targetId: target.targetId,
+        workflowVersionId,
         threadId,
+        input: workflowInput as StartOfficeDelegationRequest["input"],
       });
       setRunId(response.run.runId);
     } catch (cause) {
@@ -73,6 +95,52 @@ export function ControlOfficeRoom({
     }
   }
 
+  return (
+    <ControlOfficeRoomView
+      busy={busy}
+      input={input}
+      locale={locale}
+      office={office}
+      onBack={onBack}
+      onInputChange={setInput}
+      onStart={() => void startRun()}
+      onWorkflowVersionChange={setWorkflowVersionId}
+      runId={runId}
+      threadId={threadId}
+      workflows={workflows}
+      workflowVersionId={workflowVersionId}
+    />
+  );
+}
+
+export function ControlOfficeRoomView({
+  busy,
+  input,
+  locale,
+  office,
+  onBack,
+  onInputChange,
+  onStart,
+  onWorkflowVersionChange,
+  runId,
+  threadId,
+  workflows,
+  workflowVersionId,
+}: {
+  busy: boolean;
+  input: string;
+  locale: Locale;
+  office: OfficeContract;
+  onBack: () => void;
+  onInputChange: (value: string) => void;
+  onStart: () => void;
+  onWorkflowVersionChange: (value: string) => void;
+  runId: string | null;
+  threadId: string | null;
+  workflows: readonly WorkflowVersionSummaryView[];
+  workflowVersionId: string;
+}) {
+  const zh = locale === "zh";
   return (
     <section className="office-workspace-view" data-control-office-room="">
       <header className="office-workspace-header">
@@ -87,37 +155,71 @@ export function ControlOfficeRoom({
           <button className="button" type="button" onClick={onBack}>
             {zh ? "返回办公室" : "Back to offices"}
           </button>
-          <button
-            className="button primary"
-            type="button"
-            disabled={busy || !threadId || !target}
-            onClick={() => void startRun()}
-          >
-            {busy
-              ? zh
-                ? "正在启动…"
-                : "Starting…"
-              : zh
-                ? "启动执行"
-                : "Start run"}
-          </button>
         </div>
       </header>
       <div className="page-panel">
-        <strong>
-          {zh ? "成员与执行目标" : "Members and execution targets"}
-        </strong>
+        <strong>{zh ? "成员边界" : "Member boundary"}</strong>
         {office.members.map((member) => (
           <p key={member.memberId}>
             {member.displayName} · {member.agentVersionId}
           </p>
         ))}
       </div>
+      <div className="page-panel capability-field-list">
+        <strong>
+          {zh ? "显式 Workflow 委派" : "Explicit Workflow delegation"}
+        </strong>
+        <label>
+          <span>{zh ? "Workflow 版本" : "Workflow version"}</span>
+          <select
+            value={workflowVersionId}
+            onChange={(event) => onWorkflowVersionChange(event.target.value)}
+          >
+            {workflows.map((workflow) => (
+              <option
+                key={workflow.workflowVersionId}
+                value={workflow.workflowVersionId}
+              >
+                {workflow.name} · {workflow.workflowVersionId}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>{zh ? "Workflow 输入（JSON）" : "Workflow input (JSON)"}</span>
+          <textarea
+            rows={5}
+            value={input}
+            onChange={(event) => onInputChange(event.target.value)}
+          />
+        </label>
+        {workflows.length === 0 ? (
+          <p className="team-office-room-warning" role="status">
+            {zh
+              ? "没有可委派的 WorkflowVersion。请先在 Control 中发布 Workflow。"
+              : "No WorkflowVersion is available. Publish a Workflow in Control first."}
+          </p>
+        ) : null}
+        <button
+          className="button primary"
+          type="button"
+          disabled={busy || !threadId || !workflowVersionId}
+          onClick={onStart}
+        >
+          {busy
+            ? zh
+              ? "正在委派…"
+              : "Delegating…"
+            : zh
+              ? "启动 Workflow"
+              : "Start workflow"}
+        </button>
+      </div>
       {!threadId ? (
         <p className="team-office-room-warning" role="status">
           {zh
-            ? "先打开一个 Control 会话，才能用该 threadId 启动办公室执行。"
-            : "Open a Control thread before starting this office run."}
+            ? "先打开一个 Control 会话，才能在该 Thread 上启动 Workflow。"
+            : "Open a Control thread before starting this workflow."}
         </p>
       ) : null}
       {runId ? (
@@ -127,8 +229,8 @@ export function ControlOfficeRoom({
       ) : null}
       <p className="team-office-room-warning" role="note">
         {zh
-          ? "当前 Control contract 不提供 Office 群聊、delegation、retry、memory 或 verification；这些入口在此运行态不可用。"
-          : "The current Control contract does not provide Office chat, delegation, retry, memory, or verification; those actions are unavailable here."}
+          ? "Office 只定义成员边界；执行、重试、验证与恢复均由 canonical Workflow Run 负责。"
+          : "Office defines the member boundary; execution, retry, verification, and recovery belong to the canonical Workflow Run."}
       </p>
     </section>
   );

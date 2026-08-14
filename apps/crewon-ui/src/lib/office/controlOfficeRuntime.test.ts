@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   createControlOffice,
   listControlOfficeCatalog,
-  startControlOfficeRun,
+  startControlOfficeDelegation,
 } from "./controlOfficeRuntime";
 
 const office = {
@@ -117,22 +117,27 @@ describe("Control Office runtime", () => {
     expect(record.config.workspace.recordId).toBe("office-version-1");
   });
 
-  it("starts the selected Control Office target on the active thread", async () => {
-    const startOfficeRun = vi.fn().mockResolvedValue({
-      disposition: "created",
+  it("starts an explicit Workflow delegation on the active thread", async () => {
+    const startOfficeDelegation = vi.fn().mockResolvedValue({
+      disposition: "committed",
       run: { runId: "run-1" },
     });
 
-    await startControlOfficeRun({
-      client: { startOfficeRun } as unknown as ControlApiClient,
+    await startControlOfficeDelegation({
+      client: { startOfficeDelegation } as unknown as ControlApiClient,
       officeVersionId: "office-version-1",
-      targetId: "target-1",
+      workflowVersionId: "workflow-version-1",
       threadId: "thread-1",
+      input: { topic: "release" },
     });
 
-    expect(startOfficeRun).toHaveBeenCalledWith(
+    expect(startOfficeDelegation).toHaveBeenCalledWith(
       "office-version-1",
-      { targetId: "target-1", threadId: "thread-1" },
+      {
+        workflowVersionId: "workflow-version-1",
+        threadId: "thread-1",
+        input: { topic: "release" },
+      },
       expect.any(String),
     );
   });

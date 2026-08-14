@@ -1,4 +1,8 @@
-import type { AgentVersionView, OfficeContract } from "@crewon/contracts";
+import type {
+  AgentVersionView,
+  OfficeContract,
+  StartOfficeDelegationRequest,
+} from "@crewon/contracts";
 import type { ControlApiClient } from "@crewon/control-client";
 
 import type { AgentConfig } from "../domain/crewonDomain";
@@ -115,15 +119,20 @@ export async function createControlOffice(params: {
   return controlOfficeRecord(response.office);
 }
 
-export async function startControlOfficeRun(params: {
+export async function startControlOfficeDelegation(params: {
   client: ControlApiClient;
   officeVersionId: string;
-  targetId: string;
+  workflowVersionId: string;
   threadId: string;
+  input: StartOfficeDelegationRequest["input"];
 }) {
-  return params.client.startOfficeRun(
+  return params.client.startOfficeDelegation(
     params.officeVersionId,
-    { targetId: params.targetId, threadId: params.threadId },
+    {
+      workflowVersionId: params.workflowVersionId,
+      threadId: params.threadId,
+      input: params.input,
+    },
     crypto.randomUUID(),
   );
 }

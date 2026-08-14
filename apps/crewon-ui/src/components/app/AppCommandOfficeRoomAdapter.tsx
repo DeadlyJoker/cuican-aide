@@ -47,6 +47,7 @@ export function createControlCommandOfficeRoomAdapter({
       return officeVersionId ? (
         <ControlOfficeRoom
           client={client}
+          key={officeVersionId}
           locale={locale}
           officeVersionId={officeVersionId}
           onBack={onBack}
