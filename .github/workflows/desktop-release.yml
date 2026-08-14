@@ -1,0 +1,359 @@
+name: desktop-release
+
+on:
+  push:
+    tags: ["desktop-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing desktop-v* tag to rebuild
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: desktop-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  CARGO_NET_GIT_FETCH_WITH_CLI: "true"
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  macos:
+    name: macOS arm64 signed package
+    runs-on: macos-15
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      TARGET: aarch64-apple-darwin
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        with:
+          run_install: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .node-version
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: aarch64-apple-darwin
+      - name: Require native arm64 runner and release credentials
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_ID \
+            APPLE_KEYCHAIN_PASSWORD APPLE_PASSWORD APPLE_TEAM_ID \
+            TAURI_SIGNING_PRIVATE_KEY; do
+            test -n "${!name:-}" || { echo "$name is required" >&2; exit 1; }
+          done
+      - run: pnpm install --frozen-lockfile
+      - name: Plan official Node distribution
+        id: node_plan
+        run: node scripts/desktop-release-tools.mjs node-plan --target "$TARGET" --github-output "$GITHUB_OUTPUT"
+      - name: Download and attest official Node 24
+        id: node_binary
+        shell: bash
+        run: |
+          set -euo pipefail
+          root="$RUNNER_TEMP/official-node"
+          mkdir -p "$root/extracted"
+          curl --fail --silent --show-error --location \
+            '${{ steps.node_plan.outputs.checksums_url }}' -o "$root/SHASUMS256.txt"
+          curl --fail --silent --show-error --location \
+            '${{ steps.node_plan.outputs.download_url }}' -o "$root/${{ steps.node_plan.outputs.archive }}"
+          tar -xzf "$root/${{ steps.node_plan.outputs.archive }}" -C "$root/extracted"
+          node scripts/desktop-release-tools.mjs attest-node \
+            --target "$TARGET" \
+            --archive "$root/${{ steps.node_plan.outputs.archive }}" \
+            --checksums "$root/SHASUMS256.txt" \
+            --extracted-root "$root/extracted" \
+            --github-output "$GITHUB_OUTPUT"
+      - name: Build process guardian
+        working-directory: codex-rs
+        run: cargo build --locked -p crewon-process-guardian --release --target "$TARGET"
+      - name: Stage pure TypeScript desktop runtime
+        env:
+          CREWON_GUARDIAN_BINARY: ${{ github.workspace }}/codex-rs/target/aarch64-apple-darwin/release/crewon-process-guardian
+          CREWON_NODE_BINARY: ${{ steps.node_binary.outputs.node_binary }}
+          CREWON_NODE_BINARY_SHA256: ${{ steps.node_binary.outputs.node_binary_sha256 }}
+          CREWON_NODE_BINARY_TARGET: aarch64-apple-darwin
+          CREWON_NODE_DISTRIBUTABLE: "1"
+          CREWON_SIDECAR_TARGET: aarch64-apple-darwin
+        run: pnpm --filter @crewon/ui sidecar:stage
+      - name: Import Developer ID certificate
+        id: apple_identity
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_KEYCHAIN_PASSWORD: ${{ secrets.APPLE_KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          keychain="$RUNNER_TEMP/crewon-signing.keychain-db"
+          certificate="$RUNNER_TEMP/crewon-signing.p12"
+          printf '%s' "$APPLE_CERTIFICATE" | openssl base64 -d -A -out "$certificate"
+          security create-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
+          security default-keychain -s "$keychain"
+          security unlock-keychain -p "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
+          security set-keychain-settings -lut 7200 "$keychain"
+          security list-keychains -d user -s "$keychain"
+          security import "$certificate" -k "$keychain" \
+            -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+          security set-key-partition-list -S apple-tool:,apple:,codesign: \
+            -s -k "$APPLE_KEYCHAIN_PASSWORD" "$keychain"
+          identities="$(security find-identity -v -p codesigning "$keychain" | grep 'Developer ID Application' || true)"
+          test "$(printf '%s\n' "$identities" | grep -c 'Developer ID Application')" = 1
+          identity="$(printf '%s\n' "$identities" | sed -E 's/^[^"]*"([^"]+)".*/\1/')"
+          echo "identity=$identity" >> "$GITHUB_OUTPUT"
+      - name: Build, sign, notarize, and staple
+        env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ steps.apple_identity.outputs.identity }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CI: "true"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm --filter @crewon/ui exec tauri build --target "$TARGET" --bundles app,dmg
+      - name: Verify code signature, Gatekeeper, and notarization ticket
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="apps/crewon-ui/src-tauri/target/$TARGET/release/bundle"
+          app="$bundle/macos/Crewon.app"
+          dmg="$(find "$bundle/dmg" -maxdepth 1 -type f -name '*.dmg' -print -quit)"
+          test -d "$app" && test -n "$dmg"
+          codesign --verify --deep --strict --verbose=4 "$app"
+          codesign --verify --strict --verbose=4 "$dmg"
+          spctl --assess --type execute --verbose=4 "$app"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$dmg"
+          xcrun stapler validate "$app"
+          xcrun stapler validate "$dmg"
+      - name: Scan packaged artifact for removed runtimes
+        run: node scripts/desktop-release-tools.mjs scan --root "apps/crewon-ui/src-tauri/target/$TARGET/release/bundle/macos/Crewon.app"
+      - name: Run packaged Workflow recovery smoke
+        env:
+          CREWON_PACKAGED_APP_BINARY: ${{ github.workspace }}/apps/crewon-ui/src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Crewon.app/Contents/MacOS/crewon-ui
+        run: node --experimental-strip-types scripts/packaged-workflow-app-smoke.ts
+      - name: Collect signed macOS assets
+        run: node scripts/desktop-release-tools.mjs collect --target "$TARGET" --bundle-root "apps/crewon-ui/src-tauri/target/$TARGET/release/bundle" --output release-macos
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: desktop-macos-arm64
+          path: release-macos/*
+          if-no-files-found: error
+      - name: Remove temporary keychain
+        if: always()
+        shell: bash
+        run: |
+          security delete-keychain "$RUNNER_TEMP/crewon-signing.keychain-db" 2>/dev/null || true
+          rm -f "$RUNNER_TEMP/crewon-signing.p12"
+
+  windows:
+    name: Windows x64 signed package
+    runs-on: windows-2022
+    timeout-minutes: 120
+    permissions:
+      contents: read
+    env:
+      TARGET: x86_64-pc-windows-msvc
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        with:
+          run_install: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .node-version
+      - uses: dtolnay/rust-toolchain@e081816240890017053eacbb1bdf337761dc5582 # 1.95.0
+        with:
+          targets: x86_64-pc-windows-msvc
+      - name: Require release credentials
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          foreach ($name in @("TAURI_SIGNING_PRIVATE_KEY", "WINDOWS_CERTIFICATE", "WINDOWS_CERTIFICATE_PASSWORD", "WINDOWS_TIMESTAMP_URL")) {
+            if ([string]::IsNullOrWhiteSpace((Get-Item "Env:$name").Value)) { throw "$name is required" }
+          }
+      - run: pnpm install --frozen-lockfile
+      - name: Plan official Node distribution
+        id: node_plan
+        shell: pwsh
+        run: node scripts/desktop-release-tools.mjs node-plan --target $env:TARGET --github-output $env:GITHUB_OUTPUT
+      - name: Download and attest official Node 24
+        id: node_binary
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP "official-node"
+          New-Item -ItemType Directory -Force -Path (Join-Path $root "extracted") | Out-Null
+          curl.exe --fail --silent --show-error --location '${{ steps.node_plan.outputs.checksums_url }}' --output (Join-Path $root "SHASUMS256.txt")
+          curl.exe --fail --silent --show-error --location '${{ steps.node_plan.outputs.download_url }}' --output (Join-Path $root '${{ steps.node_plan.outputs.archive }}')
+          tar.exe -xf (Join-Path $root '${{ steps.node_plan.outputs.archive }}') -C (Join-Path $root "extracted")
+          node scripts/desktop-release-tools.mjs attest-node --target $env:TARGET `
+            --archive (Join-Path $root '${{ steps.node_plan.outputs.archive }}') `
+            --checksums (Join-Path $root "SHASUMS256.txt") `
+            --extracted-root (Join-Path $root "extracted") `
+            --github-output $env:GITHUB_OUTPUT
+      - name: Build process guardian
+        working-directory: codex-rs
+        run: cargo build --locked -p crewon-process-guardian --release --target $env:TARGET
+      - name: Stage pure TypeScript desktop runtime
+        shell: pwsh
+        env:
+          CREWON_GUARDIAN_BINARY: ${{ github.workspace }}\codex-rs\target\x86_64-pc-windows-msvc\release\crewon-process-guardian.exe
+          CREWON_NODE_BINARY: ${{ steps.node_binary.outputs.node_binary }}
+          CREWON_NODE_BINARY_SHA256: ${{ steps.node_binary.outputs.node_binary_sha256 }}
+          CREWON_NODE_BINARY_TARGET: x86_64-pc-windows-msvc
+          CREWON_NODE_DISTRIBUTABLE: "1"
+          CREWON_SIDECAR_TARGET: x86_64-pc-windows-msvc
+        run: pnpm --filter @crewon/ui sidecar:stage
+      - name: Import Authenticode certificate
+        id: windows_certificate
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $path = Join-Path $env:RUNNER_TEMP "crewon-signing.pfx"
+          [IO.File]::WriteAllBytes($path, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $imported = @(Import-PfxCertificate -FilePath $path -CertStoreLocation Cert:\CurrentUser\My -Password $password)
+          $certificate = @($imported | Where-Object HasPrivateKey)
+          if ($certificate.Count -ne 1) { throw "exactly one signing certificate with a private key is required" }
+          "thumbprint=$($certificate[0].Thumbprint.ToUpperInvariant())" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+      - name: Create fail-closed Windows signing config
+        shell: pwsh
+        env:
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+        run: node scripts/desktop-release-tools.mjs windows-config --thumbprint '${{ steps.windows_certificate.outputs.thumbprint }}' --timestamp-url $env:WINDOWS_TIMESTAMP_URL --output (Join-Path $env:RUNNER_TEMP "tauri-windows-signing.json")
+      - name: Build and sign NSIS package
+        shell: pwsh
+        env:
+          CI: "true"
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: pnpm --filter @crewon/ui exec tauri build --target $env:TARGET --bundles nsis --config (Join-Path $env:RUNNER_TEMP "tauri-windows-signing.json")
+      - name: Verify Authenticode signer and timestamp
+        shell: pwsh
+        run: |
+          $root = "apps/crewon-ui/src-tauri/target/$env:TARGET/release"
+          $paths = @((Join-Path $root "crewon-ui.exe")) + @(Get-ChildItem (Join-Path $root "bundle/nsis") -Filter "*-setup.exe" | ForEach-Object FullName)
+          if ($paths.Count -ne 2) { throw "expected signed app and one NSIS installer" }
+          foreach ($path in $paths) {
+            $signature = Get-AuthenticodeSignature $path
+            if ($signature.Status -ne "Valid") { throw "invalid Authenticode signature: $path ($($signature.Status))" }
+            if ($signature.SignerCertificate.Thumbprint -ne '${{ steps.windows_certificate.outputs.thumbprint }}') { throw "unexpected Authenticode signer: $path" }
+            if ($null -eq $signature.TimeStamperCertificate) { throw "missing Authenticode timestamp: $path" }
+          }
+      - name: Scan packaged inputs for removed runtimes
+        shell: pwsh
+        run: node scripts/desktop-release-tools.mjs scan --root apps/crewon-ui/src-tauri/binaries/runtime --root apps/crewon-ui/dist --root "apps/crewon-ui/src-tauri/target/$env:TARGET/release/crewon-ui.exe"
+      - name: Install NSIS package for isolated smoke
+        id: installed_app
+        shell: pwsh
+        run: |
+          $installer = @(Get-ChildItem "apps/crewon-ui/src-tauri/target/$env:TARGET/release/bundle/nsis" -Filter "*-setup.exe")
+          if ($installer.Count -ne 1) { throw "expected one NSIS installer" }
+          $installRoot = Join-Path $env:RUNNER_TEMP "crewon-installed"
+          & $installer[0].FullName /S "/D=$installRoot"
+          if ($LASTEXITCODE -ne 0) { throw "NSIS install failed: $LASTEXITCODE" }
+          $app = @(Get-ChildItem $installRoot -Recurse -File -Filter "crewon-ui.exe")
+          if ($app.Count -ne 1) { throw "installed Crewon executable not found" }
+          "path=$($app[0].FullName)" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+          "install_root=$installRoot" | Out-File -Append -FilePath $env:GITHUB_OUTPUT
+      - name: Run isolated Windows launch and guardian cleanup smoke
+        shell: pwsh
+        env:
+          CREWON_PACKAGED_APP_BINARY: ${{ steps.installed_app.outputs.path }}
+          CREWON_PACKAGED_SMOKE_MODE: launch
+        run: node --experimental-strip-types scripts/packaged-workflow-app-smoke.ts
+      - name: Collect signed Windows assets
+        shell: pwsh
+        run: node scripts/desktop-release-tools.mjs collect --target $env:TARGET --bundle-root "apps/crewon-ui/src-tauri/target/$env:TARGET/release/bundle" --output release-windows
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        with:
+          name: desktop-windows-x64
+          path: release-windows/*
+          if-no-files-found: error
+      - name: Remove imported certificate and installed app
+        if: always()
+        shell: pwsh
+        run: |
+          $thumbprint = '${{ steps.windows_certificate.outputs.thumbprint }}'
+          if (-not [string]::IsNullOrWhiteSpace($thumbprint)) {
+            Get-ChildItem Cert:\CurrentUser\My | Where-Object Thumbprint -eq $thumbprint | Remove-Item -Force
+          }
+          $installRoot = '${{ steps.installed_app.outputs.install_root }}'
+          if (-not [string]::IsNullOrWhiteSpace($installRoot)) {
+            Remove-Item -Recurse -Force $installRoot -ErrorAction SilentlyContinue
+          }
+          Remove-Item -Force (Join-Path $env:RUNNER_TEMP "crewon-signing.pfx") -ErrorAction SilentlyContinue
+
+  publish:
+    name: Publish complete desktop release
+    needs: [macos, windows]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .node-version
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          pattern: desktop-*
+          path: release-assets
+          merge-multiple: true
+      - name: Merge updater manifest
+        run: node scripts/desktop-release-tools.mjs merge --tag "$RELEASE_TAG" --repository "$GITHUB_REPOSITORY" --fragments release-assets --output latest.json
+      - name: Upload assets and publish only after both platforms are complete
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
+            test "$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)" = true || {
+              echo "refusing to mutate an already-published release" >&2
+              exit 1
+            }
+          else
+            gh release create "$RELEASE_TAG" --verify-tag --draft \
+              --title "Crewon ${RELEASE_TAG#desktop-v}" \
+              --notes "Signed macOS arm64 and Windows x64 desktop release."
+          fi
+          mapfile -d '' assets < <(find release-assets -type f ! -name 'fragment-*.json' -print0)
+          test "${#assets[@]}" -ge 5
+          gh release upload "$RELEASE_TAG" --clobber "${assets[@]}"
+          gh release upload "$RELEASE_TAG" --clobber latest.json
+          gh release edit "$RELEASE_TAG" --draft=false

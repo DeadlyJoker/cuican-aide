@@ -55,7 +55,7 @@ jobs:
         run: pnpm --filter @crewon/runtime-worker test
 
       - name: Test desktop sidecar staging contract
-        run: node --test scripts/stage-desktop-runtime.test.mjs
+        run: node --test scripts/desktop-release-tools.test.mjs scripts/stage-desktop-runtime.test.mjs
 
       - name: Ensure root README.md contains only ASCII and certain Unicode code points
         run: ./scripts/asciicheck.py README.md
