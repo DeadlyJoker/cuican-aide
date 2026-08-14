@@ -246,6 +246,40 @@ test("builds one provenance-bound ordinary Turn in the compound commit", async (
   assert.deepEqual(result.binding, input.binding);
 });
 
+test("prepares one schedule-bound invocation without repeating authorization", async () => {
+  const events: string[] = [];
+  const store = new FakeAutomationStore(events);
+  store.context = invocationContext();
+  const service = createService(store, events);
+  const occurrenceDigest = sha256("automation-1:1:2026-08-10T10:00:00Z");
+
+  const prepared = await service.prepare({
+    actor,
+    claim: {
+      record: definitionRecord(),
+      scheduledFor: "2026-08-10T10:00:00Z",
+      observedAt: "2026-08-10T10:01:00Z",
+      occurrenceDigest,
+      lease: {
+        ownerId: "scheduler-1",
+        leaseId: "lease-1",
+        epoch: 1,
+        expiresAt: "2026-08-10T10:01:30Z",
+      },
+    },
+  });
+
+  assert.deepEqual(events, ["store.invocationContext", "route"]);
+  assert.deepEqual(prepared.binding.trigger, {
+    kind: "schedule",
+    scheduleRevision: 1,
+    scheduledFor: "2026-08-10T10:00:00Z",
+    occurrenceDigest,
+  });
+  assert.equal(prepared.idempotency.key, occurrenceDigest);
+  assert.equal(prepared.threadFence.expectedRevision, 3);
+});
+
 test("retries an unknown invocation outcome with the same receipt before current state or route", async () => {
   const events: string[] = [];
   const store = new FakeAutomationStore(events);

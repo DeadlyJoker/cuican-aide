@@ -33,7 +33,11 @@ import type {
   CreateAutomationCommand,
   RunAutomationNowCommand,
 } from "./automation-store-port.ts";
-import type { AutomationScheduleCalculatorPort } from "./automation-scheduler-store-port.ts";
+import type {
+  AutomationScheduleCalculatorPort,
+  AutomationScheduleClaim,
+  ScheduledAutomationInvocationPreparer,
+} from "./automation-scheduler-store-port.ts";
 import {
   isAutomationDigest,
   isAutomationTimestamp,
@@ -59,7 +63,9 @@ export type {
   RunAutomationNowCommand,
 } from "./automation-store-port.ts";
 
-export class AutomationApplicationService {
+export class AutomationApplicationService
+  implements ScheduledAutomationInvocationPreparer
+{
   readonly #store: AutomationStore;
   readonly #authorization: AutomationAuthorizationPort;
   readonly #clock: ApplicationClock;
@@ -253,6 +259,7 @@ export class AutomationApplicationService {
       context,
       route,
       idempotency,
+      { kind: "manual" },
     );
     const result = await this.#storeCall(() =>
       this.#store.commitAutomationInvocation(input),
@@ -263,6 +270,73 @@ export class AutomationApplicationService {
       record: context.record,
     });
     return result;
+  }
+
+  async prepare(
+    input: Parameters<ScheduledAutomationInvocationPreparer["prepare"]>[0],
+  ): Promise<CommitAutomationInvocationInput> {
+    const { actor, claim } = input;
+    validateAutomationActor(actor);
+    this.#validateRecord(actor, claim.record);
+    const definition = claim.record.definition;
+    if (
+      canonicalJson(definition.owner) !== canonicalJson(actor) ||
+      claim.record.scheduleState.status !== "enabled" ||
+      claim.record.scheduleState.nextOccurrenceAt !== claim.scheduledFor
+    ) {
+      throw new ApplicationError(
+        "internal",
+        "automation_schedule_claim_invalid",
+      );
+    }
+    const context = await this.#storeCall(() =>
+      this.#store.loadAutomationInvocationContext({
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        automationId: definition.automationId,
+      }),
+    );
+    if (
+      context === null ||
+      canonicalJson(context.record) !== canonicalJson(claim.record)
+    ) {
+      throw new ApplicationError(
+        "internal",
+        "automation_schedule_claim_invalid",
+      );
+    }
+    const command = {
+      kind: "automation.runNow" as const,
+      idempotencyKey: claim.occurrenceDigest,
+      automationId: definition.automationId,
+      expectedAutomationRevision: 1 as const,
+      expectedThreadRevision: context.thread.revision,
+    };
+    this.#validateInvocationContext(actor, command, context);
+    const route = await this.#resolveRoute(
+      actor,
+      definition.threadId,
+      definition.agentVersionId,
+    );
+    if (route.agentVersionId !== definition.agentVersionId) {
+      throw new ApplicationError(
+        "internal",
+        "automation_frozen_agent_version_mismatch",
+      );
+    }
+    return this.#invocationInput(
+      actor,
+      command,
+      context,
+      route,
+      scheduledIdempotency(actor, claim),
+      {
+        kind: "schedule",
+        scheduleRevision: claim.record.scheduleState.scheduleRevision,
+        scheduledFor: claim.scheduledFor,
+        occurrenceDigest: claim.occurrenceDigest,
+      },
+    );
   }
 
   #createDefinition(
@@ -295,6 +369,7 @@ export class AutomationApplicationService {
     context: AutomationInvocationContext,
     route: RunRoute,
     idempotency: ReturnType<typeof runIdempotency>,
+    trigger: AutomationInvocationTrigger,
   ): CommitAutomationInvocationInput {
     const definition = context.record.definition;
     const occurredAt = this.#now();
@@ -326,7 +401,7 @@ export class AutomationApplicationService {
         invocationId: this.#nextId("automationInvocation"),
         runId,
         routeDigest,
-        trigger: { kind: "manual" } satisfies AutomationInvocationTrigger,
+        trigger,
       });
     const origin = parseAutomationInvocationOrigin({
       kind: "automation",
@@ -1016,6 +1091,24 @@ function runIdempotency(actor: ActorContext, command: RunAutomationNowCommand) {
     expectedAutomationRevision: command.expectedAutomationRevision,
     expectedThreadRevision: command.expectedThreadRevision,
   });
+}
+
+function scheduledIdempotency(
+  actor: ActorContext,
+  claim: AutomationScheduleClaim,
+) {
+  return idempotency(
+    actor,
+    "automation-schedule-command",
+    claim.occurrenceDigest,
+    {
+      kind: "automation.schedule",
+      automationId: claim.record.definition.automationId,
+      scheduleRevision: claim.record.scheduleState.scheduleRevision,
+      scheduledFor: claim.scheduledFor,
+      occurrenceDigest: claim.occurrenceDigest,
+    },
+  );
 }
 
 function idempotency(
