@@ -1,4 +1,4 @@
-import { ModelTransportError } from "@crewon/agent-kernel";
+import { ModelTransportError } from "@crewon/agent-kernel/runtime";
 
 const DEFAULT_MAX_EVENT_BYTES = 256 * 1024;
 

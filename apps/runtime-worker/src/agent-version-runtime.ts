@@ -1,4 +1,4 @@
-import type { AgentKernelPort } from "@crewon/agent-kernel";
+import type { AgentKernelPort } from "@crewon/agent-kernel/runtime";
 import type { CompiledAgentVersion } from "@crewon/agent-version";
 import type {
   ContentDigester,

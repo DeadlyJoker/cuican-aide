@@ -3,7 +3,7 @@ import type {
   ToolExecutionCall,
   WorkItemClaim,
 } from "@crewon/application";
-import type { KernelAgentEvent } from "@crewon/agent-kernel";
+import type { KernelAgentEvent } from "@crewon/agent-kernel/runtime";
 import type { ToolApprovalState } from "@crewon/domain";
 import type { ToolRuntimePort } from "@crewon/tool-broker";
 

@@ -1,7 +1,7 @@
 import {
   ModelTransportError,
   type ModelTransportErrorCategory,
-} from "@crewon/agent-kernel";
+} from "@crewon/agent-kernel/runtime";
 
 const MAX_RETRY_AFTER_MS = 24 * 60 * 60 * 1_000;
 

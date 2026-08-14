@@ -3,7 +3,7 @@ import type {
   AgentSegmentContract,
   AgentSegmentControlSink,
   KernelAgentEvent,
-} from "@crewon/agent-kernel";
+} from "@crewon/agent-kernel/runtime";
 import type { ProviderCheckpoint } from "@crewon/contracts/runtime";
 import { AgentSegmentStateMachine } from "./agent-segment-state-machine.ts";
 

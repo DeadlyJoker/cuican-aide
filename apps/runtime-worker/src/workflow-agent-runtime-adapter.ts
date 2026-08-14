@@ -1,14 +1,11 @@
-import { AgentKernelError } from "@crewon/agent-kernel";
+import { AgentKernelError } from "@crewon/agent-kernel/runtime";
 import type {
   DomainStore,
   DurableQueueStore,
   RunExecutionService,
   WorkflowRuntimeStore,
 } from "@crewon/application";
-import type {
-  ModelDispatchReceipt,
-  WorkflowSchemaValue,
-} from "@crewon/domain";
+import type { ModelDispatchReceipt, WorkflowSchemaValue } from "@crewon/domain";
 import { AgentSegmentExecutionEngine } from "./agent-segment-execution-engine.ts";
 import {
   CancellationWatcher,
@@ -139,7 +136,9 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
     return this.#execute(input);
   }
 
-  async #execute(input: WorkflowAgentEngineInput): Promise<WorkflowNodeOutcome> {
+  async #execute(
+    input: WorkflowAgentEngineInput,
+  ): Promise<WorkflowNodeOutcome> {
     const isContinuation = "continuationState" in input;
     const continuationState = isContinuation
       ? input.continuationState
@@ -184,8 +183,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
     }
     await this.#execution.loadRun(authority.workItemClaim);
     const modelSampleIndex = continuationState?.modelSampleIndex ?? 0;
-    const toolRoundsConsumed =
-      continuationState?.toolRoundsConsumed ?? 0;
+    const toolRoundsConsumed = continuationState?.toolRoundsConsumed ?? 0;
     const segmentId =
       modelSampleIndex === 0
         ? `segment:${authority.attemptId}`
@@ -701,7 +699,6 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       throw error;
     }
   }
-
 }
 
 type WorkflowAgentContinuationState = Readonly<{

@@ -1,7 +1,7 @@
 import {
   CrewONAgentKernel,
   type ModelTransportPort,
-} from "@crewon/agent-kernel";
+} from "@crewon/agent-kernel/runtime";
 import {
   InMemoryAgentVersionRegistry,
   type CompiledAgentVersion,

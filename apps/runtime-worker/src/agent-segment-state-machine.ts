@@ -1,4 +1,7 @@
-import { AgentKernelError, type KernelAgentEvent } from "@crewon/agent-kernel";
+import {
+  AgentKernelError,
+  type KernelAgentEvent,
+} from "@crewon/agent-kernel/runtime";
 import type { ProviderCheckpoint } from "@crewon/contracts/runtime";
 
 export type AgentSegmentImmediateAction =

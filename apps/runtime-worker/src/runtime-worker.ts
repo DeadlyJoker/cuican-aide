@@ -6,7 +6,7 @@ import {
   type AgentKernelPort,
   type AgentSegmentContract,
   type KernelAgentEvent,
-} from "@crewon/agent-kernel";
+} from "@crewon/agent-kernel/runtime";
 import {
   ApplicationError,
   type DomainStore,

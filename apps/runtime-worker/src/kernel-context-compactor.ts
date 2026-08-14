@@ -1,4 +1,7 @@
-import { AgentKernelError, type AgentKernelPort } from "@crewon/agent-kernel";
+import {
+  AgentKernelError,
+  type AgentKernelPort,
+} from "@crewon/agent-kernel/runtime";
 import {
   CONTEXT_COMPACTION_PROMPT,
   type ContextCompactionContract,

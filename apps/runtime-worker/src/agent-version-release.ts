@@ -1,4 +1,4 @@
-import type { ModelTransportPort } from "@crewon/agent-kernel";
+import type { ModelTransportPort } from "@crewon/agent-kernel/runtime";
 import {
   compileAgentVersion,
   createAgentVersionAsset,

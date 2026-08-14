@@ -1,4 +1,7 @@
-import type { AgentHistoryItem, KernelAgentEvent } from "@crewon/agent-kernel";
+import type {
+  AgentHistoryItem,
+  KernelAgentEvent,
+} from "@crewon/agent-kernel/runtime";
 import type { WorkflowExecutionValue } from "@crewon/application";
 import type { ProviderCheckpoint } from "@crewon/contracts/runtime";
 import type {

@@ -1,4 +1,7 @@
-import type { AgentHistoryItem, KernelAgentEvent } from "@crewon/agent-kernel";
+import type {
+  AgentHistoryItem,
+  KernelAgentEvent,
+} from "@crewon/agent-kernel/runtime";
 import type {
   DomainStore,
   DurableQueueStore,
@@ -95,10 +98,15 @@ export async function executeWorkflowTools(
   for (const event of requests) {
     const call = event.data;
     const defined = input.runtime.version.tools.some(
-      (candidate) => candidate.kind === call.kind && candidate.name === call.name,
+      (candidate) =>
+        candidate.kind === call.kind && candidate.name === call.name,
     );
-    const policy = input.runtime.toolRuntime.executionPolicy(call.kind, call.name);
-    if (!defined || policy === null) throw new Error("tool_execution_policy_missing");
+    const policy = input.runtime.toolRuntime.executionPolicy(
+      call.kind,
+      call.name,
+    );
+    if (!defined || policy === null)
+      throw new Error("tool_execution_policy_missing");
     if (input.node.kind === "humanGate")
       throw new Error("workflow_human_gate_model_execution_forbidden");
     const prepared =
@@ -135,11 +143,12 @@ export async function executeWorkflowTools(
     const approval: ToolApprovalState | null =
       adopted?.receipt.call.callId === call.callId ? adopted.approval : null;
     if (policy.approvalRequirement === "perAction" && approval === null) {
-      const artifacts = await dependencies.execution.prepareWorkflowToolApproval(
-        input.authority.workItemClaim,
-        receipt,
-        { expiresAfterMs: dependencies.approvalTtlMs },
-      );
+      const artifacts =
+        await dependencies.execution.prepareWorkflowToolApproval(
+          input.authority.workItemClaim,
+          receipt,
+          { expiresAfterMs: dependencies.approvalTtlMs },
+        );
       const published = await dependencies.store.publishWorkflowToolApproval({
         lease: leaseInput(input.authority.workItemClaim),
         binding: input.authority.binding,
@@ -218,7 +227,8 @@ export async function executeWorkflowTools(
       },
     };
     if (receipt.status !== "completed") {
-      if (toolAttempt === null) throw new Error("workflow_tool_attempt_missing");
+      if (toolAttempt === null)
+        throw new Error("workflow_tool_attempt_missing");
       const nextHistory = [
         ...currentHistory,
         {
@@ -228,26 +238,28 @@ export async function executeWorkflowTools(
           output: resolution.result.output,
         },
       ];
-      const committed = await dependencies.store.commitWorkflowToolContinuation({
-        lease: leaseInput(input.authority.workItemClaim),
-        authority: workflowAttemptAuthority(durableAuthority(input)),
-        receipt,
-        toolAttempt,
-        completedEvent,
-        providerReceiptId: resolution.providerReceiptId,
-        expectedContinuationRevision: revision,
-        next: workflowContinuationCheckpoint({
-          authority: durableAuthority(input),
-          segmentId: continuation.segmentId,
-          modelSampleIndex: continuation.modelSampleIndex,
-          toolRoundsConsumed: continuation.nextToolRoundsConsumed,
-          history: nextHistory,
-          dispatch: continuation.dispatch,
-          providerCheckpoint: continuation.providerCheckpoint,
-          providerTurnState: continuation.providerTurnState,
-        }),
-        committedAt: new Date().toISOString(),
-      });
+      const committed = await dependencies.store.commitWorkflowToolContinuation(
+        {
+          lease: leaseInput(input.authority.workItemClaim),
+          authority: workflowAttemptAuthority(durableAuthority(input)),
+          receipt,
+          toolAttempt,
+          completedEvent,
+          providerReceiptId: resolution.providerReceiptId,
+          expectedContinuationRevision: revision,
+          next: workflowContinuationCheckpoint({
+            authority: durableAuthority(input),
+            segmentId: continuation.segmentId,
+            modelSampleIndex: continuation.modelSampleIndex,
+            toolRoundsConsumed: continuation.nextToolRoundsConsumed,
+            history: nextHistory,
+            dispatch: continuation.dispatch,
+            providerCheckpoint: continuation.providerCheckpoint,
+            providerTurnState: continuation.providerTurnState,
+          }),
+          committedAt: new Date().toISOString(),
+        },
+      );
       revision = committed.continuation.revision;
       currentHistory = committed.continuation.history;
     }
@@ -298,7 +310,8 @@ function workflowToolCommand(
   claim: WorkItemClaim,
   approval: ToolApprovalState | null,
 ): ToolExecutionCommand {
-  if (receipt.actionIntent === null) throw new Error("tool_action_intent_missing");
+  if (receipt.actionIntent === null)
+    throw new Error("tool_action_intent_missing");
   return {
     schemaVersion: "crewon.tool-invocation.v0",
     executionId: receipt.executionId,

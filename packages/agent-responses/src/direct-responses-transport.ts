@@ -5,7 +5,7 @@ import {
   type ModelTransportStreamOptions,
   type ModelTransportEvent,
   type ModelTransportPort,
-} from "@crewon/agent-kernel";
+} from "@crewon/agent-kernel/runtime";
 import {
   parseProviderCheckpoint,
   type ProviderCheckpoint,

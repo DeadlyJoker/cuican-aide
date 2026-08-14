@@ -1,4 +1,7 @@
-import type { ModelInputItem, ModelTransportEvent } from "@crewon/agent-kernel";
+import type {
+  ModelInputItem,
+  ModelTransportEvent,
+} from "@crewon/agent-kernel/runtime";
 import type { ProviderCheckpoint } from "@crewon/contracts/runtime";
 
 import { protocolError, transportError } from "./responses-errors.ts";

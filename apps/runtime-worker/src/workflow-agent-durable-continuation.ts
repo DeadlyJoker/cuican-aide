@@ -3,7 +3,7 @@ import type {
   WorkflowNodeContinuationCheckpoint,
 } from "@crewon/application";
 import type { ModelDispatchReceipt } from "@crewon/domain";
-import type { AgentHistoryItem } from "@crewon/agent-kernel";
+import type { AgentHistoryItem } from "@crewon/agent-kernel/runtime";
 import type { ProviderCheckpoint } from "@crewon/contracts/runtime";
 
 export type WorkflowDurableExecutionAuthority = Readonly<{

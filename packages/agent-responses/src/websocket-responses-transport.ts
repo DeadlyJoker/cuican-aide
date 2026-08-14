@@ -5,7 +5,7 @@ import {
   type ModelTransportStreamOptions,
   type ModelTransportEvent,
   type ModelTransportPort,
-} from "@crewon/agent-kernel";
+} from "@crewon/agent-kernel/runtime";
 import type { ClientRequest, IncomingMessage } from "node:http";
 import WebSocket, { type ClientOptions, type RawData } from "ws";
 

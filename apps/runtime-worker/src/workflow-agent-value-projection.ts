@@ -1,8 +1,5 @@
-import type { AgentHistoryItem } from "@crewon/agent-kernel";
-import {
-  canonicalJson,
-  MAX_WORKFLOW_VALUE_BYTES,
-} from "@crewon/application";
+import type { AgentHistoryItem } from "@crewon/agent-kernel/runtime";
+import { canonicalJson, MAX_WORKFLOW_VALUE_BYTES } from "@crewon/application";
 import { escapeContextXmlText } from "@crewon/context";
 import {
   validateWorkflowSchemaValue,

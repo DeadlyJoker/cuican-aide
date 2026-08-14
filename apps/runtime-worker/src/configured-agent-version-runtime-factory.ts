@@ -1,7 +1,7 @@
 import {
   CrewONAgentKernel,
   type ModelTransportPort,
-} from "@crewon/agent-kernel";
+} from "@crewon/agent-kernel/runtime";
 import type { CompiledAgentVersion } from "@crewon/agent-version";
 import type { AgentVersionDeployment } from "@crewon/application";
 import type { GovernedContextBundle } from "@crewon/context";

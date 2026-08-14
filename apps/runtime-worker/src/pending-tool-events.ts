@@ -1,5 +1,5 @@
 import type { DomainStore } from "@crewon/application";
-import type { KernelAgentEvent } from "@crewon/agent-kernel";
+import type { KernelAgentEvent } from "@crewon/agent-kernel/runtime";
 import type { RunLifecycleEvent, RunState } from "@crewon/domain";
 
 export async function loadPendingToolEventsForSegment(input: {

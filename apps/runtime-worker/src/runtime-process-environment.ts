@@ -1,6 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 
-import type { ModelTransportPort } from "@crewon/agent-kernel";
+import type { ModelTransportPort } from "@crewon/agent-kernel/runtime";
 import {
   DirectResponsesTransport,
   ResilientResponsesTransport,
