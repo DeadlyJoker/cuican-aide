@@ -68,9 +68,11 @@ export function decodePostgresWorkItem(row: PostgresQueueItemRow): WorkItem {
                 ? "workflowNode"
                 : value.payload.trigger === "workflowReconcile"
                   ? "workflowReconcile"
-                  : value.payload.trigger === "manualCompaction"
-                    ? "manualCompaction"
-                    : "default",
+                  : value.payload.trigger === "workflowToolApprovalResume"
+                    ? "workflowToolApprovalResume"
+                    : value.payload.trigger === "manualCompaction"
+                      ? "manualCompaction"
+                      : "default",
   );
   if (
     value.kind !== row.kind ||

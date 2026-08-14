@@ -1199,6 +1199,13 @@ class TestPostgresAttemptStore extends PostgresDomainStore {
 
   async simulateExecutionSchema(version: number): Promise<void> {
     await this.#admin.query(
+      `DROP TABLE ${this.#schemaSql}.workflow_tool_approval_handoffs`,
+    );
+    await this.#admin.query(
+      `DELETE FROM ${this.#schemaSql}.schema_migrations
+       WHERE component='workflow_tool_approval'`,
+    );
+    await this.#admin.query(
       `DROP TABLE ${this.#schemaSql}.thread_model_states`,
     );
     await this.#admin.query(`DROP TABLE ${this.#schemaSql}.tool_approvals`);

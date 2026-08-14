@@ -3023,6 +3023,7 @@ export function validateWorkItems(
     | "workflowCancel"
     | "workflowNode"
     | "workflowReconcile"
+    | "workflowToolApprovalResume"
     | "manualCompaction" = "default",
 ): void {
   const workItemIds = new Set<string>();
@@ -3073,40 +3074,58 @@ export function validateWorkItems(
                   "schemaVersion",
                   "trigger",
                 ])
-              : payloadKind === "default"
-                ? stableJson(payloadKeys) === stableJson(["throughSequence"])
-                : payloadKind === "goalContinuation"
-                  ? stableJson(payloadKeys) ===
-                    stableJson([
-                      "goalId",
-                      "goalRevision",
-                      "previousRunId",
-                      "throughSequence",
-                      "trigger",
-                    ])
-                  : payloadKind === "goalActivation"
+              : payloadKind === "workflowToolApprovalResume"
+                ? stableJson(payloadKeys) ===
+                  stableJson([
+                    "actionDigest",
+                    "agentLeaseEpoch",
+                    "agentVersionId",
+                    "agentWorkItemId",
+                    "approvalId",
+                    "attemptId",
+                    "binding",
+                    "claimEpoch",
+                    "claimId",
+                    "nodeId",
+                    "receiptId",
+                    "schemaVersion",
+                    "stepId",
+                    "trigger",
+                  ])
+                : payloadKind === "default"
+                  ? stableJson(payloadKeys) === stableJson(["throughSequence"])
+                  : payloadKind === "goalContinuation"
                     ? stableJson(payloadKeys) ===
                       stableJson([
                         "goalId",
                         "goalRevision",
+                        "previousRunId",
                         "throughSequence",
                         "trigger",
                       ])
-                    : payloadKind === "automationInvocation"
+                    : payloadKind === "goalActivation"
                       ? stableJson(payloadKeys) ===
                         stableJson([
-                          "binding",
-                          "schemaVersion",
+                          "goalId",
+                          "goalRevision",
                           "throughSequence",
                           "trigger",
                         ])
-                      : stableJson(payloadKeys) ===
-                        stableJson([
-                          "expectedHistorySequence",
-                          "schemaVersion",
-                          "throughSequence",
-                          "trigger",
-                        ]);
+                      : payloadKind === "automationInvocation"
+                        ? stableJson(payloadKeys) ===
+                          stableJson([
+                            "binding",
+                            "schemaVersion",
+                            "throughSequence",
+                            "trigger",
+                          ])
+                        : stableJson(payloadKeys) ===
+                          stableJson([
+                            "expectedHistorySequence",
+                            "schemaVersion",
+                            "throughSequence",
+                            "trigger",
+                          ]);
     if (
       !payloadValid ||
       (![
@@ -3114,6 +3133,7 @@ export function validateWorkItems(
         "workflowCancel",
         "workflowNode",
         "workflowReconcile",
+        "workflowToolApprovalResume",
       ].includes(payloadKind) &&
         workItem.payload.throughSequence !== throughSequence)
     ) {
@@ -3153,6 +3173,39 @@ export function validateWorkItems(
         typeof payload.claimEpoch !== "number" ||
         !Number.isSafeInteger(payload.claimEpoch) ||
         payload.claimEpoch <= 0
+      )
+        throw new RunStoreError("work_item_payload_invalid");
+      try {
+        parseFrozenWorkflowVersionBinding(payload.binding);
+      } catch {
+        throw new RunStoreError("work_item_payload_invalid");
+      }
+    }
+    if (payloadKind === "workflowToolApprovalResume") {
+      const payload = workItem.payload;
+      if (
+        payload.schemaVersion !==
+          "crewon.workflow-tool-approval-resume-work-item.v0" ||
+        payload.trigger !== "workflowToolApprovalResume" ||
+        ![
+          payload.nodeId,
+          payload.claimId,
+          payload.stepId,
+          payload.attemptId,
+          payload.agentVersionId,
+          payload.agentWorkItemId,
+          payload.approvalId,
+          payload.receiptId,
+          payload.actionDigest,
+        ].every(
+          (value) => typeof value === "string" && value.trim().length > 0,
+        ) ||
+        ![payload.claimEpoch, payload.agentLeaseEpoch].every(
+          (value) =>
+            typeof value === "number" &&
+            Number.isSafeInteger(value) &&
+            value > 0,
+        )
       )
         throw new RunStoreError("work_item_payload_invalid");
       try {

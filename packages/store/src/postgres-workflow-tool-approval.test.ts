@@ -23,10 +23,7 @@ const digester = {
 const startedAt = "2026-08-12T00:00:00.000Z";
 
 if (postgresUrl === undefined) {
-  test.skip(
-    "PostgreSQL Workflow Tool approval requires CREWON_TEST_POSTGRES_URL",
-    () => {},
-  );
+  test.skip("PostgreSQL Workflow Tool approval requires CREWON_TEST_POSTGRES_URL", () => {});
 } else {
   test("publishes, decides, consumes, and re-adopts the resume authority", async () => {
     const fixture = await postgresFixture();
@@ -57,6 +54,28 @@ if (postgresUrl === undefined) {
         schedulerOperationId: string;
         workflowInput: { valueId: string; valueDigest: string };
       };
+      await fixture.domain.commitRun({
+        tenantId: "tenant-1",
+        expectedRevision: 1,
+        idempotency: {
+          scope: "workflow-approval-test",
+          key: "start",
+          requestFingerprint: "start-fingerprint",
+        },
+        events: [
+          {
+            schemaVersion: "crewon.run-event.v0",
+            identity: { runId },
+            eventId: "run-started-event",
+            sequence: 2,
+            occurredAt: startedAt,
+            type: "run.started",
+            data: {},
+          },
+        ],
+        outbox: [],
+        workItems: [],
+      });
       const scheduled = await fixture.admission.scheduleWorkflowNodes({
         tenantId: "tenant-1",
         runId,
@@ -196,7 +215,10 @@ if (postgresUrl === undefined) {
         recovery: "reconcilable",
         preparedAt: startedAt,
       });
-      await fixture.admission.prepareToolExecution({ lease: nodeLease, receipt });
+      await fixture.admission.prepareToolExecution({
+        lease: nodeLease,
+        receipt,
+      });
       const approval = createToolApproval({
         approvalId: "approval-1",
         tenantId: "tenant-1",
@@ -214,7 +236,7 @@ if (postgresUrl === undefined) {
         schemaVersion: "crewon.run-event.v0" as const,
         identity: { runId },
         eventId: "approval-required-event",
-        sequence: 2,
+        sequence: 3,
         occurredAt: startedAt,
         type: "run.approval.required" as const,
         data: { approvalId: approval.approvalId, actionDigest },
@@ -263,7 +285,7 @@ if (postgresUrl === undefined) {
         schemaVersion: "crewon.run-event.v0" as const,
         identity: { runId },
         eventId: "approval-resumed-event",
-        sequence: 3,
+        sequence: 4,
         occurredAt: "2026-08-12T00:00:01.000Z",
         type: "run.resumed" as const,
         data: { reasonCode: "tool_approval_approved" },
@@ -280,7 +302,7 @@ if (postgresUrl === undefined) {
             key: "approve",
             requestFingerprint: "approve-fingerprint",
           },
-          expectedRevision: 2,
+          expectedRevision: 3,
           events: [resumed],
           outbox: [
             {
