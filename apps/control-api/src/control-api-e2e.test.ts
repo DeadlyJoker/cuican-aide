@@ -2431,7 +2431,7 @@ async function runWorkerProcess(
 }
 
 function workerEnvironment(databasePath: string): NodeJS.ProcessEnv {
-  return {
+  const environment: NodeJS.ProcessEnv = {
     ...process.env,
     CREWON_CONTROL_DB_PATH: databasePath,
     CREWON_MODEL_ID: "fake-model",
@@ -2447,6 +2447,10 @@ function workerEnvironment(databasePath: string): NodeJS.ProcessEnv {
     CREWON_POLICY_SNAPSHOT_ID: "policy-e2e-1",
     CREWON_WORKSPACE_BINDING_ID: "workspace-e2e-1",
   };
+  delete environment.CREWON_CONTROL_DATABASE_URL;
+  delete environment.CREWON_CONTROL_DATABASE_SCHEMA;
+  delete environment.CREWON_CONTROL_SECURITY_MODE;
+  return environment;
 }
 
 function postgresWorkerEnvironment(
@@ -2455,8 +2459,9 @@ function postgresWorkerEnvironment(
   ownerId: string,
   expectedUserMessage: string,
 ): NodeJS.ProcessEnv {
-  return {
+  const environment: NodeJS.ProcessEnv = {
     ...process.env,
+    CREWON_CONTROL_SECURITY_MODE: "production",
     CREWON_CONTROL_DATABASE_URL: connectionString,
     CREWON_CONTROL_DATABASE_SCHEMA: schema,
     CREWON_MODEL_ID: "fake-model",
@@ -2467,12 +2472,17 @@ function postgresWorkerEnvironment(
     CREWON_WORKER_LEASE_DURATION_MS: "30000",
     CREWON_WORKER_RETRY_AFTER_MS: "0",
     CREWON_TENANT_ID: "tenant-e2e-1",
+    CREWON_SPACE_ID: "space-e2e-1",
+    CREWON_RELEASE_PRINCIPAL_ID: "release-principal-e2e",
+    CREWON_RELEASE_ACTOR_ID: "release-actor-e2e",
     CREWON_AUTHORITY_ID: "standalone-e2e-1",
     CREWON_RUNTIME_GENERATION: "ts-v0",
     CREWON_AGENT_VERSION_ID: "agent-version-e2e-1",
     CREWON_POLICY_SNAPSHOT_ID: "policy-e2e-1",
     CREWON_WORKSPACE_BINDING_ID: "workspace-e2e-1",
   };
+  delete environment.CREWON_CONTROL_DB_PATH;
+  return environment;
 }
 
 function readHeaders(): Record<string, string> {

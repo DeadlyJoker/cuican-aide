@@ -1,6 +1,9 @@
 import type { ActorContext, AuthorizationPort } from "@crewon/application";
 
-import { environmentOr } from "./runtime-process-environment.ts";
+import {
+  resolveRuntimeAuthorityValue,
+  type RuntimeProcessSecurityMode,
+} from "./runtime-database-environment.ts";
 
 export class RuntimeReleaseAuthorization implements AuthorizationPort {
   readonly #actor: ActorContext;
@@ -29,14 +32,34 @@ export class RuntimeReleaseAuthorization implements AuthorizationPort {
   }
 }
 
-export function loadRuntimeReleaseActor(): ActorContext {
+export function loadRuntimeReleaseActor(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+  securityMode: RuntimeProcessSecurityMode = "standalone",
+): ActorContext {
   return {
-    principalId: environmentOr(
+    principalId: resolveRuntimeAuthorityValue(
+      environment,
+      securityMode,
       "CREWON_RELEASE_PRINCIPAL_ID",
       "standalone-release-principal",
     ),
-    actorId: environmentOr("CREWON_RELEASE_ACTOR_ID", "standalone-release"),
-    tenantId: environmentOr("CREWON_TENANT_ID", "standalone-tenant"),
-    spaceId: environmentOr("CREWON_SPACE_ID", "standalone-space"),
+    actorId: resolveRuntimeAuthorityValue(
+      environment,
+      securityMode,
+      "CREWON_RELEASE_ACTOR_ID",
+      "standalone-release",
+    ),
+    tenantId: resolveRuntimeAuthorityValue(
+      environment,
+      securityMode,
+      "CREWON_TENANT_ID",
+      "standalone-tenant",
+    ),
+    spaceId: resolveRuntimeAuthorityValue(
+      environment,
+      securityMode,
+      "CREWON_SPACE_ID",
+      "standalone-space",
+    ),
   };
 }

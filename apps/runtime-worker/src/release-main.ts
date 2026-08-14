@@ -8,19 +8,56 @@ import { loadAgentVersionDeployments } from "./runtime-binding-config.ts";
 import {
   createConfiguredToolRuntime,
   createModelTransport,
-  environmentOr,
   parseNativeWorkspaceReadCatalog,
   parseNonNegativeInteger,
   parsePositiveInteger,
-  requiredEnvironment,
 } from "./runtime-process-environment.ts";
+import {
+  resolveRuntimeAuthorityValue,
+  resolveRuntimeDatabaseAuthority,
+} from "./runtime-database-environment.ts";
+import { parseRuntimeWorkerSecurityMode } from "./runtime-provider-probe-environment.ts";
 import { SystemApplicationClock } from "./standalone-adapters.ts";
 import {
   loadRuntimeReleaseActor,
   RuntimeReleaseAuthorization,
 } from "./release-authority.ts";
 
-const actor = loadRuntimeReleaseActor();
+const securityMode = parseRuntimeWorkerSecurityMode(
+  process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
+);
+const databaseAuthority = resolveRuntimeDatabaseAuthority(
+  process.env,
+  securityMode,
+);
+const actor = loadRuntimeReleaseActor(process.env, securityMode);
+const route = {
+  authorityId: resolveRuntimeAuthorityValue(
+    process.env,
+    securityMode,
+    "CREWON_AUTHORITY_ID",
+    "standalone-authority",
+  ),
+  runtimeGeneration: resolveRuntimeAuthorityValue(
+    process.env,
+    securityMode,
+    "CREWON_RUNTIME_GENERATION",
+    "ts-v0",
+  ),
+  agentVersionId: resolveRuntimeAuthorityValue(
+    process.env,
+    securityMode,
+    "CREWON_AGENT_VERSION_ID",
+    "default-agent-v1",
+  ),
+  policySnapshotId: resolveRuntimeAuthorityValue(
+    process.env,
+    securityMode,
+    "CREWON_POLICY_SNAPSHOT_ID",
+    "standalone-policy-v0",
+  ),
+  workspaceBindingId: process.env.CREWON_WORKSPACE_BINDING_ID?.trim() || null,
+};
 const bindingsPath =
   process.env.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
 const configuredDeployments = bindingsPath
@@ -37,20 +74,7 @@ try {
     activationId:
       process.env.CREWON_AGENT_VERSION_ACTIVATION_ID?.trim() || uuidv7(),
     runtimeTenantId: actor.tenantId,
-    route: {
-      authorityId: environmentOr("CREWON_AUTHORITY_ID", "standalone-authority"),
-      runtimeGeneration: environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
-      agentVersionId: environmentOr(
-        "CREWON_AGENT_VERSION_ID",
-        "default-agent-v1",
-      ),
-      policySnapshotId: environmentOr(
-        "CREWON_POLICY_SNAPSHOT_ID",
-        "standalone-policy-v0",
-      ),
-      workspaceBindingId:
-        process.env.CREWON_WORKSPACE_BINDING_ID?.trim() || null,
-    },
+    route,
     transport,
     agentInstructions: process.env.CREWON_AGENT_INSTRUCTIONS?.trim() || null,
     toolRuntime,
@@ -79,19 +103,17 @@ try {
           ),
         }),
   };
-  const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
-  const activated = connectionString
-    ? await activatePostgresRuntimeAgentVersionRelease({
-        ...common,
-        connectionString,
-        ...(process.env.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
-          ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
-          : {}),
-      })
-    : await activateStandaloneRuntimeAgentVersionRelease({
-        ...common,
-        databasePath: requiredEnvironment("CREWON_CONTROL_DB_PATH"),
-      });
+  const activated =
+    databaseAuthority.mode === "production"
+      ? await activatePostgresRuntimeAgentVersionRelease({
+          ...common,
+          connectionString: databaseAuthority.connectionString,
+          schema: databaseAuthority.schema,
+        })
+      : await activateStandaloneRuntimeAgentVersionRelease({
+          ...common,
+          databasePath: databaseAuthority.databasePath,
+        });
   process.stdout.write(
     `${JSON.stringify({
       disposition: activated.activation.disposition,

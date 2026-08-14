@@ -15,12 +15,15 @@ import {
 import {
   createConfiguredToolRuntime,
   createModelTransport,
-  environmentOr,
   parseNativeWorkspaceReadCatalog,
   parseNonNegativeInteger,
   parsePositiveInteger,
   requiredEnvironment,
 } from "./runtime-process-environment.ts";
+import {
+  resolveRuntimeAuthorityValue,
+  resolveRuntimeDatabaseAuthority,
+} from "./runtime-database-environment.ts";
 import { takeRuntimeNativeBootstrap } from "./runtime-native-bootstrap.ts";
 import {
   createRuntimeNativeWorkspaceResources,
@@ -38,6 +41,13 @@ import {
   type RuntimeNativeRemoteMcpOwner,
 } from "./runtime-native-remote-mcp.ts";
 
+const securityMode = parseRuntimeWorkerSecurityMode(
+  process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
+);
+const databaseAuthority = resolveRuntimeDatabaseAuthority(
+  process.env,
+  securityMode,
+);
 const agentVersionRuntimeBindingsPath =
   process.env.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
 const nativeBootstrap = takeRuntimeNativeBootstrap();
@@ -47,9 +57,6 @@ const initialized = await (async () => {
   let toolRuntime: Awaited<ReturnType<typeof createConfiguredToolRuntime>>;
   let artifactAuthority: ReturnType<typeof createConfiguredArtifactAuthority>;
   try {
-    const securityMode = parseRuntimeWorkerSecurityMode(
-      process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
-    );
     const ambientProviderProbe = resolveRuntimeProviderProbeEnvironment(
       process.env,
       securityMode,
@@ -87,21 +94,40 @@ const initialized = await (async () => {
     ) {
       throw new Error("runtime_workspace_read_bootstrap_mismatch");
     }
-    const runtimeTenantId =
-      workspaceBootstrap?.authority.tenantId ??
-      environmentOr("CREWON_TENANT_ID", "standalone-tenant");
+    const runtimeTenantId = resolveRuntimeAuthorityValue(
+      process.env,
+      securityMode,
+      "CREWON_TENANT_ID",
+      "standalone-tenant",
+      workspaceBootstrap?.authority.tenantId,
+    );
     const route = {
-      authorityId: environmentOr("CREWON_AUTHORITY_ID", "standalone-authority"),
-      runtimeGeneration:
-        workspaceBootstrap?.authority.runtimeBindingId ??
-        environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
-      agentVersionId: environmentOr(
+      authorityId: resolveRuntimeAuthorityValue(
+        process.env,
+        securityMode,
+        "CREWON_AUTHORITY_ID",
+        "standalone-authority",
+      ),
+      runtimeGeneration: resolveRuntimeAuthorityValue(
+        process.env,
+        securityMode,
+        "CREWON_RUNTIME_GENERATION",
+        "ts-v0",
+        workspaceBootstrap?.authority.runtimeBindingId,
+      ),
+      agentVersionId: resolveRuntimeAuthorityValue(
+        process.env,
+        securityMode,
         "CREWON_AGENT_VERSION_ID",
         "default-agent-v1",
       ),
-      policySnapshotId:
-        workspaceBootstrap?.authority.policySnapshotId ??
-        environmentOr("CREWON_POLICY_SNAPSHOT_ID", "standalone-policy-v0"),
+      policySnapshotId: resolveRuntimeAuthorityValue(
+        process.env,
+        securityMode,
+        "CREWON_POLICY_SNAPSHOT_ID",
+        "standalone-policy-v0",
+        workspaceBootstrap?.authority.policySnapshotId,
+      ),
       workspaceBindingId:
         workspaceBootstrap?.authority.workspaceBindingId ??
         process.env.CREWON_WORKSPACE_BINDING_ID?.trim() ??
@@ -149,7 +175,6 @@ const initialized = await (async () => {
       remoteMcpOwner,
       route,
       runtimeTenantId,
-      securityMode,
       toolRuntime,
       transport,
       workspaceBootstrap,
@@ -280,22 +305,17 @@ try {
           workspaceReadFile: nativeWorkspaceResources.readFile,
         }),
   };
-  const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
-  runtime = connectionString
-    ? await createPostgresRuntimeWorker({
-        ...config,
-        connectionString,
-        ...(process.env.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
-          ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
-          : {}),
-      })
-    : await (async () => {
-        const databasePath = requiredEnvironment("CREWON_CONTROL_DB_PATH");
-        return createStandaloneRuntimeWorker({
+  runtime =
+    databaseAuthority.mode === "production"
+      ? await createPostgresRuntimeWorker({
           ...config,
-          databasePath,
+          connectionString: databaseAuthority.connectionString,
+          schema: databaseAuthority.schema,
+        })
+      : await createStandaloneRuntimeWorker({
+          ...config,
+          databasePath: databaseAuthority.databasePath,
         });
-      })();
 } catch (error) {
   await nativeWorkspaceResources?.close();
   await artifactAuthority?.store.close();

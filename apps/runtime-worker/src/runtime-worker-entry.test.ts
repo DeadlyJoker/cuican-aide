@@ -1,14 +1,12 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { createServer as createNetServer, type Server } from "node:net";
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import type { ModelTransportPort } from "@crewon/agent-kernel";
-import { RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH } from "@crewon/contracts/runtime";
 
 import {
   TEST_CA_CERT,
@@ -31,7 +29,7 @@ test("packaged entry starts the Workspace listener and emits only non-secret rea
   );
   const child = spawn(process.execPath, ["--experimental-strip-types", entry], {
     env: {
-      ...process.env,
+      ...cleanDatabaseEnvironment(),
       CREWON_CONTROL_DB_PATH: databasePath,
       CREWON_MODEL_ID: "fake-model",
       CREWON_RESPONSES_ENDPOINT: "https://provider.example/v1/responses",
@@ -85,15 +83,8 @@ test("packaged entry starts the Workspace listener and emits only non-secret rea
   assert.equal(await waitForExit(child), 0);
 });
 
-test("production entry starts the authenticated Provider listener", async (context) => {
+test("production entry rejects SQLite before Provider readiness", async (context) => {
   const databasePath = temporaryDatabasePath(context);
-  const config = {
-    ...packagedConfig(),
-    nativeWorkspaceReadCatalog: "disabled" as const,
-  };
-  await activateRelease(databasePath, config);
-  const port = await unusedLoopbackPort();
-  const token = "production-provider-probe-token-at-least-32-bytes";
   const child = spawn(
     process.execPath,
     [
@@ -102,65 +93,21 @@ test("production entry starts the authenticated Provider listener", async (conte
     ],
     {
       env: {
-        ...process.env,
+        ...cleanDatabaseEnvironment(),
         CREWON_CONTROL_SECURITY_MODE: "production",
         CREWON_CONTROL_DB_PATH: databasePath,
-        CREWON_MODEL_ID: "fake-model",
-        CREWON_RESPONSES_ENDPOINT: "https://provider.example/v1/responses",
-        CREWON_TENANT_ID: config.runtimeTenantId,
-        CREWON_AUTHORITY_ID: config.route.authorityId,
-        CREWON_AGENT_VERSION_ID: config.route.agentVersionId,
-        CREWON_RUNTIME_GENERATION: config.route.runtimeGeneration,
-        CREWON_POLICY_SNAPSHOT_ID: config.route.policySnapshotId,
-        CREWON_WORKSPACE_BINDING_ID:
-          config.route.workspaceBindingId ?? undefined,
-        CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON: JSON.stringify({
-          schemaVersion: "crewon.runtime-provider-probe.v0",
-          port,
-          tokenEnvironment: "PRODUCTION_PROVIDER_PROBE_TOKEN",
-          providerId: "gateway",
-          runtimeBindingId: config.route.runtimeGeneration,
-          endpoint: "https://provider.example/v1",
-          credentialEnvironment: "PRODUCTION_PROVIDER_API_KEY",
-        }),
-        PRODUCTION_PROVIDER_PROBE_TOKEN: token,
-        PRODUCTION_PROVIDER_API_KEY:
-          "production-provider-api-key-at-least-32-bytes",
-        CREWON_WORKER_SCAN_INTERVAL_MS: "1000",
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
-  context.after(() => {
-    if (child.exitCode === null) child.kill("SIGKILL");
-  });
-  const failed = collectExit(child);
-  try {
-    await waitForStdout(
-      child,
-      `CrewON Provider Runtime ready:${config.route.runtimeGeneration}\n`,
-    );
-  } catch (error) {
-    const output = await failed;
-    throw new Error(
-      `${error instanceof Error ? error.message : "provider_ready_failed"}:${output.stderr.replaceAll(token, "[redacted]")}`,
-    );
-  }
-  const unauthorized = await fetch(
-    `http://127.0.0.1:${port}/internal/v1/model-provider-probe`,
-    { method: "POST" },
-  );
-  assert.equal(unauthorized.status, 401);
-  child.kill("SIGTERM");
-  assert.equal(await waitForExit(child), 0);
+  const output = await collectExit(child);
+  assert.notEqual(output.code, 0);
+  assert.match(output.stderr, /CREWON_CONTROL_DB_PATH_forbidden/u);
+  assert.doesNotMatch(output.stdout, /CrewON .*ready|Runtime Worker started/u);
+  assert.equal(existsSync(databasePath), false);
 });
 
-test("production entry starts the authenticated Workspace listener", async (context) => {
-  const databasePath = temporaryDatabasePath(context);
-  const config = packagedConfig();
-  await activateRelease(databasePath, config);
-  const port = await unusedLoopbackPort();
-  const token = "production-workspace-private-token-at-least-32-bytes";
+test("production entry rejects standalone route defaults before readiness", async () => {
   const child = spawn(
     process.execPath,
     [
@@ -169,55 +116,23 @@ test("production entry starts the authenticated Workspace listener", async (cont
     ],
     {
       env: {
-        ...process.env,
+        ...cleanDatabaseEnvironment(),
         CREWON_CONTROL_SECURITY_MODE: "production",
-        CREWON_CONTROL_DB_PATH: databasePath,
-        CREWON_MODEL_ID: "fake-model",
-        CREWON_RESPONSES_ENDPOINT: "https://provider.example/v1/responses",
-        CREWON_TENANT_ID: config.runtimeTenantId,
-        CREWON_AUTHORITY_ID: config.route.authorityId,
-        CREWON_AGENT_VERSION_ID: config.route.agentVersionId,
-        CREWON_RUNTIME_GENERATION: config.route.runtimeGeneration,
-        CREWON_POLICY_SNAPSHOT_ID: config.route.policySnapshotId,
-        CREWON_WORKSPACE_BINDING_ID:
-          config.route.workspaceBindingId ?? undefined,
-        CREWON_RUNTIME_WORKSPACE_CONFIG_JSON: JSON.stringify({
-          schemaVersion: "crewon.runtime-workspace.v0",
-          trustedLocalPath: process.cwd(),
-          deadlineMs: 35_000,
-          privateServer: {
-            port,
-            tokenEnvironment: "PRODUCTION_WORKSPACE_PRIVATE_TOKEN",
-          },
-          authority: {
-            tenantId: config.runtimeTenantId,
-            spaceId: "space-1",
-            workspaceBindingId: config.route.workspaceBindingId,
-            incarnationId: "incarnation-1",
-            runtimeBindingId: config.route.runtimeGeneration,
-            policySnapshotId: config.route.policySnapshotId,
-          },
-        }),
-        PRODUCTION_WORKSPACE_PRIVATE_TOKEN: token,
-        CREWON_WORKER_SCAN_INTERVAL_MS: "1000",
+        CREWON_CONTROL_DATABASE_URL: "postgresql://127.0.0.1:1/unused",
+        CREWON_CONTROL_DATABASE_SCHEMA: "runtime_entry_test",
+        CREWON_TENANT_ID: "tenant-production",
+        CREWON_AUTHORITY_ID: "standalone-authority",
       },
       stdio: ["ignore", "pipe", "pipe"],
     },
   );
-  context.after(() => {
-    if (child.exitCode === null) child.kill("SIGKILL");
-  });
-  await waitForStdout(
-    child,
-    `CrewON Workspace Runtime ready:http://127.0.0.1:${port}:${config.route.runtimeGeneration}\n`,
+  const output = await collectExit(child);
+  assert.notEqual(output.code, 0);
+  assert.match(
+    output.stderr,
+    /CREWON_AUTHORITY_ID_standalone_default_forbidden/u,
   );
-  const unauthorized = await fetch(
-    `http://127.0.0.1:${port}${RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH}`,
-    { method: "POST" },
-  );
-  assert.equal(unauthorized.status, 401);
-  child.kill("SIGTERM");
-  assert.equal(await waitForExit(child), 0);
+  assert.doesNotMatch(output.stdout, /CrewON .*ready|Runtime Worker started/u);
 });
 
 test("packaged entry rejects malformed stdin without echoing secret bytes", async () => {
@@ -293,7 +208,8 @@ test("packaged entry redacts credentials when startup fails after composition", 
   );
   const child = spawn(process.execPath, ["--experimental-strip-types", entry], {
     env: {
-      ...process.env,
+      ...cleanDatabaseEnvironment(),
+      CREWON_CONTROL_DB_PATH: join(directory, "control.sqlite"),
       CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH: bindingsPath,
       CREWON_AGENT_VERSION_ID: "agent-version-1",
       CREWON_MODEL_ID: "x".repeat(513),
@@ -564,28 +480,17 @@ function temporaryDatabasePath(context: TestContext): string {
   return join(directory, "control.sqlite");
 }
 
-async function unusedLoopbackPort(): Promise<number> {
-  const server = createNetServer();
-  await listen(server);
-  const address = server.address();
-  if (address === null || typeof address === "string") {
-    throw new Error("loopback_address_invalid");
+function cleanDatabaseEnvironment(): NodeJS.ProcessEnv {
+  const environment = { ...process.env };
+  for (const name of [
+    "CREWON_CONTROL_DATABASE_URL",
+    "CREWON_CONTROL_DATABASE_SCHEMA",
+    "CREWON_CONTROL_DB_PATH",
+    "CREWON_CONTROL_SECURITY_MODE",
+  ]) {
+    delete environment[name];
   }
-  await close(server);
-  return address.port;
-}
-
-function listen(server: Server): Promise<void> {
-  return new Promise((resolve, reject) => {
-    server.once("error", reject);
-    server.listen(0, "127.0.0.1", resolve);
-  });
-}
-
-function close(server: Server): Promise<void> {
-  return new Promise((resolve, reject) => {
-    server.close((error) => (error ? reject(error) : resolve()));
-  });
+  return environment;
 }
 
 function escapeRegExp(value: string): string {
