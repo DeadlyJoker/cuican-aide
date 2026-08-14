@@ -46,6 +46,21 @@ function client(overrides: Partial<ControlApiClient> = {}): ControlApiClient {
       ],
       nextCursor: null,
     })),
+    listKnowledge: vi.fn(async () => ({
+      data: [
+        {
+          schemaVersion: "crewon.knowledge.v0" as const,
+          knowledgeId: "knowledge-1",
+          kind: "memory" as const,
+          sourceId: "thread:thread-1",
+          title: "Launch decision",
+          content: "Ship after accessibility review.",
+          contentDigest: "sha256:knowledge-1",
+          createdAt: "2026-08-14T00:00:00.000Z",
+        },
+      ],
+      nextCursor: null,
+    })),
     ...overrides,
   } as unknown as ControlApiClient;
 }
@@ -56,6 +71,18 @@ describe("discoverControlComposerResources", () => {
 
     expect(discovery).toEqual({
       releaseId: "release-1",
+      knowledgeSelections: [
+        {
+          executable: false,
+          reason: "durable_knowledge_reference_not_supported",
+          reference: {
+            contentDigest: "sha256:knowledge-1",
+            knowledgeId: "knowledge-1",
+          },
+          sourceId: "thread:thread-1",
+          title: "Launch decision",
+        },
+      ],
       slashCommands: [
         expect.objectContaining({
           kind: "mcp",
@@ -78,15 +105,36 @@ describe("discoverControlComposerResources", () => {
     ).toBe(true);
     expect(JSON.stringify(discovery)).not.toContain("control://");
     expect(JSON.stringify(discovery)).not.toContain("jsonSchema");
-    expect(JSON.stringify(discovery)).not.toContain("sha256:");
+    expect(JSON.stringify(discovery.slashCommands)).not.toContain("sha256:");
   });
 
-  it("does not project Knowledge until turn/start supports a durable reference", async () => {
-    const listKnowledge = vi.fn();
-    await discoverControlComposerResources(
-      client({ listKnowledge } as Partial<ControlApiClient>),
+  it("projects immutable Knowledge selections but marks every entry non-executable", async () => {
+    const discovery = await discoverControlComposerResources(client());
+    expect(discovery.knowledgeSelections).toMatchInlineSnapshot(`
+      [
+        {
+          "executable": false,
+          "reason": "durable_knowledge_reference_not_supported",
+          "reference": {
+            "contentDigest": "sha256:knowledge-1",
+            "knowledgeId": "knowledge-1",
+          },
+          "sourceId": "thread:thread-1",
+          "title": "Launch decision",
+        },
+      ]
+    `);
+  });
+
+  it("omits Knowledge when its Control read is unavailable", async () => {
+    const discovery = await discoverControlComposerResources(
+      client({
+        listKnowledge: vi.fn(async () => {
+          throw new Error("offline");
+        }),
+      }),
     );
-    expect(listKnowledge).not.toHaveBeenCalled();
+    expect(discovery.knowledgeSelections).toEqual([]);
   });
 
   it("fails closed when capability pages drift from the active release", async () => {
