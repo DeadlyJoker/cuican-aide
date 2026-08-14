@@ -59,6 +59,15 @@ skip`、Runtime Worker `306 pass / 1 PostgreSQL 环境条件 skip`。本机未�
   之前授权并冻结 exact Knowledge 内容。Knowledge 与用户消息在同一事务追加到 Model History，rollback/compaction 保持同一 turn
   边界，模型投影明确把内容包装为不可信参考数据。真实 Control HTTP→SQLite→TS Worker 验收已观察到该冻结输入；同 key replay
   不重新读取 Knowledge，digest 漂移与超限均 fail closed。
+- 主页 `+ File/Folder` 已直接把有界 UTF-8 文本导入 immutable Control Knowledge，再附加结构化 digest 引用；单文件 8 KiB、合计
+  24 KiB、最多四项，整批先校验后写入。source identity 与 idempotency key 从标题和内容的 SHA-256 确定性派生，用户重试不会创建
+  重复 Knowledge。Agent/Knowledge 资源入口也直接打开真实 Control Library，不再落到“尚未迁移”的内部页面。
+- Renderer production composition 已删除最后一条 `agent-platform://` 资源 attachment callback 及其公共 helper 模块；历史消息中的旧
+  scheme 只作为只读展示数据保留，不会发起旧协议连接或 mutation。Runtime Worker 同时移除了已无源码引用的
+  `@crewon/device-dispatch` 生产依赖与依赖边界许可，Device 时代代码不再进入 Worker 依赖图。
+- 当前 Node 24 UI focused architecture `22/22`、lint 与 production build 通过；此前完整 UI 为 `205/205` files、`1267/1267`
+  tests。fresh renderer bundle 中 App Server/WebSocket/6176/Device Tool/Responses Lite marker 均为 0；desktop staging gate `4/4`
+  通过。完整 UI 未因本次纯组合删除重跑，因此不把 focused 结果外推为新的全量测试批次。
 - 本轮重新 staging 与构建后的 `.app` 仍只包含 Tauri shell、官方 Node 24、guardian 与四个 TS runtime bundle；Device Tool、
   Gateway、Responses Lite、Rust App Server、6176 与旧 restart/client marker 扫描均为 0。最新隔离 HOME smoke
   `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-jEMknn` 中，Workflow Run
