@@ -25,6 +25,7 @@ const expectedReceiptId = `workflow-gate-decision:${digester.sha256(canonicalJso
   runId: command.runId, nodeId: command.nodeId,
   gateRequestId: command.gateRequestId, idempotencyKey: command.idempotencyKey,
 })).slice("sha256:".length)}`;
+const noPublications = async () => [] as const;
 
 type DecisionInput = Readonly<{ tenantId: string; runId: string;
   binding: typeof binding; nodeId: string; claimId: string; claimEpoch: number;
@@ -32,9 +33,32 @@ type DecisionInput = Readonly<{ tenantId: string; runId: string;
     | Readonly<{ status: "completed" }>
     | Readonly<{ status: "failed"; failureCode: "workflow_gate_rejected" }> }>;
 
+test("published Human Gates are authorized and projected through the scoped Store port", async () => {
+  const publication = { runId: "run-1", nodeId: "gate", claimId: "claim-1",
+    claimEpoch: 1, gateRequestId: "gate-request-1",
+    approvalPolicyId: "approval-1", status: "published" as const,
+    createdAt: "2026-08-12T00:00:00.000Z" };
+  const calls: string[] = [];
+  const service = new WorkflowHumanGateApplicationService({ digester,
+    authorization: { authorize: async () => { calls.push("authorize");
+      return { outcome: "allow" as const }; } },
+    store: { loadRun: async () => { calls.push("load"); return run; },
+      listPublishedWorkflowHumanGates: async (input) => {
+        calls.push(`list:${input.tenantId}:${input.runId}`);
+        return [publication];
+      },
+      async recordWorkflowHumanGateDecision() {
+        throw new Error("must not mutate");
+      } } });
+
+  assert.deepEqual(await service.listPublished(actor, "run-1"), [publication]);
+  assert.deepEqual(calls, ["load", "authorize", "list:tenant-1:run-1"]);
+});
+
 test("Human Gate decision loads canonical Run and authorizes its resource before mutation", async () => {
   const calls: string[] = [];
   const store = {
+    listPublishedWorkflowHumanGates: noPublications,
     async loadRun(locator: Readonly<{ tenantId: string; runId: string }>) {
       calls.push(`load:${locator.tenantId}:${locator.runId}`);
       return run;
@@ -75,6 +99,7 @@ test("decision and claim drift reuse the stable operation identity and reach Sto
   const received: DecisionInput[] = [];
   let canonical: DecisionInput | undefined;
   const store = { loadRun: async () => run,
+    listPublishedWorkflowHumanGates: noPublications,
     async recordWorkflowHumanGateDecision(input: DecisionInput) {
       operationIds.push(input.decisionReceiptId);
       received.push(input);
@@ -105,6 +130,7 @@ test("caller authority fields and unknown command fields fail validation before 
   const service = new WorkflowHumanGateApplicationService({ digester,
     authorization: { authorize: async () => ({ outcome: "allow" as const }) },
     store: { loadRun: async () => run,
+      listPublishedWorkflowHumanGates: noPublications,
       async recordWorkflowHumanGateDecision() { mutations += 1;
         throw new Error("must not mutate"); } } });
   for (const extra of [
@@ -123,6 +149,7 @@ test("canonical Run scope mismatch and authorization denial perform zero decisio
         ? { outcome: "allow" as const }
         : { outcome: "deny" as const, reasonCode: "forbidden" } },
       store: { loadRun: async () => loadedRun,
+        listPublishedWorkflowHumanGates: noPublications,
         async recordWorkflowHumanGateDecision() { mutations += 1;
           throw new Error("must not mutate"); } } });
   await assert.rejects(make({ ...run, spaceId: "space-2" }, "allow")

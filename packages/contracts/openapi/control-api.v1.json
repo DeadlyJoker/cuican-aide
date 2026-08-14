@@ -1409,6 +1409,30 @@
         }
       }
     },
+    "/api/v1/runs/{runId}/workflow-gates": {
+      "get": {
+        "operationId": "listWorkflowHumanGates",
+        "parameters": [{ "$ref": "#/components/parameters/RunId" }],
+        "responses": {
+          "200": {
+            "description": "Published Human Gates awaiting an authorized decision",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListWorkflowHumanGatesResponse"
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
+          "404": { "$ref": "#/components/responses/Error" },
+          "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" },
+          "503": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
     "/api/v1/workflow-gates:decide": {
       "post": {
         "operationId": "decideWorkflowHumanGate",
@@ -4287,6 +4311,56 @@
             "description": "Additionally capped at 256 UTF-8 bytes by the runtime parser."
           },
           "decision": { "type": "string", "enum": ["approve", "reject"] }
+        }
+      },
+      "WorkflowHumanGatePublicationView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "runId",
+          "nodeId",
+          "claimId",
+          "claimEpoch",
+          "gateRequestId",
+          "approvalPolicyId",
+          "status",
+          "createdAt"
+        ],
+        "properties": {
+          "runId": { "type": "string", "minLength": 1, "maxLength": 128 },
+          "nodeId": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "claimId": { "type": "string", "minLength": 1, "maxLength": 256 },
+          "claimEpoch": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "gateRequestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "approvalPolicyId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "status": { "type": "string", "const": "published" },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "ListWorkflowHumanGatesResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "$ref": "#/components/schemas/WorkflowHumanGatePublicationView"
+            }
+          }
         }
       },
       "WorkflowHumanGateDecisionResponse": {

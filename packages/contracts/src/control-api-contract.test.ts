@@ -116,6 +116,7 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/runs",
     "/api/v1/runs/{runId}",
     "/api/v1/runs/{runId}/events",
+    "/api/v1/runs/{runId}/workflow-gates",
     "/api/v1/runs/{runId}:cancel",
     "/api/v1/threads",
     "/api/v1/threads/{threadId}",
@@ -273,6 +274,24 @@ test("accepts only public Workflow Human Gate decision authority", () => {
       .maxLength,
     256,
   );
+  const gateList = (openApi.paths["/api/v1/runs/{runId}/workflow-gates"] as
+    { get: Record<string, any> }).get;
+  assert.equal(gateList.operationId, "listWorkflowHumanGates");
+  assert.equal(
+    gateList.responses["200"].content["application/json"].schema.$ref,
+    "#/components/schemas/ListWorkflowHumanGatesResponse",
+  );
+  const publication = openApi.components.schemas
+    .WorkflowHumanGatePublicationView as Record<string, any>;
+  assert.deepEqual(Object.keys(publication.properties).sort(), [
+    "approvalPolicyId", "claimEpoch", "claimId", "createdAt",
+    "gateRequestId", "nodeId", "runId", "status",
+  ]);
+  assert.equal(publication.additionalProperties, false);
+  assert.equal(publication.properties.status.const, "published");
+  const list = openApi.components.schemas.ListWorkflowHumanGatesResponse as
+    { properties: { data: { maxItems: number } } };
+  assert.equal(list.properties.data.maxItems, 256);
 });
 
 test("parses only bounded Workflow Run start authority", () => {

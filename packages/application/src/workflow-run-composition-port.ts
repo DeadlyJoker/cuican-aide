@@ -7,6 +7,8 @@ import type {
 
 import type {
   WorkflowExecutionValue,
+  OutboxLeaseInput,
+  OutboxMessage,
   WorkflowRunInputRef,
   WorkItemLeaseInput,
 } from "./durable-queue-port.ts";
@@ -42,6 +44,23 @@ export type WorkflowGatePublicationAuthority = Readonly<{
   gateRequestId: string;
   publicationOutboxMessageId: string;
   approvalResumeWorkItemId: string;
+}>;
+
+/** Public, durable authority exposed only after the gate Outbox is acknowledged. */
+export type WorkflowHumanGatePublication = Readonly<{
+  runId: string;
+  nodeId: string;
+  claimId: string;
+  claimEpoch: number;
+  gateRequestId: string;
+  approvalPolicyId: string;
+  status: "published";
+  createdAt: string;
+}>;
+
+export type PublishWorkflowHumanGateInput = Readonly<{
+  lease: OutboxLeaseInput;
+  message: OutboxMessage;
 }>;
 
 export type WorkflowAtomicHandoff = Readonly<{
@@ -114,6 +133,20 @@ export type WorkflowReconciliationResult =
       handoff: WorkflowAtomicHandoff;
       runDisposition: WorkflowRunDisposition;
     }>;
+
+/** Atomically publishes durable Human Gate authority through its exact Outbox lease. */
+export interface WorkflowHumanGatePublicationStore {
+  /** Atomically exposes one gate publication and acknowledges its exact Outbox lease. */
+  publishWorkflowHumanGate(
+    input: PublishWorkflowHumanGateInput,
+  ): Promise<WorkflowHumanGatePublication>;
+
+  /** Lists only publications whose durable Outbox delivery has completed. */
+  listPublishedWorkflowHumanGates(input: {
+    tenantId: string;
+    runId: string;
+  }): Promise<readonly WorkflowHumanGatePublication[]>;
+}
 
 export interface WorkflowRunCompositionStore {
   scheduleWorkflowNodes(input: {

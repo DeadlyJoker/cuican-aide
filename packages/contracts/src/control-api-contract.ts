@@ -87,6 +87,10 @@ export type DecideWorkflowHumanGateRequest =
   components["schemas"]["DecideWorkflowHumanGateRequest"];
 export type WorkflowHumanGateDecisionResponse =
   components["schemas"]["WorkflowHumanGateDecisionResponse"];
+export type WorkflowHumanGatePublicationView =
+  components["schemas"]["WorkflowHumanGatePublicationView"];
+export type ListWorkflowHumanGatesResponse =
+  components["schemas"]["ListWorkflowHumanGatesResponse"];
 export type StartTurnRequest = components["schemas"]["StartTurnRequest"];
 export type CompactThreadRequest =
   components["schemas"]["CompactThreadRequest"];

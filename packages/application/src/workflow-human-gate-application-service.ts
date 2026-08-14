@@ -5,7 +5,10 @@ import type { ActorContext, AuthorizationPort } from "./authorization-port.ts";
 import { canonicalJson } from "./canonical-json.ts";
 import type { ContentDigester } from "./application-runtime-ports.ts";
 import { RunStoreError } from "./run-store-port.ts";
-import type { WorkflowRunCompositionStore } from "./workflow-run-composition-port.ts";
+import type {
+  WorkflowHumanGatePublicationStore,
+  WorkflowRunCompositionStore,
+} from "./workflow-run-composition-port.ts";
 
 export type DecideWorkflowHumanGateCommand = Readonly<{
   kind: "workflowHumanGate.decide";
@@ -20,6 +23,9 @@ export type DecideWorkflowHumanGateCommand = Readonly<{
 
 type Store = Readonly<{
   loadRun(input: { tenantId: string; runId: string }): Promise<GateRunAuthority | null>;
+  listPublishedWorkflowHumanGates(
+    input: Parameters<WorkflowHumanGatePublicationStore["listPublishedWorkflowHumanGates"]>[0],
+  ): ReturnType<WorkflowHumanGatePublicationStore["listPublishedWorkflowHumanGates"]>;
   recordWorkflowHumanGateDecision(
     input: Parameters<WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]>[0],
   ): ReturnType<WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]>;
@@ -50,25 +56,27 @@ export class WorkflowHumanGateApplicationService {
     this.#digester = dependencies.digester;
   }
 
-  async decide(actor: ActorContext, command: DecideWorkflowHumanGateCommand) {
+  async listPublished(actor: ActorContext, runId: string) {
     validateActor(actor);
-    validateCommand(command);
-    let run: GateRunAuthority | null;
+    if (!bounded(runId))
+      throw new ApplicationError("validation", "workflow_gate_run_id_invalid");
+    const run = await this.#loadAuthorizedRun(actor, runId);
     try {
-      run = await this.#store.loadRun({
+      return await this.#store.listPublishedWorkflowHumanGates({
         tenantId: actor.tenantId,
-        runId: command.runId,
+        runId: run.runId,
       });
     } catch (error) {
       throw mapStoreError(error);
     }
-    if (run === null || run.tenantId !== actor.tenantId ||
-        run.spaceId !== actor.spaceId)
-      throw new ApplicationError("notFound", "workflow_gate_run_not_found");
-    if (run.purpose !== "workflow" || run.status !== "running" ||
-        run.workflowVersionBinding === undefined)
+  }
+
+  async decide(actor: ActorContext, command: DecideWorkflowHumanGateCommand) {
+    validateActor(actor);
+    validateCommand(command);
+    const run = await this.#loadAuthorizedRun(actor, command.runId);
+    if (run.status !== "running")
       throw new ApplicationError("conflict", "workflow_gate_run_authority_invalid");
-    await this.#authorize(actor, run);
     const decisionReceiptId = receiptId(actor, command, this.#digester);
     try {
       const result = await this.#store.recordWorkflowHumanGateDecision({
@@ -95,6 +103,26 @@ export class WorkflowHumanGateApplicationService {
     } catch (error) {
       throw mapStoreError(error);
     }
+  }
+
+  async #loadAuthorizedRun(actor: ActorContext, runId: string) {
+    let run: GateRunAuthority | null;
+    try {
+      run = await this.#store.loadRun({
+        tenantId: actor.tenantId,
+        runId,
+      });
+    } catch (error) {
+      throw mapStoreError(error);
+    }
+    if (run === null || run.tenantId !== actor.tenantId ||
+        run.spaceId !== actor.spaceId)
+      throw new ApplicationError("notFound", "workflow_gate_run_not_found");
+    const binding = run.workflowVersionBinding;
+    if (run.purpose !== "workflow" || binding === undefined)
+      throw new ApplicationError("conflict", "workflow_gate_run_authority_invalid");
+    await this.#authorize(actor, run);
+    return { ...run, workflowVersionBinding: binding };
   }
 
   async #authorize(actor: ActorContext, run: GateRunAuthority): Promise<void> {

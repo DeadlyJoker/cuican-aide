@@ -550,6 +550,34 @@ test("decides a Workflow Human Gate with only public claim authority", async () 
   );
 });
 
+test("lists the bounded public Human Gate decision projection", async () => {
+  let request: { input: string; init: RequestInit } | undefined;
+  const response = { data: [{ runId: "run/1", nodeId: "gate",
+    claimId: "claim-1", claimEpoch: 1, gateRequestId: "gate-request-1",
+    approvalPolicyId: "approval-1", status: "published" as const,
+    createdAt: "2026-08-12T00:00:00.000Z" }] };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example",
+    accessToken: "session-1",
+    csrfToken: "csrf",
+    fetch: async (input, init = {}) => {
+      request = { input: String(input), init };
+      return jsonResponse(200, response);
+    },
+  });
+
+  assert.deepEqual(await client.listWorkflowHumanGates("run/1"), response);
+  assert.equal(
+    request?.input,
+    "https://control.example/api/v1/runs/run%2F1/workflow-gates",
+  );
+  assert.equal(request?.init.method, "GET");
+  const headers = new Headers(request?.init.headers);
+  assert.equal(headers.get("authorization"), "Bearer session-1");
+  assert.equal(headers.get("x-csrf-token"), null);
+  assert.equal(request?.init.body, undefined);
+});
+
 test("decides a Tool approval with CSRF and idempotency and fails closed without CSRF", async () => {
   const requests: Array<{ input: string; init: RequestInit }> = [];
   const response = {

@@ -480,6 +480,22 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/runs/{runId}/workflow-gates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listWorkflowHumanGates"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/workflow-gates:decide": {
     parameters: {
       query?: never;
@@ -1526,6 +1542,21 @@ export interface components {
       gateRequestId: string;
       /** @enum {string} */
       decision: "approve" | "reject";
+    };
+    WorkflowHumanGatePublicationView: {
+      runId: string;
+      nodeId: string;
+      claimId: string;
+      claimEpoch: number;
+      gateRequestId: string;
+      approvalPolicyId: string;
+      /** @constant */
+      status: "published";
+      /** Format: date-time */
+      createdAt: string;
+    };
+    ListWorkflowHumanGatesResponse: {
+      data: components["schemas"]["WorkflowHumanGatePublicationView"][];
     };
     WorkflowHumanGateDecisionResponse: {
       /** @enum {string} */
@@ -3563,6 +3594,34 @@ export interface operations {
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
       500: components["responses"]["Error"];
+    };
+  };
+  listWorkflowHumanGates: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        runId: components["parameters"]["RunId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Published Human Gates awaiting an authorized decision */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListWorkflowHumanGatesResponse"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+      503: components["responses"]["Error"];
     };
   };
   decideWorkflowHumanGate: {

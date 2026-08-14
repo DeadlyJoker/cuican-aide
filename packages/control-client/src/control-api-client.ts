@@ -26,6 +26,7 @@ import type {
   ListOfficeDelegationsResponse,
   StartWorkflowRunRequest,
   DecideWorkflowHumanGateRequest,
+  ListWorkflowHumanGatesResponse,
   WorkflowHumanGateDecisionResponse,
   CreateThreadRequest,
   DecideToolApprovalRequest,
@@ -723,6 +724,18 @@ export class ControlApiClient {
       idempotencyKey,
       expectedStatuses: [200],
     });
+  }
+
+  listWorkflowHumanGates(
+    runId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<ListWorkflowHumanGatesResponse> {
+    return this.#json(
+      "GET",
+      `/api/v1/runs/${resourceId(runId)}/workflow-gates`,
+      null,
+      { ...options, expectedStatuses: [200] },
+    );
   }
 
   getRun(
