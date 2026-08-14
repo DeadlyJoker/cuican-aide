@@ -1,4 +1,5 @@
 import { AlertTriangle, CloudOff, LoaderCircle } from "lucide-react";
+import type { ReactNode } from "react";
 
 import type { CapabilityPanel } from "../../lib/capability/capabilityPanelTypes";
 import type { Locale } from "../../lib/i18n";
@@ -12,6 +13,7 @@ export type SettingsDataMode = "demo" | "disconnected" | "live";
 
 type SettingsContentProps = {
   activeSection: SettingsSection;
+  children?: ReactNode;
   dataMode?: SettingsDataMode;
   disabled?: boolean;
   locale: Locale;
@@ -30,6 +32,7 @@ type SettingsSummarySection = {
 
 export function SettingsContent({
   activeSection,
+  children,
   dataMode = "live",
   disabled = false,
   locale,
@@ -165,6 +168,8 @@ export function SettingsContent({
             </span>
           </section>
         ) : null}
+
+        {children}
       </main>
     </section>
   );

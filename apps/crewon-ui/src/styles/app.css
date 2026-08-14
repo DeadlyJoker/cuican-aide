@@ -9624,6 +9624,27 @@ button.library-item:hover .library-card-chevron {
   padding-left: 16px;
 }
 
+.screen-shell.command-screen .settings-update-summary {
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: start;
+  column-gap: 10px;
+}
+
+.screen-shell.command-screen .settings-update-summary > span {
+  display: grid;
+  gap: 4px;
+}
+
+.screen-shell.command-screen .settings-update-summary > .settings-update-notes,
+.screen-shell.command-screen .settings-update-summary > progress {
+  grid-column: 2;
+  width: 100%;
+}
+
+.screen-shell.command-screen .settings-update-notes {
+  white-space: pre-wrap;
+}
+
 .screen-shell.command-screen .settings-actions {
   display: flex;
   flex-wrap: wrap;

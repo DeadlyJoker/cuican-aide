@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  checkDesktopUpdate,
   checkForUpdate,
   createProgressTracker,
   installUpdate,
@@ -40,7 +41,10 @@ describe("checkForUpdate", () => {
 
   it("reports current when the manifest offers nothing newer", async () => {
     const { states, emit } = recorder();
-    const port: UpdaterPort = { check: async () => null, relaunch: async () => {} };
+    const port: UpdaterPort = {
+      check: async () => null,
+      relaunch: async () => {},
+    };
 
     await expect(checkForUpdate(port, emit)).resolves.toBeNull();
     expect(states).toEqual([{ phase: "checking" }, { phase: "current" }]);
@@ -49,7 +53,10 @@ describe("checkForUpdate", () => {
   it("surfaces the offered version when one is available", async () => {
     const { states, emit } = recorder();
     const handle = handleStub();
-    const port: UpdaterPort = { check: async () => handle, relaunch: async () => {} };
+    const port: UpdaterPort = {
+      check: async () => handle,
+      relaunch: async () => {},
+    };
 
     await expect(checkForUpdate(port, emit)).resolves.toBe(handle);
     expect(states).toEqual([
@@ -75,6 +82,54 @@ describe("checkForUpdate", () => {
   });
 });
 
+describe("manual desktop update check", () => {
+  it("projects a null updater port as unsupported", async () => {
+    const { states, emit } = recorder();
+
+    await expect(
+      checkDesktopUpdate(async () => null, emit),
+    ).resolves.toBeNull();
+    expect(states).toEqual([{ phase: "unsupported" }]);
+  });
+
+  it("surfaces updater port resolution failures", async () => {
+    const { states, emit } = recorder();
+
+    await expect(
+      checkDesktopUpdate(async () => {
+        throw new Error("updater plugin unavailable");
+      }, emit),
+    ).resolves.toBeNull();
+    expect(states).toEqual([
+      { phase: "failed", error: "updater plugin unavailable" },
+    ]);
+  });
+
+  it("does not install or relaunch until the offered update is explicitly installed", async () => {
+    const { states, emit } = recorder();
+    const downloadAndInstall = vi.fn(async () => {});
+    const relaunch = vi.fn(async () => {});
+    const handle = handleStub({ downloadAndInstall });
+    const port: UpdaterPort = {
+      check: async () => handle,
+      relaunch,
+    };
+
+    const resolved = await checkDesktopUpdate(async () => port, emit);
+
+    expect(resolved).toEqual({ handle, port });
+    expect(downloadAndInstall).not.toHaveBeenCalled();
+    expect(relaunch).not.toHaveBeenCalled();
+
+    if (resolved) {
+      await installUpdate(resolved.port, resolved.handle, emit);
+    }
+
+    expect(downloadAndInstall).toHaveBeenCalledOnce();
+    expect(relaunch).toHaveBeenCalledOnce();
+  });
+});
+
 describe("createProgressTracker", () => {
   it("reports a fraction of the announced content length", () => {
     const track = createProgressTracker();
@@ -89,7 +144,9 @@ describe("createProgressTracker", () => {
     const track = createProgressTracker();
 
     expect(track({ event: "Started", data: {} })).toBeUndefined();
-    expect(track({ event: "Progress", data: { chunkLength: 100 } })).toBeUndefined();
+    expect(
+      track({ event: "Progress", data: { chunkLength: 100 } }),
+    ).toBeUndefined();
     expect(track({ event: "Finished" })).toBe(1);
   });
 

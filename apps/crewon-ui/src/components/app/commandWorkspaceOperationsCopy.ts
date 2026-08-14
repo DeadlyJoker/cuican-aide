@@ -87,7 +87,8 @@ export const WORKSPACE_COPY = {
     cancel: "Cancel",
     directory: "Folder",
     file: "File",
-    deviceResultTruncated: "The Device truncated the top-level result.",
+    deviceResultTruncated:
+      "The desktop runtime truncated the top-level result.",
     authorityReadOnly:
       "Team environments are currently read-only. Results remain visible, but Workspace operations cannot be started, checked again, or canceled.",
     authorityUnavailable:
@@ -120,7 +121,7 @@ export const WORKSPACE_COPY = {
     stateError: "Sync failed",
     operationTitle: "Top-level read",
     summaryPending:
-      "The Device is reading safe top-level entries from the authorized Workspace.",
+      "The desktop runtime is reading safe top-level entries from the authorized Workspace.",
     summaryUnknown:
       "The delivery outcome is not confirmed. Check the same operation record again.",
     summaryFailedRetryable: "The operation failed and can be started again.",

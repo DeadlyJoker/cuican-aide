@@ -36,7 +36,9 @@ export type UpdateHandle = {
   version: string;
   notes?: string;
   /** Downloads and installs, reporting bytes as they arrive. */
-  downloadAndInstall(onProgress: (event: DownloadProgress) => void): Promise<void>;
+  downloadAndInstall(
+    onProgress: (event: DownloadProgress) => void,
+  ): Promise<void>;
 };
 
 export type DownloadProgress =
@@ -49,6 +51,13 @@ export type UpdaterPort = {
   check(): Promise<UpdateHandle | null>;
   relaunch(): Promise<void>;
 };
+
+export type ResolvedUpdate = {
+  handle: UpdateHandle;
+  port: UpdaterPort;
+};
+
+export type UpdaterPortResolver = () => Promise<UpdaterPort | null>;
 
 export const IDLE_STATE: UpdateState = { phase: "idle" };
 export const UNSUPPORTED_STATE: UpdateState = { phase: "unsupported" };
@@ -92,13 +101,34 @@ export async function checkForUpdate(
 }
 
 /**
+ * Resolves the desktop-only updater authority, then performs one user-requested
+ * check. Keeping resolution in the action means opening Settings never imports
+ * a Tauri plugin or contacts the update endpoint by itself.
+ */
+export async function checkDesktopUpdate(
+  resolvePort: UpdaterPortResolver,
+  emit: (state: UpdateState) => void,
+): Promise<ResolvedUpdate | null> {
+  try {
+    const port = await resolvePort();
+    const handle = await checkForUpdate(port, emit);
+    return port && handle ? { handle, port } : null;
+  } catch (error) {
+    emit(failure(error));
+    return null;
+  }
+}
+
+/**
  * Tracks download progress as a fraction.
  *
  * Kept separate from the install call because the arithmetic is the only part
  * with edge cases worth testing: a manifest may omit `contentLength`, and
  * dividing by zero would put the UI at `Infinity`.
  */
-export function createProgressTracker(): (event: DownloadProgress) => number | undefined {
+export function createProgressTracker(): (
+  event: DownloadProgress,
+) => number | undefined {
   let total = 0;
   let received = 0;
 

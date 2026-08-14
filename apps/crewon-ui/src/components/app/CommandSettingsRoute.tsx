@@ -5,7 +5,11 @@ import type { Locale } from "../../lib/i18n";
 import type { NoticeState } from "../../lib/shared/noticeState";
 import type { PlatformKind } from "../../lib/platform";
 import type { SettingsSection } from "../../lib/settings/settingsCatalog";
-import { SettingsContent, type SettingsDataMode } from "../settings/SettingsContent";
+import { DesktopUpdateSettings } from "../settings/DesktopUpdateSettings";
+import {
+  SettingsContent,
+  type SettingsDataMode,
+} from "../settings/SettingsContent";
 import { SettingsNavigation } from "../settings/SettingsNavigation";
 
 export type CommandSettingsRouteProps = {
@@ -70,7 +74,11 @@ export function CommandSettingsRoute({
             onPanelAction={onPanelAction}
             onPanelFieldChange={onPanelFieldChange}
             onPanelFieldCommit={onPanelFieldCommit}
-          />
+          >
+            {activeSection === "appearance" ? (
+              <DesktopUpdateSettings locale={locale} />
+            ) : null}
+          </SettingsContent>
         </section>
       </section>
     </section>

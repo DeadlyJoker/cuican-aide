@@ -38,7 +38,11 @@ describe("CommandSettingsRoute", () => {
       />,
     );
 
-    expect(markup).toContain("screen-shell command-screen settings-command-screen");
+    expect(markup).toContain(
+      "screen-shell command-screen settings-command-screen",
+    );
+    expect(markup).toContain('data-desktop-update="idle"');
+    expect(markup).toContain("仅在你点击检查时连接更新服务");
     expect(markup).not.toContain("titlebar-actions");
     expect(markup).toMatchSnapshot();
   });

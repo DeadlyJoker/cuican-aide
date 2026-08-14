@@ -6,7 +6,7 @@
  * code that dials `window.__TAURI_INTERNALS__`.
  */
 
-import { detectRuntimeSurface } from "../platform";
+import { hasDesktopBridge } from "../platform";
 import type { DownloadProgress, UpdaterPort } from "./desktopUpdate";
 
 /**
@@ -17,7 +17,7 @@ import type { DownloadProgress, UpdaterPort } from "./desktopUpdate";
  * decide it does not care.
  */
 export async function resolveUpdaterPort(): Promise<UpdaterPort | null> {
-  if (detectRuntimeSurface() !== "desktop") {
+  if (!hasDesktopBridge()) {
     return null;
   }
 
