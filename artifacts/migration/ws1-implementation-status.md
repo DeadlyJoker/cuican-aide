@@ -65,9 +65,27 @@ skip`、Runtime Worker `306 pass / 1 PostgreSQL 环境条件 skip`。本机未�
 - Renderer production composition 已删除最后一条 `agent-platform://` 资源 attachment callback 及其公共 helper 模块；历史消息中的旧
   scheme 只作为只读展示数据保留，不会发起旧协议连接或 mutation。Runtime Worker 同时移除了已无源码引用的
   `@crewon/device-dispatch` 生产依赖与依赖边界许可，Device 时代代码不再进入 Worker 依赖图。
-- 当前 Node 24 UI focused architecture `22/22`、lint 与 production build 通过；此前完整 UI 为 `205/205` files、`1267/1267`
-  tests。fresh renderer bundle 中 App Server/WebSocket/6176/Device Tool/Responses Lite marker 均为 0；desktop staging gate `4/4`
-  通过。完整 UI 未因本次纯组合删除重跑，因此不把 focused 结果外推为新的全量测试批次。
+- 当前 Node 24 UI 完整测试为 `208/208` files、`1278/1278` tests，lint 与 production build 通过。生产组合已删除
+  `?demoItems=1`、离线 demo Thread/Turn 注入及相关 `isDemoPreview` 参数链；Control 未连接时创建/发送显式 fail closed，并保留用户输入，
+  不再改写会话历史。`#view-agents`、`#view-knowledge` 的首次加载、hashchange 与 popstate 均规范化到 Command shell 并打开真实
+  Control Library；旧目录占位页面及 Projects 的“尚未迁移”文案已删除。fresh renderer bundle 中 demo Thread/Turn、迁移占位、App
+  Server/WebSocket/6176/Device Tool/Responses Lite marker 均为 0。
+- Settings 的 Appearance 页面新增手动桌面更新卡。打开 Settings 不解析 updater、不联网、不启动 timer；只有用户点击检查后才调用
+  真实 Tauri updater，发现版本后还需第二次明确点击“安装并重启”。Web/null bridge、检查、下载或安装失败都投影为可见状态；只有
+  `downloadAndInstall` 成功后才 relaunch，不存在自动检查、自动重启、App Server 或 Rust fallback。
+- 纯 TS package dependency gate 已与当前单一 authority 拓扑收口并全量 `15/15`：Domain 不再反向引用 Contracts 的 checkpoint
+  type，Store 的 value type 由 Application port 持有；Kernel/Store 只精确承认模型请求证据、Provider turn invariant、冻结
+  AgentVersion 与 canonical Agent event 验证所需依赖。Control API 仅保留 standalone Local Settings 必需的 `node:sqlite`；MCP、
+  Application 的 SHA-256 authority 只精确允许 `node:crypto`，没有宽泛放行 Node 内置模块。
+- Team/Cloud production Provider Probe 已删除 `Unavailable` 占位 registry。`CREWON_PROVIDER_PROBE_TENANT_ROUTES_JSON` 现在是生产
+  必填 authority，按 `tenantId + runtimeBindingId` 精确绑定 HTTPS/loopback bearer Worker；缺失、短 token、不安全 origin、重复
+  route 或 standalone ambient 配置都在 PostgreSQL open 前 fail closed。Control 全量为
+  `127 pass / 4 PostgreSQL 环境条件 skip / 0 fail`。Team Workspace List 仍明确 unavailable：现有 PC loopback transport 只有单
+  workspace binding，不能冒充多租户 registry。
+- Production Runtime Release/Worker 已删除 `CREWON_MODEL_ADAPTER` 和 deterministic fake factory，只能构造真实 Responses transport；
+  Tauri 不再继承 fake 配置，staging marker 同时拒绝 `deterministic-fake`、`DeterministicFakeModelTransport` 与 `CREWON_FAKE_`。Runtime
+  Worker 全量为 `306 pass / 1 PostgreSQL 环境条件 skip / 0 fail`；Control 子进程 E2E 改用真实 loopback Responses SSE transport，
+  不再通过 production fake 完成 durable Run。
 - 本轮重新 staging 与构建后的 `.app` 仍只包含 Tauri shell、官方 Node 24、guardian 与四个 TS runtime bundle；Device Tool、
   Gateway、Responses Lite、Rust App Server、6176 与旧 restart/client marker 扫描均为 0。最新隔离 HOME smoke
   `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-jEMknn` 中，Workflow Run
@@ -75,6 +93,16 @@ skip`、Runtime Worker `306 pass / 1 PostgreSQL 环境条件 skip`。本机未�
   2 个 Attempt、唯一 `run.completed`，同 key `committed -> replayed` 且 admission receipt/Run 各一；GUI `SIGKILL` 后
   guardian 清理全部子进程和 3210。`.app` 与 updater archive 已生成，Tauri 命令只因缺少
   `TAURI_SIGNING_PRIVATE_KEY` 最终返回失败，未绕过发布签名边界。
+- 正式桌面发布路径已有 fail-closed GitHub Actions matrix：标准 `macos-15` arm64 与 `windows-2022` x64 分别校验 Node 官方
+  `SHASUMS256.txt`、绑定 binary target/SHA/distributable、构建 guardian、stage 四个 TS bundle，并要求 updater/OS 签名。macOS
+  还要求 notarization、codesign、Gatekeeper、stapler 与完整 Workflow recovery smoke；Windows 要求 PFX Authenticode、RFC 3161
+  timestamp、NSIS 隔离安装及 3210/guardian launch-cleanup smoke。两平台 artifact 齐全后才上传 `latest.json` 并发布 draft。
+  Release/staging contract `10/10`、YAML 与 smoke syntax 通过；真实签名、公证、Windows installer 和 GitHub Release publish 仍需
+  hosted runner 与仓库凭据，当前不得冒充实包通过。
+- Web static image 已改为 root-context multi-stage fresh build，不再 `COPY` 一个被 gitignore 的预生成 `dist`。required CI 现执行 Web
+  BFF typecheck、`15/15` tests、production identity source gate，并从 fresh source 构建 nginx 与 BFF 两个 image；本机两个真实 Docker
+  build 均通过。Identity Center、PostgreSQL Control/Worker、多租户认证 smoke 与部署发布仍属于外部环境验收，不由 source gate
+  冒充 live production。
 - Renderer 已改为 Control-only bootstrap。Library 与 Settings 不再构造 App Server client：Library 的 Automation/Knowledge/
   Agent/Office/Tool 读取和允许的 mutation 走 Control；Settings 只公开 Account、Appearance、Model access 三个具有真实 Control
   authority 的页面。语言/主题使用 revision CAS，成功提交后才更新本地状态；旧 Config、Personalization、Thread Settings 和
