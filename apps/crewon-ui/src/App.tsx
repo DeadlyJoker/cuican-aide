@@ -68,7 +68,6 @@ import {
   assistantThreadRuntimeSettings,
   latestAssistantThread,
 } from "./lib/thread/assistantThread";
-import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate";
 import type { LibraryKind } from "./lib/domain/crewonDomain";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
 import { useControlCommandCatalog } from "./lib/control-runtime/useControlCommandCatalog";
@@ -78,8 +77,6 @@ import { useControlWorkflowAdapter } from "./lib/control-runtime/useControlWorkf
 
 export function App({ controlClient }: { controlClient: ControlApiClient }) {
   const { isDemoPreview, platform } = useAppEnvironment();
-  // Who you are in CrewON. The model account below is a separate credential.
-  const platformAccount = useAgentPlatformAccount();
   const { libraryLoadRequestRef, openLibraryRef, refreshSettingsSectionRef } =
     useAppCoordinatorRefs();
   const { locale, localeRef, notice, setLocale, setNotice, setTheme, theme } =
@@ -432,7 +429,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     client: controlClient,
     getCapabilityPanel: () => capabilityPanelRef.current,
     locale,
-    platformUser: platformAccount?.user ?? null,
+    platformUser: null,
     setCapabilityPanel,
     setLocale,
     setNotice,

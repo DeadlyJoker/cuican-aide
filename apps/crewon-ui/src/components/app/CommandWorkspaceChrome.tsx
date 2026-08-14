@@ -20,7 +20,6 @@ import { classNames } from "./commandWorkspaceUtils";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
 import { detectRuntimeSurface } from "../../lib/platform";
-import { useAgentPlatformAccount } from "../auth/AgentPlatformAuthGate";
 
 export type PaletteItemWithCommand = CommandPaletteItem & {
   action?:
@@ -85,7 +84,6 @@ export function CommandSidebar({
   slots,
   onNewThread,
   onOpenLinkedThread,
-  onOpenSettings,
   onCloseSearch,
   onQueryChange,
   onSwitchView,
@@ -108,7 +106,6 @@ export function CommandSidebar({
   onToggleCollapse: () => void;
   onToggleSearch: () => void;
 }) {
-  const account = useAgentPlatformAccount();
   /*
    * This drives layout only: the drag region and the brand offset that clears
    * the floating window controls. It has to match whatever the window frame
@@ -343,13 +340,6 @@ export function CommandSidebar({
         onOpenLinkedThread={onOpenLinkedThread}
       />
 
-      {account ? (
-        <SidebarAccount
-          account={account}
-          locale={locale}
-          onSettings={onOpenSettings}
-        />
-      ) : null}
     </aside>
   );
 }

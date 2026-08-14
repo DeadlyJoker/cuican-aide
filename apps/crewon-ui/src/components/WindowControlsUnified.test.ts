@@ -74,11 +74,11 @@ describe("window controls", () => {
       "utf8",
     );
 
-    // The frame must sit outside the auth gate, or the login screen loses it.
     const frameAt = entry.indexOf("<DesktopWindowFrame>");
-    const gateAt = entry.indexOf("<AgentPlatformAuthGate>");
+    const unavailableAt = entry.indexOf("<ControlRuntimeUnavailable />");
     expect(frameAt).toBeGreaterThan(-1);
-    expect(gateAt).toBeGreaterThan(frameAt);
+    expect(unavailableAt).toBeGreaterThan(frameAt);
+    expect(entry).not.toContain("AgentPlatformAuthGate");
   });
 
   /*

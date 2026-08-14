@@ -62,6 +62,31 @@ describe("App Workspace Control composition", () => {
     expect(source).not.toContain("scheduleClient");
   });
 
+  it("boots the renderer exclusively from a non-null Control session", () => {
+    const entry = readFileSync(
+      new URL("../../main.tsx", import.meta.url),
+      "utf8",
+    );
+    const workspace = readFileSync(
+      new URL("../../components/app/CommandWorkspace.tsx", import.meta.url),
+      "utf8",
+    );
+    const viteConfig = readFileSync(
+      new URL("../../../vite.config.ts", import.meta.url),
+      "utf8",
+    );
+
+    expect(entry).toContain("<App controlClient={controlClient} />");
+    expect(entry).toContain("<ControlRuntimeUnavailable />");
+    expect(entry).not.toMatch(
+      /AgentPlatformAuthGate|pimLaunchBridge|installDesktopFetch/u,
+    );
+    expect(workspace).not.toContain("readAgentPlatformSnapshot");
+    expect(viteConfig).not.toMatch(
+      /CREWON_AGENT_PLATFORM_TARGET|agent-platform-api|127\.0\.0\.1:8000/u,
+    );
+  });
+
   it("has no development recovery route that restarts App Server", () => {
     const viteConfig = readFileSync(
       new URL("../../../vite.config.ts", import.meta.url),

@@ -30,16 +30,14 @@ import {
 } from "./CommandWorkspaceOperationsPanel";
 import { CommandSceneHeader, CommandSceneQuickRow } from "./CommandSceneHeader";
 import {
-  AgentsView,
-  KnowledgeCatalogView,
   ProjectsView,
   TeamView,
 } from "./CommandWorkspaceViews";
+import { CommandUnavailableCatalogView } from "./CommandUnavailableCatalogView";
 import { classNames } from "./commandWorkspaceUtils";
 
 type ThreadGoalStatus = ThreadGoalView["status"];
 import {
-  agentPlatformResourceStates as selectAgentPlatformResourceStates,
   emptyAgentPlatformSnapshot,
   insertTokenIntoComposerValue,
   selectCommandHomeSlots,
@@ -51,10 +49,6 @@ import {
   commandSceneContextItems,
   commandSceneSlashItems,
 } from "./commandWorkspaceSceneResources";
-import {
-  readAgentPlatformSnapshot,
-  type AgentPlatformSnapshot,
-} from "../../lib/agent-platform/agentPlatformClient";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
 import type { ControlWorkflowAdapter } from "../../lib/workflow/controlWorkflowAdapter";
@@ -325,7 +319,6 @@ export type CommandOfficeRoomAdapter = {
   ) => ReactNode;
 };
 
-type PlatformLoadState = "loading" | "ready" | "fallback";
 type TeamMode = "office" | "workflow";
 type CommandDomainCatalog = {
   agents: Array<{ config: AgentConfig; filePath: string }>;
@@ -478,7 +471,6 @@ export function CommandWorkspace({
   onClearAssistantThread,
   onModeChange,
   onOpenSettings,
-  onSaveCapability,
   onRemoveComposerMention,
   onRetryConnection,
   onSend,
@@ -547,12 +539,7 @@ export function CommandWorkspace({
     "add" | "context" | "provider" | "slash" | null
   >(null);
   const [paletteQuery, setPaletteQuery] = useState("");
-  const [platformState, setPlatformState] =
-    useState<PlatformLoadState>("loading");
-  const [platformSnapshot, setPlatformSnapshot] =
-    useState<AgentPlatformSnapshot>(emptyAgentPlatformSnapshot);
-  const [catalogFilter, setCatalogFilter] = useState("skill");
-  const [catalogSearch, setCatalogSearch] = useState("");
+  const platformSnapshot = emptyAgentPlatformSnapshot;
   const [teamMode, setTeamMode] = useState<TeamMode>("office");
   const [teamCatalog, setTeamCatalog] = useState<CommandDomainCatalog>({
     agents: [],
@@ -668,28 +655,6 @@ export function CommandWorkspace({
     workspaceCwd: workspaceOperations?.nativeWorkspaceDisplayName ?? "",
   });
 
-  useEffect(() => {
-    let cancelled = false;
-    setPlatformState("loading");
-    readAgentPlatformSnapshot()
-      .then((snapshot) => {
-        if (cancelled) {
-          return;
-        }
-        setPlatformSnapshot(snapshot);
-        setPlatformState("ready");
-      })
-      .catch(() => {
-        if (cancelled) {
-          return;
-        }
-        setPlatformSnapshot(emptyAgentPlatformSnapshot);
-        setPlatformState("fallback");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     setActiveLinkedThreadId(selectedThreadId);
@@ -1082,34 +1047,7 @@ export function CommandWorkspace({
       })),
     [linkedThreads, locale],
   );
-  const platformHasResources =
-    platformSnapshot.agents.length +
-      platformSnapshot.skills.length +
-      platformSnapshot.mcpServers.length +
-      platformSnapshot.knowledgeBases.length +
-      platformSnapshot.workflows.length >
-    0;
-  const platformResourceStates =
-    selectAgentPlatformResourceStates(platformSnapshot);
-  const resourceStatus =
-    platformState === "loading"
-      ? "正在读取当前账号的资源。"
-      : platformState === "fallback"
-        ? "本地 agent-platform 未连接，对话后端不受影响。"
-        : platformHasResources
-          ? "Agent-platform 资源已同步。"
-          : "当前账号暂无已创建或已授权的资源。";
-
-  async function reloadPlatformResources() {
-    setPlatformState("loading");
-    try {
-      setPlatformSnapshot(await readAgentPlatformSnapshot());
-      setPlatformState("ready");
-    } catch {
-      setPlatformSnapshot(emptyAgentPlatformSnapshot);
-      setPlatformState("fallback");
-    }
-  }
+  const resourceStatus = "此资源目录尚未迁移到 Control。";
 
   function switchView(view: CommandShellView) {
     setOpenPalette(null);
@@ -2360,24 +2298,13 @@ export function CommandWorkspace({
               textareaRef.current?.focus();
             }}
           />
-          <AgentsView
+          <CommandUnavailableCatalogView
             active={activeView === "agents"}
-            catalogFilter={catalogFilter}
-            catalogSearch={catalogSearch}
-            platformState={platformState}
-            resourceStates={platformResourceStates}
-            snapshot={platformSnapshot}
-            onReload={reloadPlatformResources}
-            onCatalogFilterChange={setCatalogFilter}
-            onCatalogSearchChange={setCatalogSearch}
-            onSaveCapability={onSaveCapability}
+            kind="agents"
           />
-          <KnowledgeCatalogView
+          <CommandUnavailableCatalogView
             active={activeView === "knowledge"}
-            platformState={platformState}
-            resourceStates={platformResourceStates}
-            snapshot={platformSnapshot}
-            onReload={reloadPlatformResources}
+            kind="knowledge"
           />
           <TeamView
             active={activeView === "team"}
