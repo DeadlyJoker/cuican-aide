@@ -75,6 +75,8 @@ import { useControlCommandCatalog } from "./lib/control-runtime/useControlComman
 import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWorkspaceRuntime";
 import { desktopWorkspaceAuthority } from "./lib/desktop/desktopWorkspaceAuthorityAdapter";
 import { useControlWorkflowAdapter } from "./lib/control-runtime/useControlWorkflowAdapter";
+import { importControlKnowledgeFiles } from "./lib/knowledge/controlKnowledgeFileAttachments";
+import type { LocalResourceSelectionKind } from "./lib/shared/localResourceAttachments";
 
 export function App({ controlClient }: { controlClient: ControlApiClient }) {
   const { isDemoPreview, platform } = useAppEnvironment();
@@ -425,6 +427,47 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     });
   };
   const attachWorkspaceContext = async () => unavailableWorkspaceCapability();
+  const addControlKnowledgeFiles = async (
+    files: File[],
+    kind: LocalResourceSelectionKind,
+  ) => {
+    if (!controlRuntimeConnected) {
+      unavailableWorkspaceCapability();
+      return;
+    }
+    const usedReferences = pendingComposerMentions.filter(
+      (mention) => mention.knowledgeReference !== undefined,
+    ).length;
+    try {
+      const selections = await importControlKnowledgeFiles({
+        client: controlClient,
+        files,
+        kind,
+        locale,
+        maximumFiles: 4 - usedReferences,
+      });
+      setPendingComposerMentions((mentions) =>
+        selections.reduce(withKnowledgeReferenceMention, mentions),
+      );
+      setNotice({
+        text:
+          locale === "zh"
+            ? `已添加 ${selections.length} 个文件到当前任务`
+            : `Added ${selections.length} file${selections.length === 1 ? "" : "s"} to this task`,
+        tone: "success",
+      });
+    } catch (error) {
+      setNotice({
+        text:
+          error instanceof Error
+            ? error.message
+            : locale === "zh"
+              ? "添加文件失败"
+              : "Failed to add files",
+        tone: "warning",
+      });
+    }
+  };
 
   const settingsCoordinator = createAppSettingsCoordinator({
     client: controlClient,
@@ -637,7 +680,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           onCancel: () => resolveConfirm(false),
           onConfirm: () => resolveConfirm(true),
         }}
-        onAddLocalResources={async () => unavailableWorkspaceCapability()}
+        onAddLocalResources={addControlKnowledgeFiles}
         onChangeComposerValue={setComposerValue}
         onComposerResourceSelect={({ kind, name, platformResource }) => {
           setPendingComposerMentions((current) =>

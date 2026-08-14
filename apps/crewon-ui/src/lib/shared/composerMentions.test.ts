@@ -107,5 +107,15 @@ describe("composer mention helpers", () => {
       },
     ]);
     expect(withKnowledgeReferenceMention(result, selection)).toBe(result);
+    const full = Array.from({ length: 4 }, (_, index) => ({
+      knowledgeReference: {
+        knowledgeId: `knowledge-${index}`,
+        contentDigest: `sha256:${String(index).repeat(64)}`,
+      },
+      name: `Knowledge ${index}`,
+      path: `control-knowledge:knowledge-${index}`,
+      resourceKind: "knowledge" as const,
+    }));
+    expect(withKnowledgeReferenceMention(full, selection)).toBe(full);
   });
 });

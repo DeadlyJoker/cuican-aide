@@ -265,6 +265,8 @@ describe("App Workspace Control composition", () => {
     );
 
     expect(source).not.toContain("addLocalComposerResources");
+    expect(source).toContain("importControlKnowledgeFiles");
+    expect(source).toContain("onAddLocalResources={addControlKnowledgeFiles}");
   });
 
   it("sources the packaged command target and model catalogs only from Control", () => {

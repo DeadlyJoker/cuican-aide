@@ -88,6 +88,12 @@ export function withKnowledgeReferenceMention(
 ): PendingComposerMention[] {
   const path = `control-knowledge:${selection.reference.knowledgeId}`;
   if (mentions.some((mention) => mention.path === path)) return mentions;
+  if (
+    mentions.filter((mention) => mention.knowledgeReference !== undefined)
+      .length >= 4
+  ) {
+    return mentions;
+  }
   return [
     ...mentions,
     {
