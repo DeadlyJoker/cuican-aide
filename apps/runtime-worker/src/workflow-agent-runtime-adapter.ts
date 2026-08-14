@@ -3,8 +3,11 @@ import type {
   DomainStore,
   DurableQueueStore,
   RunExecutionService,
+  WorkflowAtomicNodeOutcome,
+  WorkflowNodeResponseRecovery,
   WorkflowRuntimeStore,
 } from "@crewon/application";
+import { canonicalJson } from "@crewon/application";
 import type { ModelDispatchReceipt, WorkflowSchemaValue } from "@crewon/domain";
 import { AgentSegmentExecutionEngine } from "./agent-segment-execution-engine.ts";
 import {
@@ -68,6 +71,12 @@ export interface WorkflowAdmittedAgentExecutionEngine {
         Readonly<{ status: "completed"; value: WorkflowSchemaValue }>
       >
   >;
+  reconcile(input: {
+    runtime: AgentVersionRuntime;
+    claim: Parameters<WorkflowAgentNodePort["reconcile"]>[0]["claim"];
+    binding: Parameters<WorkflowAgentNodePort["reconcile"]>[0]["binding"];
+    recovery: WorkflowNodeResponseRecovery;
+  }): Promise<WorkflowAtomicNodeOutcome>;
   resumeToolApproval(input: {
     runtime: AgentVersionRuntime;
     claim: Parameters<WorkflowAgentNodePort["execute"]>[0]["workItemClaim"];
@@ -134,6 +143,160 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
     input: Parameters<WorkflowAdmittedAgentExecutionEngine["execute"]>[0],
   ): Promise<WorkflowNodeOutcome> {
     return this.#execute(input);
+  }
+
+  async reconcile(
+    input: Parameters<WorkflowAdmittedAgentExecutionEngine["reconcile"]>[0],
+  ): Promise<WorkflowAtomicNodeOutcome> {
+    const { claim, recovery, runtime } = input;
+    const node = recovery.claim.node;
+    const attempt = recovery.attempt;
+    const storedAttempt = await this.#store.loadRunAttempt({
+      tenantId: attempt.tenantId,
+      runId: attempt.runId,
+      stepId: attempt.stepId,
+      attemptId: attempt.attemptId,
+    });
+    const storedStep = await this.#store.loadRunStep({
+      tenantId: recovery.step.tenantId,
+      runId: recovery.step.runId,
+      stepId: recovery.step.stepId,
+    });
+    const storedDispatch = await this.#store.loadModelDispatchReceipt({
+      tenantId: recovery.dispatch.tenantId,
+      runId: recovery.dispatch.runId,
+      stepId: recovery.dispatch.stepId,
+      attemptId: recovery.dispatch.attemptId,
+      operationId: recovery.dispatch.operationId,
+    });
+    if (
+      canonicalJson(storedAttempt) !== canonicalJson(attempt) ||
+      canonicalJson(storedStep) !== canonicalJson(recovery.step) ||
+      canonicalJson(storedDispatch) !== canonicalJson(recovery.dispatch) ||
+      attempt.status !== "running" ||
+      attempt.providerCheckpoint === null ||
+      attempt.checkpointDigest !== recovery.dispatch.responseCheckpointDigest ||
+      recovery.dispatch.operation !== "dispatch" ||
+      recovery.dispatch.status !== "responseObserved" ||
+      recovery.dispatch.provider.agentVersionId !==
+        runtime.version.agentVersionId ||
+      recovery.dispatch.provider.adapterName !==
+        runtime.kernel.modelIdentity.adapterName ||
+      recovery.dispatch.provider.adapterVersion !==
+        runtime.kernel.modelIdentity.adapterVersion ||
+      recovery.dispatch.provider.modelId !==
+        runtime.kernel.modelIdentity.modelId ||
+      attempt.tenantId !== claim.workItem.tenantId ||
+      attempt.runId !== claim.workItem.runId
+    )
+      throw new Error("workflow_response_retrieve_authority_mismatch");
+    const prepared = prepareWorkflowNodeExecution({
+      node,
+      inputValue: recovery.inputValue,
+    });
+    if (prepared.kind !== "executeSegment")
+      return prepared.kind === "settle"
+        ? (prepared.outcome as WorkflowAtomicNodeOutcome)
+        : { status: "unknown" };
+    await this.#execution.loadRun(claim);
+    const controller = new AbortController();
+    const renewLease = async () => {
+      await this.#store.renewWorkItemLease({
+        ...leaseInput(claim),
+        leaseDurationMs: this.#leaseDurationMs,
+      });
+    };
+    const heartbeat = new LeaseHeartbeat(
+      Math.max(1, Math.floor(this.#leaseDurationMs / 3)),
+      renewLease,
+      controller,
+    );
+    const cancellationWatcher = new CancellationWatcher(
+      Math.max(1, Math.floor(this.#leaseDurationMs / 6)),
+      () => this.#execution.loadRun(claim),
+      controller,
+      systemRuntimeWorkerScheduler,
+    );
+    heartbeat.start();
+    cancellationWatcher.start();
+    try {
+      const executed = await this.#segments.execute({
+        kernel: runtime.kernel,
+        contract: {
+          schemaVersion: "crewon.agent-segment.v0",
+          purpose: "agent",
+          runId: attempt.runId,
+          segmentId: `reconcile:${attempt.attemptId}`,
+          attempt: attempt.attemptNumber,
+          agentVersionId: runtime.version.agentVersionId,
+          policySnapshotId: runtime.version.policySnapshotId,
+          collaborationMode: "default",
+          allowedTools: runtime.version.tools.map(({ kind, name }) => ({
+            kind,
+            name,
+          })),
+          history: [
+            ...(runtime.governedContext?.modelItems() ?? []),
+            ...prepared.history,
+          ],
+          continuation: { kind: "manual" },
+          reconcileCheckpoint: attempt.providerCheckpoint,
+          ...(attempt.providerTurnState === null
+            ? {}
+            : { providerTurnState: attempt.providerTurnState }),
+          budget: { maxOutputBytes: 32 * 1024 },
+        },
+        signal: controller.signal,
+        providerTurnState: attempt.providerTurnState,
+        authority: {
+          renewLease,
+          cancellationRequested: async () =>
+            (await this.#execution.loadRun(claim)).cancelRequested,
+          checkpointProviderResponse: async (checkpoint) => {
+            if (
+              canonicalJson(checkpoint) !==
+              canonicalJson(attempt.providerCheckpoint)
+            )
+              throw new Error("workflow_response_retrieve_checkpoint_mismatch");
+          },
+          persistImmediateEvent: async () => undefined,
+          recordProviderTurnState: async (providerTurnState) => {
+            if (providerTurnState !== attempt.providerTurnState)
+              throw new Error("workflow_response_retrieve_turn_state_mismatch");
+          },
+        },
+      });
+      if (heartbeat.failure() !== null) throw heartbeat.failure();
+      if (cancellationWatcher.failure() !== null)
+        throw cancellationWatcher.failure();
+      if (executed.canceled || cancellationWatcher.cancellationRequested())
+        return { status: "canceled" };
+      if (
+        executed.segment.requestedTools.length !== 0 ||
+        executed.segment.assistantContinuation !== null
+      )
+        throw new Error("workflow_response_retrieve_nonterminal");
+      const failure = executed.segment.bufferedEvents.find(
+        (event) => event.type === "segment.failed",
+      );
+      const decision = decideWorkflowNodeSegment(node, {
+        output: executed.segment.output,
+        completed: executed.segment.completed,
+        providerCheckpoint: executed.segment.providerCheckpoint,
+        bufferedEvents: [],
+        requestedTools: [],
+        assistantContinuation: null,
+        failure: failure?.type === "segment.failed" ? failure.data : null,
+        canceled: executed.canceled,
+        effectCertainty: "responseObserved",
+      });
+      if (decision.kind !== "settle")
+        throw new Error("workflow_response_retrieve_nonterminal");
+      return decision.outcome as WorkflowAtomicNodeOutcome;
+    } finally {
+      await cancellationWatcher.close();
+      await heartbeat.close();
+    }
   }
 
   async #execute(
@@ -774,6 +937,39 @@ export class WorkflowAgentRuntimeAdapter implements WorkflowAgentNodePort {
       inputValue: input.inputValue,
       node: input.node,
     });
+  }
+
+  async reconcile(
+    input: Parameters<WorkflowAgentNodePort["reconcile"]>[0],
+  ): Promise<WorkflowAtomicNodeOutcome> {
+    const node = input.recovery.claim.node;
+    const agentVersionId =
+      node.kind === "agent"
+        ? node.agentVersionId
+        : node.kind === "verification"
+          ? node.verifierAgentVersionId
+          : null;
+    if (
+      agentVersionId === null ||
+      input.recovery.dispatch.provider.agentVersionId !== agentVersionId
+    )
+      throw new Error("workflow_response_retrieve_route_mismatch");
+    const runtime = await this.#runtimes.resolve({
+      tenantId: input.claim.workItem.tenantId,
+      agentVersionId,
+    });
+    if (
+      runtime === null ||
+      runtime.version.agentVersionId !== agentVersionId ||
+      runtime.kernel.modelIdentity.adapterName !==
+        input.recovery.dispatch.provider.adapterName ||
+      runtime.kernel.modelIdentity.adapterVersion !==
+        input.recovery.dispatch.provider.adapterVersion ||
+      runtime.kernel.modelIdentity.modelId !==
+        input.recovery.dispatch.provider.modelId
+    )
+      throw new Error("workflow_response_retrieve_route_mismatch");
+    return this.#engine.reconcile({ ...input, runtime });
   }
 
   async resumeToolApproval(

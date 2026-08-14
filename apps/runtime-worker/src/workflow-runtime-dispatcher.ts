@@ -1,16 +1,21 @@
 import type {
   WorkItemClaim,
+  WorkflowAtomicNodeOutcome,
   WorkflowCancellationResult,
+  WorkflowNodeResponseRecovery,
   WorkflowRuntimeStore,
   WorkflowVersionStore,
 } from "@crewon/application";
 import { canonicalJson, MAX_WORKFLOW_VALUE_BYTES } from "@crewon/application";
 import type {
+  FrozenWorkflowVersionBinding,
+  ModelDispatchTerminalOutcome,
   RunState,
   WorkflowNodeDefinition,
   WorkflowContentDigester,
   WorkflowSchemaValue,
 } from "@crewon/domain";
+import { createWorkflowNodeTerminalEvidence } from "@crewon/domain";
 import { loadFrozenWorkflowVersion } from "./workflow-version-runtime.ts";
 import {
   parseWorkflowWorkItemPayload,
@@ -44,22 +49,29 @@ export type WorkflowModelTerminalAuthority = Readonly<{
   candidateId: string;
 }>;
 
+export type WorkflowAgentNodeInput = Readonly<{
+  tenantId: string;
+  runId: string;
+  nodeId: string;
+  agentVersionId: string;
+  node: WorkflowNodeDefinition;
+  inputValue: import("@crewon/application").WorkflowExecutionValue;
+  claimId: string;
+  claimEpoch: number;
+  stepId: string;
+  attemptId: string;
+  workItemClaim: WorkItemClaim;
+  binding: FrozenWorkflowVersionBinding;
+}>;
+
 export interface WorkflowAgentNodePort {
   readonly workflowStore: WorkflowRuntimeStore;
-  execute(input: {
-    tenantId: string;
-    runId: string;
-    nodeId: string;
-    agentVersionId: string;
-    node: WorkflowNodeDefinition;
-    inputValue: import("@crewon/application").WorkflowExecutionValue;
-    claimId: string;
-    claimEpoch: number;
-    stepId: string;
-    attemptId: string;
-    workItemClaim: WorkItemClaim;
-    binding: import("@crewon/domain").FrozenWorkflowVersionBinding;
-  }): Promise<WorkflowNodeOutcome>;
+  execute(input: WorkflowAgentNodeInput): Promise<WorkflowNodeOutcome>;
+  reconcile(input: {
+    claim: WorkItemClaim;
+    binding: FrozenWorkflowVersionBinding;
+    recovery: WorkflowNodeResponseRecovery;
+  }): Promise<WorkflowAtomicNodeOutcome>;
   resumeToolApproval(input: {
     claim: WorkItemClaim;
     binding: import("@crewon/domain").FrozenWorkflowVersionBinding;
@@ -232,6 +244,13 @@ export class ProductionWorkflowRuntimeDispatcher
             runId: input.run.runId,
             code: "workflow_reconciliation_retry_required",
           };
+        case "retrieveRequired":
+          return this.#retrieveNode(
+            input,
+            payload,
+            workflow,
+            reconciled.recovery,
+          );
         case "settled":
         case "replay":
           assertCompletedHandoff(reconciled.handoff);
@@ -245,6 +264,115 @@ export class ProductionWorkflowRuntimeDispatcher
       }
     }
     throw new Error("workflow_reconciliation_contract_incomplete");
+  }
+
+  async #retrieveNode(
+    input: { claim: WorkItemClaim; run: RunState },
+    payload: Extract<WorkflowWorkItemPayload, { trigger: "workflowReconcile" }>,
+    workflow: Awaited<ReturnType<typeof loadFrozenWorkflowVersion>>,
+    recovery: WorkflowNodeResponseRecovery,
+  ): Promise<WorkflowRuntimeDispatchOutcome> {
+    const node = workflow.nodes.find(
+      (candidate) => candidate.nodeId === payload.nodeId,
+    );
+    const agentVersionId =
+      node?.kind === "agent"
+        ? node.agentVersionId
+        : node?.kind === "verification"
+          ? node.verifierAgentVersionId
+          : null;
+    if (
+      node === undefined ||
+      agentVersionId === null ||
+      canonicalJson(recovery.claim.node) !== canonicalJson(node) ||
+      recovery.claim.claimId !== payload.claimId ||
+      recovery.claim.claimEpoch !== payload.claimEpoch ||
+      recovery.attempt.stepId !== recovery.step.stepId ||
+      recovery.attempt.attemptId !== recovery.step.currentAttemptId ||
+      recovery.attempt.workItemId !== recovery.dispatch.workItemId ||
+      recovery.attempt.leaseEpoch !== recovery.dispatch.leaseEpoch ||
+      recovery.attempt.attemptId !== recovery.dispatch.attemptId ||
+      recovery.attempt.stepId !== recovery.dispatch.stepId ||
+      recovery.attempt.checkpointDigest !==
+        recovery.dispatch.responseCheckpointDigest ||
+      recovery.dispatch.provider.agentVersionId !== agentVersionId ||
+      recovery.inputValue.valueDigest !== recovery.claim.inputDigest
+    )
+      throw new Error("workflow_node_retrieval_identity_mismatch");
+    let outcome: WorkflowAtomicNodeOutcome;
+    try {
+      outcome = await this.#agent.reconcile({
+        claim: input.claim,
+        binding: input.run.workflowVersionBinding!,
+        recovery,
+      });
+    } catch {
+      outcome = { status: "unknown" };
+    }
+    if (outcome.status === "unknown")
+      return {
+        kind: "retry",
+        runId: input.run.runId,
+        code: "workflow_response_retrieve_retry_required",
+      };
+    const terminal = retrievedTerminal(outcome);
+    const evidence = createWorkflowNodeTerminalEvidence({
+      workflow,
+      nodeId: node.nodeId,
+      outcome: terminal.evidenceOutcome,
+      digester: this.#digester,
+    });
+    try {
+      const settleRetrieved = this.#store.settleRetrievedWorkflowNode;
+      if (settleRetrieved === undefined)
+        throw new Error("workflow_retrieved_settlement_not_configured");
+      const settled = await settleRetrieved.call(this.#store, {
+        tenantId: input.run.tenantId,
+        runId: input.run.runId,
+        lease: leaseInput(input.claim),
+        binding: input.run.workflowVersionBinding!,
+        nodeId: node.nodeId,
+        claimId: payload.claimId!,
+        claimEpoch: payload.claimEpoch!,
+        reconciliationOperationId: payload.reconciliationOperationId,
+        agentVersionId,
+        attempt: {
+          stepId: recovery.attempt.stepId,
+          attemptId: recovery.attempt.attemptId,
+          workItemId: recovery.attempt.workItemId,
+          leaseEpoch: recovery.attempt.leaseEpoch,
+        },
+        dispatch: {
+          operationId: recovery.dispatch.operationId,
+          requestSequence: recovery.dispatch.requestSequence,
+          expectedRevision: recovery.dispatch.revision,
+          status: "responseObserved",
+        },
+        evidence,
+        dispatchTerminalOutcome: terminal.dispatchOutcome,
+      });
+      if (
+        settled.evidenceStatus !== "responseObserved" ||
+        canonicalJson(settled.evidence) !== canonicalJson(evidence) ||
+        canonicalJson(settled.dispatchTerminalOutcome) !==
+          canonicalJson(terminal.dispatchOutcome)
+      )
+        throw new Error("workflow_retrieved_settlement_evidence_mismatch");
+      assertCompletedHandoff(settled.handoff);
+      return settled.runDisposition === "terminalConverged"
+        ? { kind: "completed", runId: input.run.runId }
+        : {
+            kind: "recovery",
+            runId: input.run.runId,
+            code: "workflow_retrieved_node_settled",
+          };
+    } catch {
+      return {
+        kind: "recovery",
+        runId: input.run.runId,
+        code: "workflow_retrieved_settlement_result_unknown",
+      };
+    }
   }
 
   async cancel(
@@ -523,6 +651,45 @@ function deterministicNodeFailureCode(error: unknown): string {
   if (error instanceof Error && /^[a-z][a-z0-9_]{0,127}$/.test(error.message))
     return error.message;
   return "workflow_node_execution_failed";
+}
+
+function retrievedTerminal(
+  outcome: Exclude<
+    WorkflowAtomicNodeOutcome,
+    {
+      status: "unknown";
+    }
+  >,
+): Readonly<{
+  evidenceOutcome: import("@crewon/domain").WorkflowNodeTerminalOutcome;
+  dispatchOutcome: ModelDispatchTerminalOutcome;
+}> {
+  if (outcome.status === "completed")
+    return {
+      evidenceOutcome: outcome,
+      dispatchOutcome: {
+        kind: "completed",
+        code: null,
+        certainty: "responseObserved",
+      },
+    };
+  if (outcome.status === "failed")
+    return {
+      evidenceOutcome: { ...outcome, certainty: "responseObserved" },
+      dispatchOutcome: {
+        kind: "failed",
+        code: outcome.failureCode,
+        certainty: "responseObserved",
+      },
+    };
+  return {
+    evidenceOutcome: { status: "canceled", certainty: "responseObserved" },
+    dispatchOutcome: {
+      kind: "canceled",
+      code: "user_requested",
+      certainty: "responseObserved",
+    },
+  };
 }
 
 function assertCompletedHandoff(
