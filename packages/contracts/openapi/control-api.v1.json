@@ -1236,7 +1236,7 @@
     },
     "/api/v1/offices/{officeVersionId}:runs": {
       "post": {
-        "operationId": "startOfficeRun",
+        "operationId": "startOfficeDelegation",
         "parameters": [
           {
             "name": "officeVersionId",
@@ -1251,24 +1251,30 @@
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/StartOfficeRunRequest" }
+              "schema": {
+                "$ref": "#/components/schemas/StartOfficeDelegationRequest"
+              }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "Replayed canonical Run",
+            "description": "Replayed Office Workflow delegation",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/OfficeDelegationMutationResponse"
+                }
               }
             }
           },
           "201": {
-            "description": "Created canonical Run",
+            "description": "Committed Office Workflow delegation",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/RunMutationResponse" }
+                "schema": {
+                  "$ref": "#/components/schemas/OfficeDelegationMutationResponse"
+                }
               }
             }
           },
@@ -1277,6 +1283,45 @@
           "403": { "$ref": "#/components/responses/Error" },
           "404": { "$ref": "#/components/responses/Error" },
           "409": { "$ref": "#/components/responses/Error" },
+          "500": { "$ref": "#/components/responses/Error" }
+        }
+      }
+    },
+    "/api/v1/offices/{officeVersionId}/delegations": {
+      "get": {
+        "operationId": "listOfficeDelegations",
+        "parameters": [
+          {
+            "name": "officeVersionId",
+            "in": "path",
+            "required": true,
+            "schema": { "type": "string", "maxLength": 128 }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": { "type": "integer", "minimum": 1, "maximum": 100 }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": { "type": "string", "maxLength": 1024 }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Office Workflow delegations with canonical Runs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListOfficeDelegationsResponse"
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/Error" },
+          "401": { "$ref": "#/components/responses/Error" },
+          "403": { "$ref": "#/components/responses/Error" },
           "500": { "$ref": "#/components/responses/Error" }
         }
       }
@@ -2525,13 +2570,89 @@
           "nextCursor": { "type": ["string", "null"] }
         }
       },
-      "StartOfficeRunRequest": {
+      "StartOfficeDelegationRequest": {
+        "$ref": "#/components/schemas/StartWorkflowRunRequest"
+      },
+      "OfficeDelegation": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["targetId", "threadId"],
+        "required": [
+          "schemaVersion",
+          "delegationId",
+          "tenantId",
+          "spaceId",
+          "officeId",
+          "officeVersionId",
+          "workflowVersionBinding",
+          "threadId",
+          "runId",
+          "requestedByActorId",
+          "createdAt"
+        ],
         "properties": {
-          "targetId": { "type": "string", "maxLength": 128 },
-          "threadId": { "type": "string", "maxLength": 128 }
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.office-delegation.v0"
+          },
+          "delegationId": { "type": "string", "maxLength": 512 },
+          "tenantId": { "type": "string", "maxLength": 512 },
+          "spaceId": { "type": "string", "maxLength": 512 },
+          "officeId": { "type": "string", "maxLength": 512 },
+          "officeVersionId": { "type": "string", "maxLength": 512 },
+          "workflowVersionBinding": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["workflowId", "workflowVersionId", "contentDigest"],
+            "properties": {
+              "workflowId": { "type": "string", "maxLength": 512 },
+              "workflowVersionId": { "type": "string", "maxLength": 512 },
+              "contentDigest": {
+                "type": "string",
+                "pattern": "^sha256:[a-f0-9]{64}$"
+              }
+            }
+          },
+          "threadId": { "type": "string", "maxLength": 512 },
+          "runId": { "type": "string", "maxLength": 512 },
+          "requestedByActorId": { "type": "string", "maxLength": 512 },
+          "createdAt": { "type": "string", "format": "date-time" }
+        }
+      },
+      "OfficeDelegationMutationResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["disposition", "delegation", "run"],
+        "properties": {
+          "disposition": {
+            "type": "string",
+            "enum": ["committed", "replayed"]
+          },
+          "delegation": { "$ref": "#/components/schemas/OfficeDelegation" },
+          "run": { "$ref": "#/components/schemas/RunView" }
+        }
+      },
+      "OfficeDelegationListItem": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["delegation", "run"],
+        "properties": {
+          "delegation": { "$ref": "#/components/schemas/OfficeDelegation" },
+          "run": { "$ref": "#/components/schemas/RunView" }
+        }
+      },
+      "ListOfficeDelegationsResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["data", "nextCursor"],
+        "properties": {
+          "data": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/OfficeDelegationListItem"
+            }
+          },
+          "nextCursor": { "type": ["string", "null"] }
         }
       },
       "HealthResponse": {

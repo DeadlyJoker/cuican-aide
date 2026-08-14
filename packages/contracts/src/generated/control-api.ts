@@ -425,7 +425,23 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    post: operations["startOfficeRun"];
+    post: operations["startOfficeDelegation"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/offices/{officeVersionId}/delegations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["listOfficeDelegations"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -910,9 +926,39 @@ export interface components {
       data: components["schemas"]["Office"][];
       nextCursor: string | null;
     };
-    StartOfficeRunRequest: {
-      targetId: string;
+    StartOfficeDelegationRequest: components["schemas"]["StartWorkflowRunRequest"];
+    OfficeDelegation: {
+      /** @constant */
+      schemaVersion: "crewon.office-delegation.v0";
+      delegationId: string;
+      tenantId: string;
+      spaceId: string;
+      officeId: string;
+      officeVersionId: string;
+      workflowVersionBinding: {
+        workflowId: string;
+        workflowVersionId: string;
+        contentDigest: string;
+      };
       threadId: string;
+      runId: string;
+      requestedByActorId: string;
+      /** Format: date-time */
+      createdAt: string;
+    };
+    OfficeDelegationMutationResponse: {
+      /** @enum {string} */
+      disposition: "committed" | "replayed";
+      delegation: components["schemas"]["OfficeDelegation"];
+      run: components["schemas"]["RunView"];
+    };
+    OfficeDelegationListItem: {
+      delegation: components["schemas"]["OfficeDelegation"];
+      run: components["schemas"]["RunView"];
+    };
+    ListOfficeDelegationsResponse: {
+      data: components["schemas"]["OfficeDelegationListItem"][];
+      nextCursor: string | null;
     };
     HealthResponse: {
       /** @constant */
@@ -3328,7 +3374,7 @@ export interface operations {
       500: components["responses"]["Error"];
     };
   };
-  startOfficeRun: {
+  startOfficeDelegation: {
     parameters: {
       query?: never;
       header: {
@@ -3343,26 +3389,26 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["StartOfficeRunRequest"];
+        "application/json": components["schemas"]["StartOfficeDelegationRequest"];
       };
     };
     responses: {
-      /** @description Replayed canonical Run */
+      /** @description Replayed Office Workflow delegation */
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["RunMutationResponse"];
+          "application/json": components["schemas"]["OfficeDelegationMutationResponse"];
         };
       };
-      /** @description Created canonical Run */
+      /** @description Committed Office Workflow delegation */
       201: {
         headers: {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["RunMutationResponse"];
+          "application/json": components["schemas"]["OfficeDelegationMutationResponse"];
         };
       };
       400: components["responses"]["Error"];
@@ -3370,6 +3416,35 @@ export interface operations {
       403: components["responses"]["Error"];
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  listOfficeDelegations: {
+    parameters: {
+      query?: {
+        limit?: number;
+        cursor?: string;
+      };
+      header?: never;
+      path: {
+        officeVersionId: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Office Workflow delegations with canonical Runs */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListOfficeDelegationsResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
       500: components["responses"]["Error"];
     };
   };

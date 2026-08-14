@@ -182,6 +182,81 @@ test("uses typed Knowledge create, read and pagination routes", async () => {
   assert.equal(headers.get("x-csrf-token"), "csrf");
 });
 
+test("starts and lists explicit Office Workflow delegations", async () => {
+  const requests: { input: string; init: RequestInit }[] = [];
+  const response = {
+    disposition: "committed" as const,
+    delegation: {
+      schemaVersion: "crewon.office-delegation.v0" as const,
+      delegationId: "delegation-1",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      officeId: "office-1",
+      officeVersionId: "office/version-1",
+      workflowVersionBinding: {
+        workflowId: "workflow-1",
+        workflowVersionId: "workflow-version-1",
+        contentDigest: `sha256:${"a".repeat(64)}`,
+      },
+      threadId: "thread-1",
+      runId: "run-1",
+      requestedByActorId: "actor-1",
+      createdAt: "2026-08-14T00:00:00.000Z",
+    },
+    run: runResponse().run,
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    csrfToken: "csrf",
+    fetch: async (input, init = {}) => {
+      requests.push({ input: String(input), init });
+      return jsonResponse(
+        200,
+        init.method === "GET"
+          ? { data: [response], nextCursor: "next" }
+          : response,
+      );
+    },
+  });
+
+  await client.startOfficeDelegation(
+    "office/version-1",
+    {
+      workflowVersionId: "workflow-version-1",
+      threadId: "thread-1",
+      input: { topic: "release" },
+    },
+    "delegation-start-1",
+  );
+  await client.listOfficeDelegations("office/version-1", {
+    cursor: "opaque",
+    limit: 20,
+  });
+
+  assert.deepEqual(
+    requests.map(({ input, init }) => [init.method, input]),
+    [
+      [
+        "POST",
+        "https://control.example/api/v1/offices/office%2Fversion-1:runs",
+      ],
+      [
+        "GET",
+        "https://control.example/api/v1/offices/office%2Fversion-1/delegations?limit=20&cursor=opaque",
+      ],
+    ],
+  );
+  assert.equal(
+    new Headers(requests[0]!.init.headers).get("idempotency-key"),
+    "delegation-start-1",
+  );
+  assert.deepEqual(JSON.parse(String(requests[0]!.init.body)), {
+    workflowVersionId: "workflow-version-1",
+    threadId: "thread-1",
+    input: { topic: "release" },
+  });
+});
+
 test("reads and probes model provider settings through Control API", async () => {
   const requests: { input: string; init: RequestInit }[] = [];
   const client = new ControlApiClient({

@@ -1,6 +1,12 @@
 import { ContractValidationError } from "./contract-validation-error.ts";
+import {
+  parseStartWorkflowRunRequest,
+  type RunView,
+  type StartWorkflowRunRequest,
+} from "./control-api-contract.ts";
 
 const OFFICE_CURSOR_PREFIX = "crewon.office.cursor.v1:";
+const OFFICE_DELEGATION_CURSOR_PREFIX = "crewon.office-delegation.cursor.v1:";
 
 export type OfficeMemberContract = Readonly<{
   memberId: string;
@@ -40,9 +46,35 @@ export type ListOfficesResponse = Readonly<{
   data: readonly OfficeContract[];
   nextCursor: string | null;
 }>;
-export type StartOfficeRunRequest = Readonly<{
-  targetId: string;
+export type OfficeDelegationContract = Readonly<{
+  schemaVersion: "crewon.office-delegation.v0";
+  delegationId: string;
+  tenantId: string;
+  spaceId: string;
+  officeId: string;
+  officeVersionId: string;
+  workflowVersionBinding: Readonly<{
+    workflowId: string;
+    workflowVersionId: string;
+    contentDigest: string;
+  }>;
   threadId: string;
+  runId: string;
+  requestedByActorId: string;
+  createdAt: string;
+}>;
+export type StartOfficeDelegationRequest = StartWorkflowRunRequest;
+export type OfficeDelegationMutationResponse = Readonly<{
+  disposition: "committed" | "replayed";
+  delegation: OfficeDelegationContract;
+  run: RunView;
+}>;
+export type ListOfficeDelegationsResponse = Readonly<{
+  data: readonly Readonly<{
+    delegation: OfficeDelegationContract;
+    run: RunView;
+  }>[];
+  nextCursor: string | null;
 }>;
 
 export function parseCreateOfficeRequest(value: unknown): CreateOfficeRequest {
@@ -71,15 +103,10 @@ export function parseCreateOfficeRequest(value: unknown): CreateOfficeRequest {
     executionTargets: array(object.executionTargets, 1, 32, target),
   };
 }
-export function parseStartOfficeRunRequest(
+export function parseStartOfficeDelegationRequest(
   value: unknown,
-): StartOfficeRunRequest {
-  const object = record(value, "office_run_request_invalid");
-  exact(object, ["targetId", "threadId"]);
-  return {
-    targetId: text(object.targetId, 128, "office_target_id_invalid"),
-    threadId: text(object.threadId, 128, "thread_id_invalid"),
-  };
+): StartOfficeDelegationRequest {
+  return parseStartWorkflowRunRequest(value);
 }
 export function parseOfficeVersionId(value: unknown) {
   return text(value, 128, "office_version_id_invalid");
@@ -121,6 +148,51 @@ export function formatOfficeCursor(value: {
     `${OFFICE_CURSOR_PREFIX}${JSON.stringify([
       timestamp(value.createdAt, "office_cursor_invalid"),
       text(value.officeVersionId, 128, "office_cursor_invalid"),
+    ])}`,
+  );
+}
+export function parseOfficeDelegationListQuery(value: unknown) {
+  const object = record(value, "office_delegation_list_query_invalid");
+  exact(object, ["limit", "cursor"]);
+  const limit = object.limit === undefined ? 50 : Number(object.limit);
+  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 100)
+    fail("office_delegation_list_limit_invalid");
+  let before = null;
+  if (object.cursor !== undefined) {
+    try {
+      const input = text(
+        object.cursor,
+        1024,
+        "office_delegation_cursor_invalid",
+      );
+      const decoded = decodeBase64Url(input);
+      if (!decoded.startsWith(OFFICE_DELEGATION_CURSOR_PREFIX))
+        fail("office_delegation_cursor_invalid");
+      const tuple: unknown = JSON.parse(
+        decoded.slice(OFFICE_DELEGATION_CURSOR_PREFIX.length),
+      );
+      if (!Array.isArray(tuple) || tuple.length !== 2)
+        fail("office_delegation_cursor_invalid");
+      before = {
+        createdAt: timestamp(tuple[0], "office_delegation_cursor_invalid"),
+        delegationId: text(tuple[1], 512, "office_delegation_cursor_invalid"),
+      };
+      if (formatOfficeDelegationCursor(before) !== input)
+        fail("office_delegation_cursor_invalid");
+    } catch {
+      fail("office_delegation_cursor_invalid");
+    }
+  }
+  return { limit, before };
+}
+export function formatOfficeDelegationCursor(value: {
+  createdAt: string;
+  delegationId: string;
+}) {
+  return encodeBase64Url(
+    `${OFFICE_DELEGATION_CURSOR_PREFIX}${JSON.stringify([
+      timestamp(value.createdAt, "office_delegation_cursor_invalid"),
+      text(value.delegationId, 512, "office_delegation_cursor_invalid"),
     ])}`,
   );
 }

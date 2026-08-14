@@ -21,7 +21,9 @@ import type {
   OfficeMutationResponse,
   GetOfficeResponse,
   ListOfficesResponse,
-  StartOfficeRunRequest,
+  StartOfficeDelegationRequest,
+  OfficeDelegationMutationResponse,
+  ListOfficeDelegationsResponse,
   StartWorkflowRunRequest,
   DecideWorkflowHumanGateRequest,
   WorkflowHumanGateDecisionResponse,
@@ -668,17 +670,34 @@ export class ControlApiClient {
     });
   }
 
-  startOfficeRun(
+  startOfficeDelegation(
     officeVersionId: string,
-    body: StartOfficeRunRequest,
+    body: StartOfficeDelegationRequest,
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
-  ): Promise<RunMutationResponse> {
+  ): Promise<OfficeDelegationMutationResponse> {
     return this.#json(
       "POST",
       `/api/v1/offices/${resourceId(officeVersionId)}:runs`,
       body,
       { ...options, idempotencyKey, expectedStatuses: [200, 201] },
+    );
+  }
+
+  listOfficeDelegations(
+    officeVersionId: string,
+    query: { limit?: number; cursor?: string } = {},
+    options: ControlApiRequestOptions = {},
+  ): Promise<ListOfficeDelegationsResponse> {
+    const search = new URLSearchParams();
+    if (query.limit !== undefined) search.set("limit", String(query.limit));
+    if (query.cursor !== undefined) search.set("cursor", query.cursor);
+    const suffix = search.size === 0 ? "" : `?${search}`;
+    return this.#json(
+      "GET",
+      `/api/v1/offices/${resourceId(officeVersionId)}/delegations${suffix}`,
+      null,
+      { ...options, expectedStatuses: [200] },
     );
   }
 
