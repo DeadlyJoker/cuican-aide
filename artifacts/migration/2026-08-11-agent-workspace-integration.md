@@ -653,9 +653,10 @@ Gate 报告为通过。
 - renderer 已强制 Control-only；Control bootstrap 失败直接阻断，不再创建或重连 `AppServerClient`。账号页改读 Control account snapshot，明确将
   usage/rate-limit 标为非当前 authority；Workspace drawer 已接入真实 Control content search 与 Git status，并用 abort + request identity 防止旧请求覆盖。
 - Automation Library 已改为 Control authority：列表、详情、创建与 run-now 均读取 canonical Automation/Thread/AgentVersion，使用 Thread revision CAS
-  与 idempotency；不再用演示记录或旧 App Server 读取。Office 列表、详情、创建与 start-run 同样改为 Control authority，仅暴露当前协议真实支持的
-  published AgentVersion、execution target 与 active Thread；尚未有 Control contract 的 Office chat、delegation、retry、memory、verification 明确显示为
-  unsupported，不用 legacy fallback 掩盖。
+  与 idempotency；不再用演示记录或旧 App Server 读取。Office 列表、详情与创建同样使用 Control authority；Office start 已直接切换为显式
+  WorkflowVersion + active Thread + bounded JSON input 的 delegation。SQLite/PostgreSQL 在单个 provider transaction 内写入 root input、canonical Run、
+  scheduler WorkItem、Workflow receipt、OfficeDelegation 与 Office receipt；旧 target-based start request 被拒绝，不做兼容翻译。Office chat、auto-dispatch
+  与 memory handoff 仍明确 unavailable。
 - Command Workspace 的正常产品组合现在强制 `workspaceAuthority="control"`；空任务页只展示 Control `Tasks`，不再从 cwd 合成 legacy Workspace，旧
   `teamCwd` authority 与 attach-context callback 已从该路径删除。三条 renderer cutover 合并后 UI 完整套件为 `286/286` files、`1798/1798`
   tests，lint 与 production build 均通过；build 只保留既有 chunk-size warning。Control shell 也不再暴露只会尝试旧 App Server 的 Schedule 页面；

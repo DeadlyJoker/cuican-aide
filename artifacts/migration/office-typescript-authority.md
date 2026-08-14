@@ -2,48 +2,47 @@
 
 ## Scope
 
-Office is a tenant/space-scoped control-plane definition. It is not an execution
-engine, scheduler, expert compatibility layer, or handoff mechanism. An Office
-start resolves one immutable execution target and delegates to the existing
-canonical Thread/Run application services. The resulting Run remains the sole
-execution projection and authority.
+Office is a tenant/space-scoped membership boundary. It is not an execution
+engine, scheduler, expert compatibility layer, or in-memory handoff mechanism.
+Starting work from an Office now names one immutable `WorkflowVersion`, one
+active Thread, and bounded JSON input. The resulting canonical Workflow Run is
+the sole execution, retry, verification, cancellation, and recovery authority.
 
 ## Authority
 
-- `OfficeDefinitionStore` is the only Office authority and is part of the same
-  `DomainStore` implemented by SQLite and PostgreSQL.
-- An Office has a stable `officeId` and immutable, monotonically increasing
-  versions. A version contains a bounded title, bounded members, and bounded
-  execution targets.
-- Every member and execution target references an existing published
-  `AgentVersion`. Office never copies an Agent definition or mutable deployment.
-- Creation is receipt-first. `(tenantId, spaceId, actorId, idempotencyKey)` maps
-  to one request digest and result. Replays return that result; digest mismatch
-  is a conflict.
-- Creating the next version uses compare-and-swap against the latest Office
-  revision. The first version expects revision zero.
-- Reads and list cursors are tenant/space scoped. Limits, strings, collections,
-  request bodies, and cursor components have hard bounds.
+- `OfficeDefinitionStore` owns immutable Office versions.
+- `OfficeDelegationStore` owns immutable Office-to-Workflow-Run provenance and
+  is part of the same canonical `DomainStore` as Workflow admission on SQLite
+  and PostgreSQL.
+- Admission is receipt-first. A matching receipt returns the original
+  Delegation and Workflow Run without invoking route resolution or
+  preparation. A fingerprint mismatch conflicts.
+- A fresh admission loads the exact OfficeVersion, immutable digest-valid
+  WorkflowVersion, and active Thread, then revalidates the current release,
+  every Agent/Verifier deployment, and the candidate route.
+- Every AgentVersion referenced by the Workflow must be present in the Office
+  membership boundary.
+- Root input, canonical Run/event/outbox/scheduler WorkItem, Workflow receipt,
+  OfficeDelegation, and Office receipt commit in one provider transaction.
+- Delegation lists join the current canonical Run snapshot and use stable
+  `createdAt + delegationId` pagination.
 
 ## Control contract
 
-- `POST /api/v1/offices` creates an immutable Office version and requires an
-  idempotency key plus `expectedRevision`.
-- `GET /api/v1/offices/:officeVersionId` reads one version.
-- `GET /api/v1/offices?limit=&before=` lists versions with stable pagination.
-- `POST /api/v1/offices/:officeVersionId:runs` starts the selected target through
-  the existing canonical Run service. It does not enqueue Office-specific work.
-- The request does not atomically persist an Office-to-Run provenance binding in
-  this slice. The returned canonical Run identifies its AgentVersion and Thread;
-  durable Office provenance is an explicitly uncovered future contract.
-- All operations resolve the authenticated actor first and authorize an
-  Office-scoped action before touching authoritative state.
-- The CrewON Office Library lists these immutable versions through the typed
-  Control client. It does not expose a create button until the UI can select at
-  least one real published `AgentVersion` target.
+- `POST /api/v1/offices` creates an immutable Office version with revision CAS.
+- `GET /api/v1/offices/:officeVersionId` and `GET /api/v1/offices` read versions.
+- `POST /api/v1/offices/:officeVersionId:runs` accepts only
+  `workflowVersionId`, `threadId`, and `input`; the former target-based request
+  is rejected rather than translated.
+- `GET /api/v1/offices/:officeVersionId/delegations` lists immutable provenance
+  together with safe canonical Run projections.
+- Start requires both exact `office:run` and `run:create` authorization. List
+  requires exact `office:read` authorization.
+- The CrewON Office room reads WorkflowVersion choices from Control, requires
+  explicit JSON input, and shows no legacy Office scheduler or App Server path.
 
 ## Deliberate exclusions
 
-No legacy Rust compatibility, auto-dispatch, timers, scheduler, expert aliases,
-in-memory handoff, or Office-specific Run state is introduced. The first slice
-selects one target explicitly; orchestration across targets is future work.
+No Rust compatibility, legacy importer, dual-read, target-to-Workflow adapter,
+Office-specific queue, auto-dispatch, expert alias, chat, or memory handoff is
+introduced. Automation scheduling is a separate pure TypeScript authority.
