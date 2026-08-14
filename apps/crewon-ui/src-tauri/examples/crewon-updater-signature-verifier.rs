@@ -60,5 +60,5 @@ fn main() {
 }
 
 #[cfg(test)]
-#[path = "crewon_updater_signature_verifier_tests.rs"]
+#[path = "../src/crewon_updater_signature_verifier_tests.rs"]
 mod tests;

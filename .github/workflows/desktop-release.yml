@@ -164,12 +164,12 @@ jobs:
           cargo build --locked \
             --manifest-path apps/crewon-ui/src-tauri/Cargo.toml \
             --release --target "$TARGET" \
-            --bin crewon-updater-signature-verifier
+            --example crewon-updater-signature-verifier
           shopt -s nullglob
           updaters=(release-macos/*.app.tar.gz)
           test "${#updaters[@]}" -eq 1
           test -f "${updaters[0]}.sig"
-          "apps/crewon-ui/src-tauri/target/$TARGET/release/crewon-updater-signature-verifier" \
+          "apps/crewon-ui/src-tauri/target/$TARGET/release/examples/crewon-updater-signature-verifier" \
             "$public_key" "${updaters[0]}" "${updaters[0]}.sig"
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
@@ -322,13 +322,13 @@ jobs:
           cargo build --locked `
             --manifest-path apps/crewon-ui/src-tauri/Cargo.toml `
             --release --target $env:TARGET `
-            --bin crewon-updater-signature-verifier
+            --example crewon-updater-signature-verifier
           if ($LASTEXITCODE -ne 0) { throw "updater verifier build failed: $LASTEXITCODE" }
           $updaters = @(Get-ChildItem release-windows -File -Filter "*-setup.exe")
           if ($updaters.Count -ne 1) { throw "expected one Windows updater artifact" }
           $signature = "$($updaters[0].FullName).sig"
           if (-not (Test-Path $signature -PathType Leaf)) { throw "Windows updater signature missing" }
-          $verifier = "apps/crewon-ui/src-tauri/target/$env:TARGET/release/crewon-updater-signature-verifier.exe"
+          $verifier = "apps/crewon-ui/src-tauri/target/$env:TARGET/release/examples/crewon-updater-signature-verifier.exe"
           & $verifier $publicKey $updaters[0].FullName $signature
           if ($LASTEXITCODE -ne 0) { throw "Windows updater signature verification failed" }
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
