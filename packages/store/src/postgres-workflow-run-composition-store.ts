@@ -7,6 +7,7 @@ import {
   type WorkflowNodeContinuationStore,
   type WorkflowRunAdmissionStore,
   type WorkflowRunCompositionStore,
+  type WorkflowHumanGatePublicationStore,
   type WorkflowRuntimeStore,
   type WorkflowToolApprovalStore,
 } from "@crewon/application";
@@ -61,6 +62,11 @@ import {
   migratePostgresWorkflowToolApprovals,
   publishPostgresWorkflowToolApproval,
 } from "./postgres-workflow-tool-approval.ts";
+import { stableJson } from "./store-invariants.ts";
+import {
+  prepareWorkflowGatePublication,
+  projectWorkflowGatePublication,
+} from "./workflow-gate-publication.ts";
 
 export type PostgresWorkflowRunCompositionStoreOptions =
   PostgresThreadStoreOptions & Readonly<{ digester: WorkflowContentDigester }>;
@@ -71,6 +77,7 @@ export class PostgresWorkflowRunCompositionStore
   implements
     WorkflowRuntimeStore,
     WorkflowRunCompositionStore,
+    WorkflowHumanGatePublicationStore,
     WorkflowRunAdmissionStore,
     ModelDispatchEvidenceStore,
     WorkflowToolApprovalStore
@@ -116,6 +123,70 @@ export class PostgresWorkflowRunCompositionStore
     } finally {
       client.release();
     }
+  }
+
+  async publishWorkflowHumanGate(
+    input: Parameters<WorkflowHumanGatePublicationStore["publishWorkflowHumanGate"]>[0],
+  ): ReturnType<WorkflowHumanGatePublicationStore["publishWorkflowHumanGate"]> {
+    return this.#transaction(input.message, async (client) => {
+      const gate = await client.query<{ state_json: unknown }>(
+        `SELECT state_json FROM ${this.schemaSql()}.workflow_gate_requests
+         WHERE tenant_id=$1 AND run_id=$2 AND publication_outbox_message_id=$3
+         FOR UPDATE`,
+        [input.message.tenantId, input.message.runId, input.lease.messageId],
+      );
+      if (gate.rows[0] === undefined)
+        throw new RunStoreError("workflow_gate_publication_not_found");
+      const outbox = await client.query<{
+        message_json: unknown; status: string; lease_owner_id: string | null;
+        lease_id: string | null; lease_epoch: string | number;
+        lease_expires_at: Date | string | null; now: Date | string;
+      }>(`SELECT message_json,status,lease_owner_id,lease_id,lease_epoch,
+          lease_expires_at,clock_timestamp() now
+        FROM ${this.schemaSql()}.outbox WHERE message_id=$1 FOR UPDATE`,
+        [input.lease.messageId]);
+      const queue = outbox.rows[0];
+      const now = queue === undefined ? null : new Date(queue.now).toISOString();
+      if (queue === undefined || now === null || queue.status !== "leased" ||
+          queue.lease_owner_id !== input.lease.ownerId ||
+          queue.lease_id !== input.lease.leaseId ||
+          Number(queue.lease_epoch) !== input.lease.leaseEpoch ||
+          queue.lease_expires_at === null ||
+          new Date(queue.lease_expires_at).getTime() <= new Date(queue.now).getTime() ||
+          stableJson(queue.message_json) !== stableJson(input.message))
+        throw new RunStoreError("workflow_gate_publication_lease_invalid");
+      const prepared = prepareWorkflowGatePublication(
+        input.message, gate.rows[0].state_json, now,
+      );
+      const gateUpdate = await client.query(
+        `UPDATE ${this.schemaSql()}.workflow_gate_requests
+         SET status='published',state_json=$1,updated_at=$2
+         WHERE publication_outbox_message_id=$3 AND status='publicationPending'`,
+        [prepared.nextState, now, input.lease.messageId],
+      );
+      const outboxUpdate = await client.query(
+        `UPDATE ${this.schemaSql()}.outbox SET status='delivered',
+         lease_owner_id=NULL,lease_id=NULL,lease_expires_at=NULL,delivered_at=$1
+         WHERE message_id=$2 AND status='leased' AND lease_owner_id=$3 AND lease_id=$4
+         AND lease_epoch=$5 AND lease_expires_at>clock_timestamp()`,
+        [now, input.lease.messageId, input.lease.ownerId, input.lease.leaseId,
+          input.lease.leaseEpoch],
+      );
+      if (gateUpdate.rowCount !== 1 || outboxUpdate.rowCount !== 1)
+        throw new RunStoreError("workflow_gate_publication_conflict");
+      return prepared.publication;
+    });
+  }
+
+  async listPublishedWorkflowHumanGates(input: { tenantId: string; runId: string }) {
+    this.assertOpen();
+    const rows = await this.pool.query<{ state_json: unknown }>(
+      `SELECT state_json FROM ${this.schemaSql()}.workflow_gate_requests
+       WHERE tenant_id=$1 AND run_id=$2 AND status='published'
+       ORDER BY created_at,node_id LIMIT 256`,
+      [input.tenantId, input.runId],
+    );
+    return rows.rows.map((row) => projectWorkflowGatePublication(row.state_json));
   }
 
   async loadWorkflowExecution(input: { tenantId: string; runId: string }) {

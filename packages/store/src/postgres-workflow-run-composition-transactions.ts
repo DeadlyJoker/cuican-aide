@@ -37,6 +37,7 @@ import {
   scheduleReadyNodes,
   workflowAuthorityId,
 } from "./workflow-run-composition-support.ts";
+import { assertWorkflowGatePublicationMessage } from "./workflow-gate-publication.ts";
 
 export type ScheduleInput = Parameters<
   WorkflowRunCompositionStore["scheduleWorkflowNodes"]
@@ -180,7 +181,7 @@ export async function schedulePostgresWorkflowNodes(
         inputDigest: claim.inputDigest,
         publicationOutboxMessageId,
         approvalResumeWorkItemId,
-        status: "published",
+        status: "publicationPending",
         createdAt: now,
         updatedAt: now,
       };
@@ -204,7 +205,7 @@ export async function schedulePostgresWorkflowNodes(
         `INSERT INTO ${schema}.workflow_gate_requests
          (tenant_id,run_id,node_id,gate_request_id,claim_id,claim_epoch,step_id,approval_policy_id,input_digest,
           publication_outbox_message_id,approval_resume_work_item_id,status,state_json,created_at,updated_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$3,$7,$8,$9,$10,'published',$11,$12,$12)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$3,$7,$8,$9,$10,'publicationPending',$11,$12,$12)`,
         [
           input.tenantId,
           input.runId,
@@ -723,8 +724,8 @@ async function validateScheduleReplay(
       },
       true,
     );
-    const outbox = await client.query<{ message_json: unknown }>(
-      `SELECT message_json FROM ${schema}.outbox WHERE message_id=$1`,
+    const outbox = await client.query<{ message_json: unknown; status: string }>(
+      `SELECT message_json,status FROM ${schema}.outbox WHERE message_id=$1`,
       [authority.publicationOutboxMessageId],
     );
     const state = gate.rows[0]?.state_json as
@@ -739,13 +740,18 @@ async function validateScheduleReplay(
       state.publicationOutboxMessageId !==
         authority.publicationOutboxMessageId ||
       state.approvalResumeWorkItemId !== authority.approvalResumeWorkItemId ||
-      (outbox.rows[0]?.message_json as { payload?: unknown } | undefined)
-        ?.payload === undefined ||
-      stableJson(
-        (outbox.rows[0]!.message_json as { payload: unknown }).payload,
-      ) !== stableJson(state)
+      outbox.rows[0] === undefined ||
+      !["pending", "leased", "delivered"].includes(outbox.rows[0].status)
     )
       replayCorrupt();
+    try {
+      assertWorkflowGatePublicationMessage(
+        outbox.rows[0]!.message_json as import("@crewon/application").OutboxMessage,
+        state,
+      );
+    } catch {
+      replayCorrupt();
+    }
   }
   if (result.disposition === "reconcileRequired") {
     if (result.reconciliationClaims.length === 0) replayCorrupt();

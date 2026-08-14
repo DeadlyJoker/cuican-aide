@@ -2,8 +2,8 @@ import { DatabaseSync } from "node:sqlite";
 import { RunStoreError } from "@crewon/application";
 import type { PoolClient } from "pg";
 
-const SQLITE_SCHEMA_VERSION = 9;
-const POSTGRES_SCHEMA_VERSION = 7;
+const SQLITE_SCHEMA_VERSION = 10;
+const POSTGRES_SCHEMA_VERSION = 8;
 
 export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
   try {
@@ -105,7 +105,45 @@ export function migrateSqliteWorkflowExecutions(database: DatabaseSync): void {
         .prepare(
           "UPDATE workflow_execution_schema SET version=? WHERE singleton=1",
         )
-        .run(SQLITE_SCHEMA_VERSION);
+        .run(9);
+      version = 9;
+    }
+    if (version === 9) {
+      database.exec(`ALTER TABLE workflow_gate_requests RENAME TO workflow_gate_requests_v9;
+      CREATE TABLE workflow_gate_requests (
+        tenant_id TEXT NOT NULL, run_id TEXT NOT NULL, node_id TEXT NOT NULL,
+        gate_request_id TEXT NOT NULL UNIQUE, claim_id TEXT NOT NULL,
+        claim_epoch INTEGER NOT NULL CHECK (claim_epoch >= 1), step_id TEXT NOT NULL,
+        approval_policy_id TEXT NOT NULL, input_digest TEXT NOT NULL,
+        publication_outbox_message_id TEXT NOT NULL UNIQUE,
+        approval_resume_work_item_id TEXT NOT NULL UNIQUE,
+        status TEXT NOT NULL CHECK (status IN ('publicationPending','published','completed','failed','canceled')),
+        state_json TEXT NOT NULL CHECK (json_valid(state_json)),
+        created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+        PRIMARY KEY (tenant_id,run_id,node_id),
+        FOREIGN KEY (tenant_id,run_id) REFERENCES workflow_executions(tenant_id,run_id),
+        FOREIGN KEY (tenant_id,run_id,step_id) REFERENCES run_steps(tenant_id,run_id,step_id)
+      ) STRICT;
+      INSERT INTO workflow_gate_requests
+      SELECT tenant_id,run_id,node_id,gate_request_id,claim_id,claim_epoch,step_id,
+        approval_policy_id,input_digest,publication_outbox_message_id,
+        approval_resume_work_item_id,
+        CASE WHEN status='published' AND NOT EXISTS (
+          SELECT 1 FROM outbox WHERE message_id=publication_outbox_message_id
+          AND status='delivered') THEN 'publicationPending' ELSE status END,
+        CASE WHEN status='published' AND NOT EXISTS (
+          SELECT 1 FROM outbox WHERE message_id=publication_outbox_message_id
+          AND status='delivered') THEN json_set(state_json,'$.status','publicationPending')
+          ELSE state_json END,
+        created_at,updated_at
+      FROM workflow_gate_requests_v9;
+      UPDATE outbox SET status='delivered',lease_owner_id=NULL,lease_id=NULL,
+        lease_expires_at_ms=NULL,delivered_at_ms=COALESCE(delivered_at_ms,available_at_ms)
+      WHERE message_id IN (SELECT publication_outbox_message_id
+        FROM workflow_gate_requests WHERE status IN ('completed','failed','canceled'))
+        AND status IN ('pending','leased');
+      DROP TABLE workflow_gate_requests_v9;
+      UPDATE workflow_execution_schema SET version=10 WHERE singleton=1`);
       version = SQLITE_SCHEMA_VERSION;
     }
     assertSqliteShape(database);
@@ -197,6 +235,28 @@ export async function migratePostgresWorkflowExecutions(
       `UPDATE ${schema}.workflow_execution_schema SET version=7 WHERE singleton=true`,
     );
     version = 7;
+  }
+  if (version === 7) {
+    await client.query(`ALTER TABLE ${schema}.workflow_gate_requests
+      DROP CONSTRAINT workflow_gate_requests_status_check,
+      ADD CONSTRAINT workflow_gate_requests_status_check
+      CHECK (status IN ('publicationPending','published','completed','failed','canceled'));
+      UPDATE ${schema}.workflow_gate_requests gate SET
+        status='publicationPending',
+        state_json=jsonb_set(state_json,'{status}','"publicationPending"'::jsonb)
+      WHERE status='published' AND NOT EXISTS (
+        SELECT 1 FROM ${schema}.outbox message
+        WHERE message.message_id=gate.publication_outbox_message_id
+        AND message.status='delivered');
+      UPDATE ${schema}.outbox message SET status='delivered',lease_owner_id=NULL,
+        lease_id=NULL,lease_expires_at=NULL,
+        delivered_at=COALESCE(delivered_at,created_at)
+      WHERE message_id IN (SELECT publication_outbox_message_id
+        FROM ${schema}.workflow_gate_requests
+        WHERE status IN ('completed','failed','canceled'))
+        AND status IN ('pending','leased');
+      UPDATE ${schema}.workflow_execution_schema SET version=8 WHERE singleton=true`);
+    version = POSTGRES_SCHEMA_VERSION;
   }
   const columns = await client.query<{
     table_name: string;
@@ -321,7 +381,7 @@ CREATE TABLE workflow_gate_requests (
   input_digest TEXT NOT NULL,
   publication_outbox_message_id TEXT NOT NULL UNIQUE,
   approval_resume_work_item_id TEXT NOT NULL UNIQUE,
-  status TEXT NOT NULL CHECK (status IN ('published','completed','failed','canceled')),
+  status TEXT NOT NULL CHECK (status IN ('publicationPending','published','completed','failed','canceled')),
   state_json TEXT NOT NULL CHECK (json_valid(state_json)),
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
@@ -461,7 +521,7 @@ function postgresCompositionTables(schema: string): string {
     step_id text NOT NULL, approval_policy_id text NOT NULL, input_digest text NOT NULL,
     publication_outbox_message_id text NOT NULL UNIQUE,
     approval_resume_work_item_id text NOT NULL UNIQUE,
-    status text NOT NULL CHECK (status IN ('published','completed','failed','canceled')),
+    status text NOT NULL CHECK (status IN ('publicationPending','published','completed','failed','canceled')),
     state_json jsonb NOT NULL, created_at timestamptz NOT NULL, updated_at timestamptz NOT NULL,
     PRIMARY KEY (tenant_id,run_id,node_id),
     FOREIGN KEY (tenant_id,run_id) REFERENCES ${schema}.workflow_executions(tenant_id,run_id),

@@ -16,7 +16,7 @@ if (postgresUrl === undefined) {
   test.skip("PostgreSQL Workflow execution migrations require CREWON_TEST_POSTGRES_URL", () => {});
 } else {
   for (const legacyVersion of [1, 2, 3, 4, 5, 6] as const) {
-    test(`PostgreSQL Workflow execution v${legacyVersion} migrates through v7`, async () => {
+    test(`PostgreSQL Workflow execution v${legacyVersion} migrates through v8`, async () => {
       const schema = `workflow_execution_v${legacyVersion}_${randomUUID().replaceAll("-", "")}`;
       const pool = new Pool({ connectionString: postgresUrl });
       const store = await PostgresWorkflowRunCompositionStore.open({
@@ -41,7 +41,7 @@ if (postgresUrl === undefined) {
         const version = await pool.query<{ version: number }>(
           `SELECT version FROM ${schema}.workflow_execution_schema WHERE singleton=true`,
         );
-        assert.equal(version.rows[0]?.version, 7);
+        assert.equal(version.rows[0]?.version, 8);
         const columns = await pool.query<{ column_name: string }>(
           `SELECT column_name FROM information_schema.columns
            WHERE table_schema=$1 AND table_name='workflow_run_admission_receipts'

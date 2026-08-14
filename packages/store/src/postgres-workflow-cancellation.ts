@@ -455,8 +455,20 @@ async function cancelGate(
   now: string,
 ) {
   const gate = await client.query(
-    `UPDATE ${schema}.workflow_gate_requests SET status='canceled',updated_at=$1
-     WHERE tenant_id=$2 AND run_id=$3 AND node_id=$4 AND status='published'`,
+    `UPDATE ${schema}.workflow_gate_requests SET status='canceled',updated_at=$1,
+     state_json=jsonb_set(jsonb_set(state_json,'{status}','"canceled"'::jsonb),
+       '{updatedAt}',to_jsonb($1::text))
+     WHERE tenant_id=$2 AND run_id=$3 AND node_id=$4
+     AND status IN ('publicationPending','published')`,
+    [now, input.tenantId, input.runId, nodeId],
+  );
+  await client.query(
+    `UPDATE ${schema}.outbox SET status='delivered',lease_owner_id=NULL,lease_id=NULL,
+       lease_expires_at=NULL,delivered_at=$1
+     WHERE message_id=(SELECT publication_outbox_message_id
+       FROM ${schema}.workflow_gate_requests
+       WHERE tenant_id=$2 AND run_id=$3 AND node_id=$4)
+     AND status IN ('pending','leased')`,
     [now, input.tenantId, input.runId, nodeId],
   );
   const step = await loadPostgresRunStep(

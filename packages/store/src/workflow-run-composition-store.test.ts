@@ -741,6 +741,8 @@ test("SQLite composition prototype exposes only the current Store contract", () 
     >;
   assert.equal(prototype.admitWorkflowNodes, undefined);
   for (const method of [
+    "publishWorkflowHumanGate",
+    "listPublishedWorkflowHumanGates",
     "scheduleWorkflowNodes",
     "admitWorkflowNodeWork",
     "settleWorkflowNode",
@@ -758,7 +760,7 @@ test("SQLite composition prototype exposes only the current Store contract", () 
 test("SQLite fanout atomically queues agent work and publishes a sibling gate", async () => {
   const database = new DatabaseSync(":memory:");
   const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
-  const store = new SqliteWorkflowRunCompositionStore(database, {
+  let store = new SqliteWorkflowRunCompositionStore(database, {
     digester,
     clock,
   });
@@ -776,6 +778,10 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
     },
   } as const;
   const scheduled = await store.scheduleWorkflowNodes(scheduleInput);
+  database.exec(`UPDATE workflow_gate_requests SET status='published',
+    state_json=json_set(state_json,'$.status','published');
+    UPDATE workflow_execution_schema SET version=9 WHERE singleton=1`);
+  store = new SqliteWorkflowRunCompositionStore(database, { digester, clock });
   assert.equal(scheduled.disposition, "scheduled");
   assert.equal(scheduled.nodeWorkItems.length, 1);
   assert.equal(scheduled.gatePublications.length, 1);
@@ -800,6 +806,63 @@ test("SQLite fanout atomically queues agent work and publishes a sibling gate", 
       .prepare("SELECT count(*) AS count FROM workflow_gate_requests")
       .get()?.count,
     1,
+  );
+  assert.equal(
+    database.prepare("SELECT status FROM workflow_gate_requests").get()?.status,
+    "publicationPending",
+  );
+  assert.deepEqual(
+    await store.listPublishedWorkflowHumanGates({
+      tenantId: "tenant-1",
+      runId: "run-1",
+    }),
+    [],
+  );
+  const gateAuthority = scheduled.gatePublications[0]!;
+  database.prepare(`UPDATE outbox SET status='leased',lease_owner_id='publisher-1',
+    lease_id='gate-lease-1',lease_epoch=1,lease_expires_at_ms=?
+    WHERE message_id=?`).run(
+      clock.nowEpochMilliseconds() + 60_000,
+      gateAuthority.publicationOutboxMessageId,
+    );
+  const gateMessage = JSON.parse(String(database.prepare(
+    "SELECT message_json FROM outbox WHERE message_id=?",
+  ).get(gateAuthority.publicationOutboxMessageId)?.message_json));
+  const publication = await store.publishWorkflowHumanGate({
+    lease: {
+      messageId: gateAuthority.publicationOutboxMessageId,
+      ownerId: "publisher-1",
+      leaseId: "gate-lease-1",
+      leaseEpoch: 1,
+    },
+    message: gateMessage,
+  });
+  assert.deepEqual(publication, {
+    runId: "run-1",
+    nodeId: "gate",
+    claimId: gateAuthority.claimId,
+    claimEpoch: gateAuthority.claimEpoch,
+    gateRequestId: gateAuthority.gateRequestId,
+    approvalPolicyId: "approval-1",
+    status: "published",
+    createdAt: "2026-08-12T00:00:00.000Z",
+  });
+  assert.deepEqual(
+    await store.listPublishedWorkflowHumanGates({
+      tenantId: "tenant-1",
+      runId: "run-1",
+    }),
+    [publication],
+  );
+  assert.deepEqual(
+    { ...database.prepare("SELECT status FROM workflow_gate_requests").get() },
+    { status: "published" },
+  );
+  assert.deepEqual(
+    { ...database.prepare(
+      "SELECT status,lease_owner_id,lease_id FROM outbox WHERE message_id=?",
+    ).get(gateAuthority.publicationOutboxMessageId) },
+    { status: "delivered", lease_owner_id: null, lease_id: null },
   );
   assert.equal(
     database

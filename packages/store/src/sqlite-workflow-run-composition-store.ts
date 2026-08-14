@@ -11,6 +11,7 @@ import {
   type WorkflowCancellationResult,
   type WorkflowExecutionValue,
   type WorkflowRunCompositionStore,
+  type WorkflowHumanGatePublicationStore,
   type WorkflowToolApprovalStore,
 } from "@crewon/application";
 import {
@@ -75,6 +76,10 @@ import {
   ensureSqliteCancellationReconciliation,
   sqliteCancellationReconciliationWorkItemIds,
 } from "./sqlite-workflow-cancellation.ts";
+import {
+  prepareWorkflowGatePublication,
+  projectWorkflowGatePublication,
+} from "./workflow-gate-publication.ts";
 
 type Dependencies = Readonly<{
   digester: WorkflowContentDigester;
@@ -83,8 +88,79 @@ type Dependencies = Readonly<{
 
 /** SQLite production composition authority. Every admission is one IMMEDIATE transaction. */
 export class SqliteWorkflowRunCompositionStore
-  implements WorkflowRunCompositionStore, WorkflowToolApprovalStore
+  implements
+    WorkflowRunCompositionStore,
+    WorkflowHumanGatePublicationStore,
+    WorkflowToolApprovalStore
 {
+  async publishWorkflowHumanGate(
+    input: Parameters<WorkflowHumanGatePublicationStore["publishWorkflowHumanGate"]>[0],
+  ): ReturnType<WorkflowHumanGatePublicationStore["publishWorkflowHumanGate"]> {
+    const nowMs = readLeaseClock(this.#clock);
+    const now = new Date(nowMs).toISOString();
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      const outbox = this.#database.prepare(`SELECT message_json,status,
+        lease_owner_id,lease_id,lease_epoch,lease_expires_at_ms FROM outbox
+        WHERE message_id=?`).get(input.lease.messageId) as {
+          message_json: string; status: string; lease_owner_id: string | null;
+          lease_id: string | null; lease_epoch: number;
+          lease_expires_at_ms: number | null;
+        } | undefined;
+      if (outbox === undefined || outbox.status !== "leased" ||
+          outbox.lease_owner_id !== input.lease.ownerId ||
+          outbox.lease_id !== input.lease.leaseId ||
+          outbox.lease_epoch !== input.lease.leaseEpoch ||
+          outbox.lease_expires_at_ms === null || outbox.lease_expires_at_ms <= nowMs ||
+          stableJson(JSON.parse(outbox.message_json)) !== stableJson(input.message))
+        throw new RunStoreError("workflow_gate_publication_lease_invalid");
+      const row = this.#database.prepare(`SELECT state_json FROM workflow_gate_requests
+        WHERE publication_outbox_message_id=?`).get(input.lease.messageId) as
+          { state_json: string } | undefined;
+      if (row === undefined) throw new RunStoreError("workflow_gate_publication_not_found");
+      const prepared = prepareWorkflowGatePublication(
+        input.message, JSON.parse(row.state_json), now,
+      );
+      const gate = this.#database.prepare(`UPDATE workflow_gate_requests
+        SET status='published',state_json=?,updated_at=?
+        WHERE publication_outbox_message_id=? AND status='publicationPending'`).run(
+          stableJson(prepared.nextState), now, input.lease.messageId);
+      const outboxUpdate = this.#database.prepare(`UPDATE outbox SET status='delivered',
+        lease_owner_id=NULL,lease_id=NULL,lease_expires_at_ms=NULL,delivered_at_ms=?
+        WHERE message_id=? AND status='leased' AND lease_owner_id=? AND lease_id=?
+        AND lease_epoch=? AND lease_expires_at_ms>?`).run(
+          nowMs, input.lease.messageId, input.lease.ownerId, input.lease.leaseId,
+          input.lease.leaseEpoch, nowMs);
+      if (gate.changes !== 1 || outboxUpdate.changes !== 1)
+        throw new RunStoreError("workflow_gate_publication_conflict");
+      this.#database.exec("COMMIT");
+      return prepared.publication;
+    } catch (error) {
+      rollback(this.#database);
+      if (error instanceof RunStoreError) throw normalizeCompositionError(error);
+      throw normalizeCompositionError(new RunStoreError(
+        "workflow_gate_publication_store_failed",
+        { cause: error instanceof Error ? error : undefined },
+      ));
+    }
+  }
+
+  async listPublishedWorkflowHumanGates(input: { tenantId: string; runId: string }) {
+    try {
+      const rows = this.#database.prepare(`SELECT state_json FROM workflow_gate_requests
+        WHERE tenant_id=? AND run_id=? AND status='published'
+        ORDER BY created_at,node_id LIMIT 256`).all(input.tenantId, input.runId) as
+          { state_json: string }[];
+      return rows.map((row) => projectWorkflowGatePublication(JSON.parse(row.state_json)));
+    } catch (error) {
+      if (error instanceof RunStoreError) throw normalizeCompositionError(error);
+      throw normalizeCompositionError(new RunStoreError(
+        "workflow_gate_publication_store_failed",
+        { cause: error instanceof Error ? error : undefined },
+      ));
+    }
+  }
+
   async loadWorkflowExecution(input: { tenantId: string; runId: string }) {
     return this.#loadExecution(input.tenantId, input.runId);
   }
@@ -605,10 +681,18 @@ export class SqliteWorkflowRunCompositionStore
         }
         if (node.status === "waitingHuman") {
           const changed = this.#database.prepare(
-            `UPDATE workflow_gate_requests SET status='canceled',updated_at=?
-             WHERE tenant_id=? AND run_id=? AND node_id=? AND status='published'`,
-          ).run(now, input.tenantId, input.runId, node.nodeId);
+            `UPDATE workflow_gate_requests SET status='canceled',
+             state_json=json_set(state_json,'$.status','canceled','$.updatedAt',?),updated_at=?
+             WHERE tenant_id=? AND run_id=? AND node_id=?
+             AND status IN ('publicationPending','published')`,
+          ).run(now, now, input.tenantId, input.runId, node.nodeId);
           if (changed.changes === 1) {
+            this.#database.prepare(`UPDATE outbox SET status='delivered',
+              lease_owner_id=NULL,lease_id=NULL,lease_expires_at_ms=NULL,delivered_at_ms=?
+              WHERE message_id=(SELECT publication_outbox_message_id FROM workflow_gate_requests
+                WHERE tenant_id=? AND run_id=? AND node_id=?)
+              AND status IN ('pending','leased')`).run(
+                nowMs, input.tenantId, input.runId, node.nodeId);
             const step = loadSqliteRunStep(this.#database, {
               tenantId: input.tenantId, runId: input.runId, stepId: node.nodeId,
             });
@@ -1003,7 +1087,7 @@ export class SqliteWorkflowRunCompositionStore
             inputDigest: claim.inputDigest,
             publicationOutboxMessageId,
             approvalResumeWorkItemId,
-            status: "published",
+            status: "publicationPending",
             createdAt: now,
             updatedAt: now,
           };
@@ -1039,7 +1123,7 @@ export class SqliteWorkflowRunCompositionStore
              (tenant_id,run_id,node_id,gate_request_id,claim_id,claim_epoch,step_id,
               approval_policy_id,input_digest,publication_outbox_message_id,
               approval_resume_work_item_id,status,state_json,created_at,updated_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,'published',?,?,?)`,
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,'publicationPending',?,?,?)`,
             )
             .run(
               input.tenantId,

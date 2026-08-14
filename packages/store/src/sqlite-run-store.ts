@@ -186,6 +186,7 @@ import {
   type WorkspaceOperationSnapshot,
   type WorkflowNodeContinuationStore,
   type WorkflowRunCompositionStore,
+  type WorkflowHumanGatePublicationStore,
   type WorkflowRuntimeStore,
   type WorkflowToolApprovalStore,
   type CommitKnowledgeInput,
@@ -580,6 +581,16 @@ export class SqliteRunStore
 
   async loadWorkflowExecution(input: { tenantId: string; runId: string }) {
     return this.#workflow().loadWorkflowExecution(input);
+  }
+  async publishWorkflowHumanGate(
+    input: Parameters<WorkflowHumanGatePublicationStore["publishWorkflowHumanGate"]>[0],
+  ): ReturnType<WorkflowHumanGatePublicationStore["publishWorkflowHumanGate"]> {
+    return this.#workflow().publishWorkflowHumanGate(input);
+  }
+  listPublishedWorkflowHumanGates(
+    input: Parameters<WorkflowHumanGatePublicationStore["listPublishedWorkflowHumanGates"]>[0],
+  ): ReturnType<WorkflowHumanGatePublicationStore["listPublishedWorkflowHumanGates"]> {
+    return this.#workflow().listPublishedWorkflowHumanGates(input);
   }
   async publishWorkflowToolApproval(
     input: Parameters<
