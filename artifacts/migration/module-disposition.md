@@ -64,15 +64,32 @@
 
 ## Workflow、Office、Experts 与 Automation
 
-| ID  | 当前路径                                                                 | 处置            | 最终所有者                      | 核心证据/删除 Gate                                  |
-| --- | ------------------------------------------------------------------------ | --------------- | ------------------------------- | --------------------------------------------------- |
-| W01 | `crewon_domain_workflow*.rs`、`workflow_node_dispatch.rs`                | `PORT_REDESIGN` | workflow-runtime                | 六态、Human Gate、cancel/restart、本地 Agent thread |
-| W02 | `.crewon/workflows/*.json` legacy definition                             | `DELETE`        | 无                              | 新 Store authority 生效；不实现 importer/dual-read  |
-| W03 | `crewon_domain_office_run.rs`、message/receipt/recovery/authority 文件族 | `PORT_REDESIGN` | unified Run + Office projection | receipt、recovery、owner、message intent fixtures   |
-| W04 | Office legacy mutation、专用 scheduler state、旧 auto-dispatch           | `DELETE`        | 无                              | 统一 Run cutover、零调用、drain/观察期              |
-| W05 | Office migration importer/snapshot/targets                               | `DELETE`        | 无                              | 新 Store authority 生效；不实现 importer/dual-read  |
-| W06 | `automation_scheduler.rs`、automation binding                            | `PORT_REDESIGN` | application + workflow-runtime  | schedule/misfire/dedupe/timezone/owner tests        |
-| W07 | `experts_processor`、Office manager/member delegation                    | `PORT_REDESIGN` | AgentVersion + Run/Step         | 委派 durable，不隐藏内存 handoff                    |
+| ID  | 当前路径                                                                 | 处置                      | 最终所有者                      | 核心证据/删除 Gate                                  |
+| --- | ------------------------------------------------------------------------ | ------------------------- | ------------------------------- | --------------------------------------------------- |
+| W01 | `crewon_domain_workflow*.rs`、`workflow_node_dispatch.rs`                | `PORT_REDESIGN`           | workflow-runtime                | 六态、Human Gate、cancel/restart、本地 Agent thread |
+| W02 | `.crewon/workflows/*.json` legacy definition                             | `DELETE`（已关闭）        | 无                              | 新 Store authority 生效；不实现 importer/dual-read  |
+| W03 | `crewon_domain_office_run.rs`、message/receipt/recovery/authority 文件族 | `PORT_REDESIGN`（已切换） | unified Run + Office projection | receipt、recovery、owner、message intent fixtures   |
+| W04 | Office legacy mutation、专用 scheduler state、旧 auto-dispatch           | `DELETE`（已关闭）        | 无                              | 统一 Run cutover、零调用、drain/观察期              |
+| W05 | Office migration importer/snapshot/targets                               | `DELETE`（已关闭）        | 无                              | 新 Store authority 生效；不实现 importer/dual-read  |
+| W06 | `automation_scheduler.rs`、automation binding                            | `PORT_REDESIGN`（已切换） | application + workflow-runtime  | schedule/misfire/dedupe/timezone/owner tests        |
+| W07 | `experts_processor`、Office manager/member delegation                    | `PORT_REDESIGN`（已切换） | AgentVersion + Run/Step         | 委派 durable，不隐藏内存 handoff                    |
+
+### W02–W07 pure TypeScript cutover evidence（2026-08-14）
+
+- **W02**：production source graph 不再读取 `.crewon/workflows/*.json`。最后一组无调用的 `CommandWorkflowPanel`、
+  legacy parser 和对应测试已删除；当前 Workflow UI 只使用 generated Control client 与 `ControlWorkflowPanel`。
+- **W03 / W07**：Office create/get/list 与显式 delegation start/list 均由 Control API 暴露。delegation fresh transaction
+  固定 OfficeVersion、WorkflowVersion、Thread、成员 AgentVersion 与 route，原子创建 canonical Workflow Run、root input、
+  scheduler WorkItem、event/outbox 和 receipt；replay 不再次 prepare 或执行。Office/Experts 不拥有第二套 Run reducer。
+- **W04**：production composition 不包含 Office 专用 scheduler、legacy message delivery、auto-dispatch 或内存 handoff。
+  Office 只定义成员边界，执行统一进入 Workflow scheduler 与 Runtime Worker。
+- **W05**：没有 legacy Office snapshot/importer、dual-read 或 dual-write production 入口；新 SQLite/PostgreSQL Store 是唯一
+  Office 与 delegation authority。按本次 breaking cutover 决策不迁移迁移期未使用的旧数据。
+- **W06**：Automation schedule v1、due lease、occurrence receipt、misfire/coalesce、timezone、owner freeze 与 canonical Run
+  admission 已接入 standalone SQLite 和 production PostgreSQL；Automation scheduler 只创建统一 Run。
+
+这些状态只关闭 WS4 的旧兼容路径与统一 Run cutover，不代表 Provider、MCP、Resource/PIM、三平台发布签名和运维 Gate
+已经完成。
 
 ## Identity、Provider、Resource 与 Artifact
 

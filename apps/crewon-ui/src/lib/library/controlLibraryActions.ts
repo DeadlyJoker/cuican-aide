@@ -213,8 +213,8 @@ async function openControlOffices(params: {
           : `${offices.length} offices${truncated ? " (truncated)" : ""}`,
       body:
         params.locale === "zh"
-          ? "办公室定义来自 Control authority。创建办公室需先选择已发布 AgentVersion；当前 UI 未提供创建。旧版消息投递、自动调度与内存交接未启用。"
-          : "Office definitions come from Control authority. Creating one requires a published AgentVersion selection, which this UI does not yet provide. Legacy message delivery, auto-dispatch, and memory handoff are disabled.",
+          ? "办公室定义来自 Control authority。可在办公室页选择已发布 AgentVersion 创建办公室，并通过显式 Workflow 委派启动 canonical Run。"
+          : "Office definitions come from Control authority. Create an office from published AgentVersions on the Offices page, then start a canonical Run through explicit Workflow delegation.",
       actions: [],
       items: offices.map((office, index) =>
         controlOfficeItem(office, index, params.locale),

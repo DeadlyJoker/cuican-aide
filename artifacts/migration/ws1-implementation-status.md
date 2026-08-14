@@ -43,6 +43,11 @@
   fail closed。Node 24 当前验证为 Store `346 pass / 61 PostgreSQL 环境条件 skip`、Control `122 pass / 4 PostgreSQL 环境条件
 skip`、Runtime Worker `306 pass / 1 PostgreSQL 环境条件 skip`。本机未配置 `CREWON_TEST_POSTGRES_URL`，因此新增 PG scheduler
   双 claim/atomic admission 行为测试只作为条件测试存在，不能记为本轮 real-host 通过。
+- W02–W07 已按“不保留迁移期兼容”的规则完成 pure TypeScript cutover：legacy `.crewon/workflows` reader/UI、Office 专用
+  scheduler、legacy message/auto-dispatch/memory handoff 与 Office importer 均不进入 production graph；Office create/list/get
+  使用已发布 AgentVersion，显式 Office delegation 在单事务内冻结 Office/Workflow/Thread/route/member authority 并创建
+  canonical Workflow Run。Automation scheduler 同样只 admission 统一 Run。独立 Experts processor 不再恢复；需要多成员执行时
+  以 Office 成员边界 + immutable WorkflowVersion 表达，不建立第二套内存 handoff 或 Run 状态机。
 - 本轮重新 staging 与构建后的 `.app` 仍只包含 Tauri shell、官方 Node 24、guardian 与四个 TS runtime bundle；Device Tool、
   Gateway、Responses Lite、Rust App Server、6176 与旧 restart/client marker 扫描均为 0。最新隔离 HOME smoke
   `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-svjMds` 中，Workflow Run

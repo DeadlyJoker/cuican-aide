@@ -389,7 +389,10 @@ describe("openControlLibraryAction", () => {
       actions: [],
     });
     expect((panel as LibraryPanel | null)?.body).toContain(
-      "requires a published AgentVersion selection",
+      "Create an office from published AgentVersions",
+    );
+    expect((panel as LibraryPanel | null)?.body).toContain(
+      "explicit Workflow delegation",
     );
   });
 
