@@ -70,6 +70,10 @@ skip`、Runtime Worker `306 pass / 1 PostgreSQL 环境条件 skip`。本机未�
   不再改写会话历史。`#view-agents`、`#view-knowledge` 的首次加载、hashchange 与 popstate 均规范化到 Command shell 并打开真实
   Control Library；旧目录占位页面及 Projects 的“尚未迁移”文案已删除。fresh renderer bundle 中 demo Thread/Turn、迁移占位、App
   Server/WebSocket/6176/Device Tool/Responses Lite marker 均为 0。
+- 已有消息的 Conversation composer 中，“附加上下文”不再落到固定 unavailable handler；连接正常时直接打开文件选择器，并复用主页
+  已有的有界 Control Knowledge 导入、immutable digest reference 与最多四项约束，连接不可用时仍明确 fail closed。该切片没有恢复
+  App Server、Rust Device/Gateway 或第二套附件协议；UI 全量仍为 `208/208` files、`1278/1278` tests，lint、production build 与 legacy
+  marker scan 通过。
 - Settings 的 Appearance 页面新增手动桌面更新卡。打开 Settings 不解析 updater、不联网、不启动 timer；只有用户点击检查后才调用
   真实 Tauri updater，发现版本后还需第二次明确点击“安装并重启”。Web/null bridge、检查、下载或安装失败都投影为可见状态；只有
   `downloadAndInstall` 成功后才 relaunch，不存在自动检查、自动重启、App Server 或 Rust fallback。
@@ -77,12 +81,19 @@ skip`、Runtime Worker `306 pass / 1 PostgreSQL 环境条件 skip`。本机未�
   type，Store 的 value type 由 Application port 持有；Kernel/Store 只精确承认模型请求证据、Provider turn invariant、冻结
   AgentVersion 与 canonical Agent event 验证所需依赖。Control API 仅保留 standalone Local Settings 必需的 `node:sqlite`；MCP、
   Application 的 SHA-256 authority 只精确允许 `node:crypto`，没有宽泛放行 Node 内置模块。
-- Team/Cloud production Provider Probe 与 Workspace List 均已删除 `Unavailable` 占位 registry。
+- Team/Cloud production Provider Probe 与 Workspace List 均已删除 `Unavailable` 占位 registry，并已补齐本仓库首方 Runtime Worker
+  server authority。
   `CREWON_PROVIDER_PROBE_TENANT_ROUTES_JSON` 按 `tenantId + runtimeBindingId` 精确绑定认证 Worker；
   `CREWON_WORKSPACE_TENANT_ROUTES_JSON` 的冻结阶段只接受 verified tenant/space/thread scope，dispatch 再按冻结的
-  `tenantId + runtimeBindingId + workspaceBindingId` 精确路由。两条生产 transport 都要求 HTTPS bearer、限制响应体与 deadline，校验
-  binding/generation echo，并在缺失、短 token、不安全 origin、重复 route 或 standalone ambient 配置时于 PostgreSQL open 前 fail
-  closed；PC loopback client 没有被复用或放宽。合并后的 Control 全量为
+  `tenantId + runtimeBindingId + workspaceBindingId` 精确路由。Control route 只接受 `tokenEnvironment`，不在 JSON 中承载明文 bearer；
+  HTTPS 用于远端 route，同机首方 Worker 只额外允许精确 `127.0.0.1` loopback。两条 transport 都限制响应体与 deadline、校验
+  binding/generation echo，并在缺失、短 token、不安全 origin、重复 route 或跨模式配置时于 PostgreSQL open 前 fail closed；PC
+  standalone client 没有被复用冒充 Team authority。
+- 普通 Node production Worker 现在通过严格、互斥的 `CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON` 与
+  `CREWON_RUNTIME_WORKSPACE_CONFIG_JSON` 启动认证 listener，不再依赖 Tauri native bootstrap。Provider 配置冻结 provider/runtime binding、
+  endpoint 与 credential environment；Workspace 配置冻结 trusted local root、tenant/space/workspace/incarnation/runtime/policy authority，
+  并复用现有 TS local list/read、freeze/dispatch/private server。两个真实 production `src/main.ts` 子进程的未授权请求均观察到 `401`；
+  Runtime Worker 全量为 `310 pass / 1 PostgreSQL 环境条件 skip / 0 fail`，Control 全量为
   `132 pass / 4 PostgreSQL 环境条件 skip / 0 fail`。
 - Production Runtime Release/Worker 已删除 `CREWON_MODEL_ADAPTER` 和 deterministic fake factory，只能构造真实 Responses transport；
   Tauri 不再继承 fake 配置，staging marker 同时拒绝 `deterministic-fake`、`DeterministicFakeModelTransport` 与 `CREWON_FAKE_`。Runtime
