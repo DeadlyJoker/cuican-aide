@@ -6,7 +6,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import { Pool } from "pg";
-import { RunApplicationService, RunStoreError, ThreadApplicationService } from "@crewon/application";
+import {
+  RunApplicationService,
+  RunStoreError,
+  ThreadApplicationService,
+  type OutboxMessage,
+} from "@crewon/application";
 import {
   compileWorkflowVersion,
   createWorkflowNodeTerminalEvidence,
@@ -1436,6 +1441,23 @@ if (postgresUrl === undefined) {
         },
       });
       const gate = scheduled.gatePublications[0]!;
+      const publicationLease = {
+        messageId: gate.publicationOutboxMessageId,
+        ownerId: "gate-publisher",
+        leaseId: "gate-publication-lease",
+        leaseEpoch: 1,
+      } as const;
+      const publication = await pool.query<{ message_json: OutboxMessage }>(
+        `UPDATE ${schema}.outbox SET status='leased',lease_owner_id=$1,lease_id=$2,
+         lease_epoch=1,lease_expires_at=clock_timestamp()+interval '1 minute'
+         WHERE message_id=$3 RETURNING message_json`,
+        [publicationLease.ownerId, publicationLease.leaseId, publicationLease.messageId],
+      );
+      assert.equal(publication.rows.length, 1);
+      await store.publishWorkflowHumanGate({
+        lease: publicationLease,
+        message: publication.rows[0]!.message_json,
+      });
       const decision = {
         tenantId: "tenant-1",
         runId: "run-1",
