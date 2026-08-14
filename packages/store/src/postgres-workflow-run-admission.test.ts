@@ -7,9 +7,13 @@ import {
   createAgentVersionAsset,
 } from "@crewon/agent-version";
 import {
+  ApplicationError,
+  OfficeDelegationApplicationService,
   RunStoreError,
   WorkflowRunApplicationService,
+  type CommitOfficeDelegationStartInput,
   type CommitWorkflowRunStartInput,
+  type OfficeDelegationStore,
   type WorkflowRunAdmissionStore,
 } from "@crewon/application";
 import {
@@ -42,6 +46,196 @@ const route = {
 if (postgresUrl === undefined && isDirectTestEntry) {
   test.skip("PostgreSQL Workflow Run admission requires CREWON_TEST_POSTGRES_URL", () => {});
 } else if (isDirectTestEntry) {
+  test("PostgreSQL Office delegation is atomic, receipt-first, and listable", async () => {
+    const fixture = await postgresFixture();
+    try {
+      await seedOffice(fixture.domain);
+      let routeCalls = 0;
+      let idCalls = 0;
+      const service = new OfficeDelegationApplicationService({
+        store: fixture.domain,
+        authorization: {
+          async authorize() {
+            return { outcome: "allow" as const };
+          },
+        },
+        clock: { now: () => "2026-08-12T00:00:01.000Z" },
+        ids: { nextId: () => `office-delegation-${++idCalls}` },
+        digester,
+        routeResolver: {
+          async resolveRoute() {
+            routeCalls += 1;
+            return route;
+          },
+        },
+      });
+      const start = () =>
+        service.start(actor(), {
+          kind: "officeDelegation.start",
+          idempotencyKey: "office-delegation-key-1",
+          officeVersionId: "office-version-1",
+          workflowVersionId: "workflow-version-1",
+          threadId: "thread-1",
+          input: { topic: "safe" },
+        });
+      const fresh = await start();
+      const idsAfterFresh = idCalls;
+      const progressed = await fixture.domain.commitRun({
+        tenantId: "tenant-1",
+        expectedRevision: fresh.run.state.revision,
+        idempotency: {
+          scope: "office-progress",
+          key: "office-progress-1",
+          requestFingerprint: "office-progress-fp-1",
+        },
+        events: [
+          {
+            schemaVersion: "crewon.run-event.v0",
+            identity: { runId: fresh.run.state.runId },
+            eventId: "office-progress-event-1",
+            sequence: fresh.run.state.lastSequence + 1,
+            occurredAt: "2026-08-12T00:00:02.000Z",
+            type: "run.started",
+            data: {},
+          },
+        ],
+        outbox: [],
+        workItems: [],
+      });
+      const replay = await start();
+      assert.equal(fresh.disposition, "committed");
+      assert.deepEqual(replay, {
+        ...fresh,
+        disposition: "replayed",
+        run: { ...fresh.run, disposition: "replayed" },
+      });
+      assert.deepEqual(
+        { routeCalls, idCalls, idsAfterFresh },
+        { routeCalls: 1, idCalls: idsAfterFresh, idsAfterFresh },
+      );
+      const page = await service.list(actor(), {
+        officeVersionId: "office-version-1",
+        before: null,
+        limit: 10,
+      });
+      assert.deepEqual(page.items, [
+        { delegation: fresh.delegation, run: progressed.state },
+      ]);
+      assert.equal(page.next, null);
+      const callsBeforeConflict = { routeCalls, idCalls };
+      await assert.rejects(
+        service.start(actor(), {
+          kind: "officeDelegation.start",
+          idempotencyKey: "office-delegation-key-1",
+          officeVersionId: "office-version-1",
+          workflowVersionId: "workflow-version-1",
+          threadId: "thread-1",
+          input: { topic: "changed" },
+        }),
+        (error: unknown) =>
+          error instanceof ApplicationError &&
+          error.code === "office_delegation_idempotency_conflict",
+      );
+      assert.deepEqual({ routeCalls, idCalls }, callsBeforeConflict);
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  test("PostgreSQL Office delegation rolls back every effect after late preparation rejection", async () => {
+    const fixture = await postgresFixture();
+    try {
+      await seedOffice(fixture.domain, { includeVerifier: false });
+      const { service, stats } = officeDelegationService(fixture.domain);
+      await assert.rejects(
+        service.start(actor(), officeDelegationCommand("rejected")),
+        (error: unknown) =>
+          error instanceof ApplicationError &&
+          error.code === "office_workflow_agent_not_member",
+      );
+      assert.deepEqual(stats, { idCalls: 0, routeCalls: 1 });
+      for (const table of [
+        "run_snapshots",
+        "run_events",
+        "idempotency_receipts",
+        "outbox",
+        "work_items",
+        "workflow_execution_values",
+        "workflow_run_admission_receipts",
+        "office_delegations",
+        "office_delegation_receipts",
+      ]) {
+        const count = await fixture.pool.query<{ count: string }>(
+          `SELECT count(*)::text AS count FROM ${fixture.schema}.${table}`,
+        );
+        assert.equal(count.rows[0]!.count, "0", table);
+      }
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  test("concurrent PostgreSQL Office retries prepare once and converge on one receipt", async () => {
+    const fixture = await postgresFixture();
+    try {
+      await seedOffice(fixture.domain);
+      const store = countingOfficeStore(fixture.domain);
+      const gate = barrier(2);
+      const { service, stats } = officeDelegationService(store, gate);
+      const results = await Promise.all([
+        service.start(actor(), officeDelegationCommand("concurrent")),
+        service.start(actor(), officeDelegationCommand("concurrent")),
+      ]);
+      assert.deepEqual(results.map((result) => result.disposition).sort(), [
+        "committed",
+        "replayed",
+      ]);
+      assert.equal(store.prepareCalls, 1);
+      assert.deepEqual(stats, { idCalls: 7, routeCalls: 2 });
+      assert.equal(results[0]!.delegation.runId, results[1]!.delegation.runId);
+    } finally {
+      await fixture.close();
+    }
+  });
+
+  test("PostgreSQL Office delegation cursor preserves bytewise order across pages", async () => {
+    const fixture = await postgresFixture();
+    try {
+      await seedOffice(fixture.domain);
+      const { service } = officeDelegationService(fixture.domain);
+      const created = await Promise.all(
+        ["first", "second", "third"].map((key) =>
+          service.start(actor(), officeDelegationCommand(key)),
+        ),
+      );
+      const expected = created
+        .map((result) => result.delegation.delegationId)
+        .sort((left, right) =>
+          Buffer.compare(Buffer.from(right), Buffer.from(left)),
+        );
+      const first = await service.list(actor(), {
+        officeVersionId: "office-version-1",
+        before: null,
+        limit: 2,
+      });
+      assert.notEqual(first.next, null);
+      const second = await service.list(actor(), {
+        officeVersionId: "office-version-1",
+        before: first.next,
+        limit: 2,
+      });
+      assert.deepEqual(
+        [...first.items, ...second.items].map(
+          (item) => item.delegation.delegationId,
+        ),
+        expected,
+      );
+      assert.equal(second.next, null);
+    } finally {
+      await fixture.close();
+    }
+  });
+
   test("fresh then replay uses distinct specialized and general fingerprints", async () => {
     const fixture = await postgresFixture();
     try {
@@ -544,6 +738,109 @@ export function command() {
   };
 }
 
+async function seedOffice(
+  domain: PostgresDomainStore,
+  options: { includeVerifier: boolean } = { includeVerifier: true },
+) {
+  await domain.commitOfficeDefinition({
+    expectedRevision: 0,
+    receipt: {
+      actorId: "actor-1",
+      idempotencyKey: "office-definition-1",
+      requestDigest: "office-definition-fingerprint-1",
+    },
+    definition: {
+      schemaVersion: "crewon.office-definition.v0",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      officeId: "office-1",
+      officeVersionId: "office-version-1",
+      revision: 1,
+      title: "Delivery",
+      members: [
+        {
+          memberId: "node",
+          displayName: "Node",
+          agentVersionId: "node-agent",
+        },
+        ...(options.includeVerifier
+          ? [
+              {
+                memberId: "verifier",
+                displayName: "Verifier",
+                agentVersionId: "verifier-agent",
+              },
+            ]
+          : []),
+      ],
+      executionTargets: [{ targetId: "node", agentVersionId: "node-agent" }],
+      createdByActorId: "actor-1",
+      createdAt: "2026-08-12T00:00:00.000Z",
+    },
+  });
+}
+
+function officeDelegationCommand(idempotencyKey: string) {
+  return {
+    kind: "officeDelegation.start" as const,
+    idempotencyKey,
+    officeVersionId: "office-version-1",
+    workflowVersionId: "workflow-version-1",
+    threadId: "thread-1",
+    input: { topic: "safe" },
+  };
+}
+
+function officeDelegationService(
+  store: OfficeDelegationStore,
+  beforeResolve: (() => Promise<void>) | null = null,
+) {
+  const stats = { idCalls: 0, routeCalls: 0 };
+  return {
+    stats,
+    service: new OfficeDelegationApplicationService({
+      store,
+      authorization: {
+        async authorize() {
+          return { outcome: "allow" as const };
+        },
+      },
+      clock: { now: () => "2026-08-12T00:00:01.000Z" },
+      ids: {
+        nextId: () => `office-delegation-${++stats.idCalls}`,
+      },
+      digester,
+      routeResolver: {
+        async resolveRoute() {
+          stats.routeCalls += 1;
+          await beforeResolve?.();
+          return route;
+        },
+      },
+    }),
+  };
+}
+
+function countingOfficeStore(delegate: OfficeDelegationStore) {
+  return new (class implements OfficeDelegationStore {
+    prepareCalls = 0;
+    async commitOfficeDelegationStart(input: CommitOfficeDelegationStartInput) {
+      return delegate.commitOfficeDelegationStart({
+        ...input,
+        prepare: (authority) => {
+          this.prepareCalls += 1;
+          return input.prepare(authority);
+        },
+      });
+    }
+    async listOfficeDelegations(
+      input: Parameters<OfficeDelegationStore["listOfficeDelegations"]>[0],
+    ) {
+      return delegate.listOfficeDelegations(input);
+    }
+  })();
+}
+
 function barrier(parties: number) {
   let remaining = parties;
   let release!: () => void;
@@ -561,7 +858,8 @@ export function hasCauseCode(code: string) {
   return (error: unknown) => {
     let current = error;
     while (current instanceof Error) {
-      if (current instanceof RunStoreError && current.code === code) return true;
+      if (current instanceof RunStoreError && current.code === code)
+        return true;
       current = current.cause;
     }
     return false;

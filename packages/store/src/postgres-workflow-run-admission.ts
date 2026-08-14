@@ -68,6 +68,15 @@ export async function readPostgresWorkflowRunStartReplay(
   }
 }
 
+export function readPostgresWorkflowRunStartReplayWithinTransaction(
+  client: PoolClient,
+  schema: string,
+  input: CommitWorkflowRunStartInput,
+  digester: WorkflowContentDigester,
+): Promise<CommitWorkflowRunStartResult | null> {
+  return loadReplay(client, schema, input, digester);
+}
+
 export async function commitPostgresWorkflowRunStart(
   client: PoolClient,
   schema: string,
@@ -227,6 +236,9 @@ async function validateReplay(
   const result = stored.result;
   const tenantId = result.run?.state?.tenantId;
   const runId = result.run?.state?.runId;
+  const admissionEvent = result.run?.events?.[0];
+  const admissionOutbox = result.run?.outbox?.[0];
+  const admissionWorkItem = result.run?.workItems?.[0];
   if (
     tenantId !== receipt.tenant_id ||
     tenantId !== input.tenantId ||
@@ -250,8 +262,10 @@ async function validateReplay(
     event_id: string;
     event_json: unknown;
   }>(
-    `SELECT tenant_id,run_id,sequence,event_id,event_json FROM ${schema}.run_events WHERE tenant_id=$1 AND run_id=$2 ORDER BY sequence`,
-    [tenantId, runId],
+    `SELECT tenant_id,run_id,sequence,event_id,event_json
+     FROM ${schema}.run_events
+     WHERE tenant_id=$1 AND run_id=$2 AND event_id=$3`,
+    [tenantId, runId, admissionEvent?.eventId ?? ""],
   );
   const general = await client.query<{
     tenant_id: string;
@@ -272,8 +286,10 @@ async function validateReplay(
     topic: string;
     message_json: unknown;
   }>(
-    `SELECT message_id,tenant_id,run_id,topic,message_json FROM ${schema}.outbox WHERE tenant_id=$1 AND run_id=$2 ORDER BY created_at,message_id`,
-    [tenantId, runId],
+    `SELECT message_id,tenant_id,run_id,topic,message_json
+     FROM ${schema}.outbox
+     WHERE tenant_id=$1 AND run_id=$2 AND message_id=$3`,
+    [tenantId, runId, admissionOutbox?.messageId ?? ""],
   );
   const workItems = await client.query<{
     work_item_id: string;
@@ -282,8 +298,10 @@ async function validateReplay(
     kind: string;
     work_item_json: unknown;
   }>(
-    `SELECT work_item_id,tenant_id,run_id,kind,work_item_json FROM ${schema}.work_items WHERE tenant_id=$1 AND run_id=$2 ORDER BY created_at,work_item_id`,
-    [tenantId, runId],
+    `SELECT work_item_id,tenant_id,run_id,kind,work_item_json
+     FROM ${schema}.work_items
+     WHERE tenant_id=$1 AND run_id=$2 AND work_item_id=$3`,
+    [tenantId, runId, admissionWorkItem?.workItemId ?? ""],
   );
   const root = await client.query<{
     value_id: string;
@@ -319,7 +337,7 @@ async function validateReplay(
     | { valueId?: unknown; valueDigest?: unknown }
     | undefined;
   if (
-    stableJson(state) !== stableJson(result.run.state) ||
+    !sameWorkflowAdmissionRunIdentity(state, result.run.state) ||
     stableJson(events.rows.map(({ event_json }) => event_json)) !==
       stableJson(result.run.events) ||
     !events.rows.every((row, index) => {
@@ -663,6 +681,34 @@ function validateSchedulerWork(
     typeof value.schedulerOperationId !== "string"
   )
     throw new RunStoreError("workflow_scheduler_work_item_mismatch");
+}
+
+function sameWorkflowAdmissionRunIdentity(
+  current: RunState,
+  admitted: RunState,
+): boolean {
+  return (
+    current.revision >= admitted.revision &&
+    current.lastSequence >= admitted.lastSequence &&
+    current.runId === admitted.runId &&
+    current.threadId === admitted.threadId &&
+    current.tenantId === admitted.tenantId &&
+    current.spaceId === admitted.spaceId &&
+    current.createdByActorId === admitted.createdByActorId &&
+    current.authorityId === admitted.authorityId &&
+    current.runtimeGeneration === admitted.runtimeGeneration &&
+    current.agentVersionId === admitted.agentVersionId &&
+    current.policySnapshotId === admitted.policySnapshotId &&
+    current.workspaceBindingId === admitted.workspaceBindingId &&
+    stableJson(current.workflowVersionBinding) ===
+      stableJson(admitted.workflowVersionBinding) &&
+    current.collaborationMode === admitted.collaborationMode &&
+    current.purpose === admitted.purpose &&
+    stableJson(current.origin ?? null) ===
+      stableJson(admitted.origin ?? null) &&
+    stableJson(current.goalBinding) === stableJson(admitted.goalBinding) &&
+    current.createdAt === admitted.createdAt
+  );
 }
 
 async function advisoryLock(client: PoolClient, key: string) {

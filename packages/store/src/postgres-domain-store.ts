@@ -23,6 +23,8 @@ import {
   type ExpireModelProviderSettingsInput,
   type ExpireModelProviderSettingsResult,
   type ModelProviderSettingsState,
+  OfficeDelegationStoreError,
+  type CommitOfficeDelegationStartInput,
   type PrepareModelProviderSettingsInput,
   type PrepareModelProviderSettingsResult,
   type DomainStore,
@@ -163,6 +165,12 @@ import {
   POSTGRES_KNOWLEDGE_SCHEMA_VERSION,
 } from "./knowledge-schema.ts";
 import { PostgresOfficeStore } from "./postgres-office-store.ts";
+import {
+  commitPostgresOfficeDelegationStart,
+  listPostgresOfficeDelegations,
+  readPostgresOfficeDelegationReplay,
+} from "./postgres-office-delegation-store.ts";
+import { commitPostgresWorkflowRunStart } from "./postgres-workflow-run-admission.ts";
 
 const workflowDigester: WorkflowContentDigester = {
   sha256: (value) =>
@@ -183,7 +191,10 @@ export class PostgresDomainStore
       this.schemaSql(),
       () => this.assertOpen(),
     );
-    this.#officeAuthority = new PostgresOfficeStore(this.pool, this.schemaSql());
+    this.#officeAuthority = new PostgresOfficeStore(
+      this.pool,
+      this.schemaSql(),
+    );
   }
   workflowVersionStore(
     digester: WorkflowContentDigester,
@@ -305,9 +316,86 @@ export class PostgresDomainStore
       client.release();
     }
   }
-  commitOfficeDefinition(input: Parameters<PostgresOfficeStore["commitOfficeDefinition"]>[0]) { return this.#officeAuthority.commitOfficeDefinition(input); }
-  loadOfficeDefinition(input: Parameters<PostgresOfficeStore["loadOfficeDefinition"]>[0]) { return this.#officeAuthority.loadOfficeDefinition(input); }
-  listOfficeDefinitions(input: Parameters<PostgresOfficeStore["listOfficeDefinitions"]>[0]) { return this.#officeAuthority.listOfficeDefinitions(input); }
+  commitOfficeDefinition(
+    input: Parameters<PostgresOfficeStore["commitOfficeDefinition"]>[0],
+  ) {
+    return this.#officeAuthority.commitOfficeDefinition(input);
+  }
+  loadOfficeDefinition(
+    input: Parameters<PostgresOfficeStore["loadOfficeDefinition"]>[0],
+  ) {
+    return this.#officeAuthority.loadOfficeDefinition(input);
+  }
+  listOfficeDefinitions(
+    input: Parameters<PostgresOfficeStore["listOfficeDefinitions"]>[0],
+  ) {
+    return this.#officeAuthority.listOfficeDefinitions(input);
+  }
+
+  async commitOfficeDelegationStart(input: CommitOfficeDelegationStartInput) {
+    this.assertOpen();
+    const replay = await readPostgresOfficeDelegationReplay(
+      this.pool,
+      this.schemaSql(),
+      input,
+      workflowDigester,
+    );
+    if (replay !== null) return replay;
+    const candidateRoute = await input.resolveCandidateRoute();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await commitPostgresOfficeDelegationStart(
+        client,
+        this.schemaSql(),
+        input,
+        candidateRoute,
+        workflowDigester,
+        () =>
+          this.loadThreadWithin(
+            client,
+            { tenantId: input.tenantId, threadId: input.threadId },
+            true,
+          ),
+        (workflowInput) =>
+          commitPostgresWorkflowRunStart(
+            client,
+            this.schemaSql(),
+            workflowInput,
+            candidateRoute,
+            workflowDigester,
+            (commit, beforeWrite) =>
+              this.commitRunWithin(client, commit, {
+                beforeWrite,
+                workItemPayloadKind: "workflowScheduler",
+              }),
+          ),
+      );
+      await client.query("COMMIT");
+      return result;
+    } catch (error) {
+      await rollbackPostgres(client);
+      if (
+        error instanceof OfficeDelegationStoreError &&
+        error.code === "office_delegation_prepare_rejected" &&
+        error.cause instanceof Error
+      ) {
+        throw error.cause;
+      }
+      throw error instanceof OfficeDelegationStoreError
+        ? error
+        : normalizePostgresError(error);
+    } finally {
+      client.release();
+    }
+  }
+
+  listOfficeDelegations(
+    input: Parameters<typeof listPostgresOfficeDelegations>[2],
+  ) {
+    this.assertOpen();
+    return listPostgresOfficeDelegations(this.pool, this.schemaSql(), input);
+  }
 
   loadKnowledgeReceipt(
     query: KnowledgeReceiptQuery,

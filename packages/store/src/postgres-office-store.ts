@@ -17,7 +17,52 @@ export class PostgresOfficeStore implements OfficeDefinitionStore {
   }
   async migrate() {
     await this.#pool.query(
-      `CREATE TABLE IF NOT EXISTS ${this.#schema}.office_definitions (tenant_id TEXT NOT NULL, space_id TEXT NOT NULL, office_id TEXT NOT NULL, office_version_id TEXT NOT NULL, revision INTEGER NOT NULL CHECK (revision > 0), created_at TEXT NOT NULL, definition_json JSONB NOT NULL, PRIMARY KEY (tenant_id, space_id, office_version_id), UNIQUE (tenant_id, space_id, office_id, revision)); CREATE INDEX IF NOT EXISTS office_definitions_list ON ${this.#schema}.office_definitions (tenant_id, space_id, created_at DESC, office_version_id DESC); CREATE TABLE IF NOT EXISTS ${this.#schema}.office_create_receipts (tenant_id TEXT NOT NULL, space_id TEXT NOT NULL, actor_id TEXT NOT NULL, idempotency_key TEXT NOT NULL, request_digest TEXT NOT NULL, office_version_id TEXT NOT NULL, PRIMARY KEY (tenant_id, space_id, actor_id, idempotency_key));`,
+      `CREATE TABLE IF NOT EXISTS ${this.#schema}.office_definitions (
+         tenant_id TEXT NOT NULL, space_id TEXT NOT NULL, office_id TEXT NOT NULL,
+         office_version_id TEXT NOT NULL, revision INTEGER NOT NULL CHECK (revision > 0),
+         created_at TEXT NOT NULL, definition_json JSONB NOT NULL,
+         PRIMARY KEY (tenant_id, space_id, office_version_id),
+         UNIQUE (tenant_id, space_id, office_id, revision)
+       );
+       CREATE INDEX IF NOT EXISTS office_definitions_list
+         ON ${this.#schema}.office_definitions
+         (tenant_id, space_id, created_at DESC, office_version_id DESC);
+       CREATE TABLE IF NOT EXISTS ${this.#schema}.office_create_receipts (
+         tenant_id TEXT NOT NULL, space_id TEXT NOT NULL, actor_id TEXT NOT NULL,
+         idempotency_key TEXT NOT NULL, request_digest TEXT NOT NULL,
+         office_version_id TEXT NOT NULL,
+         PRIMARY KEY (tenant_id, space_id, actor_id, idempotency_key)
+       );
+       CREATE TABLE IF NOT EXISTS ${this.#schema}.office_delegations (
+         tenant_id TEXT NOT NULL, space_id TEXT NOT NULL,
+         delegation_id TEXT NOT NULL, office_id TEXT NOT NULL,
+         office_version_id TEXT NOT NULL, workflow_version_id TEXT NOT NULL,
+         thread_id TEXT NOT NULL, run_id TEXT NOT NULL, created_at TEXT NOT NULL,
+         delegation_json JSONB NOT NULL,
+         PRIMARY KEY (tenant_id, delegation_id),
+         UNIQUE (tenant_id, run_id),
+         FOREIGN KEY (tenant_id, space_id, office_version_id)
+           REFERENCES ${this.#schema}.office_definitions
+             (tenant_id, space_id, office_version_id),
+         FOREIGN KEY (tenant_id, run_id)
+           REFERENCES ${this.#schema}.run_snapshots (tenant_id, run_id)
+       );
+       CREATE INDEX IF NOT EXISTS office_delegations_list
+         ON ${this.#schema}.office_delegations
+         (tenant_id, space_id, office_version_id, created_at DESC,
+          delegation_id COLLATE "C" DESC);
+       CREATE TABLE IF NOT EXISTS ${this.#schema}.office_delegation_receipts (
+         tenant_id TEXT NOT NULL, space_id TEXT NOT NULL,
+         scope TEXT NOT NULL, idempotency_key TEXT NOT NULL,
+         fingerprint TEXT NOT NULL, delegation_id TEXT NOT NULL, run_id TEXT NOT NULL,
+         PRIMARY KEY (scope, idempotency_key),
+         UNIQUE (tenant_id, delegation_id),
+         UNIQUE (tenant_id, run_id),
+         FOREIGN KEY (tenant_id, delegation_id)
+           REFERENCES ${this.#schema}.office_delegations (tenant_id, delegation_id),
+         FOREIGN KEY (tenant_id, run_id)
+           REFERENCES ${this.#schema}.run_snapshots (tenant_id, run_id)
+       );`,
     );
   }
   async commitOfficeDefinition(
