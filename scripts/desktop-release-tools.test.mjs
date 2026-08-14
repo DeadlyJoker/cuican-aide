@@ -12,6 +12,7 @@ import {
   nodeReleasePlan,
   scanArtifactRoots,
   windowsSigningConfig,
+  writeUpdaterPublicKey,
 } from "./desktop-release-tools.mjs";
 
 test("plans official Node 24 distributions for both desktop targets", () => {
@@ -191,6 +192,68 @@ test("writes only a SHA-256 HTTPS Windows signing override", () => {
         timestampUrl: "http://timestamp.test",
       }),
     /thumbprint_invalid/u,
+  );
+});
+
+test("writes the exact updater public key embedded in Tauri config", () => {
+  const root = temporaryDirectory();
+  const output = join(root, "updater.pub");
+  writeUpdaterPublicKey({
+    configPath: join(
+      import.meta.dirname,
+      "..",
+      "apps",
+      "crewon-ui",
+      "src-tauri",
+      "tauri.conf.json",
+    ),
+    outputPath: output,
+  });
+  assert.equal(
+    readFileSync(output, "utf8"),
+    "untrusted comment: minisign public key: 118CA5AE059C230D\n" +
+      "RWQNI5wFrqWMES5TzpOjJSNXOhYk1H311BPkej9W69zdDPDtOcQe4zI7\n",
+  );
+  assert.throws(
+    () =>
+      writeUpdaterPublicKey({
+        configPath: join(
+          import.meta.dirname,
+          "..",
+          "apps",
+          "crewon-ui",
+          "src-tauri",
+          "tauri.conf.json",
+        ),
+        outputPath: output,
+      }),
+    /public_key_output_invalid/u,
+  );
+});
+
+test("rejects malformed updater public key configuration", () => {
+  const root = temporaryDirectory();
+  const config = join(root, "tauri.conf.json");
+  writeFileSync(
+    config,
+    JSON.stringify({ plugins: { updater: { pubkey: "!!!!" } } }),
+  );
+  assert.throws(
+    () =>
+      writeUpdaterPublicKey({
+        configPath: config,
+        outputPath: join(root, "updater.pub"),
+      }),
+    /public_key_invalid/u,
+  );
+  writeFileSync(config, "not json");
+  assert.throws(
+    () =>
+      writeUpdaterPublicKey({
+        configPath: config,
+        outputPath: join(root, "updater.pub"),
+      }),
+    /updater_config_invalid/u,
   );
 });
 

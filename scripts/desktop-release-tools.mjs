@@ -15,6 +15,7 @@ import {
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { TextDecoder } from "node:util";
 
 import { REMOVED_RUNTIME_MARKERS } from "./stage-desktop-runtime.mjs";
 
@@ -203,6 +204,50 @@ export function windowsSigningConfig({ thumbprint, timestampUrl }) {
   };
 }
 
+export function writeUpdaterPublicKey({ configPath, outputPath }) {
+  let config;
+  try {
+    config = JSON.parse(readFileSync(configPath, "utf8"));
+  } catch {
+    throw new Error("desktop_updater_config_invalid");
+  }
+  const encoded = config?.plugins?.updater?.pubkey;
+  if (
+    typeof encoded !== "string" ||
+    encoded.length === 0 ||
+    encoded.length > 16_384 ||
+    !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(
+      encoded,
+    )
+  ) {
+    throw new Error("desktop_updater_public_key_invalid");
+  }
+  const decoded = Buffer.from(encoded, "base64");
+  if (decoded.toString("base64") !== encoded)
+    throw new Error("desktop_updater_public_key_invalid");
+  let publicKey;
+  try {
+    publicKey = new TextDecoder("utf-8", {
+      fatal: true,
+      ignoreBOM: true,
+    }).decode(decoded);
+  } catch {
+    throw new Error("desktop_updater_public_key_invalid");
+  }
+  if (
+    !/^untrusted comment: [^\r\n]{1,1024}\n[A-Za-z0-9+/]{56}\n$/u.test(
+      publicKey,
+    )
+  ) {
+    throw new Error("desktop_updater_public_key_invalid");
+  }
+  try {
+    writeFileSync(outputPath, decoded, { flag: "wx", mode: 0o600 });
+  } catch {
+    throw new Error("desktop_updater_public_key_output_invalid");
+  }
+}
+
 function exactlyOne(values, kind) {
   if (values.length !== 1)
     throw new Error(`desktop_${kind}_count_invalid:${values.length}`);
@@ -351,6 +396,13 @@ function main() {
       timestampUrl: input.one("timestamp-url"),
     });
     writeFileSync(input.one("output"), `${JSON.stringify(config, null, 2)}\n`);
+    return;
+  }
+  if (command === "updater-public-key") {
+    writeUpdaterPublicKey({
+      configPath: input.one("config"),
+      outputPath: input.one("output"),
+    });
     return;
   }
   throw new Error(`desktop_release_command_invalid:${command ?? ""}`);

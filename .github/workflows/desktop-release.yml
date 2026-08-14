@@ -153,6 +153,24 @@ jobs:
         run: node --experimental-strip-types scripts/packaged-workflow-app-smoke.ts
       - name: Collect signed macOS assets
         run: node scripts/desktop-release-tools.mjs collect --target "$TARGET" --bundle-root "apps/crewon-ui/src-tauri/target/$TARGET/release/bundle" --output release-macos
+      - name: Verify macOS updater signature with embedded public key
+        shell: bash
+        run: |
+          set -euo pipefail
+          public_key="$RUNNER_TEMP/crewon-updater.pub"
+          node scripts/desktop-release-tools.mjs updater-public-key \
+            --config apps/crewon-ui/src-tauri/tauri.conf.json \
+            --output "$public_key"
+          cargo build --locked \
+            --manifest-path apps/crewon-ui/src-tauri/Cargo.toml \
+            --release --target "$TARGET" \
+            --bin crewon-updater-signature-verifier
+          shopt -s nullglob
+          updaters=(release-macos/*.app.tar.gz)
+          test "${#updaters[@]}" -eq 1
+          test -f "${updaters[0]}.sig"
+          "apps/crewon-ui/src-tauri/target/$TARGET/release/crewon-updater-signature-verifier" \
+            "$public_key" "${updaters[0]}" "${updaters[0]}.sig"
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: desktop-macos-arm64
@@ -294,6 +312,25 @@ jobs:
       - name: Collect signed Windows assets
         shell: pwsh
         run: node scripts/desktop-release-tools.mjs collect --target $env:TARGET --bundle-root "apps/crewon-ui/src-tauri/target/$env:TARGET/release/bundle" --output release-windows
+      - name: Verify Windows updater signature with embedded public key
+        shell: pwsh
+        run: |
+          $publicKey = Join-Path $env:RUNNER_TEMP "crewon-updater.pub"
+          node scripts/desktop-release-tools.mjs updater-public-key `
+            --config apps/crewon-ui/src-tauri/tauri.conf.json `
+            --output $publicKey
+          cargo build --locked `
+            --manifest-path apps/crewon-ui/src-tauri/Cargo.toml `
+            --release --target $env:TARGET `
+            --bin crewon-updater-signature-verifier
+          if ($LASTEXITCODE -ne 0) { throw "updater verifier build failed: $LASTEXITCODE" }
+          $updaters = @(Get-ChildItem release-windows -File -Filter "*-setup.exe")
+          if ($updaters.Count -ne 1) { throw "expected one Windows updater artifact" }
+          $signature = "$($updaters[0].FullName).sig"
+          if (-not (Test-Path $signature -PathType Leaf)) { throw "Windows updater signature missing" }
+          $verifier = "apps/crewon-ui/src-tauri/target/$env:TARGET/release/crewon-updater-signature-verifier.exe"
+          & $verifier $publicKey $updaters[0].FullName $signature
+          if ($LASTEXITCODE -ne 0) { throw "Windows updater signature verification failed" }
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         with:
           name: desktop-windows-x64
