@@ -93,6 +93,7 @@ import {
   loadThread,
   replayCreateReceiptSnapshot,
   replayInvocationReceiptInTransaction,
+  replayInvocationReceiptSnapshot,
 } from "./postgres-automation-context.ts";
 
 export async function commitPostgresAutomationCreate(
@@ -201,6 +202,24 @@ export async function commitPostgresAutomationInvocation(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    await advisoryLock(
+      client,
+      `idempotency:${input.idempotency.scope}:${input.idempotency.key}`,
+    );
+    const prior = await loadInvocationReceipt(
+      client,
+      schema,
+      input.tenantId,
+      input.idempotency,
+    );
+    if (prior !== null) {
+      await client.query("COMMIT");
+      return replayInvocationReceiptSnapshot(client, schema, {
+        tenantId: input.tenantId,
+        automationId: input.definitionFence.automationId,
+        idempotency: input.idempotency,
+      });
+    }
     const result = await commitPostgresAutomationInvocationInTransaction(
       client,
       schema,
