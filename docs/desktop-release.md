@@ -50,9 +50,6 @@ The tag must be exactly `desktop-v<apps/crewon-ui/package.json version>`.
 `workflow_dispatch` accepts an existing tag for retrying a failed draft. It
 does not create or retarget tags.
 
-`pnpm release:publish` is the old single-machine macOS publisher. It is not the
-canonical production path and must not be used to replace the release matrix.
-
 ## Supply-chain and build gates
 
 Each platform job reads the version from `.node-version`, downloads the matching

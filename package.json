@@ -8,7 +8,6 @@
     "ui:build": "pnpm --filter @crewon/ui build",
     "ui:desktop": "pnpm --filter @crewon/ui desktop",
     "release:desktop": "node scripts/release-desktop.mjs",
-    "release:publish": "node scripts/release-local.mjs",
     "crewon:dev": "node scripts/crewon-desktop-dev.mjs",
     "control-api:start": "pnpm --filter @crewon/control-api start",
     "control-api:test": "pnpm --filter @crewon/control-api test",
