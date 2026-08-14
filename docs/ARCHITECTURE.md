@@ -39,18 +39,18 @@ CatDesk 是一个**桌面级 AI Agent 工作台**。它不是"套壳聊天框"�
 
 核心能力面：
 
-|能力域|说明|
-| ------| ------------------------------------------------------------------------------------|
-|**对话与 Agent 执行**|流式对话、多轮会话、SubAgent 子会话、工具调用可视化、失败重试与恢复|
-|**工作区（Workspace）**|项目/会话双层组织、文件树、文件监听、产物（Artifact）追踪|
-|**内嵌终端**|node-pty 驱动的真实 PTY，Agent 与用户共用|
-|**内嵌浏览器**|WebContentsView 驱动的可编排浏览器，供 Agent 做网页操作与信息抓取|
-|**文件预览**|Monaco 代码预览 + 图片/音视频原生播放 + Office/PDF 在线渲染|
-|**扩展生态**|Plugin（容器）/ Skill（能力包）/ MCP Server / Slash Command / Subagent|
-|**自动化（Automation）**|RRule 定时调度 + 事件触发，无人值守跑 Agent 任务|
-|**多形态入口**|主窗口、Quick Chat（Raycast 式唤起）、Popout 独立会话窗、桌宠 Overlay、CLI、DeepLink|
-|**语音输入**|原生键盘监听 Fn 键 Push-to-Talk + 流式 ASR|
-|**云端协同**|本机作为 Channel 接入远端 Desk / 云端沙箱容器|
+| 能力域                   | 说明                                                                                 |
+| ------------------------ | ------------------------------------------------------------------------------------ |
+| **对话与 Agent 执行**    | 流式对话、多轮会话、SubAgent 子会话、工具调用可视化、失败重试与恢复                  |
+| **工作区（Workspace）**  | 项目/会话双层组织、文件树、文件监听、产物（Artifact）追踪                            |
+| **内嵌终端**             | node-pty 驱动的真实 PTY，Agent 与用户共用                                            |
+| **内嵌浏览器**           | WebContentsView 驱动的可编排浏览器，供 Agent 做网页操作与信息抓取                    |
+| **文件预览**             | Monaco 代码预览 + 图片/音视频原生播放 + Office/PDF 在线渲染                          |
+| **扩展生态**             | Plugin（容器）/ Skill（能力包）/ MCP Server / Slash Command / Subagent               |
+| **自动化（Automation）** | RRule 定时调度 + 事件触发，无人值守跑 Agent 任务                                     |
+| **多形态入口**           | 主窗口、Quick Chat（Raycast 式唤起）、Popout 独立会话窗、桌宠 Overlay、CLI、DeepLink |
+| **语音输入**             | 原生键盘监听 Fn 键 Push-to-Talk + 流式 ASR                                           |
+| **云端协同**             | 本机作为 Channel 接入远端 Desk / 云端沙箱容器                                        |
 
 ### 1.2 六个核心设计目标
 
@@ -66,7 +66,7 @@ CatDesk 是一个**桌面级 AI Agent 工作台**。它不是"套壳聊天框"�
 
 > 上游内核（OSS）与下游定制（distro）之间零 patch、零 fork 分叉。
 
-通过 **Slots 文件影子覆盖（Shadow）**  机制实现：distro 提供同路径同名文件，构建时由 `distroResolvePlugin` 覆盖 OSS 默认实现。全仓 **70+ 个 **​ **​`*Slots.ts`​** 就是这套契约的落地。
+通过 **Slots 文件影子覆盖（Shadow）** 机制实现：distro 提供同路径同名文件，构建时由 `distroResolvePlugin` 覆盖 OSS 默认实现。全仓 **70+ 个 **​ **​`*Slots.ts`​** 就是这套契约的落地。
 
 **G3 — 双运行时同构（Local / Cloud Isomorphism）**
 
@@ -98,26 +98,26 @@ Bridge 层每个方法都是 `getElectronAPI()?.method?.() ?? <安全默认值>`
 
 ### 2.1 选型总表
 
-|层次|技术|版本/形态|选择理由|被拒方案与原因|
-| ----| -------------------------------------| ---------------------------------| -----------------------------------------------------------------------------------------------| -----------------------------------------------------------------------------------------------------------------------------------------------|
-|**桌面容器**|Electron|ESM 主进程|需要 Node.js 全能力（child_process / PTY / FFI / 原生模块）+ Chromium 渲染 + 成熟的自动更新生态|**Tauri**：Rust 生态对 node-pty / koffi / better-sqlite3 这类既有 Node 原生依赖不友好，且 Agent SDK 是 Node 包；**纯 Web**：无法访问本地文件系统与终端，产品立不住|
-|**UI 框架**|React 19|`StrictMode` + `createRoot`|团队熟悉度、并发特性（`useSyncExternalStore` 用于命令/快捷键注册表）、生态（Radix / dnd-kit / TanStack Virtual）|**Vue/Svelte**：团队既有 UI SDK（`@catpaw-ui/*`）是 React 组件库|
-|**状态管理**|Zustand|单 store + slice 自注册|无 Provider 嵌套、选择器订阅粒度细、`useShallow` 控制 re-render、可在非组件层（service）直接 `getState()`|**Redux**：样板过重；**Context**：大 store 下重渲染不可控；**Jotai**：原子过多时启动编排（beforeInit/afterInit 顺序）难表达|
-|**构建工具**|Vite + esbuild/SWC|`vite-env.d.ts` 可见|冷启动快、HMR 快、`isolatedModules` 保证类型导入被擦除|**Webpack**：Electron 多入口场景下配置与构建速度均劣|
-|**语言**|TypeScript|`strict` + `isolatedModules`|跨进程契约必须靠类型锁死|—|
-|**测试**|Vitest + Testing Library + happy-dom|168 个测试文件|与 Vite 共用配置与转换管线，零额外构建成本|**Jest**：需要独立 transform 配置，与 Vite 的 ESM/别名解析易漂移|
-|**样式**|Tailwind CSS + CVA + `clsx`/`tailwind-merge`|`index.css` 为入口|原子化避免样式冲突；CVA 表达组件变体|**CSS-in-JS**：Electron 下运行时开销与 FOUC 问题|
-|**无障碍组件**|Radix UI|锁定 `1.1.17`|无样式、可访问性达标、Portal 可控（配合 BrowserView overlay 隐藏）|**MUI/AntD**：样式侵入强，与 UI SDK 冲突|
-|**编辑器**|Monaco + Lexical|Monaco 只读预览；Lexical 做输入框|Monaco 是 VSCode 同款，代码预览体验一致；Lexical 支持富文本 mention/slash 的可扩展节点模型|**CodeMirror**：与 VSCode 视觉差异大；**ProseMirror**：API 陡峭|
-|**终端**|`@xterm/xterm` + `node-pty`|+ `addon-fit` / `addon-unicode11`|事实标准，性能与兼容性最佳|—|
-|**本地数据库**|better-sqlite3|asarUnpack|同步 API 适合主进程消息存储；单文件易备份/迁移|**IndexedDB**：在渲染进程，主进程无法直接写；**LevelDB**：无 SQL 查询能力|
-|**轻量配置存储**|electron-store|JSON|设置项这类小体量强一致数据用 JSON 更易调试/手改|—|
-|**原生 FFI**|koffi|隔离在 utilityProcess|macOS 键盘 CGEvent Tap 监听（Fn 键 Push-to-Talk）|**N-API 自研插件**：需维护多平台编译产物|
-|**日志**|electron-log + 自研多文件 WriteStream|`main/renderer/agent/conversations` 分文件|electron-log 负责 console hook 与轮转；自研流负责高频 agent 事件的零开销写入|单一 electron-log：高频 agent 事件会污染 main.log|
-|**调度**|rrule|自动化定时任务|iCalendar RRule 是日程重复规则的工业标准|**node-cron**：无法表达"每月第二个周二"这类规则|
-|**Schema 校验**|zod|plugin.json / marketplace.json|运行时校验 + `z.infer` 反推类型，杜绝类型与校验漂移|手写校验：必然与类型定义漂移|
-|**打包**|electron-builder|`electron-builder.json`|三平台产物 + Electron Fuses + asarUnpack 的成熟支持|**electron-forge**：Fuses/差量更新的可控性弱|
-|**包管理**|pnpm workspace|`pnpm-workspace.yaml`|硬链接节省磁盘、`overrides` 精确锁定传递依赖版本、`onlyBuiltDependencies` 白名单控制原生模块编译|**npm/yarn**：幽灵依赖导致打包体积失控|
+| 层次             | 技术                                         | 版本/形态                                  | 选择理由                                                                                                         | 被拒方案与原因                                                                                                                                                     |
+| ---------------- | -------------------------------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **桌面容器**     | Electron                                     | ESM 主进程                                 | 需要 Node.js 全能力（child_process / PTY / FFI / 原生模块）+ Chromium 渲染 + 成熟的自动更新生态                  | **Tauri**：Rust 生态对 node-pty / koffi / better-sqlite3 这类既有 Node 原生依赖不友好，且 Agent SDK 是 Node 包；**纯 Web**：无法访问本地文件系统与终端，产品立不住 |
+| **UI 框架**      | React 19                                     | `StrictMode` + `createRoot`                | 团队熟悉度、并发特性（`useSyncExternalStore` 用于命令/快捷键注册表）、生态（Radix / dnd-kit / TanStack Virtual） | **Vue/Svelte**：团队既有 UI SDK（`@catpaw-ui/*`）是 React 组件库                                                                                                   |
+| **状态管理**     | Zustand                                      | 单 store + slice 自注册                    | 无 Provider 嵌套、选择器订阅粒度细、`useShallow` 控制 re-render、可在非组件层（service）直接 `getState()`        | **Redux**：样板过重；**Context**：大 store 下重渲染不可控；**Jotai**：原子过多时启动编排（beforeInit/afterInit 顺序）难表达                                        |
+| **构建工具**     | Vite + esbuild/SWC                           | `vite-env.d.ts` 可见                       | 冷启动快、HMR 快、`isolatedModules` 保证类型导入被擦除                                                           | **Webpack**：Electron 多入口场景下配置与构建速度均劣                                                                                                               |
+| **语言**         | TypeScript                                   | `strict` + `isolatedModules`               | 跨进程契约必须靠类型锁死                                                                                         | —                                                                                                                                                                  |
+| **测试**         | Vitest + Testing Library + happy-dom         | 168 个测试文件                             | 与 Vite 共用配置与转换管线，零额外构建成本                                                                       | **Jest**：需要独立 transform 配置，与 Vite 的 ESM/别名解析易漂移                                                                                                   |
+| **样式**         | Tailwind CSS + CVA + `clsx`/`tailwind-merge` | `index.css` 为入口                         | 原子化避免样式冲突；CVA 表达组件变体                                                                             | **CSS-in-JS**：Electron 下运行时开销与 FOUC 问题                                                                                                                   |
+| **无障碍组件**   | Radix UI                                     | 锁定 `1.1.17`                              | 无样式、可访问性达标、Portal 可控（配合 BrowserView overlay 隐藏）                                               | **MUI/AntD**：样式侵入强，与 UI SDK 冲突                                                                                                                           |
+| **编辑器**       | Monaco + Lexical                             | Monaco 只读预览；Lexical 做输入框          | Monaco 是 VSCode 同款，代码预览体验一致；Lexical 支持富文本 mention/slash 的可扩展节点模型                       | **CodeMirror**：与 VSCode 视觉差异大；**ProseMirror**：API 陡峭                                                                                                    |
+| **终端**         | `@xterm/xterm` + `node-pty`                  | + `addon-fit` / `addon-unicode11`          | 事实标准，性能与兼容性最佳                                                                                       | —                                                                                                                                                                  |
+| **本地数据库**   | better-sqlite3                               | asarUnpack                                 | 同步 API 适合主进程消息存储；单文件易备份/迁移                                                                   | **IndexedDB**：在渲染进程，主进程无法直接写；**LevelDB**：无 SQL 查询能力                                                                                          |
+| **轻量配置存储** | electron-store                               | JSON                                       | 设置项这类小体量强一致数据用 JSON 更易调试/手改                                                                  | —                                                                                                                                                                  |
+| **原生 FFI**     | koffi                                        | 隔离在 utilityProcess                      | macOS 键盘 CGEvent Tap 监听（Fn 键 Push-to-Talk）                                                                | **N-API 自研插件**：需维护多平台编译产物                                                                                                                           |
+| **日志**         | electron-log + 自研多文件 WriteStream        | `main/renderer/agent/conversations` 分文件 | electron-log 负责 console hook 与轮转；自研流负责高频 agent 事件的零开销写入                                     | 单一 electron-log：高频 agent 事件会污染 main.log                                                                                                                  |
+| **调度**         | rrule                                        | 自动化定时任务                             | iCalendar RRule 是日程重复规则的工业标准                                                                         | **node-cron**：无法表达"每月第二个周二"这类规则                                                                                                                    |
+| **Schema 校验**  | zod                                          | plugin.json / marketplace.json             | 运行时校验 + `z.infer` 反推类型，杜绝类型与校验漂移                                                              | 手写校验：必然与类型定义漂移                                                                                                                                       |
+| **打包**         | electron-builder                             | `electron-builder.json`                    | 三平台产物 + Electron Fuses + asarUnpack 的成熟支持                                                              | **electron-forge**：Fuses/差量更新的可控性弱                                                                                                                       |
+| **包管理**       | pnpm workspace                               | `pnpm-workspace.yaml`                      | 硬链接节省磁盘、`overrides` 精确锁定传递依赖版本、`onlyBuiltDependencies` 白名单控制原生模块编译                 | **npm/yarn**：幽灵依赖导致打包体积失控                                                                                                                             |
 
 ### 2.2 几个关键选型的深层理由
 
@@ -158,9 +158,9 @@ native 控制面（`startMonitor` / `stopMonitor` / `setWatcherInterval` / `setA
 
 ```yaml
 overrides:
-  '@catx/desk-channel-sdk': '0.1.69'
-  '@catx/desk-channel-sdk-node>@catx/desk-channel-sdk': '0.1.69'   # 嵌套覆盖
-  '@radix-ui/react-dialog': '1.1.17'
+  "@catx/desk-channel-sdk": "0.1.69"
+  "@catx/desk-channel-sdk-node>@catx/desk-channel-sdk": "0.1.69" # 嵌套覆盖
+  "@radix-ui/react-dialog": "1.1.17"
 ```
 
 Radix 被锁定是因为 Dialog/Popover 的 Portal 行为变更会直接破坏 `useOverlayAutoHide`（Radix 弹层打开时必须隐藏 BrowserView overlay，否则原生视图会盖住弹层）。`desk-channel-sdk` 的嵌套覆盖是为了保证 node 版与 web 版 SDK 走**同一份协议定义**，避免协议漂移。
@@ -288,42 +288,43 @@ localAgentChannel                cloudAgentChannel           │
 
 ### 4.1 进程清单
 
-|进程|数量|职责|隔离动机|
-| ----| ------------| -------------------------------------------------| ----------------------------------|
-|**Main（主进程）**|1|服务编排、IPC 路由、窗口/生命周期管理、Agent 调度|—|
-|**Renderer（渲染进程）**|N|全部 UI，按 hash 路由分化为不同"窗口角色"|Chromium 站点隔离|
-|**Preload**|每窗口 1|`contextBridge` 暴露 `window.electronAPI`|上下文隔离，渲染层无 Node 权限|
-|**Agent CLI 子进程**|每会话 1|`catpaw-cli` + `@catpaw/agent-sdk` 执行 Agent Loop|Agent 崩溃不拖垮宿主；可独立 kill|
-|**agent-host 子进程**|0..1|Channel 插件、移动端配对、Pike 长连接|网络长连接与主进程解耦；可按 `product.json` 关闭|
-|**keyboard-helper（utilityProcess）**|0..1 (macOS)|koffi + CGEvent Tap 键盘监听|**隔离 FFI 死锁风险**（见 2.2）|
-|**PTY 子进程**|每终端 1|node-pty 真实 shell|—|
-|**Wenshu SW 隐藏窗口**|0..1|Chrome 扩展 Service Worker 环境模拟|让原插件代码零修改运行|
+| 进程                                  | 数量         | 职责                                               | 隔离动机                                         |
+| ------------------------------------- | ------------ | -------------------------------------------------- | ------------------------------------------------ |
+| **Main（主进程）**                    | 1            | 服务编排、IPC 路由、窗口/生命周期管理、Agent 调度  | —                                                |
+| **Renderer（渲染进程）**              | N            | 全部 UI，按 hash 路由分化为不同"窗口角色"          | Chromium 站点隔离                                |
+| **Preload**                           | 每窗口 1     | `contextBridge` 暴露 `window.electronAPI`          | 上下文隔离，渲染层无 Node 权限                   |
+| **Agent CLI 子进程**                  | 每会话 1     | `catpaw-cli` + `@catpaw/agent-sdk` 执行 Agent Loop | Agent 崩溃不拖垮宿主；可独立 kill                |
+| **agent-host 子进程**                 | 0..1         | Channel 插件、移动端配对、Pike 长连接              | 网络长连接与主进程解耦；可按 `product.json` 关闭 |
+| **keyboard-helper（utilityProcess）** | 0..1 (macOS) | koffi + CGEvent Tap 键盘监听                       | **隔离 FFI 死锁风险**（见 2.2）                  |
+| **PTY 子进程**                        | 每终端 1     | node-pty 真实 shell                                | —                                                |
+| **Wenshu SW 隐藏窗口**                | 0..1         | Chrome 扩展 Service Worker 环境模拟                | 让原插件代码零修改运行                           |
 
 ### 4.2 窗口拓扑：Hash 路由驱动的"单 bundle 多形态"
 
 **同一份 **​**​`index.html`​**​ ** + 同一份 JS bundle**，通过 `window.location.hash` 在模块加载期（而非运行期）决定窗口角色。`hashRouteConstants.ts` 在模块顶层就完成解析：
 
 ```ts
-const _hashParts = window.location.hash.slice(1).split('?')
-export const isQuickChatRoute   = _hashParts[0] === '/quickchat'
-export const isPopoutRoute      = _hashParts[0] === '/popout'
-export const isPetOverlayRoute  = _hashParts[0] === '/pet-overlay'
-export const isMemoryDevToolsRoute = window.location.hash === '#/memory-devtools'
-export const isDiagnosticsRoute    = window.location.hash === '#/diagnostics'
-export const isTaskManagerRoute    = window.location.hash === '#/task-manager'
-export const isDiffDemoRoute       = _hashParts[0] === '/diff-demo'
+const _hashParts = window.location.hash.slice(1).split("?");
+export const isQuickChatRoute = _hashParts[0] === "/quickchat";
+export const isPopoutRoute = _hashParts[0] === "/popout";
+export const isPetOverlayRoute = _hashParts[0] === "/pet-overlay";
+export const isMemoryDevToolsRoute =
+  window.location.hash === "#/memory-devtools";
+export const isDiagnosticsRoute = window.location.hash === "#/diagnostics";
+export const isTaskManagerRoute = window.location.hash === "#/task-manager";
+export const isDiffDemoRoute = _hashParts[0] === "/diff-demo";
 ```
 
-|路由|窗口形态|外壳|特点|
-| --------| -------------------| ---------------------| ------------------------------|
-|`#/`（默认）|主窗口|完整 `MainLayout` + 全部全局 hook|唯一挂载完整表面|
-|`#/quickchat`|Raycast 式唤起窗|极简，强制 `light` 主题|预热常驻、轻量初始化|
-|`#/popout?sessionId=`|独立会话窗|极简|会话内容与主窗口共享主进程真值|
-|`#/pet-overlay`|桌宠悬浮层|完全透明、无 chrome|被动只读快照|
-|`#/diagnostics`|性能诊断台|极简|—|
-|`#/memory-devtools`|记忆调试|极简|—|
-|`#/task-manager`|进程管理器|极简|—|
-|`#/diff-demo`|渲染链路 A/B 对比页|极简|验证 legacy → ui-sdk 数据转换|
+| 路由                  | 窗口形态            | 外壳                              | 特点                           |
+| --------------------- | ------------------- | --------------------------------- | ------------------------------ |
+| `#/`（默认）          | 主窗口              | 完整 `MainLayout` + 全部全局 hook | 唯一挂载完整表面               |
+| `#/quickchat`         | Raycast 式唤起窗    | 极简，强制 `light` 主题           | 预热常驻、轻量初始化           |
+| `#/popout?sessionId=` | 独立会话窗          | 极简                              | 会话内容与主窗口共享主进程真值 |
+| `#/pet-overlay`       | 桌宠悬浮层          | 完全透明、无 chrome               | 被动只读快照                   |
+| `#/diagnostics`       | 性能诊断台          | 极简                              | —                              |
+| `#/memory-devtools`   | 记忆调试            | 极简                              | —                              |
+| `#/task-manager`      | 进程管理器          | 极简                              | —                              |
+| `#/diff-demo`         | 渲染链路 A/B 对比页 | 极简                              | 验证 legacy → ui-sdk 数据转换  |
 
 ### 4.3 `MainWindowApp` 隔离：一个真实的性能修复
 
@@ -365,41 +366,45 @@ function MainWindowApp({ isDark }) {
 
 ```ts
 function deepFreeze<T extends Record<string, unknown>>(obj: T): Readonly<T> {
-  Object.freeze(obj)
+  Object.freeze(obj);
   for (const value of Object.values(obj)) {
-    if (value !== null && typeof value === 'object' && !Object.isFrozen(value)) {
-      deepFreeze(value as Record<string, unknown>)
+    if (
+      value !== null &&
+      typeof value === "object" &&
+      !Object.isFrozen(value)
+    ) {
+      deepFreeze(value as Record<string, unknown>);
     }
   }
-  return obj
+  return obj;
 }
-const productConfiguration = deepFreeze(productJson) as IProductConfiguration
+const productConfiguration = deepFreeze(productJson) as IProductConfiguration;
 ```
 
 它提供了 **30+ 个具名 getter**，每个都带 OSS 安全默认值。这个"**带默认值的具名 getter**"模式非常关键——它保证给 `product.json` 新增字段时，**永远不会静默改变已有 build 的行为**：
 
 ```ts
 // Agent 子系统
-getAgentBackend()          // 'local-cli' | 'catx'，默认 local-cli
-getAgentSdkSource()        // 默认 'CatPawDesk'
-getEffectiveAgentSdkSource(isCloud)  // cloud 走独立 source 便于后端分桶
-getAgentHostEnabled()      // 默认 true
-getAgentEnableArtifacts()  // 默认 true
-getAgentEnableGenerateImage()  // 默认 false（依赖美团内网图床）
-getAgentEnableMemoryMcp()  // 默认 true
+getAgentBackend(); // 'local-cli' | 'catx'，默认 local-cli
+getAgentSdkSource(); // 默认 'CatPawDesk'
+getEffectiveAgentSdkSource(isCloud); // cloud 走独立 source 便于后端分桶
+getAgentHostEnabled(); // 默认 true
+getAgentEnableArtifacts(); // 默认 true
+getAgentEnableGenerateImage(); // 默认 false（依赖美团内网图床）
+getAgentEnableMemoryMcp(); // 默认 true
 
 // 模型档位（distro 可路由到不同后端）
-getAgentQueryDefaultModelId()   // 0   = Auto
-getAgentQuerySafeRoomModelId()  // 10000 = 安全屋
-getAgentQueryLiteModelId()      // 10001
-getAgentQueryProModelId()       // 10002
-getAgentQueryMaxModelId()       // 10003
+getAgentQueryDefaultModelId(); // 0   = Auto
+getAgentQuerySafeRoomModelId(); // 10000 = 安全屋
+getAgentQueryLiteModelId(); // 10001
+getAgentQueryProModelId(); // 10002
+getAgentQueryMaxModelId(); // 10003
 
 // 存储 / 更新 / 打包
-getRemoteStorageEnabled()   // 默认 false（本地 electron-store）
-getWindowsUpdateMode()      // 'overlay' | 'mutex'
-getWin32MutexName()         // 必须与 Inno Setup 脚本的 AppMutex 一致
-getBundleDisplayName()      // 镜像 electron-builder 的 productFilename 推导规则
+getRemoteStorageEnabled(); // 默认 false（本地 electron-store）
+getWindowsUpdateMode(); // 'overlay' | 'mutex'
+getWin32MutexName(); // 必须与 Inno Setup 脚本的 AppMutex 一致
+getBundleDisplayName(); // 镜像 electron-builder 的 productFilename 推导规则
 ```
 
 `getBundleDisplayName()` 的注释尤其体现工程严谨度——它必须精确复刻 electron-builder 内部 `productFilename = executableName ?? sanitizedProductName` 的推导链，否则 macOS 自更新会找不到 `.app` 包。
@@ -412,10 +417,13 @@ getBundleDisplayName()      // 镜像 electron-builder 的 productFilename 推�
 
 ```ts
 export function getScopedDataFolderName(): string {
-  return path.join(getDataFolderName(), dataPathScopeSlot.getActiveScopeSegment())
+  return path.join(
+    getDataFolderName(),
+    dataPathScopeSlot.getActiveScopeSegment(),
+  );
 }
 export function getUserDataDir(): string {
-  return path.join(getRuntimeHome(), getScopedDataFolderName())
+  return path.join(getRuntimeHome(), getScopedDataFolderName());
 }
 ```
 
@@ -429,7 +437,7 @@ OSS 默认 `getActiveScopeSegment()` 返回空串，`path.join(home, '.catpaw', 
 
 ```ts
 export function getCliFolderName(): string {
-  return getProductConfiguration().cliSocketFolder ?? getDataFolderName()
+  return getProductConfiguration().cliSocketFolder ?? getDataFolderName();
 }
 ```
 
@@ -448,7 +456,7 @@ export function getCliFolderName(): string {
     └── {convId}.log
 ```
 
-**为什么 agent.log 不用 electron-log？**  因为 Agent 事件是高频流式的，走 electron-log 的格式化管线会有明显开销，且会把 main.log 冲爆。用裸 `fs.WriteStream` 是零开销的选择。
+**为什么 agent.log 不用 electron-log？** 因为 Agent 事件是高频流式的，走 electron-log 的格式化管线会有明显开销，且会把 main.log 冲爆。用裸 `fs.WriteStream` 是零开销的选择。
 
 文件头部有一条**关键不变量**：
 
@@ -465,9 +473,9 @@ Console hook ordering (critical invariant):
 同时为了不打破分层（L0 不得依赖 L1 telemetry），采用了**反向注入**：
 
 ```ts
-let _uncaughtErrorReporter: (() => void) | null = null
+let _uncaughtErrorReporter: (() => void) | null = null;
 export function setUncaughtErrorReporter(reporter: () => void): void {
-  _uncaughtErrorReporter = reporter
+  _uncaughtErrorReporter = reporter;
 }
 // main.ts 在 telemetry 就绪后调用 setUncaughtErrorReporter(cacheCrashCount)
 ```
@@ -477,10 +485,18 @@ export function setUncaughtErrorReporter(reporter: () => void): void {
 解决的是一个真实痛点：Agent 回复里带的是绝对路径（如 `/Users/x/.agent-browser/tmp/screenshots/a.png`），渲染进程无法直接加载——dev 模式下 Vite 会把它解析到 `http://localhost:5173/`，生产环境 `file://` origin 又对不上。
 
 ```ts
-protocol.registerSchemesAsPrivileged([{
-  scheme: 'catpaw-local',
-  privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true },
-}])
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "catpaw-local",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      stream: true,
+    },
+  },
+]);
 ```
 
 `stream: true` 是为了支持 **Range 请求**，让本地音视频可以拖动进度条播放。协议内置 MIME 映射表覆盖图片/PDF/视频/音频。注意注册必须在 `app.ready` **之前**。
@@ -489,22 +505,22 @@ protocol.registerSchemesAsPrivileged([{
 
 `electron/services/feature/` 下 14 个独立子域，共约 270 个文件：
 
-|目录|规模|核心职责|关键设计|
-| ----| --------| --------------------------------------| -----------------------------------------------------------|
-|`plugin/`|~40 文件|插件容器：发现/安装/加载/市场/生命周期|zod schema 校验、`asyncMutationQueue` 串行化写操作、`local/cloud` 双 bridge|
-|`market/skills/`|~35 文件|对内 Skill 市场|安装锁（`skillLock`）、S3 下载、更新轮询、CatX 全量同步上报|
-|`market/skills-external/`|~25 文件|对外 Skill 市场|企业版 API、分发轮询、bootstrap 策略槽|
-|`market/mcp/`|~6 文件|MCP Server 市场|local/cloud 双 bridge|
-|`system/`|~40 文件|系统能力总集|剪贴板/全局快捷键/托盘/更新器/内存指标/安全屋/键盘监听/截屏|
-|`automation/`|~22 文件|定时与事件自动化|RRule 调度、动态唤醒定时器、文件监听防篡改|
-|`deepLink/`|~14 文件|`catdesk://` 协议路由|handler 注册表按 hostname 分发|
-|`agent/`|~9 文件|Agent 配置与 SubAgent 桥|模型类型、错误码配置|
-|`voice/`|~3 文件|流式 ASR|—|
-|`media/`|~5 文件|媒体处理 / ASR 转写客户端|—|
-|`office/`|~6 文件|大象 IM / 邮件|内网集成|
-|`wenshu/`|~7 文件|Chrome 扩展宿主|Chrome API shim + 隐藏窗口 SW|
-|`pet/`|~5 文件|桌宠状态机|节流广播快照|
-|`project/` `commands/` `ask/` `trafficSafeGuard/`|~15 文件|项目桥、命令桥、Ask 注册表、流量保护|—|
+| 目录                                              | 规模     | 核心职责                               | 关键设计                                                                    |
+| ------------------------------------------------- | -------- | -------------------------------------- | --------------------------------------------------------------------------- |
+| `plugin/`                                         | ~40 文件 | 插件容器：发现/安装/加载/市场/生命周期 | zod schema 校验、`asyncMutationQueue` 串行化写操作、`local/cloud` 双 bridge |
+| `market/skills/`                                  | ~35 文件 | 对内 Skill 市场                        | 安装锁（`skillLock`）、S3 下载、更新轮询、CatX 全量同步上报                 |
+| `market/skills-external/`                         | ~25 文件 | 对外 Skill 市场                        | 企业版 API、分发轮询、bootstrap 策略槽                                      |
+| `market/mcp/`                                     | ~6 文件  | MCP Server 市场                        | local/cloud 双 bridge                                                       |
+| `system/`                                         | ~40 文件 | 系统能力总集                           | 剪贴板/全局快捷键/托盘/更新器/内存指标/安全屋/键盘监听/截屏                 |
+| `automation/`                                     | ~22 文件 | 定时与事件自动化                       | RRule 调度、动态唤醒定时器、文件监听防篡改                                  |
+| `deepLink/`                                       | ~14 文件 | `catdesk://` 协议路由                  | handler 注册表按 hostname 分发                                              |
+| `agent/`                                          | ~9 文件  | Agent 配置与 SubAgent 桥               | 模型类型、错误码配置                                                        |
+| `voice/`                                          | ~3 文件  | 流式 ASR                               | —                                                                           |
+| `media/`                                          | ~5 文件  | 媒体处理 / ASR 转写客户端              | —                                                                           |
+| `office/`                                         | ~6 文件  | 大象 IM / 邮件                         | 内网集成                                                                    |
+| `wenshu/`                                         | ~7 文件  | Chrome 扩展宿主                        | Chrome API shim + 隐藏窗口 SW                                               |
+| `pet/`                                            | ~5 文件  | 桌宠状态机                             | 节流广播快照                                                                |
+| `project/` `commands/` `ask/` `trafficSafeGuard/` | ~15 文件 | 项目桥、命令桥、Ask 注册表、流量保护   | —                                                                           |
 
 ---
 
@@ -533,9 +549,11 @@ electron/services/**                  ← 业务服务
 这是 `vite-env.d.ts` 里最重要的一段设计：
 
 ```ts
-import type { ElectronAPI } from '../electron/preload'
+import type { ElectronAPI } from "../electron/preload";
 declare global {
-  interface Window { electronAPI: ElectronAPI }
+  interface Window {
+    electronAPI: ElectronAPI;
+  }
 }
 ```
 
@@ -548,23 +566,65 @@ declare global {
 ```ts
 export const bridge = {
   // 系统与窗口
-  system, window, taskManager, clipboard, shell, keyboard, notify, watermark,
+  system,
+  window,
+  taskManager,
+  clipboard,
+  shell,
+  keyboard,
+  notify,
+  watermark,
   // 身份与环境
-  auth, env, runtime, runMode, horn, diagnostics,
+  auth,
+  env,
+  runtime,
+  runMode,
+  horn,
+  diagnostics,
   // 工作区数据
-  projects, sessions, folders, files, storage, settings, workspace,
+  projects,
+  sessions,
+  folders,
+  files,
+  storage,
+  settings,
+  workspace,
   // Agent
-  agent, agentConfig, agentHost, memory, todos, tool, tokenUsage,
+  agent,
+  agentConfig,
+  agentHost,
+  memory,
+  todos,
+  tool,
+  tokenUsage,
   // 云端
-  cloudChannel, cloudConversation, cloudSession,
+  cloudChannel,
+  cloudConversation,
+  cloudSession,
   // 扩展生态
-  skills, externalSkills, plugin, mcpMarket, commands, ask, snippets,
+  skills,
+  externalSkills,
+  plugin,
+  mcpMarket,
+  commands,
+  ask,
+  snippets,
   // 交互面板
-  ui, browser, terminal, quickChat, voice, selection, crossWindow, pet,
+  ui,
+  browser,
+  terminal,
+  quickChat,
+  voice,
+  selection,
+  crossWindow,
+  pet,
   // 其他
-  automation, updater, cli, feedback,
-  ...distroBridgeSlots,   // ← distro 可注入全新顶层 domain
-} as const
+  automation,
+  updater,
+  cli,
+  feedback,
+  ...distroBridgeSlots, // ← distro 可注入全新顶层 domain
+} as const;
 ```
 
 ### 6.4 四条设计原则
@@ -579,10 +639,10 @@ export const bridge = {
 降级的实现全部集中在 `shared.ts`：
 
 ```ts
-export const NOOP_DISPOSABLE: IDisposable = { dispose: () => {} }
-export function getElectronAPI(): Window['electronAPI'] | undefined {
-  if (typeof window === 'undefined') return undefined
-  return window.electronAPI
+export const NOOP_DISPOSABLE: IDisposable = { dispose: () => {} };
+export function getElectronAPI(): Window["electronAPI"] | undefined {
+  if (typeof window === "undefined") return undefined;
+  return window.electronAPI;
 }
 ```
 
@@ -598,7 +658,7 @@ listActiveConversations: () => … ?? Promise.resolve([])                 // 空
 tryResendPendingInput:   () => … ?? Promise.resolve(null)               // null → 调用方回退 retry
 ```
 
- **"发送必须报错，停止可静默"**  ——降级策略是按语义逐个方法决定的，不是一刀切。
+**"发送必须报错，停止可静默"** ——降级策略是按语义逐个方法决定的，不是一刀切。
 
 ### 6.5 `useBridgeEvent`：订阅生命周期的统一封装
 
@@ -608,17 +668,17 @@ tryResendPendingInput:   () => … ?? Promise.resolve(null)               // nul
 useBridgeEvent(bridge.agent.onEvent, handleEvent, {
   onSubscribed: () => bridge.agent.addActiveSession(sessionId),
   deps: [sessionId],
-})
+});
 ```
 
-|设计点|解决的问题|
-| ---------------| ---------------------------------------------------------------------------------------------------|
-|**自动 dispose**，cleanup 包 `try/catch`|preload 侧异常导致连锁 unmount|
-|**​`useLayoutEffect`​**​ ** 订阅**（而非 `useEffect`）|缩短 "commit 完成 → 开始订阅" 的事件丢失窗口|
-|**handler 存 ref** 并在 `useLayoutEffect` 同步更新|回调始终是最新闭包，且不因 handler 变化重订阅|
-|**​`onSubscribed`​**​ ** 回调**|订阅成功后立刻拉快照 / 触发主进程 replay 广播，彻底关掉"订阅前事件被丢弃"的窗口|
-|**显式 **​**​`deps`​**|需要随 props 重订阅时语义清晰，先 dispose 旧的再建新的|
-|**DEV 双重告警**|① subscribe 引用在 render 间漂移（疑似 render 内新建函数）② 拿到 `NOOP_DISPOSABLE`（通道根本没接上，事件永不触发）|
+| 设计点                                                 | 解决的问题                                                                                                         |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| **自动 dispose**，cleanup 包 `try/catch`               | preload 侧异常导致连锁 unmount                                                                                     |
+| **​`useLayoutEffect`​**​ ** 订阅**（而非 `useEffect`） | 缩短 "commit 完成 → 开始订阅" 的事件丢失窗口                                                                       |
+| **handler 存 ref** 并在 `useLayoutEffect` 同步更新     | 回调始终是最新闭包，且不因 handler 变化重订阅                                                                      |
+| **​`onSubscribed`​**​ ** 回调**                        | 订阅成功后立刻拉快照 / 触发主进程 replay 广播，彻底关掉"订阅前事件被丢弃"的窗口                                    |
+| **显式 **​**​`deps`​**                                 | 需要随 props 重订阅时语义清晰，先 dispose 旧的再建新的                                                             |
+| **DEV 双重告警**                                       | ① subscribe 引用在 render 间漂移（疑似 render 内新建函数）② 拿到 `NOOP_DISPOSABLE`（通道根本没接上，事件永不触发） |
 
 第 6 条 DEV 告警特别有价值——`NOOP_DISPOSABLE` 检测能在开发期立刻暴露"这个 IPC 通道压根没接"的静默 bug，否则只会表现为"功能不生效但没报错"。
 
@@ -654,20 +714,25 @@ src/
 
 ```ts
 export const useCatDeskStore = create<CatDeskState>((...a) => ({
-  ...Object.assign({}, ...getRegisteredSlices().map((entry) => entry.create(...a))),
+  ...Object.assign(
+    {},
+    ...getRegisteredSlices().map((entry) => entry.create(...a)),
+  ),
   isInitialized: false,
-  initialize: async () => { /* 加载 UI 偏好 */ },
-}))
+  initialize: async () => {
+    /* 加载 UI 偏好 */
+  },
+}));
 ```
 
 注册表结构定义了**每个 slice 可声明自己的启动任务**：
 
 ```ts
 export interface SliceEntry {
-  name: string
-  create: StateCreator<CatDeskState, [], [], Partial<CatDeskState>>
-  beforeInit?: Step   // UI 渲染前的阻塞初始化
-  afterInit?: Step    // UI 已显示后的后台初始化，失败不影响用户
+  name: string;
+  create: StateCreator<CatDeskState, [], [], Partial<CatDeskState>>;
+  beforeInit?: Step; // UI 渲染前的阻塞初始化
+  afterInit?: Step; // UI 已显示后的后台初始化，失败不影响用户
 }
 ```
 
@@ -710,8 +775,12 @@ Quick Chat 需要极致启动速度（目标 50–100ms），因此有独立路�
 
 ```ts
 const QUICK_CHAT_DEFERRED_SLICES = new Set([
-  'auth', 'darkMode', 'channel', 'modelList', 'cloudChannel',
-])
+  "auth",
+  "darkMode",
+  "channel",
+  "modelList",
+  "cloudChannel",
+]);
 ```
 
 只跑 `loadProjects` + `loadSessions` 就解锁 UI，其余 slice 的数据在 Phase 3 后台补齐，且**只补这 5 个**——`tab` / `overlay` / `terminalPanel` / `chatSearch` / `monitor` 等主窗口专属 slice 完全跳过，避免浪费内存。
@@ -732,9 +801,9 @@ const QUICK_CHAT_DEFERRED_SLICES = new Set([
 
 ```ts
 getAll = (): readonly CommandDescriptor[] => {
-  if (!this.snapshot) this.snapshot = Array.from(this.commands.values())
-  return this.snapshot
-}
+  if (!this.snapshot) this.snapshot = Array.from(this.commands.values());
+  return this.snapshot;
+};
 ```
 
 配合 `useSyncExternalStore`，注册表未变时返回同一引用，不触发无意义 re-render。`notify()` 时置 `snapshot = null` 失效缓存。
@@ -743,12 +812,13 @@ getAll = (): readonly CommandDescriptor[] => {
 
 ```ts
 dispose: () => {
-  const existing = this.commands.get(descriptor.id)
-  if (existing === descriptor) {   // ← 只删自己注册的那个
-    this.commands.delete(descriptor.id)
-    this.notify()
+  const existing = this.commands.get(descriptor.id);
+  if (existing === descriptor) {
+    // ← 只删自己注册的那个
+    this.commands.delete(descriptor.id);
+    this.notify();
   }
-}
+};
 ```
 
 防止"后来者已覆盖同 ID，此处 dispose 把新的误删"。
@@ -756,8 +826,8 @@ dispose: () => {
 **③ i18n 驱动的显式刷新**
 
 ```ts
-subscribeRuntimeCoworkLocale(() => commandRegistry.refresh())
-subscribeRuntimeBrandName(()  => commandRegistry.refresh())
+subscribeRuntimeCoworkLocale(() => commandRegistry.refresh());
+subscribeRuntimeBrandName(() => commandRegistry.refresh());
 ```
 
 命令的 `title()` 依赖 locale 与品牌名，这些外部状态变化时底层 Map 没变、订阅者不会被触发，命令面板就会停留在旧语言。`refresh()` 提供显式刷新句柄。
@@ -769,7 +839,10 @@ subscribeRuntimeBrandName(()  => commandRegistry.refresh())
 亮点是**声明式焦点键**：
 
 ```ts
-contextKeyService.registerFocusKey({ key: 'terminalFocus', selector: '.terminal-container' })
+contextKeyService.registerFocusKey({
+  key: "terminalFocus",
+  selector: ".terminal-container",
+});
 ```
 
 内部监听 `document` 的 `focusin` / `focusout`（capture 阶段），用 `document.activeElement.closest(selector)` 判定命中。组件**不需要写任何 focus/blur 回调**，只要 DOM 上有对应 class 即可。
@@ -782,7 +855,7 @@ contextKeyService.registerFocusKey({ key: 'terminalFocus', selector: '.terminal-
 
 - **Chord 支持**：`mod+k mod+s` 两段式，首键命中后 1000ms 超时窗口
 - **权重决胜**：`KeybindingWeight.User` > `Builtin`
--  **​`-commandId`​**​ ** 移除语义**：与 VSCode 完全一致
+- **​`-commandId`​**​ ** 移除语义**：与 VSCode 完全一致
 - **平台键选择**：`mac` / `win` / `linux` / `key` 四级回退
 - **​`scope: 'global'`​** ：标记为系统全局热键的规则**不参与渲染层派发**（真实触发在主进程 `globalShortcut`），仅用于设置页与命令面板展示
 
@@ -805,11 +878,17 @@ if (this.startsAnyChord(stroke)) {
 内置规则把 `escape → chat.stopGeneration` 标为 `passive`（命中只发信号、不 `preventDefault`），把 Esc 关闭 Dialog 的原生行为留给下游。但用户在设置页改键写入的 user 规则不带 `passive` 字段，一旦覆盖同命令，语义就丢了——**所有 Radix 弹窗的 Esc 关闭会全部失效**。
 
 ```ts
-const passiveCommands = new Set<string>()
-for (const r of this.builtinRules) if (!r.removal && r.passive) passiveCommands.add(r.command)
-// …
-.map(r => r.source === 'user' && !r.passive && passiveCommands.has(r.command)
-  ? { ...r, passive: true } : r)
+const passiveCommands = new Set<string>();
+for (const r of this.builtinRules)
+  if (!r.removal && r.passive)
+    passiveCommands
+      .add(r.command)
+      // …
+      .map((r) =>
+        r.source === "user" && !r.passive && passiveCommands.has(r.command)
+          ? { ...r, passive: true }
+          : r,
+      );
 ```
 
 **③ 整组覆盖兜底**
@@ -831,22 +910,31 @@ private notify(): void {
 #### contributions/ — 命令的业务贡献
 
 ```ts
-export { registerPanelCommands,      type PanelDeps }      from './panelCommands'
-export { registerNavigationCommands, type NavigationDeps } from './navigationCommands'
-export { registerSessionCommands,    type SessionDeps }    from './sessionCommands'
-export { registerChatCommands,       type ChatDeps }       from './chatCommands'
-export { registerWorkbenchCommands,  type WorkbenchDeps }  from './workbenchCommands'
-export { registerEditorCommands,     type EditorDeps }     from './editorCommands'
-export { registerPopoutCommands,     type PopoutDeps }     from './popoutCommands'
-export { registerQuickChatCommands,  type QuickChatDeps }  from './quickChatCommands'
-export { registerVoiceCommands }                            from './voiceCommands'
+export { registerPanelCommands, type PanelDeps } from "./panelCommands";
+export {
+  registerNavigationCommands,
+  type NavigationDeps,
+} from "./navigationCommands";
+export { registerSessionCommands, type SessionDeps } from "./sessionCommands";
+export { registerChatCommands, type ChatDeps } from "./chatCommands";
+export {
+  registerWorkbenchCommands,
+  type WorkbenchDeps,
+} from "./workbenchCommands";
+export { registerEditorCommands, type EditorDeps } from "./editorCommands";
+export { registerPopoutCommands, type PopoutDeps } from "./popoutCommands";
+export {
+  registerQuickChatCommands,
+  type QuickChatDeps,
+} from "./quickChatCommands";
+export { registerVoiceCommands } from "./voiceCommands";
 ```
 
 统一模式：`register*Commands(deps) → IDisposable`，调用方在 `useEffect` 中传入回调，卸载时统一 dispose。依赖显式注入而非从 store 直接取，让命令逻辑可独立测试。
 
 ### 7.4 服务层与 Hook 层
 
-**​`services/`​**  是无 React 依赖的业务服务，可被 hook、组件、甚至其他 service 复用：
+**​`services/`​** 是无 React 依赖的业务服务，可被 hook、组件、甚至其他 service 复用：
 
 - `agent/` — `IAgentChannel` 抽象 + local/cloud 双实现 + `getAgentChannel(runMode)` 工厂
 - `previewService.ts` — 文件预览编排（1300+ 行）：Monaco / 图片 / 音视频 / 在线渲染四条路径 + 全局 LRU tab 淘汰
@@ -860,10 +948,10 @@ export { registerVoiceCommands }                            from './voiceCommand
 ```ts
 function enforceGlobalEditorTabLimit(newTabId: string): void {
   // 淘汰前快照 id → filePath，供淘汰后停对应 watcher（action 只回 id）
-  const evictedIds = state.evictLruEditorTabsIfNeeded(newTabId)
+  const evictedIds = state.evictLruEditorTabsIfNeeded(newTabId);
   for (const id of evictedIds) {
-    const filePath = idToPath.get(id)
-    if (filePath) bridge.files.unwatchForPreview(filePath)   // ← 关键：同时停 watcher
+    const filePath = idToPath.get(id);
+    if (filePath) bridge.files.unwatchForPreview(filePath); // ← 关键：同时停 watcher
   }
 }
 ```
@@ -874,26 +962,26 @@ function enforceGlobalEditorTabLimit(newTabId: string): void {
 
 ```ts
 export interface ScopedStore<T> {
-  hydrate(): Promise<void>   // 从主进程 scoped store 读入
-  load(): T                  // 同步读缓存
-  save(value: T): void       // 写缓存 + fire-and-forget 落盘
-  subscribe(cb): () => void  // 订阅变化
+  hydrate(): Promise<void>; // 从主进程 scoped store 读入
+  load(): T; // 同步读缓存
+  save(value: T): void; // 写缓存 + fire-and-forget 落盘
+  subscribe(cb): () => void; // 订阅变化
 }
 ```
 
 关键在于它**内部自行订阅 **​**​`bridge.storage.onStorageScopeChanged`​**，账号切换时自动重 hydrate 并通知订阅者。消费方只需 `subscribe()`，无需感知 scope 切换。数据落主进程而非 `localStorage`，故切账号时随 storage scope 一起隔离，**绝不残留上一个账号的数据**。
 
-**​`hooks/`​**​ **（~96 个）**  是业务逻辑的主要载体，几类：
+**​`hooks/`​**​ **（~96 个）** 是业务逻辑的主要载体，几类：
 
-|类型|代表|说明|
-| --------| ----| -------------------------------|
-|Facade|`useConversation`|组合 6 个子 hook，对外 API 不变|
-|事件桥|`useAgentEventHandler` `useCloudChannelEventBridge`|IPC 事件 → store|
-|Toast 桥|`useNetworkErrorToast` `useAgentStderrToast` `useEnvRestartToast`|错误 → UI 提示|
-|跨窗口|`useCrossWindowSync` `useTodosSyncListener` `useSandboxSyncListener`|多窗口一致性|
-|数据|`usePluginsData` `useSkillsData` `useExternalSkillsData`|列表加载与派生|
-|交互|`useKeybindingDispatcher` `useGlobalShortcuts` `useSlashMenu`|输入处理|
-|搜索|`unifiedSearch/` `quickSearch/` `search/`|三套搜索场景|
+| 类型     | 代表                                                                 | 说明                            |
+| -------- | -------------------------------------------------------------------- | ------------------------------- |
+| Facade   | `useConversation`                                                    | 组合 6 个子 hook，对外 API 不变 |
+| 事件桥   | `useAgentEventHandler` `useCloudChannelEventBridge`                  | IPC 事件 → store                |
+| Toast 桥 | `useNetworkErrorToast` `useAgentStderrToast` `useEnvRestartToast`    | 错误 → UI 提示                  |
+| 跨窗口   | `useCrossWindowSync` `useTodosSyncListener` `useSandboxSyncListener` | 多窗口一致性                    |
+| 数据     | `usePluginsData` `useSkillsData` `useExternalSkillsData`             | 列表加载与派生                  |
+| 交互     | `useKeybindingDispatcher` `useGlobalShortcuts` `useSlashMenu`        | 输入处理                        |
+| 搜索     | `unifiedSearch/` `quickSearch/` `search/`                            | 三套搜索场景                    |
 
 `useConversation` 的 Facade 分工在注释里写得很清楚：
 
@@ -943,26 +1031,29 @@ canStop   = isRunning && !!conversationId
 
 主进程侧已落地的双 bridge：
 
-|Bridge|契约位置|local 实现|cloud 实现|
-| ------| --------| ----------| ----------|
-|`IPluginBridge`|`@shared/types/plugin`|`localPluginBridge`|`cloudPluginBridge`|
-|`ISkillBridge`|`skills/bridge/types`|`localSkillBridge`|`cloudSkillBridge`|
-|`IExternalSkillBridge`|`skills-external/bridge/types`|`localExternalSkillBridge`|`cloudExternalSkillBridge`|
-|`IMcpBridge`|`mcp/bridge/types`|`localMcpBridge`|`cloudMcpBridge`|
-|`IAutomationBridge`|`@shared/types/automation`|`AutomationService`|`CloudAutomationBridge`|
-|`IProjectBridge`|`project/projectBridge/types`|`localProjectBridge`|`cloudProjectBridge`|
-|`ICommandBridge`|`commands/commandBridge/types`|`localCommandBridge`|`cloudCommandBridge`|
-|`ISubagentBridge`|`agent/subagentBridge/types`|`localSubagentBridge`|`cloudSubagentBridge`|
+| Bridge                 | 契约位置                       | local 实现                 | cloud 实现                 |
+| ---------------------- | ------------------------------ | -------------------------- | -------------------------- |
+| `IPluginBridge`        | `@shared/types/plugin`         | `localPluginBridge`        | `cloudPluginBridge`        |
+| `ISkillBridge`         | `skills/bridge/types`          | `localSkillBridge`         | `cloudSkillBridge`         |
+| `IExternalSkillBridge` | `skills-external/bridge/types` | `localExternalSkillBridge` | `cloudExternalSkillBridge` |
+| `IMcpBridge`           | `mcp/bridge/types`             | `localMcpBridge`           | `cloudMcpBridge`           |
+| `IAutomationBridge`    | `@shared/types/automation`     | `AutomationService`        | `CloudAutomationBridge`    |
+| `IProjectBridge`       | `project/projectBridge/types`  | `localProjectBridge`       | `cloudProjectBridge`       |
+| `ICommandBridge`       | `commands/commandBridge/types` | `localCommandBridge`       | `cloudCommandBridge`       |
+| `ISubagentBridge`      | `agent/subagentBridge/types`   | `localSubagentBridge`      | `cloudSubagentBridge`      |
 
 统一的分发实现：
 
 ```ts
 function resolveMode(): RunMode {
-  try { return getStorageService().getRunMode() }
-  catch { return RUN_MODE.LOCAL }   // ← 启动早期 / 单测时 storage 未就绪，兜底 LOCAL
+  try {
+    return getStorageService().getRunMode();
+  } catch {
+    return RUN_MODE.LOCAL;
+  } // ← 启动早期 / 单测时 storage 未就绪，兜底 LOCAL
 }
 export function getPluginBridge(): IPluginBridge {
-  return isCloudRunMode(resolveMode()) ? cloudPluginBridge : localPluginBridge
+  return isCloudRunMode(resolveMode()) ? cloudPluginBridge : localPluginBridge;
 }
 ```
 
@@ -984,12 +1075,17 @@ export function getPluginBridge(): IPluginBridge {
 
 ```ts
 export interface IAgentChannel {
-  appendUserMessageBeforeSend(input: UserMessagePlaceholderInput): void
-  send(message: string, options?: IAgentQueryOptions): Promise<AgentSendOutcome>
-  stop(conversationId: string): Promise<unknown>
-  resume(conversationId: string): Promise<AgentRecoveryResult>
-  retry(conversationId: string, options?): Promise<AgentRecoveryResult>
-  tryResendPendingInput(conversationId: string): Promise<AgentSendOutcome | null>
+  appendUserMessageBeforeSend(input: UserMessagePlaceholderInput): void;
+  send(
+    message: string,
+    options?: IAgentQueryOptions,
+  ): Promise<AgentSendOutcome>;
+  stop(conversationId: string): Promise<unknown>;
+  resume(conversationId: string): Promise<AgentRecoveryResult>;
+  retry(conversationId: string, options?): Promise<AgentRecoveryResult>;
+  tryResendPendingInput(
+    conversationId: string,
+  ): Promise<AgentSendOutcome | null>;
 }
 ```
 
@@ -1022,7 +1118,7 @@ async retry(conversationId) { return cloudAgentChannel.resume(conversationId) }
 解法是缓存上一次 send 的原始输入：
 
 ```ts
-const lastSentInputs = new Map<string, CachedSendInput>()
+const lastSentInputs = new Map<string, CachedSendInput>();
 ```
 
 缓存生命周期的注释解释了一个关键决策：
@@ -1073,7 +1169,7 @@ conversation: {
  * 本端 Pike `state === 'ready'` 不代表远端 desk 进程还活着 —— UI 做离线 banner
  * 时需同时考虑两者。
  */
-remoteDeskOnline: boolean
+remoteDeskOnline: boolean;
 ```
 
 **本地连接就绪 ≠ 远端服务存活**——这是所有长连接系统都会遇到的经典问题。
@@ -1113,19 +1209,19 @@ remoteDeskOnline: boolean
 ```ts
 // stores/slices/darkModeSlots.ts
 export const darkModeSlot: DarkModeSlot = {
-  defaultEnabled: false,   // 开关默认隐藏
-  forceEnabled: false,     // 仍受 Desk-DarkMode 灰度控制
-}
+  defaultEnabled: false, // 开关默认隐藏
+  forceEnabled: false, // 仍受 Desk-DarkMode 灰度控制
+};
 // external 租户 shadow → { defaultEnabled: true, forceEnabled: true }
 ```
 
 ```ts
 // components/ChatAreaV2/chatInputSlots.ts
-export const CHAT_INPUT_DEPLOYMENT: ChatInputDeployment = 'internal'
-export const CHAT_INPUT_FORCE_V2 = false
-export const CHAT_INPUT_DISABLE_ATTACHMENT_FILTER = false
-export const CHAT_INPUT_VOICE_INPUT_ENABLED = true
-export const VOICE_INPUT_ALWAYS_ON = false
+export const CHAT_INPUT_DEPLOYMENT: ChatInputDeployment = "internal";
+export const CHAT_INPUT_FORCE_V2 = false;
+export const CHAT_INPUT_DISABLE_ATTACHMENT_FILTER = false;
+export const CHAT_INPUT_VOICE_INPUT_ENABLED = true;
+export const VOICE_INPUT_ALWAYS_ON = false;
 ```
 
 注释明确要求：**保持文件扁平，一个 slot 一个 export**，这样 OSS 与 distro 的差异 diff 是一行对比。
@@ -1138,10 +1234,10 @@ export const VOICE_INPUT_ALWAYS_ON = false
 
 ```ts
 // components/SettingsPage/settingsRegistrySlots.ts
-export const MEMORY_TAB_FORCE_VISIBLE = (): boolean => false
-export const MEMORY_TAB_FORCE_HIDDEN  = (): boolean => false
-export const subscribeSettingsRegistryVisibility = (_l: () => void) => () => {}
-export const getSettingsRegistryVisibilityVersion = (): number => 0
+export const MEMORY_TAB_FORCE_VISIBLE = (): boolean => false;
+export const MEMORY_TAB_FORCE_HIDDEN = (): boolean => false;
+export const subscribeSettingsRegistryVisibility = (_l: () => void) => () => {};
+export const getSettingsRegistryVisibilityVersion = (): number => 0;
 ```
 
 `subscribe` + `getVersion` 这对是标准的 `useSyncExternalStore` 契约——distro 能让设置项显隐**响应式**变化（如企业版身份异步解析完成后隐藏 memory tab）。
@@ -1150,9 +1246,15 @@ export const getSettingsRegistryVisibilityVersion = (): number => 0
 
 ```ts
 // services/telemetrySlots.ts
-export function reportApiPerformanceSlot(_api: ApiPerformanceData): void { /* OSS noop */ }
-export function handleMainProcessMetricSlot(_metric: MetricItem): void  { /* OSS noop */ }
-export function setPageActivitySlot(_activity: PageActivity): void      { /* OSS noop */ }
+export function reportApiPerformanceSlot(_api: ApiPerformanceData): void {
+  /* OSS noop */
+}
+export function handleMainProcessMetricSlot(_metric: MetricItem): void {
+  /* OSS noop */
+}
+export function setPageActivitySlot(_activity: PageActivity): void {
+  /* OSS noop */
+}
 ```
 
 OSS 不带任何遥测实现，distro 注入 Owl / Raptor / LX。
@@ -1160,15 +1262,17 @@ OSS 不带任何遥测实现，distro 注入 Owl / Raptor / LX。
 #### 形态 4：组件槽（UI 注入）
 
 ```ts
-export const ChatModeSlotComponent: ComponentType | null = null
-export const distroSettingsSections: SectionDef[] = []
+export const ChatModeSlotComponent: ComponentType | null = null;
+export const distroSettingsSections: SectionDef[] = [];
 ```
 
 `GlobalOverlaySlot` 在 `App.tsx` 里被无条件渲染，OSS 默认渲染 `null`：
 
 ```tsx
-{/* distro 注入的全局浮层（OSS 默认 null）：如 external 登录后「积分已到账」欢迎弹窗 */}
-<GlobalOverlaySlot />
+{
+  /* distro 注入的全局浮层（OSS 默认 null）：如 external 登录后「积分已到账」欢迎弹窗 */
+}
+<GlobalOverlaySlot />;
 ```
 
 #### 形态 5：类型合并槽（新增整个 domain）
@@ -1177,18 +1281,18 @@ export const distroSettingsSections: SectionDef[] = []
 
 ```ts
 // src/bridge/domains/distroSlots.ts
-export const distroBridgeSlots: DistroBridgeSlots = {}
+export const distroBridgeSlots: DistroBridgeSlots = {};
 
 // src/bridge/domains/distroSlots.types.ts
-export interface DistroBridgeSlots {}   // ← 空接口，distro 用 declare module 合并
+export interface DistroBridgeSlots {} // ← 空接口，distro 用 declare module 合并
 ```
 
 distro 侧：
 
 ```ts
-declare module '.../src/bridge/domains/distroSlots.types' {
+declare module ".../src/bridge/domains/distroSlots.types" {
   interface DistroBridgeSlots {
-    officeAddin?: typeof officeAddinBridge
+    officeAddin?: typeof officeAddinBridge;
   }
 }
 ```
@@ -1203,15 +1307,15 @@ export const bridge = { system, taskManager, /* … */, ...distroBridgeSlots } a
 
 ### 9.3 Slot 分布图
 
-|层级|数量|代表|
-| --------------| ----| -------|
-|主进程 base|4|`browserPartitionSlots` `dataPathScopeSlots`|
-|主进程 feature|18|`safeRoomSlots` `enterpriseMarketplaceSlots` `petAuditSlots` `updateRequestSlots` `winStagedUpdateSlots` `skillsBridgeProviderSlots` `externalSkillBootstrapPolicySlots`|
-|渲染 bridge|8|`authSlots` `envSlots` `skillsSlots` `pluginSlots` `distroSlots`|
-|渲染 store|12|`darkModeSlots` `envSlots` `previewPanelSlots` `projectAvailabilitySlots` `sessionArchiveSlots` `sessionUnarchiveSlots` `sessionPermanentDeleteSlots`|
-|渲染 service|5|`telemetrySlots` `telemetryInitSlots` `documentPreviewSlots`|
-|渲染 hook|4|`enterpriseEpGuardSlots` `expertAccessGuardSlots` `slashMenuSkillsSlots`|
-|渲染组件|25+|`chatInputSlots` `mainHeaderSlots` `welcomeLayoutSlots` `settingsRegistrySlots` `sessionDeleteSlots` `mobileQrSlots` `bottomBarPluginsSlots` `contextBarPluginsSlots`|
+| 层级           | 数量 | 代表                                                                                                                                                                     |
+| -------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 主进程 base    | 4    | `browserPartitionSlots` `dataPathScopeSlots`                                                                                                                             |
+| 主进程 feature | 18   | `safeRoomSlots` `enterpriseMarketplaceSlots` `petAuditSlots` `updateRequestSlots` `winStagedUpdateSlots` `skillsBridgeProviderSlots` `externalSkillBootstrapPolicySlots` |
+| 渲染 bridge    | 8    | `authSlots` `envSlots` `skillsSlots` `pluginSlots` `distroSlots`                                                                                                         |
+| 渲染 store     | 12   | `darkModeSlots` `envSlots` `previewPanelSlots` `projectAvailabilitySlots` `sessionArchiveSlots` `sessionUnarchiveSlots` `sessionPermanentDeleteSlots`                    |
+| 渲染 service   | 5    | `telemetrySlots` `telemetryInitSlots` `documentPreviewSlots`                                                                                                             |
+| 渲染 hook      | 4    | `enterpriseEpGuardSlots` `expertAccessGuardSlots` `slashMenuSkillsSlots`                                                                                                 |
+| 渲染组件       | 25+  | `chatInputSlots` `mainHeaderSlots` `welcomeLayoutSlots` `settingsRegistrySlots` `sessionDeleteSlots` `mobileQrSlots` `bottomBarPluginsSlots` `contextBarPluginsSlots`    |
 
 ### 9.4 Slot 与"物理裁剪"的配合
 
@@ -1224,15 +1328,16 @@ export const bridge = { system, taskManager, /* … */, ...distroBridgeSlots } a
 `safeRoomSlots.ts` 是另一个例子：
 
 ```ts
-export const safeRoomSlot: SafeRoomSlot = { enabled: true }
+export const safeRoomSlot: SafeRoomSlot = { enabled: true };
 ```
 
 `system/providers.ts` 里据此做三处短路：
 
 ```ts
-if (!safeRoomSlot.enabled) return { IS_SAFE_ROOM_AGENT: 'false' }   // 不发 token 请求
+if (!safeRoomSlot.enabled) return { IS_SAFE_ROOM_AGENT: "false" }; // 不发 token 请求
 // …
-if (safeRoomSlot.enabled) registerProvider('browserPlugin', createSafeRoomTokenBrowserPlugin())
+if (safeRoomSlot.enabled)
+  registerProvider("browserPlugin", createSafeRoomTokenBrowserPlugin());
 ```
 
 注释解释了为什么必须短路而不能只是"返回空"：**否则会 POST **​ **​`/api/oauth/safe-room-token`​**——对没有安全屋后端的租户来说这是一个必然 404 的无效请求。
@@ -1271,20 +1376,20 @@ if (safeRoomSlot.enabled) registerProvider('browserPlugin', createSafeRoomTokenB
 
 ### 10.3 已注册的 Provider 清单
 
-|Provider Key|注册方|消费方|作用|
-| ------------| ------------------------------| -----------------------------| -----------------------------|
-|`pluginBridge`|feature/plugin|pluginHandlers|UI 的 plugin CRUD|
-|`clientConfig`|feature/plugin, feature/market|core/agent/agentClientFactory|向 Agent SDK config 贡献片段|
-|`shellEnv`|feature/system|core/agent（每次 query）|注入 Safe Room JWT 等环境变量|
-|`workspaceSettings`|feature/system|agent-host workspace RPC|设置变更的跨进程副作用|
-|`systemUpgrade`|feature/system|agent-host / CLI|`checkUpgrade` / `applyUpdate`|
-|`browserPlugin`|feature/system|core/browser|向特定域名页面注入脚本|
-|`subagentBridge`|feature/agent|agent-host subagent RPC|SubAgent 列表/模型/工具/迁移|
-|`skillsBridge`|feature/market|agent-host skills RPC|Skill 安装/卸载/查询/更新|
-|`mcpBridge`|feature/market|agent-host mcp RPC|MCP Server 管理|
-|`automationBridge`|feature/automation|agent-host automation RPC|定时任务 CRUD|
-|`projectBridge`|feature/project|agent-host workspace RPC|项目 CRUD|
-|`commandBridge`|feature/commands|agent-host commands RPC|自定义命令|
+| Provider Key        | 注册方                         | 消费方                        | 作用                           |
+| ------------------- | ------------------------------ | ----------------------------- | ------------------------------ |
+| `pluginBridge`      | feature/plugin                 | pluginHandlers                | UI 的 plugin CRUD              |
+| `clientConfig`      | feature/plugin, feature/market | core/agent/agentClientFactory | 向 Agent SDK config 贡献片段   |
+| `shellEnv`          | feature/system                 | core/agent（每次 query）      | 注入 Safe Room JWT 等环境变量  |
+| `workspaceSettings` | feature/system                 | agent-host workspace RPC      | 设置变更的跨进程副作用         |
+| `systemUpgrade`     | feature/system                 | agent-host / CLI              | `checkUpgrade` / `applyUpdate` |
+| `browserPlugin`     | feature/system                 | core/browser                  | 向特定域名页面注入脚本         |
+| `subagentBridge`    | feature/agent                  | agent-host subagent RPC       | SubAgent 列表/模型/工具/迁移   |
+| `skillsBridge`      | feature/market                 | agent-host skills RPC         | Skill 安装/卸载/查询/更新      |
+| `mcpBridge`         | feature/market                 | agent-host mcp RPC            | MCP Server 管理                |
+| `automationBridge`  | feature/automation             | agent-host automation RPC     | 定时任务 CRUD                  |
+| `projectBridge`     | feature/project                | agent-host workspace RPC      | 项目 CRUD                      |
+| `commandBridge`     | feature/commands               | agent-host commands RPC       | 自定义命令                     |
 
 ### 10.4 `clientConfig`：聚合型 Provider + 脏标记
 
@@ -1292,16 +1397,16 @@ if (safeRoomSlot.enabled) registerProvider('browserPlugin', createSafeRoomTokenB
 
 ```ts
 export const clientConfigProvider: ClientConfigProvider = {
-  name: 'plugin',
+  name: "plugin",
   async contribute() {
-    const { enabledPlugins } = await readPluginSettings()
-    if (Object.keys(enabledPlugins).length === 0) return {}
-    return { enabledPlugins }
+    const { enabledPlugins } = await readPluginSettings();
+    if (Object.keys(enabledPlugins).length === 0) return {};
+    return { enabledPlugins };
   },
   isDirty() {
-    return consumePluginConfigDirty()   // ← install/uninstall/toggle/update 时置脏
+    return consumePluginConfigDirty(); // ← install/uninstall/toggle/update 时置脏
   },
-}
+};
 ```
 
 注释解释了为什么必须这么做：
@@ -1323,13 +1428,13 @@ export const clientConfigProvider: ClientConfigProvider = {
 
 ```ts
 const safeRoomShellEnvProvider: ShellEnvProvider = {
-  name: 'safeRoom',
+  name: "safeRoom",
   async contribute({ sessionId, enableSafeHouse }) {
-    if (!sessionId) return null
-    if (!safeRoomSlot.enabled) return { IS_SAFE_ROOM_AGENT: 'false' }
-    return buildSafeRoomShellEnv(sessionId, enableSafeHouse)
+    if (!sessionId) return null;
+    if (!safeRoomSlot.enabled) return { IS_SAFE_ROOM_AGENT: "false" };
+    return buildSafeRoomShellEnv(sessionId, enableSafeHouse);
   },
-}
+};
 ```
 
 注释说明了合并顺序：
@@ -1342,9 +1447,9 @@ const safeRoomShellEnvProvider: ShellEnvProvider = {
 
 ```ts
 export class AutomationService implements IService, IAutomationBridge {
-  readonly id = 'automation'
-  readonly startPhase = LifecycleMainPhase.AfterWindowOpen
-  readonly dependencies: readonly string[] = []
+  readonly id = "automation";
+  readonly startPhase = LifecycleMainPhase.AfterWindowOpen;
+  readonly dependencies: readonly string[] = [];
   // …
 }
 ```
@@ -1396,7 +1501,7 @@ Plugin（容器 / 分发单元）
  * 一旦 seeded，所有消费方必须从注册表读市场根，绝不能从名字重新推算。
  */
 export function getDefaultMarketDir(marketName: string): string {
-  return path.join(getMarketplacesDir(), marketName)
+  return path.join(getMarketplacesDir(), marketName);
 }
 ```
 
@@ -1405,9 +1510,11 @@ export function getDefaultMarketDir(marketName: string): string {
 #### Schema 校验：zod 作为单一事实源
 
 ```ts
-export type PluginManifest = z.infer<ReturnType<typeof PluginManifestSchema>>
-export type CommandMetadata = z.infer<ReturnType<typeof CommandMetadataSchema>>
-export type MarketplaceSource = z.infer<ReturnType<typeof MarketplaceSourceSchema>>
+export type PluginManifest = z.infer<ReturnType<typeof PluginManifestSchema>>;
+export type CommandMetadata = z.infer<ReturnType<typeof CommandMetadataSchema>>;
+export type MarketplaceSource = z.infer<
+  ReturnType<typeof MarketplaceSourceSchema>
+>;
 ```
 
 **类型从 schema 推导**，而不是手写类型再单独写校验——彻底消除两者漂移的可能。注意 Schema 是 `ReturnType<typeof XxxSchema>`，说明它们是**工厂函数**（大概率为了注入 i18n 上下文或延迟求值）。
@@ -1420,11 +1527,13 @@ export type MarketplaceSource = z.infer<ReturnType<typeof MarketplaceSourceSchem
  * 这是 parseMarketplaceManifest 过滤掉无法在磁盘上解析的非本地源（npm/git/github）
  * 之后返回的条目类型。
  */
-export type LocalPluginEntry = Omit<PluginMarketplaceEntry, 'source'> & { source: string }
+export type LocalPluginEntry = Omit<PluginMarketplaceEntry, "source"> & {
+  source: string;
+};
 
-export type LocalMarketplaceManifest = Omit<PluginMarketplace, 'plugins'> & {
-  plugins: LocalPluginEntry[]
-}
+export type LocalMarketplaceManifest = Omit<PluginMarketplace, "plugins"> & {
+  plugins: LocalPluginEntry[];
+};
 ```
 
 用类型系统编码"已校验"这个运行时事实，让下游代码不必重复检查。
@@ -1453,21 +1562,21 @@ loadPlugin(dir, source)
 
 #### 完整服务清单（~40 文件）
 
-|服务|职责|
-| ------| ----------------------------------------|
-|`pluginDiscovery`|扫描与发现|
-|`pluginLoader`|manifest 解析与组件解析|
-|`pluginCrudService`|增删改|
-|`pluginInstallRegistry`|`installed_plugins.json` 读写|
-|`pluginSettingsService`|`enabledPlugins` 读写 + 脏标记|
-|`pluginStartupService`|启动时对账（reconcile）|
-|`pluginResourceDiscoveryService`|向 Agent 暴露 skills/commands/agents/mcp|
-|`pluginLifecycleReporter`|生命周期埋点|
-|`pluginUpdatePolling`|后台更新轮询|
-|`marketplacePluginService` / `marketplaceRegistryService`|市场逻辑|
-|`catxMarketApiService` / `catxMarketService`|CatX 官方市场|
-|`remoteMarketItem` / `remoteMarketUpdateService` / `remotePluginStagingService`|远程市场与暂存|
-|`enterpriseMarketplaceSlots`|企业市场扩展点|
+| 服务                                                                            | 职责                                     |
+| ------------------------------------------------------------------------------- | ---------------------------------------- |
+| `pluginDiscovery`                                                               | 扫描与发现                               |
+| `pluginLoader`                                                                  | manifest 解析与组件解析                  |
+| `pluginCrudService`                                                             | 增删改                                   |
+| `pluginInstallRegistry`                                                         | `installed_plugins.json` 读写            |
+| `pluginSettingsService`                                                         | `enabledPlugins` 读写 + 脏标记           |
+| `pluginStartupService`                                                          | 启动时对账（reconcile）                  |
+| `pluginResourceDiscoveryService`                                                | 向 Agent 暴露 skills/commands/agents/mcp |
+| `pluginLifecycleReporter`                                                       | 生命周期埋点                             |
+| `pluginUpdatePolling`                                                           | 后台更新轮询                             |
+| `marketplacePluginService` / `marketplaceRegistryService`                       | 市场逻辑                                 |
+| `catxMarketApiService` / `catxMarketService`                                    | CatX 官方市场                            |
+| `remoteMarketItem` / `remoteMarketUpdateService` / `remotePluginStagingService` | 远程市场与暂存                           |
+| `enterpriseMarketplaceSlots`                                                    | 企业市场扩展点                           |
 
 ### 11.3 Skill 子系统
 
@@ -1522,8 +1631,9 @@ function hotUpdateExcludeSkillPaths(): void {
 
 ```ts
 export function isSkillLocked(installPath: string): boolean {
-  const lockedPaths: string[] = getSettingsStorageService().get('lockedSkillPaths') ?? []
-  return lockedPaths.includes(normalizePath(installPath))
+  const lockedPaths: string[] =
+    getSettingsStorageService().get("lockedSkillPaths") ?? [];
+  return lockedPaths.includes(normalizePath(installPath));
 }
 ```
 
@@ -1537,9 +1647,10 @@ export function isSkillLocked(installPath: string): boolean {
 /** Polynomial Rolling Hash — 从 skillId 稳定映射到 0~3 的 fallback 图标索引。
  *  必须与渲染侧 SkillFallbackIcon.tsx 的 hashSeed 保持一致。 */
 function hashSeed(seed: string): number {
-  let h = 0
-  for (let i = 0; i < seed.length; i++) h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0
-  return Math.abs(h)
+  let h = 0;
+  for (let i = 0; i < seed.length; i++)
+    h = (Math.imul(31, h) + seed.charCodeAt(i)) | 0;
+  return Math.abs(h);
 }
 ```
 
@@ -1549,31 +1660,31 @@ function hashSeed(seed: string): number {
 
 `skills/catx/` 下有一整套上报链路：
 
-|文件|职责|
-| ----| -----------------------------|
-|`catxFullSync`|全量同步本地 skill 状态到云端|
-|`catxSkillReport` / `catxWorkspaceReport`|skill 级 / 工作区级上报|
-|`catxS3Upload`|产物上传 S3|
-|`catxCloudReport` / `catxReportBase`|上报基础设施|
-|`catxSkillService`|云端 skill 变更通知的接收处理|
+| 文件                                      | 职责                          |
+| ----------------------------------------- | ----------------------------- |
+| `catxFullSync`                            | 全量同步本地 skill 状态到云端 |
+| `catxSkillReport` / `catxWorkspaceReport` | skill 级 / 工作区级上报       |
+| `catxS3Upload`                            | 产物上传 S3                   |
+| `catxCloudReport` / `catxReportBase`      | 上报基础设施                  |
+| `catxSkillService`                        | 云端 skill 变更通知的接收处理 |
 
 ### 11.4 MCP / Command / Subagent
 
-|扩展物|存储位置|分发方式|Bridge|
-| ------| --------------| ----------------------| ------|
-|**MCP Server**|`~/<data>/mcp/` + plugin 内联|市场 / plugin 打包|`IMcpBridge`|
-|**Slash Command**|`~/<data>/commands/` + plugin 内|用户自建 / plugin 打包|`ICommandBridge`|
-|**Subagent**|`~/<data>/agents/`、`<ws>/<data>/agents/`|用户自建 / plugin 打包|`ISubagentBridge`|
-|**Snippet**|`~/<data>/snippets/`|用户自建（Raycast 式）|—|
+| 扩展物            | 存储位置                                  | 分发方式               | Bridge            |
+| ----------------- | ----------------------------------------- | ---------------------- | ----------------- |
+| **MCP Server**    | `~/<data>/mcp/` + plugin 内联             | 市场 / plugin 打包     | `IMcpBridge`      |
+| **Slash Command** | `~/<data>/commands/` + plugin 内          | 用户自建 / plugin 打包 | `ICommandBridge`  |
+| **Subagent**      | `~/<data>/agents/`、`<ws>/<data>/agents/` | 用户自建 / plugin 打包 | `ISubagentBridge` |
+| **Snippet**       | `~/<data>/snippets/`                      | 用户自建（Raycast 式） | —                 |
 
 `ISubagentBridge` 的接口体现了它的能力面：
 
 ```ts
-list(workspacePath)      // 列出可用 subagent
-availableModels()        // 可选模型
-availableTools()         // 可选工具
-update(items)            // 批量更新 → { success, affected }
-migrate(source, scope)   // 从其他来源迁移 → { count, success }
+list(workspacePath); // 列出可用 subagent
+availableModels(); // 可选模型
+availableTools(); // 可选工具
+update(items); // 批量更新 → { success, affected }
+migrate(source, scope); // 从其他来源迁移 → { count, success }
 ```
 
 `feature/agent/providers.ts` 里对每个方法都做了 **错误吞掉 + 结构化返回** 的包装：
@@ -1628,10 +1739,10 @@ private powerMonitorDisposers: Array<() => void> = []   // 休眠 / 锁屏恢复
 配合常量：
 
 ```ts
-MAX_WAKEUP_MS          // 单次 setTimeout 上限（防溢出）
-MISSED_RUN_GRACE_MS    // 错过执行的宽限窗口
-MAX_PER_TICK           // 单次 tick 最多执行几个任务（防雪崩）
-FALLBACK_POLL_MS       // 兜底轮询周期
+MAX_WAKEUP_MS; // 单次 setTimeout 上限（防溢出）
+MISSED_RUN_GRACE_MS; // 错过执行的宽限窗口
+MAX_PER_TICK; // 单次 tick 最多执行几个任务（防雪崩）
+FALLBACK_POLL_MS; // 兜底轮询周期
 ```
 
 `MISSED_RUN_GRACE_MS` 处理的是"电脑睡了 8 小时，醒来后 3 个任务都过期了"——在宽限期内的补跑，超出的丢弃（避免醒来瞬间跑几十个任务）。`MAX_PER_TICK` 是雪崩保护。
@@ -1640,8 +1751,9 @@ FALLBACK_POLL_MS       // 兜底轮询周期
 
 ```ts
 const RRULE_WEEKDAY_MAP: Record<Weekday, RRuleWeekday> = {
-  MO: RRule.MO, TU: RRule.TU, /* … */
-}
+  MO: RRule.MO,
+  TU: RRule.TU /* … */,
+};
 ```
 
 选 `rrule` 而非 cron 是因为它能表达"每月第二个周二"、"每个工作日"这类 cron 无法表达的规则，且是日历应用的通用标准，便于与外部系统互通。
@@ -1711,10 +1823,10 @@ UpdaterService（facade）
 getWindowsUpdateMode(): 'overlay' | 'mutex'
 ```
 
-|模式|流程|适用|
-| --------| ----------------------------------------------------------------------------| ----------|
-|`overlay`（默认）|直接覆盖安装，必须先停应用|简单场景|
-|`mutex`|**VSCode 同款**：下载时应用还活着就 `/verysilent` 跑安装器，靠 "updating" / "ready" 一对命名互斥体协调；**无退出时安装、无外部 mover**|大规模部署|
+| 模式              | 流程                                                                                                                                   | 适用       |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| `overlay`（默认） | 直接覆盖安装，必须先停应用                                                                                                             | 简单场景   |
+| `mutex`           | **VSCode 同款**：下载时应用还活着就 `/verysilent` 跑安装器，靠 "updating" / "ready" 一对命名互斥体协调；**无退出时安装、无外部 mover** | 大规模部署 |
 
 mutex 模式需要 `getWin32MutexName()` 与 Inno Setup 脚本的 `#define AppMutex` **严格一致**：
 
@@ -1745,9 +1857,15 @@ staging 完成后创建 <name>-ready
 #### 失败上报
 
 ```ts
-if (status === 'error') {
-  bridgeReportCount(Metrics.UPDATE_FAILURE, 1, { stage: inferUpdateFailureStage(error) })
-  void reportUpdateFailToGateway(app.getVersion(), info?.version ?? '', error ?? '')
+if (status === "error") {
+  bridgeReportCount(Metrics.UPDATE_FAILURE, 1, {
+    stage: inferUpdateFailureStage(error),
+  });
+  void reportUpdateFailToGateway(
+    app.getVersion(),
+    info?.version ?? "",
+    error ?? "",
+  );
 }
 ```
 
@@ -1759,12 +1877,12 @@ if (status === 'error') {
 
 基于 `WebContentsView`（而非已废弃的 `BrowserView`），由 `core/browser/` 管理：
 
-|模块|职责|
-| ----| ---------------------------------------------|
-|`tabManager`|标签页生命周期|
-|`webContentsViewManager`|原生视图挂载与 bounds 同步|
-|`viewStealthSetup`|反检测（UA / 响应头改写） + session partition|
-|`tools/browserAction`|暴露给 Agent 的浏览器动作工具|
+| 模块                     | 职责                                          |
+| ------------------------ | --------------------------------------------- |
+| `tabManager`             | 标签页生命周期                                |
+| `webContentsViewManager` | 原生视图挂载与 bounds 同步                    |
+| `viewStealthSetup`       | 反检测（UA / 响应头改写） + session partition |
+| `tools/browserAction`    | 暴露给 Agent 的浏览器动作工具                 |
 
 **Overlay 与 React 层的 z-index 冲突**是原生视图内嵌的经典难题——`WebContentsView` 永远盖在 DOM 之上。解法是 `useOverlayAutoHide`：监听 Radix Portal（Dialog / DropdownMenu）的打开，自动隐藏 overlay。这也是为什么 `pnpm-workspace.yaml` 要把 Radix 版本锁死。
 
@@ -1786,18 +1904,18 @@ if (status === 'error') {
 
 `previewService.ts` 按扩展名分发到四条渲染路径：
 
-|类型|渲染方式|扩展名|
-| ----| ------------------------| -----------------------------------------------|
-|`monaco`|Monaco Editor 只读|代码 / 文本，命中 `MONACO_LANGUAGE_MAP`|
-|`image`|`catpaw-local://` 直接 `<img>`|png/jpg/gif/webp/bmp/svg/ico/avif|
-|`video` / `audio`|`catpaw-local://` + Range 请求原生播放|mp4/webm/ogv/mov、mp3/wav/ogg/aac/m4a/flac/opus|
-|`online`|上传后由远端渲染服务出图|Office / PDF|
+| 类型              | 渲染方式                               | 扩展名                                          |
+| ----------------- | -------------------------------------- | ----------------------------------------------- |
+| `monaco`          | Monaco Editor 只读                     | 代码 / 文本，命中 `MONACO_LANGUAGE_MAP`         |
+| `image`           | `catpaw-local://` 直接 `<img>`         | png/jpg/gif/webp/bmp/svg/ico/avif               |
+| `video` / `audio` | `catpaw-local://` + Range 请求原生播放 | mp4/webm/ogv/mov、mp3/wav/ogg/aac/m4a/flac/opus |
+| `online`          | 上传后由远端渲染服务出图               | Office / PDF                                    |
 
 Cloud 模式下 HTML 有特殊处理：
 
 ```ts
 /** 浏览器可直接渲染的 HTML 扩展名 — cloud 模式优先用 previewUrl 渲染 */
-const CLOUD_HTML_EXTENSIONS = new Set(['html', 'htm', 'xhtml'])
+const CLOUD_HTML_EXTENSIONS = new Set(["html", "htm", "xhtml"]);
 ```
 
 理由是"观感对齐网页效果"——html 会命中 `MONACO_LANGUAGE_MAP` 被当成源码看，但用户通常想看渲染结果。
@@ -1820,12 +1938,12 @@ register(hooks: PetPluginHooks = {}): PetPluginAPI
 
 ```ts
 const STATUS_PRIORITY: Record<PetSessionStatus, number> = {
-  waiting: 0,   // 最高——等用户回答，必须让用户看到
-  failed:  1,
+  waiting: 0, // 最高——等用户回答，必须让用户看到
+  failed: 1,
   running: 2,
-  review:  3,
-  idle:    4,
-}
+  review: 3,
+  idle: 4,
+};
 ```
 
 多会话并发时，桌宠显示优先级最高的那个状态。`waiting` 排第一是产品判断：**需要用户介入的事情最紧急**。
@@ -1833,7 +1951,7 @@ const STATUS_PRIORITY: Record<PetSessionStatus, number> = {
 #### 节流广播
 
 ```ts
-const BROADCAST_THROTTLE_MS = 100
+const BROADCAST_THROTTLE_MS = 100;
 ```
 
 注释解释了为什么可以安全节流：
@@ -1861,11 +1979,18 @@ WenshuExtensionHost
 关键技巧是注册 `wenshu-sw://` **特权 scheme**：
 
 ```ts
-protocol.registerSchemesAsPrivileged([{
-  scheme: 'wenshu-sw',
-  privileges: { standard: true, secure: true, supportFetchAPI: true,
-                corsEnabled: true, allowServiceWorkers: true },
-}])
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "wenshu-sw",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      allowServiceWorkers: true,
+    },
+  },
+]);
 ```
 
 注释解释了为什么必须这么做：
@@ -1907,7 +2032,7 @@ catdesk://?client=local                              仅激活应用到前台
 ```ts
 // Auth deep link 的 pending 缓冲/消费与事件通道落在 platform/auth/contracts/
 // （分层约束：provider 在 L1 无法依赖 feature/）。此处仅 re-export 类型/消费函数便于聚合。
-export { consumePendingAuthDeepLink } from '../../platform/auth/contracts/authDeepLinkEvents'
+export { consumePendingAuthDeepLink } from "../../platform/auth/contracts/authDeepLinkEvents";
 ```
 
 即使为了聚合导出的便利，也不破坏分层——只做 re-export，实体放在正确的层。
@@ -1916,10 +2041,10 @@ export { consumePendingAuthDeepLink } from '../../platform/auth/contracts/authDe
 
 ```ts
 function bringToForeground(): BrowserWindow | null {
-  const win = _mainWindow
-  if (!win || win.isDestroyed()) return null
-  windowFocusSlot.bringToForeground(win)   // ← 统一实现
-  return win
+  const win = _mainWindow;
+  if (!win || win.isDestroyed()) return null;
+  windowFocusSlot.bringToForeground(win); // ← 统一实现
+  return win;
 }
 ```
 
@@ -1935,13 +2060,13 @@ function bringToForeground(): BrowserWindow | null {
 
 ### 13.1 五类存储介质
 
-|介质|存放内容|位置|理由|
-| ------------------| -------------------------------------------------------------| --------| -----------------------------|
-|**SQLite**（better-sqlite3）|会话消息、conversation 记录|userData|量大、需查询、需事务|
-|**electron-store**（JSON）|settings、UI state、项目/会话元数据|userData|小体量、需人工可读可改|
-|**文件系统**|skills / plugins / commands / agents / snippets / automations|`~/<scopedDataFolderName>/`|与 CLI 共享、Agent 可直接读写|
-|**远程 Gateway**|云端会话/项目/设置|远端|`remoteStorageEnabled=true` 时启用|
-|**内存**|Agent 运行态、stream 映射、临时缓存|—|进程生命周期|
+| 介质                         | 存放内容                                                      | 位置                        | 理由                               |
+| ---------------------------- | ------------------------------------------------------------- | --------------------------- | ---------------------------------- |
+| **SQLite**（better-sqlite3） | 会话消息、conversation 记录                                   | userData                    | 量大、需查询、需事务               |
+| **electron-store**（JSON）   | settings、UI state、项目/会话元数据                           | userData                    | 小体量、需人工可读可改             |
+| **文件系统**                 | skills / plugins / commands / agents / snippets / automations | `~/<scopedDataFolderName>/` | 与 CLI 共享、Agent 可直接读写      |
+| **远程 Gateway**             | 云端会话/项目/设置                                            | 远端                        | `remoteStorageEnabled=true` 时启用 |
+| **内存**                     | Agent 运行态、stream 映射、临时缓存                           | —                           | 进程生命周期                       |
 
 ### 13.2 用户数据目录全景
 
@@ -1986,9 +2111,9 @@ function bringToForeground(): BrowserWindow | null {
 
 ```ts
 export function getSkillUpdateTmpDirFromPath(skillDir: string): string {
-  const parsed = parseSkillDataPath(skillDir)
-  if (parsed) return path.join(parsed.dataRoot, '.skills-tmp')   // ← 同 dataRoot
-  return getSkillsTmpDir()
+  const parsed = parseSkillDataPath(skillDir);
+  if (parsed) return path.join(parsed.dataRoot, ".skills-tmp"); // ← 同 dataRoot
+  return getSkillsTmpDir();
 }
 ```
 
@@ -1996,13 +2121,13 @@ export function getSkillUpdateTmpDirFromPath(skillDir: string): string {
 
 > 无论用户级（`~/<scoped>/`）还是工作区级（`{ws}/<scoped>/`）都能工作，保证暂存目录与 skill **在同一文件系统**上（这样 `fs.rename` 不会撞 EXDEV）。
 
-**下载-然后-交换（download-then-swap）**  的原子更新模式，前提是 rename 不跨设备。
+**下载-然后-交换（download-then-swap）** 的原子更新模式，前提是 rename 不跨设备。
 
 #### ② 共享 vs 账号隔离的区分
 
 ```ts
-getSharedUserDataDir()   // ~/<dataFolderName>/         永不按账号分片
-getUserDataDir()         // ~/<dataFolderName>/<scope>/ 按账号分片
+getSharedUserDataDir(); // ~/<dataFolderName>/         永不按账号分片
+getUserDataDir(); // ~/<dataFolderName>/<scope>/ 按账号分片
 ```
 
 `sso_config.json` 有两份：共享的（`getSharedSsoConfigPath`）与账号级的（`getLocalSsoConfigPath`）——共享的用于"当前登录的是哪个账号"，账号级的存该账号的凭据。这是多账号切换必须的双层结构。
@@ -2010,8 +2135,8 @@ getUserDataDir()         // ~/<dataFolderName>/<scope>/ 按账号分片
 #### ③ 元数据文件名也随品牌派生
 
 ```ts
-getSkillMetaFilename()        // `${dataFolderName}-meta.json`         → .catpaw-meta.json
-getSkillInstallMetaFilename() // `${dataFolderName}-install-meta.json`
+getSkillMetaFilename(); // `${dataFolderName}-meta.json`         → .catpaw-meta.json
+getSkillInstallMetaFilename(); // `${dataFolderName}-install-meta.json`
 ```
 
 连元数据文件名都不硬编码，保证两个 CatDesk-family 产品的 skill 目录可以共存而不互相误读。
@@ -2030,8 +2155,8 @@ loadSession(sessionId): Promise<LoadSessionResult>
 配套的**订阅与广播**协议：
 
 ```ts
-addActiveSession(sessionId)     // 标记窗口正在订阅，主进程触发一次 `replace` 全量广播
-removeActiveSession(sessionId)  // 取消订阅（多窗口下避免重复广播）
+addActiveSession(sessionId); // 标记窗口正在订阅，主进程触发一次 `replace` 全量广播
+removeActiveSession(sessionId); // 取消订阅（多窗口下避免重复广播）
 ```
 
 这是"**订阅即拉快照**"模式——窗口订阅时主进程主动推一次全量，之后只推增量。配合 `useBridgeEvent` 的 `onSubscribed` 就能彻底消除事件丢失窗口。
@@ -2045,7 +2170,7 @@ removeActiveSession(sessionId)  // 取消订阅（多窗口下避免重复广播
  * 同步调用可消除 async invoke 的微任务间隙，防止 echo 事件先于标志位被处理。
  */
 appendUserMessageSync: (sessionId, message): boolean =>
-  getElectronAPI()?.appendUserMessageSync?.(sessionId, message) ?? false
+  getElectronAPI()?.appendUserMessageSync?.(sessionId, message) ?? false;
 ```
 
 全仓几乎所有 IPC 都是异步 `invoke`，这里是**唯一刻意用同步 **​**​`sendSync`​** 的地方。理由是竞态：异步 invoke 会让出一个微任务，而 SSE 的 `user_message` echo 可能恰在这个间隙到达，此时 `markUserMessageSent()` 标志位还没设上，echo 就会被当成新消息上屏造成重复。
@@ -2086,14 +2211,14 @@ appendUserMessageSync: (sessionId, message): boolean =>
 > - **主动采样**（DOM 节点数 / 内存读数）使用尾置 `setTimeout` + `requestIdleCallback`，在主线程繁忙时**自动退避**，绝不抢占 UI 线程；
 > - 真正"重"的诊断（CPU profile / Heap snapshot / Chromium trace）**不在渲染侧**——那些都跑在主进程，由 `diagnosticsOrchestratorService` 触发，对渲染线程几乎零影响。
 
- **"观测工具本身不能成为性能问题"**  ——这条原则被逐条论证，而不是空喊。
+**"观测工具本身不能成为性能问题"** ——这条原则被逐条论证，而不是空喊。
 
 三个初始化的顺序也有讲究：
 
 ```ts
-initTelemetry()            // 1. 最前，捕获早期错误
-initClientObservability()  // 2. React 渲染前，覆盖启动期错误
-initExpertLogoResolver()   // 3. 给 normalizer 提供同步查询
+initTelemetry(); // 1. 最前，捕获早期错误
+initClientObservability(); // 2. React 渲染前，覆盖启动期错误
+initExpertLogoResolver(); // 3. 给 normalizer 提供同步查询
 ```
 
 `initExpertLogoResolver` 的理由：让历史消息**在入 store 前**一次性补齐 `chip.thumbnailUrl`，避免渲染层每次遍历查找。这是"**把计算前移到数据入口**"的优化。
@@ -2110,9 +2235,9 @@ initExpertLogoResolver()   // 3. 给 normalizer 提供同步查询
  * - macOS / Linux：沿用 workingSetSize。
  */
 function procMemoryKB(metric: Electron.ProcessMetric): number {
-  const privateBytes = metric.memory.privateBytes ?? 0
-  if (process.platform === 'win32' && privateBytes > 0) return privateBytes
-  return metric.memory.workingSetSize
+  const privateBytes = metric.memory.privateBytes ?? 0;
+  if (process.platform === "win32" && privateBytes > 0) return privateBytes;
+  return metric.memory.workingSetSize;
 }
 ```
 
@@ -2132,9 +2257,9 @@ private prevCliCpuSample = new Map<number, { cpuTimeSec: number; atMs: number }>
 阈值定义：
 
 ```ts
-CPU_WARNING_THRESHOLD_PERCENT = 60      // 单进程 60s 平均 CPU
-EVENT_LOOP_DELAY_P99_WARNING_MS = 100   // 事件循环延迟 P99
-ANR_BLOCK_THRESHOLD_MS = 3000           // 主线程单次阻塞 > 3s = ANR
+CPU_WARNING_THRESHOLD_PERCENT = 60; // 单进程 60s 平均 CPU
+EVENT_LOOP_DELAY_P99_WARNING_MS = 100; // 事件循环延迟 P99
+ANR_BLOCK_THRESHOLD_MS = 3000; // 主线程单次阻塞 > 3s = ANR
 ```
 
 ANR 用 **max 而非 p99** 的理由：
@@ -2156,23 +2281,23 @@ private intensiveUntil = 0
 
 ### 14.4 容错设计清单
 
-|场景|机制|位置|
-| --------------------------| ----------------------------------------| ---------------|
-|asar 损坏（更新失败）|bootstrap 早期守卫 + 友好弹窗 + 下载链接|`bootstrap.ts`|
-|preload 缺失|Bridge 全线降级为安全默认值|`bridge/shared.ts`|
-|React 渲染崩溃|`<ErrorBoundary>` 包裹整个 App|`main.tsx`|
-|IPC 订阅回调抛错|`useBridgeEvent` 的 try/catch|`useBridgeEvent.ts`|
-|命令 handler 抛错|`commandRegistry.execute` 捕获，返回 true 不打断派发循环|`commandRegistry.ts`|
-|订阅者抛错|所有 `notify()` 循环内逐个 try/catch|三个 Service|
-|Agent 崩溃|独立子进程，不影响宿主|进程隔离|
-|FFI 死锁|utilityProcess 隔离 + kill 收割|`keyboardHelperHost.ts`|
-|`automation.json` 被 Agent 写坏|watcher 校验 + 快照回滚 + 错误精确投递|`folderAutomationWatcher.ts`|
-|存储早期未就绪|`resolveMode()` 兜底 `RUN_MODE.LOCAL`|各 bridge index|
-|云端连接 lifecycle 错误|降级为 null（区别于业务错误的 throw）|`cloudHandlers`|
-|Windows mutex 原生依赖缺失|降级到文件标记 + 轮询超时|`updater/shared.ts`|
-|预览 tab 撑爆内存|全局 LRU 淘汰 + 停 watcher|`previewService.ts`|
-|SSE 事件在订阅前丢失|`onSubscribed` + 主进程 replay 广播|`useBridgeEvent`|
-|多窗口事件串扰|`streamId → sessionId` 归属校验|`useAgentEventHandler`|
+| 场景                            | 机制                                                     | 位置                         |
+| ------------------------------- | -------------------------------------------------------- | ---------------------------- |
+| asar 损坏（更新失败）           | bootstrap 早期守卫 + 友好弹窗 + 下载链接                 | `bootstrap.ts`               |
+| preload 缺失                    | Bridge 全线降级为安全默认值                              | `bridge/shared.ts`           |
+| React 渲染崩溃                  | `<ErrorBoundary>` 包裹整个 App                           | `main.tsx`                   |
+| IPC 订阅回调抛错                | `useBridgeEvent` 的 try/catch                            | `useBridgeEvent.ts`          |
+| 命令 handler 抛错               | `commandRegistry.execute` 捕获，返回 true 不打断派发循环 | `commandRegistry.ts`         |
+| 订阅者抛错                      | 所有 `notify()` 循环内逐个 try/catch                     | 三个 Service                 |
+| Agent 崩溃                      | 独立子进程，不影响宿主                                   | 进程隔离                     |
+| FFI 死锁                        | utilityProcess 隔离 + kill 收割                          | `keyboardHelperHost.ts`      |
+| `automation.json` 被 Agent 写坏 | watcher 校验 + 快照回滚 + 错误精确投递                   | `folderAutomationWatcher.ts` |
+| 存储早期未就绪                  | `resolveMode()` 兜底 `RUN_MODE.LOCAL`                    | 各 bridge index              |
+| 云端连接 lifecycle 错误         | 降级为 null（区别于业务错误的 throw）                    | `cloudHandlers`              |
+| Windows mutex 原生依赖缺失      | 降级到文件标记 + 轮询超时                                | `updater/shared.ts`          |
+| 预览 tab 撑爆内存               | 全局 LRU 淘汰 + 停 watcher                               | `previewService.ts`          |
+| SSE 事件在订阅前丢失            | `onSubscribed` + 主进程 replay 广播                      | `useBridgeEvent`             |
+| 多窗口事件串扰                  | `streamId → sessionId` 归属校验                          | `useAgentEventHandler`       |
 
 ---
 
@@ -2191,13 +2316,13 @@ private intensiveUntil = 0
 }
 ```
 
-|Fuse|值|安全意义|
-| ----| ----| ----------------------------------------|
-|`enableNodeOptionsEnvironmentVariable`|**false**|阻止通过 `NODE_OPTIONS` 环境变量注入启动脚本|
-|`enableNodeCliInspectArguments`|**false**|阻止 `--inspect` 附加调试器窃取内存数据|
-|`enableEmbeddedAsarIntegrityValidation`|**true**|asar 完整性校验，防篡改|
-|`onlyLoadAppFromAsar`|**true**|只从 asar 加载，防止旁路放置同名目录劫持|
-|`runAsNode`|true|保留——CLI 与 utilityProcess 需要|
+| Fuse                                    | 值        | 安全意义                                     |
+| --------------------------------------- | --------- | -------------------------------------------- |
+| `enableNodeOptionsEnvironmentVariable`  | **false** | 阻止通过 `NODE_OPTIONS` 环境变量注入启动脚本 |
+| `enableNodeCliInspectArguments`         | **false** | 阻止 `--inspect` 附加调试器窃取内存数据      |
+| `enableEmbeddedAsarIntegrityValidation` | **true**  | asar 完整性校验，防篡改                      |
+| `onlyLoadAppFromAsar`                   | **true**  | 只从 asar 加载，防止旁路放置同名目录劫持     |
+| `runAsNode`                             | true      | 保留——CLI 与 utilityProcess 需要             |
 
 `runAsNode: true` 是有意识的权衡：它降低了一点安全性（`ELECTRON_RUN_AS_NODE` 可用），但 CLI 子进程与 keyboard-helper utilityProcess 都依赖它。
 
@@ -2205,7 +2330,7 @@ private intensiveUntil = 0
 
 - **contextIsolation**：渲染层拿不到 Node API，只能通过 `contextBridge` 暴露的 `window.electronAPI`
 - **API 白名单**：preload 显式列举每个方法，无通配转发
--  **​`<webview>`​**​ ** 严格受限**：仅 CloudTerminalPanel 一处使用，且需主窗口显式开启 `webviewTag`
+- **​`<webview>`​**​ ** 严格受限**：仅 CloudTerminalPanel 一处使用，且需主窗口显式开启 `webviewTag`
 - **自定义协议特权最小化**：`catpaw-local` 只开 `stream` / `supportFetchAPI` / `corsEnabled`，不开 `allowServiceWorkers`；`wenshu-sw` 才开（因为要跑 SW）
 
 ### 15.3 账号数据隔离
@@ -2219,7 +2344,7 @@ private intensiveUntil = 0
 ### 15.4 Safe Room（安全屋）
 
 ```ts
-buildSafeRoomShellEnv(sessionId, enableSafeHouse)
+buildSafeRoomShellEnv(sessionId, enableSafeHouse);
 // → { IS_SAFE_ROOM_AGENT, DAXIANG_SAFE_ROOM_TOKEN, … }
 ```
 
@@ -2336,11 +2461,11 @@ release/                  electron-builder 输出
 
 ### 16.4 三平台产物
 
-|平台|目标|最低版本|备注|
-| -------| ----| --------| ---------------------------|
-|macOS|`zip`|13.0|`identity: null`（OSS 不签名）；分类 `developer-tools`|
-|Windows|`nsis` + `zip`|—|NSIS 非一键、允许改安装目录|
-|Linux|`AppImage` + `deb`|—|分类 `Development`|
+| 平台    | 目标               | 最低版本 | 备注                                                   |
+| ------- | ------------------ | -------- | ------------------------------------------------------ |
+| macOS   | `zip`              | 13.0     | `identity: null`（OSS 不签名）；分类 `developer-tools` |
+| Windows | `nsis` + `zip`     | —        | NSIS 非一键、允许改安装目录                            |
+| Linux   | `AppImage` + `deb` | —        | 分类 `Development`                                     |
 
 macOS 用 `.zip` 而非 `.dmg` 是为了配合 **Squirrel.Mac 自动更新**（它要求 zip 格式）。
 
@@ -2379,9 +2504,9 @@ Dev              : <repo>/product.json
 
 ```yaml
 onlyBuiltDependencies:
-  - '@catpaw/agent-sdk'
-  - '@catpaw/ripgrep'
-  - '@swc/core'
+  - "@catpaw/agent-sdk"
+  - "@catpaw/ripgrep"
+  - "@swc/core"
   - electron
   - electron-winstaller
   - esbuild
@@ -2398,18 +2523,18 @@ pnpm 默认禁止依赖执行 install 脚本（供应链安全），这里显式
 
 **168 个测试文件**，覆盖主进程与渲染进程：
 
-|区域|测试重点|代表|
-| -----------------| --------------------------------------------------------| --------------|
-|主进程 base|路径解析|`dataPathService.test.ts`|
-|主进程 plugin|发现/路径/设置/并发/市场/更新|15 个测试文件|
-|主进程 skills|fs / 导入 / 元数据 / 路径 / 开关 / 更新|6 个测试文件|
-|主进程 automation|schema / 服务 / 调度同步 / store / watcher / rrule|6 个测试文件|
-|主进程 system|文件上传 / 图片压缩 / 设置副作用 / 更新版本 / 窗口背景|5 个测试文件|
-|渲染 platform|commandRegistry / contextkeyParser / keybindingService|3 个测试文件|
-|渲染 stores|各 slice 独立测试|10 个测试文件|
-|渲染 hooks|24 个测试文件|—|
-|渲染 components|ChatAreaV2 隔离/会话隔离/mention/slash/错误恢复/历史导航|12+ 个测试文件|
-|i18n|**翻译完整性守卫**|`i18nGuard.test.ts`|
+| 区域              | 测试重点                                                 | 代表                      |
+| ----------------- | -------------------------------------------------------- | ------------------------- |
+| 主进程 base       | 路径解析                                                 | `dataPathService.test.ts` |
+| 主进程 plugin     | 发现/路径/设置/并发/市场/更新                            | 15 个测试文件             |
+| 主进程 skills     | fs / 导入 / 元数据 / 路径 / 开关 / 更新                  | 6 个测试文件              |
+| 主进程 automation | schema / 服务 / 调度同步 / store / watcher / rrule       | 6 个测试文件              |
+| 主进程 system     | 文件上传 / 图片压缩 / 设置副作用 / 更新版本 / 窗口背景   | 5 个测试文件              |
+| 渲染 platform     | commandRegistry / contextkeyParser / keybindingService   | 3 个测试文件              |
+| 渲染 stores       | 各 slice 独立测试                                        | 10 个测试文件             |
+| 渲染 hooks        | 24 个测试文件                                            | —                         |
+| 渲染 components   | ChatAreaV2 隔离/会话隔离/mention/slash/错误恢复/历史导航 | 12+ 个测试文件            |
+| i18n              | **翻译完整性守卫**                                       | `i18nGuard.test.ts`       |
 
 ### 17.2 Vitest 配置的两处经验修复
 
@@ -2421,8 +2546,8 @@ pnpm 默认禁止依赖执行 install 脚本（供应链安全），这里显式
 // vitest 4 下 `@testing-library/jest-dom/vitest` 的自扩展副作用在某些 workspace/
 // 多 project 配置里落不到本项目的 expect 实例上，导致 `toBeInTheDocument` 等
 // 匹配器全部报 "Invalid Chai property"（renderer 项目下 64+ 个测试受影响）。
-import * as jestDomMatchers from '@testing-library/jest-dom/matchers'
-expect.extend(jestDomMatchers)
+import * as jestDomMatchers from "@testing-library/jest-dom/matchers";
+expect.extend(jestDomMatchers);
 ```
 
 **② 全局 cleanup**
@@ -2432,7 +2557,9 @@ expect.extend(jestDomMatchers)
 // 会把它的 in-flight effects / async requests 带进下一个测试，消耗排队的
 // mockResolvedValueOnce 值并污染无关的 spec（表现为跨测试的 flaky 失败，
 // 例如 usePluginsData 看到过期的 page 响应）。
-afterEach(() => { cleanup() })
+afterEach(() => {
+  cleanup();
+});
 ```
 
 **③ Vitest 4 的构造函数 mock**
@@ -2446,7 +2573,10 @@ global.ResizeObserver = vi.fn(function (this: unknown) { … })
 ### 17.3 默认不注入 electronAPI
 
 ```ts
-Object.defineProperty(window, 'electronAPI', { writable: true, value: undefined })
+Object.defineProperty(window, "electronAPI", {
+  writable: true,
+  value: undefined,
+});
 ```
 
 这是**故意的**：让所有组件测试**默认跑在 Bridge 降级路径上**。这带来两个好处：
@@ -2473,7 +2603,7 @@ plugin/__tests__/marketplacePluginService.concurrent.test.ts   并发写
 automation/__tests__/folderAutomationWatcher.test.ts           防篡改
 ```
 
-**测试名描述"防止什么退化"，而不是"测什么函数"**  ——这让测试成为活文档。
+**测试名描述"防止什么退化"，而不是"测什么函数"** ——这让测试成为活文档。
 
 ---
 
@@ -2481,17 +2611,17 @@ automation/__tests__/folderAutomationWatcher.test.ts           防篡改
 
 ### 18.1 已做的权衡
 
-|决策|收益|代价|判断|
-| ----| -------------------------------------| --------------------------------------| --------------------------------------------------|
-|**70+ Slots 扩展点**|OSS/distro 零 fork 分叉，可维护多租户|认知负担；改行为要同时想 OSS 与 distro|✅ 值得——多租户是硬需求，fork 分叉的长期成本远高|
-|**Local/Cloud 双 Bridge**|UI 代码复用率极高|每个能力要写两遍实现|✅ 值得——接口层薄，实现本就不同|
-|**单 Zustand Store + 40 slice**|无 Provider 嵌套、跨 slice 读取方便|store 类型巨大；slice 间无强隔离|⚠️ 可接受——但 slice 数量再涨要考虑拆分|
-|**会话真值在主进程**|多窗口天然一致；崩溃可恢复|每次更新一次 IPC；需节流合批|✅ 值得——多窗口是核心场景|
-|**Hash 路由多形态窗口**|单 bundle，构建简单|所有窗口加载完整 JS；靠 `MainWindowApp` 隔离副作用|⚠️ 可接受——已通过组件边界隔离缓解|
-|**koffi utilityProcess 隔离**|主进程绝不被 FFI 卡死|多一个进程；跨进程消息开销|✅ 值得——死锁的代价是整个应用假死|
-|**​`chatInputSlots`​**​ ** 用构建时常量**|可 tree-shake|无法运行时切换|✅ 值得——租户在构建时就确定|
-|**ChatArea 与 ChatAreaV2 并存**|平滑迁移，可灰度回滚|两套渲染链路同时维护|⚠️ 临时状态——应有明确的下线时间点|
-|**​`appendUserMessageSync`​**​ ** 用同步 IPC**|消除 echo 竞态|阻塞渲染进程（极短）|✅ 值得——但必须是唯一例外|
+| 决策                                           | 收益                                  | 代价                                               | 判断                                             |
+| ---------------------------------------------- | ------------------------------------- | -------------------------------------------------- | ------------------------------------------------ |
+| **70+ Slots 扩展点**                           | OSS/distro 零 fork 分叉，可维护多租户 | 认知负担；改行为要同时想 OSS 与 distro             | ✅ 值得——多租户是硬需求，fork 分叉的长期成本远高 |
+| **Local/Cloud 双 Bridge**                      | UI 代码复用率极高                     | 每个能力要写两遍实现                               | ✅ 值得——接口层薄，实现本就不同                  |
+| **单 Zustand Store + 40 slice**                | 无 Provider 嵌套、跨 slice 读取方便   | store 类型巨大；slice 间无强隔离                   | ⚠️ 可接受——但 slice 数量再涨要考虑拆分           |
+| **会话真值在主进程**                           | 多窗口天然一致；崩溃可恢复            | 每次更新一次 IPC；需节流合批                       | ✅ 值得——多窗口是核心场景                        |
+| **Hash 路由多形态窗口**                        | 单 bundle，构建简单                   | 所有窗口加载完整 JS；靠 `MainWindowApp` 隔离副作用 | ⚠️ 可接受——已通过组件边界隔离缓解                |
+| **koffi utilityProcess 隔离**                  | 主进程绝不被 FFI 卡死                 | 多一个进程；跨进程消息开销                         | ✅ 值得——死锁的代价是整个应用假死                |
+| **​`chatInputSlots`​**​ ** 用构建时常量**      | 可 tree-shake                         | 无法运行时切换                                     | ✅ 值得——租户在构建时就确定                      |
+| **ChatArea 与 ChatAreaV2 并存**                | 平滑迁移，可灰度回滚                  | 两套渲染链路同时维护                               | ⚠️ 临时状态——应有明确的下线时间点                |
+| **​`appendUserMessageSync`​**​ ** 用同步 IPC** | 消除 echo 竞态                        | 阻塞渲染进程（极短）                               | ✅ 值得——但必须是唯一例外                        |
 
 ### 18.2 可识别的技术债
 
@@ -2509,7 +2639,7 @@ src/components/ChatAreaV2/  (v2，@catpaw-ui/render-react)
 ```ts
 // FIXME(Phase 3 cleanup): service 不应直接依赖 stores/，后续需把 store 依赖改为参数注入
 // eslint-disable-next-line import-x/no-restricted-paths
-import { useCatDeskStore } from '../stores/catDeskStore'
+import { useCatDeskStore } from "../stores/catDeskStore";
 ```
 
 `previewService` 里有 3 处这样的标注。已用 ESLint 规则（`import-x/no-restricted-paths`）**把约束显式化**并逐个 disable 标记，属于"**受控的技术债**"——比无声违反好得多。
@@ -2521,7 +2651,7 @@ import { useCatDeskStore } from '../stores/catDeskStore'
 #### 债务 4：`__petDebug` 挂在全局 window
 
 ```ts
-;(window as any).__petDebug = { update, remove, clear, devtools, demo }
+(window as any).__petDebug = { update, remove, clear, devtools, demo };
 ```
 
 这段调试代码在 `bridge.ts` 里**无条件**注入所有渲染窗口，生产环境也存在。建议用 `import.meta.env.DEV` 包裹。
@@ -2531,7 +2661,7 @@ import { useCatDeskStore } from '../stores/catDeskStore'
 **近期（1–2 个迭代）**
 
 1. **确定 ChatArea v1 下线时间表**——双链路是当前最大的复杂度来源
-2.  **​`__petDebug`​**​ ** 加 DEV 守卫**——一行改动，降低生产面
+2. **​`__petDebug`​**​ ** 加 DEV 守卫**——一行改动，降低生产面
 3. **完成 service → store 的依赖倒置**——把 store 依赖改为参数注入，让 `previewService` 可独立测试
 
 **中期（3–6 个月）**
@@ -2573,51 +2703,51 @@ import { useCatDeskStore } from '../stores/catDeskStore'
 
 ## 附录 A：关键文件索引
 
-|关注点|入口文件|
-| -------------------------| --------|
-|主进程启动与崩溃守卫|`electron/bootstrap.ts`|
-|产品配置（品牌/行为开关）|`electron/services/base/productService.ts`|
-|所有路径解析|`electron/services/base/dataPathService.ts`|
-|日志体系|`electron/services/base/logFileService.ts`|
-|IPC 聚合出口|`src/bridge/bridge.ts`|
-|IPC 降级基础|`src/bridge/shared.ts`|
-|IPC 类型契约|`src/vite-env.d.ts`|
-|事件订阅规范|`src/hooks/useBridgeEvent.ts`|
-|渲染进程入口|`src/main.tsx` → `src/App.tsx`|
-|状态装配与启动编排|`src/stores/catDeskStore.ts`|
-|Slice 注册契约|`src/stores/slices/registry.ts`|
-|命令注册表|`src/platform/commands/commandRegistry.ts`|
-|快捷键派发|`src/platform/keybinding/keybindingService.ts`|
-|上下文键|`src/platform/contextkey/contextKeyService.ts`|
-|Agent 通道抽象|`src/services/agent/IAgentChannel.ts`|
-|对话 Facade|`src/hooks/useConversation.ts`|
-|Agent 事件处理|`src/hooks/useAgentEventHandler.ts`|
-|文件预览编排|`src/services/previewService.ts`|
-|打包配置|`electron-builder.json`|
-|依赖锁定|`pnpm-workspace.yaml`|
-|测试环境|`vitest.setup.ts`|
+| 关注点                    | 入口文件                                       |
+| ------------------------- | ---------------------------------------------- |
+| 主进程启动与崩溃守卫      | `electron/bootstrap.ts`                        |
+| 产品配置（品牌/行为开关） | `electron/services/base/productService.ts`     |
+| 所有路径解析              | `electron/services/base/dataPathService.ts`    |
+| 日志体系                  | `electron/services/base/logFileService.ts`     |
+| IPC 聚合出口              | `src/bridge/bridge.ts`                         |
+| IPC 降级基础              | `src/bridge/shared.ts`                         |
+| IPC 类型契约              | `src/vite-env.d.ts`                            |
+| 事件订阅规范              | `src/hooks/useBridgeEvent.ts`                  |
+| 渲染进程入口              | `src/main.tsx` → `src/App.tsx`                 |
+| 状态装配与启动编排        | `src/stores/catDeskStore.ts`                   |
+| Slice 注册契约            | `src/stores/slices/registry.ts`                |
+| 命令注册表                | `src/platform/commands/commandRegistry.ts`     |
+| 快捷键派发                | `src/platform/keybinding/keybindingService.ts` |
+| 上下文键                  | `src/platform/contextkey/contextKeyService.ts` |
+| Agent 通道抽象            | `src/services/agent/IAgentChannel.ts`          |
+| 对话 Facade               | `src/hooks/useConversation.ts`                 |
+| Agent 事件处理            | `src/hooks/useAgentEventHandler.ts`            |
+| 文件预览编排              | `src/services/previewService.ts`               |
+| 打包配置                  | `electron-builder.json`                        |
+| 依赖锁定                  | `pnpm-workspace.yaml`                          |
+| 测试环境                  | `vitest.setup.ts`                              |
 
 ## 附录 B：术语表
 
-|术语|含义|
-| ----| -----------------------------------------------------------------|
-|**Distro**|基于 OSS 内核的下游定制版本（internal / external(CatX) / 私有化）|
-|**Slot**|`*Slots.ts` 扩展点文件，distro 可通过同路径同名文件影子覆盖|
-|**Shadow**|distro 覆盖 OSS 文件的机制，由 `distroResolvePlugin` 在构建时解析|
-|**runMode**|运行模式，`local`（本机 Agent）或 `cloud`（远端 Desk）|
-|**Desk**|一个 CatDesk 实例；cloud 模式下本机作为 Channel 连接远端 Desk|
-|**Pike**|长连接推送协议，用于 cloud 模式的 RPC 与事件|
-|**Skill**|能力包，含 `SKILL.md` + 脚本 + 资源，Agent 可按需加载|
-|**Plugin**|容器扩展，打包 skills / MCP servers / commands / subagents|
-|**MCP**|Model Context Protocol，标准化的工具服务器协议|
-|**Subagent**|子代理，主 Agent 可委派任务的专门化代理|
-|**Artifact**|Agent 产出物（文件/代码/文档）|
-|**Safe Room（安全屋）**|敏感数据处理的隔离环境，JWT 授权|
-|**Automation**|定时/事件触发的无人值守 Agent 任务|
-|**Quick Chat**|Raycast 风格的全局唤起输入窗（Command+J）|
-|**Popout**|从主窗口分离出的独立会话窗口|
-|**Pet Overlay**|桌面宠物悬浮层，被动展示会话状态|
-|**Wenshu（文书）**|美团内部下载插件，以 Chrome 扩展形式集成|
-|**Horn**|配置下发/灰度开关服务|
-|**Owl / Raptor / LX**|美团内部的 APM / 指标 / 埋点平台|
-|**CIBA**|Client-Initiated Backchannel Authentication，端上确认的授权流|
+| 术语                    | 含义                                                              |
+| ----------------------- | ----------------------------------------------------------------- |
+| **Distro**              | 基于 OSS 内核的下游定制版本（internal / external(CatX) / 私有化） |
+| **Slot**                | `*Slots.ts` 扩展点文件，distro 可通过同路径同名文件影子覆盖       |
+| **Shadow**              | distro 覆盖 OSS 文件的机制，由 `distroResolvePlugin` 在构建时解析 |
+| **runMode**             | 运行模式，`local`（本机 Agent）或 `cloud`（远端 Desk）            |
+| **Desk**                | 一个 CatDesk 实例；cloud 模式下本机作为 Channel 连接远端 Desk     |
+| **Pike**                | 长连接推送协议，用于 cloud 模式的 RPC 与事件                      |
+| **Skill**               | 能力包，含 `SKILL.md` + 脚本 + 资源，Agent 可按需加载             |
+| **Plugin**              | 容器扩展，打包 skills / MCP servers / commands / subagents        |
+| **MCP**                 | Model Context Protocol，标准化的工具服务器协议                    |
+| **Subagent**            | 子代理，主 Agent 可委派任务的专门化代理                           |
+| **Artifact**            | Agent 产出物（文件/代码/文档）                                    |
+| **Safe Room（安全屋）** | 敏感数据处理的隔离环境，JWT 授权                                  |
+| **Automation**          | 定时/事件触发的无人值守 Agent 任务                                |
+| **Quick Chat**          | Raycast 风格的全局唤起输入窗（Command+J）                         |
+| **Popout**              | 从主窗口分离出的独立会话窗口                                      |
+| **Pet Overlay**         | 桌面宠物悬浮层，被动展示会话状态                                  |
+| **Wenshu（文书）**      | 美团内部下载插件，以 Chrome 扩展形式集成                          |
+| **Horn**                | 配置下发/灰度开关服务                                             |
+| **Owl / Raptor / LX**   | 美团内部的 APM / 指标 / 埋点平台                                  |
+| **CIBA**                | Client-Initiated Backchannel Authentication，端上确认的授权流     |
