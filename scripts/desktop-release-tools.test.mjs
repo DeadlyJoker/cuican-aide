@@ -11,6 +11,7 @@ import {
   latestManifest,
   nodeReleasePlan,
   scanArtifactRoots,
+  verifyReleaseChecks,
   windowsSigningConfig,
   writeUpdaterPublicKey,
 } from "./desktop-release-tools.mjs";
@@ -257,6 +258,106 @@ test("rejects malformed updater public key configuration", () => {
   );
 });
 
+test("requires every ruleset-bound check run to succeed on the release commit", () => {
+  const commitSha = "a".repeat(40);
+  assert.doesNotThrow(() =>
+    verifyReleaseChecks({
+      branchProtection: branchProtection([]),
+      checkRuns: {
+        total_count: 2,
+        check_runs: [
+          checkRun("TypeScript CI", commitSha, 101),
+          checkRun("Bazel", commitSha, 202),
+        ],
+      },
+      commitSha,
+      rules: [
+        requiredChecksRule([
+          { context: "TypeScript CI", integration_id: 101 },
+          { context: "Bazel", integration_id: 202 },
+        ]),
+      ],
+    }),
+  );
+});
+
+test("rejects incomplete, failed, or app-mismatched required check runs", () => {
+  const commitSha = "b".repeat(40);
+  const rules = [requiredChecksRule([{ context: "CI", integration_id: 101 }])];
+  assert.throws(
+    () =>
+      verifyReleaseChecks({
+        branchProtection: branchProtection([]),
+        checkRuns: {
+          total_count: 2,
+          check_runs: [checkRun("CI", commitSha, 101)],
+        },
+        commitSha,
+        rules,
+      }),
+    /check_runs_incomplete/u,
+  );
+  assert.throws(
+    () =>
+      verifyReleaseChecks({
+        branchProtection: branchProtection([]),
+        checkRuns: {
+          total_count: 1,
+          check_runs: [checkRun("CI", commitSha, 101, "failure")],
+        },
+        commitSha,
+        rules,
+      }),
+    /required_check_failed/u,
+  );
+  assert.throws(
+    () =>
+      verifyReleaseChecks({
+        branchProtection: branchProtection([]),
+        checkRuns: {
+          total_count: 1,
+          check_runs: [checkRun("CI", commitSha, 999)],
+        },
+        commitSha,
+        rules,
+      }),
+    /required_check_ambiguous/u,
+  );
+  assert.throws(
+    () =>
+      verifyReleaseChecks({
+        branchProtection: branchProtection([]),
+        checkRuns: { total_count: 0, check_runs: [] },
+        commitSha: "c".repeat(40),
+        rules: [],
+      }),
+    /required_checks_missing/u,
+  );
+});
+
+test("accepts classic main branch protection returned by GraphQL", () => {
+  const commitSha = "d".repeat(40);
+  assert.doesNotThrow(() =>
+    verifyReleaseChecks({
+      branchProtection: branchProtection([
+        {
+          matchingRefs: refConnection([{ name: "main" }]),
+          requiredStatusChecks: [
+            { app: { databaseId: 303 }, context: "Classic CI" },
+          ],
+          requiresStatusChecks: true,
+        },
+      ]),
+      checkRuns: {
+        total_count: 1,
+        check_runs: [checkRun("Classic CI", commitSha, 303)],
+      },
+      commitSha,
+      rules: [],
+    }),
+  );
+});
+
 function fixture(name, installerName, updaterName) {
   const root = temporaryDirectory();
   const bundle = join(root, name, "bundle");
@@ -274,4 +375,43 @@ function temporaryDirectory() {
 
 function digest(value) {
   return createHash("sha256").update(value).digest("hex");
+}
+
+function requiredChecksRule(requiredStatusChecks) {
+  return {
+    type: "required_status_checks",
+    parameters: { required_status_checks: requiredStatusChecks },
+  };
+}
+
+function checkRun(name, headSha, appId, conclusion = "success") {
+  return {
+    app: { id: appId },
+    conclusion,
+    head_sha: headSha,
+    name,
+    status: "completed",
+  };
+}
+
+function branchProtection(nodes) {
+  return {
+    data: {
+      repository: {
+        branchProtectionRules: {
+          nodes,
+          pageInfo: { hasNextPage: false },
+          totalCount: nodes.length,
+        },
+      },
+    },
+  };
+}
+
+function refConnection(nodes) {
+  return {
+    nodes,
+    pageInfo: { hasNextPage: false },
+    totalCount: nodes.length,
+  };
 }

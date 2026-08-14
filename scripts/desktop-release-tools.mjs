@@ -248,6 +248,118 @@ export function writeUpdaterPublicKey({ configPath, outputPath }) {
   }
 }
 
+export function verifyReleaseChecks({
+  branchProtection,
+  checkRuns,
+  commitSha,
+  rules,
+}) {
+  if (!/^[a-f0-9]{40}$/u.test(commitSha))
+    throw new Error("desktop_release_commit_invalid");
+  if (!Array.isArray(rules) || rules.length >= 100)
+    throw new Error("desktop_release_rules_invalid");
+  const requirements = new Map();
+  for (const rule of rules) {
+    if (rule?.type !== "required_status_checks") continue;
+    const required = rule.parameters?.required_status_checks;
+    if (!Array.isArray(required))
+      throw new Error("desktop_release_rules_invalid");
+    for (const value of required) {
+      const context = value?.context;
+      const integrationId = value?.integration_id ?? null;
+      if (
+        typeof context !== "string" ||
+        context.length === 0 ||
+        context.length > 512 ||
+        /[\r\n]/u.test(context) ||
+        (integrationId !== null &&
+          (!Number.isSafeInteger(integrationId) || integrationId <= 0))
+      ) {
+        throw new Error("desktop_release_rules_invalid");
+      }
+      requirements.set(`${context}\0${integrationId ?? "any"}`, {
+        context,
+        integrationId,
+      });
+    }
+  }
+  const protection = branchProtection?.data?.repository?.branchProtectionRules;
+  if (
+    !Number.isSafeInteger(protection?.totalCount) ||
+    !Array.isArray(protection?.nodes) ||
+    protection.totalCount !== protection.nodes.length ||
+    protection.pageInfo?.hasNextPage !== false
+  ) {
+    throw new Error("desktop_release_branch_protection_invalid");
+  }
+  for (const rule of protection.nodes) {
+    const matchingRefs = rule?.matchingRefs;
+    if (
+      !Number.isSafeInteger(matchingRefs?.totalCount) ||
+      !Array.isArray(matchingRefs?.nodes) ||
+      matchingRefs.totalCount !== matchingRefs.nodes.length ||
+      matchingRefs.pageInfo?.hasNextPage !== false
+    ) {
+      throw new Error("desktop_release_branch_protection_invalid");
+    }
+    if (!matchingRefs.nodes.some((ref) => ref?.name === "main")) continue;
+    if (
+      rule.requiresStatusChecks !== true ||
+      !Array.isArray(rule.requiredStatusChecks)
+    )
+      throw new Error("desktop_release_branch_protection_invalid");
+    for (const value of rule.requiredStatusChecks) {
+      const context = value?.context;
+      const integrationId = value?.app?.databaseId ?? null;
+      if (
+        typeof context !== "string" ||
+        context.length === 0 ||
+        context.length > 512 ||
+        /[\r\n]/u.test(context) ||
+        (integrationId !== null &&
+          (!Number.isSafeInteger(integrationId) || integrationId <= 0))
+      ) {
+        throw new Error("desktop_release_branch_protection_invalid");
+      }
+      requirements.set(`${context}\0${integrationId ?? "any"}`, {
+        context,
+        integrationId,
+      });
+    }
+  }
+  if (requirements.size === 0)
+    throw new Error("desktop_release_required_checks_missing");
+  if (
+    !Number.isSafeInteger(checkRuns?.total_count) ||
+    !Array.isArray(checkRuns?.check_runs) ||
+    checkRuns.total_count !== checkRuns.check_runs.length
+  ) {
+    throw new Error("desktop_release_check_runs_incomplete");
+  }
+
+  for (const requirement of requirements.values()) {
+    const matches = checkRuns.check_runs.filter(
+      (run) =>
+        run?.name === requirement.context &&
+        run?.head_sha === commitSha &&
+        (requirement.integrationId === null ||
+          run?.app?.id === requirement.integrationId),
+    );
+    if (matches.length !== 1)
+      throw new Error(
+        `desktop_release_required_check_ambiguous:${requirement.context}`,
+      );
+    if (
+      matches[0].status !== "completed" ||
+      matches[0].conclusion !== "success"
+    ) {
+      throw new Error(
+        `desktop_release_required_check_failed:${requirement.context}`,
+      );
+    }
+  }
+}
+
 function exactlyOne(values, kind) {
   if (values.length !== 1)
     throw new Error(`desktop_${kind}_count_invalid:${values.length}`);
@@ -402,6 +514,17 @@ function main() {
     writeUpdaterPublicKey({
       configPath: input.one("config"),
       outputPath: input.one("output"),
+    });
+    return;
+  }
+  if (command === "verify-release-checks") {
+    verifyReleaseChecks({
+      branchProtection: JSON.parse(
+        readFileSync(input.one("branch-protection"), "utf8"),
+      ),
+      checkRuns: JSON.parse(readFileSync(input.one("check-runs"), "utf8")),
+      commitSha: input.one("commit"),
+      rules: JSON.parse(readFileSync(input.one("rules"), "utf8")),
     });
     return;
   }

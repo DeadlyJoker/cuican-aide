@@ -21,8 +21,79 @@ env:
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
 jobs:
+  trust:
+    name: Bind release tag to trusted main commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      checks: read
+      contents: read
+    outputs:
+      release_sha: ${{ steps.release.outputs.release_sha }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .node-version
+      - name: Verify immutable tag, trusted main ancestry, and required CI
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.DESKTOP_RELEASE_TRUST_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^desktop-v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          origin_url="$(git remote get-url origin)"
+          [[ "$origin_url" == "https://github.com/$GITHUB_REPOSITORY" || \
+             "$origin_url" == "https://github.com/$GITHUB_REPOSITORY.git" ]]
+          git fetch --force --no-tags origin \
+            "+refs/heads/main:refs/remotes/origin/main" \
+            "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          release_sha="$(git rev-parse --verify "$RELEASE_TAG^{commit}")"
+          test "$(git rev-parse --verify HEAD)" = "$release_sha"
+          git merge-base --is-ancestor "$release_sha" refs/remotes/origin/main
+          expected_main="$(git rev-parse refs/remotes/origin/main)"$'\t'refs/heads/main
+          expected_tag="$(git rev-parse "refs/tags/$RELEASE_TAG")"$'\t'"refs/tags/$RELEASE_TAG"
+          test "$(git ls-remote --refs origin refs/heads/main)" = "$expected_main"
+          test "$(git ls-remote --refs origin "refs/tags/$RELEASE_TAG")" = "$expected_tag"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+          rules="$RUNNER_TEMP/main-rules.json"
+          branch_protection="$RUNNER_TEMP/main-branch-protection.json"
+          check_runs="$RUNNER_TEMP/release-check-runs.json"
+          if ! gh api -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/$GITHUB_REPOSITORY/rules/branches/main?per_page=100" > "$rules"; then
+            echo "release trust requires repository rules metadata visibility" >&2
+            exit 1
+          fi
+          owner="${GITHUB_REPOSITORY%%/*}"
+          repository="${GITHUB_REPOSITORY#*/}"
+          if ! gh api graphql -F owner="$owner" -F repository="$repository" \
+            -f query='query($owner:String!,$repository:String!){repository(owner:$owner,name:$repository){branchProtectionRules(first:100){totalCount pageInfo{hasNextPage} nodes{requiresStatusChecks requiredStatusChecks{context app{databaseId}} matchingRefs(first:100,query:"main"){totalCount pageInfo{hasNextPage} nodes{name}}}}}}' \
+            > "$branch_protection"; then
+            echo "release trust needs branch-protection read access; configure DESKTOP_RELEASE_TRUST_TOKEN with Administration: read and Checks: read" >&2
+            exit 1
+          fi
+          if ! gh api -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/$GITHUB_REPOSITORY/commits/$release_sha/check-runs?filter=latest&per_page=100" \
+            > "$check_runs"; then
+            echo "release trust requires the active GH token to have Checks: read permission" >&2
+            exit 1
+          fi
+          node scripts/desktop-release-tools.mjs verify-release-checks \
+            --commit "$release_sha" --rules "$rules" \
+            --branch-protection "$branch_protection" --check-runs "$check_runs"
+          echo "release_sha=$release_sha" >> "$GITHUB_OUTPUT"
+
   macos:
     name: macOS arm64 signed package
+    needs: trust
     runs-on: macos-15
     timeout-minutes: 120
     permissions:
@@ -32,7 +103,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.trust.outputs.release_sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
@@ -185,6 +256,7 @@ jobs:
 
   windows:
     name: Windows x64 signed package
+    needs: trust
     runs-on: windows-2022
     timeout-minutes: 120
     permissions:
@@ -194,7 +266,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.trust.outputs.release_sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
@@ -353,7 +425,7 @@ jobs:
 
   publish:
     name: Publish complete desktop release
-    needs: [macos, windows]
+    needs: [trust, macos, windows]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -361,7 +433,7 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
-          ref: ${{ env.RELEASE_TAG }}
+          ref: ${{ needs.trust.outputs.release_sha }}
           fetch-depth: 0
           persist-credentials: false
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
@@ -372,6 +444,13 @@ jobs:
           pattern: desktop-*
           path: release-assets
           merge-multiple: true
+      - name: Revalidate tag before publishing updater metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch --force --no-tags origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          test "$(git rev-parse --verify "$RELEASE_TAG^{commit}")" = \
+            "${{ needs.trust.outputs.release_sha }}"
       - name: Merge updater manifest
         run: node scripts/desktop-release-tools.mjs merge --tag "$RELEASE_TAG" --repository "$GITHUB_REPOSITORY" --fragments release-assets --output latest.json
       - name: Upload assets and publish only after both platforms are complete
