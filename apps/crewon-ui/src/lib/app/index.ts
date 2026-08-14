@@ -18,11 +18,6 @@ export {
   commandShellRuntimeState,
 } from "./appCommandShellRuntime";
 export { showDemoThreadsAction } from "./appConnectionActions";
-export {
-  addLocalComposerResources,
-  platformResourceMentionPath,
-  withPlatformResourceMention,
-} from "./appComposerAttachmentActions";
 export { createAppSettingsCoordinator } from "./appSettingsCoordinator";
 export { useAppChromeState } from "./useAppChromeState";
 export { useAppCommandShellRoute } from "./useAppCommandShellRoute";

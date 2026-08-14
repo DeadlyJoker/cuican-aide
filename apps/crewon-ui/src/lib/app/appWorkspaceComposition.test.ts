@@ -208,6 +208,9 @@ describe("App Workspace Control composition", () => {
     expect(source).toContain("useControlComposerResourceDiscovery");
     expect(source).not.toContain("useProviderResourceComposer");
     expect(source).not.toContain("providerResourceComposer");
+    expect(source).not.toContain("platformResourceMentionPath");
+    expect(source).not.toContain("withPlatformResourceMention");
+    expect(source).not.toContain("onComposerResourceSelect=");
   });
 
   it("routes Library interactions only through Control", () => {

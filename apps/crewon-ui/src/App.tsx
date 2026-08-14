@@ -46,8 +46,6 @@ import {
   shouldRenderCommandShellView,
   assistantThreadRuntimeState,
   commandShellRuntimeState,
-  platformResourceMentionPath,
-  withPlatformResourceMention,
   useAppDraftWorkspaceState,
   showDemoThreadsAction,
 } from "./lib/app";
@@ -682,15 +680,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         }}
         onAddLocalResources={addControlKnowledgeFiles}
         onChangeComposerValue={setComposerValue}
-        onComposerResourceSelect={({ kind, name, platformResource }) => {
-          setPendingComposerMentions((current) =>
-            withPlatformResourceMention(current, {
-              kind,
-              name,
-              path: platformResourceMentionPath(platformResource),
-            }),
-          );
-        }}
         onClearAssistantThread={() => {
           if (assistantThread) {
             void clearAssistantThread(assistantThread);
