@@ -159,6 +159,23 @@ describe("App Workspace Control composition", () => {
     );
   });
 
+  it("keeps production composition free of demo preview threads and turns", () => {
+    const productionSources = [
+      "../../App.tsx",
+      "./useAppEnvironment.ts",
+      "./effects/useAppThreadListEffects.ts",
+      "./effects/useAppViewSyncEffects.ts",
+      "./handlers/appThreadRuntimeHandlers.ts",
+      "../thread/threadMessageActions.ts",
+      "../thread/threadSearchActions.ts",
+      "../thread/threadToolActions.ts",
+    ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
+
+    expect(productionSources.join("\n")).not.toMatch(
+      /demoItems|isDemoPreview|showDemoThreads|createDemoThread|createDemoTurn|createDraftDemoThread|demoData/u,
+    );
+  });
+
   it("keeps active App catalog consumers off the App Server module", () => {
     const source = readFileSync(
       new URL(

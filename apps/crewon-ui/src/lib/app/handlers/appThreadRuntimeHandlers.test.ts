@@ -11,7 +11,6 @@ import type {
   ToggleArchivedThreadsActionParams,
 } from "../../thread/threadListActions";
 import type {
-  CreateDemoThreadActionParams,
   CreateThreadActionParams,
   InterruptActiveTurnActionParams,
   SendMessageActionParams,
@@ -47,14 +46,9 @@ const threadListSpy = vi.hoisted(() => ({
 }));
 
 const threadMessageSpy = vi.hoisted(() => ({
-  createDemoParams: null as CreateDemoThreadActionParams | null,
   createParams: null as CreateThreadActionParams | null,
   interruptParams: null as InterruptActiveTurnActionParams | null,
   sendParams: null as SendMessageActionParams | null,
-  createDemo: vi.fn((params: CreateDemoThreadActionParams) => {
-    threadMessageSpy.createDemoParams = params;
-    return thread("demo-thread");
-  }),
   create: vi.fn(async (params: CreateThreadActionParams) => {
     threadMessageSpy.createParams = params;
     return thread("created-thread");
@@ -88,7 +82,6 @@ vi.mock("../../thread/threadListActions", () => ({
 }));
 
 vi.mock("../../thread/threadMessageActions", () => ({
-  createDemoThreadAction: threadMessageSpy.createDemo,
   createThreadAction: threadMessageSpy.create,
   interruptActiveTurnAction: threadMessageSpy.interrupt,
   sendMessageAction: threadMessageSpy.send,
@@ -137,15 +130,11 @@ function createParams(
     busyToolId: null,
     client: client(),
     confirm: () => true,
-    demoResponse: "Demo response",
     getShowArchivedThreads: () => false,
     isConnected: true,
     isDemo: false,
-    isDemoPreview: false,
     isSending: false,
     locale: "en",
-    newDraftPreview: "Draft preview",
-    newDraftThread: "Draft",
     pendingComposerMentions: [],
     prompt: () => "Renamed",
     recordShowArchivedThreads: () => {},
@@ -180,7 +169,6 @@ describe("app thread runtime handlers", () => {
     threadListSpy.renameParams = null;
     threadListSpy.selectParams = null;
     threadListSpy.toggleParams = null;
-    threadMessageSpy.createDemoParams = null;
     threadMessageSpy.createParams = null;
     threadMessageSpy.interruptParams = null;
     threadMessageSpy.sendParams = null;
@@ -246,7 +234,6 @@ describe("app thread runtime handlers", () => {
     });
     expect(threadMessageSpy.sendParams).toMatchObject({
       activeTurnId: "turn-1",
-      demoResponse: "Demo response",
       selectedThreadId: "selected-thread",
       text: "hello",
     });
@@ -272,18 +259,12 @@ describe("app thread runtime handlers", () => {
     });
   });
 
-  it("wires demo draft creation and active turn interruption", async () => {
+  it("wires draft creation and active turn interruption", async () => {
     const handlers = createAppThreadRuntimeHandlers(createParams());
 
-    handlers.createDemoThread("demo prompt");
     handlers.startDraftThread();
     await handlers.interruptActiveTurn();
 
-    expect(threadMessageSpy.createDemoParams).toMatchObject({
-      initialPrompt: "demo prompt",
-      newDraftPreview: "Draft preview",
-      newDraftThread: "Draft",
-    });
     expect(threadListSpy.startDraft).toHaveBeenCalledOnce();
     expect(threadMessageSpy.interruptParams).toMatchObject({
       activeTurnId: "turn-1",
@@ -351,12 +332,10 @@ describe("app thread runtime handlers", () => {
 
     expect(threadToolSpy.reviewParams).toMatchObject({
       isDemo: false,
-      isDemoPreview: false,
       selectedThread: thread("selected-thread"),
     });
     expect(threadToolSpy.sideChatParams).toMatchObject({
       isDemo: false,
-      isDemoPreview: false,
       selectedThread: thread("selected-thread"),
     });
     expect(threadMessageSpy.create).toHaveBeenCalledTimes(2);

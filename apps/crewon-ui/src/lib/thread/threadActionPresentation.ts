@@ -136,6 +136,16 @@ export function threadCreateFailureNotice(
   );
 }
 
+export function threadCreateUnavailableNotice(locale: Locale): NoticeState {
+  return {
+    text:
+      locale === "zh"
+        ? "连接 CrewON Control 后才能创建任务"
+        : "Connect to CrewON Control before creating a task",
+    tone: "warning",
+  };
+}
+
 export function threadGuidanceAppendedNotice(locale: Locale): NoticeState {
   return {
     text:
@@ -156,6 +166,16 @@ export function threadSendFailureNotice(
       ? "发送到后端失败，消息已保留在输入框。"
       : "Unable to send to backend. The message was kept in the composer.",
   );
+}
+
+export function threadSendUnavailableNotice(locale: Locale): NoticeState {
+  return {
+    text:
+      locale === "zh"
+        ? "连接 CrewON Control 后才能发送消息"
+        : "Connect to CrewON Control before sending a message",
+    tone: "warning",
+  };
 }
 
 export function threadInterruptRequestedNotice(locale: Locale): NoticeState {

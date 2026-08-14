@@ -62,7 +62,9 @@ function state(initialSelectedThreadId: string | null = "thread-1") {
     setNotice(notice: NoticeState | null) {
       this.notices.push(notice);
     },
-    setSelectedThreadId(updater: (currentThreadId: string | null) => string | null) {
+    setSelectedThreadId(
+      updater: (currentThreadId: string | null) => string | null,
+    ) {
       selectedThreadId = updater(selectedThreadId);
     },
     setThreads(updater: (currentThreads: Thread[]) => Thread[]) {
@@ -73,34 +75,6 @@ function state(initialSelectedThreadId: string | null = "thread-1") {
 }
 
 describe("thread search actions", () => {
-  it("uses demo threads in demo preview mode", () => {
-    const captured = state();
-    const showDemoThreads = vi.fn();
-
-    const cleanup = runThreadSearchEffectAction({
-      clearTimeout: () => {},
-      client: null,
-      currentRequestId: () => 1,
-      emptySelectionBehavior: "selectFirst",
-      isConnected: false,
-      isDemoPreview: true,
-      locale: "en",
-      requestId: 1,
-      searchTerm: "query",
-      setIsSearchingThreads: captured.setIsSearchingThreads.bind(captured),
-      setNotice: captured.setNotice.bind(captured),
-      setSelectedThreadId: captured.setSelectedThreadId,
-      setThreads: captured.setThreads.bind(captured),
-      setTimeout,
-      showArchivedThreads: false,
-      showDemoThreads,
-    });
-
-    expect(cleanup).toBeUndefined();
-    expect(captured.isSearchingValues).toEqual([false]);
-    expect(showDemoThreads).toHaveBeenCalledOnce();
-  });
-
   it("lists threads immediately when search is empty", async () => {
     const captured = state();
 
@@ -118,7 +92,6 @@ describe("thread search actions", () => {
       currentRequestId: () => 2,
       emptySelectionBehavior: "selectFirst",
       isConnected: true,
-      isDemoPreview: false,
       locale: "en",
       requestId: 2,
       searchTerm: "   ",
@@ -128,7 +101,6 @@ describe("thread search actions", () => {
       setThreads: captured.setThreads.bind(captured),
       setTimeout,
       showArchivedThreads: true,
-      showDemoThreads: () => {},
     });
     await flushAsyncWork();
 
@@ -153,7 +125,6 @@ describe("thread search actions", () => {
       currentRequestId: () => 7,
       emptySelectionBehavior: "preserve",
       isConnected: true,
-      isDemoPreview: false,
       locale: "en",
       requestId: 7,
       searchTerm: "",
@@ -163,7 +134,6 @@ describe("thread search actions", () => {
       setThreads: captured.setThreads.bind(captured),
       setTimeout,
       showArchivedThreads: false,
-      showDemoThreads: () => {},
     });
     await flushAsyncWork();
 
@@ -191,7 +161,6 @@ describe("thread search actions", () => {
       currentRequestId: () => 6,
       emptySelectionBehavior: "selectFirst",
       isConnected: true,
-      isDemoPreview: false,
       locale: "en",
       requestId: 6,
       searchTerm: "",
@@ -201,7 +170,6 @@ describe("thread search actions", () => {
       setThreads: captured.setThreads.bind(captured),
       setTimeout,
       showArchivedThreads: false,
-      showDemoThreads: () => {},
     });
     await flushAsyncWork();
 
@@ -233,7 +201,6 @@ describe("thread search actions", () => {
       currentRequestId: () => 3,
       emptySelectionBehavior: "selectFirst",
       isConnected: true,
-      isDemoPreview: false,
       locale: "en",
       requestId: 3,
       searchTerm: " demo ",
@@ -246,7 +213,6 @@ describe("thread search actions", () => {
         return 10 as ReturnType<typeof setTimeout>;
       },
       showArchivedThreads: false,
-      showDemoThreads: () => {},
     });
 
     expect(typeof cleanup).toBe("function");
@@ -274,7 +240,6 @@ describe("thread search actions", () => {
       currentRequestId: () => 99,
       emptySelectionBehavior: "selectFirst",
       isConnected: true,
-      isDemoPreview: false,
       locale: "en",
       requestId: 4,
       searchTerm: "",
@@ -284,7 +249,6 @@ describe("thread search actions", () => {
       setThreads: captured.setThreads.bind(captured),
       setTimeout,
       showArchivedThreads: false,
-      showDemoThreads: () => {},
     });
     await flushAsyncWork();
 
@@ -308,7 +272,6 @@ describe("thread search actions", () => {
       currentRequestId: () => 5,
       emptySelectionBehavior: "selectFirst",
       isConnected: true,
-      isDemoPreview: false,
       locale: "en",
       requestId: 5,
       searchTerm: "",
@@ -318,7 +281,6 @@ describe("thread search actions", () => {
       setThreads: captured.setThreads.bind(captured),
       setTimeout,
       showArchivedThreads: false,
-      showDemoThreads: () => {},
     });
     await flushAsyncWork();
 

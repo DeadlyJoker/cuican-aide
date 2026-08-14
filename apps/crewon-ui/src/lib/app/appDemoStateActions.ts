@@ -8,7 +8,7 @@ import {
   demoGitRemoteDiff,
   demoThreadGoal,
 } from "../demo/demoContent";
-import { localizeSeedDemoThreads } from "./appUiState";
+import { getDemoThreads } from "../demo/demoData";
 import type { AccountStatus, GitRemoteDiffSummary } from "./appStatusTypes";
 import type { ConnectionState } from "./appRuntimeState";
 import type { Locale } from "../i18n";
@@ -16,6 +16,18 @@ import type { Locale } from "../i18n";
 type ThreadListSetter = (
   updater: (currentThreads: Thread[]) => Thread[],
 ) => void;
+
+function localizeSeedDemoThreads(
+  currentThreads: Thread[],
+  locale: Locale,
+): Thread[] {
+  const seedThreadById = new Map(
+    getDemoThreads(locale).map((thread) => [thread.id, thread]),
+  );
+  return currentThreads.map(
+    (thread) => seedThreadById.get(thread.id) ?? thread,
+  );
+}
 
 export function localizeDemoThreadsAction(params: {
   connectionState: ConnectionState;

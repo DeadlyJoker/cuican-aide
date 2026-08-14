@@ -27,7 +27,6 @@ import {
   type ToggleArchivedThreadsActionParams,
 } from "../../thread/threadListActions";
 import {
-  createDemoThreadAction,
   createThreadAction,
   interruptActiveTurnAction,
   sendMessageAction,
@@ -69,7 +68,6 @@ type AppThreadRuntimeClient = NonNullable<ArchiveThreadActionParams["client"]> &
 export type AppThreadRuntimeHandlers = {
   archiveThread: (thread: Thread) => Promise<void>;
   clearAssistantThread: (thread: Thread) => Promise<void>;
-  createDemoThread: (initialPrompt?: string) => Thread;
   createThread: (
     initialPrompt?: string,
     threadSource?: string,
@@ -109,18 +107,14 @@ export type AppThreadRuntimeHandlersParams = {
   busyToolId: ToolId | null;
   client: AppThreadRuntimeClient | null;
   confirm: ConfirmHandler;
-  demoResponse: string;
   getShowArchivedThreads: () => boolean;
   isConnected: boolean;
   isDemo: boolean;
-  isDemoPreview: boolean;
   isSending: boolean;
   locale: Locale;
   onExecutionIntentCommitted?: (
     intent: Exclude<CommandExecutionIntent, "none">,
   ) => void;
-  newDraftPreview: string;
-  newDraftThread: string;
   pendingComposerMentions: PendingComposerMention[];
   prompt: (message: string, defaultValue: string) => string | null;
   recordShowArchivedThreads: (showArchived: boolean) => void;
@@ -156,19 +150,6 @@ export function createAppThreadRuntimeHandlers(
   params: AppThreadRuntimeHandlersParams,
 ): AppThreadRuntimeHandlers {
   const activeTurnId = params.activeTurnId;
-  const createDemoThread = (initialPrompt?: string) =>
-    createDemoThreadAction({
-      initialPrompt,
-      locale: params.locale,
-      newDraftPreview: params.newDraftPreview,
-      newDraftThread: params.newDraftThread,
-      setInspectorOpen: params.setInspectorOpen,
-      setSelectedThreadId: (threadId) => params.setSelectedThreadId(threadId),
-      setSidebarOpen: params.setSidebarOpen,
-      setThreads: params.setThreads,
-      shouldAutoCloseSidebar: params.shouldAutoCloseSidebar,
-    });
-
   const createThread = (
     initialPrompt?: string,
     threadSource = "control-api",
@@ -177,7 +158,6 @@ export function createAppThreadRuntimeHandlers(
   ) =>
     createThreadAction({
       client: params.client,
-      createDemoThread,
       initialPrompt,
       isConnected: params.isConnected,
       locale: params.locale,
@@ -215,9 +195,7 @@ export function createAppThreadRuntimeHandlers(
           threadSettings,
           workspaceCwd,
         ),
-      demoResponse: params.demoResponse,
       isConnected: params.isConnected,
-      isDemoPreview: params.isDemoPreview,
       isSending: params.isSending,
       locale: params.locale,
       onExecutionIntentCommitted: params.onExecutionIntentCommitted,
@@ -260,7 +238,6 @@ export function createAppThreadRuntimeHandlers(
         setThreads: params.setThreads,
         thread,
       }),
-    createDemoThread,
     createThread,
     deleteArchivedThread: (thread) =>
       deleteArchivedThreadAction({
@@ -373,7 +350,6 @@ export function createAppThreadRuntimeHandlers(
         createThread,
         isConnected: params.isConnected,
         isDemo: params.isDemo,
-        isDemoPreview: params.isDemoPreview,
         locale: params.locale,
         selectedThread: params.selectedThread,
         setBusyToolId: params.setBusyToolId,
@@ -389,7 +365,6 @@ export function createAppThreadRuntimeHandlers(
         createThread,
         isConnected: params.isConnected,
         isDemo: params.isDemo,
-        isDemoPreview: params.isDemoPreview,
         locale: params.locale,
         selectedThread: params.selectedThread,
         setBusyToolId: params.setBusyToolId,

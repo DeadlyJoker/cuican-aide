@@ -47,7 +47,6 @@ import {
   assistantThreadRuntimeState,
   commandShellRuntimeState,
   useAppDraftWorkspaceState,
-  showDemoThreadsAction,
 } from "./lib/app";
 import {
   mentionsWithSlashCommand,
@@ -57,7 +56,6 @@ import { withKnowledgeReferenceMention } from "./lib/shared/composerMentions";
 import type { CapabilityPanelItem } from "./lib/capability/capabilityPanelTypes";
 import { useControlComposerResourceDiscovery } from "./lib/control-runtime/useControlComposerResourceDiscovery";
 import { demoCapabilityPanel, demoSettingsPanel } from "./lib/demo/demoContent";
-import { getDemoThreads } from "./lib/demo/demoData";
 import { persistLocale, translate } from "./lib/i18n";
 import { persistTheme } from "./lib/theme";
 import { isSingleConversationThread } from "./lib/thread/threadSourceFilters";
@@ -77,7 +75,7 @@ import { importControlKnowledgeFiles } from "./lib/knowledge/controlKnowledgeFil
 import type { LocalResourceSelectionKind } from "./lib/shared/localResourceAttachments";
 
 export function App({ controlClient }: { controlClient: ControlApiClient }) {
-  const { isDemoPreview, platform } = useAppEnvironment();
+  const { platform } = useAppEnvironment();
   const { libraryLoadRequestRef, openLibraryRef, refreshSettingsSectionRef } =
     useAppCoordinatorRefs();
   const { locale, localeRef, notice, setLocale, setNotice, setTheme, theme } =
@@ -257,26 +255,15 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   ]);
 
   const retryConnection = () => globalThis.location.reload();
-  const showDemoThreads = () => {
-    showDemoThreadsAction({
-      demoThreads: getDemoThreads(localeRef.current),
-      setSelectedThreadId,
-      setStreamingTextByThread: threadState.setStreamingTextByThread,
-      setThreads: threadState.setThreads,
-    });
-  };
-
   useAppThreadListEffects({
     client: threadRuntimeClient,
     emptySelectionBehavior:
       draftWorkspaceCwd === undefined ? "selectFirst" : "preserve",
     isConnected: threadRuntimeConnected,
-    isDemoPreview,
     localeRef,
     searchTerm: threadSearchTerm,
     ...threadState,
     setNotice,
-    showDemoThreads,
   });
 
   useAppViewSyncEffects({
@@ -285,7 +272,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     demoSettingsPanel,
     isConnected,
     isDemo,
-    isDemoPreview,
     locale,
     openLibrary: (kind) => openLibraryRef.current(kind),
     refreshSettingsSection: (section) =>
@@ -372,11 +358,9 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     ...workspaceStatus,
     client: threadRuntimeClient,
     confirm: requestConfirm,
-    demoResponse: t.demoResponse,
     getShowArchivedThreads: () => showArchivedThreadsRef.current,
     isConnected: threadRuntimeConnected,
     isDemo,
-    isDemoPreview,
     ...composerState,
     locale,
     onExecutionIntentCommitted: (intent) => {
@@ -385,8 +369,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         sequence: (current?.sequence ?? 0) + 1,
       }));
     },
-    newDraftPreview: t.newDraftPreview,
-    newDraftThread: t.newDraftThread,
     prompt: window.prompt,
     recordShowArchivedThreads: (showArchived) => {
       showArchivedThreadsRef.current = showArchived;

@@ -9,7 +9,6 @@ import type { ComposerImageInput } from "../shared/composerImages";
 import type { NoticeState } from "../shared/noticeState";
 import type { ThreadRuntimeSettings } from "./threadRuntimeSettings";
 import {
-  createDemoThreadAction,
   createThreadAction,
   interruptActiveTurnAction,
   sendMessageAction,
@@ -150,9 +149,7 @@ function baseSendParams(
       },
     },
     createThread: async () => thread(),
-    demoResponse: "Demo response",
     isConnected: true,
-    isDemoPreview: false,
     isSending: false,
     locale: "en",
     pendingComposerMentions: state.pendingMentions,
@@ -185,33 +182,38 @@ describe("thread message actions", () => {
     ]);
   });
 
-  it("creates a demo thread when disconnected", () => {
+  it("fails closed when creating a thread while disconnected", async () => {
     const state = threadState([]);
-    let inspectorOpen = true;
-    let sidebarOpen = true;
 
-    const createdThread = createDemoThreadAction({
+    const createdThread = await createThreadAction({
+      client: null,
       initialPrompt: "Write tests for message flow",
+      isConnected: false,
       locale: "en",
-      newDraftPreview: "Draft",
-      newDraftThread: "New draft",
-      setInspectorOpen: (open) => {
-        inspectorOpen = open;
-      },
+      resolveBackendCwd: async () => "/repo",
+      setNotice: state.setNotice,
       setSelectedThreadId: state.setSelectedThreadId,
-      setSidebarOpen: (open) => {
-        sidebarOpen = open;
-      },
+      setSidebarOpen: () => {},
       setThreads: state.setThreads,
       shouldAutoCloseSidebar: () => true,
     });
 
-    expect(createdThread.id).toMatch(/^demo-/);
-    expect(createdThread.preview).toBe("Write tests for message flow");
-    expect(state.threads[0]).toEqual(createdThread);
-    expect(state.selectedThreadId).toBe(createdThread.id);
-    expect(inspectorOpen).toBe(false);
-    expect(sidebarOpen).toBe(false);
+    expect({
+      createdThread,
+      notice: state.notice,
+      selectedThreadId: state.selectedThreadId,
+      threads: state.threads,
+    }).toMatchInlineSnapshot(`
+      {
+        "createdThread": null,
+        "notice": {
+          "text": "Connect to CrewON Control before creating a task",
+          "tone": "warning",
+        },
+        "selectedThreadId": null,
+        "threads": [],
+      }
+    `);
   });
 
   it("starts a backend thread and selects it", async () => {
@@ -235,7 +237,6 @@ describe("thread message actions", () => {
           return thread({ id: "thread-created" });
         },
       },
-      createDemoThread: () => thread({ id: "demo-thread" }),
       initialPrompt: "Build",
       isConnected: true,
       locale: "en",
@@ -291,7 +292,6 @@ describe("thread message actions", () => {
           return { thread: created, executionContext };
         },
       },
-      createDemoThread: () => thread({ id: "demo-thread" }),
       executionContextPreparation: {
         workspaceKey: "workspace-1",
         async afterStart(threadValue, context) {
@@ -346,7 +346,6 @@ describe("thread message actions", () => {
           return { thread: created, executionContext };
         },
       },
-      createDemoThread: () => thread({ id: "demo-thread" }),
       executionContextPreparation: {
         workspaceKey: "workspace-1",
         async afterStart() {
@@ -380,7 +379,6 @@ describe("thread message actions", () => {
           return thread({ cwd, id: "thread-workspace" });
         },
       },
-      createDemoThread: () => thread({ id: "demo-thread" }),
       isConnected: true,
       locale: "en",
       resolveBackendCwd,
@@ -409,7 +407,6 @@ describe("thread message actions", () => {
           return thread({ id: "thread-standalone" });
         },
       },
-      createDemoThread: () => thread({ id: "demo-thread" }),
       isConnected: true,
       locale: "en",
       resolveBackendCwd,
@@ -434,7 +431,6 @@ describe("thread message actions", () => {
           throw new Error("create failed");
         },
       },
-      createDemoThread: () => thread({ id: "demo-thread" }),
       isConnected: true,
       locale: "en",
       resolveBackendCwd: async () => "/repo",
@@ -538,28 +534,35 @@ describe("thread message actions", () => {
     ]);
   });
 
-  it("creates demo thread content when disconnected", async () => {
-    const state = threadState([]);
-    const demoThread = thread({ id: "demo-thread", preview: "", turns: [] });
+  it("preserves the composer and history when sending while disconnected", async () => {
+    const existingThread = thread({ id: "thread-existing", turns: [] });
+    const state = threadState([existingThread]);
+    const createThread = vi.fn(async () => thread({ id: "thread-created" }));
 
     await sendMessageAction(
       baseSendParams({
         client: null,
-        createThread: async () => {
-          state.setThreads(() => [demoThread]);
-          return demoThread;
-        },
+        createThread,
         isConnected: false,
-        selectedThread: null,
-        selectedThreadId: null,
+        selectedThread: existingThread,
+        selectedThreadId: existingThread.id,
+        setComposerFocusSignal: state.setComposerFocusSignal,
+        setComposerValue: state.setComposerValue,
         setIsSending: state.setIsSending,
+        setNotice: state.setNotice,
         setThreads: state.setThreads,
+        text: "Keep this message",
       }),
     );
 
-    expect(state.threads[0]?.turns).toHaveLength(1);
-    expect(state.threads[0]?.preview).toBe("Hello");
-    expect(state.threads[0]?.name).toBe("Hello");
+    expect(createThread).not.toHaveBeenCalled();
+    expect(state.composerValue).toBe("Keep this message");
+    expect(state.focusSignal).toBe(1);
+    expect(state.threads).toEqual([existingThread]);
+    expect(state.notice).toEqual({
+      text: "Connect to CrewON Control before sending a message",
+      tone: "warning",
+    });
     expect(state.isSending).toBe(false);
   });
 

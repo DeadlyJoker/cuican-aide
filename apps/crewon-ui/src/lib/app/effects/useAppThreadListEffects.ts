@@ -27,7 +27,6 @@ export type AppThreadListEffectsParams = {
   client: ThreadListEffectControlPort | null;
   emptySelectionBehavior: EmptyThreadSelectionBehavior;
   isConnected: boolean;
-  isDemoPreview: boolean;
   localeRef: MutableRefObject<Locale>;
   searchTerm: string;
   setIsSearchingThreads: (isSearching: boolean) => void;
@@ -37,14 +36,12 @@ export type AppThreadListEffectsParams = {
   setThreads: Dispatch<SetStateAction<Thread[]>>;
   showArchivedThreads: boolean;
   showArchivedThreadsRef: MutableRefObject<boolean>;
-  showDemoThreads: () => void;
 };
 
 export function useAppThreadListEffects({
   client,
   emptySelectionBehavior,
   isConnected,
-  isDemoPreview,
   localeRef,
   searchTerm,
   setIsSearchingThreads,
@@ -54,7 +51,6 @@ export function useAppThreadListEffects({
   setThreads,
   showArchivedThreads,
   showArchivedThreadsRef,
-  showDemoThreads,
 }: AppThreadListEffectsParams) {
   const searchRequestRef = useRef(0);
 
@@ -82,7 +78,6 @@ export function useAppThreadListEffects({
       currentRequestId: () => searchRequestRef.current,
       emptySelectionBehavior,
       isConnected,
-      isDemoPreview,
       locale: localeRef.current,
       requestId,
       searchTerm,
@@ -92,13 +87,11 @@ export function useAppThreadListEffects({
       setThreads,
       setTimeout: (handler, timeout) => window.setTimeout(handler, timeout),
       showArchivedThreads: showArchivedThreadsRef.current,
-      showDemoThreads,
     });
   }, [
     client,
     emptySelectionBehavior,
     isConnected,
-    isDemoPreview,
     localeRef,
     searchTerm,
     setIsSearchingThreads,
@@ -107,6 +100,5 @@ export function useAppThreadListEffects({
     setThreads,
     showArchivedThreads,
     showArchivedThreadsRef,
-    showDemoThreads,
   ]);
 }

@@ -17,7 +17,6 @@ export {
   assistantThreadRuntimeState,
   commandShellRuntimeState,
 } from "./appCommandShellRuntime";
-export { showDemoThreadsAction } from "./appConnectionActions";
 export { createAppSettingsCoordinator } from "./appSettingsCoordinator";
 export { useAppChromeState } from "./useAppChromeState";
 export { useAppCommandShellRoute } from "./useAppCommandShellRoute";

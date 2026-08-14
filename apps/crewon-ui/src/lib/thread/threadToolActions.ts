@@ -12,10 +12,7 @@ import {
   sideChatErrorPanel,
 } from "../side-chat/sideChatPanel";
 import { threadReviewFailureNotice } from "./threadActionPresentation";
-import {
-  upsertThread,
-  upsertTurnInThread,
-} from "./threadModel";
+import { upsertThread, upsertTurnInThread } from "./threadModel";
 
 type ThreadToolClient = {
   forkThread(threadId: string): Promise<{ thread: Thread }>;
@@ -38,7 +35,6 @@ type BaseThreadToolActionParams = {
   createThread: () => Promise<Thread | null>;
   isConnected: boolean;
   isDemo: boolean;
-  isDemoPreview: boolean;
   locale: Locale;
   selectedThread: Thread | null;
   setBusyToolId: (toolId: ToolId | null) => void;
@@ -60,7 +56,6 @@ export async function startReviewAction(params: StartReviewActionParams) {
     createThread,
     isConnected,
     isDemo,
-    isDemoPreview,
     locale,
     selectedThread,
     setBusyToolId,
@@ -86,7 +81,6 @@ export async function startReviewAction(params: StartReviewActionParams) {
   try {
     const thread = await selectedOrCreatedThread({
       createThread,
-      isDemoPreview,
       selectedThread,
     });
     if (!thread) {
@@ -114,7 +108,6 @@ export async function startSideChatAction(params: StartSideChatActionParams) {
     createThread,
     isConnected,
     isDemo,
-    isDemoPreview,
     locale,
     selectedThread,
     setBusyToolId,
@@ -137,7 +130,6 @@ export async function startSideChatAction(params: StartSideChatActionParams) {
   try {
     const thread = await selectedOrCreatedThread({
       createThread,
-      isDemoPreview,
       selectedThread,
     });
     if (!thread) {
@@ -159,11 +151,10 @@ export async function startSideChatAction(params: StartSideChatActionParams) {
 
 async function selectedOrCreatedThread(params: {
   createThread: () => Promise<Thread | null>;
-  isDemoPreview: boolean;
   selectedThread: Thread | null;
 }): Promise<Thread | null> {
-  const { createThread, isDemoPreview, selectedThread } = params;
-  if (!isDemoPreview && selectedThread) {
+  const { createThread, selectedThread } = params;
+  if (selectedThread) {
     return selectedThread;
   }
   return createThread();

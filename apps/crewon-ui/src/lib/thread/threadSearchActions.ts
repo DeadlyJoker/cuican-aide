@@ -20,14 +20,15 @@ type ThreadSearchClient = {
 type SelectedThreadSetter = (
   updater: (currentThreadId: string | null) => string | null,
 ) => void;
-type ThreadListSetter = (updater: (currentThreads: Thread[]) => Thread[]) => void;
+type ThreadListSetter = (
+  updater: (currentThreads: Thread[]) => Thread[],
+) => void;
 
 export function runThreadSearchEffectAction(params: {
   clearTimeout: (timeoutId: ReturnType<typeof setTimeout>) => void;
   client: ThreadSearchClient | null | undefined;
   currentRequestId: () => number;
   isConnected: boolean;
-  isDemoPreview: boolean;
   locale: Locale;
   emptySelectionBehavior: EmptyThreadSelectionBehavior;
   requestId: number;
@@ -41,15 +42,8 @@ export function runThreadSearchEffectAction(params: {
     timeout: number,
   ) => ReturnType<typeof setTimeout>;
   showArchivedThreads: boolean;
-  showDemoThreads: () => void;
 }): (() => void) | undefined {
   const trimmedSearchTerm = params.searchTerm.trim();
-
-  if (params.isDemoPreview) {
-    params.setIsSearchingThreads(false);
-    params.showDemoThreads();
-    return undefined;
-  }
 
   if (!params.isConnected) {
     params.setIsSearchingThreads(false);

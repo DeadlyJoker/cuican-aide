@@ -52,7 +52,9 @@ function turn(overrides: Partial<Turn> = {}): Turn {
   };
 }
 
-function baseClient(overrides: Partial<ThreadToolClient> = {}): ThreadToolClient {
+function baseClient(
+  overrides: Partial<ThreadToolClient> = {},
+): ThreadToolClient {
   return {
     async forkThread() {
       return { thread: thread({ id: "side-thread" }) };
@@ -94,7 +96,6 @@ function baseParams(
     createThread: async () => thread({ id: "created-thread" }),
     isConnected: true,
     isDemo: false,
-    isDemoPreview: false,
     locale: "en",
     selectedThread: thread(),
     setBusyToolId: () => {},
@@ -142,7 +143,10 @@ describe("thread tool actions", () => {
         client: baseClient({
           async startReview(threadId) {
             reviewedThreads.push(threadId);
-            return { reviewThreadId: threadId, turn: turn({ id: "review-turn" }) };
+            return {
+              reviewThreadId: threadId,
+              turn: turn({ id: "review-turn" }),
+            };
           },
         }),
         setBusyToolId: (toolId) => {
@@ -163,7 +167,7 @@ describe("thread tool actions", () => {
     expect(threads[0]?.turns).toEqual([turn({ id: "review-turn" })]);
   });
 
-  it("creates a thread before review in demo preview", async () => {
+  it("creates a thread before review when none is selected", async () => {
     const reviewedThreads: string[] = [];
     let created = false;
 
@@ -179,7 +183,7 @@ describe("thread tool actions", () => {
           created = true;
           return thread({ id: "created-thread" });
         },
-        isDemoPreview: true,
+        selectedThread: null,
       }),
     );
 

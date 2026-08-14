@@ -10,7 +10,6 @@ import {
   activeTurnByThreadAfterTurnId,
 } from "./threadRuntimeState";
 import type { NoticeState } from "../shared/noticeState";
-import { createDemoTurn, createDraftDemoThread } from "../demo/demoData";
 import type { Locale } from "../i18n";
 import {
   appendTurnWithFallbackPreview,
@@ -21,10 +20,12 @@ import {
 import { removeRecordKey } from "../shared/recordState";
 import {
   threadCreateFailureNotice,
+  threadCreateUnavailableNotice,
   threadGuidanceAppendedNotice,
   threadInterruptFailureNotice,
   threadInterruptRequestedNotice,
   threadSendFailureNotice,
+  threadSendUnavailableNotice,
 } from "./threadActionPresentation";
 import type { ThreadRuntimeSettings } from "./threadRuntimeSettings";
 import type { ThreadExecutionContext } from "@crewon-platform-model/v2/ThreadExecutionContext";
@@ -86,18 +87,6 @@ export type ThreadExecutionContextPreparation = {
   ) => Promise<void>;
 };
 
-export type CreateDemoThreadActionParams = {
-  initialPrompt?: string;
-  locale: Locale;
-  newDraftPreview: string;
-  newDraftThread: string;
-  setInspectorOpen: (open: boolean) => void;
-  setSelectedThreadId: (threadId: string | null) => void;
-  setSidebarOpen: (open: boolean) => void;
-  setThreads: ThreadListSetter;
-  shouldAutoCloseSidebar: () => boolean;
-};
-
 export type CreateThreadActionParams = {
   client:
     | Pick<
@@ -106,7 +95,6 @@ export type CreateThreadActionParams = {
       >
     | null
     | undefined;
-  createDemoThread: (initialPrompt?: string) => Thread;
   initialPrompt?: string;
   isConnected: boolean;
   locale: Locale;
@@ -137,9 +125,7 @@ export type SendMessageActionParams = {
     | null
     | undefined;
   createThread: (initialPrompt?: string) => Promise<Thread | null>;
-  demoResponse: string;
   isConnected: boolean;
-  isDemoPreview: boolean;
   isSending: boolean;
   locale: Locale;
   /**
@@ -196,35 +182,8 @@ export function visibleComposerMentionsForText(
   );
 }
 
-export function createDemoThreadAction({
-  initialPrompt,
-  locale,
-  newDraftPreview,
-  newDraftThread,
-  setInspectorOpen,
-  setSelectedThreadId,
-  setSidebarOpen,
-  setThreads,
-  shouldAutoCloseSidebar,
-}: CreateDemoThreadActionParams): Thread {
-  const demoThread = createDraftDemoThread({
-    initialPrompt,
-    locale,
-    newDraftPreview,
-    newDraftThread,
-  });
-  setThreads((current) => [demoThread, ...current]);
-  setSelectedThreadId(demoThread.id);
-  setInspectorOpen(false);
-  if (shouldAutoCloseSidebar()) {
-    setSidebarOpen(false);
-  }
-  return demoThread;
-}
-
 export async function createThreadAction({
   client,
-  createDemoThread,
   initialPrompt,
   isConnected,
   locale,
@@ -240,7 +199,8 @@ export async function createThreadAction({
   executionContextPreparation,
 }: CreateThreadActionParams): Promise<Thread | null> {
   if (!isConnected) {
-    return createDemoThread(initialPrompt);
+    setNotice(threadCreateUnavailableNotice(locale));
+    return null;
   }
 
   try {
@@ -296,9 +256,7 @@ export async function sendMessageAction({
   activeTurnId,
   client,
   createThread,
-  demoResponse,
   isConnected,
-  isDemoPreview,
   isSending,
   locale,
   onExecutionIntentCommitted,
@@ -321,17 +279,24 @@ export async function sendMessageAction({
     return;
   }
 
+  if (!isConnected) {
+    setComposerValue(text);
+    setComposerFocusSignal((signal) => signal + 1);
+    setNotice(threadSendUnavailableNotice(locale));
+    return;
+  }
+
   const visibleMentions = visibleComposerMentionsForText(
     text,
     pendingComposerMentions,
   );
   setIsSending(true);
-  let thread = isDemoPreview ? null : selectedThread;
+  let thread = selectedThread;
   let failedThreadId = selectedThreadId;
   let createdThreadForMessage = false;
 
   try {
-    if (activeTurnId && selectedThreadId && isConnected) {
+    if (activeTurnId && selectedThreadId) {
       const response = await client?.steerTurn(
         selectedThreadId,
         text,
@@ -361,21 +326,6 @@ export async function sendMessageAction({
     }
 
     const activeThread = thread;
-
-    if (!isConnected) {
-      const now = Math.floor(Date.now() / 1000);
-      const turn = createDemoTurn({ text, responseText: demoResponse });
-      setThreads((current) =>
-        appendTurnWithFallbackPreview(
-          current,
-          activeThread.id,
-          turn,
-          promptPreview(text),
-          now,
-        ),
-      );
-      return;
-    }
 
     const resumedThread =
       activeThread.status.type === "notLoaded"

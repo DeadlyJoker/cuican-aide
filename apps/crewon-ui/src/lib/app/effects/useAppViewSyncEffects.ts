@@ -21,7 +21,6 @@ export type AppViewSyncEffectsParams = {
   ) => CapabilityPanel;
   isConnected: boolean;
   isDemo: boolean;
-  isDemoPreview: boolean;
   locale: Locale;
   openLibrary: (kind: LibraryKind) => void | Promise<void>;
   refreshSettingsSection: (section: SettingsSection) => void | Promise<void>;
@@ -37,7 +36,6 @@ export function useAppViewSyncEffects({
   demoSettingsPanel,
   isConnected,
   isDemo,
-  isDemoPreview,
   locale,
   openLibrary,
   refreshSettingsSection,
@@ -57,14 +55,14 @@ export function useAppViewSyncEffects({
     if (
       !initialLibraryView ||
       initialLibraryViewOpenedRef.current ||
-      (connectionState === "connecting" && !isDemoPreview)
+      connectionState === "connecting"
     ) {
       return;
     }
 
     initialLibraryViewOpenedRef.current = true;
     void openLibrary(initialLibraryView);
-  }, [connectionState, isDemoPreview]);
+  }, [connectionState]);
 
   useEffect(() => {
     const syncViewFromUrl = () => {

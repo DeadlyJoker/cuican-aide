@@ -24,7 +24,6 @@ type Messages = {
   connectionLost: string;
   crewon: string;
   demo: string;
-  demoResponse: string;
   dismiss: string;
   draftUnsaved: string;
   emptyDescription: string;
@@ -84,8 +83,6 @@ const messages: Record<Locale, Messages> = {
     connectionLost: "无法连接 CrewON Control，已保留当前会话，等待重连。",
     crewon: "Crewon",
     demo: "演示",
-    demoResponse:
-      "当前处于演示模式。连接 CrewON Control 后，这条请求会发送给真实代理。",
     dismiss: "关闭",
     draftUnsaved: "草稿未发送",
     emptyDescription:
@@ -154,8 +151,6 @@ const messages: Record<Locale, Messages> = {
       "Could not connect to CrewON Control. Current sessions are preserved for retry.",
     crewon: "Crewon",
     demo: "Demo",
-    demoResponse:
-      "Demo mode is active. Connect to CrewON Control to run this request against the real agent.",
     dismiss: "Dismiss",
     draftUnsaved: "Draft not sent",
     emptyDescription:
