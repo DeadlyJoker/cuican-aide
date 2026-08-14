@@ -373,7 +373,7 @@ export function validateAutomationCreateReceiptAuthority(
   validateAutomationCreateResult(receipt.result);
   if (
     record === null ||
-    stableJson(record) !== stableJson(receipt.result.record)
+    !isAutomationRecordEvolution(receipt.result.record, record)
   ) {
     throw new AutomationStoreError("automation_create_receipt_invalid");
   }
@@ -425,7 +425,7 @@ export function validateAutomationInvocationReceiptAuthority(
   );
   if (
     authority.record === null ||
-    stableJson(authority.record) !== stableJson(result.record) ||
+    !isAutomationRecordEvolution(result.record, authority.record) ||
     authority.thread === null ||
     reducedThread === null ||
     stableJson(authority.thread) !== stableJson(reducedThread) ||
@@ -451,6 +451,20 @@ export function validateAutomationInvocationReceiptAuthority(
   ) {
     throw new AutomationStoreError("automation_invocation_receipt_invalid");
   }
+}
+
+function isAutomationRecordEvolution(
+  receipt: AutomationDefinitionRecord,
+  current: AutomationDefinitionRecord,
+): boolean {
+  return (
+    stableJson(current.definition) === stableJson(receipt.definition) &&
+    current.definitionDigest === receipt.definitionDigest &&
+    current.scheduleState.automationId === receipt.scheduleState.automationId &&
+    current.scheduleState.scheduleRevision ===
+      receipt.scheduleState.scheduleRevision &&
+    current.scheduleState.revision >= receipt.scheduleState.revision
+  );
 }
 
 function sameImmutableMessage(

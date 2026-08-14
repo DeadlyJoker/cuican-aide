@@ -61,6 +61,51 @@ export class CompatibleAutomationScheduleCalculator
   }
 }
 
+export function latestAutomationScheduleOccurrence(input: {
+  schedule: AutomationScheduleSpec;
+  through: string;
+}): string | null {
+  const schedule = parseAutomationScheduleSpec(input.schedule);
+  const through = timestamp(input.through);
+  if (schedule.kind === "once") {
+    const at = timestamp(schedule.at);
+    return at <= through ? iso(at) : null;
+  }
+  if (schedule.kind === "interval") {
+    const anchor = timestamp(schedule.anchorAt);
+    if (anchor > through) return null;
+    const interval = schedule.everySeconds * 1_000;
+    return iso(anchor + Math.floor((through - anchor) / interval) * interval);
+  }
+  const [hour, minute] = schedule.localTime.split(":").map(Number) as [
+    number,
+    number,
+  ];
+  const local = zonedParts(through, schedule.timezone);
+  const start = Date.UTC(local.year, local.month - 1, local.day);
+  for (let dayOffset = 0; dayOffset <= 8; dayOffset += 1) {
+    const date = new Date(start - dayOffset * 86_400_000);
+    const year = date.getUTCFullYear();
+    const month = date.getUTCMonth() + 1;
+    const day = date.getUTCDate();
+    if (
+      schedule.kind === "weekly" &&
+      isoWeekday(year, month, day) !== schedule.isoWeekday
+    ) {
+      continue;
+    }
+    const occurrence = compatibleInstant(
+      { year, month, day, hour, minute, second: 0 },
+      schedule.timezone,
+    );
+    if (occurrence <= through) return iso(occurrence);
+  }
+  throw new ApplicationError(
+    "internal",
+    "automation_schedule_calculation_failed",
+  );
+}
+
 type DateTimeParts = Readonly<{
   year: number;
   month: number;

@@ -282,7 +282,9 @@ export class AutomationApplicationService
     if (
       canonicalJson(definition.owner) !== canonicalJson(actor) ||
       claim.record.scheduleState.status !== "enabled" ||
-      claim.record.scheduleState.nextOccurrenceAt !== claim.scheduledFor
+      claim.record.scheduleState.nextOccurrenceAt === null ||
+      Date.parse(claim.record.scheduleState.nextOccurrenceAt) >
+        Date.parse(claim.scheduledFor)
     ) {
       throw new ApplicationError(
         "internal",
