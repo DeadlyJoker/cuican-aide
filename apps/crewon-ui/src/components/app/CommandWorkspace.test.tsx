@@ -9,6 +9,7 @@ import {
   applyDesignCardVisibility,
   cleanSlotTitle,
   commandComposerResourceSelection,
+  commandKnowledgeSelection,
   commandComposerKeyIntent,
   CommandWorkspace as CommandWorkspaceComponent,
   type CommandWorkspaceOperationsSlot,
@@ -1305,6 +1306,53 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('data-slash-item=""');
     expect(markup).toContain('data-label="Review Skill"');
     expect(markup).toContain("Review the page");
+  });
+
+  it("renders immutable Control Knowledge in the homepage palettes", () => {
+    const selection = {
+      reference: {
+        knowledgeId: "knowledge-1",
+        contentDigest: `sha256:${"a".repeat(64)}`,
+      },
+      sourceId: "thread:thread-1",
+      title: "Launch decision",
+    };
+    const markup = renderToStaticMarkup(
+      <CommandWorkspace
+        composerValue=""
+        connectionState="connected"
+        isSending={false}
+        knowledgeSelections={[selection]}
+        workMode="code"
+        onChangeComposerValue={() => undefined}
+        onKnowledgeSelect={() => undefined}
+        onModeChange={() => undefined}
+        onRetryConnection={() => undefined}
+        onSend={() => undefined}
+      />,
+    );
+
+    expect({
+      addPalette: markup.includes(
+        'data-kind="knowledge" data-label="Launch decision"',
+      ),
+      contextPalette: markup.includes(
+        'data-context-item="" data-kind="knowledge"',
+      ),
+      title: markup.includes("Launch decision"),
+    }).toMatchSnapshot();
+    expect(
+      commandKnowledgeSelection(
+        {
+          detail: selection.sourceId,
+          kind: "knowledge",
+          knowledgeReference: selection.reference,
+          label: "知识库",
+          title: selection.title,
+        },
+        [selection],
+      ),
+    ).toEqual(selection);
   });
 
   it("renders real conversation history in the workspace tree", () => {

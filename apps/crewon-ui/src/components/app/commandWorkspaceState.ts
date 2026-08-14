@@ -57,6 +57,10 @@ export type CommandHomeSlots = {
 export type CommandPaletteItem = {
   detail: string;
   kind: CommandPaletteKind;
+  knowledgeReference?: Readonly<{
+    knowledgeId: string;
+    contentDigest: string;
+  }>;
   label: string;
   platformResource?: AgentPlatformComposerResource;
   title: string;

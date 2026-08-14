@@ -1,7 +1,4 @@
-import type {
-  CapabilitySummaryView,
-  KnowledgeView,
-} from "@crewon/contracts";
+import type { CapabilitySummaryView, KnowledgeView } from "@crewon/contracts";
 import type { ControlApiClient } from "@crewon/control-client";
 import type {
   ComposerSlashCommand,
@@ -12,11 +9,9 @@ import { readControlCapabilityCatalog } from "./controlCapabilityCatalog";
 const PAGE_SIZE = 100;
 const MAX_PAGES = 5;
 const MAX_CAPABILITIES = 24;
-const MAX_KNOWLEDGE_REFERENCES = 16;
+const MAX_KNOWLEDGE_REFERENCES = 4;
 
 export type ControlKnowledgeSelection = Readonly<{
-  executable: false;
-  reason: "durable_knowledge_reference_not_supported";
   reference: Readonly<{
     contentDigest: string;
     knowledgeId: string;
@@ -67,8 +62,6 @@ async function collectKnowledge(
 
 function knowledgeSelection(item: KnowledgeView): ControlKnowledgeSelection {
   return {
-    executable: false,
-    reason: "durable_knowledge_reference_not_supported",
     reference: {
       contentDigest: item.contentDigest,
       knowledgeId: item.knowledgeId,

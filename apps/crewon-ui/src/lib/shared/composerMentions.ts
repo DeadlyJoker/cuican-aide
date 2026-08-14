@@ -75,3 +75,26 @@ export function upsertPendingComposerMention(
         },
       ];
 }
+
+export function withKnowledgeReferenceMention(
+  mentions: PendingComposerMention[],
+  selection: Readonly<{
+    reference: Readonly<{
+      knowledgeId: string;
+      contentDigest: string;
+    }>;
+    title: string;
+  }>,
+): PendingComposerMention[] {
+  const path = `control-knowledge:${selection.reference.knowledgeId}`;
+  if (mentions.some((mention) => mention.path === path)) return mentions;
+  return [
+    ...mentions,
+    {
+      knowledgeReference: selection.reference,
+      name: selection.title,
+      path,
+      resourceKind: "knowledge",
+    },
+  ];
+}

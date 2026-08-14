@@ -5,6 +5,7 @@ import {
   appMentionInfo,
   removeComposerMentionToken,
   upsertPendingComposerMention,
+  withKnowledgeReferenceMention,
 } from "./composerMentions";
 
 describe("composer mention helpers", () => {
@@ -85,5 +86,26 @@ describe("composer mention helpers", () => {
     expect(
       removeComposerMentionToken("$plugin-creator\n", "$plugin-creator"),
     ).toBe("");
+  });
+
+  it("adds one immutable Control Knowledge reference", () => {
+    const selection = {
+      reference: {
+        knowledgeId: "knowledge-1",
+        contentDigest: `sha256:${"a".repeat(64)}`,
+      },
+      title: "Launch decision",
+    };
+    const result = withKnowledgeReferenceMention([], selection);
+
+    expect(result).toEqual([
+      {
+        knowledgeReference: selection.reference,
+        name: "Launch decision",
+        path: "control-knowledge:knowledge-1",
+        resourceKind: "knowledge",
+      },
+    ]);
+    expect(withKnowledgeReferenceMention(result, selection)).toBe(result);
   });
 });

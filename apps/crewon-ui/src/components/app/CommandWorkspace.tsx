@@ -29,10 +29,7 @@ import {
   type CommandWorkspaceOperationsPanelProps,
 } from "./CommandWorkspaceOperationsPanel";
 import { CommandSceneHeader, CommandSceneQuickRow } from "./CommandSceneHeader";
-import {
-  ProjectsView,
-  TeamView,
-} from "./CommandWorkspaceViews";
+import { ProjectsView, TeamView } from "./CommandWorkspaceViews";
 import { CommandUnavailableCatalogView } from "./CommandUnavailableCatalogView";
 import { classNames } from "./commandWorkspaceUtils";
 
@@ -50,6 +47,7 @@ import {
   commandSceneSlashItems,
 } from "./commandWorkspaceSceneResources";
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
+import type { ControlKnowledgeSelection } from "../../lib/control-runtime/controlComposerResourceDiscovery";
 import type { Locale } from "../../lib/i18n";
 import type { ControlWorkflowAdapter } from "../../lib/workflow/controlWorkflowAdapter";
 import type { ConnectionState } from "../../lib/shared/connectionState";
@@ -167,6 +165,7 @@ type CommandWorkspaceProps = {
   workspaceOperations?: CommandWorkspaceOperationsSlot | null;
   isSending: boolean;
   linkedThreads?: Thread[];
+  knowledgeSelections?: readonly ControlKnowledgeSelection[];
   locale?: Locale;
   modelOptions?: CommandModelOption[];
   officeRoomAdapter?: CommandOfficeRoomAdapter | null;
@@ -196,6 +195,7 @@ type CommandWorkspaceProps = {
   ) => void;
   onClearAssistantThread?: () => void | Promise<void>;
   onModeChange: (mode: WorkMode) => void;
+  onKnowledgeSelect?: (selection: ControlKnowledgeSelection) => void;
   onOpenSettings?: () => void;
   onSaveCapability?: import("../../lib/capability/capabilityCatalog").CapabilityEditorSaveHandler;
   onRetryConnection: () => void;
@@ -256,6 +256,23 @@ export function commandComposerResourceSelection(
     name: item.title,
     platformResource: item.platformResource,
   };
+}
+
+export function commandKnowledgeSelection(
+  item: PaletteItemWithCommand,
+  selections: readonly ControlKnowledgeSelection[],
+): ControlKnowledgeSelection | null {
+  if (item.kind !== "knowledge" || item.knowledgeReference === undefined) {
+    return null;
+  }
+  const matches = selections.filter(
+    (selection) =>
+      selection.reference.knowledgeId ===
+        item.knowledgeReference?.knowledgeId &&
+      selection.reference.contentDigest ===
+        item.knowledgeReference?.contentDigest,
+  );
+  return matches.length === 1 ? matches[0] : null;
 }
 
 export function submitCommandComposer({
@@ -452,6 +469,7 @@ export function CommandWorkspace({
   controlWorkflowAdapter = null,
   workspaceOperations = null,
   isSending,
+  knowledgeSelections = [],
   linkedThreads = [],
   locale = "zh",
   modelOptions = fallbackCommandModelOptions,
@@ -470,6 +488,7 @@ export function CommandWorkspace({
   onComposerResourceSelect,
   onClearAssistantThread,
   onModeChange,
+  onKnowledgeSelect,
   onOpenSettings,
   onRemoveComposerMention,
   onRetryConnection,
@@ -655,7 +674,6 @@ export function CommandWorkspace({
     workspaceCwd: workspaceOperations?.nativeWorkspaceDisplayName ?? "",
   });
 
-
   useEffect(() => {
     setActiveLinkedThreadId(selectedThreadId);
   }, [selectedThreadId]);
@@ -740,8 +758,17 @@ export function CommandWorkspace({
     [platformSnapshot],
   );
   const contextPaletteItems = useMemo(
-    () => commandSceneContextItems(scene, emptyAgentPlatformSnapshot, ""),
-    [scene],
+    () => [
+      ...commandSceneContextItems(scene, emptyAgentPlatformSnapshot, ""),
+      ...(onKnowledgeSelect ? knowledgeSelections : []).map((selection) => ({
+        detail: selection.sourceId,
+        kind: "knowledge" as const,
+        knowledgeReference: selection.reference,
+        label: locale === "zh" ? "知识库" : "Knowledge",
+        title: selection.title,
+      })),
+    ],
+    [knowledgeSelections, locale, onKnowledgeSelect, scene],
   );
   const slashPaletteItems = useMemo(
     () => commandSceneSlashItems(emptyAgentPlatformSnapshot, slashCommands),
@@ -1240,6 +1267,25 @@ export function CommandWorkspace({
   function insertContextItem(item: PaletteItemWithCommand) {
     const currentValue =
       activeView === "assist" ? assistantComposerValue : composerValue;
+    const knowledgeSelection = commandKnowledgeSelection(
+      item,
+      knowledgeSelections,
+    );
+    if (knowledgeSelection) {
+      onKnowledgeSelect?.(knowledgeSelection);
+      const nextValue = removeComposerMentionToken(
+        currentValue,
+        `@${item.title}`,
+      );
+      if (activeView === "assist") {
+        setAssistantComposerValue(nextValue);
+      } else {
+        onChangeComposerValue(nextValue);
+      }
+      closeComposerPalette();
+      focusActiveComposer();
+      return;
+    }
     const selection = commandComposerResourceSelection(item);
     if (selection) {
       onComposerResourceSelect?.(selection);

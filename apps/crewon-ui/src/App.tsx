@@ -55,6 +55,7 @@ import {
   mentionsWithSlashCommand,
   type ComposerSlashCommand,
 } from "./lib/composer/composerSlashCommands";
+import { withKnowledgeReferenceMention } from "./lib/shared/composerMentions";
 import type { CapabilityPanelItem } from "./lib/capability/capabilityPanelTypes";
 import { useControlComposerResourceDiscovery } from "./lib/control-runtime/useControlComposerResourceDiscovery";
 import { demoCapabilityPanel, demoSettingsPanel } from "./lib/demo/demoContent";
@@ -579,6 +580,9 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         connectionState={threadConnectionState}
         isSending={isSending}
         linkedThreads={conversationThreads}
+        knowledgeSelections={
+          controlComposerResources?.knowledgeSelections ?? []
+        }
         locale={locale}
         selectedThread={commandShellRuntime.selectedThread}
         selectedThreadId={commandShellRuntime.selectedThreadId}
@@ -650,6 +654,11 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           }
         }}
         onModeChange={setWorkMode}
+        onKnowledgeSelect={(selection) => {
+          setPendingComposerMentions((mentions) =>
+            withKnowledgeReferenceMention(mentions, selection),
+          );
+        }}
         onOpenSettings={openSettings}
         onRemoveComposerMention={(path) => {
           setPendingComposerMentions((mentions) =>

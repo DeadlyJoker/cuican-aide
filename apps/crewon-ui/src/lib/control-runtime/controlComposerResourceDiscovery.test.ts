@@ -17,6 +17,7 @@ const activeCatalog = {
     },
   ],
 } as const;
+const knowledgeDigest = `sha256:${"a".repeat(64)}`;
 
 function client(overrides: Partial<ControlApiClient> = {}): ControlApiClient {
   return {
@@ -55,7 +56,7 @@ function client(overrides: Partial<ControlApiClient> = {}): ControlApiClient {
           sourceId: "thread:thread-1",
           title: "Launch decision",
           content: "Ship after accessibility review.",
-          contentDigest: "sha256:knowledge-1",
+          contentDigest: knowledgeDigest,
           createdAt: "2026-08-14T00:00:00.000Z",
         },
       ],
@@ -73,10 +74,8 @@ describe("discoverControlComposerResources", () => {
       releaseId: "release-1",
       knowledgeSelections: [
         {
-          executable: false,
-          reason: "durable_knowledge_reference_not_supported",
           reference: {
-            contentDigest: "sha256:knowledge-1",
+            contentDigest: knowledgeDigest,
             knowledgeId: "knowledge-1",
           },
           sourceId: "thread:thread-1",
@@ -108,15 +107,13 @@ describe("discoverControlComposerResources", () => {
     expect(JSON.stringify(discovery.slashCommands)).not.toContain("sha256:");
   });
 
-  it("projects immutable Knowledge selections but marks every entry non-executable", async () => {
+  it("projects immutable Knowledge selections", async () => {
     const discovery = await discoverControlComposerResources(client());
     expect(discovery.knowledgeSelections).toMatchInlineSnapshot(`
       [
         {
-          "executable": false,
-          "reason": "durable_knowledge_reference_not_supported",
           "reference": {
-            "contentDigest": "sha256:knowledge-1",
+            "contentDigest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "knowledgeId": "knowledge-1",
           },
           "sourceId": "thread:thread-1",
@@ -163,11 +160,11 @@ describe("discoverControlComposerResources", () => {
               {
                 agentVersionId: "agent-v1",
                 agentVersionDigest: "sha256:stale-agent-v1",
-                kind: "function",
+                kind: "function" as const,
                 name: "mcp__github__search",
                 description: "Search GitHub metadata",
-                execution: "parallel",
-                inputFormat: "jsonSchema",
+                execution: "parallel" as const,
+                inputFormat: "jsonSchema" as const,
               },
             ],
             nextCursor: null,
