@@ -9,6 +9,17 @@ import type {
 
 export type ProviderRuntimeRouteAvailability = "available" | "unavailable";
 
+export interface ProviderRuntimeRouteAvailabilityResolver {
+  resolve(
+    input: Readonly<{
+      tenantId: string;
+      runtimeBindingId: string;
+    }>,
+  ):
+    | ProviderRuntimeRouteAvailability
+    | Promise<ProviderRuntimeRouteAvailability>;
+}
+
 /** Redacts coordinator/runtime identity while retaining actionable settings. */
 export function projectModelProviderSettings(
   view: ModelProviderSettingsView,

@@ -793,6 +793,73 @@ test("exposes a safe Provider snapshot and replays one bounded probe", async (co
     assert.equal(snapshotResponse.body.includes(privateField), false);
   }
 
+  const routeChecks: unknown[] = [];
+  let routeAvailable = false;
+  const routedSettingsApp = buildControlApi({
+    ...runtime.dependencies,
+    providerSettings: {
+      get: async () => ({
+        catalog: {
+          tenantId: "standalone-tenant",
+          revision: 1,
+          activeProviderId: "gateway",
+          runtimeBindingId: "provider-runtime-1",
+          bindings: [
+            {
+              providerId: "gateway",
+              displayName: "Gateway",
+              endpoint: "https://provider.example/v1",
+              credentialKind: "keychain" as const,
+              environmentVariable: null,
+            },
+          ],
+          updatedAt: "2026-08-14T00:00:00.000Z",
+        },
+        pending: null,
+      }),
+    },
+    providerRuntimeAvailability: {
+      resolve: (input) => {
+        routeChecks.push(input);
+        return routeAvailable ? "available" : "unavailable";
+      },
+    },
+  });
+  context.after(() => routedSettingsApp.close());
+  const unavailableRoute = await routedSettingsApp.inject({
+    method: "GET",
+    url: "/api/v1/model-provider-settings",
+    headers: readHeaders(),
+  });
+  assert.equal(unavailableRoute.statusCode, 200, unavailableRoute.body);
+  assert.equal(
+    unavailableRoute.json<GetModelProviderSettingsResponse>().settings
+      .runtimeAvailability,
+    "unavailable",
+  );
+  routeAvailable = true;
+  const availableRoute = await routedSettingsApp.inject({
+    method: "GET",
+    url: "/api/v1/model-provider-settings",
+    headers: readHeaders(),
+  });
+  assert.equal(availableRoute.statusCode, 200, availableRoute.body);
+  assert.equal(
+    availableRoute.json<GetModelProviderSettingsResponse>().settings
+      .runtimeAvailability,
+    "available",
+  );
+  assert.deepEqual(routeChecks, [
+    {
+      tenantId: "standalone-tenant",
+      runtimeBindingId: "provider-runtime-1",
+    },
+    {
+      tenantId: "standalone-tenant",
+      runtimeBindingId: "provider-runtime-1",
+    },
+  ]);
+
   let probes = 0;
   const app = buildControlApi({
     ...runtime.dependencies,
@@ -3393,7 +3460,9 @@ async function testRuntime(
     automations,
     providerSettings,
     providerProbes,
-    providerRuntimeAvailability: "available" as const,
+    providerRuntimeAvailability: {
+      resolve: () => "available" as const,
+    },
     workspaceLists: null,
     workspaceReadonly: options.workspaceReadonly ?? null,
     workspaceQueries,

@@ -111,7 +111,8 @@ test("production binds the required tenant Worker registry directly", () => {
     source,
     /new TenantRoutedProviderProbeWorker\(\s*config\.providerProbeWorkers,?\s*\)/u,
   );
-  assert.match(source, /providerRuntimeAvailability: "available"/u);
+  assert.match(source, /config\.providerProbeWorkers\.resolve\(input\)/u);
+  assert.doesNotMatch(source, /providerRuntimeAvailability: "available"/u);
   assert.doesNotMatch(source, /UnavailableTenantProviderProbeWorkerRegistry/u);
   assert.match(source, /new WorkspaceListApplicationService/u);
   assert.match(source, /workspaceLists,/u);

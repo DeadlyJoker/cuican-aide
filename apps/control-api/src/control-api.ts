@@ -198,6 +198,7 @@ import {
   projectModelProviderProbe,
   projectModelProviderSettings,
   type ProviderRuntimeRouteAvailability,
+  type ProviderRuntimeRouteAvailabilityResolver,
 } from "./provider-settings-projection.ts";
 import {
   projectWorkspaceOperationList,
@@ -258,7 +259,7 @@ export type ControlApiDependencies = Readonly<{
   knowledge?: KnowledgeApplicationService;
   providerSettings: Pick<ModelProviderSettingsApplicationService, "get">;
   providerProbes: Pick<ControlProviderProbeService, "probe">;
-  providerRuntimeAvailability: ProviderRuntimeRouteAvailability;
+  providerRuntimeAvailability: ProviderRuntimeRouteAvailabilityResolver;
   workspaceQueries: WorkspaceOperationQueryService;
   workspaceLists: WorkspaceListApplicationService | null;
   workspaceReadonly?: Readonly<{
@@ -508,11 +509,17 @@ export function buildControlApi(
       requestContext(request),
     );
     const view = await dependencies.providerSettings.get(actor);
+    const routeAvailability: ProviderRuntimeRouteAvailability =
+      view.pending !== null ||
+      view.catalog.activeProviderId === null ||
+      view.catalog.runtimeBindingId === null
+        ? "unavailable"
+        : await dependencies.providerRuntimeAvailability.resolve({
+            tenantId: actor.tenantId,
+            runtimeBindingId: view.catalog.runtimeBindingId,
+          });
     const response: GetModelProviderSettingsResponse = {
-      settings: projectModelProviderSettings(
-        view,
-        dependencies.providerRuntimeAvailability,
-      ),
+      settings: projectModelProviderSettings(view, routeAvailability),
     };
     return response;
   });

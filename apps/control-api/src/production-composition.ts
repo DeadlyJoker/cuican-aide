@@ -310,7 +310,13 @@ async function composeProductionControlApi(
       workspaceQueries,
       providerSettings,
       providerProbes,
-      providerRuntimeAvailability: "available",
+      providerRuntimeAvailability: {
+        async resolve(input) {
+          return (await config.providerProbeWorkers.resolve(input)) === null
+            ? "unavailable"
+            : "available";
+        },
+      },
       agentVersionDigester: digester,
       workflowVersionDigester: digester,
       clock,

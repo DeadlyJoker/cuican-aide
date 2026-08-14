@@ -393,8 +393,14 @@ function composeControlApi(
       workspaceQueries,
       providerSettings,
       providerProbes,
-      providerRuntimeAvailability:
-        config.providerProbeWorkers === undefined ? "unavailable" : "available",
+      providerRuntimeAvailability: {
+        async resolve(input) {
+          if (config.providerProbeWorkers === undefined) return "unavailable";
+          return (await config.providerProbeWorkers.resolve(input)) === null
+            ? "unavailable"
+            : "available";
+        },
+      },
       agentVersionDigester: digester,
       workflowVersionDigester: digester,
       clock,
