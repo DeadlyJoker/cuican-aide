@@ -113,6 +113,45 @@ export function registerTurnStartStoreConformance(
       );
     });
 
+    test("atomically freezes Knowledge context before its user Message", async (context) => {
+      const store = await managedStore(context, createStore);
+      await seedThread(store);
+      const input = turnStartCommit();
+      const userMessage = input.thread.history.items[0]!;
+      const withKnowledge: CommitTurnStartInput = {
+        ...input,
+        thread: {
+          ...input.thread,
+          history: {
+            expectedLastSequence: 0,
+            items: [
+              knowledgeContextItem(1, input.thread.messages[0]!.createdAt),
+              { ...userMessage, sequence: 2, itemId: "history-2" },
+            ],
+          },
+        },
+      };
+
+      const committed = await store.commitTurnStart(withKnowledge);
+
+      assert.deepEqual(
+        committed.historyItems,
+        withKnowledge.thread.history.items,
+      );
+      assert.deepEqual(
+        await store.listModelHistoryItems(
+          { tenantId: "tenant-1", threadId: "thread-1" },
+          0,
+          10,
+        ),
+        withKnowledge.thread.history.items,
+      );
+      assert.deepEqual(await store.commitTurnStart(withKnowledge), {
+        ...committed,
+        disposition: "replayed",
+      });
+    });
+
     test("rejects a parallel active Run without appending another Message", async (context) => {
       const store = await managedStore(context, createStore);
       await seedThread(store);
@@ -540,6 +579,32 @@ export function turnStartCommit(
           createdAt: occurredAt,
         },
       ],
+    },
+  };
+}
+
+function knowledgeContextItem(sequence: number, createdAt: string) {
+  return {
+    schemaVersion: "crewon.model-history-item.v0" as const,
+    itemId: `history-${sequence}`,
+    tenantId: "tenant-1",
+    threadId: "thread-1",
+    sequence,
+    runId: null,
+    segmentId: null,
+    createdAt,
+    type: "message" as const,
+    role: "user" as const,
+    source: "knowledge_context" as const,
+    content: "durable reference",
+    contentDigest: CONTENT_DIGEST,
+    knowledge: {
+      schemaVersion: "crewon.knowledge-context.v0" as const,
+      knowledgeId: "knowledge-1",
+      kind: "source" as const,
+      sourceId: "source-1",
+      title: "Reference",
+      contentDigest: CONTENT_DIGEST,
     },
   };
 }

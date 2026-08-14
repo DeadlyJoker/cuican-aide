@@ -1,8 +1,13 @@
 import {
   DEFAULT_THREAD_GOAL_TOKEN_BUDGET,
+  MAX_TURN_KNOWLEDGE_REFERENCES,
+  MAX_TURN_KNOWLEDGE_TOTAL_BYTES,
+  KnowledgeError,
   RunLifecycleError,
   ThreadLifecycleError,
   isGoalRunnable,
+  knowledgeContextBinding,
+  type KnowledgeRecord,
   type RunGoalBinding,
   type RunLifecycleEvent,
   type ThreadGoal,
@@ -24,6 +29,7 @@ import type {
   AuthorizationResource,
 } from "./authorization-port.ts";
 import { canonicalJson } from "./canonical-json.ts";
+import type { KnowledgeStore } from "./knowledge-store-port.ts";
 import type { ModelHistoryStore } from "./model-history-store-port.ts";
 import {
   RunStoreError,
@@ -52,6 +58,7 @@ export class TurnApplicationService {
     ThreadGoalStore &
     ModelHistoryStore &
     TurnStartStore;
+  readonly #knowledge: Pick<KnowledgeStore, "loadKnowledge">;
   readonly #authorization: AuthorizationPort;
   readonly #clock: ApplicationClock;
   readonly #ids: ApplicationIdGenerator;
@@ -59,12 +66,14 @@ export class TurnApplicationService {
 
   constructor(dependencies: {
     store: ThreadStore & ThreadGoalStore & ModelHistoryStore & TurnStartStore;
+    knowledge: Pick<KnowledgeStore, "loadKnowledge">;
     authorization: AuthorizationPort;
     clock: ApplicationClock;
     ids: ApplicationIdGenerator;
     digester: ContentDigester;
   }) {
     this.#store = dependencies.store;
+    this.#knowledge = dependencies.knowledge;
     this.#authorization = dependencies.authorization;
     this.#clock = dependencies.clock;
     this.#ids = dependencies.ids;
@@ -85,6 +94,10 @@ export class TurnApplicationService {
     );
     const historyHead = await this.#loadHistoryHead(actor, thread.threadId);
     const currentGoal = await this.#loadGoal(actor, thread.threadId);
+    const knowledge = await this.#loadKnowledge(
+      actor,
+      command.knowledgeReferences,
+    );
     const occurredAt = this.#now();
     const runId = this.#nextId("run");
     const messageId = this.#nextId("message");
@@ -108,6 +121,22 @@ export class TurnApplicationService {
       origin: null,
       proposedPlan: null,
     };
+    const knowledgeHistoryItems = knowledge.map((record, index) => ({
+      schemaVersion: "crewon.model-history-item.v0" as const,
+      itemId: this.#nextId("modelHistoryItem"),
+      tenantId: actor.tenantId,
+      threadId: thread.threadId,
+      sequence: historyHead.lastSequence + index + 1,
+      runId: null,
+      segmentId: null,
+      createdAt: occurredAt,
+      type: "message" as const,
+      role: "user" as const,
+      source: "knowledge_context" as const,
+      content: record.content,
+      contentDigest: record.contentDigest,
+      knowledge: knowledgeContextBinding(record),
+    }));
     const threadEvent: ThreadLifecycleEvent = {
       schemaVersion: "crewon.thread-event.v0",
       identity: { threadId: thread.threadId },
@@ -155,12 +184,14 @@ export class TurnApplicationService {
         history: {
           expectedLastSequence: historyHead.lastSequence,
           items: [
+            ...knowledgeHistoryItems,
             {
               schemaVersion: "crewon.model-history-item.v0",
               itemId: this.#nextId("modelHistoryItem"),
               tenantId: actor.tenantId,
               threadId: thread.threadId,
-              sequence: historyHead.lastSequence + 1,
+              sequence:
+                historyHead.lastSequence + knowledgeHistoryItems.length + 1,
               runId: null,
               segmentId: null,
               createdAt: occurredAt,
@@ -251,6 +282,66 @@ export class TurnApplicationService {
     } catch (error) {
       throw mapApplicationError(error);
     }
+  }
+
+  async #loadKnowledge(
+    actor: ActorContext,
+    references: StartTurnRequestCommand["knowledgeReferences"],
+  ): Promise<readonly KnowledgeRecord[]> {
+    const records: KnowledgeRecord[] = [];
+    let totalBytes = 0;
+    for (const reference of references) {
+      const { knowledgeId } = reference;
+      await this.#authorize(actor, "knowledge:read", {
+        kind: "knowledge",
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        knowledgeId,
+      });
+      let record: KnowledgeRecord | null;
+      try {
+        record = await this.#knowledge.loadKnowledge({
+          tenantId: actor.tenantId,
+          spaceId: actor.spaceId,
+          knowledgeId,
+        });
+      } catch (error) {
+        throw mapApplicationError(error);
+      }
+      if (record === null) {
+        throw new ApplicationError("notFound", "knowledge_not_found");
+      }
+      if (
+        record.tenantId !== actor.tenantId ||
+        record.spaceId !== actor.spaceId ||
+        record.knowledgeId !== knowledgeId
+      ) {
+        throw new ApplicationError("internal", "knowledge_authority_mismatch");
+      }
+      if (record.contentDigest !== reference.contentDigest) {
+        throw new ApplicationError("conflict", "knowledge_reference_stale");
+      }
+      totalBytes += new TextEncoder().encode(record.content).byteLength;
+      if (totalBytes > MAX_TURN_KNOWLEDGE_TOTAL_BYTES) {
+        throw new ApplicationError(
+          "validation",
+          "knowledge_context_total_too_large",
+        );
+      }
+      try {
+        knowledgeContextBinding(record);
+      } catch (error) {
+        throw new ApplicationError(
+          "validation",
+          error instanceof KnowledgeError
+            ? error.code
+            : "knowledge_context_invalid",
+          { cause: error },
+        );
+      }
+      records.push(record);
+    }
+    return records;
   }
 
   #prepareGoal(
@@ -432,6 +523,7 @@ function idempotencyDescriptor(
     threadId: command.threadId,
     expectedThreadRevision: command.expectedThreadRevision,
     content: command.content,
+    knowledgeReferences: command.knowledgeReferences,
     requestedAgentVersionId: command.requestedAgentVersionId,
     executionIntent: command.executionIntent,
   };
@@ -472,6 +564,32 @@ function validateRequestCommand(command: StartTurnRequestCommand): void {
     new TextEncoder().encode(command.content).byteLength > MAX_MESSAGE_BYTES
   ) {
     throw new ApplicationError("validation", "message_content_too_large");
+  }
+  if (
+    !Array.isArray(command.knowledgeReferences) ||
+    command.knowledgeReferences.length > MAX_TURN_KNOWLEDGE_REFERENCES
+  ) {
+    throw new ApplicationError("validation", "knowledge_references_invalid");
+  }
+  const knowledgeIds = new Set<string>();
+  for (const reference of command.knowledgeReferences) {
+    if (
+      !isPlainObject(reference) ||
+      Object.keys(reference).sort().join(",") !== "contentDigest,knowledgeId"
+    ) {
+      throw new ApplicationError("validation", "knowledge_reference_invalid");
+    }
+    const { knowledgeId, contentDigest } = reference;
+    requireNonEmpty(knowledgeId, "knowledge_id_invalid");
+    if (
+      knowledgeId.length > 128 ||
+      knowledgeIds.has(knowledgeId) ||
+      typeof contentDigest !== "string" ||
+      !/^sha256:[a-f0-9]{64}$/u.test(contentDigest)
+    ) {
+      throw new ApplicationError("validation", "knowledge_reference_invalid");
+    }
+    knowledgeIds.add(knowledgeId);
   }
   if (command.requestedAgentVersionId !== null) {
     requireNonEmpty(

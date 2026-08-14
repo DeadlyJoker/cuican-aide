@@ -1,6 +1,8 @@
 import {
   MESSAGE_ROLES,
   MAX_AUTOMATION_INSTRUCTION_BYTES,
+  MAX_TURN_KNOWLEDGE_REFERENCES,
+  MAX_TURN_KNOWLEDGE_TOTAL_BYTES,
   ModelHistoryError,
   parseAutomationInvocationBinding,
   parseAutomationInvocationOrigin,
@@ -1844,7 +1846,8 @@ export function validateTurnStartInput(input: CommitTurnStartInput): {
   const runEvent = input.run.events[0];
   const threadEvent = input.thread.events[0];
   const message = input.thread.messages[0];
-  const historyItem = input.thread.history.items[0];
+  const historyItem = input.thread.history.items.at(-1);
+  const knowledgeItems = input.thread.history.items.slice(0, -1);
   if (
     input.run.expectedRevision !== 0 ||
     input.thread.expectedRevision < 1 ||
@@ -1854,7 +1857,7 @@ export function validateTurnStartInput(input: CommitTurnStartInput): {
     threadEvent?.type !== "thread.message.appended" ||
     input.thread.messages.length !== 1 ||
     message?.role !== "user" ||
-    input.thread.history.items.length !== 1 ||
+    input.thread.history.items.length < 1 ||
     historyItem?.type !== "message" ||
     historyItem.role !== "user" ||
     historyItem.source !== "thread_message" ||
@@ -1864,6 +1867,37 @@ export function validateTurnStartInput(input: CommitTurnStartInput): {
     input.run.workItems.length !== 1
   ) {
     throw new RunStoreError("turn_start_shape_invalid");
+  }
+  if (
+    knowledgeItems.length > MAX_TURN_KNOWLEDGE_REFERENCES ||
+    new Set(
+      knowledgeItems.flatMap((item) =>
+        item.type === "message" && item.source === "knowledge_context"
+          ? [item.knowledge.knowledgeId]
+          : [],
+      ),
+    ).size !== knowledgeItems.length ||
+    knowledgeItems.reduce(
+      (total, item) =>
+        total +
+        (item.type === "message"
+          ? new TextEncoder().encode(item.content).byteLength
+          : 0),
+      0,
+    ) > MAX_TURN_KNOWLEDGE_TOTAL_BYTES ||
+    knowledgeItems.some(
+      (item) =>
+        item.type !== "message" ||
+        item.role !== "user" ||
+        item.source !== "knowledge_context" ||
+        item.tenantId !== input.tenantId ||
+        item.threadId !== threadId ||
+        item.runId !== null ||
+        item.segmentId !== null ||
+        item.createdAt !== message.createdAt,
+    )
+  ) {
+    throw new RunStoreError("turn_start_knowledge_mismatch");
   }
   if (
     runEvent.data.threadId !== threadId ||

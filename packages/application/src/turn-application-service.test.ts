@@ -6,6 +6,7 @@ import {
   reduceRunLifecycleEvent,
   reduceThreadLifecycleEvent,
   type ThreadState,
+  type KnowledgeRecord,
 } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
@@ -70,6 +71,114 @@ test("authorizes and prepares one atomic Message, history item, Run and queue ha
   assert.equal(committed.run.events[0]?.type, "run.created");
   assert.equal(committed.run.outbox.length, 1);
   assert.equal(committed.run.workItems.length, 1);
+});
+
+test("freezes authorized Knowledge before the user message in the atomic Turn", async () => {
+  const store = new RecordingTurnStore();
+  const authorization = new RecordingAuthorization();
+
+  await createService(store, authorization).startTurn(actor(), {
+    ...command(),
+    knowledgeReferences: [knowledgeReference()],
+  });
+
+  assert.equal(store.knowledgeReads, 1);
+  assert.deepEqual(
+    authorization.requests.map(({ action }) => action),
+    ["thread:message:append", "run:create", "knowledge:read"],
+  );
+  assert.deepEqual(store.commits[0]?.thread.history.items, [
+    {
+      schemaVersion: "crewon.model-history-item.v0",
+      itemId: "modelHistoryItem-1",
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      sequence: 1,
+      runId: null,
+      segmentId: null,
+      createdAt: "2026-08-09T00:00:01Z",
+      type: "message",
+      role: "user",
+      source: "knowledge_context",
+      content: "durable reference",
+      contentDigest: `sha256:${"a".repeat(64)}`,
+      knowledge: {
+        schemaVersion: "crewon.knowledge-context.v0",
+        knowledgeId: "knowledge-1",
+        kind: "source",
+        sourceId: "source-1",
+        title: "Reference",
+        contentDigest: `sha256:${"a".repeat(64)}`,
+      },
+    },
+    {
+      schemaVersion: "crewon.model-history-item.v0",
+      itemId: "modelHistoryItem-2",
+      tenantId: "tenant-1",
+      threadId: "thread-1",
+      sequence: 2,
+      runId: null,
+      segmentId: null,
+      createdAt: "2026-08-09T00:00:01Z",
+      type: "message",
+      role: "user",
+      source: "thread_message",
+      content: "do the work",
+      contentDigest: `sha256:${"a".repeat(64)}`,
+    },
+  ]);
+});
+
+test("replays a Knowledge-bound Turn without re-reading Knowledge", async () => {
+  const store = new RecordingTurnStore();
+  const request = {
+    ...command(),
+    knowledgeReferences: [knowledgeReference()],
+  };
+  const service = createService(store);
+  await service.startTurn(actor(), request);
+  const readsAfterCommit = store.knowledgeReads;
+  const { route: _route, ...replayCommand } = request;
+
+  const replay = await service.replayTurn(actor(), replayCommand);
+
+  assert.equal(replay?.disposition, "replayed");
+  assert.equal(store.knowledgeReads, readsAfterCommit);
+});
+
+test("rejects duplicate Knowledge IDs before authorization or Store access", async () => {
+  const store = new RecordingTurnStore();
+  const authorization = new RecordingAuthorization();
+
+  await assert.rejects(
+    createService(store, authorization).startTurn(actor(), {
+      ...command(),
+      knowledgeReferences: [knowledgeReference(), knowledgeReference()],
+    }),
+    hasApplicationError("validation", "knowledge_reference_invalid"),
+  );
+  assert.deepEqual(authorization.requests, []);
+  assert.equal(store.knowledgeReads, 0);
+  assert.deepEqual(store.commits, []);
+});
+
+test("rejects Knowledge digest drift before the atomic Turn write", async () => {
+  const store = new RecordingTurnStore();
+
+  await assert.rejects(
+    createService(store).startTurn(actor(), {
+      ...command(),
+      knowledgeReferences: [
+        {
+          ...knowledgeReference(),
+          contentDigest: `sha256:${"b".repeat(64)}`,
+        },
+      ],
+    }),
+    hasApplicationError("conflict", "knowledge_reference_stale"),
+  );
+  assert.equal(store.knowledgeReads, 1);
+  assert.deepEqual(store.commits, []);
 });
 
 test("keeps the idempotency fingerprint stable across a changed derived route", async () => {
@@ -190,6 +299,7 @@ function createService(
 ) {
   return new TurnApplicationService({
     store,
+    knowledge: store,
     authorization,
     clock: { now: () => "2026-08-09T00:00:01Z" },
     ids: new IncrementingIds(),
@@ -213,6 +323,7 @@ function command() {
     threadId: "thread-1",
     expectedThreadRevision: 1,
     content: "do the work",
+    knowledgeReferences: [],
     requestedAgentVersionId: null,
     executionIntent: "none" as const,
     route: {
@@ -268,6 +379,7 @@ class RecordingTurnStore
   readonly commits: CommitTurnStartInput[] = [];
   readonly #thread: ThreadState;
   receiptReads = 0;
+  knowledgeReads = 0;
   #result: CommitTurnStartResult | null = null;
 
   constructor(thread: ThreadState = threadState()) {
@@ -304,6 +416,11 @@ class RecordingTurnStore
 
   async listModelHistoryItems() {
     return [];
+  }
+
+  async loadKnowledge({ knowledgeId }: { knowledgeId: string }) {
+    this.knowledgeReads += 1;
+    return knowledgeId === "knowledge-1" ? knowledgeRecord() : null;
   }
 
   async loadTurnStartReceipt(
@@ -384,5 +501,28 @@ function threadState(): ThreadState {
     archivedAt: null,
     deletedAt: null,
     deletedByActorId: null,
+  };
+}
+
+function knowledgeRecord(): KnowledgeRecord {
+  return {
+    schemaVersion: "crewon.knowledge.v0",
+    knowledgeId: "knowledge-1",
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+    ownerActorId: "actor-1",
+    kind: "source",
+    sourceId: "source-1",
+    title: "Reference",
+    content: "durable reference",
+    contentDigest: `sha256:${"a".repeat(64)}`,
+    createdAt: "2026-08-09T00:00:00.000Z",
+  };
+}
+
+function knowledgeReference() {
+  return {
+    knowledgeId: "knowledge-1",
+    contentDigest: `sha256:${"a".repeat(64)}`,
   };
 }

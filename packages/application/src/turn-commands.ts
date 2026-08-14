@@ -6,6 +6,10 @@ export type StartTurnRequestCommand = Readonly<{
   threadId: string;
   expectedThreadRevision: number;
   content: string;
+  knowledgeReferences: readonly Readonly<{
+    knowledgeId: string;
+    contentDigest: string;
+  }>[];
   requestedAgentVersionId: string | null;
   executionIntent: "none" | "goal" | "plan";
 }>;
