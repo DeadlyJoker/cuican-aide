@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { DesktopWindowFrame } from "./components/DesktopWindowFrame";
 import { ControlRuntimeUnavailable } from "./components/ControlRuntimeUnavailable";
+import { installDesktopFetch } from "./lib/desktop/desktopFetch";
 import { detectRuntimeSurface } from "./lib/platform";
 import { loadControlApiClient } from "./lib/control-runtime/controlRuntimeBootstrap";
 // Loaded first: the theme-aware neutral scale every other sheet resolves against.
@@ -20,6 +21,11 @@ import "./styles/appearance.css";
  * hydrate the rest of the shell.
  */
 document.documentElement.dataset.surface = detectRuntimeSurface();
+
+// Packaged Control lives on a loopback origin. Install the Tauri HTTP transport
+// before constructing the client so the webview never attempts that absolute
+// request through browser CORS.
+await installDesktopFetch();
 
 // Control must issue a renderer session before any product UI can mount.
 const controlClient = await loadControlApiClient();

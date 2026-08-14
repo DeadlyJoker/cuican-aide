@@ -1,16 +1,16 @@
 /**
  * Routes network calls through Tauri in a packaged build.
  *
- * The webview enforces CORS, and the agent-platform backend sends no
- * `Access-Control-Allow-Origin`. In dev that never surfaced because the Vite
- * proxy made every call same-origin; a packaged build dialling the backend
- * directly from `tauri://localhost` had all of them blocked, surfacing as
- * `Load failed` on the login screen.
+ * The webview enforces CORS, while packaged Control is an authenticated
+ * loopback service on a different origin and deliberately does not expose a
+ * browser CORS surface. In dev, the Vite BFF keeps Control requests
+ * same-origin; a packaged build must route absolute Control requests through
+ * Tauri's HTTP plugin.
  *
  * Requests issued from Rust are not subject to the webview's origin rules, so
  * the fix is to send them there. Installing it as `globalThis.fetch` rather than
- * threading a client through every call site means no request can be forgotten,
- * including ones added later.
+ * threading a client through every call site ensures the generated Control
+ * client captures the correct transport when it is constructed.
  */
 
 import { hasDesktopBridge, hasDevServerProxy } from "../platform";
@@ -136,10 +136,9 @@ async function withDeadline(
  * Whether a request target carries its own origin.
  *
  * Rust has no page to resolve a relative URL against, so handing it one produces
- * a request that cannot be built -- under `tauri dev` that meant the dev-server
- * proxy path `/agent-platform-api` never resolved and the app hung on its loading
- * screen. Relative targets are same-origin by definition, so they raise no CORS
- * problem and belong on the webview's own fetch.
+ * a request that cannot be built. Relative targets are same-origin by
+ * definition and belong on the webview's own fetch; only absolute packaged
+ * Control URLs use the plugin.
  */
 function isAbsolute(input: RequestInfo | URL): boolean {
   const url =

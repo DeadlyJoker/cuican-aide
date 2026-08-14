@@ -78,9 +78,11 @@ describe("App Workspace Control composition", () => {
 
     expect(entry).toContain("<App controlClient={controlClient} />");
     expect(entry).toContain("<ControlRuntimeUnavailable />");
-    expect(entry).not.toMatch(
-      /AgentPlatformAuthGate|pimLaunchBridge|installDesktopFetch/u,
+    expect(entry).toContain("await installDesktopFetch()");
+    expect(entry.indexOf("await installDesktopFetch()")).toBeLessThan(
+      entry.indexOf("await loadControlApiClient()"),
     );
+    expect(entry).not.toMatch(/AgentPlatformAuthGate|pimLaunchBridge/u);
     expect(workspace).not.toContain("readAgentPlatformSnapshot");
     expect(viteConfig).not.toMatch(
       /CREWON_AGENT_PLATFORM_TARGET|agent-platform-api|127\.0\.0\.1:8000/u,
