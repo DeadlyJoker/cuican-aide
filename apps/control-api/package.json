@@ -26,6 +26,7 @@
     "@crewon/tool-broker": "workspace:*",
     "@types/node": "^24.10.1",
     "@types/pg": "8.20.0",
+    "esbuild": "0.27.7",
     "pg": "8.22.0",
     "typescript": "^5.9.3"
   },
