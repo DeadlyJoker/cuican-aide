@@ -43,7 +43,7 @@
     "longDescription": "A desktop client for the CrewON TypeScript agent runtime.",
     "createUpdaterArtifacts": true,
     "macOS": {
-      "minimumSystemVersion": "10.15"
+      "minimumSystemVersion": "13.5"
     },
     "windows": {
       "nsis": {

@@ -97,6 +97,7 @@ test("desktop bundle contains only the Tauri shell and TypeScript runtime", () =
     "binaries/runtime/runtime-release.mjs",
     "binaries/runtime/runtime-worker.mjs",
   ]);
+  assert.equal(config.bundle.macOS.minimumSystemVersion, "13.5");
   const manifest = JSON.stringify(config.bundle);
   for (const removedRuntime of [
     "crewon-app-server",
