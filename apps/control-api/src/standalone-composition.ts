@@ -134,7 +134,7 @@ export async function createPostgresControlApi(
     statementTimeoutMs: config.statementTimeoutMs,
   });
   try {
-    return composeControlApi(store, config);
+    return composeControlApi(store, config, null, store);
   } catch (error) {
     await store.close();
     throw error;

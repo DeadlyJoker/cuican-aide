@@ -3,6 +3,7 @@ import {
   AgentVersionCatalogApplicationService,
   ArtifactApplicationService,
   AutomationApplicationService,
+  AutomationSchedulerApplicationService,
   CompatibleAutomationScheduleCalculator,
   KnowledgeApplicationService,
   OfficeApplicationService,
@@ -29,6 +30,7 @@ import {
 import { PostgresDomainStore } from "@crewon/store";
 
 import { buildControlApi } from "./control-api.ts";
+import { AutomationSchedulerLoop } from "./automation-scheduler-loop.ts";
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
 import { OutboxDispatcher } from "./outbox-dispatcher.ts";
 import {
@@ -59,6 +61,7 @@ export type ProductionPostgresControlApiConfig = Readonly<{
   authorization: AuthorizationPort & AutomationAuthorizationPort;
   heartbeatIntervalMs?: number | null;
   outboxScanIntervalMs?: number | null;
+  automationSchedulerIntervalMs?: number | null;
   artifactStore: ArtifactStorePort;
   artifactEncryptionKeyId: string;
   providerProbeWorkers?: TenantProviderProbeWorkerRegistry;
@@ -100,6 +103,7 @@ async function composeProductionControlApi(
       scanIntervalMs: config.outboxScanIntervalMs,
     },
   );
+  let automationScheduler: AutomationSchedulerLoop | null = null;
   try {
     const clock = new SystemApplicationClock();
     const digester = new NodeSha256ContentDigester();
@@ -174,6 +178,7 @@ async function composeProductionControlApi(
       digester,
       routeResolver,
     });
+    const scheduleCalculator = new CompatibleAutomationScheduleCalculator();
     const automations = new AutomationApplicationService({
       store,
       authorization: config.authorization,
@@ -181,8 +186,23 @@ async function composeProductionControlApi(
       ids,
       digester,
       routeResolver,
-      scheduleCalculator: new CompatibleAutomationScheduleCalculator(),
+      scheduleCalculator,
     });
+    automationScheduler = new AutomationSchedulerLoop(
+      new AutomationSchedulerApplicationService({
+        store,
+        authorization: config.authorization,
+        calculator: scheduleCalculator,
+        preparer: automations,
+        retryAfterMs: 1_000,
+      }),
+      {
+        ownerId: `automation-scheduler:${ids.nextId("outboxLease")}`,
+        nextLeaseId: () => ids.nextId("outboxLease"),
+        now: () => clock.now(),
+        scanIntervalMs: config.automationSchedulerIntervalMs ?? null,
+      },
+    );
     const knowledge = new KnowledgeApplicationService({
       store,
       authorization: config.authorization,
@@ -288,7 +308,11 @@ async function composeProductionControlApi(
       heartbeatIntervalMs: config.heartbeatIntervalMs,
     });
     outboxDispatcher.start();
+    if (config.automationSchedulerIntervalMs !== undefined) {
+      automationScheduler.start();
+    }
     app.addHook("onClose", async () => {
+      await automationScheduler?.close();
       await outboxDispatcher.close();
       eventHub.close();
       await config.artifactStore.close();
@@ -298,12 +322,13 @@ async function composeProductionControlApi(
       app,
       eventHub,
       outboxDispatcher,
-      automationScheduler: null,
+      automationScheduler,
       providerProbes,
       workspaceLists: null,
       workspaceQueries,
     };
   } catch (error) {
+    void automationScheduler?.close();
     void outboxDispatcher.close();
     eventHub.close();
     void config.artifactStore.close();
