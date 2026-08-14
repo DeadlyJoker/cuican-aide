@@ -14,11 +14,13 @@ import { SqliteRunStore } from "../packages/store/src/index.ts";
 
 import { activateStandaloneRuntimeAgentVersionRelease } from "../apps/runtime-worker/src/agent-version-release-composition.ts";
 import { loadAgentVersionRuntimeFactory } from "../apps/runtime-worker/src/runtime-binding-config.ts";
+import { findOwnedPackagedWindowsProcesses } from "./windows-packaged-processes.mjs";
 
 const repo = resolve(import.meta.dirname, "..");
 const smokeMode = process.env.CREWON_PACKAGED_SMOKE_MODE === "launch" ? "launch" : "workflow";
 const appBinary = process.env.CREWON_PACKAGED_APP_BINARY?.trim() ||
   join(repo, "apps/crewon-ui/src-tauri/target/release/bundle/macos/Crewon.app/Contents/MacOS/crewon-ui");
+const installRoot = process.env.CREWON_PACKAGED_INSTALL_ROOT?.trim() ?? null;
 const home = mkdtempSync(join(tmpdir(), "crewon-slice7-app-"));
 const localData = process.platform === "win32"
   ? join(home, "AppData", "Local")
@@ -116,9 +118,10 @@ try {
     assert.equal(portOpen(6176), false);
     app.kill("SIGKILL");
     await waitForExit(app);
-    await waitFor(() => (!portOpen(3210) && !portOpen(6176)) || null);
+    await waitFor(() => launchCleanupComplete() || null);
     console.log(JSON.stringify({ home, launch: true, guardianCleanup: true,
-      controlPort: 3210, removedAppServerPortClosed: true }));
+      controlPort: 3210, removedAppServerPortClosed: true,
+      packagedProcessCleanup: process.platform === "win32" }));
   } else {
     const authority = await waitForControlAuthority();
     await waitFor(() => portOpen(3210) || null);
@@ -200,7 +203,7 @@ try {
   app.kill("SIGKILL");
   await Promise.allSettled([waitForExit(app),
     waitFor(() => (smokeMode === "launch"
-      ? !portOpen(3210) && !portOpen(6176)
+      ? launchCleanupComplete()
       : managedPids().length === 0 && !portOpen(3210)) || null)]);
   provider.close();
 }
@@ -242,6 +245,25 @@ function processPids(pattern: RegExp) {
 
 function processLines() {
   return execFileSync("ps", ["eww", "-ax", "-o", "pid=,command="], { encoding: "utf8" }).split("\n");
+}
+
+function launchCleanupComplete() {
+  if (portOpen(3210) || portOpen(6176)) return false;
+  if (process.platform !== "win32") return true;
+  assert.ok(installRoot, "CREWON_PACKAGED_INSTALL_ROOT is required on Windows");
+  return windowsPackagedProcessSnapshot().length === 0;
+}
+
+function windowsPackagedProcessSnapshot() {
+  const command = "$ErrorActionPreference = 'Stop'; " +
+    "$rows = @(Get-CimInstance Win32_Process | " +
+    "Select-Object ProcessId,Name,ExecutablePath,CommandLine); " +
+    "ConvertTo-Json -Compress -Depth 3 -InputObject $rows";
+  const output = execFileSync("powershell.exe", ["-NoLogo", "-NoProfile", "-NonInteractive",
+    "-Command", command], { encoding: "utf8", maxBuffer: 16 * 1024 * 1024 });
+  return findOwnedPackagedWindowsProcesses({
+    appBinary, installRoot, processes: JSON.parse(output),
+  });
 }
 
 function environmentValue(line: string, name: string) {

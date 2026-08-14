@@ -307,6 +307,7 @@ jobs:
         shell: pwsh
         env:
           CREWON_PACKAGED_APP_BINARY: ${{ steps.installed_app.outputs.path }}
+          CREWON_PACKAGED_INSTALL_ROOT: ${{ steps.installed_app.outputs.install_root }}
           CREWON_PACKAGED_SMOKE_MODE: launch
         run: node --experimental-strip-types scripts/packaged-workflow-app-smoke.ts
       - name: Collect signed Windows assets
