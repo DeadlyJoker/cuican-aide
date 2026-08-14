@@ -87,11 +87,11 @@ skip`、Runtime Worker `306 pass / 1 PostgreSQL 环境条件 skip`。本机未�
   Worker 全量为 `306 pass / 1 PostgreSQL 环境条件 skip / 0 fail`；Control 子进程 E2E 改用真实 loopback Responses SSE transport，
   不再通过 production fake 完成 durable Run。
 - 本轮重新 staging 与构建后的 `.app` 仍只包含 Tauri shell、官方 Node 24、guardian 与四个 TS runtime bundle；Device Tool、
-  Gateway、Responses Lite、Rust App Server、6176 与旧 restart/client marker 扫描均为 0。最新隔离 HOME smoke
-  `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-jEMknn` 中，Workflow Run
-  `019fffc1-c531-7222-a116-5650a45b537a` 在 Worker `SIGKILL` 后由同一 HOME 重启恢复为 `completed`：2 次不同模型采样、
-  2 个 Attempt、唯一 `run.completed`，同 key `committed -> replayed` 且 admission receipt/Run 各一；GUI `SIGKILL` 后
-  guardian 清理全部子进程和 3210。`.app` 与 updater archive 已生成，Tauri 命令只因缺少
+  Gateway、Responses Lite、Rust App Server、6176、fake model 与旧 restart/client marker 扫描均为 0。最新隔离 HOME smoke
+  `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-218cgw` 中，Workflow Run
+  `01a0005f-28da-7358-b308-5ebf0f6ce653` 在 Worker `SIGKILL` 后由同一 HOME 重启恢复为 `completed`：2 次真实 loopback Responses
+  采样、2 个 Attempt、唯一 `run.completed`，同 key `committed -> replayed` 且 admission receipt/Run 各一；GUI `SIGKILL` 后 guardian
+  清理全部子进程和 3210。未签名 `.app` 与 updater archive 已生成；即使指定 `--no-sign`，Tauri updater 仍因缺少
   `TAURI_SIGNING_PRIVATE_KEY` 最终返回失败，未绕过发布签名边界。
 - 正式桌面发布路径已有 fail-closed GitHub Actions matrix：标准 `macos-15` arm64 与 `windows-2022` x64 分别校验 Node 官方
   `SHASUMS256.txt`、绑定 binary target/SHA/distributable、构建 guardian、stage 四个 TS bundle，并要求 updater/OS 签名。macOS
