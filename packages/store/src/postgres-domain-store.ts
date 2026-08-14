@@ -18,6 +18,12 @@ import {
   type AutomationInvocationResult,
   type AutomationListQuery,
   type AutomationLocator,
+  type AutomationScheduleClaim,
+  type AutomationScheduleClaimInput,
+  type AutomationScheduleLeaseInput,
+  type CommitScheduledAutomationInvocationInput,
+  type RetryAutomationScheduleClaimInput,
+  type ScheduledAutomationReceiptQuery,
   type FinalizeModelProviderSettingsInput,
   type FinalizeModelProviderSettingsResult,
   type ExpireModelProviderSettingsInput,
@@ -117,11 +123,16 @@ import {
 import {
   commitPostgresAutomationCreate,
   commitPostgresAutomationInvocation,
+  claimNextDuePostgresAutomation,
+  commitPostgresScheduledAutomationInvocation,
+  disablePostgresAutomationScheduleClaim,
   listPostgresAutomations,
   loadPostgresAutomation,
   loadPostgresAutomationCreateReceipt,
   loadPostgresAutomationInvocationContext,
   loadPostgresAutomationInvocationReceipt,
+  loadPostgresScheduledAutomationReceipt,
+  retryPostgresAutomationScheduleClaim,
 } from "./postgres-automation-store.ts";
 import {
   POSTGRES_WORKSPACE_OPERATION_SCHEMA_VERSION,
@@ -590,6 +601,57 @@ export class PostgresDomainStore
   ): Promise<AutomationInvocationResult> {
     this.assertOpen();
     return commitPostgresAutomationInvocation(
+      this.pool,
+      this.schemaSql(),
+      input,
+    );
+  }
+
+  async claimNextDueAutomation(
+    input: AutomationScheduleClaimInput,
+  ): Promise<AutomationScheduleClaim | null> {
+    this.assertOpen();
+    return claimNextDuePostgresAutomation(this.pool, this.schemaSql(), input);
+  }
+
+  async loadScheduledAutomationReceipt(
+    query: ScheduledAutomationReceiptQuery,
+  ): Promise<AutomationInvocationResult | null> {
+    this.assertOpen();
+    return loadPostgresScheduledAutomationReceipt(
+      this.pool,
+      this.schemaSql(),
+      query,
+    );
+  }
+
+  async commitScheduledAutomationInvocation(
+    input: CommitScheduledAutomationInvocationInput,
+  ): Promise<AutomationInvocationResult> {
+    this.assertOpen();
+    return commitPostgresScheduledAutomationInvocation(
+      this.pool,
+      this.schemaSql(),
+      input,
+    );
+  }
+
+  async retryAutomationScheduleClaim(
+    input: RetryAutomationScheduleClaimInput,
+  ): Promise<void> {
+    this.assertOpen();
+    await retryPostgresAutomationScheduleClaim(
+      this.pool,
+      this.schemaSql(),
+      input,
+    );
+  }
+
+  async disableAutomationScheduleClaim(
+    input: AutomationScheduleLeaseInput & Readonly<{ reasonCode: string }>,
+  ): Promise<void> {
+    this.assertOpen();
+    await disablePostgresAutomationScheduleClaim(
       this.pool,
       this.schemaSql(),
       input,

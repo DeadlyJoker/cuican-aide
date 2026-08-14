@@ -71,6 +71,88 @@ if (connectionString === undefined) {
     }
   });
 
+  test("atomically admits one leased scheduled Automation", async () => {
+    const store = await createTestStore(connectionString);
+    try {
+      await seedAutomationThread(store);
+      const automations = automationApplicationService(store);
+      await automations.createAutomation(
+        automationActor(),
+        automationCreateCommand(),
+      );
+      const claims = await Promise.all([
+        store.claimNextDueAutomation({
+          ownerId: "postgres-scheduler-1",
+          leaseId: "postgres-schedule-lease-1",
+          leaseDurationMs: 30_000,
+          observedAt: "2026-08-10T10:01:00.000Z",
+        }),
+        store.claimNextDueAutomation({
+          ownerId: "postgres-scheduler-2",
+          leaseId: "postgres-schedule-lease-2",
+          leaseDurationMs: 30_000,
+          observedAt: "2026-08-10T10:01:00.000Z",
+        }),
+      ]);
+      const admittedClaims = claims.filter((claim) => claim !== null);
+      assert.equal(admittedClaims.length, 1);
+      const claim = admittedClaims[0];
+      assert.ok(claim);
+      const prepared = await automations.prepare({
+        actor: automationActor(),
+        claim,
+      });
+      const receipt = {
+        tenantId: "tenant-1",
+        automationId: "automation-1",
+        scheduleRevision: 1 as const,
+        scheduledFor: claim.scheduledFor,
+        occurrenceDigest: claim.occurrenceDigest,
+      };
+      const committed = await store.commitScheduledAutomationInvocation({
+        receipt,
+        lease: {
+          tenantId: "tenant-1",
+          automationId: "automation-1",
+          scheduleRevision: 1,
+          scheduledFor: claim.scheduledFor,
+          ownerId: claim.lease.ownerId,
+          leaseId: claim.lease.leaseId,
+          leaseEpoch: claim.lease.epoch,
+        },
+        expectedDefinitionDigest: claim.record.definitionDigest,
+        expectedScheduleStateRevision: claim.record.scheduleState.revision,
+        invocation: prepared,
+        nextScheduleState: {
+          ...claim.record.scheduleState,
+          nextOccurrenceAt: "2026-08-11T10:00:00.000Z",
+          lastScheduledFor: claim.scheduledFor,
+          retryAt: null,
+          revision: 2,
+          updatedAt: claim.observedAt,
+        },
+      });
+
+      assert.equal(committed.disposition, "committed");
+      assert.deepEqual(await store.loadScheduledAutomationReceipt(receipt), {
+        ...committed,
+        disposition: "replayed",
+      });
+      assert.equal(
+        (
+          await store.loadAutomation({
+            tenantId: "tenant-1",
+            spaceId: "space-1",
+            automationId: "automation-1",
+          })
+        )?.scheduleState.revision,
+        2,
+      );
+    } finally {
+      await store.close();
+    }
+  });
+
   test("replays an invocation receipt without waiting for later run or thread locks", async () => {
     const store = await createTestStore(connectionString);
     try {
