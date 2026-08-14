@@ -32,22 +32,15 @@ const ROUTE = {
   runtimeBindingId: "runtime-binding-1",
   workspaceBindingId: "workspace-1",
 } as const;
+const TOKEN_ENVIRONMENT = "WORKSPACE_WORKER_TOKEN";
 
-test("production Worker requires HTTPS unless loopback is explicit test transport", async () => {
+test("production Worker accepts HTTPS or an exact same-host loopback", async () => {
   const config = {
     ...ROUTE,
     origin: "http://127.0.0.1:3211",
     token: TOKEN,
   };
-  assert.throws(
-    () => new ProductionWorkspaceWorkerClient(config),
-    (error) =>
-      error instanceof RuntimeWorkspaceWorkerClientError &&
-      error.code === "runtime_workspace_worker_origin_invalid",
-  );
-  await new ProductionWorkspaceWorkerClient(config, {
-    allowTestLoopback: true,
-  }).close();
+  await new ProductionWorkspaceWorkerClient(config).close();
   await new ProductionWorkspaceWorkerClient({
     ...config,
     origin: "https://workspace.internal.example",
@@ -170,9 +163,10 @@ test("production environment requires one authenticated active route per tenant"
   const route = {
     ...ROUTE,
     origin: "https://workspace.internal.example",
-    token: TOKEN,
+    tokenEnvironment: TOKEN_ENVIRONMENT,
   };
   const registry = resolveProductionWorkspaceWorkers({
+    [TOKEN_ENVIRONMENT]: TOKEN,
     CREWON_WORKSPACE_TENANT_ROUTES_JSON: JSON.stringify([route]),
   });
   assert.ok(
@@ -185,12 +179,14 @@ test("production environment requires one authenticated active route per tenant"
   await registry.close();
 
   for (const routes of [
-    [{ ...route, origin: "http://127.0.0.1:3211" }],
+    [{ ...route, origin: "http://workspace.internal:3211" }],
+    [{ ...route, tokenEnvironment: "MISSING_WORKSPACE_TOKEN" }],
     [route, { ...route, workspaceBindingId: "workspace-2" }],
   ]) {
     assert.throws(
       () =>
         resolveProductionWorkspaceWorkers({
+          [TOKEN_ENVIRONMENT]: TOKEN,
           CREWON_WORKSPACE_TENANT_ROUTES_JSON: JSON.stringify(routes),
         }),
       /CREWON_WORKSPACE_TENANT_ROUTES_JSON_invalid/u,
@@ -205,6 +201,6 @@ function client(fetch: typeof globalThis.fetch) {
       origin: "http://127.0.0.1:3211",
       token: TOKEN,
     },
-    { allowTestLoopback: true, fetch },
+    { fetch },
   );
 }

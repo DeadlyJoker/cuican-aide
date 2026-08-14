@@ -12,7 +12,7 @@ const MAX_BYTES = 512 * 1_024;
 type RouteConfig = ProductionWorkspaceWorkerRoute &
   Readonly<{
     origin: string;
-    token: string;
+    tokenEnvironment: string;
     deadlineMs?: number;
   }>;
 
@@ -51,7 +51,10 @@ export function resolveProductionWorkspaceWorkers(
     if (tenants.has(config.tenantId)) throw invalidConfiguration();
     let worker;
     try {
-      worker = new ProductionWorkspaceWorkerClient(config);
+      worker = new ProductionWorkspaceWorkerClient({
+        ...config,
+        token: secret(environment[config.tokenEnvironment]),
+      });
     } catch (cause) {
       throw invalidConfiguration(cause);
     }
@@ -76,7 +79,7 @@ function routeConfig(value: unknown): RouteConfig {
     "origin",
     "runtimeBindingId",
     "tenantId",
-    "token",
+    "tokenEnvironment",
     "workspaceBindingId",
   ].sort();
   const allowed = [...required, "deadlineMs"].sort();
@@ -92,7 +95,7 @@ function routeConfig(value: unknown): RouteConfig {
     typeof value.runtimeBindingId !== "string" ||
     typeof value.workspaceBindingId !== "string" ||
     typeof value.origin !== "string" ||
-    typeof value.token !== "string" ||
+    !environmentName(value.tokenEnvironment) ||
     (value.deadlineMs !== undefined &&
       (!Number.isSafeInteger(value.deadlineMs) ||
         (value.deadlineMs as number) < 1_000 ||
@@ -105,11 +108,26 @@ function routeConfig(value: unknown): RouteConfig {
     runtimeBindingId: value.runtimeBindingId,
     workspaceBindingId: value.workspaceBindingId,
     origin: value.origin,
-    token: value.token,
+    tokenEnvironment: value.tokenEnvironment,
     ...(value.deadlineMs === undefined
       ? {}
       : { deadlineMs: value.deadlineMs as number }),
   };
+}
+
+function environmentName(value: unknown): value is string {
+  return (
+    typeof value === "string" && /^[A-Za-z_][A-Za-z0-9_]{0,127}$/u.test(value)
+  );
+}
+
+function secret(value: string | undefined): string {
+  if (value === undefined) throw invalidConfiguration();
+  const bytes = new TextEncoder().encode(value).byteLength;
+  if (bytes < 32 || bytes > 8_192 || /[\u0000-\u001f\u007f]/u.test(value)) {
+    throw invalidConfiguration();
+  }
+  return value;
 }
 
 function routeKey(route: ProductionWorkspaceWorkerRoute): string {

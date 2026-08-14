@@ -8,6 +8,7 @@ import test, { type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import type { ModelTransportPort } from "@crewon/agent-kernel";
+import { RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH } from "@crewon/contracts/runtime";
 
 import {
   TEST_CA_CERT,
@@ -147,6 +148,71 @@ test("production entry starts the authenticated Provider listener", async (conte
   }
   const unauthorized = await fetch(
     `http://127.0.0.1:${port}/internal/v1/model-provider-probe`,
+    { method: "POST" },
+  );
+  assert.equal(unauthorized.status, 401);
+  child.kill("SIGTERM");
+  assert.equal(await waitForExit(child), 0);
+});
+
+test("production entry starts the authenticated Workspace listener", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const config = packagedConfig();
+  await activateRelease(databasePath, config);
+  const port = await unusedLoopbackPort();
+  const token = "production-workspace-private-token-at-least-32-bytes";
+  const child = spawn(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      fileURLToPath(new URL("./main.ts", import.meta.url)),
+    ],
+    {
+      env: {
+        ...process.env,
+        CREWON_CONTROL_SECURITY_MODE: "production",
+        CREWON_CONTROL_DB_PATH: databasePath,
+        CREWON_MODEL_ID: "fake-model",
+        CREWON_RESPONSES_ENDPOINT: "https://provider.example/v1/responses",
+        CREWON_TENANT_ID: config.runtimeTenantId,
+        CREWON_AUTHORITY_ID: config.route.authorityId,
+        CREWON_AGENT_VERSION_ID: config.route.agentVersionId,
+        CREWON_RUNTIME_GENERATION: config.route.runtimeGeneration,
+        CREWON_POLICY_SNAPSHOT_ID: config.route.policySnapshotId,
+        CREWON_WORKSPACE_BINDING_ID:
+          config.route.workspaceBindingId ?? undefined,
+        CREWON_RUNTIME_WORKSPACE_CONFIG_JSON: JSON.stringify({
+          schemaVersion: "crewon.runtime-workspace.v0",
+          trustedLocalPath: process.cwd(),
+          deadlineMs: 35_000,
+          privateServer: {
+            port,
+            tokenEnvironment: "PRODUCTION_WORKSPACE_PRIVATE_TOKEN",
+          },
+          authority: {
+            tenantId: config.runtimeTenantId,
+            spaceId: "space-1",
+            workspaceBindingId: config.route.workspaceBindingId,
+            incarnationId: "incarnation-1",
+            runtimeBindingId: config.route.runtimeGeneration,
+            policySnapshotId: config.route.policySnapshotId,
+          },
+        }),
+        PRODUCTION_WORKSPACE_PRIVATE_TOKEN: token,
+        CREWON_WORKER_SCAN_INTERVAL_MS: "1000",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  context.after(() => {
+    if (child.exitCode === null) child.kill("SIGKILL");
+  });
+  await waitForStdout(
+    child,
+    `CrewON Workspace Runtime ready:http://127.0.0.1:${port}:${config.route.runtimeGeneration}\n`,
+  );
+  const unauthorized = await fetch(
+    `http://127.0.0.1:${port}${RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH}`,
     { method: "POST" },
   );
   assert.equal(unauthorized.status, 401);

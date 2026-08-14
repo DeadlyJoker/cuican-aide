@@ -100,16 +100,11 @@ class AuthenticatedRuntimeWorkspaceWorkerClient
     dependencies: Readonly<{
       fetch?: typeof globalThis.fetch;
       scheduler?: RuntimeWorkspaceClientDeadlineSchedulerPort;
-      allowTestLoopback?: boolean;
     }> = {},
     expectedRoute: ProductionWorkspaceWorkerRoute | null = null,
     originMode: "loopback" | "production" = "loopback",
   ) {
-    const origin = workerOrigin(
-      config.origin,
-      originMode,
-      dependencies.allowTestLoopback === true,
-    );
+    const origin = workerOrigin(config.origin, originMode);
     this.#freezeUrl = new URL(
       RUNTIME_WORKER_WORKSPACE_FREEZE_COMMAND_PATH,
       origin,
@@ -425,7 +420,6 @@ export class ProductionWorkspaceWorkerClient extends AuthenticatedRuntimeWorkspa
     dependencies: Readonly<{
       fetch?: typeof globalThis.fetch;
       scheduler?: RuntimeWorkspaceClientDeadlineSchedulerPort;
-      allowTestLoopback?: boolean;
     }> = {},
   ) {
     const route = productionRoute(config);
@@ -533,11 +527,7 @@ export class TenantRoutedProductionWorkspaceWorker
   }
 }
 
-function workerOrigin(
-  value: string,
-  mode: "loopback" | "production",
-  allowTestLoopback: boolean,
-): URL {
+function workerOrigin(value: string, mode: "loopback" | "production"): URL {
   let url: URL;
   try {
     url = new URL(value);
@@ -556,7 +546,7 @@ function workerOrigin(
   if (
     (mode === "loopback"
       ? !rawLoopback
-      : url.protocol !== "https:" && !(allowTestLoopback && rawLoopback)) ||
+      : url.protocol !== "https:" && !rawLoopback) ||
     url.username !== "" ||
     url.password !== "" ||
     url.pathname !== "/" ||

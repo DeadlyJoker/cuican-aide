@@ -31,6 +31,7 @@ import {
   parseRuntimeWorkerSecurityMode,
   resolveRuntimeProviderProbeEnvironment,
 } from "./runtime-provider-probe-environment.ts";
+import { resolveRuntimeProductionWorkspaceEnvironment } from "./runtime-production-workspace-environment.ts";
 import { runtimeNativeReadinessLines } from "./runtime-native-readiness.ts";
 import {
   createRuntimeNativeRemoteMcpOwner,
@@ -54,6 +55,10 @@ const initialized = await (async () => {
       securityMode,
       new DesktopProviderProbeEgressPolicy(),
     );
+    const productionWorkspace = resolveRuntimeProductionWorkspaceEnvironment(
+      process.env,
+      securityMode,
+    );
     if (
       nativeBootstrap?.provider !== null &&
       nativeBootstrap?.provider !== undefined &&
@@ -61,33 +66,44 @@ const initialized = await (async () => {
     ) {
       throw new Error("runtime_provider_probe_bootstrap_conflict");
     }
-    const nativeWorkspaceReadCatalog = parseNativeWorkspaceReadCatalog(
-      process.env.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
-    );
+    if (
+      nativeBootstrap?.workspace !== null &&
+      nativeBootstrap?.workspace !== undefined &&
+      productionWorkspace !== undefined
+    ) {
+      throw new Error("runtime_workspace_bootstrap_conflict");
+    }
+    const workspaceBootstrap =
+      nativeBootstrap?.workspace ?? productionWorkspace ?? null;
+    const nativeWorkspaceReadCatalog =
+      productionWorkspace === undefined
+        ? parseNativeWorkspaceReadCatalog(
+            process.env.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
+          )
+        : "enabled";
     if (
       (nativeWorkspaceReadCatalog === "enabled") !==
-      (nativeBootstrap?.workspace !== null &&
-        nativeBootstrap?.workspace !== undefined)
+      (workspaceBootstrap !== null)
     ) {
       throw new Error("runtime_workspace_read_bootstrap_mismatch");
     }
     const runtimeTenantId =
-      nativeBootstrap?.workspace?.authority.tenantId ??
+      workspaceBootstrap?.authority.tenantId ??
       environmentOr("CREWON_TENANT_ID", "standalone-tenant");
     const route = {
       authorityId: environmentOr("CREWON_AUTHORITY_ID", "standalone-authority"),
       runtimeGeneration:
-        nativeBootstrap?.workspace?.authority.runtimeBindingId ??
+        workspaceBootstrap?.authority.runtimeBindingId ??
         environmentOr("CREWON_RUNTIME_GENERATION", "ts-v0"),
       agentVersionId: environmentOr(
         "CREWON_AGENT_VERSION_ID",
         "default-agent-v1",
       ),
       policySnapshotId:
-        nativeBootstrap?.workspace?.authority.policySnapshotId ??
+        workspaceBootstrap?.authority.policySnapshotId ??
         environmentOr("CREWON_POLICY_SNAPSHOT_ID", "standalone-policy-v0"),
       workspaceBindingId:
-        nativeBootstrap?.workspace?.authority.workspaceBindingId ??
+        workspaceBootstrap?.authority.workspaceBindingId ??
         process.env.CREWON_WORKSPACE_BINDING_ID?.trim() ??
         null,
     };
@@ -136,6 +152,7 @@ const initialized = await (async () => {
       securityMode,
       toolRuntime,
       transport,
+      workspaceBootstrap,
     };
   } catch (error) {
     await Promise.allSettled([
@@ -158,17 +175,17 @@ const {
   runtimeTenantId,
   toolRuntime,
   transport,
+  workspaceBootstrap,
 } = initialized;
 
 let runtime: StandaloneRuntimeWorker;
 let nativeWorkspaceResources: RuntimeNativeWorkspaceResources | undefined;
 try {
   nativeWorkspaceResources =
-    nativeBootstrap?.workspace === null ||
-    nativeBootstrap?.workspace === undefined
+    workspaceBootstrap === null
       ? undefined
       : createRuntimeNativeWorkspaceResources({
-          bootstrap: nativeBootstrap.workspace,
+          bootstrap: workspaceBootstrap,
           runtimeTenantId,
           route,
         });
@@ -344,7 +361,7 @@ if (process.env.CREWON_WORKER_ONCE === "1") {
       null,
     workspacePrivateOrigin: runtime.workspacePrivateOrigin,
     workspaceRuntimeBindingId:
-      nativeBootstrap?.workspace?.authority.runtimeBindingId ?? null,
+      workspaceBootstrap?.authority.runtimeBindingId ?? null,
   })) {
     process.stdout.write(`${line}\n`);
   }
