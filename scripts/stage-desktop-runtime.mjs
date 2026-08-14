@@ -76,7 +76,7 @@ export function assertReleaseNodeMetadata({
   }
 }
 
-const REMOVED_RUNTIME_MARKERS = [
+export const REMOVED_RUNTIME_MARKERS = [
   "CREWON_DEVICE_TOOL_CONFIG_PATH",
   "crewon.device-tool-runtime.v0",
   "deviceToolConfigPath",
