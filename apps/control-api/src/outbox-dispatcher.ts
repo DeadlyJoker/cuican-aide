@@ -1,4 +1,9 @@
-import type { OutboxClaim, OutboxMessage, RunStore } from "@crewon/application";
+import type {
+  OutboxClaim,
+  OutboxMessage,
+  RunStore,
+  WorkflowHumanGatePublicationStore,
+} from "@crewon/application";
 
 import { RunEventHub } from "./run-event-hub.ts";
 
@@ -19,6 +24,10 @@ export type OutboxDispatcherConfig = Readonly<{
 export class OutboxDispatcher {
   readonly #store: RunStore;
   readonly #eventHub: RunEventHub;
+  readonly #gatePublications: Pick<
+    WorkflowHumanGatePublicationStore,
+    "publishWorkflowHumanGate"
+  > | null;
   readonly #ownerId: string;
   readonly #nextLeaseId: () => string;
   readonly #leaseDurationMs: number;
@@ -31,11 +40,19 @@ export class OutboxDispatcher {
   #lastFailureCode: string | null = null;
 
   constructor(
-    dependencies: { store: RunStore; eventHub: RunEventHub },
+    dependencies: {
+      store: RunStore;
+      eventHub: RunEventHub;
+      gatePublications?: Pick<
+        WorkflowHumanGatePublicationStore,
+        "publishWorkflowHumanGate"
+      >;
+    },
     config: OutboxDispatcherConfig,
   ) {
     this.#store = dependencies.store;
     this.#eventHub = dependencies.eventHub;
+    this.#gatePublications = dependencies.gatePublications ?? null;
     this.#ownerId = requireString(config.ownerId, "outbox_owner_id_invalid");
     this.#nextLeaseId = config.nextLeaseId;
     this.#leaseDurationMs = positiveInteger(
@@ -121,13 +138,7 @@ export class OutboxDispatcher {
         return;
       }
       try {
-        await this.#publish(claim.message);
-        await this.#store.acknowledgeOutbox({
-          messageId: claim.message.messageId,
-          ownerId: claim.lease.ownerId,
-          leaseId: claim.lease.leaseId,
-          leaseEpoch: claim.lease.epoch,
-        });
+        await this.#deliver(claim);
       } catch (error) {
         await this.#retry(claim, error);
         throw error;
@@ -135,7 +146,27 @@ export class OutboxDispatcher {
     }
   }
 
-  async #publish(message: OutboxMessage): Promise<void> {
+  async #deliver(claim: OutboxClaim): Promise<void> {
+    const lease = {
+      messageId: claim.message.messageId,
+      ownerId: claim.lease.ownerId,
+      leaseId: claim.lease.leaseId,
+      leaseEpoch: claim.lease.epoch,
+    };
+    if (claim.message.topic === "workflow.gate.requested") {
+      if (this.#gatePublications === null)
+        throw new Error("workflow_gate_publication_unavailable");
+      await this.#gatePublications.publishWorkflowHumanGate({
+        lease,
+        message: claim.message,
+      });
+      return;
+    }
+    await this.#publishRunUpdated(claim.message);
+    await this.#store.acknowledgeOutbox(lease);
+  }
+
+  async #publishRunUpdated(message: OutboxMessage): Promise<void> {
     const eventReference = parseRunUpdatedMessage(message);
     const events = await this.#store.listRunEvents(
       { tenantId: message.tenantId, runId: message.runId },

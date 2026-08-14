@@ -494,17 +494,26 @@ for (const decision of ["approve", "reject"] as const)
       scanIntervalMs: null,
     });
     context.after(() => worker.close());
-    await wakeUntil(
-      worker.worker,
-      () => readGate(databasePath, started.run.runId) !== null,
-    );
-    await control.outboxDispatcher.wake();
+    let publishedGates = await client.listWorkflowHumanGates(started.run.runId);
+    await wakeUntil(worker.worker, async () => {
+      await control.outboxDispatcher.wake();
+      publishedGates = await client.listWorkflowHumanGates(started.run.runId);
+      return publishedGates.data.length === 1;
+    });
+    assert.equal(control.outboxDispatcher.lastFailureCode(), null);
     assert.equal(
       (await client.getRun(started.run.runId)).run.status,
       "running",
     );
-    const gate = readGate(databasePath, started.run.runId);
-    assert.ok(gate);
+    const gate = publishedGates.data[0]!;
+    assert.deepEqual(Object.keys(gate).sort(), [
+      "approvalPolicyId", "claimEpoch", "claimId", "createdAt",
+      "gateRequestId", "nodeId", "runId", "status",
+    ]);
+    assert.equal(gate.runId, started.run.runId);
+    assert.equal(gate.nodeId, "gate");
+    assert.equal(gate.approvalPolicyId, "approval-policy-1");
+    assert.equal(gate.status, "published");
     const decided = await client.decideWorkflowHumanGate(
       {
         runId: started.run.runId,
@@ -522,6 +531,10 @@ for (const decision of ["approve", "reject"] as const)
       nodeId: "gate",
       gateRequestId: gate.gateRequestId,
     });
+    assert.deepEqual(
+      (await client.listWorkflowHumanGates(started.run.runId)).data,
+      [],
+    );
     await wakeUntil(worker.worker, async () => {
       const status = (await client.getRun(started.run.runId)).run.status;
       return status === "completed" || status === "failed";
@@ -2176,27 +2189,6 @@ function createWorkflowModelTransport(
       yield { type: "completed" as const, checkpoint };
     },
   };
-}
-
-function readGate(databasePath: string, runId: string) {
-  const database = new DatabaseSync(databasePath);
-  try {
-    const row = database
-      .prepare(
-        `SELECT gate_request_id gateRequestId,claim_id claimId,
-      claim_epoch claimEpoch FROM workflow_gate_requests WHERE run_id=?`,
-      )
-      .get(runId);
-    return row === undefined
-      ? null
-      : {
-          gateRequestId: String(row.gateRequestId),
-          claimId: String(row.claimId),
-          claimEpoch: Number(row.claimEpoch),
-        };
-  } finally {
-    database.close();
-  }
 }
 
 async function wakeUntil(

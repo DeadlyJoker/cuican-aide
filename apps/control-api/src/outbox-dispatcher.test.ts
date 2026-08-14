@@ -132,6 +132,50 @@ test("retries a malformed Outbox message without a busy loop", async (context) =
   assert.deepEqual(await store.listPendingOutbox(100), [message]);
 });
 
+test("retries Human Gate publication when its typed authority is unavailable", async (context) => {
+  const clock = new MutableLeaseClock();
+  const store = new InMemoryRunStore({ clock });
+  const eventHub = new RunEventHub();
+  const message: OutboxMessage = {
+    messageId: "outbox-gate-1",
+    tenantId: "tenant-1",
+    runId: "run-gate-1",
+    topic: "workflow.gate.requested",
+    payload: { gateRequestId: "gate-request-1" },
+    createdAt: "2026-08-08T00:00:01Z",
+  };
+  await seedThread(store);
+  await store.commitRun({
+    tenantId: "tenant-1",
+    idempotency: { scope: "gate-outbox-test", key: "create-1",
+      requestFingerprint: "gate-outbox-fingerprint" },
+    expectedRevision: 0,
+    events: [createdEvent("run-gate-1")],
+    outbox: [message],
+    workItems: [],
+  });
+  const dispatcher = new OutboxDispatcher({ store, eventHub }, {
+    ownerId: "dispatcher-1",
+    nextLeaseId: () => "lease-gate-1",
+    retryAfterMs: 500,
+    scanIntervalMs: null,
+  });
+  context.after(async () => {
+    await dispatcher.close();
+    eventHub.close();
+    await store.close();
+  });
+
+  await dispatcher.wake();
+  assert.equal(
+    dispatcher.lastFailureCode(),
+    "workflow_gate_publication_unavailable",
+  );
+  assert.deepEqual(await store.listPendingOutbox(100), []);
+  clock.advance(500);
+  assert.deepEqual(await store.listPendingOutbox(100), [message]);
+});
+
 class IncrementingIds implements ApplicationIdGenerator {
   readonly #counters = new Map<ApplicationIdKind, number>();
 

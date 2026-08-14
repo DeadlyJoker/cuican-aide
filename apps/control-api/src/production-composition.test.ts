@@ -97,6 +97,8 @@ test("production composes Workflow commands from the single PostgreSQL Store", (
   assert.doesNotMatch(source, /selectWorkflowRunStartFactory/u);
   assert.match(source, /new WorkflowRunApplicationService/u);
   assert.match(source, /new WorkflowHumanGateApplicationService/u);
+  assert.match(source, /gatePublications: store/u);
+  assert.match(source, /store\.listPublishedWorkflowHumanGates/u);
   assert.match(source, /await workflowVersionStore\.migrate\(\)/u);
 });
 

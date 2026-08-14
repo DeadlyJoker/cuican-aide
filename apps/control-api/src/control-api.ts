@@ -117,6 +117,7 @@ import {
   type ListAgentVersionsResponse,
   type ListActiveCapabilitiesResponse,
   type ListAutomationsResponse,
+  type ListWorkflowHumanGatesResponse,
   type ProbeModelProviderResponse,
   type RunMutationResponse,
   type WorkflowHumanGateDecisionResponse,
@@ -249,7 +250,7 @@ export type ControlApiDependencies = Readonly<{
   workflowRuns?: Pick<WorkflowRunApplicationService, "startWorkflowRun"> | null;
   workflowHumanGates?: Pick<
     WorkflowHumanGateApplicationService,
-    "decide"
+    "decide" | "listPublished"
   > | null;
   agentVersionCatalogs: AgentVersionCatalogApplicationService;
   artifacts: ArtifactApplicationService;
@@ -1482,6 +1483,24 @@ export function buildControlApi(
         nodeId: result.nodeId,
         gateRequestId: result.gateRequestId,
       };
+      return response;
+    },
+  );
+
+  app.get<{ Params: { runId: string } }>(
+    "/api/v1/runs/:runId/workflow-gates",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      if (dependencies.workflowHumanGates == null) {
+        throw new WorkspaceControlUnavailableError();
+      }
+      const data = await dependencies.workflowHumanGates.listPublished(
+        actor,
+        parseRunId(request.params.runId),
+      );
+      const response: ListWorkflowHumanGatesResponse = { data: [...data] };
       return response;
     },
   );

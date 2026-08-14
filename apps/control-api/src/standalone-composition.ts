@@ -31,6 +31,7 @@ import {
   type KnowledgeStore,
   type WorkflowVersionStore,
   type WorkflowRuntimeStore,
+  type WorkflowHumanGatePublicationStore,
 } from "@crewon/application";
 import { PostgresDomainStore, SqliteRunStore } from "@crewon/store";
 import type { WorkflowContentDigester } from "@crewon/domain";
@@ -105,6 +106,7 @@ export type StandaloneControlApiRuntime = Readonly<{
 
 type ControlDomainStore = DomainStore &
   WorkflowRuntimeStore &
+  WorkflowHumanGatePublicationStore &
   AutomationStore &
   ModelProviderSettingsStore &
   KnowledgeStore &
@@ -150,7 +152,7 @@ function composeControlApi(
   const eventHub = new RunEventHub();
   const ids = new UuidV7ApplicationIdGenerator();
   const outboxDispatcher = new OutboxDispatcher(
-    { store, eventHub },
+    { store, eventHub, gatePublications: store },
     {
       ownerId: `outbox:${ids.nextId("outboxLease")}`,
       nextLeaseId: () => ids.nextId("outboxLease"),
@@ -356,6 +358,8 @@ function composeControlApi(
               workflowVersionBinding: run.workflowVersionBinding ?? undefined,
             };
           },
+          listPublishedWorkflowHumanGates: (input) =>
+            store.listPublishedWorkflowHumanGates(input),
           recordWorkflowHumanGateDecision: (input) =>
             store.recordWorkflowHumanGateDecision(input),
         },

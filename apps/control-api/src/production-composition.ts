@@ -101,7 +101,7 @@ async function composeProductionControlApi(
   const eventHub = new RunEventHub();
   const ids = new UuidV7ApplicationIdGenerator();
   const outboxDispatcher = new OutboxDispatcher(
-    { store, eventHub },
+    { store, eventHub, gatePublications: store },
     {
       ownerId: `outbox:${ids.nextId("outboxLease")}`,
       nextLeaseId: () => ids.nextId("outboxLease"),
@@ -293,6 +293,8 @@ async function composeProductionControlApi(
               workflowVersionBinding: run.workflowVersionBinding ?? undefined,
             };
           },
+          listPublishedWorkflowHumanGates: (input) =>
+            store.listPublishedWorkflowHumanGates(input),
           recordWorkflowHumanGateDecision: (input) =>
             store.recordWorkflowHumanGateDecision(input),
         },
