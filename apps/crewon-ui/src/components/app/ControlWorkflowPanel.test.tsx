@@ -47,7 +47,7 @@ describe("ControlWorkflowPanel", () => {
 
     expect({ detail, invalidJson, noThread }).toMatchSnapshot();
     expect(detail).toContain("workflow-version-1");
-    expect(detail).toContain("Human Gate · 当前不可用");
+    expect(detail).toContain("Human Gate · 权威审批");
     expect(detail).not.toContain("批准并继续");
     expect(detail).not.toContain("驳回");
     expect(noThread).toContain("请先打开一个 Control 会话");
@@ -146,6 +146,35 @@ describe("ControlWorkflowPanel", () => {
     expect(waiting).not.toContain("lease");
   });
 
+  it("snapshots a durable Human Gate publication without internal evidence", () => {
+    const waiting = renderState({
+      catalogState: "ready",
+      selected: workflowVersion(),
+      selectedThreadId: "thread-1",
+      run: workflowRun({ status: "running", lastSequence: 2 }),
+      humanGates: [
+        {
+          runId: "run-1",
+          nodeId: "gate",
+          claimId: "claim-private",
+          claimEpoch: 2,
+          gateRequestId: "gate-request-1",
+          approvalPolicyId: "delivery-review",
+          status: "published",
+          createdAt: "2026-08-13T00:00:30.000Z",
+        },
+      ],
+    });
+
+    expect(waiting).toMatchSnapshot();
+    expect(waiting).toContain("人工确认待处理");
+    expect(waiting).toContain("批准并继续");
+    expect(waiting).toContain("驳回并终止");
+    expect(waiting).not.toContain("claim-private");
+    expect(waiting).not.toContain("receipt");
+    expect(waiting).not.toContain("lease");
+  });
+
   it("keeps the stateful loading boundary safe during server rendering", () => {
     const adapter = {
       discover: vi.fn(),
@@ -173,6 +202,7 @@ function renderState(
         catalog: [],
         catalogState: "loading",
         error: null,
+        humanGates: [],
         input: "{}",
         run: null,
         selected: null,
@@ -185,6 +215,7 @@ function renderState(
       onOpen={vi.fn()}
       onReload={vi.fn()}
       onApprovalDecision={vi.fn()}
+      onHumanGateDecision={vi.fn()}
       onStart={vi.fn()}
     />,
   );

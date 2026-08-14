@@ -1,6 +1,7 @@
 import type {
   RunView,
   ToolApprovalView,
+  WorkflowHumanGatePublicationView,
   WorkflowVersionSummaryView,
   WorkflowVersionView,
 } from "@crewon/contracts";
@@ -10,13 +11,18 @@ import type { ControlWorkflowAdapter } from "../../lib/workflow/controlWorkflowA
 import {
   ControlWorkflowInputError,
   decideControlWorkflowApproval,
+  decideControlWorkflowHumanGate,
   followControlWorkflowRun,
+  isTerminalWorkflowRun,
   retainWorkflowApprovalAttempt,
+  retainWorkflowHumanGateAttempt,
   retainWorkflowStartAttempt,
   startControlWorkflowRun,
   type WorkflowStartAttempt,
   type WorkflowApprovalAttempt,
   type WorkflowApprovalDecision,
+  type WorkflowHumanGateAttempt,
+  type WorkflowHumanGateDecision,
   type WorkflowStreamState,
 } from "../../lib/workflow/controlWorkflowRun";
 import {
@@ -45,6 +51,9 @@ export function ControlWorkflowPanel({
   const [input, setInput] = useState("{}");
   const [run, setRun] = useState<RunView | null>(null);
   const [approval, setApproval] = useState<ToolApprovalView | null>(null);
+  const [humanGates, setHumanGates] = useState<
+    WorkflowHumanGatePublicationView[]
+  >([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [streamState, setStreamState] = useState<PanelStreamState>({
@@ -55,8 +64,11 @@ export function ControlWorkflowPanel({
   const detailAbortRef = useRef<AbortController | null>(null);
   const runAbortRef = useRef<AbortController | null>(null);
   const approvalAbortRef = useRef<AbortController | null>(null);
+  const humanGateAbortRef = useRef<AbortController | null>(null);
+  const humanGateDecisionAbortRef = useRef<AbortController | null>(null);
   const startAttemptRef = useRef<WorkflowStartAttempt | null>(null);
   const approvalAttemptRef = useRef<WorkflowApprovalAttempt | null>(null);
+  const humanGateAttemptRef = useRef<WorkflowHumanGateAttempt | null>(null);
   const threadRef = useRef(selectedThreadId);
 
   async function reload(signal: AbortSignal) {
@@ -107,6 +119,8 @@ export function ControlWorkflowPanel({
       detailAbortRef.current?.abort();
       runAbortRef.current?.abort();
       approvalAbortRef.current?.abort();
+      humanGateAbortRef.current?.abort();
+      humanGateDecisionAbortRef.current?.abort();
     };
   }, [adapter]);
 
@@ -114,14 +128,45 @@ export function ControlWorkflowPanel({
     if (threadRef.current === selectedThreadId) return;
     threadRef.current = selectedThreadId;
     runAbortRef.current?.abort();
+    humanGateDecisionAbortRef.current?.abort();
     runAbortRef.current = null;
     startAttemptRef.current = null;
     setRun(null);
     setApproval(null);
+    setHumanGates([]);
     setBusy(false);
     setError(null);
     setStreamState({ kind: "idle" });
   }, [selectedThreadId]);
+
+  useEffect(() => {
+    humanGateAbortRef.current?.abort();
+    setHumanGates([]);
+    humanGateAttemptRef.current = null;
+    if (run === null || isTerminalWorkflowRun(run.status)) return;
+    const abort = new AbortController();
+    humanGateAbortRef.current = abort;
+    let timeout: ReturnType<typeof globalThis.setTimeout> | null = null;
+    const poll = async () => {
+      try {
+        const gates = await adapter.readHumanGates(run.runId, abort.signal);
+        if (!abort.signal.aborted) setHumanGates(gates);
+      } catch (gateError) {
+        if (!abort.signal.aborted) {
+          setError(errorMessage(gateError, "无法读取人工审批"));
+        }
+      } finally {
+        if (!abort.signal.aborted) {
+          timeout = globalThis.setTimeout(() => void poll(), 1_000);
+        }
+      }
+    };
+    void poll();
+    return () => {
+      abort.abort();
+      if (timeout !== null) globalThis.clearTimeout(timeout);
+    };
+  }, [adapter, run?.runId, run?.status]);
 
   useEffect(() => {
     approvalAbortRef.current?.abort();
@@ -154,6 +199,7 @@ export function ControlWorkflowPanel({
     const request = ++requestRef.current;
     detailAbortRef.current?.abort();
     runAbortRef.current?.abort();
+    humanGateDecisionAbortRef.current?.abort();
     const abort = new AbortController();
     detailAbortRef.current = abort;
     setBusy(true);
@@ -167,6 +213,7 @@ export function ControlWorkflowPanel({
       setSelected(version);
       setRun(null);
       setApproval(null);
+      setHumanGates([]);
       startAttemptRef.current = null;
       setStreamState({ kind: "idle" });
       onRoomOpenChange?.(true);
@@ -258,14 +305,62 @@ export function ControlWorkflowPanel({
     }
   }
 
+  async function decideHumanGate(
+    gate: WorkflowHumanGatePublicationView,
+    decision: WorkflowHumanGateDecision,
+  ) {
+    if (busy) return;
+    humanGateDecisionAbortRef.current?.abort();
+    const abort = new AbortController();
+    humanGateDecisionAbortRef.current = abort;
+    const attempt = retainWorkflowHumanGateAttempt(
+      humanGateAttemptRef.current,
+      gate,
+      decision,
+    );
+    humanGateAttemptRef.current = attempt;
+    setBusy(true);
+    setError(null);
+    try {
+      await decideControlWorkflowHumanGate(
+        adapter,
+        gate,
+        decision,
+        attempt.idempotencyKey,
+        abort.signal,
+      );
+      humanGateAttemptRef.current = null;
+      setHumanGates((current) =>
+        current.filter((item) => item.gateRequestId !== gate.gateRequestId),
+      );
+      const nextRun = await adapter.readRun(gate.runId, abort.signal);
+      if (nextRun.runId !== gate.runId || nextRun.purpose !== "workflow") {
+        throw new Error("control_workflow_human_gate_run_invalid");
+      }
+      if (!abort.signal.aborted) setRun(nextRun);
+    } catch (decisionError) {
+      if (!abort.signal.aborted) {
+        setError(errorMessage(decisionError, "人工审批失败"));
+      }
+    } finally {
+      if (humanGateDecisionAbortRef.current === abort) {
+        humanGateDecisionAbortRef.current = null;
+        setBusy(false);
+      }
+    }
+  }
+
   function close() {
     requestRef.current += 1;
     detailAbortRef.current?.abort();
     runAbortRef.current?.abort();
     approvalAbortRef.current?.abort();
+    humanGateAbortRef.current?.abort();
+    humanGateDecisionAbortRef.current?.abort();
     setSelected(null);
     setRun(null);
     setApproval(null);
+    setHumanGates([]);
     setBusy(false);
     startAttemptRef.current = null;
     setError(null);
@@ -279,6 +374,7 @@ export function ControlWorkflowPanel({
     catalog,
     catalogState,
     error,
+    humanGates,
     input,
     run,
     selected,
@@ -293,6 +389,9 @@ export function ControlWorkflowPanel({
       onOpen={(summary) => void open(summary)}
       onReload={beginReload}
       onApprovalDecision={(decision) => void decide(decision)}
+      onHumanGateDecision={(gate, decision) =>
+        void decideHumanGate(gate, decision)
+      }
       onStart={() => void start()}
     />
   );

@@ -2,6 +2,7 @@ import { ArrowLeft, ArrowUp, RotateCw } from "lucide-react";
 import type {
   RunView,
   ToolApprovalView,
+  WorkflowHumanGatePublicationView,
   WorkflowVersionSummaryView,
   WorkflowVersionView,
 } from "@crewon/contracts";
@@ -11,6 +12,7 @@ import {
   publicWorkflowRunStatus,
   type WorkflowStreamState,
   type WorkflowApprovalDecision,
+  type WorkflowHumanGateDecision,
 } from "../../lib/workflow/controlWorkflowRun";
 
 type CatalogState = "loading" | "ready" | "unavailable";
@@ -22,6 +24,7 @@ export type ControlWorkflowPanelViewState = Readonly<{
   catalog: WorkflowVersionSummaryView[];
   catalogState: CatalogState;
   error: string | null;
+  humanGates: WorkflowHumanGatePublicationView[];
   input: string;
   run: RunView | null;
   selected: WorkflowVersionView | null;
@@ -36,6 +39,7 @@ export function ControlWorkflowPanelView({
   onOpen,
   onReload,
   onApprovalDecision,
+  onHumanGateDecision,
   onStart,
 }: {
   state: ControlWorkflowPanelViewState;
@@ -44,6 +48,10 @@ export function ControlWorkflowPanelView({
   onOpen: (workflow: WorkflowVersionSummaryView) => void;
   onReload: () => void;
   onApprovalDecision: (decision: WorkflowApprovalDecision) => void;
+  onHumanGateDecision: (
+    gate: WorkflowHumanGatePublicationView,
+    decision: WorkflowHumanGateDecision,
+  ) => void;
   onStart: () => void;
 }) {
   if (state.selected === null) {
@@ -121,7 +129,7 @@ export function ControlWorkflowPanelView({
               </div>
               <em className="status">
                 {node.kind === "humanGate"
-                  ? "Human Gate · 当前不可用"
+                  ? "Human Gate · 权威审批"
                   : nodeKindLabel(node.kind)}
               </em>
             </article>
@@ -148,6 +156,19 @@ export function ControlWorkflowPanelView({
                 onDecision={onApprovalDecision}
               />
             ) : null}
+            {state.humanGates.map((gate) => (
+              <HumanGateMessage
+                key={gate.gateRequestId}
+                gate={gate}
+                nodeTitle={
+                  state.selected?.nodes.find(
+                    (node) => node.nodeId === gate.nodeId,
+                  )?.title ?? gate.nodeId
+                }
+                busy={state.busy}
+                onDecision={onHumanGateDecision}
+              />
+            ))}
             {state.error ? (
               <p className="workflow-control-error" role="alert">
                 {state.error}
@@ -207,6 +228,54 @@ export function ControlWorkflowPanelView({
         </section>
       </main>
     </section>
+  );
+}
+
+function HumanGateMessage({
+  gate,
+  nodeTitle,
+  busy,
+  onDecision,
+}: {
+  gate: WorkflowHumanGatePublicationView;
+  nodeTitle: string;
+  busy: boolean;
+  onDecision: (
+    gate: WorkflowHumanGatePublicationView,
+    decision: WorkflowHumanGateDecision,
+  ) => void;
+}) {
+  return (
+    <article
+      className="office-room-message workflow-approval-message"
+      data-gate-request-id={gate.gateRequestId}
+    >
+      <span className="team-avatar">审</span>
+      <div>
+        <strong>人工确认待处理</strong>
+        <p>
+          {nodeTitle} · 审批策略 {gate.approvalPolicyId}
+        </p>
+        <span className="inline-actions" aria-label="Human Gate 审批操作">
+          <button
+            className="button compact primary"
+            type="button"
+            disabled={busy}
+            onClick={() => onDecision(gate, "approve")}
+          >
+            批准并继续
+          </button>
+          <button
+            className="button compact"
+            type="button"
+            disabled={busy}
+            onClick={() => onDecision(gate, "reject")}
+          >
+            驳回并终止
+          </button>
+        </span>
+      </div>
+    </article>
   );
 }
 
@@ -347,7 +416,7 @@ function nodeKindLabel(
     case "agent":
       return "Agent";
     case "humanGate":
-      return "Human Gate · 当前不可用";
+      return "Human Gate · 权威审批";
     case "verification":
       return "Verification";
   }

@@ -64,6 +64,53 @@ describe("ControlWorkflowAdapter", () => {
       }),
     ).rejects.toThrow("control_workflow_binding_invalid");
   });
+
+  it("reads and decides only Human Gates bound to the requested Run", async () => {
+    const gate = {
+      runId: "run-1",
+      nodeId: "gate-1",
+      claimId: "claim-1",
+      claimEpoch: 1,
+      gateRequestId: "gate-request-1",
+      approvalPolicyId: "approval-policy-1",
+      status: "published" as const,
+      createdAt: "2026-08-13T00:00:30.000Z",
+    };
+    const client = {
+      listWorkflowHumanGates: vi.fn(async () => ({ data: [gate] })),
+      decideWorkflowHumanGate: vi.fn(async () => ({
+        disposition: "recorded",
+        runId: gate.runId,
+        nodeId: gate.nodeId,
+        gateRequestId: gate.gateRequestId,
+      })),
+    } as unknown as ControlApiClient;
+    const adapter = createControlWorkflowAdapter(client);
+
+    await expect(adapter.readHumanGates("run-1")).resolves.toEqual([gate]);
+    expect(client.listWorkflowHumanGates).toHaveBeenCalledWith("run-1", {
+      signal: undefined,
+    });
+    await adapter.decideHumanGate({
+      body: {
+        runId: gate.runId,
+        nodeId: gate.nodeId,
+        claimId: gate.claimId,
+        claimEpoch: gate.claimEpoch,
+        gateRequestId: gate.gateRequestId,
+        decision: "approve",
+      },
+      idempotencyKey: "gate-decision-1",
+    });
+    expect(client.decideWorkflowHumanGate).toHaveBeenCalledTimes(1);
+
+    client.listWorkflowHumanGates = vi.fn(async () => ({
+      data: [{ ...gate, runId: "run-other" }],
+    })) as never;
+    await expect(adapter.readHumanGates("run-1")).rejects.toThrow(
+      "control_workflow_human_gate_identity_invalid",
+    );
+  });
 });
 
 function workflowRun(): RunView {

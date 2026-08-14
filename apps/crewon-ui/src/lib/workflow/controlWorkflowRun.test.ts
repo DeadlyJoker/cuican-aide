@@ -4,12 +4,14 @@ import type { RunEventView, RunView } from "@crewon/contracts";
 import type { ControlWorkflowAdapter } from "./controlWorkflowAdapter";
 import {
   decideControlWorkflowApproval,
+  decideControlWorkflowHumanGate,
   ControlWorkflowInputError,
   createWorkflowStartIdempotencyKey,
   followControlWorkflowRun,
   parseControlWorkflowInput,
   publicWorkflowRunStatus,
   retainWorkflowApprovalAttempt,
+  retainWorkflowHumanGateAttempt,
   retainWorkflowStartAttempt,
   startControlWorkflowRun,
 } from "./controlWorkflowRun";
@@ -302,6 +304,59 @@ describe("Control Workflow Run", () => {
       signal: undefined,
     });
   });
+
+  it("reuses one Human Gate decision key and validates public authority", async () => {
+    const gate = {
+      runId: "run-1",
+      nodeId: "gate-1",
+      claimId: "claim-1",
+      claimEpoch: 2,
+      gateRequestId: "gate-request-1",
+      approvalPolicyId: "approval-policy-1",
+      status: "published" as const,
+      createdAt: "2026-08-13T00:00:30.000Z",
+    };
+    const first = retainWorkflowHumanGateAttempt(
+      null,
+      gate,
+      "approve",
+      () => "decision-1",
+    );
+    expect(
+      retainWorkflowHumanGateAttempt(first, gate, "approve", () => "new"),
+    ).toBe(first);
+    expect(
+      retainWorkflowHumanGateAttempt(first, gate, "reject", () => "decision-2")
+        .idempotencyKey,
+    ).toBe("workflow-human-gate.decide:decision-2");
+
+    const decideHumanGate = vi.fn().mockResolvedValue({
+      disposition: "recorded",
+      runId: "run-1",
+      nodeId: "gate-1",
+      gateRequestId: "gate-request-1",
+    });
+    await expect(
+      decideControlWorkflowHumanGate(
+        workflowAdapter({ decideHumanGate }),
+        gate,
+        "approve",
+        first.idempotencyKey,
+      ),
+    ).resolves.toMatchObject({ disposition: "recorded" });
+    expect(decideHumanGate).toHaveBeenCalledWith({
+      body: {
+        runId: "run-1",
+        nodeId: "gate-1",
+        claimId: "claim-1",
+        claimEpoch: 2,
+        gateRequestId: "gate-request-1",
+        decision: "approve",
+      },
+      idempotencyKey: "workflow-human-gate.decide:decision-1",
+      signal: undefined,
+    });
+  });
 });
 
 function workflowAdapter(
@@ -314,6 +369,8 @@ function workflowAdapter(
     readRun: vi.fn(),
     readApproval: vi.fn(),
     decideApproval: vi.fn(),
+    readHumanGates: vi.fn(),
+    decideHumanGate: vi.fn(),
     events: vi.fn(),
     ...overrides,
   };

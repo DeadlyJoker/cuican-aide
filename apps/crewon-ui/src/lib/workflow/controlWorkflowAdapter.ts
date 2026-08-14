@@ -1,4 +1,5 @@
 import type {
+  DecideWorkflowHumanGateRequest,
   DecideToolApprovalRequest,
   ListWorkflowVersionsResponse,
   RunEventView,
@@ -6,6 +7,8 @@ import type {
   StartWorkflowRunRequest,
   ToolApprovalMutationResponse,
   ToolApprovalView,
+  WorkflowHumanGateDecisionResponse,
+  WorkflowHumanGatePublicationView,
   WorkflowVersionView,
 } from "@crewon/contracts";
 import {
@@ -42,6 +45,15 @@ export type ControlWorkflowAdapter = Readonly<{
     idempotencyKey: string;
     signal?: AbortSignal;
   }): Promise<ToolApprovalMutationResponse>;
+  readHumanGates(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<WorkflowHumanGatePublicationView[]>;
+  decideHumanGate(input: {
+    body: DecideWorkflowHumanGateRequest;
+    idempotencyKey: string;
+    signal?: AbortSignal;
+  }): Promise<WorkflowHumanGateDecisionResponse>;
   events(input: {
     runId: string;
     afterSequence: number;
@@ -90,6 +102,20 @@ export function createControlWorkflowAdapter(
         input.idempotencyKey,
         { signal: input.signal },
       ),
+    async readHumanGates(runId, signal) {
+      const gates = (await client.listWorkflowHumanGates(runId, { signal }))
+        .data;
+      if (gates.some((gate) => gate.runId !== runId)) {
+        throw new ControlApiProtocolError(
+          "control_workflow_human_gate_identity_invalid",
+        );
+      }
+      return gates;
+    },
+    decideHumanGate: (input) =>
+      client.decideWorkflowHumanGate(input.body, input.idempotencyKey, {
+        signal: input.signal,
+      }),
     events: (input) =>
       streamRunEvents(client, {
         runId: input.runId,

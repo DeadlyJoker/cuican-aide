@@ -1,5 +1,7 @@
 import {
   parseStartWorkflowRunRequest,
+  type WorkflowHumanGateDecisionResponse,
+  type WorkflowHumanGatePublicationView,
   type ToolApprovalView,
   type RunEventView,
   type RunView,
@@ -34,6 +36,13 @@ export type WorkflowStartAttempt = Readonly<{
 export type WorkflowApprovalDecision = "approved" | "rejected";
 
 export type WorkflowApprovalAttempt = Readonly<{
+  fingerprint: string;
+  idempotencyKey: string;
+}>;
+
+export type WorkflowHumanGateDecision = "approve" | "reject";
+
+export type WorkflowHumanGateAttempt = Readonly<{
   fingerprint: string;
   idempotencyKey: string;
 }>;
@@ -112,6 +121,64 @@ export function retainWorkflowApprovalAttempt(
         fingerprint,
         idempotencyKey: `tool-approval.decide:${randomUUID()}`,
       };
+}
+
+export function retainWorkflowHumanGateAttempt(
+  current: WorkflowHumanGateAttempt | null,
+  gate: WorkflowHumanGatePublicationView,
+  decision: WorkflowHumanGateDecision,
+  randomUUID: () => string = () => globalThis.crypto.randomUUID(),
+): WorkflowHumanGateAttempt {
+  const fingerprint = JSON.stringify([
+    gate.runId,
+    gate.nodeId,
+    gate.claimId,
+    gate.claimEpoch,
+    gate.gateRequestId,
+    decision,
+  ]);
+  return current?.fingerprint === fingerprint
+    ? current
+    : {
+        fingerprint,
+        idempotencyKey: `workflow-human-gate.decide:${randomUUID()}`,
+      };
+}
+
+export async function decideControlWorkflowHumanGate(
+  adapter: ControlWorkflowAdapter,
+  gate: WorkflowHumanGatePublicationView,
+  decision: WorkflowHumanGateDecision,
+  idempotencyKey: string,
+  signal?: AbortSignal,
+): Promise<WorkflowHumanGateDecisionResponse> {
+  if (gate.status !== "published") {
+    throw new ControlApiProtocolError(
+      "control_workflow_human_gate_not_pending",
+    );
+  }
+  const result = await adapter.decideHumanGate({
+    body: {
+      runId: gate.runId,
+      nodeId: gate.nodeId,
+      claimId: gate.claimId,
+      claimEpoch: gate.claimEpoch,
+      gateRequestId: gate.gateRequestId,
+      decision,
+    },
+    idempotencyKey,
+    signal,
+  });
+  if (
+    result.runId !== gate.runId ||
+    result.nodeId !== gate.nodeId ||
+    result.gateRequestId !== gate.gateRequestId
+  ) {
+    throw new ControlApiProtocolError(
+      "control_workflow_human_gate_response_invalid",
+    );
+  }
+  return result;
 }
 
 export async function decideControlWorkflowApproval(
