@@ -196,6 +196,7 @@ type CommandWorkspaceProps = {
   onClearAssistantThread?: () => void | Promise<void>;
   onModeChange: (mode: WorkMode) => void;
   onKnowledgeSelect?: (selection: ControlKnowledgeSelection) => void;
+  onOpenLibrary?: (kind: "agents" | "knowledge") => void | Promise<void>;
   onOpenSettings?: () => void;
   onSaveCapability?: import("../../lib/capability/capabilityCatalog").CapabilityEditorSaveHandler;
   onRetryConnection: () => void;
@@ -273,6 +274,12 @@ export function commandKnowledgeSelection(
         item.knowledgeReference?.contentDigest,
   );
   return matches.length === 1 ? matches[0] : null;
+}
+
+export function commandLibraryKindForView(
+  view: CommandShellView,
+): "agents" | "knowledge" | null {
+  return view === "agents" || view === "knowledge" ? view : null;
 }
 
 export function submitCommandComposer({
@@ -489,6 +496,7 @@ export function CommandWorkspace({
   onClearAssistantThread,
   onModeChange,
   onKnowledgeSelect,
+  onOpenLibrary,
   onOpenSettings,
   onRemoveComposerMention,
   onRetryConnection,
@@ -1079,6 +1087,11 @@ export function CommandWorkspace({
   function switchView(view: CommandShellView) {
     setOpenPalette(null);
     setPaletteQuery("");
+    const libraryKind = commandLibraryKindForView(view);
+    if (libraryKind !== null && onOpenLibrary) {
+      void onOpenLibrary(libraryKind);
+      return;
+    }
     setActiveView(view);
     if (typeof window !== "undefined") {
       window.history.replaceState(

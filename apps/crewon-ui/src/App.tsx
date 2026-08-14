@@ -702,6 +702,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
             withKnowledgeReferenceMention(mentions, selection),
           );
         }}
+        onOpenLibrary={(kind) => openLibrary(kind)}
         onOpenSettings={openSettings}
         onRemoveComposerMention={(path) => {
           setPendingComposerMentions((mentions) =>

@@ -218,6 +218,7 @@ describe("App Workspace Control composition", () => {
 
     expect(source).toContain("createControlLibraryPanelActionHandler");
     expect(source).toContain("openControlLibraryItem");
+    expect(source).toContain("onOpenLibrary={(kind) => openLibrary(kind)}");
     expect(source).not.toContain("createAppLibraryOpenCoordinator");
     expect(source).not.toContain("createAppLibraryPanelDispatchCoordinator");
     expect(source).not.toContain("createAppOfficeRuntimeCoordinator");

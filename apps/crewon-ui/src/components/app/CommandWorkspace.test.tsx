@@ -10,6 +10,7 @@ import {
   cleanSlotTitle,
   commandComposerResourceSelection,
   commandKnowledgeSelection,
+  commandLibraryKindForView,
   commandComposerKeyIntent,
   CommandWorkspace as CommandWorkspaceComponent,
   type CommandWorkspaceOperationsSlot,
@@ -616,6 +617,17 @@ describe("CommandWorkspace", () => {
         selectedThread,
       }),
     ).toBe(false);
+  });
+
+  it("routes Agent and Knowledge navigation to the Control resource library", () => {
+    expect(
+      ["command", "assist", "projects", "agents", "knowledge", "team"].map(
+        (view) =>
+          commandLibraryKindForView(
+            view as Parameters<typeof commandLibraryKindForView>[0],
+          ),
+      ),
+    ).toEqual([null, null, null, "agents", "knowledge", null]);
   });
 
   it("inserts slash command tokens without losing mention syntax", () => {
