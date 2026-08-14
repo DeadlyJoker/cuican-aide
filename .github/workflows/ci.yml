@@ -54,12 +54,6 @@ jobs:
       - name: Test the Runtime Worker
         run: pnpm --filter @crewon/runtime-worker test
 
-      - name: Typecheck the Device Gateway
-        run: pnpm --filter @crewon/device-gateway typecheck
-
-      - name: Test the Device Gateway
-        run: pnpm --filter @crewon/device-gateway test
-
       - name: Test desktop sidecar staging contract
         run: node --test scripts/stage-desktop-runtime.test.mjs
 
@@ -83,6 +77,9 @@ jobs:
 
       - name: Typecheck the UI
         run: pnpm --filter @crewon/ui lint
+
+      - name: Build the web production bundle
+        run: pnpm --filter @crewon/ui build
 
       - name: Test the UI
         run: pnpm --filter @crewon/ui test

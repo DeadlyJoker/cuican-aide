@@ -14,8 +14,6 @@
     "control-api:test": "pnpm --filter @crewon/control-api test",
     "runtime-worker:start": "pnpm --filter @crewon/runtime-worker start",
     "runtime-worker:test": "pnpm --filter @crewon/runtime-worker test",
-    "device-gateway:start": "pnpm --filter @crewon/device-gateway start",
-    "device-gateway:test": "pnpm --filter @crewon/device-gateway test",
     "format": "prettier --check *.json *.md docs/*.md .github/workflows/*.yml **/*.js",
     "format:fix": "prettier --write *.json *.md docs/*.md .github/workflows/*.yml **/*.js",
     "write-hooks-schema": "cargo run --manifest-path ./codex-rs/Cargo.toml -p crewon-hooks --bin write_hooks_schema_fixtures"
