@@ -92,7 +92,7 @@ import {
   loadInvocationReceipt,
   loadThread,
   replayCreateReceiptSnapshot,
-  replayInvocationReceiptSnapshot,
+  replayInvocationReceiptInTransaction,
 } from "./postgres-automation-context.ts";
 
 export async function commitPostgresAutomationCreate(
@@ -201,154 +201,10 @@ export async function commitPostgresAutomationInvocation(
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    await advisoryLock(
-      client,
-      `idempotency:${input.idempotency.scope}:${input.idempotency.key}`,
-    );
-    const prior = await loadInvocationReceipt(
+    const result = await commitPostgresAutomationInvocationInTransaction(
       client,
       schema,
-      input.tenantId,
-      input.idempotency,
-    );
-    if (prior !== null) {
-      await client.query("COMMIT");
-      return replayInvocationReceiptSnapshot(client, schema, {
-        tenantId: input.tenantId,
-        automationId: input.definitionFence.automationId,
-        idempotency: input.idempotency,
-      });
-    }
-    await assertPostgresProviderSettingsAdmissionOpen(
-      client,
-      schema,
-      input.tenantId,
-    );
-    await advisoryLock(client, `run:${input.tenantId}:${input.binding.runId}`);
-    await advisoryLock(
-      client,
-      `thread:${input.tenantId}:${input.threadFence.threadId}`,
-    );
-
-    const record = await loadAutomationRecord(
-      client,
-      schema,
-      input.definitionFence.automationId,
-      true,
-    );
-    if (record === null || record.definition.tenantId !== input.tenantId) {
-      throw new RunStoreError("automation_not_found");
-    }
-    const threadId = input.threadFence.threadId;
-    const thread = await loadThread(
-      client,
-      schema,
-      { tenantId: input.tenantId, threadId },
-      true,
-    );
-    const history = await loadHistory(client, schema, {
-      tenantId: input.tenantId,
-      threadId,
-    });
-    const runRows = await client.query<PostgresRunRow>(
-      `SELECT snapshots.tenant_id, snapshots.space_id, snapshots.run_id,
-              snapshots.revision, snapshots.last_sequence, snapshots.state_json,
-              snapshots.updated_at, bindings.thread_id
-       FROM ${schema}.run_snapshots AS snapshots
-       JOIN ${schema}.run_thread_bindings AS bindings
-         ON bindings.tenant_id=snapshots.tenant_id
-        AND bindings.run_id=snapshots.run_id
-       WHERE snapshots.tenant_id=$1 AND bindings.thread_id=$2`,
-      [input.tenantId, threadId],
-    );
-    const threadRuns = runRows.rows.map((row) =>
-      decodePostgresRunState(row, {
-        tenantId: input.tenantId,
-        runId: row.run_id,
-      }),
-    );
-    const activeRunExists = threadRuns.some(
-      ({ status }) =>
-        status !== "completed" && status !== "failed" && status !== "canceled",
-    );
-    const workRows = await client.query<{ status: string }>(
-      `SELECT work.status FROM ${schema}.work_items AS work
-       JOIN ${schema}.run_thread_bindings AS bindings
-         ON bindings.tenant_id=work.tenant_id AND bindings.run_id=work.run_id
-       WHERE work.tenant_id=$1 AND bindings.thread_id=$2`,
-      [input.tenantId, threadId],
-    );
-    const unsettledWorkExists = workRows.rows.some(({ status }) => {
-      if (
-        status !== "pending" &&
-        status !== "leased" &&
-        status !== "completed"
-      ) {
-        throw new RunStoreError("stored_work_item_status_invalid");
-      }
-      return status !== "completed";
-    });
-    const runIdExists =
-      (
-        await client.query(
-          `SELECT 1 FROM ${schema}.run_snapshots
-           WHERE tenant_id=$1 AND run_id=$2`,
-          [input.tenantId, input.binding.runId],
-        )
-      ).rowCount !== 0;
-    const ids = await existingArtifactIds(client, schema, input);
-    const result = prepareAutomationInvocation(input, {
-      record,
-      thread,
-      history,
-      activeRunExists,
-      unsettledWorkExists,
-      runIdExists,
-      threadEventIdExists: (id) => ids.threadEvents.has(id),
-      messageIdExists: (id) => ids.messages.has(id),
-      historyItemIdExists: (id) => ids.history.has(id),
-      runEventIdExists: (id) => ids.runEvents.has(id),
-      outboxIdExists: (id) => ids.outbox.has(id),
-      workItemIdExists: (id) => ids.work.has(id),
-    });
-    await writePostgresThreadSnapshot(
-      client,
-      schema,
-      thread,
-      result.threadState,
-      input.threadFence.expectedRevision,
-    );
-    await writePostgresThreadEvents(
-      client,
-      schema,
-      [input.threadEvent],
-      input.tenantId,
-    );
-    await writePostgresMessages(client, schema, [input.message]);
-    await writePostgresModelHistory(client, schema, [input.historyItem]);
-    await writePostgresRunSnapshot(client, schema, null, result.runState, 0);
-    await writePostgresRunEvents(
-      client,
-      schema,
-      [input.runEvent],
-      input.tenantId,
-    );
-    await writePostgresOutbox(client, schema, [input.outbox]);
-    await writePostgresWorkItems(client, schema, [input.workItem]);
-    await client.query(
-      `INSERT INTO ${schema}.automation_invocation_receipts (
-         tenant_id, scope, idempotency_key, automation_id, run_id, fingerprint,
-         result_json
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [
-        input.tenantId,
-        input.idempotency.scope,
-        input.idempotency.key,
-        record.definition.automationId,
-        input.binding.runId,
-        input.idempotency.requestFingerprint,
-        stableJson(result),
-      ],
+      input,
     );
     await client.query("COMMIT");
     return structuredClone(result);
@@ -358,6 +214,159 @@ export async function commitPostgresAutomationInvocation(
   } finally {
     client.release();
   }
+}
+
+export async function commitPostgresAutomationInvocationInTransaction(
+  client: PoolClient,
+  schema: string,
+  input: CommitAutomationInvocationInput,
+): Promise<AutomationInvocationResult> {
+  validateAutomationInvocationInputShape(input);
+  await advisoryLock(
+    client,
+    `idempotency:${input.idempotency.scope}:${input.idempotency.key}`,
+  );
+  const prior = await loadInvocationReceipt(
+    client,
+    schema,
+    input.tenantId,
+    input.idempotency,
+  );
+  if (prior !== null) {
+    return replayInvocationReceiptInTransaction(client, schema, {
+      tenantId: input.tenantId,
+      automationId: input.definitionFence.automationId,
+      idempotency: input.idempotency,
+    });
+  }
+  await assertPostgresProviderSettingsAdmissionOpen(
+    client,
+    schema,
+    input.tenantId,
+  );
+  await advisoryLock(client, `run:${input.tenantId}:${input.binding.runId}`);
+  await advisoryLock(
+    client,
+    `thread:${input.tenantId}:${input.threadFence.threadId}`,
+  );
+
+  const record = await loadAutomationRecord(
+    client,
+    schema,
+    input.definitionFence.automationId,
+    true,
+  );
+  if (record === null || record.definition.tenantId !== input.tenantId) {
+    throw new RunStoreError("automation_not_found");
+  }
+  const threadId = input.threadFence.threadId;
+  const thread = await loadThread(
+    client,
+    schema,
+    { tenantId: input.tenantId, threadId },
+    true,
+  );
+  const history = await loadHistory(client, schema, {
+    tenantId: input.tenantId,
+    threadId,
+  });
+  const runRows = await client.query<PostgresRunRow>(
+    `SELECT snapshots.tenant_id, snapshots.space_id, snapshots.run_id,
+              snapshots.revision, snapshots.last_sequence, snapshots.state_json,
+              snapshots.updated_at, bindings.thread_id
+       FROM ${schema}.run_snapshots AS snapshots
+       JOIN ${schema}.run_thread_bindings AS bindings
+         ON bindings.tenant_id=snapshots.tenant_id
+        AND bindings.run_id=snapshots.run_id
+       WHERE snapshots.tenant_id=$1 AND bindings.thread_id=$2`,
+    [input.tenantId, threadId],
+  );
+  const threadRuns = runRows.rows.map((row) =>
+    decodePostgresRunState(row, {
+      tenantId: input.tenantId,
+      runId: row.run_id,
+    }),
+  );
+  const activeRunExists = threadRuns.some(
+    ({ status }) =>
+      status !== "completed" && status !== "failed" && status !== "canceled",
+  );
+  const workRows = await client.query<{ status: string }>(
+    `SELECT work.status FROM ${schema}.work_items AS work
+       JOIN ${schema}.run_thread_bindings AS bindings
+         ON bindings.tenant_id=work.tenant_id AND bindings.run_id=work.run_id
+       WHERE work.tenant_id=$1 AND bindings.thread_id=$2`,
+    [input.tenantId, threadId],
+  );
+  const unsettledWorkExists = workRows.rows.some(({ status }) => {
+    if (status !== "pending" && status !== "leased" && status !== "completed") {
+      throw new RunStoreError("stored_work_item_status_invalid");
+    }
+    return status !== "completed";
+  });
+  const runIdExists =
+    (
+      await client.query(
+        `SELECT 1 FROM ${schema}.run_snapshots
+           WHERE tenant_id=$1 AND run_id=$2`,
+        [input.tenantId, input.binding.runId],
+      )
+    ).rowCount !== 0;
+  const ids = await existingArtifactIds(client, schema, input);
+  const result = prepareAutomationInvocation(input, {
+    record,
+    thread,
+    history,
+    activeRunExists,
+    unsettledWorkExists,
+    runIdExists,
+    threadEventIdExists: (id) => ids.threadEvents.has(id),
+    messageIdExists: (id) => ids.messages.has(id),
+    historyItemIdExists: (id) => ids.history.has(id),
+    runEventIdExists: (id) => ids.runEvents.has(id),
+    outboxIdExists: (id) => ids.outbox.has(id),
+    workItemIdExists: (id) => ids.work.has(id),
+  });
+  await writePostgresThreadSnapshot(
+    client,
+    schema,
+    thread,
+    result.threadState,
+    input.threadFence.expectedRevision,
+  );
+  await writePostgresThreadEvents(
+    client,
+    schema,
+    [input.threadEvent],
+    input.tenantId,
+  );
+  await writePostgresMessages(client, schema, [input.message]);
+  await writePostgresModelHistory(client, schema, [input.historyItem]);
+  await writePostgresRunSnapshot(client, schema, null, result.runState, 0);
+  await writePostgresRunEvents(
+    client,
+    schema,
+    [input.runEvent],
+    input.tenantId,
+  );
+  await writePostgresOutbox(client, schema, [input.outbox]);
+  await writePostgresWorkItems(client, schema, [input.workItem]);
+  await client.query(
+    `INSERT INTO ${schema}.automation_invocation_receipts (
+         tenant_id, scope, idempotency_key, automation_id, run_id, fingerprint,
+         result_json
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [
+      input.tenantId,
+      input.idempotency.scope,
+      input.idempotency.key,
+      record.definition.automationId,
+      input.binding.runId,
+      input.idempotency.requestFingerprint,
+      stableJson(result),
+    ],
+  );
+  return result;
 }
 
 async function existingArtifactIds(

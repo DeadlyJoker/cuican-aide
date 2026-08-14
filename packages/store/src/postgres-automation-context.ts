@@ -380,6 +380,20 @@ export async function replayInvocationReceiptSnapshot(
   await client.query(
     "BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY",
   );
+  const replay = await replayInvocationReceiptInTransaction(
+    client,
+    schema,
+    query,
+  );
+  await client.query("COMMIT");
+  return replay;
+}
+
+export async function replayInvocationReceiptInTransaction(
+  client: PoolClient,
+  schema: string,
+  query: AutomationInvocationReceiptQuery,
+): Promise<AutomationInvocationResult> {
   const receipt = await loadInvocationReceipt(
     client,
     schema,
@@ -390,9 +404,7 @@ export async function replayInvocationReceiptSnapshot(
     throw new RunStoreError("automation_invocation_receipt_invalid");
   }
   await validateInvocationReceiptAuthority(client, schema, receipt);
-  const replay = replayAutomationInvocationReceipt(query, receipt);
-  await client.query("COMMIT");
-  return replay;
+  return replayAutomationInvocationReceipt(query, receipt);
 }
 
 async function loadMessage(
