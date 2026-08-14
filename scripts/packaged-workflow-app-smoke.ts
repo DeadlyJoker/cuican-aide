@@ -136,6 +136,16 @@ try {
   assert.deepEqual(workflowAdmissionEvidence(runId), { receipts: 1, runs: 1 });
   assert.equal((await client.getRun(runId)).run.runId, runId);
   await waitFor(() => completedAttemptCount(runId) === 1 && samples.length === 1);
+  const gate = await waitFor(async () => {
+    const publications = await client.listWorkflowHumanGates(runId);
+    return publications.data.length === 1 ? publications.data[0]! : null;
+  });
+  const gateDecision = { runId, nodeId: gate.nodeId, claimId: gate.claimId,
+    claimEpoch: gate.claimEpoch, gateRequestId: gate.gateRequestId,
+    decision: "approve" as const };
+  const decided = await client.decideWorkflowHumanGate(
+    gateDecision, "slice7-gate-decision");
+  assert.equal(decided.disposition, "recorded");
   const workerPidsBeforeKill = workerPids();
   assert.ok(workerPidsBeforeKill.length > 0);
   for (const pid of workerPidsBeforeKill) process.kill(pid, "SIGKILL");
@@ -149,11 +159,15 @@ try {
   const restartedAuthority = await waitForControlAuthority();
   await waitFor(() => portOpen(3210) || null);
   const restartedClient = controlClient(restartedAuthority);
+  const replayedDecision = await restartedClient.decideWorkflowHumanGate(
+    gateDecision, "slice7-gate-decision");
+  assert.equal(replayedDecision.disposition, "replay");
   const terminal = await waitFor(async () => {
     const value = await restartedClient.getRun(runId);
     return value.run.status === "completed" ? value : null;
   });
   assert.equal(terminal.run.status, "completed");
+  assert.deepEqual((await restartedClient.listWorkflowHumanGates(runId)).data, []);
   assert.equal(samples.length, 2);
   assert.notEqual(samples[0]!.body, samples[1]!.body);
   assert.equal(attemptCount(runId), 2);
@@ -176,6 +190,8 @@ try {
     attempts: attemptCount(runId), terminal: terminal.run.status,
     workerPidsBeforeKill, liveBeforeGuiKill,
     startDisposition: started.disposition, replayDisposition: replayed.disposition,
+    gateDecision: decided.disposition,
+    gateDecisionReplay: replayedDecision.disposition,
     workflowAdmission: workflowAdmissionEvidence(runId), clientEventTypes,
     sampleBodyDigests: samples.map((sample) => digester.sha256(sample.body)),
     guardianCleanup: true, uniqueTerminalEvent: true }));
@@ -325,6 +341,10 @@ function workflow() {
     inputSchema: schema(), outputSchema: schema(), entryNodeIds: ["agent"], outputNodeIds: ["verification"],
     nodes: [{ nodeId: "agent", title: "Agent", instruction: "Return {}", kind: "agent",
       agentVersionId: "workflow-agent", dependsOn: [], inputSchema: schema(), outputSchema: schema() },
+    { nodeId: "gate", title: "Human Gate", instruction: "Approve", kind: "humanGate",
+      approvalPolicyId: "slice7-approval", dependsOn: ["agent"],
+      inputSchema: schema(), outputSchema: schema() },
     { nodeId: "verification", title: "Verification", instruction: "Verify {}", kind: "verification",
-      verifierAgentVersionId: "workflow-verifier", dependsOn: ["agent"], inputSchema: schema(), outputSchema: schema() }] };
+      verifierAgentVersionId: "workflow-verifier", dependsOn: ["gate"],
+      inputSchema: schema(), outputSchema: schema() }] };
 }
