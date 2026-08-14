@@ -18,7 +18,7 @@ test("accepts only the Node 24 runtime ABI", () => {
   );
 });
 
-test("rejects removed Device protocol and Responses Lite compatibility markers", () => {
+test("rejects removed runtime compatibility markers", () => {
   assert.doesNotThrow(() =>
     assertNoRemovedRuntimeMarkers("standard Responses runtime"),
   );
@@ -32,6 +32,12 @@ test("rejects removed Device protocol and Responses Lite compatibility markers",
     "HttpsDeviceDispatchClient",
     "responsesLite",
     "responses-lite",
+    "AppServerClient",
+    "127.0.0.1:6176",
+    "restart-app-server",
+    "crewon-app-server",
+    "crewon-device-runtime",
+    "device-gateway",
   ]) {
     assert.throws(
       () => assertNoRemovedRuntimeMarkers(`bundle:${marker}`),

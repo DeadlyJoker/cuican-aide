@@ -86,6 +86,12 @@ const REMOVED_RUNTIME_MARKERS = [
   "HttpsDeviceDispatchClient",
   "responsesLite",
   "responses-lite",
+  "AppServerClient",
+  "127.0.0.1:6176",
+  "restart-app-server",
+  "crewon-app-server",
+  "crewon-device-runtime",
+  "device-gateway",
 ];
 
 export function assertNoRemovedRuntimeMarkers(bundleSource) {
