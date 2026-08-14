@@ -339,7 +339,9 @@ if (process.env.CREWON_WORKER_ONCE === "1") {
   process.stdout.write("CrewON Runtime Worker started\n");
   for (const line of runtimeNativeReadinessLines({
     providerRuntimeBindingId:
-      nativeBootstrap?.provider?.runtimeBindingId ?? null,
+      nativeBootstrap?.provider?.runtimeBindingId ??
+      ambientProviderProbe?.runtimeBinding.runtimeBindingId ??
+      null,
     workspacePrivateOrigin: runtime.workspacePrivateOrigin,
     workspaceRuntimeBindingId:
       nativeBootstrap?.workspace?.authority.runtimeBindingId ?? null,

@@ -18,7 +18,7 @@ type Route = Readonly<{
   tenantId: string;
   runtimeBindingId: string;
   origin: string;
-  token: string;
+  tokenEnvironment: string;
   timeoutMs?: number;
 }>;
 
@@ -63,7 +63,7 @@ export function resolveProductionProviderProbeWorkers(
         key,
         new HttpProviderProbeWorkerClient({
           origin: route.origin,
-          token: route.token,
+          token: secretValue(environment[route.tokenEnvironment]),
           ...(route.timeoutMs === undefined
             ? {}
             : { timeoutMs: route.timeoutMs }),
@@ -83,7 +83,12 @@ export function resolveProductionProviderProbeWorkers(
 function parseRoute(value: unknown): Route {
   if (!record(value)) throw invalidConfiguration();
   const keys = Object.keys(value).sort();
-  const required = ["origin", "runtimeBindingId", "tenantId", "token"];
+  const required = [
+    "origin",
+    "runtimeBindingId",
+    "tenantId",
+    "tokenEnvironment",
+  ];
   const allowed = [...required, "timeoutMs"].sort();
   if (
     keys.join("\0") !== required.sort().join("\0") &&
@@ -95,7 +100,7 @@ function parseRoute(value: unknown): Route {
     !opaque(value.tenantId, 512) ||
     !opaque(value.runtimeBindingId, 512) ||
     typeof value.origin !== "string" ||
-    typeof value.token !== "string" ||
+    !environmentName(value.tokenEnvironment) ||
     (value.timeoutMs !== undefined &&
       (!Number.isSafeInteger(value.timeoutMs) ||
         (value.timeoutMs as number) < 1_000 ||
@@ -107,11 +112,26 @@ function parseRoute(value: unknown): Route {
     tenantId: value.tenantId,
     runtimeBindingId: value.runtimeBindingId,
     origin: value.origin,
-    token: value.token,
+    tokenEnvironment: value.tokenEnvironment,
     ...(value.timeoutMs === undefined
       ? {}
       : { timeoutMs: value.timeoutMs as number }),
   };
+}
+
+function environmentName(value: unknown): value is string {
+  return (
+    typeof value === "string" && /^[A-Za-z_][A-Za-z0-9_]{0,127}$/u.test(value)
+  );
+}
+
+function secretValue(value: string | undefined): string {
+  if (value === undefined) throw invalidConfiguration();
+  const bytes = new TextEncoder().encode(value).byteLength;
+  if (bytes < 32 || bytes > 8_192 || /[\u0000-\u001f\u007f]/u.test(value)) {
+    throw invalidConfiguration();
+  }
+  return value;
 }
 
 function routeKey(tenantId: string, runtimeBindingId: string): string {

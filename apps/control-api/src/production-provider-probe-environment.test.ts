@@ -5,6 +5,7 @@ import { HttpProviderProbeWorkerClient } from "./provider-probe-worker-client.ts
 import { resolveProductionProviderProbeWorkers } from "./production-provider-probe-environment.ts";
 
 const TOKEN = "production-provider-probe-token-at-least-32-bytes";
+const TOKEN_ENVIRONMENT = "PROVIDER_PROBE_WORKER_TOKEN";
 
 test("requires explicit authenticated Team Worker routes", () => {
   assert.throws(
@@ -23,18 +24,20 @@ test("requires explicit authenticated Team Worker routes", () => {
 
 test("routes only the exact tenant and runtime generation", async () => {
   const registry = resolveProductionProviderProbeWorkers({
+    [TOKEN_ENVIRONMENT]: TOKEN,
+    PROVIDER_PROBE_WORKER_TOKEN_2: `${TOKEN}-2`,
     CREWON_PROVIDER_PROBE_TENANT_ROUTES_JSON: routes([
       {
         tenantId: "tenant-1",
         runtimeBindingId: "runtime-1",
         origin: "https://worker-1.internal.example",
-        token: TOKEN,
+        tokenEnvironment: TOKEN_ENVIRONMENT,
       },
       {
         tenantId: "tenant-1",
         runtimeBindingId: "runtime-2",
         origin: "https://worker-2.internal.example",
-        token: `${TOKEN}-2`,
+        tokenEnvironment: "PROVIDER_PROBE_WORKER_TOKEN_2",
         timeoutMs: 5_000,
       },
     ]),
@@ -76,7 +79,7 @@ test("rejects ambiguous or unauthenticated Team Worker routes", () => {
         tenantId: "tenant-1",
         runtimeBindingId: "runtime-1",
         origin: "http://worker.internal:3211",
-        token: TOKEN,
+        tokenEnvironment: TOKEN_ENVIRONMENT,
       },
     ],
     [
@@ -84,7 +87,7 @@ test("rejects ambiguous or unauthenticated Team Worker routes", () => {
         tenantId: "tenant-1",
         runtimeBindingId: "runtime-1",
         origin: "https://worker.internal",
-        token: "short",
+        tokenEnvironment: "MISSING_TOKEN",
       },
     ],
     [
@@ -92,19 +95,20 @@ test("rejects ambiguous or unauthenticated Team Worker routes", () => {
         tenantId: "tenant-1",
         runtimeBindingId: "runtime-1",
         origin: "https://worker.internal",
-        token: TOKEN,
+        tokenEnvironment: TOKEN_ENVIRONMENT,
       },
       {
         tenantId: "tenant-1",
         runtimeBindingId: "runtime-1",
         origin: "https://worker-duplicate.internal",
-        token: `${TOKEN}-duplicate`,
+        tokenEnvironment: TOKEN_ENVIRONMENT,
       },
     ],
   ]) {
     assert.throws(
       () =>
         resolveProductionProviderProbeWorkers({
+          [TOKEN_ENVIRONMENT]: TOKEN,
           CREWON_PROVIDER_PROBE_TENANT_ROUTES_JSON: routes(value),
         }),
       /CREWON_PROVIDER_PROBE_TENANT_ROUTES_JSON_invalid/u,

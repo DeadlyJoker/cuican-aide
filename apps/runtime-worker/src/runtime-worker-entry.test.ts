@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createServer as createNetServer, type Server } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test, { type TestContext } from "node:test";
@@ -79,6 +80,76 @@ test("packaged entry starts the Workspace listener and emits only non-secret rea
       "u",
     ),
   );
+  child.kill("SIGTERM");
+  assert.equal(await waitForExit(child), 0);
+});
+
+test("production entry starts the authenticated Provider listener", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const config = {
+    ...packagedConfig(),
+    nativeWorkspaceReadCatalog: "disabled" as const,
+  };
+  await activateRelease(databasePath, config);
+  const port = await unusedLoopbackPort();
+  const token = "production-provider-probe-token-at-least-32-bytes";
+  const child = spawn(
+    process.execPath,
+    [
+      "--experimental-strip-types",
+      fileURLToPath(new URL("./main.ts", import.meta.url)),
+    ],
+    {
+      env: {
+        ...process.env,
+        CREWON_CONTROL_SECURITY_MODE: "production",
+        CREWON_CONTROL_DB_PATH: databasePath,
+        CREWON_MODEL_ID: "fake-model",
+        CREWON_RESPONSES_ENDPOINT: "https://provider.example/v1/responses",
+        CREWON_TENANT_ID: config.runtimeTenantId,
+        CREWON_AUTHORITY_ID: config.route.authorityId,
+        CREWON_AGENT_VERSION_ID: config.route.agentVersionId,
+        CREWON_RUNTIME_GENERATION: config.route.runtimeGeneration,
+        CREWON_POLICY_SNAPSHOT_ID: config.route.policySnapshotId,
+        CREWON_WORKSPACE_BINDING_ID:
+          config.route.workspaceBindingId ?? undefined,
+        CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON: JSON.stringify({
+          schemaVersion: "crewon.runtime-provider-probe.v0",
+          port,
+          tokenEnvironment: "PRODUCTION_PROVIDER_PROBE_TOKEN",
+          providerId: "gateway",
+          runtimeBindingId: config.route.runtimeGeneration,
+          endpoint: "https://provider.example/v1",
+          credentialEnvironment: "PRODUCTION_PROVIDER_API_KEY",
+        }),
+        PRODUCTION_PROVIDER_PROBE_TOKEN: token,
+        PRODUCTION_PROVIDER_API_KEY:
+          "production-provider-api-key-at-least-32-bytes",
+        CREWON_WORKER_SCAN_INTERVAL_MS: "1000",
+      },
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  context.after(() => {
+    if (child.exitCode === null) child.kill("SIGKILL");
+  });
+  const failed = collectExit(child);
+  try {
+    await waitForStdout(
+      child,
+      `CrewON Provider Runtime ready:${config.route.runtimeGeneration}\n`,
+    );
+  } catch (error) {
+    const output = await failed;
+    throw new Error(
+      `${error instanceof Error ? error.message : "provider_ready_failed"}:${output.stderr.replaceAll(token, "[redacted]")}`,
+    );
+  }
+  const unauthorized = await fetch(
+    `http://127.0.0.1:${port}/internal/v1/model-provider-probe`,
+    { method: "POST" },
+  );
+  assert.equal(unauthorized.status, 401);
   child.kill("SIGTERM");
   assert.equal(await waitForExit(child), 0);
 });
@@ -425,6 +496,30 @@ function temporaryDatabasePath(context: TestContext): string {
   const directory = mkdtempSync(join(tmpdir(), "crewon-packaged-worker-"));
   context.after(() => rmSync(directory, { recursive: true, force: true }));
   return join(directory, "control.sqlite");
+}
+
+async function unusedLoopbackPort(): Promise<number> {
+  const server = createNetServer();
+  await listen(server);
+  const address = server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("loopback_address_invalid");
+  }
+  await close(server);
+  return address.port;
+}
+
+function listen(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", resolve);
+  });
+}
+
+function close(server: Server): Promise<void> {
+  return new Promise((resolve, reject) => {
+    server.close((error) => (error ? reject(error) : resolve()));
+  });
 }
 
 function escapeRegExp(value: string): string {

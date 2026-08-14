@@ -18,7 +18,7 @@ import { runtimeNativeReadinessLines } from "./runtime-native-readiness.ts";
 const TOKEN = "standalone-provider-probe-token-at-least-32-bytes";
 const API_KEY = "standalone-provider-api-key-at-least-32-bytes";
 
-test("production forbids every ambient binding and security mode is exact", () => {
+test("production isolates its strict config from every standalone binding", () => {
   assert.equal(parseRuntimeWorkerSecurityMode("standalone"), "standalone");
   assert.equal(parseRuntimeWorkerSecurityMode("production"), "production");
   for (const value of ["", "team", " production", "PRODUCTION"]) {
@@ -43,6 +43,24 @@ test("production forbids every ambient binding and security mode is exact", () =
       ),
     );
   }
+  const production = resolveRuntimeProviderProbeEnvironment(
+    productionEnvironment(),
+    "production",
+    new DesktopProviderProbeEgressPolicy(),
+  );
+  assert.equal(
+    production?.runtimeBinding.runtimeBindingId,
+    "runtime-generation-1",
+  );
+  assert.throws(
+    () =>
+      resolveRuntimeProviderProbeEnvironment(
+        productionEnvironment(),
+        "standalone",
+        new DesktopProviderProbeEgressPolicy(),
+      ),
+    /CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON_forbidden/u,
+  );
 });
 
 test("starts parsed private config and probes a real loopback Provider", async (t) => {
@@ -143,6 +161,22 @@ function validEnvironment(): Record<string, string> {
     CREWON_PROVIDER_PROBE_RUNTIME_BINDING_ID: "runtime-generation-1",
     CREWON_PROVIDER_PROBE_ENDPOINT: "http://127.0.0.1:11434/v1",
     CREWON_PROVIDER_PROBE_CREDENTIAL_ENVIRONMENT: "PROVIDER_API_KEY",
+    PROVIDER_API_KEY: API_KEY,
+  };
+}
+
+function productionEnvironment(): Record<string, string> {
+  return {
+    CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON: JSON.stringify({
+      schemaVersion: "crewon.runtime-provider-probe.v0",
+      port: 3211,
+      tokenEnvironment: "PROVIDER_PROBE_TOKEN",
+      providerId: "gateway",
+      runtimeBindingId: "runtime-generation-1",
+      endpoint: "http://127.0.0.1:11434/v1",
+      credentialEnvironment: "PROVIDER_API_KEY",
+    }),
+    PROVIDER_PROBE_TOKEN: TOKEN,
     PROVIDER_API_KEY: API_KEY,
   };
 }

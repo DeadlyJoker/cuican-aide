@@ -16,6 +16,9 @@ const BINDING = "CREWON_PROVIDER_PROBE_RUNTIME_BINDING_ID";
 const ENDPOINT = "CREWON_PROVIDER_PROBE_ENDPOINT";
 const CREDENTIAL = "CREWON_PROVIDER_PROBE_CREDENTIAL_ENVIRONMENT";
 const NAMES = [PORT, TOKEN, PROVIDER, BINDING, ENDPOINT, CREDENTIAL] as const;
+const PRODUCTION_CONFIG = "CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON";
+const PRODUCTION_SCHEMA = "crewon.runtime-provider-probe.v0";
+const MAX_PRODUCTION_CONFIG_BYTES = 64 * 1_024;
 
 export type RuntimeProviderProbeEnvironment = Readonly<{
   port: number;
@@ -34,7 +37,7 @@ export function parseRuntimeWorkerSecurityMode(
   throw new Error("CREWON_CONTROL_SECURITY_MODE_invalid");
 }
 
-/** Parses the standalone private listener as one indivisible ambient binding. */
+/** Parses one mode-exact private listener without mixing desktop and Team authority. */
 export function resolveRuntimeProviderProbeEnvironment(
   environment: Environment,
   securityMode: RuntimeWorkerSecurityMode,
@@ -45,7 +48,10 @@ export function resolveRuntimeProviderProbeEnvironment(
     if (declared) {
       throw new Error("CREWON_PROVIDER_PROBE_CONFIGURATION_forbidden");
     }
-    return undefined;
+    return productionConfig(environment, egressPolicy);
+  }
+  if (environment[PRODUCTION_CONFIG] !== undefined) {
+    throw new Error(`${PRODUCTION_CONFIG}_forbidden`);
   }
   if (!declared) return undefined;
   for (const name of NAMES) requiredExact(environment, name);
@@ -71,10 +77,82 @@ export function resolveRuntimeProviderProbeEnvironment(
   return redact(config);
 }
 
+function productionConfig(
+  environment: Environment,
+  egressPolicy: ProviderProbeEgressPolicy,
+): RuntimeProviderProbeEnvironment | undefined {
+  const encoded = environment[PRODUCTION_CONFIG];
+  if (encoded === undefined) return undefined;
+  if (
+    encoded.length === 0 ||
+    encoded !== encoded.trim() ||
+    Buffer.byteLength(encoded, "utf8") > MAX_PRODUCTION_CONFIG_BYTES
+  ) {
+    throw productionInvalid();
+  }
+  let value: unknown;
+  try {
+    value = JSON.parse(encoded);
+  } catch (cause) {
+    throw productionInvalid(cause);
+  }
+  if (
+    !record(value) ||
+    Object.keys(value).sort().join("\0") !==
+      [
+        "credentialEnvironment",
+        "endpoint",
+        "port",
+        "providerId",
+        "runtimeBindingId",
+        "schemaVersion",
+        "tokenEnvironment",
+      ]
+        .sort()
+        .join("\0") ||
+    value.schemaVersion !== PRODUCTION_SCHEMA ||
+    typeof value.port !== "number" ||
+    typeof value.providerId !== "string" ||
+    typeof value.runtimeBindingId !== "string" ||
+    typeof value.endpoint !== "string" ||
+    typeof value.credentialEnvironment !== "string" ||
+    typeof value.tokenEnvironment !== "string"
+  ) {
+    throw productionInvalid();
+  }
+  try {
+    const credentialEnvironment = environmentName(value.credentialEnvironment);
+    const tokenEnvironment = environmentName(value.tokenEnvironment);
+    secretValue(requiredExact(environment, credentialEnvironment));
+    return redact({
+      port: integer(String(value.port), 1, 65_535),
+      token: secretValue(requiredExact(environment, tokenEnvironment)),
+      runtimeBinding: redact({
+        providerId: opaque(value.providerId, 128),
+        runtimeBindingId: opaque(value.runtimeBindingId, 512),
+        endpoint: safeEndpoint(value.endpoint),
+        credentialKind: "environment" as const,
+        environmentVariable: credentialEnvironment,
+      }),
+      secrets: new EnvironmentProviderSecretResolver(environment),
+      egressPolicy,
+    });
+  } catch (cause) {
+    throw productionInvalid(cause);
+  }
+}
+
 function requiredExact(environment: Environment, name: string): string {
   const value = environment[name];
   if (value === undefined || value.length === 0) throw invalid();
   if (value !== value.trim()) throw invalid();
+  return value;
+}
+
+function environmentName(value: string): string {
+  if (!/^[A-Za-z_][A-Za-z0-9_]{0,127}$/u.test(value)) {
+    throw productionInvalid();
+  }
   return value;
 }
 
@@ -128,6 +206,14 @@ function safeEndpoint(value: string): string {
 
 function invalid(): Error {
   return new Error("CREWON_PROVIDER_PROBE_CONFIGURATION_invalid");
+}
+
+function productionInvalid(cause?: unknown): Error {
+  return new Error(`${PRODUCTION_CONFIG}_invalid`, { cause });
+}
+
+function record(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function redact<T extends object>(value: T): T {
