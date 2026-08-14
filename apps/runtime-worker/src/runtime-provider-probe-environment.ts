@@ -6,6 +6,7 @@ import type {
   RuntimeProviderSecretResolver,
 } from "./provider-probe-service.ts";
 import { EnvironmentProviderSecretResolver } from "./provider-probe-service.ts";
+import type { ProductionProviderCatalogAuthority } from "./production-provider-catalog-bootstrap.ts";
 
 type Environment = Readonly<Record<string, string | undefined>>;
 
@@ -17,13 +18,14 @@ const ENDPOINT = "CREWON_PROVIDER_PROBE_ENDPOINT";
 const CREDENTIAL = "CREWON_PROVIDER_PROBE_CREDENTIAL_ENVIRONMENT";
 const NAMES = [PORT, TOKEN, PROVIDER, BINDING, ENDPOINT, CREDENTIAL] as const;
 const PRODUCTION_CONFIG = "CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON";
-const PRODUCTION_SCHEMA = "crewon.runtime-provider-probe.v0";
+const PRODUCTION_SCHEMA = "crewon.runtime-provider-probe.v1";
 const MAX_PRODUCTION_CONFIG_BYTES = 64 * 1_024;
 
 export type RuntimeProviderProbeEnvironment = Readonly<{
   port: number;
   token: string;
   runtimeBinding: RuntimeProviderBinding;
+  productionCatalog?: ProductionProviderCatalogAuthority;
   secrets: RuntimeProviderSecretResolver;
   egressPolicy: ProviderProbeEgressPolicy;
 }>;
@@ -82,7 +84,9 @@ function productionConfig(
   egressPolicy: ProviderProbeEgressPolicy,
 ): RuntimeProviderProbeEnvironment | undefined {
   const encoded = environment[PRODUCTION_CONFIG];
-  if (encoded === undefined) return undefined;
+  if (encoded === undefined) {
+    throw new Error(`${PRODUCTION_CONFIG}_required`);
+  }
   if (
     encoded.length === 0 ||
     encoded !== encoded.trim() ||
@@ -102,16 +106,20 @@ function productionConfig(
       [
         "credentialEnvironment",
         "endpoint",
+        "expectedCatalogRevision",
         "port",
         "providerId",
         "runtimeBindingId",
         "schemaVersion",
+        "tenantId",
         "tokenEnvironment",
       ]
         .sort()
         .join("\0") ||
     value.schemaVersion !== PRODUCTION_SCHEMA ||
     typeof value.port !== "number" ||
+    typeof value.expectedCatalogRevision !== "number" ||
+    typeof value.tenantId !== "string" ||
     typeof value.providerId !== "string" ||
     typeof value.runtimeBindingId !== "string" ||
     typeof value.endpoint !== "string" ||
@@ -124,15 +132,37 @@ function productionConfig(
     const credentialEnvironment = environmentName(value.credentialEnvironment);
     const tokenEnvironment = environmentName(value.tokenEnvironment);
     secretValue(requiredExact(environment, credentialEnvironment));
+    const tenantId = boundedAuthorityId(value.tenantId, 512);
+    const providerId = modelProviderId(value.providerId);
+    const runtimeBindingId = opaque(value.runtimeBindingId, 512);
+    const endpoint = safeEndpoint(value.endpoint);
+    const expectedRevision = integer(
+      String(value.expectedCatalogRevision),
+      0,
+      Number.MAX_SAFE_INTEGER - 1,
+    );
+    const binding = redact({
+      providerId,
+      displayName: providerId,
+      endpoint,
+      credentialKind: "environment" as const,
+      environmentVariable: credentialEnvironment,
+    });
     return redact({
       port: integer(String(value.port), 1, 65_535),
       token: secretValue(requiredExact(environment, tokenEnvironment)),
       runtimeBinding: redact({
-        providerId: opaque(value.providerId, 128),
-        runtimeBindingId: opaque(value.runtimeBindingId, 512),
-        endpoint: safeEndpoint(value.endpoint),
+        providerId,
+        runtimeBindingId,
+        endpoint,
         credentialKind: "environment" as const,
         environmentVariable: credentialEnvironment,
+      }),
+      productionCatalog: redact({
+        tenantId,
+        expectedRevision,
+        runtimeBindingId,
+        binding,
       }),
       secrets: new EnvironmentProviderSecretResolver(environment),
       egressPolicy,
@@ -172,6 +202,23 @@ function opaque(value: string, maximumBytes: number): string {
   ) {
     throw invalid();
   }
+  return value;
+}
+
+function boundedAuthorityId(value: string, maximumBytes: number): string {
+  if (
+    value.length === 0 ||
+    value !== value.trim() ||
+    /[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(value) ||
+    Buffer.byteLength(value) > maximumBytes
+  ) {
+    throw invalid();
+  }
+  return value;
+}
+
+function modelProviderId(value: string): string {
+  if (!/^[a-z0-9][a-z0-9_-]{0,127}$/u.test(value)) throw invalid();
   return value;
 }
 

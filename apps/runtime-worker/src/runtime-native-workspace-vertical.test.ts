@@ -127,6 +127,7 @@ test("real SQLite resolver fences wrong space, revision, and deleted Thread", as
     ),
     null,
   );
+  const deletedAt = new Date().toISOString();
   await store.commitThread({
     tenantId: "tenant-1",
     idempotency: {
@@ -141,7 +142,7 @@ test("real SQLite resolver fences wrong space, revision, and deleted Thread", as
         identity: { threadId: "thread-1" },
         eventId: "thread-event-2",
         sequence: 2,
-        occurredAt: new Date().toISOString(),
+        occurredAt: deletedAt,
         type: "thread.deleted",
         data: { actorId: "actor-1" },
       },
@@ -151,7 +152,7 @@ test("real SQLite resolver fences wrong space, revision, and deleted Thread", as
     tombstone: {
       expectedActiveRunId: null,
       expectedGoalRevision: null,
-      occurredAt: new Date().toISOString(),
+      occurredAt: deletedAt,
     },
   });
   assert.equal(

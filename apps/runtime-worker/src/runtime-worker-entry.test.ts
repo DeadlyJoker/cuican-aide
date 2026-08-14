@@ -122,6 +122,21 @@ test("production entry rejects standalone route defaults before readiness", asyn
         CREWON_CONTROL_DATABASE_SCHEMA: "runtime_entry_test",
         CREWON_TENANT_ID: "tenant-production",
         CREWON_AUTHORITY_ID: "standalone-authority",
+        CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON: JSON.stringify({
+          schemaVersion: "crewon.runtime-provider-probe.v1",
+          port: 32_111,
+          tokenEnvironment: "PRODUCTION_PROVIDER_PROBE_TOKEN",
+          tenantId: "tenant-production",
+          expectedCatalogRevision: 0,
+          providerId: "gateway",
+          runtimeBindingId: "runtime-production",
+          endpoint: "https://provider.example/v1",
+          credentialEnvironment: "PRODUCTION_PROVIDER_API_KEY",
+        }),
+        PRODUCTION_PROVIDER_PROBE_TOKEN:
+          "production-provider-probe-token-at-least-32-bytes",
+        PRODUCTION_PROVIDER_API_KEY:
+          "production-provider-api-key-at-least-32-bytes",
       },
       stdio: ["ignore", "pipe", "pipe"],
     },

@@ -24,13 +24,14 @@ test("production isolates its strict config from every standalone binding", () =
   for (const value of ["", "team", " production", "PRODUCTION"]) {
     assert.throws(() => parseRuntimeWorkerSecurityMode(value));
   }
-  assert.equal(
-    resolveRuntimeProviderProbeEnvironment(
-      {},
-      "production",
-      new DesktopProviderProbeEgressPolicy(),
-    ),
-    undefined,
+  assert.throws(
+    () =>
+      resolveRuntimeProviderProbeEnvironment(
+        {},
+        "production",
+        new DesktopProviderProbeEgressPolicy(),
+      ),
+    /CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON_required/u,
   );
   for (const name of Object.keys(validEnvironment()).filter((name) =>
     name.startsWith("CREWON_PROVIDER_PROBE_"),
@@ -52,6 +53,18 @@ test("production isolates its strict config from every standalone binding", () =
     production?.runtimeBinding.runtimeBindingId,
     "runtime-generation-1",
   );
+  assert.deepEqual(production?.productionCatalog, {
+    tenantId: "tenant-1",
+    expectedRevision: 0,
+    runtimeBindingId: "runtime-generation-1",
+    binding: {
+      providerId: "gateway",
+      displayName: "gateway",
+      endpoint: "http://127.0.0.1:11434/v1",
+      credentialKind: "environment",
+      environmentVariable: "PROVIDER_API_KEY",
+    },
+  });
   assert.throws(
     () =>
       resolveRuntimeProviderProbeEnvironment(
@@ -153,6 +166,30 @@ test("starts parsed private config and probes a real loopback Provider", async (
   assert.equal(inspect(config.runtimeBinding).includes("gateway"), false);
 });
 
+test("rejects catalog identities that PostgreSQL cannot commit", () => {
+  for (const patch of [
+    { providerId: "Gateway" },
+    { expectedCatalogRevision: -1 },
+    { expectedCatalogRevision: 1.5 },
+    { expectedCatalogRevision: Number.MAX_SAFE_INTEGER },
+  ]) {
+    const environment = productionEnvironment();
+    environment.CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON = JSON.stringify({
+      ...JSON.parse(environment.CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON),
+      ...patch,
+    });
+    assert.throws(
+      () =>
+        resolveRuntimeProviderProbeEnvironment(
+          environment,
+          "production",
+          new DesktopProviderProbeEgressPolicy(),
+        ),
+      /CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON_invalid/u,
+    );
+  }
+});
+
 function validEnvironment(): Record<string, string> {
   return {
     CREWON_PROVIDER_PROBE_PORT: "3211",
@@ -168,9 +205,11 @@ function validEnvironment(): Record<string, string> {
 function productionEnvironment(): Record<string, string> {
   return {
     CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON: JSON.stringify({
-      schemaVersion: "crewon.runtime-provider-probe.v0",
+      schemaVersion: "crewon.runtime-provider-probe.v1",
       port: 3211,
       tokenEnvironment: "PROVIDER_PROBE_TOKEN",
+      tenantId: "tenant-1",
+      expectedCatalogRevision: 0,
       providerId: "gateway",
       runtimeBindingId: "runtime-generation-1",
       endpoint: "http://127.0.0.1:11434/v1",

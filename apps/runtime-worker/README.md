@@ -1,10 +1,10 @@
 # CrewON Runtime Worker
 
-Standalone TypeScript execution process for durable `run.execute` Work Items. It opens the same Standalone SQLite authority as
+TypeScript execution process for durable `run.execute` Work Items. Standalone mode opens the same SQLite authority as
 the Control API, claims work with an owner/lease/epoch fence, reloads the canonical Run, Thread and Model History, revalidates the pinned route
 and policy snapshot, then runs one bounded CrewON Agent Kernel segment.
 
-The default production composition is the SDK-free Direct Responses transport:
+The standalone development composition is the SDK-free Direct Responses transport:
 
 ```bash
 CREWON_CONTROL_DB_PATH=/absolute/path/to/crewon-control.sqlite3 \
@@ -17,6 +17,37 @@ CREWON_MODEL_ID=gpt-5.6 \
 CREWON_MODEL_API_KEY=... \
 pnpm --filter @crewon/runtime-worker start
 ```
+
+Team/Cloud production uses PostgreSQL and requires one exact Provider listener/catalog freeze. The JSON contains only routing
+and credential references; the bearer and Provider credential stay in separately injected environment secrets:
+
+```bash
+CREWON_CONTROL_SECURITY_MODE=production \
+CREWON_CONTROL_DATABASE_URL=postgresql://... \
+CREWON_TENANT_ID=tenant-1 \
+CREWON_RUNTIME_GENERATION=runtime-provider-1 \
+CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON='{
+  "schemaVersion":"crewon.runtime-provider-probe.v1",
+  "port":3211,
+  "tokenEnvironment":"PROVIDER_PROBE_TOKEN",
+  "tenantId":"tenant-1",
+  "expectedCatalogRevision":0,
+  "providerId":"openai",
+  "runtimeBindingId":"runtime-provider-1",
+  "endpoint":"https://api.openai.com/v1",
+  "credentialEnvironment":"PROVIDER_API_KEY"
+}' \
+PROVIDER_PROBE_TOKEN=... \
+PROVIDER_API_KEY=... \
+pnpm --filter @crewon/runtime-worker start
+```
+
+Startup validates the frozen tenant and runtime generation, then uses the already-opened `PostgresDomainStore` to perform the
+canonical Provider `prepare` and `finalize` CAS before opening the private listener or printing readiness. An identical
+concurrent deployment replays the same deterministic receipts. A pending different operation, stale revision, changed route or
+non-PostgreSQL production selection fails closed. Only the credential environment name is persisted. To deploy a changed
+Provider binding, set `expectedCatalogRevision` to the current revision and use a new immutable `runtimeBindingId`; the committed
+catalog revision becomes `expectedCatalogRevision + 1`.
 
 `release` is a separate process boundary: it compiles the immutable bootstrap AgentVersion and configured runtime bindings into
 one canonical digest-addressed bundle, authorizes every `agentVersion:publish/deploy` decision, then commits the bundle, all new

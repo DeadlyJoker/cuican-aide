@@ -34,6 +34,7 @@ import {
   parseRuntimeWorkerSecurityMode,
   resolveRuntimeProviderProbeEnvironment,
 } from "./runtime-provider-probe-environment.ts";
+import { assertProductionProviderCatalogRoute } from "./production-provider-catalog-bootstrap.ts";
 import { resolveRuntimeProductionWorkspaceEnvironment } from "./runtime-production-workspace-environment.ts";
 import { runtimeNativeReadinessLines } from "./runtime-native-readiness.ts";
 import {
@@ -133,6 +134,15 @@ const initialized = await (async () => {
         process.env.CREWON_WORKSPACE_BINDING_ID?.trim() ??
         null,
     };
+    if (ambientProviderProbe?.productionCatalog !== undefined) {
+      assertProductionProviderCatalogRoute(
+        ambientProviderProbe.productionCatalog,
+        {
+          tenantId: runtimeTenantId,
+          runtimeBindingId: route.runtimeGeneration,
+        },
+      );
+    }
     if (
       nativeBootstrap?.credentialBindings !== null &&
       nativeBootstrap?.credentialBindings !== undefined
@@ -311,6 +321,12 @@ try {
           ...config,
           connectionString: databaseAuthority.connectionString,
           schema: databaseAuthority.schema,
+          ...(ambientProviderProbe?.productionCatalog === undefined
+            ? {}
+            : {
+                productionProviderCatalog:
+                  ambientProviderProbe.productionCatalog,
+              }),
         })
       : await createStandaloneRuntimeWorker({
           ...config,

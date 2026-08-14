@@ -24,6 +24,10 @@ import type { GovernedContextBundle } from "@crewon/context";
 import type { ToolRuntimePort } from "@crewon/tool-broker";
 
 import { RuntimeWorker, type RuntimeWorkerConfig } from "./runtime-worker.ts";
+import {
+  bootstrapProductionProviderCatalog,
+  type ProductionProviderCatalogAuthority,
+} from "./production-provider-catalog-bootstrap.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import { InMemoryAgentVersionRuntimeRegistry } from "./agent-version-runtime.ts";
 import {
@@ -149,6 +153,7 @@ export type PostgresRuntimeWorkerConfig = RuntimeWorkerCompositionConfig &
     schema?: string;
     maxPoolSize?: number;
     statementTimeoutMs?: number;
+    productionProviderCatalog?: ProductionProviderCatalogAuthority;
   }>;
 
 export type StandaloneRuntimeWorker = Readonly<{
@@ -214,6 +219,12 @@ export async function createPostgresRuntimeWorker(
       maxPoolSize: config.maxPoolSize,
       statementTimeoutMs: config.statementTimeoutMs,
     });
+    if (config.productionProviderCatalog !== undefined) {
+      await bootstrapProductionProviderCatalog(
+        store,
+        config.productionProviderCatalog,
+      );
+    }
     workspaceReadStore =
       config.workspaceReadFile === undefined
         ? undefined
