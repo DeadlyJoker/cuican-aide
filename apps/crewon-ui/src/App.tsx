@@ -163,6 +163,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     committedExecutionIntent,
     composerFocusSignal,
     composerValue,
+    conversationContextFileInputRef,
     isSending,
     officeAttachmentConsumerRef,
     pendingComposerMentions,
@@ -406,7 +407,13 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       tone: "warning",
     });
   };
-  const attachWorkspaceContext = async () => unavailableWorkspaceCapability();
+  const attachWorkspaceContext = () => {
+    if (!controlRuntimeConnected) {
+      unavailableWorkspaceCapability();
+      return;
+    }
+    conversationContextFileInputRef.current?.click();
+  };
   const addControlKnowledgeFiles = async (
     files: File[],
     kind: LocalResourceSelectionKind,
@@ -722,6 +729,19 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       onToggleSidebar={() => setSidebarOpen((open) => !open)}
       onToggleTheme={toggleTheme}
     >
+      <input
+        ref={conversationContextFileInputRef}
+        hidden
+        multiple
+        type="file"
+        onChange={(event) => {
+          const files = Array.from(event.currentTarget.files ?? []);
+          event.currentTarget.value = "";
+          if (files.length > 0) {
+            void addControlKnowledgeFiles(files, "files");
+          }
+        }}
+      />
       <AppWorkspaceNavigationPanel
         activeLibraryKind={
           appView === "library" ? (libraryPanel?.kind ?? null) : null

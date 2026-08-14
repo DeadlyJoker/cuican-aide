@@ -21,6 +21,7 @@ export function useAppComposerState() {
     intent: Exclude<CommandExecutionIntent, "none">;
     sequence: number;
   } | null>(null);
+  const conversationContextFileInputRef = useRef<HTMLInputElement>(null);
   const officeAttachmentConsumerRef = useRef<((path: string) => void) | null>(
     null,
   );
@@ -29,6 +30,7 @@ export function useAppComposerState() {
     committedExecutionIntent,
     composerFocusSignal,
     composerValue,
+    conversationContextFileInputRef,
     isSending,
     officeAttachmentConsumerRef,
     pendingComposerMentions,
