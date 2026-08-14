@@ -16,9 +16,14 @@ import { activateStandaloneRuntimeAgentVersionRelease } from "../apps/runtime-wo
 import { loadAgentVersionRuntimeFactory } from "../apps/runtime-worker/src/runtime-binding-config.ts";
 
 const repo = resolve(import.meta.dirname, "..");
-const appBinary = join(repo, "apps/crewon-ui/src-tauri/target/release/bundle/macos/Crewon.app/Contents/MacOS/crewon-ui");
+const smokeMode = process.env.CREWON_PACKAGED_SMOKE_MODE === "launch" ? "launch" : "workflow";
+const appBinary = process.env.CREWON_PACKAGED_APP_BINARY?.trim() ||
+  join(repo, "apps/crewon-ui/src-tauri/target/release/bundle/macos/Crewon.app/Contents/MacOS/crewon-ui");
 const home = mkdtempSync(join(tmpdir(), "crewon-slice7-app-"));
-const runtimeRoot = join(home, "Library/Application Support/ai.crewon.desktop/control-runtime-v0");
+const localData = process.platform === "win32"
+  ? join(home, "AppData", "Local")
+  : join(home, "Library", "Application Support");
+const runtimeRoot = join(localData, "ai.crewon.desktop", "control-runtime-v0");
 const databasePath = join(runtimeRoot, "control.sqlite");
 const bindingsPath = join(home, "runtime-bindings.json");
 const samples: Array<{ body: string }> = [];
@@ -96,17 +101,27 @@ writeFileSync(join(runtimeRoot, "provider-credentials.v1.json"), JSON.stringify(
     credentialKind: "none", environmentVariable: null } },
 }), { mode: 0o600 });
 
-const appEnvironment = { PATH: process.env.PATH!, TMPDIR: process.env.TMPDIR!,
+const appEnvironment = { ...process.env, HOME: home, USERPROFILE: home,
+  LOCALAPPDATA: localData, APPDATA: join(home, "AppData", "Roaming"),
   LANG: process.env.LANG ?? "en_US.UTF-8", USER: process.env.USER ?? "slice7",
-  LOGNAME: process.env.LOGNAME ?? "slice7", HOME: home, CREWON_MODEL_ADAPTER: "responses",
+  LOGNAME: process.env.LOGNAME ?? "slice7", CREWON_MODEL_ADAPTER: "responses",
   CREWON_MODEL_ID: "slice7-model", CREWON_AGENT_VERSION_ID: "workflow-agent",
   CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH: bindingsPath,
   CREWON_RESPONSES_STORE: "true",
   CREWON_WORKER_SCAN_INTERVAL_MS: "5000" };
 let app = startApp();
 try {
-  const authority = await waitForControlAuthority();
-  await waitFor(() => portOpen(3210) || null);
+  if (smokeMode === "launch") {
+    await waitFor(() => portOpen(3210) || null);
+    assert.equal(portOpen(6176), false);
+    app.kill("SIGKILL");
+    await waitForExit(app);
+    await waitFor(() => (!portOpen(3210) && !portOpen(6176)) || null);
+    console.log(JSON.stringify({ home, launch: true, guardianCleanup: true,
+      controlPort: 3210, removedAppServerPortClosed: true }));
+  } else {
+    const authority = await waitForControlAuthority();
+    await waitFor(() => portOpen(3210) || null);
   const client = controlClient(authority);
   const thread = await post(authority, "/api/v1/threads", "slice7-thread", { title: "Slice 7" });
   await post(authority, "/api/v1/workflow-versions", "slice7-workflow-publish", workflow());
@@ -164,10 +179,13 @@ try {
     workflowAdmission: workflowAdmissionEvidence(runId), clientEventTypes,
     sampleBodyDigests: samples.map((sample) => digester.sha256(sample.body)),
     guardianCleanup: true, uniqueTerminalEvent: true }));
+  }
 } finally {
   app.kill("SIGKILL");
   await Promise.allSettled([waitForExit(app),
-    waitFor(() => managedPids().length === 0 && !portOpen(3210))]);
+    waitFor(() => (smokeMode === "launch"
+      ? !portOpen(3210) && !portOpen(6176)
+      : managedPids().length === 0 && !portOpen(3210)) || null)]);
   provider.close();
 }
 
@@ -257,7 +275,11 @@ function waitForExit(child: ChildProcess) {
 }
 
 function portOpen(port: number) {
-  try { execFileSync("nc", ["-z", "127.0.0.1", String(port)]); return true; } catch { return false; }
+  const probe = "const net=require('node:net');const socket=net.createConnection({host:'127.0.0.1',port:Number(process.argv[1])},()=>{socket.destroy();process.exit(0)});socket.setTimeout(250,()=>{socket.destroy();process.exit(1)});socket.on('error',()=>process.exit(1));";
+  try {
+    execFileSync(process.execPath, ["-e", probe, String(port)], { timeout: 1_000 });
+    return true;
+  } catch { return false; }
 }
 
 function attemptCount(runId: string) {
