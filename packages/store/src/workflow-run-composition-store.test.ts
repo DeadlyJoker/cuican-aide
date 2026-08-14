@@ -762,6 +762,51 @@ test("SQLite composition prototype exposes only the current Store contract", () 
   }
 });
 
+test("SQLite reclaimed running node atomically hands off to reconciliation", async () => {
+  const database = new DatabaseSync(":memory:");
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  const store = new SqliteWorkflowRunCompositionStore(database, { digester, clock });
+  await seed(database, clock.nowEpochMilliseconds() + 60_000);
+  const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+    lease, binding, schedulerOperationId: "schedule-fanout-1", workflowInput: {
+      valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+  const work = scheduled.nodeWorkItems[0]!;
+  database.prepare(`UPDATE work_items SET status='leased',lease_owner_id='node-worker-1',
+    lease_id='node-lease-1',lease_epoch=1,lease_expires_at_ms=?,attempt_count=1
+    WHERE work_item_id=?`).run(clock.nowEpochMilliseconds() + 60_000, work.workItemId);
+  const admitted = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+    lease: { workItemId: work.workItemId, ownerId: "node-worker-1",
+      leaseId: "node-lease-1", leaseEpoch: 1 }, binding, nodeId: work.nodeId,
+    claimId: work.claimId, claimEpoch: work.claimEpoch,
+    schedulerOperationId: "schedule-fanout-1", admissionOperationId: "node-admit-first",
+    attemptLeaseDurationMs: 60_000 });
+  assert.equal(admitted.disposition, "fresh");
+  database.prepare(`UPDATE work_items SET lease_owner_id='node-worker-2',
+    lease_id='node-lease-2',lease_epoch=2,lease_expires_at_ms=?,attempt_count=2
+    WHERE work_item_id=?`).run(clock.nowEpochMilliseconds() + 60_000, work.workItemId);
+  const recovery = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+    lease: { workItemId: work.workItemId, ownerId: "node-worker-2",
+      leaseId: "node-lease-2", leaseEpoch: 2 }, binding, nodeId: work.nodeId,
+    claimId: work.claimId, claimEpoch: work.claimEpoch,
+    schedulerOperationId: "schedule-fanout-1", admissionOperationId: "node-admit-reclaimed",
+    attemptLeaseDurationMs: 60_000 });
+  assert.equal(recovery.disposition, "reconcileRequired");
+  assert.equal(recovery.execution.nodes[0]?.status, "unknown");
+  assert.deepEqual(recovery.handoff, { currentWorkItem: "completed",
+    nextWorkItemId: recovery.handoff.nextWorkItemId, kind: "reconcile" });
+  assert.deepEqual(database.prepare(`SELECT
+    json_extract(work_item_json,'$.payload.trigger') trigger,status,lease_epoch leaseEpoch
+    FROM work_items WHERE work_item_id IN (?,?) ORDER BY trigger`).all(
+      work.workItemId, recovery.handoff.nextWorkItemId).map((row) => ({ ...row })), [
+        { trigger: "workflowNode", status: "completed", leaseEpoch: 2 },
+        { trigger: "workflowReconcile", status: "pending", leaseEpoch: 0 },
+      ]);
+  assert.deepEqual({ ...database.prepare(`SELECT status,lease_epoch leaseEpoch
+    FROM run_attempts WHERE attempt_id=?`).get(admitted.admission!.attempt.attemptId) },
+    { status: "running", leaseEpoch: 1 });
+  database.close();
+});
+
 test("SQLite fanout atomically queues agent work and publishes a sibling gate", async () => {
   const database = new DatabaseSync(":memory:");
   const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
@@ -1042,6 +1087,58 @@ if (postgresUrl === undefined) {
           "result_json",
         ],
       );
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await store.close();
+    }
+  });
+
+  test("PostgreSQL reclaimed running node atomically hands off to reconciliation", async () => {
+    const schema = `workflow_reclaim_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    const store = await PostgresWorkflowRunCompositionStore.open({ pool, schema, digester });
+    try {
+      await seedPostgresComposition(pool, schema);
+      const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+        lease, binding, schedulerOperationId: "schedule-fanout-1", workflowInput: {
+          valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+      const work = scheduled.nodeWorkItems[0]!;
+      await pool.query(`UPDATE ${schema}.work_items SET status='leased',
+        lease_owner_id='node-worker-1',lease_id='node-lease-1',lease_epoch=1,
+        lease_expires_at=clock_timestamp()+interval '1 minute',attempt_count=1
+        WHERE work_item_id=$1`, [work.workItemId]);
+      const admitted = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+        lease: { workItemId: work.workItemId, ownerId: "node-worker-1",
+          leaseId: "node-lease-1", leaseEpoch: 1 }, binding, nodeId: work.nodeId,
+        claimId: work.claimId, claimEpoch: work.claimEpoch,
+        schedulerOperationId: "schedule-fanout-1", admissionOperationId: "node-admit-first",
+        attemptLeaseDurationMs: 60_000 });
+      assert.equal(admitted.disposition, "fresh");
+      await pool.query(`UPDATE ${schema}.work_items SET lease_owner_id='node-worker-2',
+        lease_id='node-lease-2',lease_epoch=2,
+        lease_expires_at=clock_timestamp()+interval '1 minute',attempt_count=2
+        WHERE work_item_id=$1`, [work.workItemId]);
+      const recovery = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+        lease: { workItemId: work.workItemId, ownerId: "node-worker-2",
+          leaseId: "node-lease-2", leaseEpoch: 2 }, binding, nodeId: work.nodeId,
+        claimId: work.claimId, claimEpoch: work.claimEpoch,
+        schedulerOperationId: "schedule-fanout-1", admissionOperationId: "node-admit-reclaimed",
+        attemptLeaseDurationMs: 60_000 });
+      assert.equal(recovery.disposition, "reconcileRequired");
+      assert.equal(recovery.execution.nodes[0]?.status, "unknown");
+      const workItems = await pool.query<{ trigger: string; status: string;
+        lease_epoch: number }>(`SELECT work_item_json->'payload'->>'trigger' trigger,
+          status,lease_epoch::int lease_epoch FROM ${schema}.work_items
+          WHERE work_item_id IN ($1,$2) ORDER BY trigger`,
+        [work.workItemId, recovery.handoff.nextWorkItemId]);
+      assert.deepEqual(workItems.rows, [
+        { trigger: "workflowNode", status: "completed", lease_epoch: 2 },
+        { trigger: "workflowReconcile", status: "pending", lease_epoch: 0 },
+      ]);
+      const attempt = await pool.query<{ status: string; lease_epoch: number }>(
+        `SELECT status,lease_epoch::int lease_epoch FROM ${schema}.run_attempts
+         WHERE attempt_id=$1`, [admitted.admission!.attempt.attemptId]);
+      assert.deepEqual(attempt.rows, [{ status: "running", lease_epoch: 1 }]);
     } finally {
       await pool.query(`DROP SCHEMA ${schema} CASCADE`);
       await store.close();

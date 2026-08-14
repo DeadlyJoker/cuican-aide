@@ -1295,13 +1295,64 @@ export class SqliteWorkflowRunCompositionStore
         node === undefined ||
         definition === undefined ||
         definition.kind === "humanGate" ||
-        node.status !== "queued" ||
         node.claimId !== input.claimId ||
         node.claimEpoch !== input.claimEpoch ||
         node.claimOperationId !== input.schedulerOperationId
       )
         throw new RunStoreError("workflow_composition_claim_mismatch");
       this.#assertNodeWorkPayload(input);
+      if (node.status === "running") {
+        const step = loadSqliteRunStep(this.#database, {
+          tenantId: input.tenantId,
+          runId: input.runId,
+          stepId: input.nodeId,
+        });
+        const attempt = step?.currentAttemptId === null || step === null ? null
+          : loadSqliteRunAttempt(this.#database, { tenantId: input.tenantId,
+              runId: input.runId, stepId: input.nodeId,
+              attemptId: step.currentAttemptId });
+        if (attempt?.status !== "running" ||
+            attempt.workItemId !== input.lease.workItemId ||
+            attempt.leaseEpoch >= input.lease.leaseEpoch)
+          throw new RunStoreError("workflow_composition_claim_mismatch");
+        const reconciliationClaim = { node: definition, claimId: input.claimId,
+          claimEpoch: input.claimEpoch, gateRequestId: null,
+          inputDigest: node.inputDigest! };
+        const reconciliationOperationId = workflowAuthorityId("reconcile", {
+          tenantId: input.tenantId, runId: input.runId, binding: input.binding,
+          schedulerOperationId: input.schedulerOperationId, nodeId: input.nodeId,
+          claimId: input.claimId, claimEpoch: input.claimEpoch,
+        }, this.#digester);
+        const reconciliationWorkItemId = workflowAuthorityId("reconcile", {
+          tenantId: input.tenantId, runId: input.runId, binding: input.binding,
+          operationId: reconciliationOperationId, nodeId: input.nodeId,
+          claimId: input.claimId, claimEpoch: input.claimEpoch,
+        }, this.#digester);
+        const next = { ...execution, revision: execution.revision + 1,
+          nodes: execution.nodes.map((candidate) => candidate.nodeId === input.nodeId
+            ? { ...candidate, status: "unknown" as const, leaseExpiresAt: null }
+            : candidate), updatedAt: now };
+        this.#writeExecution(next, now);
+        this.#insertWorkflowWorkItem(reconciliationWorkItemId, input, {
+          schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+          trigger: "workflowReconcile", binding: input.binding,
+          nodeId: input.nodeId, claimId: input.claimId,
+          claimEpoch: input.claimEpoch, reconciliationOperationId,
+        }, now, nowMs);
+        const result = { disposition: "reconcileRequired" as const,
+          execution: next, admission: null, reconciliationClaim,
+          handoff: { currentWorkItem: "completed" as const,
+            nextWorkItemId: reconciliationWorkItemId,
+            kind: "reconcile" as const } };
+        this.#insertReceipt(
+          { ...input, operationId: input.admissionOperationId },
+          "admitNode", fingerprint, result);
+        this.#completeLease(input, nowMs);
+        this.#database.exec("COMMIT");
+        return structuredClone(result);
+      }
+      if (node.status !== "queued")
+        throw new RunStoreError("workflow_composition_claim_mismatch");
       const attemptIdValue = workflowAuthorityId(
         "attempt",
         {

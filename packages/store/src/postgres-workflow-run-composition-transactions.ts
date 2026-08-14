@@ -399,13 +399,55 @@ export async function admitPostgresWorkflowNodeWork(
     node === undefined ||
     definition === undefined ||
     definition.kind === "humanGate" ||
-    node.status !== "queued" ||
     node.claimId !== input.claimId ||
     node.claimEpoch !== input.claimEpoch ||
     node.claimOperationId !== input.schedulerOperationId
   )
     throw new RunStoreError("workflow_composition_claim_mismatch");
   await assertNodePayload(client, schema, input);
+  if (node.status === "running") {
+    const step = await loadPostgresRunStep(client, schema, {
+      tenantId: input.tenantId, runId: input.runId, stepId: input.nodeId,
+    }, true);
+    const attempt = step?.currentAttemptId === null || step === null ? null
+      : await loadPostgresRunAttempt(client, schema, {
+          tenantId: input.tenantId, runId: input.runId, stepId: input.nodeId,
+          attemptId: step.currentAttemptId,
+        }, true);
+    if (attempt?.status !== "running" ||
+        attempt.workItemId !== input.lease.workItemId ||
+        attempt.leaseEpoch >= input.lease.leaseEpoch)
+      throw new RunStoreError("workflow_composition_claim_mismatch");
+    const reconciliationClaim = { node: definition, claimId: input.claimId,
+      claimEpoch: input.claimEpoch, gateRequestId: null,
+      inputDigest: node.inputDigest! };
+    const reconciliationOperation = reconciliationOperationId(
+      input, reconciliationClaim, digester);
+    const reconciliationWorkItem = reconciliationWorkItemId(
+      input, reconciliationClaim, digester);
+    const next = { ...execution, revision: execution.revision + 1,
+      nodes: execution.nodes.map((candidate) => candidate.nodeId === input.nodeId
+        ? { ...candidate, status: "unknown" as const, leaseExpiresAt: null }
+        : candidate), updatedAt: now };
+    await writePostgresWorkflowExecution(client, schema, next, now);
+    await insertPostgresWorkflowWorkItem(client, schema, reconciliationWorkItem,
+      input, { schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+        trigger: "workflowReconcile", binding: input.binding,
+        nodeId: input.nodeId, claimId: input.claimId,
+        claimEpoch: input.claimEpoch,
+        reconciliationOperationId: reconciliationOperation }, now);
+    const result = { disposition: "reconcileRequired" as const,
+      execution: next, admission: null, reconciliationClaim,
+      handoff: { currentWorkItem: "completed" as const,
+        nextWorkItemId: reconciliationWorkItem,
+        kind: "reconcile" as const } };
+    await insertPostgresWorkflowReceipt(client, schema, receiptInput,
+      "admitNode", fingerprint, result);
+    await completePostgresWorkflowLease(client, schema, input, now);
+    return structuredClone(result);
+  }
+  if (node.status !== "queued")
+    throw new RunStoreError("workflow_composition_claim_mismatch");
   const attemptId = workflowAuthorityId(
     "attempt",
     {
@@ -631,9 +673,8 @@ export function postgresWorkflowFingerprint(
 type ScheduleResult = Awaited<
   ReturnType<WorkflowRunCompositionStore["scheduleWorkflowNodes"]>
 >;
-type FreshAdmission = Extract<
-  Awaited<ReturnType<WorkflowRunCompositionStore["admitWorkflowNodeWork"]>>,
-  { disposition: "fresh" }
+type AdmissionResult = Awaited<
+  ReturnType<WorkflowRunCompositionStore["admitWorkflowNodeWork"]>
 >;
 
 async function validateScheduleReplay(
@@ -802,8 +843,8 @@ async function validateAdmissionReplay(
   input: AdmitInput,
   stored: unknown,
   digester: WorkflowContentDigester,
-): Promise<FreshAdmission> {
-  const result = stored as FreshAdmission;
+): Promise<AdmissionResult> {
+  const result = stored as AdmissionResult;
   const workflow = await loadPostgresWorkflowAuthorities(
     client,
     schema,
@@ -833,6 +874,29 @@ async function validateAdmissionReplay(
     workflow,
   );
   if (current.revision < result.execution.revision) replayCorrupt();
+  if (result.disposition === "reconcileRequired") {
+    const claim = result.reconciliationClaim;
+    const expectedWorkItemId = reconciliationWorkItemId(input, claim, digester);
+    const work = await client.query<{ status: string;
+      work_item_json: { payload?: unknown } }>(
+        `SELECT status,work_item_json FROM ${schema}.work_items WHERE work_item_id=$1`,
+        [expectedWorkItemId]);
+    if (result.admission !== null || claim.node.nodeId !== input.nodeId ||
+        claim.claimId !== input.claimId || claim.claimEpoch !== input.claimEpoch ||
+        result.handoff.currentWorkItem !== "completed" ||
+        result.handoff.nextWorkItemId !== expectedWorkItemId ||
+        result.handoff.kind !== "reconcile" || work.rows[0] === undefined ||
+        !["pending", "leased", "completed"].includes(work.rows[0].status) ||
+        stableJson(work.rows[0].work_item_json.payload) !== stableJson({
+          schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+          trigger: "workflowReconcile", binding: input.binding,
+          nodeId: input.nodeId, claimId: input.claimId,
+          claimEpoch: input.claimEpoch,
+          reconciliationOperationId: reconciliationOperationId(input, claim, digester),
+        }))
+      replayCorrupt();
+    return structuredClone(result);
+  }
   const admission = result.admission;
   if (
     result.disposition !== "fresh" ||
@@ -894,7 +958,7 @@ async function validateAdmissionReplay(
 }
 
 function reconciliationWorkItemId(
-  input: ScheduleInput,
+  input: ReconciliationIdentityInput,
   claim: import("@crewon/application").WorkflowNodeClaim,
   digester: WorkflowContentDigester,
 ): string {
@@ -914,7 +978,7 @@ function reconciliationWorkItemId(
 }
 
 function reconciliationOperationId(
-  input: ScheduleInput,
+  input: ReconciliationIdentityInput,
   claim: import("@crewon/application").WorkflowNodeClaim,
   digester: WorkflowContentDigester,
 ): string {
@@ -932,6 +996,13 @@ function reconciliationOperationId(
     digester,
   );
 }
+
+type ReconciliationIdentityInput = Readonly<{
+  tenantId: string;
+  runId: string;
+  binding: ScheduleInput["binding"];
+  schedulerOperationId: string;
+}>;
 
 function replayCorrupt(): never {
   throw new RunStoreError("workflow_composition_receipt_corrupt");
