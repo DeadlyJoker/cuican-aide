@@ -20,3 +20,4 @@ RUN pnpm --filter @crewon/ui build
 FROM ${BASE_IMAGE}
 
 COPY --from=build /workspace/apps/crewon-ui/dist/ /usr/share/nginx/html/
+COPY deploy/crewon/nginx.conf /etc/nginx/conf.d/default.conf

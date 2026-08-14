@@ -330,7 +330,11 @@ test("production nginx routes the same-origin boundary to the BFF, not Vite", as
     new URL("../../../deploy/crewon/nginx.conf", import.meta.url),
     "utf8",
   );
-  const dockerfile = await readFile(
+  const webDockerfile = await readFile(
+    new URL("../../../deploy/crewon/web.Dockerfile", import.meta.url),
+    "utf8",
+  );
+  const bffDockerfile = await readFile(
     new URL("../../../deploy/crewon/web-bff.Dockerfile", import.meta.url),
     "utf8",
   );
@@ -341,9 +345,16 @@ test("production nginx routes the same-origin boundary to the BFF, not Vite", as
   assert.match(nginx, /proxy_set_header Authorization "";/u);
   assert.match(nginx, /proxy_set_header X-CrewON-BFF-Authorization "";/u);
   assert.match(nginx, /proxy_buffering off;/u);
-  assert.doesNotMatch(nginx, /app-server|6176/iu);
-  assert.doesNotMatch(dockerfile, /vite|CREWON_CONTROL_SESSION_TOKEN/iu);
-  assert.match(dockerfile, /src\/main\.ts/u);
+  assert.doesNotMatch(
+    nginx,
+    /app-server|6176|agent-platform-api|127\.0\.0\.1:8000/iu,
+  );
+  assert.match(
+    webDockerfile,
+    /COPY deploy\/crewon\/nginx\.conf \/etc\/nginx\/conf\.d\/default\.conf/u,
+  );
+  assert.doesNotMatch(bffDockerfile, /vite|CREWON_CONTROL_SESSION_TOKEN/iu);
+  assert.match(bffDockerfile, /src\/main\.ts/u);
 });
 
 test("production cutover gate accepts only the request-scoped Control composition", async () => {
