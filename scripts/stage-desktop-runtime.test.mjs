@@ -23,6 +23,10 @@ test("rejects removed runtime compatibility markers", () => {
     assertNoRemovedRuntimeMarkers("standard Responses runtime"),
   );
   for (const marker of [
+    "CREWON_MODEL_ADAPTER",
+    "CREWON_FAKE_",
+    "DeterministicFakeModelTransport",
+    "deterministic-fake",
     "CREWON_DEVICE_TOOL_CONFIG_PATH",
     "crewon.device-tool-runtime.v0",
     "deviceToolConfigPath",

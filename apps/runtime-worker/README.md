@@ -132,9 +132,6 @@ one oldest history item and immediately retries within that same durable Compact
 remains the final item on every request. A context-window failure with no removable history fails closed; no partial summary or
 compaction Authority is committed.
 
-`CREWON_MODEL_ADAPTER=deterministic-fake` remains available only as deterministic correctness infrastructure. It requires
-`CREWON_FAKE_EXPECTED_USER_MESSAGE` and `CREWON_FAKE_RESPONSE`.
-
 `CREWON_RESPONSES_STREAM_MAX_RETRIES` defaults to `5`, matching the Rust runtime's default. An early close or retryable
 transport failure is retried inside the same Agent segment and durable Attempt. Each retry emits a bounded
 `model.sampling.retry` progress event. If a failed sample already emitted text, `discardedOutput: true` resets the replay

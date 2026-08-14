@@ -122,10 +122,7 @@ const initialized = await (async () => {
           remoteMcpOwner?.dependencies,
         )
       : undefined;
-    transport = createModelTransport(
-      environmentOr("CREWON_MODEL_ADAPTER", "responses"),
-      { apiKey: nativeBootstrap?.apiKey },
-    );
+    transport = createModelTransport({ apiKey: nativeBootstrap?.apiKey });
     toolRuntime = await createConfiguredToolRuntime();
     artifactAuthority = createConfiguredArtifactAuthority();
     return {

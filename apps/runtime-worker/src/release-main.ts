@@ -26,9 +26,7 @@ const bindingsPath =
 const configuredDeployments = bindingsPath
   ? loadAgentVersionDeployments(bindingsPath)
   : undefined;
-const transport = createModelTransport(
-  environmentOr("CREWON_MODEL_ADAPTER", "responses"),
-);
+const transport = createModelTransport();
 const toolRuntime = await createConfiguredToolRuntime();
 
 try {

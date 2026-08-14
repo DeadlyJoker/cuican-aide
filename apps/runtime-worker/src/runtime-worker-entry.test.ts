@@ -31,9 +31,8 @@ test("packaged entry starts the Workspace listener and emits only non-secret rea
     env: {
       ...process.env,
       CREWON_CONTROL_DB_PATH: databasePath,
-      CREWON_MODEL_ADAPTER: "deterministic-fake",
-      CREWON_FAKE_EXPECTED_USER_MESSAGE: "unused",
-      CREWON_FAKE_RESPONSE: "unused",
+      CREWON_MODEL_ID: "fake-model",
+      CREWON_RESPONSES_ENDPOINT: "https://provider.example/v1/responses",
       CREWON_AUTHORITY_ID: config.route.authorityId,
       CREWON_AGENT_VERSION_ID: config.route.agentVersionId,
       CREWON_NATIVE_WORKSPACE_READ_ENABLED: "1",
@@ -160,7 +159,7 @@ test("packaged entry redacts credentials when startup fails after composition", 
       ...process.env,
       CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH: bindingsPath,
       CREWON_AGENT_VERSION_ID: "agent-version-1",
-      CREWON_MODEL_ADAPTER: "invalid-after-native-owner",
+      CREWON_MODEL_ID: "x".repeat(513),
       CREWON_NATIVE_WORKSPACE_READ_ENABLED: "1",
     },
     stdio: ["pipe", "pipe", "pipe"],
@@ -173,7 +172,7 @@ test("packaged entry redacts credentials when startup fails after composition", 
     `${output.stdout}\n${output.stderr}`,
     new RegExp(secret, "u"),
   );
-  assert.match(output.stderr, /CREWON_MODEL_ADAPTER_unsupported/u);
+  assert.match(output.stderr, /responses_model_invalid/u);
 });
 
 function runtimeBindings(remoteMcpConfigPath: string) {
@@ -394,7 +393,7 @@ function packagedConfig(): RuntimeWorkerCompositionConfig {
 
 function deterministicTransport(): ModelTransportPort {
   return {
-    adapterName: "deterministic-fake",
+    adapterName: "direct-responses",
     adapterVersion: "1",
     modelId: "fake-model",
     async *stream() {

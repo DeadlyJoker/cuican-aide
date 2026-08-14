@@ -1,9 +1,6 @@
 import { readFileSync, statSync } from "node:fs";
 
-import {
-  DeterministicFakeModelTransport,
-  type ModelTransportPort,
-} from "@crewon/agent-kernel";
+import type { ModelTransportPort } from "@crewon/agent-kernel";
 import {
   DirectResponsesTransport,
   ResilientResponsesTransport,
@@ -32,87 +29,46 @@ export function environmentOr(name: string, fallback: string): string {
 }
 
 export function createModelTransport(
-  adapter: string,
   native: { apiKey?: string | null } = {},
 ): ModelTransportPort {
-  if (adapter === "responses") {
-    const config: DirectResponsesTransportConfig = {
-      endpoint: environmentOr(
-        "CREWON_RESPONSES_ENDPOINT",
-        "https://api.openai.com/v1/responses",
+  const config: DirectResponsesTransportConfig = {
+    endpoint: environmentOr(
+      "CREWON_RESPONSES_ENDPOINT",
+      "https://api.openai.com/v1/responses",
+    ),
+    apiKey: native.apiKey ?? (process.env.CREWON_MODEL_API_KEY?.trim() || null),
+    model: requiredEnvironment("CREWON_MODEL_ID"),
+    storeResponses: parseBoolean(
+      process.env.CREWON_RESPONSES_STORE ?? "false",
+      "CREWON_RESPONSES_STORE_invalid",
+    ),
+    idleTimeoutMs: parsePositiveInteger(
+      process.env.CREWON_RESPONSES_IDLE_TIMEOUT_MS ?? "60000",
+      "CREWON_RESPONSES_IDLE_TIMEOUT_MS_invalid",
+    ),
+    sequencePolicy: parseSequencePolicy(
+      process.env.CREWON_RESPONSES_SEQUENCE_POLICY ?? "required",
+    ),
+  };
+  if (
+    parseBoolean(
+      process.env.CREWON_RESPONSES_WEBSOCKET_ENABLED ?? "false",
+      "CREWON_RESPONSES_WEBSOCKET_ENABLED_invalid",
+    )
+  ) {
+    return new ResilientResponsesTransport({
+      ...config,
+      connectTimeoutMs: parsePositiveInteger(
+        process.env.CREWON_RESPONSES_WEBSOCKET_CONNECT_TIMEOUT_MS ?? "10000",
+        "CREWON_RESPONSES_WEBSOCKET_CONNECT_TIMEOUT_MS_invalid",
       ),
-      apiKey:
-        native.apiKey ?? (process.env.CREWON_MODEL_API_KEY?.trim() || null),
-      model: requiredEnvironment("CREWON_MODEL_ID"),
-      storeResponses: parseBoolean(
-        process.env.CREWON_RESPONSES_STORE ?? "false",
-        "CREWON_RESPONSES_STORE_invalid",
+      websocketMaxRetries: parseNonNegativeInteger(
+        process.env.CREWON_RESPONSES_WEBSOCKET_MAX_RETRIES ?? "2",
+        "CREWON_RESPONSES_WEBSOCKET_MAX_RETRIES_invalid",
       ),
-      idleTimeoutMs: parsePositiveInteger(
-        process.env.CREWON_RESPONSES_IDLE_TIMEOUT_MS ?? "60000",
-        "CREWON_RESPONSES_IDLE_TIMEOUT_MS_invalid",
-      ),
-      sequencePolicy: parseSequencePolicy(
-        process.env.CREWON_RESPONSES_SEQUENCE_POLICY ?? "required",
-      ),
-    };
-    if (
-      parseBoolean(
-        process.env.CREWON_RESPONSES_WEBSOCKET_ENABLED ?? "false",
-        "CREWON_RESPONSES_WEBSOCKET_ENABLED_invalid",
-      )
-    ) {
-      return new ResilientResponsesTransport({
-        ...config,
-        connectTimeoutMs: parsePositiveInteger(
-          process.env.CREWON_RESPONSES_WEBSOCKET_CONNECT_TIMEOUT_MS ?? "10000",
-          "CREWON_RESPONSES_WEBSOCKET_CONNECT_TIMEOUT_MS_invalid",
-        ),
-        websocketMaxRetries: parseNonNegativeInteger(
-          process.env.CREWON_RESPONSES_WEBSOCKET_MAX_RETRIES ?? "2",
-          "CREWON_RESPONSES_WEBSOCKET_MAX_RETRIES_invalid",
-        ),
-      });
-    }
-    return new DirectResponsesTransport(config);
-  }
-  if (adapter === "deterministic-fake") {
-    const inputTokens = parseNonNegativeInteger(
-      process.env.CREWON_FAKE_INPUT_TOKENS ?? "1",
-      "CREWON_FAKE_INPUT_TOKENS_invalid",
-    );
-    const cachedInputTokens = parseNonNegativeInteger(
-      process.env.CREWON_FAKE_CACHED_INPUT_TOKENS ?? "0",
-      "CREWON_FAKE_CACHED_INPUT_TOKENS_invalid",
-    );
-    if (cachedInputTokens > inputTokens) {
-      throw new Error("CREWON_FAKE_CACHED_INPUT_TOKENS_invalid");
-    }
-    const outputTokens = parseNonNegativeInteger(
-      process.env.CREWON_FAKE_OUTPUT_TOKENS ?? "1",
-      "CREWON_FAKE_OUTPUT_TOKENS_invalid",
-    );
-    return new DeterministicFakeModelTransport({
-      expectedLastUserMessage: requiredEnvironment(
-        "CREWON_FAKE_EXPECTED_USER_MESSAGE",
-      ),
-      events: [
-        {
-          type: "output.delta",
-          delta: requiredEnvironment("CREWON_FAKE_RESPONSE"),
-        },
-        {
-          type: "usage",
-          inputTokens,
-          cachedInputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
-        },
-        { type: "completed", checkpoint: null },
-      ],
     });
   }
-  throw new Error("CREWON_MODEL_ADAPTER_unsupported");
+  return new DirectResponsesTransport(config);
 }
 
 export async function createConfiguredToolRuntime(): Promise<

@@ -104,7 +104,7 @@ writeFileSync(join(runtimeRoot, "provider-credentials.v1.json"), JSON.stringify(
 const appEnvironment = { ...process.env, HOME: home, USERPROFILE: home,
   LOCALAPPDATA: localData, APPDATA: join(home, "AppData", "Roaming"),
   LANG: process.env.LANG ?? "en_US.UTF-8", USER: process.env.USER ?? "slice7",
-  LOGNAME: process.env.LOGNAME ?? "slice7", CREWON_MODEL_ADAPTER: "responses",
+  LOGNAME: process.env.LOGNAME ?? "slice7",
   CREWON_MODEL_ID: "slice7-model", CREWON_AGENT_VERSION_ID: "workflow-agent",
   CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH: bindingsPath,
   CREWON_RESPONSES_STORE: "true",
