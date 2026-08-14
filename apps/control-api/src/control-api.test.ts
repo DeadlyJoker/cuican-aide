@@ -49,6 +49,7 @@ import type {
   ListAgentVersionsResponse,
   ListActiveCapabilitiesResponse,
   ListAutomationsResponse,
+  ListOfficeDelegationsResponse,
   ListOfficesResponse,
   WorkflowVersionMutationResponse,
   GetWorkflowVersionResponse,
@@ -59,6 +60,7 @@ import type {
   ListThreadsResponse,
   RunMutationResponse,
   OfficeMutationResponse,
+  OfficeDelegationMutationResponse,
   RunAutomationNowResponse,
   StartTurnResponse,
   ThreadEventView,
@@ -469,16 +471,8 @@ test("serves an authenticated account snapshot without inventing telemetry", asy
   );
 });
 
-test("Office receipt replay is stable and selected target starts a canonical Run", async (context) => {
+test("Office definition receipt replay is stable", async (context) => {
   const runtime = await testRuntime(context);
-  const threadResponse = await runtime.app.inject({
-    method: "POST",
-    url: "/api/v1/threads",
-    headers: jsonMutationHeaders("office-thread"),
-    payload: { title: "Office run" },
-  });
-  const threadId =
-    threadResponse.json<ThreadMutationResponse>().thread.threadId;
   const create = () =>
     runtime.app.inject({
       method: "POST",
@@ -501,25 +495,6 @@ test("Office receipt replay is stable and selected target starts a canonical Run
   assert.deepEqual(
     replay.json<OfficeMutationResponse>().office,
     created.office,
-  );
-  const started = await runtime.app.inject({
-    method: "POST",
-    url: `/api/v1/offices/${created.office.officeVersionId}:runs`,
-    headers: jsonMutationHeaders("office-run"),
-    payload: { targetId: "primary", threadId },
-  });
-  assert.equal(started.statusCode, 201, started.body);
-  const run = started.json<RunMutationResponse>().run;
-  assert.equal(run.threadId, threadId);
-  assert.equal(run.purpose, "turn");
-  assert.equal(
-    (
-      await runtime.store.loadRun({
-        tenantId: created.office.tenantId,
-        runId: run.runId,
-      })
-    )?.agentVersionId,
-    "agent-version-1",
   );
 });
 
@@ -571,6 +546,118 @@ test("Office list follows the canonical cursor to a second page", async (context
     headers: readHeaders(),
   });
   assertError(legacyQueryResponse, 400, "validation", "unknown_field");
+});
+
+test("starts and lists only explicit Office Workflow delegations", async (context) => {
+  const binding = {
+    workflowId: "workflow-1",
+    workflowVersionId: "workflow-version-1",
+    contentDigest: `sha256:${"a".repeat(64)}`,
+  } as const;
+  const state = reduceRunLifecycleEvent(null, {
+    schemaVersion: "crewon.run-event.v0",
+    identity: { runId: "run-1" },
+    eventId: "event-1",
+    sequence: 1,
+    occurredAt: "2026-08-14T00:00:00.000Z",
+    type: "run.created",
+    data: {
+      threadId: "thread-1",
+      tenantId: "standalone-tenant",
+      spaceId: "standalone-space",
+      createdByActorId: "standalone-actor",
+      authorityId: "authority-1",
+      runtimeGeneration: "ts-v0",
+      agentVersionId: "agent-version-1",
+      policySnapshotId: "policy-1",
+      workspaceBindingId: null,
+      workflowVersionBinding: binding,
+      collaborationMode: "default",
+      goalBinding: null,
+      purpose: "workflow",
+    },
+  });
+  const delegation = {
+    schemaVersion: "crewon.office-delegation.v0" as const,
+    delegationId: "delegation-1",
+    tenantId: "standalone-tenant",
+    spaceId: "standalone-space",
+    officeId: "office-1",
+    officeVersionId: "office-version-1",
+    workflowVersionBinding: binding,
+    threadId: "thread-1",
+    runId: "run-1",
+    requestedByActorId: "standalone-actor",
+    createdAt: "2026-08-14T00:00:00.000Z",
+  };
+  const starts: unknown[] = [];
+  const lists: unknown[] = [];
+  const runtime = await testRuntime(context, {
+    officeDelegations: {
+      async start(actor, command) {
+        starts.push({ actor, command });
+        return {
+          disposition: "committed",
+          delegation,
+          run: {
+            disposition: "committed",
+            state,
+            events: [],
+            outbox: [],
+            workItems: [],
+          },
+        };
+      },
+      async list(actor, query) {
+        lists.push({ actor, query });
+        return {
+          items: [{ delegation, run: state }],
+          next: {
+            createdAt: delegation.createdAt,
+            delegationId: delegation.delegationId,
+          },
+        };
+      },
+    },
+  });
+
+  const started = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/offices/office-version-1:runs",
+    headers: jsonMutationHeaders("office-delegation-1"),
+    payload: {
+      workflowVersionId: "workflow-version-1",
+      threadId: "thread-1",
+      input: { topic: "release" },
+    },
+  });
+  assert.equal(started.statusCode, 201, started.body);
+  assert.deepEqual(started.json<OfficeDelegationMutationResponse>(), {
+    disposition: "committed",
+    delegation,
+    run: projectRun(state),
+  });
+  assert.equal(starts.length, 1);
+
+  const listed = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/offices/office-version-1/delegations?limit=25",
+    headers: readHeaders(),
+  });
+  assert.equal(listed.statusCode, 200, listed.body);
+  const page = listed.json<ListOfficeDelegationsResponse>();
+  assert.deepEqual(page.data, [{ delegation, run: projectRun(state) }]);
+  assert.notEqual(page.nextCursor, null);
+  assert.equal(lists.length, 1);
+
+  const legacy = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/offices/office-version-1:runs",
+    headers: jsonMutationHeaders("office-delegation-legacy"),
+    payload: { targetId: "target-1", threadId: "thread-1" },
+  });
+  assertError(legacy, 400, "validation", "workflow_run_fields_invalid");
+  assert.equal(starts.length, 1);
 });
 
 test("exposes a safe Provider snapshot and replays one bounded probe", async (context) => {
@@ -2988,6 +3075,7 @@ test("keeps internal Workflow node authority out of public Run event views", () 
 async function testRuntime(
   context: TestContext,
   options: Readonly<{
+    officeDelegations?: ControlApiDependencies["officeDelegations"];
     threadEventPoller?: ThreadEventPoller;
     threadGoalEventPoller?: ThreadGoalEventPoller;
     workspaceReadonly?: ControlApiDependencies["workspaceReadonly"];
@@ -3177,6 +3265,7 @@ async function testRuntime(
   const dependencies = {
     application,
     offices,
+    officeDelegations: options.officeDelegations ?? null,
     threads,
     goals,
     turns,

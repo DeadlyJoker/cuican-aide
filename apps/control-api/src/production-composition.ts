@@ -5,6 +5,7 @@ import {
   AutomationApplicationService,
   KnowledgeApplicationService,
   OfficeApplicationService,
+  OfficeDelegationApplicationService,
   RunApplicationService,
   ThreadApplicationService,
   ThreadGoalApplicationService,
@@ -164,6 +165,14 @@ async function composeProductionControlApi(
       digester,
       admission: new StoreBackedAgentVersionAdmission(store),
     });
+    const officeDelegations = new OfficeDelegationApplicationService({
+      store,
+      authorization: config.authorization,
+      clock,
+      ids,
+      digester,
+      routeResolver,
+    });
     const automations = new AutomationApplicationService({
       store,
       authorization: config.authorization,
@@ -221,6 +230,7 @@ async function composeProductionControlApi(
     const app = buildControlApi({
       application,
       offices,
+      officeDelegations,
       threads,
       goals,
       turns,

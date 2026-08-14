@@ -4,6 +4,7 @@ import {
   ArtifactApplicationService,
   AutomationApplicationService,
   OfficeApplicationService,
+  OfficeDelegationApplicationService,
   RunApplicationService,
   ThreadApplicationService,
   ThreadGoalApplicationService,
@@ -214,6 +215,14 @@ function composeControlApi(
       digester,
       admission: new StoreBackedAgentVersionAdmission(store),
     });
+    const officeDelegations = new OfficeDelegationApplicationService({
+      store,
+      authorization,
+      clock,
+      ids,
+      digester,
+      routeResolver,
+    });
     const automations = new AutomationApplicationService({
       store,
       authorization,
@@ -288,6 +297,7 @@ function composeControlApi(
       localSettings,
       application,
       offices,
+      officeDelegations,
       threads,
       goals,
       turns,

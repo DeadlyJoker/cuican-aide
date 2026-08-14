@@ -8,6 +8,7 @@ import type {
   ContentDigester,
   RunApplicationService,
   OfficeApplicationService,
+  OfficeDelegationApplicationService,
   ThreadApplicationService,
   ThreadCompactionApplicationService,
   ThreadGoalApplicationService,
@@ -47,10 +48,12 @@ import {
   parseArtifactId,
   parseAutomationId,
   parseCreateOfficeRequest,
-  parseStartOfficeRunRequest,
+  parseStartOfficeDelegationRequest,
   parseOfficeVersionId,
   parseOfficeListQuery,
   formatOfficeCursor,
+  parseOfficeDelegationListQuery,
+  formatOfficeDelegationCursor,
   parseAutomationListQuery,
   parseCancelRunRequest,
   parseCompactThreadRequest,
@@ -135,6 +138,8 @@ import {
   type OfficeMutationResponse,
   type GetOfficeResponse,
   type ListOfficesResponse,
+  type OfficeDelegationMutationResponse,
+  type ListOfficeDelegationsResponse,
 } from "@crewon/contracts/runtime";
 import Fastify, { type FastifyInstance } from "fastify";
 
@@ -228,6 +233,10 @@ export type ControlApiDependencies = Readonly<{
   }> | null;
   application: RunApplicationService;
   offices?: OfficeApplicationService | null;
+  officeDelegations?: Pick<
+    OfficeDelegationApplicationService,
+    "start" | "list"
+  > | null;
   threads: ThreadApplicationService;
   goals: ThreadGoalApplicationService;
   turns: TurnApplicationService;
@@ -1379,38 +1388,56 @@ export function buildControlApi(
   app.post<{ Params: { officeVersionId: string }; Body: unknown }>(
     "/api/v1/offices/:officeVersionId([^:]+)::runs",
     async (request, reply) => {
-      if (dependencies.offices == null)
+      if (dependencies.officeDelegations == null)
         throw new WorkspaceControlUnavailableError();
       const actor = await dependencies.identity.resolveActor(
         requestContext(request),
       );
-      const body = parseStartOfficeRunRequest(request.body);
-      const target = await dependencies.offices.authorizeRun(
-        actor,
-        parseOfficeVersionId(request.params.officeVersionId),
-        body.targetId,
-      );
-      const route = await dependencies.routeResolver.resolveRoute({
-        actor,
-        threadId: body.threadId,
-        agentVersionId: target.agentVersionId,
-      });
-      const result = await dependencies.application.createRun(actor, {
-        kind: "run.create",
+      const body = parseStartOfficeDelegationRequest(request.body);
+      const result = await dependencies.officeDelegations.start(actor, {
+        kind: "officeDelegation.start",
         idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
+        officeVersionId: parseOfficeVersionId(request.params.officeVersionId),
+        workflowVersionId: body.workflowVersionId,
         threadId: body.threadId,
-        route,
+        input: body.input as JsonValue,
       });
       wakeOutbox(dependencies.outboxWakeup);
-      const response: RunMutationResponse = {
+      const response: OfficeDelegationMutationResponse = {
         disposition: result.disposition,
-        run: projectRun(result.state),
+        delegation: result.delegation,
+        run: projectRun(result.run.state),
       };
       return reply
         .code(result.disposition === "committed" ? 201 : 200)
         .send(response);
     },
   );
+
+  app.get<{
+    Params: { officeVersionId: string };
+    Querystring: unknown;
+  }>("/api/v1/offices/:officeVersionId/delegations", async (request) => {
+    if (dependencies.officeDelegations == null)
+      throw new WorkspaceControlUnavailableError();
+    const actor = await dependencies.identity.resolveActor(
+      requestContext(request),
+    );
+    const query = parseOfficeDelegationListQuery(request.query);
+    const result = await dependencies.officeDelegations.list(actor, {
+      officeVersionId: parseOfficeVersionId(request.params.officeVersionId),
+      ...query,
+    });
+    const response: ListOfficeDelegationsResponse = {
+      data: result.items.map((item) => ({
+        delegation: item.delegation,
+        run: projectRun(item.run),
+      })),
+      nextCursor:
+        result.next === null ? null : formatOfficeDelegationCursor(result.next),
+    };
+    return response;
+  });
 
   app.post<{ Body: unknown }>(
     "/api/v1/workflow-runs",

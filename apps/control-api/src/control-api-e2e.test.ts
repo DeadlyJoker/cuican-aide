@@ -61,17 +61,34 @@ const digest = {
 };
 
 test("creates, replays, reads and paginates scoped Knowledge over Control HTTP", async (context) => {
-  const control = createStandaloneControlApi(config(temporaryDatabasePath(context)));
+  const control = createStandaloneControlApi(
+    config(temporaryDatabasePath(context)),
+  );
   context.after(() => closeIfListening(control.app));
   await control.app.listen({ host: "127.0.0.1", port: 0 });
-  const client = new ControlApiClient({ baseUrl: serverBaseUrl(control.app), accessToken: SESSION_TOKEN, csrfToken: CSRF_TOKEN, origin: ORIGIN });
-  const body = { kind: "memory" as const, sourceId: "capture-1", title: "Bounded memory", content: "Remember this." };
+  const client = new ControlApiClient({
+    baseUrl: serverBaseUrl(control.app),
+    accessToken: SESSION_TOKEN,
+    csrfToken: CSRF_TOKEN,
+    origin: ORIGIN,
+  });
+  const body = {
+    kind: "memory" as const,
+    sourceId: "capture-1",
+    title: "Bounded memory",
+    content: "Remember this.",
+  };
   const created = await client.createKnowledge(body, "knowledge-create-1");
   const replayed = await client.createKnowledge(body, "knowledge-create-1");
   assert.equal(created.disposition, "committed");
   assert.deepEqual(replayed, { ...created, disposition: "replayed" });
-  assert.deepEqual(await client.getKnowledge(created.knowledge.knowledgeId), { knowledge: created.knowledge });
-  assert.deepEqual(await client.listKnowledge({ limit: 1 }), { data: [created.knowledge], nextCursor: null });
+  assert.deepEqual(await client.getKnowledge(created.knowledge.knowledgeId), {
+    knowledge: created.knowledge,
+  });
+  assert.deepEqual(await client.listKnowledge({ limit: 1 }), {
+    data: [created.knowledge],
+    nextCursor: null,
+  });
 });
 
 test("routes Workflow admission through the canonical SQLite Store", async (context) => {
@@ -117,7 +134,7 @@ test("routes Workflow admission through the canonical SQLite Store", async (cont
 });
 
 for (const decision of ["approve", "reject"] as const)
-  test(`runs a SQLite Agent + Human Gate Workflow to ${decision} terminal over Control HTTP`, async (context) => {
+  test(`runs a SQLite Office-delegated Agent + Human Gate Workflow to ${decision} terminal over Control HTTP`, async (context) => {
     const databasePath = temporaryDatabasePath(context);
     await activateSqliteReleaseProcess(databasePath);
     const controlConfig = config(databasePath, new InMemoryArtifactStore());
@@ -165,14 +182,42 @@ for (const decision of ["approve", "reject"] as const)
       workflowGateSource(decision),
     );
     assert.equal(published.disposition, "registered");
-    const started = await client.startWorkflowRun(
+    const office = await client.createOffice(
+      {
+        expectedRevision: 0,
+        title: `Workflow ${decision} office`,
+        members: [
+          {
+            memberId: "agent",
+            displayName: "Agent",
+            agentVersionId: "agent-version-e2e-1",
+          },
+          {
+            memberId: "verifier",
+            displayName: "Verifier",
+            agentVersionId: verifier.agentVersionId,
+          },
+        ],
+        executionTargets: [
+          { targetId: "agent", agentVersionId: "agent-version-e2e-1" },
+        ],
+      },
+      `workflow-${decision}-office`,
+    );
+    const started = await client.startOfficeDelegation(
+      office.office.officeVersionId,
       {
         workflowVersionId: `workflow-gate-${decision}-v1`,
         threadId: thread.thread.threadId,
         input: {},
       },
-      `workflow-${decision}-start`,
+      `workflow-${decision}-office-start`,
     );
+    assert.equal(
+      started.delegation.officeVersionId,
+      office.office.officeVersionId,
+    );
+    assert.equal(started.delegation.runId, started.run.runId);
     assert.equal(started.run.purpose, "workflow");
     assert.equal(started.run.status, "queued");
 
