@@ -48,7 +48,6 @@ import type { StandaloneControlApiRuntime } from "./standalone-composition.ts";
 import {
   ControlProviderProbeService,
   TenantRoutedProviderProbeWorker,
-  UnavailableTenantProviderProbeWorkerRegistry,
   type TenantProviderProbeWorkerRegistry,
 } from "./provider-probe-worker-client.ts";
 
@@ -64,7 +63,7 @@ export type ProductionPostgresControlApiConfig = Readonly<{
   automationSchedulerIntervalMs?: number | null;
   artifactStore: ArtifactStorePort;
   artifactEncryptionKeyId: string;
-  providerProbeWorkers?: TenantProviderProbeWorkerRegistry;
+  providerProbeWorkers: TenantProviderProbeWorkerRegistry;
 }>;
 
 /**
@@ -238,13 +237,7 @@ async function composeProductionControlApi(
     });
     const providerProbes = new ControlProviderProbeService({
       settings: providerSettings,
-      workers: new TenantRoutedProviderProbeWorker(
-        // The tenant registry remains a private vertical foundation. Public
-        // Team probing stays unavailable until the production coordinator,
-        // approved tenant egress policy, and authenticated Worker transport
-        // are deployed as one authority boundary.
-        new UnavailableTenantProviderProbeWorkerRegistry(),
-      ),
+      workers: new TenantRoutedProviderProbeWorker(config.providerProbeWorkers),
     });
     const workspaceQueries = new WorkspaceOperationQueryService({
       store,
@@ -295,9 +288,7 @@ async function composeProductionControlApi(
       workspaceQueries,
       providerSettings,
       providerProbes,
-      // Team remains fail closed until its coordinator, tenant egress policy,
-      // and authenticated Worker transport are deployed together.
-      providerRuntimeAvailability: "unavailable",
+      providerRuntimeAvailability: "available",
       agentVersionDigester: digester,
       workflowVersionDigester: digester,
       clock,
@@ -352,13 +343,14 @@ function validateProductionConfig(
     "production_authorization_required",
   );
   requireMethod(config.artifactStore, "close", "artifact_store_required");
-  if (config.providerProbeWorkers !== undefined) {
-    requireMethod(
-      config.providerProbeWorkers,
-      "resolve",
-      "production_provider_probe_registry_invalid",
-    );
+  if (config.providerProbeWorkers === undefined) {
+    throw new Error("production_provider_probe_registry_required");
   }
+  requireMethod(
+    config.providerProbeWorkers,
+    "resolve",
+    "production_provider_probe_registry_invalid",
+  );
   requireBounded(
     config.connectionString,
     8 * 1_024,

@@ -23,6 +23,7 @@ import {
   watchActivationInput,
 } from "./paused-admission.ts";
 import { resolveStandaloneProviderProbeWorkers } from "./standalone-provider-probe-environment.ts";
+import { resolveProductionProviderProbeWorkers } from "./production-provider-probe-environment.ts";
 import { resolveStandaloneWorkspaceWorkerEnvironment } from "./standalone-workspace-environment.ts";
 
 const securityMode = parseSecurityMode(
@@ -32,11 +33,6 @@ const activationGate = resolvePausedAdmission(process.env, securityMode);
 const standaloneTenantId = environmentOr(
   "CREWON_TENANT_ID",
   "standalone-tenant",
-);
-const providerProbeWorkers = resolveStandaloneProviderProbeWorkers(
-  process.env,
-  securityMode,
-  standaloneTenantId,
 );
 const workspaceWorker = resolveStandaloneWorkspaceWorkerEnvironment(
   process.env,
@@ -117,11 +113,17 @@ try {
       connectionString: productionConnectionString,
       identity,
       authorization,
+      providerProbeWorkers: resolveProductionProviderProbeWorkers(process.env),
       ...(process.env.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
         ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
         : {}),
     });
   } else {
+    const providerProbeWorkers = resolveStandaloneProviderProbeWorkers(
+      process.env,
+      securityMode,
+      standaloneTenantId,
+    );
     const standaloneConfig = {
       ...sharedConfig,
       actor: {
