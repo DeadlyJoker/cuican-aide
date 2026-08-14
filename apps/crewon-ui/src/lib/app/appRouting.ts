@@ -9,6 +9,7 @@ const commandShellViews = new Set([
   "assist",
   "projects",
   "agents",
+  "knowledge",
   "schedule",
   "team",
 ]);

@@ -541,11 +541,9 @@ const projectCatalog: CatalogItem[] = [
 
 export function ProjectsView({
   active,
-  resourceStatus,
   onNewTask,
 }: {
   active: boolean;
-  resourceStatus: string;
   onNewTask: () => void;
 }) {
   const [projectMode, setProjectMode] = useState("current");
@@ -730,7 +728,6 @@ export function ProjectsView({
                 只传 PRD 能力域、当前页面壳、审批策略，不把完整历史对话塞给
                 Agent。
               </p>
-              <p>{resourceStatus}</p>
             </section>
           </aside>
         </section>

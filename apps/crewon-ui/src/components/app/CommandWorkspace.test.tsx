@@ -1204,7 +1204,8 @@ describe("CommandWorkspace", () => {
 
     expect(markup).toContain('data-shell-view="assist"');
     expect(markup).toContain('data-shell-view="projects"');
-    expect(markup).toContain('data-shell-view="agents"');
+    expect(markup).not.toContain('data-shell-view="agents"');
+    expect(markup).not.toContain('data-shell-view="knowledge"');
     expect(markup).not.toContain('data-shell-view="schedule"');
     expect(markup).toContain('data-shell-view="team"');
     expect(markup).toContain('data-run-title-zh="\u77e5\u8bc6\u5e93"');
@@ -1225,6 +1226,9 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("\u667a\u80fd\u4f53");
     expect(markup).not.toContain("\u65e5\u7a0b\u5b89\u6392");
     expect(markup).toContain("\u529e\u516c\u5ba4");
+    expect(markup).not.toMatch(
+      /\u76ee\u5f55\u5c1a\u672a\u8fc1\u79fb|\u6682\u672a\u63d0\u4f9b\u6b64\u76ee\u5f55\u7684\u5199\u5165\u80fd\u529b/u,
+    );
   });
 
   it("snapshots the real single-thread assistant surface", () => {

@@ -30,7 +30,12 @@ import {
 } from "./CommandWorkspaceOperationsPanel";
 import { CommandSceneHeader, CommandSceneQuickRow } from "./CommandSceneHeader";
 import { ProjectsView, TeamView } from "./CommandWorkspaceViews";
-import { CommandUnavailableCatalogView } from "./CommandUnavailableCatalogView";
+import {
+  commandLibraryKindForView,
+  commandShellViewFromHash,
+  installCommandShellHashRouting,
+  openControlLibraryFromCommandShell,
+} from "./commandWorkspaceHashRouting";
 import { classNames } from "./commandWorkspaceUtils";
 
 type ThreadGoalStatus = ThreadGoalView["status"];
@@ -139,6 +144,7 @@ export {
   setDefaultTeamOfficePreview,
   syncDesignFilterState,
 } from "./commandWorkspaceState";
+export { commandLibraryKindForView } from "./commandWorkspaceHashRouting";
 export { composerKeyIntent as commandComposerKeyIntent } from "../composer/ComposerCore";
 export type {
   ComposerKeyIntent as CommandComposerKeyIntent,
@@ -276,12 +282,6 @@ export function commandKnowledgeSelection(
   return matches.length === 1 ? matches[0] : null;
 }
 
-export function commandLibraryKindForView(
-  view: CommandShellView,
-): "agents" | "knowledge" | null {
-  return view === "agents" || view === "knowledge" ? view : null;
-}
-
 export function submitCommandComposer({
   onSend,
   onSendNewThread,
@@ -350,28 +350,7 @@ type CommandDomainCatalog = {
   offices: OfficeConfigRecordReference[];
   status: "loading" | "ready" | "unavailable";
 };
-const shellViewIds: CommandShellView[] = [
-  "command",
-  "assist",
-  "projects",
-  "agents",
-  "knowledge",
-  "team",
-];
-
 const noWorkspaceValue = "__no_workspace__";
-
-function isShellView(value: string): value is CommandShellView {
-  return shellViewIds.includes(value as CommandShellView);
-}
-
-function shellViewFromHash(): CommandShellView {
-  if (typeof window === "undefined") {
-    return "command";
-  }
-  const value = window.location.hash.replace(/^#view-/, "");
-  return isShellView(value) ? value : "command";
-}
 
 function basename(path: string) {
   const normalized = path.replace(/\\/g, "/");
@@ -516,8 +495,11 @@ export function CommandWorkspace({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
   const lastCommandThreadIdRef = useRef<string | null>(selectedThreadId);
-  const [activeView, setActiveView] =
-    useState<CommandShellView>(shellViewFromHash);
+  const [activeView, setActiveView] = useState<CommandShellView>(() =>
+    typeof window === "undefined"
+      ? "command"
+      : commandShellViewFromHash(window.location.hash),
+  );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
   const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
@@ -595,16 +577,8 @@ export function CommandWorkspace({
   }, []);
 
   useEffect(() => {
-    function syncRoute() {
-      setActiveView(shellViewFromHash());
-    }
-    window.addEventListener("hashchange", syncRoute);
-    window.addEventListener("popstate", syncRoute);
-    return () => {
-      window.removeEventListener("hashchange", syncRoute);
-      window.removeEventListener("popstate", syncRoute);
-    };
-  }, []);
+    return installCommandShellHashRouting(window, setActiveView, onOpenLibrary);
+  }, [onOpenLibrary]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1082,14 +1056,17 @@ export function CommandWorkspace({
       })),
     [linkedThreads, locale],
   );
-  const resourceStatus = "此资源目录尚未迁移到 Control。";
-
   function switchView(view: CommandShellView) {
     setOpenPalette(null);
     setPaletteQuery("");
     const libraryKind = commandLibraryKindForView(view);
-    if (libraryKind !== null && onOpenLibrary) {
-      void onOpenLibrary(libraryKind);
+    if (libraryKind !== null) {
+      openControlLibraryFromCommandShell(
+        window,
+        setActiveView,
+        libraryKind,
+        onOpenLibrary,
+      );
       return;
     }
     setActiveView(view);
@@ -2348,7 +2325,6 @@ export function CommandWorkspace({
           />
           <ProjectsView
             active={activeView === "projects"}
-            resourceStatus={resourceStatus}
             onNewTask={() => {
               setActiveLinkedThreadId(null);
               setNewTaskDraft(true);
@@ -2356,14 +2332,6 @@ export function CommandWorkspace({
               switchView("command");
               textareaRef.current?.focus();
             }}
-          />
-          <CommandUnavailableCatalogView
-            active={activeView === "agents"}
-            kind="agents"
-          />
-          <CommandUnavailableCatalogView
-            active={activeView === "knowledge"}
-            kind="knowledge"
           />
           <TeamView
             active={activeView === "team"}

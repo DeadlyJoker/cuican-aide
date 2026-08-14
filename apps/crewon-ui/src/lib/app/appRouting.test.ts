@@ -34,7 +34,9 @@ describe("app routing search parsing", () => {
 
   it("parses settings sections with general settings fallback", () => {
     expect(settingsSectionFromSearch("?section=appearance")).toBe("appearance");
-    expect(settingsSectionFromSearch("section=mcp-servers")).toBe("mcp-servers");
+    expect(settingsSectionFromSearch("section=mcp-servers")).toBe(
+      "mcp-servers",
+    );
     expect(settingsSectionFromSearch("?section=unknown")).toBe("appearance");
     expect(settingsSectionFromSearch("")).toBe("appearance");
   });
@@ -42,6 +44,7 @@ describe("app routing search parsing", () => {
   it("detects command shell hash routes independently from selected threads", () => {
     expect(isCommandShellHash("#view-command")).toBe(true);
     expect(isCommandShellHash("#view-agents")).toBe(true);
+    expect(isCommandShellHash("#view-knowledge")).toBe(true);
     expect(isCommandShellHash("#view-settings")).toBe(false);
     expect(isCommandShellHash("")).toBe(false);
   });
