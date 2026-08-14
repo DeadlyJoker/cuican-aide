@@ -470,6 +470,12 @@ export class CrewONAgentKernel implements AgentKernelPort {
             throw new AgentKernelError("model_stream_incomplete", true);
           }
           if (providerRequestsContinuation) {
+            if (contract.reconcileCheckpoint !== undefined) {
+              throw new AgentKernelError(
+                "provider_response_retrieve_nonterminal",
+                false,
+              );
+            }
             const completedAssistantOutput = completedItems
               .filter(
                 (item): item is Extract<ModelInputItem, { type: "message" }> =>

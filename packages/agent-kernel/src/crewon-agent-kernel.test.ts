@@ -245,6 +245,42 @@ test("continues an empty end_turn=false stored response from its checkpoint", as
   );
 });
 
+test("never turns GET-only response reconciliation into a continuation sample", async () => {
+  const checkpoint = {
+    schemaVersion: "crewon.provider-checkpoint.v0",
+    adapterName: "stored-retrieve",
+    adapterVersion: "1",
+    modelId: "stored-model",
+    opaquePayload: { responseId: "resp-observed" },
+  } as const;
+  let requests = 0;
+  const transport: ModelTransportPort = {
+    adapterName: checkpoint.adapterName,
+    adapterVersion: checkpoint.adapterVersion,
+    modelId: checkpoint.modelId,
+    supportsResponseRetrieve: true,
+    async *stream() {
+      requests += 1;
+      yield { type: "response.created", checkpoint };
+      yield { type: "completed", checkpoint, endTurn: false };
+    },
+  };
+
+  await assert.rejects(
+    collect(
+      new CrewONAgentKernel({ transport }).runSegment(
+        { ...segmentContract(), reconcileCheckpoint: checkpoint },
+        new AbortController().signal,
+      ),
+    ),
+    (error) =>
+      error instanceof AgentKernelError &&
+      error.code === "provider_response_retrieve_nonterminal" &&
+      error.retryable === false,
+  );
+  assert.equal(requests, 1);
+});
+
 test("returns a durable boundary for stored end_turn=false assistant output", async () => {
   const checkpoint = {
     schemaVersion: "crewon.provider-checkpoint.v0",
