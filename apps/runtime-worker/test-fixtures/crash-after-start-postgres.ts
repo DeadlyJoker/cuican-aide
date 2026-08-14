@@ -1,4 +1,4 @@
-import { DeterministicFakeModelTransport } from "@crewon/agent-kernel";
+import type { ModelTransportPort } from "@crewon/agent-kernel";
 
 import { createPostgresRuntimeWorker } from "../src/standalone-composition.ts";
 
@@ -13,19 +13,7 @@ const runtime = await createPostgresRuntimeWorker({
     policySnapshotId: "policy-e2e-1",
     workspaceBindingId: "workspace-e2e-1",
   },
-  transport: new DeterministicFakeModelTransport({
-    expectedLastUserMessage: "run after PostgreSQL crash",
-    events: [
-      { type: "output.delta", delta: "child completed" },
-      {
-        type: "usage",
-        inputTokens: 5,
-        outputTokens: 2,
-        totalTokens: 7,
-      },
-      { type: "completed", checkpoint: null },
-    ],
-  }),
+  transport: unusedDirectResponsesTransport(),
   ownerId: "postgres-crashing-worker",
   leaseDurationMs: 30_000,
   retryAfterMs: 0,
@@ -47,4 +35,15 @@ function requiredEnvironment(name: string): string {
     throw new Error(`${name}_required`);
   }
   return value;
+}
+
+function unusedDirectResponsesTransport(): ModelTransportPort {
+  return {
+    adapterName: "direct-responses",
+    adapterVersion: "1",
+    modelId: "fake-model",
+    async *stream() {
+      throw new Error("crash_fixture_stream_unreachable");
+    },
+  };
 }

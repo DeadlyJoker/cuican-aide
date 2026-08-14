@@ -3,11 +3,13 @@ import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { DatabaseSync } from "node:sqlite";
-import { test, type TestContext } from "node:test";
+import { after, test, type TestContext } from "node:test";
 
 import {
   DeterministicFakeModelTransport,
@@ -59,6 +61,73 @@ const digest = {
   sha256: (value: string) =>
     `sha256:${createHash("sha256").update(value).digest("hex")}`,
 };
+const childResponsesServer = createServer((request, response) => {
+  request.resume();
+  request.once("end", () => {
+    const responseId = `resp-${randomUUID()}`;
+    const output = {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "child completed" }],
+    };
+    const events = [
+      {
+        type: "response.created",
+        sequence_number: 0,
+        response: { id: responseId },
+      },
+      {
+        type: "response.output_text.delta",
+        sequence_number: 1,
+        delta: "child completed",
+      },
+      {
+        type: "response.output_item.done",
+        sequence_number: 2,
+        item: output,
+      },
+      {
+        type: "response.completed",
+        sequence_number: 3,
+        response: {
+          id: responseId,
+          status: "completed",
+          output: [output],
+          usage: {
+            input_tokens: 5,
+            input_tokens_details: { cached_tokens: 0 },
+            output_tokens: 2,
+            total_tokens: 7,
+          },
+        },
+      },
+    ];
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    response.end(
+      events
+        .map(
+          (event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+        )
+        .join(""),
+    );
+  });
+});
+await new Promise<void>((resolve, reject) => {
+  childResponsesServer.once("error", reject);
+  childResponsesServer.listen(0, "127.0.0.1", () => {
+    childResponsesServer.off("error", reject);
+    resolve();
+  });
+});
+const childResponsesEndpoint = `http://127.0.0.1:${(childResponsesServer.address() as AddressInfo).port}/v1/responses`;
+after(
+  () =>
+    new Promise<void>((resolve, reject) => {
+      childResponsesServer.close((error) =>
+        error === undefined ? resolve() : reject(error),
+      );
+    }),
+);
 
 test("creates, replays, reads and paginates scoped Knowledge over Control HTTP", async (context) => {
   const control = createStandaloneControlApi(
@@ -362,7 +431,7 @@ for (const decision of ["approve", "reject"] as const)
     await activateStandaloneRelease({
       databasePath,
       route: controlConfig.route,
-      transport: workflowModelTransport(),
+      transport: workflowDefaultModelTransport(),
       agentVersionDeployments:
         runtimeFactory.deploymentBindings("tenant-e2e-1"),
       activationId: `workflow-${decision}-activation`,
@@ -418,7 +487,7 @@ for (const decision of ["approve", "reject"] as const)
       databasePath,
       runtimeTenantId: "tenant-e2e-1",
       route: controlConfig.route,
-      transport: workflowModelTransport(),
+      transport: workflowDefaultModelTransport(),
       agentVersionRuntimeFactory: runtimeFactory,
       agentVersionDeployments:
         runtimeFactory.deploymentBindings("tenant-e2e-1"),
@@ -532,7 +601,7 @@ for (const outcome of ["approved", "rejected", "expired", "canceled"] as const)
     await activateStandaloneRelease({
       databasePath,
       route: controlConfig.route,
-      transport: workflowModelTransport(),
+      transport: workflowDefaultModelTransport(),
       agentVersionDeployments:
         runtimeFactory.deploymentBindings("tenant-e2e-1"),
       activationId: `workflow-tool-${outcome}-activation`,
@@ -554,7 +623,7 @@ for (const outcome of ["approved", "rejected", "expired", "canceled"] as const)
       databasePath,
       runtimeTenantId: "tenant-e2e-1",
       route: controlConfig.route,
-      transport: workflowModelTransport(),
+      transport: workflowDefaultModelTransport(),
       agentVersionRuntimeFactory: runtimeFactory,
       agentVersionDeployments:
         runtimeFactory.deploymentBindings("tenant-e2e-1"),
@@ -1026,10 +1095,7 @@ test("executes an admitted published AgentVersion through the durable SQLite pat
   await activateStandaloneRelease({
     databasePath,
     route: config(databasePath).route,
-    transport: new DeterministicFakeModelTransport({
-      expectedLastUserMessage: "bootstrap is not selected",
-      events: [{ type: "completed", checkpoint: null }],
-    }),
+    transport: workflowDefaultModelTransport(),
     agentVersionDeployments: runtimeFactory.deploymentBindings("tenant-e2e-1"),
     activationId: "activation-selected-e2e",
   });
@@ -1059,10 +1125,7 @@ test("executes an admitted published AgentVersion through the durable SQLite pat
     databasePath,
     runtimeTenantId: "tenant-e2e-1",
     route: config(databasePath).route,
-    transport: new DeterministicFakeModelTransport({
-      expectedLastUserMessage: "bootstrap is not selected",
-      events: [{ type: "completed", checkpoint: null }],
-    }),
+    transport: workflowDefaultModelTransport(),
     agentVersionRuntimeFactory: runtimeFactory,
     agentVersionDeployments: runtimeFactory.deploymentBindings("tenant-e2e-1"),
     scanIntervalMs: null,
@@ -2081,8 +2144,18 @@ function workflowPostgresSource() {
 }
 
 function workflowModelTransport(): ModelTransportPort {
+  return createWorkflowModelTransport("deterministic-fake");
+}
+
+function workflowDefaultModelTransport(): ModelTransportPort {
+  return createWorkflowModelTransport("direct-responses");
+}
+
+function createWorkflowModelTransport(
+  adapterName: "deterministic-fake" | "direct-responses",
+): ModelTransportPort {
   return {
-    adapterName: "deterministic-fake",
+    adapterName,
     adapterVersion: "1",
     modelId: "fake-model",
     supportsModelDispatchEvidence: true,
@@ -2093,7 +2166,7 @@ function workflowModelTransport(): ModelTransportPort {
         );
       const checkpoint = {
         schemaVersion: "crewon.provider-checkpoint.v0" as const,
-        adapterName: "deterministic-fake",
+        adapterName,
         adapterVersion: "1",
         modelId: "fake-model",
         opaquePayload: { responseId: randomUUID() },
@@ -2361,11 +2434,8 @@ function workerEnvironment(databasePath: string): NodeJS.ProcessEnv {
   return {
     ...process.env,
     CREWON_CONTROL_DB_PATH: databasePath,
-    CREWON_MODEL_ADAPTER: "deterministic-fake",
-    CREWON_FAKE_EXPECTED_USER_MESSAGE: "run in a child process",
-    CREWON_FAKE_RESPONSE: "child completed",
-    CREWON_FAKE_INPUT_TOKENS: "5",
-    CREWON_FAKE_OUTPUT_TOKENS: "2",
+    CREWON_MODEL_ID: "fake-model",
+    CREWON_RESPONSES_ENDPOINT: childResponsesEndpoint,
     CREWON_WORKER_ONCE: "1",
     CREWON_WORKER_OWNER_ID: "recovery-worker",
     CREWON_WORKER_LEASE_DURATION_MS: "30000",
@@ -2389,11 +2459,9 @@ function postgresWorkerEnvironment(
     ...process.env,
     CREWON_CONTROL_DATABASE_URL: connectionString,
     CREWON_CONTROL_DATABASE_SCHEMA: schema,
-    CREWON_MODEL_ADAPTER: "deterministic-fake",
-    CREWON_FAKE_EXPECTED_USER_MESSAGE: expectedUserMessage,
-    CREWON_FAKE_RESPONSE: "child completed",
-    CREWON_FAKE_INPUT_TOKENS: "5",
-    CREWON_FAKE_OUTPUT_TOKENS: "2",
+    CREWON_MODEL_ID: "fake-model",
+    CREWON_RESPONSES_ENDPOINT: childResponsesEndpoint,
+    CREWON_E2E_EXPECTED_USER_MESSAGE: expectedUserMessage,
     CREWON_WORKER_ONCE: "1",
     CREWON_WORKER_OWNER_ID: ownerId,
     CREWON_WORKER_LEASE_DURATION_MS: "30000",
