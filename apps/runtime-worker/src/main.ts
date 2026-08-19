@@ -192,6 +192,7 @@ const initialized = await (async () => {
           agentVersionRuntimeBindingsPath,
           process.env,
           remoteMcpOwner?.dependencies,
+          securityMode,
         )
       : undefined;
     transport = createModelTransport({ apiKey: nativeBootstrap?.apiKey });

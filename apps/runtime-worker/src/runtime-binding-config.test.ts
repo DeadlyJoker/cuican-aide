@@ -72,6 +72,42 @@ test("requires an explicitly named provider credential at startup", (context) =>
   );
 });
 
+test("production requires every configured Provider response to be retrievable", (context) => {
+  const version = compileAgentVersion(source(), { sha256 });
+  const path = temporaryFile(context);
+  const manifest = config(version.contentDigest, null);
+  writeFileSync(path, JSON.stringify(manifest), "utf8");
+
+  assert.throws(
+    () => loadAgentVersionDeployments(path, "production"),
+    hasMessage("production_response_retrieval_required"),
+  );
+  assert.throws(
+    () => loadAgentVersionRuntimeFactory(path, {}, undefined, "production"),
+    hasMessage("production_response_retrieval_required"),
+  );
+  writeFileSync(
+    path,
+    JSON.stringify({
+      ...manifest,
+      bindings: [
+        {
+          ...manifest.bindings[0],
+          provider: {
+            ...manifest.bindings[0]!.provider,
+            storeResponses: true,
+          },
+        },
+      ],
+    }),
+    "utf8",
+  );
+  assert.doesNotThrow(() => loadAgentVersionDeployments(path, "production"));
+  assert.doesNotThrow(() =>
+    loadAgentVersionRuntimeFactory(path, {}, undefined, "production"),
+  );
+});
+
 test("rejects MCP materialization content drift after release compilation", async (context) => {
   const version = compileAgentVersion(source(), { sha256 });
   const path = temporaryFile(context);

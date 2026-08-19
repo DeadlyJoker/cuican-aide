@@ -66,7 +66,7 @@ const route = {
 const bindingsPath =
   process.env.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
 const configuredDeployments = bindingsPath
-  ? loadAgentVersionDeployments(bindingsPath)
+  ? loadAgentVersionDeployments(bindingsPath, securityMode)
   : undefined;
 const transport = createModelTransport();
 const toolRuntime = await createConfiguredToolRuntime();

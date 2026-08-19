@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 
+import { loadRuntimeReleaseActor } from "./release-authority.ts";
 import { resolveRuntimeProductionWorkspaceEnvironment } from "./runtime-production-workspace-environment.ts";
 
 const TOKEN = "production-workspace-token-at-least-32-bytes";
@@ -53,6 +54,12 @@ test("production deployment example is accepted by the release and worker parser
       },
     },
   );
+  assert.deepEqual(loadRuntimeReleaseActor(environment, "production"), {
+    principalId: "production-release-principal",
+    actorId: "production-release-actor",
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+  });
 });
 
 test("production rejects desktop flags, missing secrets, and authority drift", () => {

@@ -23,6 +23,7 @@ import {
 } from "./configured-agent-version-runtime-factory.ts";
 import { loadRemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
 import type { RemoteMcpRuntimeConfig } from "./remote-mcp-runtime-config.ts";
+import type { RuntimeWorkerSecurityMode } from "./runtime-provider-probe-environment.ts";
 import {
   composeRemoteMcpRuntime,
   type RemoteMcpBindingIdentity,
@@ -58,18 +59,17 @@ export function loadAgentVersionRuntimeFactory(
   path: string,
   environment: Readonly<Record<string, string | undefined>> = process.env,
   remoteMcpDependencies?: RemoteMcpCompositionDependencies,
+  securityMode: RuntimeWorkerSecurityMode = "standalone",
 ): ConfiguredAgentVersionRuntimeFactory {
   const input = readBoundedJson(
     path,
     MAX_CONFIG_BYTES,
     "CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH_invalid",
   );
+  const config = parseRuntimeBindingConfig(input);
+  requireRecoverableProductionBindings(config, securityMode);
   return new ConfiguredAgentVersionRuntimeFactory(
-    runtimeBindings(
-      parseRuntimeBindingConfig(input),
-      environment,
-      remoteMcpDependencies,
-    ),
+    runtimeBindings(config, environment, remoteMcpDependencies),
   );
 }
 
@@ -109,13 +109,16 @@ export function loadRemoteMcpManifestBindings(
 /** Compiles release metadata without resolving or retaining Provider secrets. */
 export function loadAgentVersionDeployments(
   path: string,
+  securityMode: RuntimeWorkerSecurityMode = "standalone",
 ): readonly AgentVersionDeploymentCandidate[] {
   const input = readBoundedJson(
     path,
     MAX_CONFIG_BYTES,
     "CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH_invalid",
   );
-  return parseRuntimeBindingConfig(input).bindings.map((binding) => ({
+  const config = parseRuntimeBindingConfig(input);
+  requireRecoverableProductionBindings(config, securityMode);
+  return config.bindings.map((binding) => ({
     schemaVersion: "crewon.agent-version-deployment.v0",
     tenantId: binding.tenantId,
     agentVersionId: binding.agentVersionId,
@@ -124,6 +127,18 @@ export function loadAgentVersionDeployments(
     authorityId: binding.authorityId,
     workspaceBindingId: binding.workspaceBindingId,
   }));
+}
+
+function requireRecoverableProductionBindings(
+  config: RuntimeBindingConfig,
+  securityMode: RuntimeWorkerSecurityMode,
+): void {
+  if (
+    securityMode === "production" &&
+    config.bindings.some((binding) => !binding.provider.storeResponses)
+  ) {
+    throw new Error("production_response_retrieval_required");
+  }
 }
 
 export function parseRuntimeBindingConfig(
