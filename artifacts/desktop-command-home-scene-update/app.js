@@ -17,13 +17,23 @@
       }
     });
     document.querySelectorAll("[data-placeholder-zh]").forEach((node) => {
-      node.setAttribute("placeholder", node.dataset[`placeholder${locale === "en" ? "En" : "Zh"}`] || node.dataset.placeholderZh || "");
+      node.setAttribute(
+        "placeholder",
+        node.dataset[`placeholder${locale === "en" ? "En" : "Zh"}`] ||
+          node.dataset.placeholderZh ||
+          "",
+      );
     });
     document.querySelectorAll(".locale-toggle").forEach((button) => {
       button.textContent = locale === "en" ? "中文" : "EN";
-      button.setAttribute("aria-label", locale === "en" ? "Switch to Chinese" : "切换到英文");
+      button.setAttribute(
+        "aria-label",
+        locale === "en" ? "Switch to Chinese" : "切换到英文",
+      );
     });
-    document.dispatchEvent(new CustomEvent("localechange", { detail: { locale } }));
+    document.dispatchEvent(
+      new CustomEvent("localechange", { detail: { locale } }),
+    );
   }
 
   function setupLocale() {
@@ -61,23 +71,29 @@
         zh: "Ask 适合确认事实、查上下文、解释任务依赖。",
         en: "Ask is for facts, context lookup, and dependency explanation.",
         placeholderZh: "问 Crewon：今天有哪些任务阻塞？需要谁确认？",
-        placeholderEn: "Ask Crewon: What is blocked today and who needs to confirm?"
+        placeholderEn:
+          "Ask Crewon: What is blocked today and who needs to confirm?",
       },
       plan: {
         zh: "Plan 会先拆 Workflow、暴露风险，再等待你批准 Gate。",
         en: "Plan decomposes Workflow, exposes risks, and waits for Gate approval.",
-        placeholderZh: "让 Crewon 拆解：把产品需求整理成 Workflow 节点、角色分工和 Gate。",
-        placeholderEn: "Plan with Crewon: turn requirements into Workflow nodes, role split, and gates."
+        placeholderZh:
+          "让 Crewon 拆解：把产品需求整理成 Workflow 节点、角色分工和 Gate。",
+        placeholderEn:
+          "Plan with Crewon: turn requirements into Workflow nodes, role split, and gates.",
       },
       agent: {
         zh: "智能体模式会使用已配置的角色、能力和权限边界。",
         en: "Agent mode uses configured roles, tools, and access boundaries.",
         placeholderZh: "调用合适的智能体，按当前 Skill/MCP 权限推进交付。",
-        placeholderEn: "Use the right Agent with current Skill/MCP access."
-      }
+        placeholderEn: "Use the right Agent with current Skill/MCP access.",
+      },
     };
     buttons.forEach((button) => {
-      button.setAttribute("aria-pressed", button.classList.contains("active") ? "true" : "false");
+      button.setAttribute(
+        "aria-pressed",
+        button.classList.contains("active") ? "true" : "false",
+      );
       button.addEventListener("click", () => {
         buttons.forEach((item) => {
           const active = item === button;
@@ -93,7 +109,10 @@
         if (composer && copy) {
           composer.dataset.placeholderZh = copy.placeholderZh;
           composer.dataset.placeholderEn = copy.placeholderEn;
-          composer.setAttribute("placeholder", currentLocale() === "en" ? copy.placeholderEn : copy.placeholderZh);
+          composer.setAttribute(
+            "placeholder",
+            currentLocale() === "en" ? copy.placeholderEn : copy.placeholderZh,
+          );
         }
       });
     });
@@ -106,13 +125,16 @@
     if (!rows.length) return;
     function paint() {
       const total = rows.length;
-      const done = Array.from(rows).filter((row) => row.classList.contains("done")).length;
+      const done = Array.from(rows).filter((row) =>
+        row.classList.contains("done"),
+      ).length;
       const percent = Math.round((done / total) * 100);
       if (progress) progress.style.setProperty("--value", `${percent}%`);
       if (label) {
         label.dataset.zh = `${done}/${total} 已完成`;
         label.dataset.en = `${done}/${total} done`;
-        label.textContent = currentLocale() === "en" ? label.dataset.en : label.dataset.zh;
+        label.textContent =
+          currentLocale() === "en" ? label.dataset.en : label.dataset.zh;
       }
     }
     rows.forEach((row) => {
@@ -131,7 +153,10 @@
       const line = document.createElement("div");
       line.className = `assistant-chat-line is-${role}`;
       line.setAttribute("role", "article");
-      line.setAttribute("aria-label", label || (role === "user" ? "你" : "助理"));
+      line.setAttribute(
+        "aria-label",
+        label || (role === "user" ? "你" : "助理"),
+      );
       const content = document.createElement("div");
       content.className = "assistant-chat-content";
       const body = document.createElement("p");
@@ -160,25 +185,49 @@
         button.classList.add("is-loading");
         if (button instanceof HTMLButtonElement) button.disabled = true;
         const target = document.querySelector(button.dataset.run || "");
-        const statusScope = target?.closest("[data-shell-view]") || button.closest(".command-input") || button.closest("[data-shell-view]") || document;
-        const statuses = Array.from(statusScope.querySelectorAll("[data-composer-status]"));
-        const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+        const statusScope =
+          target?.closest("[data-shell-view]") ||
+          button.closest(".command-input") ||
+          button.closest("[data-shell-view]") ||
+          document;
+        const statuses = Array.from(
+          statusScope.querySelectorAll("[data-composer-status]"),
+        );
+        const now = new Date().toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
         const locale = currentLocale();
-        const title = button.dataset[`runTitle${locale === "en" ? "En" : "Zh"}`] || button.dataset.runTitle || "Crewon";
-        const copy = button.dataset[`runCopy${locale === "en" ? "En" : "Zh"}`] || button.dataset.runCopy || "已创建一条新的执行记录。";
+        const title =
+          button.dataset[`runTitle${locale === "en" ? "En" : "Zh"}`] ||
+          button.dataset.runTitle ||
+          "Crewon";
+        const copy =
+          button.dataset[`runCopy${locale === "en" ? "En" : "Zh"}`] ||
+          button.dataset.runCopy ||
+          "已创建一条新的执行记录。";
         if (statuses.length) {
           statuses.forEach((status) => {
-          status.dataset.zh = "生成中 · 正在整理上下文";
-          status.dataset.en = "Generating · organizing context";
-          status.textContent = locale === "en" ? status.dataset.en : status.dataset.zh;
+            status.dataset.zh = "生成中 · 正在整理上下文";
+            status.dataset.en = "Generating · organizing context";
+            status.textContent =
+              locale === "en" ? status.dataset.en : status.dataset.zh;
           });
         }
         if (target) {
           if (target.id === "assist-log") {
             const assistInput = document.getElementById("assist-input");
-            const userCopy = assistInput instanceof HTMLTextAreaElement ? assistInput.value.trim() : "";
+            const userCopy =
+              assistInput instanceof HTMLTextAreaElement
+                ? assistInput.value.trim()
+                : "";
             if (button.classList.contains("send-button") && userCopy) {
-              appendAssistMessage(target, "user", userCopy, locale === "en" ? "You" : "你");
+              appendAssistMessage(
+                target,
+                "user",
+                userCopy,
+                locale === "en" ? "You" : "你",
+              );
               assistInput.value = "";
             }
             appendAssistMessage(target, "assistant", copy, title);
@@ -195,7 +244,8 @@
             statuses.forEach((status) => {
               status.dataset.zh = "已就绪 · 可继续编辑或发送";
               status.dataset.en = "Ready · edit or send";
-              status.textContent = doneLocale === "en" ? status.dataset.en : status.dataset.zh;
+              status.textContent =
+                doneLocale === "en" ? status.dataset.en : status.dataset.zh;
             });
             button.removeAttribute("aria-busy");
             button.classList.remove("is-loading");
@@ -208,15 +258,26 @@
             if (button instanceof HTMLButtonElement) button.disabled = false;
           }, 520);
         }
-        toast(button.dataset[`toast${locale === "en" ? "En" : "Zh"}`] || button.dataset.toast || (locale === "en" ? "Run log updated" : "已更新执行记录"));
+        toast(
+          button.dataset[`toast${locale === "en" ? "En" : "Zh"}`] ||
+            button.dataset.toast ||
+            (locale === "en" ? "Run log updated" : "已更新执行记录"),
+        );
       });
     });
   }
 
   function setComposerStatus(zh, en, scope) {
-    const statusScope = scope?.closest?.(".command-input") || scope?.closest?.("[data-shell-view]") || scope || document;
-    const scopedStatuses = statusScope.querySelectorAll?.("[data-composer-status]") || [];
-    const statuses = scopedStatuses.length ? scopedStatuses : document.querySelectorAll("[data-composer-status]");
+    const statusScope =
+      scope?.closest?.(".command-input") ||
+      scope?.closest?.("[data-shell-view]") ||
+      scope ||
+      document;
+    const scopedStatuses =
+      statusScope.querySelectorAll?.("[data-composer-status]") || [];
+    const statuses = scopedStatuses.length
+      ? scopedStatuses
+      : document.querySelectorAll("[data-composer-status]");
     if (!statuses.length) return;
     statuses.forEach((status) => {
       status.dataset.zh = zh;
@@ -232,21 +293,21 @@
         href: "desktop-command.html",
         zh: "新建任务",
         en: "New task",
-        icon: '<svg viewBox="0 0 24 24"><path d="M6.5 5.5h11v13h-11Z"></path><path d="M12 9v6"></path><path d="M9 12h6"></path></svg>'
+        icon: '<svg viewBox="0 0 24 24"><path d="M6.5 5.5h11v13h-11Z"></path><path d="M12 9v6"></path><path d="M9 12h6"></path></svg>',
       },
       {
         key: "assist",
         href: "desktop-command.html#view-assist",
         zh: "助理",
         en: "Assistant",
-        icon: '<svg viewBox="0 0 24 24"><path d="m12 4.75 1.45 4.1 4.1 1.45-4.1 1.45L12 15.85l-1.45-4.1-4.1-1.45 4.1-1.45Z"></path><path d="m17.25 15.5.7 1.95 1.95.7-1.95.7-.7 1.95-.7-1.95-1.95-.7 1.95-.7Z"></path></svg>'
+        icon: '<svg viewBox="0 0 24 24"><path d="m12 4.75 1.45 4.1 4.1 1.45-4.1 1.45L12 15.85l-1.45-4.1-4.1-1.45 4.1-1.45Z"></path><path d="m17.25 15.5.7 1.95 1.95.7-1.95.7-.7 1.95-.7-1.95-1.95-.7 1.95-.7Z"></path></svg>',
       },
       {
         key: "projects",
         href: "desktop-command.html#view-projects",
         zh: "项目",
         en: "Projects",
-        icon: '<svg viewBox="0 0 24 24"><path d="M4.75 7.5h5.5l1.45 2h7.55v7.8a1.7 1.7 0 0 1-1.7 1.7H6.45a1.7 1.7 0 0 1-1.7-1.7Z"></path><path d="M4.75 9.5h14.5"></path></svg>'
+        icon: '<svg viewBox="0 0 24 24"><path d="M4.75 7.5h5.5l1.45 2h7.55v7.8a1.7 1.7 0 0 1-1.7 1.7H6.45a1.7 1.7 0 0 1-1.7-1.7Z"></path><path d="M4.75 9.5h14.5"></path></svg>',
       },
       {
         key: "agents",
@@ -255,7 +316,7 @@
         en: "Agents",
         metaZh: "技能·连接器",
         metaEn: "Skills · connectors",
-        icon: '<svg viewBox="0 0 24 24"><path d="M12 6.1a2.35 2.35 0 1 0 0 4.7 2.35 2.35 0 0 0 0-4.7Z"></path><path d="M6.6 14.2a2.1 2.1 0 1 0 0 4.2 2.1 2.1 0 0 0 0-4.2Z"></path><path d="M17.4 14.2a2.1 2.1 0 1 0 0 4.2 2.1 2.1 0 0 0 0-4.2Z"></path><path d="M10.1 10.1 7.7 14.4"></path><path d="m13.9 10.1 2.4 4.3"></path></svg>'
+        icon: '<svg viewBox="0 0 24 24"><path d="M12 6.1a2.35 2.35 0 1 0 0 4.7 2.35 2.35 0 0 0 0-4.7Z"></path><path d="M6.6 14.2a2.1 2.1 0 1 0 0 4.2 2.1 2.1 0 0 0 0-4.2Z"></path><path d="M17.4 14.2a2.1 2.1 0 1 0 0 4.2 2.1 2.1 0 0 0 0-4.2Z"></path><path d="M10.1 10.1 7.7 14.4"></path><path d="m13.9 10.1 2.4 4.3"></path></svg>',
       },
       {
         key: "schedule",
@@ -264,35 +325,49 @@
         en: "Schedule",
         metaZh: "计划·提醒",
         metaEn: "Plans · reminders",
-        icon: '<svg viewBox="0 0 24 24"><path d="M6.25 6.75h11.5a1.5 1.5 0 0 1 1.5 1.5v9.5a1.5 1.5 0 0 1-1.5 1.5H6.25a1.5 1.5 0 0 1-1.5-1.5v-9.5a1.5 1.5 0 0 1 1.5-1.5Z"></path><path d="M8.2 4.75v3.4"></path><path d="M15.8 4.75v3.4"></path><path d="M4.75 10.3h14.5"></path><path d="M8.1 13.7h3.2"></path><path d="M8.1 16.2h6.1"></path></svg>'
+        icon: '<svg viewBox="0 0 24 24"><path d="M6.25 6.75h11.5a1.5 1.5 0 0 1 1.5 1.5v9.5a1.5 1.5 0 0 1-1.5 1.5H6.25a1.5 1.5 0 0 1-1.5-1.5v-9.5a1.5 1.5 0 0 1 1.5-1.5Z"></path><path d="M8.2 4.75v3.4"></path><path d="M15.8 4.75v3.4"></path><path d="M4.75 10.3h14.5"></path><path d="M8.1 13.7h3.2"></path><path d="M8.1 16.2h6.1"></path></svg>',
       },
       {
         key: "team",
         href: "desktop-command.html#view-team",
         zh: "团队",
         en: "Team",
-        icon: '<svg viewBox="0 0 24 24"><path d="M9.8 11.4a3.15 3.15 0 1 0 0-6.3 3.15 3.15 0 0 0 0 6.3Z"></path><path d="M4.75 18.75c.65-3 2.35-4.55 5.05-4.55s4.4 1.55 5.05 4.55"></path><path d="M15.2 11.05a2.45 2.45 0 1 0 0-4.9"></path><path d="M15.6 14.35c1.95.35 3.1 1.8 3.65 4.4"></path></svg>'
-      }
+        icon: '<svg viewBox="0 0 24 24"><path d="M9.8 11.4a3.15 3.15 0 1 0 0-6.3 3.15 3.15 0 0 0 0 6.3Z"></path><path d="M4.75 18.75c.65-3 2.35-4.55 5.05-4.55s4.4 1.55 5.05 4.55"></path><path d="M15.2 11.05a2.45 2.45 0 1 0 0-4.9"></path><path d="M15.6 14.35c1.95.35 3.1 1.8 3.65 4.4"></path></svg>',
+      },
     ];
 
-    const knowledgeIcon = '<svg viewBox="0 0 24 24"><path d="M5.75 5.75h8.8a3.7 3.7 0 0 1 3.7 3.7v8.8H9.45a3.7 3.7 0 0 0-3.7-3.7Z"></path><path d="M5.75 5.75v12.5"></path><path d="M9.3 9.25h5.25"></path><path d="M9.3 12.25h4.1"></path></svg>';
+    const knowledgeIcon =
+      '<svg viewBox="0 0 24 24"><path d="M5.75 5.75h8.8a3.7 3.7 0 0 1 3.7 3.7v8.8H9.45a3.7 3.7 0 0 0-3.7-3.7Z"></path><path d="M5.75 5.75v12.5"></path><path d="M9.3 9.25h5.25"></path><path d="M9.3 12.25h4.1"></path></svg>';
 
     function navMarkup(current, logTarget) {
       const singleShell = !!document.querySelector("[data-shell-view]");
-      const links = navItems.map((item) => {
-        const meta = item.metaZh
-          ? `<em data-zh="${item.metaZh}" data-en="${item.metaEn}">${item.metaZh}</em>`
-          : "";
-        const href = singleShell ? `#view-${item.key}` : item.href;
-        const viewAttrs = singleShell ? ` data-shell-view-target="${item.key}" data-nav-key="${item.key}"` : "";
-        const currentAttr = item.key === current ? ' aria-current="page"' : "";
-        return `<a${item.key === current ? ' class="active"' : ""}${currentAttr} href="${href}"${viewAttrs}><span class="nav-glyph" aria-hidden="true">${item.icon}</span><strong data-zh="${item.zh}" data-en="${item.en}">${item.zh}</strong>${meta}</a>`;
-      }).join("");
+      const links = navItems
+        .map((item) => {
+          const meta = item.metaZh
+            ? `<em data-zh="${item.metaZh}" data-en="${item.metaEn}">${item.metaZh}</em>`
+            : "";
+          const href = singleShell ? `#view-${item.key}` : item.href;
+          const viewAttrs = singleShell
+            ? ` data-shell-view-target="${item.key}" data-nav-key="${item.key}"`
+            : "";
+          const currentAttr =
+            item.key === current ? ' aria-current="page"' : "";
+          return `<a${item.key === current ? ' class="active"' : ""}${currentAttr} href="${href}"${viewAttrs}><span class="nav-glyph" aria-hidden="true">${item.icon}</span><strong data-zh="${item.zh}" data-en="${item.en}">${item.zh}</strong>${meta}</a>`;
+        })
+        .join("");
       return `${links}
           <button type="button" data-run="#${logTarget}" data-run-title-zh="知识库" data-run-title-en="Knowledge base" data-run-copy="知识库入口包含团队文档、项目材料、长期记忆和可引用资料。" data-run-copy-en="Knowledge base includes team docs, project materials, long-term memories, and referenceable resources." data-toast="知识库已聚焦" data-toast-en="Knowledge base focused"><span class="nav-glyph" aria-hidden="true">${knowledgeIcon}</span><strong data-zh="知识库" data-en="Knowledge base">知识库</strong></button>`;
     }
 
-    function runAttrs(logTarget, titleZh, titleEn, copyZh, copyEn, toastZh, toastEn) {
+    function runAttrs(
+      logTarget,
+      titleZh,
+      titleEn,
+      copyZh,
+      copyEn,
+      toastZh,
+      toastEn,
+    ) {
       return `data-run="#${logTarget}" data-run-title-zh="${titleZh}" data-run-title-en="${titleEn}" data-run-copy="${copyZh}" data-run-copy-en="${copyEn}" data-toast="${toastZh}" data-toast-en="${toastEn}"`;
     }
 
@@ -388,7 +463,9 @@
     const searchButton = document.querySelector("[data-sidebar-search-open]");
     const searchPanel = document.querySelector("[data-sidebar-search]");
     const searchInput = document.querySelector("[data-sidebar-search-input]");
-    const searchResults = Array.from(document.querySelectorAll("[data-search-result]"));
+    const searchResults = Array.from(
+      document.querySelectorAll("[data-search-result]"),
+    );
     const emptyState = document.querySelector("[data-search-empty]");
     const STORE_SIDEBAR = "crewon:sidebar-collapsed";
 
@@ -398,8 +475,12 @@
       collapseButton.setAttribute(
         "aria-label",
         locale === "en"
-          ? (collapsed ? "Expand sidebar" : "Collapse sidebar")
-          : (collapsed ? "展开侧栏" : "收起侧栏")
+          ? collapsed
+            ? "Expand sidebar"
+            : "Collapse sidebar"
+          : collapsed
+            ? "展开侧栏"
+            : "收起侧栏",
       );
     }
 
@@ -409,10 +490,16 @@
       collapseButton.setAttribute("aria-pressed", collapsed ? "true" : "false");
       setCollapseLabel(collapsed);
       if (collapsed) setSearchOpen(false, false);
-      try { localStorage.setItem(STORE_SIDEBAR, collapsed ? "true" : "false"); } catch (_) {}
+      try {
+        localStorage.setItem(STORE_SIDEBAR, collapsed ? "true" : "false");
+      } catch (_) {}
       if (announce) {
-        const zh = collapsed ? "侧栏已完全收起 · 左上角按钮可展开" : "侧栏已展开 · 空间与会话已恢复";
-        const en = collapsed ? "Sidebar fully collapsed · top-left button expands it" : "Sidebar expanded · spaces and conversations restored";
+        const zh = collapsed
+          ? "侧栏已完全收起 · 左上角按钮可展开"
+          : "侧栏已展开 · 空间与会话已恢复";
+        const en = collapsed
+          ? "Sidebar fully collapsed · top-left button expands it"
+          : "Sidebar expanded · spaces and conversations restored";
         setComposerStatus(zh, en);
         toast(currentLocale() === "en" ? en : zh);
       }
@@ -423,7 +510,8 @@
       const query = searchInput.value.trim().toLowerCase();
       let visibleCount = 0;
       searchResults.forEach((button) => {
-        const source = `${button.textContent || ""} ${button.dataset.searchKeywords || ""}`.toLowerCase();
+        const source =
+          `${button.textContent || ""} ${button.dataset.searchKeywords || ""}`.toLowerCase();
         const visible = !query || source.includes(query);
         button.hidden = !visible;
         if (visible) visibleCount += 1;
@@ -440,7 +528,10 @@
       searchButton.setAttribute("aria-expanded", open ? "true" : "false");
       if (open) {
         filterSearch();
-        setComposerStatus("搜索已打开 · 可查找空间、会话、能力和智能体", "Search open · find spaces, conversations, capabilities, and agents");
+        setComposerStatus(
+          "搜索已打开 · 可查找空间、会话、能力和智能体",
+          "Search open · find spaces, conversations, capabilities, and agents",
+        );
         window.setTimeout(() => searchInput?.focus(), 0);
       } else if (restoreFocus) {
         searchButton.focus();
@@ -448,7 +539,8 @@
     }
 
     try {
-      if (localStorage.getItem(STORE_SIDEBAR) === "true") setCollapsed(true, false);
+      if (localStorage.getItem(STORE_SIDEBAR) === "true")
+        setCollapsed(true, false);
       else setCollapseLabel(false);
     } catch (_) {
       setCollapseLabel(false);
@@ -479,7 +571,11 @@
 
     document.addEventListener("click", (event) => {
       if (!searchPanel || searchPanel.hidden) return;
-      if (searchPanel.contains(event.target) || searchButton?.contains(event.target)) return;
+      if (
+        searchPanel.contains(event.target) ||
+        searchButton?.contains(event.target)
+      )
+        return;
       setSearchOpen(false, false);
     });
     document.addEventListener("keydown", (event) => {
@@ -499,7 +595,9 @@
 
   function setupShellViews() {
     const views = Array.from(document.querySelectorAll("[data-shell-view]"));
-    const navLinks = Array.from(document.querySelectorAll("[data-shell-view-target]"));
+    const navLinks = Array.from(
+      document.querySelectorAll("[data-shell-view-target]"),
+    );
     if (!views.length || !navLinks.length) return;
 
     const STORE_VIEW = "crewon:desktop-shell-view";
@@ -511,7 +609,11 @@
     }
 
     function viewTitle(view, locale) {
-      return view?.dataset[`shellViewTitle${locale === "en" ? "En" : "Zh"}`] || view?.dataset.shellView || "";
+      return (
+        view?.dataset[`shellViewTitle${locale === "en" ? "En" : "Zh"}`] ||
+        view?.dataset.shellView ||
+        ""
+      );
     }
 
     function activateView(key, announce) {
@@ -531,9 +633,13 @@
       document.querySelectorAll("[data-sidebar-shell]").forEach((sidebar) => {
         sidebar.dataset.sidebarCurrent = key;
       });
-      try { localStorage.setItem(STORE_VIEW, key); } catch (_) {}
+      try {
+        localStorage.setItem(STORE_VIEW, key);
+      } catch (_) {}
       if (window.location.hash !== `#view-${key}`) {
-        try { window.history.replaceState(null, "", `#view-${key}`); } catch (_) {}
+        try {
+          window.history.replaceState(null, "", `#view-${key}`);
+        } catch (_) {}
       }
       if (announce && activeView) {
         const zh = `已切换到${viewTitle(activeView, "zh")} · 侧栏保持不变`;
@@ -554,8 +660,11 @@
     });
 
     let saved = "";
-    try { saved = localStorage.getItem(STORE_VIEW) || ""; } catch (_) {}
-    const initial = currentViewFromHash() || (keys.has(saved) ? saved : "") || "command";
+    try {
+      saved = localStorage.getItem(STORE_VIEW) || "";
+    } catch (_) {}
+    const initial =
+      currentViewFromHash() || (keys.has(saved) ? saved : "") || "command";
     activateView(keys.has(initial) ? initial : "command", false);
 
     window.addEventListener("hashchange", () => {
@@ -569,17 +678,25 @@
     const text = option?.textContent?.trim() || "";
     return {
       zh: option?.dataset.zh || text,
-      en: option?.dataset.en || text
+      en: option?.dataset.en || text,
     };
   }
 
   function setupComposerControls() {
-    const primaryRoot = document.querySelector(".command-home-view .command-input");
+    const primaryRoot = document.querySelector(
+      ".command-home-view .command-input",
+    );
     const modeSelect = primaryRoot?.querySelector("[data-task-mode]");
     const modelSelect = primaryRoot?.querySelector("[data-model-select]");
-    const permissionSelect = primaryRoot?.querySelector("[data-permission-select]");
-    const executionTargetSelect = primaryRoot?.querySelector("[data-execution-target-select]");
-    const workspaceSelect = primaryRoot?.querySelector("[data-workspace-select]");
+    const permissionSelect = primaryRoot?.querySelector(
+      "[data-permission-select]",
+    );
+    const executionTargetSelect = primaryRoot?.querySelector(
+      "[data-execution-target-select]",
+    );
+    const workspaceSelect = primaryRoot?.querySelector(
+      "[data-workspace-select]",
+    );
     const composer = primaryRoot?.querySelector("[data-composer]");
 
     function setupEnhancedSelect(select) {
@@ -592,7 +709,12 @@
       trigger.className = "select-trigger";
       trigger.setAttribute("aria-haspopup", "listbox");
       trigger.setAttribute("aria-expanded", "false");
-      trigger.setAttribute("aria-label", select.getAttribute("aria-label") || wrap.getAttribute("aria-label") || "选择");
+      trigger.setAttribute(
+        "aria-label",
+        select.getAttribute("aria-label") ||
+          wrap.getAttribute("aria-label") ||
+          "选择",
+      );
 
       const menu = document.createElement("div");
       menu.className = "select-menu";
@@ -607,7 +729,8 @@
         if (option.dataset.zh) item.dataset.zh = option.dataset.zh;
         if (option.dataset.en) item.dataset.en = option.dataset.en;
         if (option.dataset.scenes) item.dataset.scenes = option.dataset.scenes;
-        if (option.dataset.strategy) item.dataset.strategy = option.dataset.strategy;
+        if (option.dataset.strategy)
+          item.dataset.strategy = option.dataset.strategy;
         item.setAttribute("role", "option");
         menu.appendChild(item);
       });
@@ -617,7 +740,9 @@
 
       function copyForOption(option) {
         const text = option?.textContent?.trim() || "";
-        return currentLocale() === "en" ? (option?.dataset.en || text) : (option?.dataset.zh || text);
+        return currentLocale() === "en"
+          ? option?.dataset.en || text
+          : option?.dataset.zh || text;
       }
 
       function closeMenu() {
@@ -629,12 +754,16 @@
         document.querySelectorAll(".select-menu").forEach((node) => {
           if (node !== menu) {
             node.hidden = true;
-            node.parentElement?.querySelector(".select-trigger")?.setAttribute("aria-expanded", "false");
+            node.parentElement
+              ?.querySelector(".select-trigger")
+              ?.setAttribute("aria-expanded", "false");
           }
         });
         menu.hidden = false;
         trigger.setAttribute("aria-expanded", "true");
-        const selected = menu.querySelector('[aria-selected="true"]') || menu.querySelector(".select-option");
+        const selected =
+          menu.querySelector('[aria-selected="true"]') ||
+          menu.querySelector(".select-option");
         window.setTimeout(() => selected?.focus(), 0);
       }
 
@@ -642,10 +771,15 @@
         const selectedOption = select.selectedOptions?.[0] || select.options[0];
         trigger.textContent = copyForOption(selectedOption);
         Array.from(menu.querySelectorAll(".select-option")).forEach((item) => {
-          const option = Array.from(select.options).find((entry) => entry.value === item.dataset.value);
+          const option = Array.from(select.options).find(
+            (entry) => entry.value === item.dataset.value,
+          );
           item.textContent = copyForOption(option);
           item.hidden = option?.hidden || false;
-          item.setAttribute("aria-selected", item.dataset.value === select.value ? "true" : "false");
+          item.setAttribute(
+            "aria-selected",
+            item.dataset.value === select.value ? "true" : "false",
+          );
         });
       }
 
@@ -656,7 +790,11 @@
         else closeMenu();
       });
       trigger.addEventListener("keydown", (event) => {
-        if (event.key === "ArrowDown" || event.key === "Enter" || event.key === " ") {
+        if (
+          event.key === "ArrowDown" ||
+          event.key === "Enter" ||
+          event.key === " "
+        ) {
           event.preventDefault();
           openMenu();
         }
@@ -699,7 +837,9 @@
       executionTargetSelect,
       permissionSelect,
       workspaceSelect,
-      ...document.querySelectorAll(".control-select select, .workspace-picker select")
+      ...document.querySelectorAll(
+        ".control-select select, .workspace-picker select",
+      ),
     ]);
     enhancedSelects.forEach((select) => {
       if (select) setupEnhancedSelect(select);
@@ -707,25 +847,72 @@
 
     if (modeSelect) {
       const modeCopy = {
-        auto: ["将根据任务自动判断方式。", "The task mode will be detected automatically."],
-        organize: ["整理模式会生成结构化行动项或知识条目。", "Organize mode creates structured actions or knowledge entries."],
-        write: ["撰写模式会围绕受众、事实来源和可直接使用的成稿完成。", "Write mode produces audience-aware, source-grounded copy."],
-        analyze: ["分析模式会说明方法、来源和结论。", "Analyze mode explains method, sources, and conclusions."],
-        coordinate: ["协同模式会准备外部动作草稿，真实发送仍受 Gate 控制。", "Coordinate mode drafts external actions; real sends remain gated."],
-        ask: ["询问模式只读并以仓库证据回答。", "Ask mode is read-only and answers from repository evidence."],
-        plan: ["计划模式只读并输出可执行的实现计划。", "Plan mode is read-only and produces an actionable implementation plan."],
-        implement: ["生码模式允许工作区改动并要求适用验证。", "Implement mode allows workspace changes and requires relevant validation."],
-        review: ["审阅模式只读并输出可定位发现。", "Review mode is read-only and produces actionable findings."],
-        explore: ["探索模式会给出有明显差异的设计方向。", "Explore mode produces meaningfully distinct design directions."],
-        refine: ["收敛模式会深化选定方向并复用设计系统。", "Refine mode develops a chosen direction using the design system."],
-        produce: ["制作模式会生成可预览、可交付的设计产物。", "Produce mode creates previewable, handoff-ready design artifacts."],
-        inspect: ["走查模式只诊断并输出可定位问题。", "Inspect mode is diagnostic and produces actionable findings."]
+        auto: [
+          "将根据任务自动判断方式。",
+          "The task mode will be detected automatically.",
+        ],
+        organize: [
+          "整理模式会生成结构化行动项或知识条目。",
+          "Organize mode creates structured actions or knowledge entries.",
+        ],
+        write: [
+          "撰写模式会围绕受众、事实来源和可直接使用的成稿完成。",
+          "Write mode produces audience-aware, source-grounded copy.",
+        ],
+        analyze: [
+          "分析模式会说明方法、来源和结论。",
+          "Analyze mode explains method, sources, and conclusions.",
+        ],
+        coordinate: [
+          "协同模式会准备外部动作草稿，真实发送仍受 Gate 控制。",
+          "Coordinate mode drafts external actions; real sends remain gated.",
+        ],
+        ask: [
+          "询问模式只读并以仓库证据回答。",
+          "Ask mode is read-only and answers from repository evidence.",
+        ],
+        plan: [
+          "计划模式只读并输出可执行的实现计划。",
+          "Plan mode is read-only and produces an actionable implementation plan.",
+        ],
+        implement: [
+          "生码模式允许工作区改动并要求适用验证。",
+          "Implement mode allows workspace changes and requires relevant validation.",
+        ],
+        review: [
+          "审阅模式只读并输出可定位发现。",
+          "Review mode is read-only and produces actionable findings.",
+        ],
+        explore: [
+          "探索模式会给出有明显差异的设计方向。",
+          "Explore mode produces meaningfully distinct design directions.",
+        ],
+        refine: [
+          "收敛模式会深化选定方向并复用设计系统。",
+          "Refine mode develops a chosen direction using the design system.",
+        ],
+        produce: [
+          "制作模式会生成可预览、可交付的设计产物。",
+          "Produce mode creates previewable, handoff-ready design artifacts.",
+        ],
+        inspect: [
+          "走查模式只诊断并输出可定位问题。",
+          "Inspect mode is diagnostic and produces actionable findings.",
+        ],
       };
 
       function syncMode(showToast) {
         const copy = modeCopy[modeSelect.value] || modeCopy.auto;
-        setComposerStatus(copy[0], copy[1], modeSelect.closest(".command-input"));
-        document.dispatchEvent(new CustomEvent("scenemodechange", { detail: { mode: modeSelect.value } }));
+        setComposerStatus(
+          copy[0],
+          copy[1],
+          modeSelect.closest(".command-input"),
+        );
+        document.dispatchEvent(
+          new CustomEvent("scenemodechange", {
+            detail: { mode: modeSelect.value },
+          }),
+        );
         if (showToast) toast(currentLocale() === "en" ? copy[1] : copy[0]);
       }
 
@@ -734,34 +921,71 @@
     }
 
     if (executionTargetSelect) {
-      document.querySelector(".command-home-view")?.setAttribute("data-execution-strategy", executionTargetSelect.selectedOptions[0]?.dataset.strategy || "single");
+      document
+        .querySelector(".command-home-view")
+        ?.setAttribute(
+          "data-execution-strategy",
+          executionTargetSelect.selectedOptions[0]?.dataset.strategy ||
+            "single",
+        );
       executionTargetSelect.addEventListener("change", () => {
         const copy = selectedCopy(executionTargetSelect);
-        const strategy = executionTargetSelect.selectedOptions[0]?.dataset.strategy || "single";
-        document.querySelector(".command-home-view")?.setAttribute("data-execution-strategy", strategy);
-        setComposerStatus(`执行主体：${copy.zh}`, `Execution target: ${copy.en}`, executionTargetSelect.closest(".command-input"));
-        toast(currentLocale() === "en" ? `Execution target: ${copy.en}` : `执行主体：${copy.zh}`);
+        const strategy =
+          executionTargetSelect.selectedOptions[0]?.dataset.strategy ||
+          "single";
+        document
+          .querySelector(".command-home-view")
+          ?.setAttribute("data-execution-strategy", strategy);
+        setComposerStatus(
+          `执行主体：${copy.zh}`,
+          `Execution target: ${copy.en}`,
+          executionTargetSelect.closest(".command-input"),
+        );
+        toast(
+          currentLocale() === "en"
+            ? `Execution target: ${copy.en}`
+            : `执行主体：${copy.zh}`,
+        );
       });
     }
 
     if (modelSelect) {
       modelSelect.addEventListener("change", () => {
         const copy = selectedCopy(modelSelect);
-        setComposerStatus(`模型选择：${copy.zh}`, `Model selected: ${copy.en}`, modelSelect.closest(".command-input"));
-        toast(currentLocale() === "en" ? `Model selected: ${copy.en}` : `已选择${copy.zh}`);
+        setComposerStatus(
+          `模型选择：${copy.zh}`,
+          `Model selected: ${copy.en}`,
+          modelSelect.closest(".command-input"),
+        );
+        toast(
+          currentLocale() === "en"
+            ? `Model selected: ${copy.en}`
+            : `已选择${copy.zh}`,
+        );
       });
     }
 
     if (permissionSelect) {
       const permissionWrap = permissionSelect.closest(".permission-dropdown");
       function syncPermissionWarning() {
-        permissionWrap?.classList.toggle("is-warning", permissionSelect.value === "full-access");
+        permissionWrap?.classList.toggle(
+          "is-warning",
+          permissionSelect.value === "full-access",
+        );
       }
       permissionSelect.addEventListener("change", () => {
         const copy = selectedCopy(permissionSelect);
         syncPermissionWarning();
-        setComposerStatus(`权限策略：${copy.zh}`, `Access policy: ${copy.en}`, permissionSelect.closest(".command-input"));
-        toast(currentLocale() === "en" ? `Access set: ${copy.en}` : `权限已设为${copy.zh}`);
+        setComposerStatus(
+          `权限策略：${copy.zh}`,
+          `Access policy: ${copy.en}`,
+          permissionSelect.closest(".command-input"),
+        );
+        toast(
+          currentLocale() === "en"
+            ? `Access set: ${copy.en}`
+            : `权限已设为${copy.zh}`,
+        );
       });
       syncPermissionWarning();
     }
@@ -770,12 +994,21 @@
       workspaceSelect.addEventListener("change", () => {
         const copy = selectedCopy(workspaceSelect);
         document.querySelectorAll(".space-node").forEach((node) => {
-          const label = node.querySelector(".space-title strong")?.dataset.zh || "";
+          const label =
+            node.querySelector(".space-title strong")?.dataset.zh || "";
           const active = label === copy.zh;
           node.classList.toggle("current", active);
         });
-        setComposerStatus(`新任务将创建到：${copy.zh}`, `New task will be created in: ${copy.en}`, workspaceSelect.closest(".command-input"));
-        toast(currentLocale() === "en" ? `Workspace: ${copy.en}` : `工作空间：${copy.zh}`);
+        setComposerStatus(
+          `新任务将创建到：${copy.zh}`,
+          `New task will be created in: ${copy.en}`,
+          workspaceSelect.closest(".command-input"),
+        );
+        toast(
+          currentLocale() === "en"
+            ? `Workspace: ${copy.en}`
+            : `工作空间：${copy.zh}`,
+        );
       });
     }
 
@@ -792,31 +1025,41 @@
         plan: {
           zh: "计划模式会先生成 Workflow、风险和 Gate。",
           en: "Plan mode drafts Workflow, risks, and gates first.",
-          placeholderZh: "把这个需求拆成 Workflow 节点、角色分工和 Stage Gate。@ 引用上下文，/ 搜索 Skill 和 MCP。",
-          placeholderEn: "Turn this into Workflow nodes, role split, and Stage Gates. @ context, / search Skills and MCP."
+          placeholderZh:
+            "把这个需求拆成 Workflow 节点、角色分工和 Stage Gate。@ 引用上下文，/ 搜索 Skill 和 MCP。",
+          placeholderEn:
+            "Turn this into Workflow nodes, role split, and Stage Gates. @ context, / search Skills and MCP.",
         },
         goal: {
           zh: "目标模式会先确认交付结果，再反推小队配置。",
           en: "Goal mode defines the outcome first, then derives team setup.",
-          placeholderZh: "我的目标是... 请帮我反推 Agent 小队、权限边界和验收标准。@ 引用上下文，/ 搜索 Skill 和 MCP。",
-          placeholderEn: "My goal is... Help derive Agent team, access boundary, and acceptance criteria. @ context."
+          placeholderZh:
+            "我的目标是... 请帮我反推 Agent 小队、权限边界和验收标准。@ 引用上下文，/ 搜索 Skill 和 MCP。",
+          placeholderEn:
+            "My goal is... Help derive Agent team, access boundary, and acceptance criteria. @ context.",
         },
         agent: {
           zh: "智能体模式会使用角色配置、能力权限和审批卡点。",
           en: "Agent mode uses role config, tool access, and approval gates.",
-          placeholderZh: "调用选中的智能体，并按当前 Gate 与 Skill/MCP 权限推进任务。@ 引用上下文。",
-          placeholderEn: "Use the selected Agent with current Gate and Skill/MCP access. @ context."
-        }
+          placeholderZh:
+            "调用选中的智能体，并按当前 Gate 与 Skill/MCP 权限推进任务。@ 引用上下文。",
+          placeholderEn:
+            "Use the selected Agent with current Gate and Skill/MCP access. @ context.",
+        },
       };
 
       if (scopedMode && scopedMode.dataset.composerBound !== "true") {
         scopedMode.dataset.composerBound = "true";
         function syncScopedMode(showToast) {
           const copy = scopedModeCopy[scopedMode.value] || scopedModeCopy.plan;
-          if (scopedAgentMenu) scopedAgentMenu.hidden = scopedMode.value !== "agent";
+          if (scopedAgentMenu)
+            scopedAgentMenu.hidden = scopedMode.value !== "agent";
           scopedComposer.dataset.placeholderZh = copy.placeholderZh;
           scopedComposer.dataset.placeholderEn = copy.placeholderEn;
-          scopedComposer.setAttribute("placeholder", currentLocale() === "en" ? copy.placeholderEn : copy.placeholderZh);
+          scopedComposer.setAttribute(
+            "placeholder",
+            currentLocale() === "en" ? copy.placeholderEn : copy.placeholderZh,
+          );
           setComposerStatus(copy.zh, copy.en, root);
           if (showToast) toast(currentLocale() === "en" ? copy.en : copy.zh);
         }
@@ -828,8 +1071,16 @@
         scopedAgent.dataset.composerBound = "true";
         scopedAgent.addEventListener("change", () => {
           const copy = selectedCopy(scopedAgent);
-          setComposerStatus(`已使用智能体配置：${copy.zh}`, `Using agent config: ${copy.en}`, root);
-          toast(currentLocale() === "en" ? `Agent selected: ${copy.en}` : `已选择${copy.zh}`);
+          setComposerStatus(
+            `已使用智能体配置：${copy.zh}`,
+            `Using agent config: ${copy.en}`,
+            root,
+          );
+          toast(
+            currentLocale() === "en"
+              ? `Agent selected: ${copy.en}`
+              : `已选择${copy.zh}`,
+          );
         });
       }
 
@@ -837,22 +1088,46 @@
         scopedModel.dataset.composerBound = "true";
         scopedModel.addEventListener("change", () => {
           const copy = selectedCopy(scopedModel);
-          setComposerStatus(`模型选择：${copy.zh}`, `Model selected: ${copy.en}`, root);
-          toast(currentLocale() === "en" ? `Model selected: ${copy.en}` : `已选择${copy.zh}`);
+          setComposerStatus(
+            `模型选择：${copy.zh}`,
+            `Model selected: ${copy.en}`,
+            root,
+          );
+          toast(
+            currentLocale() === "en"
+              ? `Model selected: ${copy.en}`
+              : `已选择${copy.zh}`,
+          );
         });
       }
 
-      if (scopedPermission && scopedPermission.dataset.composerBound !== "true") {
+      if (
+        scopedPermission &&
+        scopedPermission.dataset.composerBound !== "true"
+      ) {
         scopedPermission.dataset.composerBound = "true";
-        const scopedPermissionWrap = scopedPermission.closest(".permission-dropdown");
+        const scopedPermissionWrap = scopedPermission.closest(
+          ".permission-dropdown",
+        );
         function syncScopedPermissionWarning() {
-          scopedPermissionWrap?.classList.toggle("is-warning", scopedPermission.value === "full-access");
+          scopedPermissionWrap?.classList.toggle(
+            "is-warning",
+            scopedPermission.value === "full-access",
+          );
         }
         scopedPermission.addEventListener("change", () => {
           const copy = selectedCopy(scopedPermission);
           syncScopedPermissionWarning();
-          setComposerStatus(`权限策略：${copy.zh}`, `Access policy: ${copy.en}`, root);
-          toast(currentLocale() === "en" ? `Access set: ${copy.en}` : `权限已设为${copy.zh}`);
+          setComposerStatus(
+            `权限策略：${copy.zh}`,
+            `Access policy: ${copy.en}`,
+            root,
+          );
+          toast(
+            currentLocale() === "en"
+              ? `Access set: ${copy.en}`
+              : `权限已设为${copy.zh}`,
+          );
         });
         syncScopedPermissionWarning();
       }
@@ -864,7 +1139,8 @@
       const composer = root.querySelector("[data-composer]");
       const palette = root.querySelector("[data-slash-palette]");
       const openButton = root.querySelector("[data-slash-open]");
-      if (!composer || !palette || palette.dataset.composerBound === "true") return;
+      if (!composer || !palette || palette.dataset.composerBound === "true")
+        return;
       palette.dataset.composerBound = "true";
 
       const search = palette.querySelector("[data-slash-search]");
@@ -873,15 +1149,18 @@
       function filterItems() {
         const query = (search?.value || "").trim().toLowerCase();
         items.forEach((item) => {
-          const haystack = `${item.textContent} ${item.dataset.kind || ""} ${item.dataset.label || ""}`.toLowerCase();
+          const haystack =
+            `${item.textContent} ${item.dataset.kind || ""} ${item.dataset.label || ""}`.toLowerCase();
           item.hidden = query.length > 0 && !haystack.includes(query);
         });
       }
 
       function openPalette(initialQuery) {
-        document.querySelectorAll("[data-slash-palette], [data-context-palette]").forEach((node) => {
-          if (node !== palette) node.hidden = true;
-        });
+        document
+          .querySelectorAll("[data-slash-palette], [data-context-palette]")
+          .forEach((node) => {
+            if (node !== palette) node.hidden = true;
+          });
         palette.hidden = false;
         if (search) {
           search.value = initialQuery || "";
@@ -893,7 +1172,9 @@
       function closePalette() {
         palette.hidden = true;
         if (search) search.value = "";
-        items.forEach((item) => { item.hidden = false; });
+        items.forEach((item) => {
+          item.hidden = false;
+        });
       }
 
       function insertItem(item) {
@@ -908,13 +1189,22 @@
         composer.setSelectionRange(next, next);
         closePalette();
         const kind = item.dataset.kind === "mcp" ? "MCP" : "Skill";
-        setComposerStatus(`已插入 ${kind}：${label}`, `Inserted ${kind}: ${label}`, root);
+        setComposerStatus(
+          `已插入 ${kind}：${label}`,
+          `Inserted ${kind}: ${label}`,
+          root,
+        );
         toast(currentLocale() === "en" ? `${kind} inserted` : `${kind} 已插入`);
       }
 
       openButton?.addEventListener("click", () => openPalette(""));
       composer.addEventListener("keydown", (event) => {
-        if (event.key === "/" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (
+          event.key === "/" &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey
+        ) {
           event.preventDefault();
           openPalette("");
         }
@@ -940,11 +1230,18 @@
           }
         }
       });
-      items.forEach((item) => item.addEventListener("click", () => insertItem(item)));
+      items.forEach((item) =>
+        item.addEventListener("click", () => insertItem(item)),
+      );
       document.addEventListener("click", (event) => {
         if (palette.hidden) return;
         const target = event.target;
-        if (target instanceof Node && !palette.contains(target) && target !== openButton && target !== composer) {
+        if (
+          target instanceof Node &&
+          !palette.contains(target) &&
+          target !== openButton &&
+          target !== composer
+        ) {
           closePalette();
         }
       });
@@ -956,7 +1253,8 @@
       const composer = root.querySelector("[data-composer]");
       const palette = root.querySelector("[data-context-palette]");
       const openButton = root.querySelector("[data-context-open]");
-      if (!composer || !palette || palette.dataset.composerBound === "true") return;
+      if (!composer || !palette || palette.dataset.composerBound === "true")
+        return;
       palette.dataset.composerBound = "true";
 
       const search = palette.querySelector("[data-context-search]");
@@ -965,15 +1263,18 @@
       function filterItems() {
         const query = (search?.value || "").trim().toLowerCase();
         items.forEach((item) => {
-          const haystack = `${item.textContent} ${item.dataset.kind || ""} ${item.dataset.label || ""}`.toLowerCase();
+          const haystack =
+            `${item.textContent} ${item.dataset.kind || ""} ${item.dataset.label || ""}`.toLowerCase();
           item.hidden = query.length > 0 && !haystack.includes(query);
         });
       }
 
       function openPalette(initialQuery) {
-        document.querySelectorAll("[data-slash-palette], [data-context-palette]").forEach((node) => {
-          if (node !== palette) node.hidden = true;
-        });
+        document
+          .querySelectorAll("[data-slash-palette], [data-context-palette]")
+          .forEach((node) => {
+            if (node !== palette) node.hidden = true;
+          });
         palette.hidden = false;
         if (search) {
           search.value = initialQuery || "";
@@ -985,7 +1286,9 @@
       function closePalette() {
         palette.hidden = true;
         if (search) search.value = "";
-        items.forEach((item) => { item.hidden = false; });
+        items.forEach((item) => {
+          item.hidden = false;
+        });
       }
 
       function insertItem(item) {
@@ -999,13 +1302,22 @@
         const next = start + insertText.length;
         composer.setSelectionRange(next, next);
         closePalette();
-        setComposerStatus(`已引用上下文：${label}`, `Context referenced: ${label}`, root);
+        setComposerStatus(
+          `已引用上下文：${label}`,
+          `Context referenced: ${label}`,
+          root,
+        );
         toast(currentLocale() === "en" ? "Context added" : "已引用上下文");
       }
 
       openButton?.addEventListener("click", () => openPalette(""));
       composer.addEventListener("keydown", (event) => {
-        if (event.key === "@" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+        if (
+          event.key === "@" &&
+          !event.metaKey &&
+          !event.ctrlKey &&
+          !event.altKey
+        ) {
           event.preventDefault();
           openPalette("");
         }
@@ -1031,11 +1343,18 @@
           }
         }
       });
-      items.forEach((item) => item.addEventListener("click", () => insertItem(item)));
+      items.forEach((item) =>
+        item.addEventListener("click", () => insertItem(item)),
+      );
       document.addEventListener("click", (event) => {
         if (palette.hidden) return;
         const target = event.target;
-        if (target instanceof Node && !palette.contains(target) && target !== openButton && target !== composer) {
+        if (
+          target instanceof Node &&
+          !palette.contains(target) &&
+          target !== openButton &&
+          target !== composer
+        ) {
           closePalette();
         }
       });
@@ -1043,7 +1362,9 @@
   }
 
   function applyCardVisibility(scope) {
-    const activeFilters = Array.from(scope.querySelectorAll(".filter-chip[data-filter].active"))
+    const activeFilters = Array.from(
+      scope.querySelectorAll(".filter-chip[data-filter].active"),
+    )
       .map((chip) => chip.dataset.filter)
       .filter((filter) => filter && filter !== "all");
     const search = scope.querySelector(".catalog-search input");
@@ -1052,8 +1373,14 @@
     let visibleCount = 0;
     cards.forEach((card) => {
       const values = (card.dataset.cardFilter || "").split(" ");
-      const matchesFilter = activeFilters.every((filter) => values.includes(filter));
-      const matchesSearch = !query || (card.innerText || card.textContent || "").toLowerCase().includes(query);
+      const matchesFilter = activeFilters.every((filter) =>
+        values.includes(filter),
+      );
+      const matchesSearch =
+        !query ||
+        (card.innerText || card.textContent || "")
+          .toLowerCase()
+          .includes(query);
       const visible = matchesFilter && matchesSearch;
       card.classList.toggle("hidden", !visible);
       if (visible) visibleCount += 1;
@@ -1071,7 +1398,8 @@
       const anchor = cards[cards.length - 1].parentElement;
       anchor?.after(empty);
     }
-    empty.textContent = currentLocale() === "en" ? empty.dataset.en : empty.dataset.zh;
+    empty.textContent =
+      currentLocale() === "en" ? empty.dataset.en : empty.dataset.zh;
     empty.hidden = visibleCount > 0;
     empty.classList.toggle("visible", visibleCount === 0);
   }
@@ -1079,22 +1407,34 @@
   function setupFilters() {
     function syncFilterAria(scope) {
       scope.querySelectorAll?.(".filter-chip[data-filter]").forEach((chip) => {
-        chip.setAttribute("aria-pressed", chip.classList.contains("active") ? "true" : "false");
+        chip.setAttribute(
+          "aria-pressed",
+          chip.classList.contains("active") ? "true" : "false",
+        );
       });
     }
     function syncTeamActions(scope) {
       const actions = scope.querySelectorAll?.("[data-team-action]");
       if (!actions || !actions.length) return;
-      const activeTeamMode = scope.querySelector('.filter-chip.active[data-filter-group="team-mode"]')?.dataset.filter || "office";
+      const activeTeamMode =
+        scope.querySelector(
+          '.filter-chip.active[data-filter-group="team-mode"]',
+        )?.dataset.filter || "office";
       actions.forEach((button) => {
         button.hidden = button.dataset.teamAction !== activeTeamMode;
       });
     }
     document.querySelectorAll(".filter-chip[data-filter]").forEach((chip) => {
       chip.addEventListener("click", () => {
-        const scope = chip.closest("[data-filter-scope]") || chip.closest("[data-shell-view]") || chip.closest(".page-stack") || document;
+        const scope =
+          chip.closest("[data-filter-scope]") ||
+          chip.closest("[data-shell-view]") ||
+          chip.closest(".page-stack") ||
+          document;
         const group = chip.dataset.filterGroup || "default";
-        const chips = scope.querySelectorAll(`.filter-chip[data-filter][data-filter-group="${group}"], .filter-chip[data-filter]:not([data-filter-group])`);
+        const chips = scope.querySelectorAll(
+          `.filter-chip[data-filter][data-filter-group="${group}"], .filter-chip[data-filter]:not([data-filter-group])`,
+        );
         chips.forEach((item) => item.classList.toggle("active", item === chip));
         syncFilterAria(scope);
         applyCardVisibility(scope);
@@ -1111,7 +1451,11 @@
   function setupCatalogSearch() {
     document.querySelectorAll(".catalog-search input").forEach((input) => {
       input.addEventListener("input", () => {
-        const scope = input.closest("[data-filter-scope]") || input.closest("[data-shell-view]") || input.closest(".page-stack") || document;
+        const scope =
+          input.closest("[data-filter-scope]") ||
+          input.closest("[data-shell-view]") ||
+          input.closest(".page-stack") ||
+          document;
         applyCardVisibility(scope);
       });
     });
@@ -1119,13 +1463,21 @@
 
   function setupCalendarA11y() {
     document.querySelectorAll(".calendar-month").forEach((month) => {
-      const title = month.querySelector(".calendar-month-head strong")?.textContent?.trim() || "";
-      const scope = month.querySelector(".calendar-month-head span")?.textContent?.trim() || "";
+      const title =
+        month
+          .querySelector(".calendar-month-head strong")
+          ?.textContent?.trim() || "";
+      const scope =
+        month.querySelector(".calendar-month-head span")?.textContent?.trim() ||
+        "";
       month.querySelectorAll(".calendar-grid button").forEach((button) => {
         const day = button.textContent.trim();
         const hasEvent = button.classList.contains("has-event");
         const selected = button.classList.contains("is-selected");
-        button.setAttribute("aria-label", `${scope} ${title} ${day} 日${selected ? "，当前选择" : ""}${hasEvent ? "，有安排" : "，无安排"}`);
+        button.setAttribute(
+          "aria-label",
+          `${scope} ${title} ${day} 日${selected ? "，当前选择" : ""}${hasEvent ? "，有安排" : "，无安排"}`,
+        );
         if (selected) button.setAttribute("aria-current", "date");
         else button.removeAttribute("aria-current");
       });
@@ -1135,9 +1487,12 @@
   function setupModals() {
     let activeModal = null;
     let lastTrigger = null;
-    const focusableSelector = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
-    const focusableElements = (modal) => Array.from(modal.querySelectorAll(focusableSelector))
-      .filter((el) => !el.hidden && el.offsetParent !== null);
+    const focusableSelector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusableElements = (modal) =>
+      Array.from(modal.querySelectorAll(focusableSelector)).filter(
+        (el) => !el.hidden && el.offsetParent !== null,
+      );
 
     function openModal(modal, trigger) {
       activeModal = modal;
@@ -1146,7 +1501,9 @@
       modal.setAttribute("tabindex", "-1");
       document.body.classList.add("modal-open");
       window.setTimeout(() => {
-        const preferred = modal.querySelector("input, textarea, select, .space-input, button:not([data-close-modal])");
+        const preferred = modal.querySelector(
+          "input, textarea, select, .space-input, button:not([data-close-modal])",
+        );
         const first = preferred || focusableElements(modal)[0] || modal;
         first.focus?.({ preventScroll: true });
       }, 0);
@@ -1156,9 +1513,13 @@
       if (!modal) return;
       modal.classList.remove("open");
       if (activeModal === modal) activeModal = null;
-      if (!document.querySelector(".modal-backdrop.open")) document.body.classList.remove("modal-open");
+      if (!document.querySelector(".modal-backdrop.open"))
+        document.body.classList.remove("modal-open");
       if (restoreFocus && lastTrigger) {
-        window.setTimeout(() => lastTrigger.focus?.({ preventScroll: true }), 0);
+        window.setTimeout(
+          () => lastTrigger.focus?.({ preventScroll: true }),
+          0,
+        );
       }
     }
 
@@ -1202,9 +1563,10 @@
       button.addEventListener("click", () => {
         closeModal(button.closest(".modal-backdrop"));
         const locale = currentLocale();
-        const message = locale === "en"
-          ? (button.dataset.submitToastEn || "Task added to workspace")
-          : (button.dataset.submitToastZh || "任务已加入工作空间");
+        const message =
+          locale === "en"
+            ? button.dataset.submitToastEn || "Task added to workspace"
+            : button.dataset.submitToastZh || "任务已加入工作空间";
         toast(message);
       });
     });
@@ -1218,7 +1580,9 @@
       if (!list || !room) return;
 
       function closeDrawers() {
-        room.querySelectorAll("[data-office-drawer]").forEach((drawer) => { drawer.hidden = true; });
+        room.querySelectorAll("[data-office-drawer]").forEach((drawer) => {
+          drawer.hidden = true;
+        });
         room.querySelectorAll("[data-office-drawer-open]").forEach((button) => {
           button.setAttribute("aria-expanded", "false");
         });
@@ -1227,7 +1591,8 @@
       shell.querySelectorAll("[data-office-open]").forEach((button) => {
         button.addEventListener("click", () => {
           const locale = currentLocale();
-          const titleZh = button.dataset.officeTitleZh || button.textContent.trim();
+          const titleZh =
+            button.dataset.officeTitleZh || button.textContent.trim();
           const titleEn = button.dataset.officeTitleEn || titleZh;
           const subtitleZh = button.dataset.officeSubtitleZh || "";
           const subtitleEn = button.dataset.officeSubtitleEn || subtitleZh;
@@ -1245,7 +1610,8 @@
           if (subtitleNode) {
             subtitleNode.dataset.zh = subtitleZh;
             subtitleNode.dataset.en = subtitleEn;
-            subtitleNode.textContent = locale === "en" ? subtitleEn : subtitleZh;
+            subtitleNode.textContent =
+              locale === "en" ? subtitleEn : subtitleZh;
           }
 
           list.hidden = true;
@@ -1254,7 +1620,9 @@
           view?.classList.add("office-room-active");
           closeDrawers();
           window.setTimeout(() => {
-            room.querySelector("[data-office-focus]")?.focus({ preventScroll: true });
+            room
+              .querySelector("[data-office-focus]")
+              ?.focus({ preventScroll: true });
           }, 0);
         });
       });
@@ -1267,7 +1635,9 @@
           view?.classList.remove("office-room-active");
           closeDrawers();
           window.setTimeout(() => {
-            shell.querySelector("[data-office-open].is-active")?.focus({ preventScroll: true });
+            shell
+              .querySelector("[data-office-open].is-active")
+              ?.focus({ preventScroll: true });
           }, 0);
         });
       });
@@ -1298,16 +1668,21 @@
       if (!list || !room) return;
 
       function closeWorkflowDrawers() {
-        room.querySelectorAll("[data-workflow-drawer]").forEach((drawer) => { drawer.hidden = true; });
-        room.querySelectorAll("[data-workflow-drawer-open]").forEach((button) => {
-          button.setAttribute("aria-expanded", "false");
+        room.querySelectorAll("[data-workflow-drawer]").forEach((drawer) => {
+          drawer.hidden = true;
         });
+        room
+          .querySelectorAll("[data-workflow-drawer-open]")
+          .forEach((button) => {
+            button.setAttribute("aria-expanded", "false");
+          });
       }
 
       shell.querySelectorAll("[data-workflow-open]").forEach((button) => {
         button.addEventListener("click", () => {
           const locale = currentLocale();
-          const titleZh = button.dataset.workflowTitleZh || button.textContent.trim();
+          const titleZh =
+            button.dataset.workflowTitleZh || button.textContent.trim();
           const titleEn = button.dataset.workflowTitleEn || titleZh;
           const stageZh = button.dataset.workflowStageZh || "";
           const stageEn = button.dataset.workflowStageEn || stageZh;
@@ -1334,7 +1709,9 @@
           view?.classList.add("workflow-room-active");
           closeWorkflowDrawers();
           window.setTimeout(() => {
-            room.querySelector("[data-workflow-focus]")?.focus({ preventScroll: true });
+            room
+              .querySelector("[data-workflow-focus]")
+              ?.focus({ preventScroll: true });
           }, 0);
         });
       });
@@ -1347,7 +1724,9 @@
           view?.classList.remove("workflow-room-active");
           closeWorkflowDrawers();
           window.setTimeout(() => {
-            shell.querySelector("[data-workflow-open].is-active")?.focus({ preventScroll: true });
+            shell
+              .querySelector("[data-workflow-open].is-active")
+              ?.focus({ preventScroll: true });
           }, 0);
         });
       });
@@ -1355,7 +1734,9 @@
       room.querySelectorAll("[data-workflow-drawer-open]").forEach((button) => {
         button.addEventListener("click", () => {
           const target = button.dataset.workflowDrawerOpen || "";
-          const drawer = room.querySelector(`[data-workflow-drawer="${target}"]`);
+          const drawer = room.querySelector(
+            `[data-workflow-drawer="${target}"]`,
+          );
           if (!drawer) return;
           const nextOpen = drawer.hidden;
           closeWorkflowDrawers();
@@ -1364,9 +1745,11 @@
         });
       });
 
-      room.querySelectorAll("[data-workflow-drawer-close]").forEach((button) => {
-        button.addEventListener("click", closeWorkflowDrawers);
-      });
+      room
+        .querySelectorAll("[data-workflow-drawer-close]")
+        .forEach((button) => {
+          button.addEventListener("click", closeWorkflowDrawers);
+        });
     });
   }
 
@@ -1376,7 +1759,15 @@
         const next = button.getAttribute("aria-pressed") !== "true";
         button.setAttribute("aria-pressed", String(next));
         const locale = currentLocale();
-        toast(next ? (locale === "en" ? "Enabled" : "已开启") : (locale === "en" ? "Disabled" : "已关闭"));
+        toast(
+          next
+            ? locale === "en"
+              ? "Enabled"
+              : "已开启"
+            : locale === "en"
+              ? "Disabled"
+              : "已关闭",
+        );
       });
     });
   }
@@ -1388,9 +1779,15 @@
         const text = target ? target.innerText : button.dataset.copyText || "";
         try {
           await navigator.clipboard.writeText(text);
-          toast(currentLocale() === "en" ? "Copied to clipboard" : "已复制到剪贴板");
+          toast(
+            currentLocale() === "en" ? "Copied to clipboard" : "已复制到剪贴板",
+          );
         } catch (_) {
-          toast(currentLocale() === "en" ? "Copy is not available here; content remains selectable" : "当前环境不支持复制，内容已保持可选中");
+          toast(
+            currentLocale() === "en"
+              ? "Copy is not available here; content remains selectable"
+              : "当前环境不支持复制，内容已保持可选中",
+          );
         }
       });
     });
@@ -1404,12 +1801,17 @@
         if (list) {
           const row = document.createElement("div");
           row.className = "activity-row";
-          row.innerHTML = locale === "en"
-            ? '<div class="task-top"><strong>Task draft created</strong><span class="status success">Ready to plan</span></div><p>Crewon has prepared a workspace draft with project, agent, and schedule suggestions.</p>'
-            : '<div class="task-top"><strong>任务草稿已创建</strong><span class="status success">可继续规划</span></div><p>Crewon 已准备工作空间草稿，并补上项目、智能体和日程安排建议。</p>';
+          row.innerHTML =
+            locale === "en"
+              ? '<div class="task-top"><strong>Task draft created</strong><span class="status success">Ready to plan</span></div><p>Crewon has prepared a workspace draft with project, agent, and schedule suggestions.</p>'
+              : '<div class="task-top"><strong>任务草稿已创建</strong><span class="status success">可继续规划</span></div><p>Crewon 已准备工作空间草稿，并补上项目、智能体和日程安排建议。</p>';
           list.prepend(row);
         }
-        toast(locale === "en" ? "Mobile task draft created" : "移动端任务草稿已创建");
+        toast(
+          locale === "en"
+            ? "Mobile task draft created"
+            : "移动端任务草稿已创建",
+        );
       });
     });
   }
@@ -1420,17 +1822,30 @@
         const target = button.dataset.target;
         if (target) {
           document.querySelectorAll("[data-mobile-panel]").forEach((panel) => {
-            panel.classList.toggle("active", panel.dataset.mobilePanel === target);
+            panel.classList.toggle(
+              "active",
+              panel.dataset.mobilePanel === target,
+            );
           });
           document.querySelectorAll("[data-mobile-tab]").forEach((item) => {
             item.classList.toggle("active", item.dataset.target === target);
           });
         } else {
-          document.querySelectorAll("[data-mobile-tab]").forEach((item) => item.classList.toggle("active", item === button));
+          document
+            .querySelectorAll("[data-mobile-tab]")
+            .forEach((item) =>
+              item.classList.toggle("active", item === button),
+            );
         }
         const locale = currentLocale();
-        const labelNode = button.dataset.zh ? button : button.querySelector("[data-zh][data-en]");
-        const label = labelNode ? (locale === "en" ? labelNode.dataset.en : labelNode.dataset.zh) : "";
+        const labelNode = button.dataset.zh
+          ? button
+          : button.querySelector("[data-zh][data-en]");
+        const label = labelNode
+          ? locale === "en"
+            ? labelNode.dataset.en
+            : labelNode.dataset.zh
+          : "";
         toast(locale === "en" ? `${label} tab selected` : `已切换到${label}`);
       });
     });
@@ -1448,36 +1863,76 @@
   function setupSceneTabs() {
     const presets = {
       office: {
-        subtitle: ["整理、撰写和推进你的工作", "Organize, write, and move work forward"],
+        subtitle: [
+          "整理、撰写和推进你的工作",
+          "Organize, write, and move work forward",
+        ],
         context: ["文档 / 日历 / 知识库", "Docs / Calendar / Knowledge"],
         deliverable: ["文档与行动项", "Documents and actions"],
-        capabilities: ["推荐能力：文档整理 · Calendar · Knowledge", "Recommended: Documents · Calendar · Knowledge"],
-        placeholder: ["例如：整理今天的项目事项，安排会议、跟进阻塞，并把结论写入知识库", "Example: organize today's project work, meetings, blockers, and knowledge capture"]
+        capabilities: [
+          "推荐能力：文档整理 · Calendar · Knowledge",
+          "Recommended: Documents · Calendar · Knowledge",
+        ],
+        placeholder: [
+          "例如：整理今天的项目事项，安排会议、跟进阻塞，并把结论写入知识库",
+          "Example: organize today's project work, meetings, blockers, and knowledge capture",
+        ],
       },
       code: {
-        subtitle: ["围绕仓库完成询问、计划、实现与审阅", "Ask, plan, implement, and review around the repository"],
+        subtitle: [
+          "围绕仓库完成询问、计划、实现与审阅",
+          "Ask, plan, implement, and review around the repository",
+        ],
         context: ["仓库 / Issue / 日志", "Repository / Issues / Logs"],
-        deliverable: ["回答、计划、Diff 与测试", "Answers, plans, diffs, and tests"],
-        capabilities: ["推荐能力：Workspace · Terminal · Test · Git", "Recommended: Workspace · Terminal · Test · Git"],
-        placeholder: ["例如：读取当前仓库规则，实现这个功能并运行适用测试", "Example: read repository rules, implement this feature, and run relevant tests"]
+        deliverable: [
+          "回答、计划、Diff 与测试",
+          "Answers, plans, diffs, and tests",
+        ],
+        capabilities: [
+          "推荐能力：Workspace · Terminal · Test · Git",
+          "Recommended: Workspace · Terminal · Test · Git",
+        ],
+        placeholder: [
+          "例如：读取当前仓库规则，实现这个功能并运行适用测试",
+          "Example: read repository rules, implement this feature, and run relevant tests",
+        ],
       },
       design: {
-        subtitle: ["从 Brief 完成探索、制作与走查", "Explore, produce, and inspect from a brief"],
-        context: ["Brief / Figma / 品牌与参考", "Brief / Figma / Brand and references"],
-        deliverable: ["方向、视觉产物与交付说明", "Directions, visual artifacts, and handoff"],
-        capabilities: ["推荐能力：Vision · Figma · Image Generation", "Recommended: Vision · Figma · Image Generation"],
-        placeholder: ["例如：基于这个 Brief 探索三个方向，并制作可预览的页面方案", "Example: explore three directions from this brief and produce a previewable page concept"]
-      }
+        subtitle: [
+          "从 Brief 完成探索、制作与走查",
+          "Explore, produce, and inspect from a brief",
+        ],
+        context: [
+          "Brief / Figma / 品牌与参考",
+          "Brief / Figma / Brand and references",
+        ],
+        deliverable: [
+          "方向、视觉产物与交付说明",
+          "Directions, visual artifacts, and handoff",
+        ],
+        capabilities: [
+          "推荐能力：Vision · Figma · Image Generation",
+          "Recommended: Vision · Figma · Image Generation",
+        ],
+        placeholder: [
+          "例如：基于这个 Brief 探索三个方向，并制作可预览的页面方案",
+          "Example: explore three directions from this brief and produce a previewable page concept",
+        ],
+      },
     };
 
     document.querySelectorAll(".scene-tabs").forEach((group) => {
       const scope = group.closest(".hero-center") || document;
-      const scenarioButtons = Array.from(scope.querySelectorAll(".quick-row [data-scene]"));
+      const scenarioButtons = Array.from(
+        scope.querySelectorAll(".quick-row [data-scene]"),
+      );
       const sceneMode = scope.querySelector("[data-scene-mode]");
       const subtitle = scope.querySelector("[data-scene-subtitle]");
       const configMode = scope.querySelector("[data-scene-config-mode]");
       const configContext = scope.querySelector("[data-scene-config-context]");
-      const configDeliverable = scope.querySelector("[data-scene-config-deliverable]");
+      const configDeliverable = scope.querySelector(
+        "[data-scene-config-deliverable]",
+      );
       const capabilities = scope.querySelector("[data-scene-capabilities]");
       const composer = scope.querySelector("[data-composer]");
       const risk = scope.querySelector("[data-scene-risk]");
@@ -1494,7 +1949,7 @@
         "探索设计方向": "explore",
         "设计页面或组件": "produce",
         "生成视觉资产": "produce",
-        "走查并交付": "inspect"
+        "走查并交付": "inspect",
       };
 
       function setLocalized(node, copy) {
@@ -1506,7 +1961,12 @@
 
       function syncRisk() {
         if (!risk || !sceneMode) return;
-        risk.hidden = !["coordinate", "implement", "refine", "produce"].includes(sceneMode.value);
+        risk.hidden = ![
+          "coordinate",
+          "implement",
+          "refine",
+          "produce",
+        ].includes(sceneMode.value);
         if (configMode) {
           const copy = selectedCopy(sceneMode);
           setLocalized(configMode, [copy.zh, copy.en]);
@@ -1539,13 +1999,22 @@
         if (composer) {
           composer.dataset.placeholderZh = preset.placeholder[0];
           composer.dataset.placeholderEn = preset.placeholder[1];
-          composer.setAttribute("placeholder", currentLocale() === "en" ? preset.placeholder[1] : preset.placeholder[0]);
+          composer.setAttribute(
+            "placeholder",
+            currentLocale() === "en"
+              ? preset.placeholder[1]
+              : preset.placeholder[0],
+          );
         }
         syncRisk();
       }
       group.querySelectorAll("button").forEach((button) => {
-        button.setAttribute("aria-pressed", button.classList.contains("active") ? "true" : "false");
-        if (button.classList.contains("active")) syncScene(button.dataset.sceneTarget);
+        button.setAttribute(
+          "aria-pressed",
+          button.classList.contains("active") ? "true" : "false",
+        );
+        if (button.classList.contains("active"))
+          syncScene(button.dataset.sceneTarget);
         button.addEventListener("click", () => {
           group.querySelectorAll("button").forEach((item) => {
             const active = item === button;
@@ -1557,7 +2026,8 @@
       });
       scenarioButtons.forEach((button) => {
         button.addEventListener("click", () => {
-          const mode = quickModeByLabel[button.dataset.zh || button.textContent.trim()];
+          const mode =
+            quickModeByLabel[button.dataset.zh || button.textContent.trim()];
           if (sceneMode && mode) {
             sceneMode.value = mode;
             sceneMode.dispatchEvent(new Event("change", { bubbles: true }));
@@ -1575,7 +2045,13 @@
           const copy = selectedCopy(sceneMode);
           setLocalized(configMode, [copy.zh, copy.en]);
         }
-        if (composer) composer.setAttribute("placeholder", currentLocale() === "en" ? preset.placeholder[1] : preset.placeholder[0]);
+        if (composer)
+          composer.setAttribute(
+            "placeholder",
+            currentLocale() === "en"
+              ? preset.placeholder[1]
+              : preset.placeholder[0],
+          );
       });
     });
   }
@@ -1587,7 +2063,8 @@
         const marker = button.querySelector("span");
         if (!node) return;
         node.classList.toggle("collapsed");
-        if (marker) marker.textContent = node.classList.contains("collapsed") ? "›" : "⌄";
+        if (marker)
+          marker.textContent = node.classList.contains("collapsed") ? "›" : "⌄";
       });
     });
 
@@ -1595,26 +2072,45 @@
       button.addEventListener("click", () => {
         const tree = button.closest(".space-tree");
         const node = button.closest(".space-node");
-        const workspace = document.querySelector("[data-workspace-select], .workspace-select");
+        const workspace = document.querySelector(
+          "[data-workspace-select], .workspace-select",
+        );
         if (tree) {
-          tree.querySelectorAll(".conversation-item").forEach((item) => item.classList.toggle("active", item === button));
-          tree.querySelectorAll(".space-node").forEach((item) => item.classList.toggle("current", item === node));
+          tree
+            .querySelectorAll(".conversation-item")
+            .forEach((item) =>
+              item.classList.toggle("active", item === button),
+            );
+          tree
+            .querySelectorAll(".space-node")
+            .forEach((item) => item.classList.toggle("current", item === node));
         }
         if (workspace && node) {
           const spaceLabel = node.querySelector(".space-title strong");
-          const zhSpace = spaceLabel?.dataset.zh || spaceLabel?.textContent.trim() || "";
+          const zhSpace =
+            spaceLabel?.dataset.zh || spaceLabel?.textContent.trim() || "";
           const enSpace = spaceLabel?.dataset.en || zhSpace;
           const zhConversation = button.dataset.zh || button.textContent.trim();
           const enConversation = button.dataset.en || zhConversation;
           if (workspace.tagName === "SELECT") {
-            const value = zhSpace.includes("办公室") ? "project" : (zhSpace.includes("Skill") || zhSpace.includes("MCP") ? "capabilities" : "crewon");
+            const value = zhSpace.includes("办公室")
+              ? "project"
+              : zhSpace.includes("Skill") || zhSpace.includes("MCP")
+                ? "capabilities"
+                : "crewon";
             workspace.value = value;
             workspace.dispatchEvent(new Event("change", { bubbles: true }));
-            setComposerStatus(`当前会话：${zhSpace} / ${zhConversation}`, `Current conversation: ${enSpace} / ${enConversation}`);
+            setComposerStatus(
+              `当前会话：${zhSpace} / ${zhConversation}`,
+              `Current conversation: ${enSpace} / ${enConversation}`,
+            );
           } else {
             workspace.dataset.zh = `${zhSpace} / ${zhConversation}`;
             workspace.dataset.en = `${enSpace} / ${enConversation}`;
-            workspace.textContent = currentLocale() === "en" ? workspace.dataset.en : workspace.dataset.zh;
+            workspace.textContent =
+              currentLocale() === "en"
+                ? workspace.dataset.en
+                : workspace.dataset.zh;
           }
         }
       });
