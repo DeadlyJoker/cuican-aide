@@ -10,6 +10,7 @@ import {
   type WorkflowExecutionState,
   type WorkflowNodeContinuationCheckpoint,
   type WorkflowPendingToolResume,
+  type WorkflowRetrievedContinuationPayload,
 } from "@crewon/application";
 import { canonicalActionIntent } from "@crewon/contracts/runtime";
 import {
@@ -659,6 +660,167 @@ test("SQLite settles a retrieved sample after continuation takeover restored run
   fixture.database.close();
 });
 
+test("SQLite atomically commits and adopts a retrieved nonterminal continuation", async () => {
+  const fixture = await continuationFixture();
+  const recovered = await prepareRecoveredRound(fixture);
+  const beforeEvents = count(fixture.database, "run_events");
+  const beforeOutbox = Number(
+    fixture.database.prepare("SELECT count(*) AS count FROM outbox").get()!
+      .count,
+  );
+
+  const result = await fixture.store.commitRetrievedWorkflowNodeContinuation(
+    recoveredCommitInput(fixture, recovered),
+  );
+
+  assert.equal(result.disposition, "resumeRequired");
+  assert.equal(count(fixture.database, "run_events"), beforeEvents + 3);
+  assert.equal(
+    Number(
+      fixture.database.prepare("SELECT count(*) AS count FROM outbox").get()!
+        .count,
+    ),
+    beforeOutbox + 3,
+  );
+  assert.deepEqual(
+    result.resume.continuation.history,
+    recovered.payload.next.history,
+  );
+  assert.equal(result.resume.continuation.modelSampleIndex, 1);
+  assert.equal(result.resume.continuation.activeDispatch, null);
+  assert.deepEqual(result.resume.continuation.authority, {
+    ...fixture.authority,
+    workItemId: fixture.reconcileInput.lease.workItemId,
+    leaseEpoch: fixture.reconcileInput.lease.leaseEpoch,
+  });
+  assert.deepEqual(
+    dispatchState(fixture, recovered.retrieval.recovery.dispatch.operationId),
+    {
+      status: "terminal",
+      revision: recovered.retrieval.recovery.dispatch.revision + 1,
+      terminalOutcome: {
+        kind: "completed",
+        code: null,
+        certainty: "responseObserved",
+      },
+    },
+  );
+  assert.equal(
+    (await fixture.store.reconcileWorkflowNode(fixture.reconcileInput))
+      .disposition,
+    "resumeRequired",
+  );
+  assert.equal(count(fixture.database, "run_events"), beforeEvents + 3);
+  fixture.database.close();
+});
+
+for (const prefixLength of [1, 3] as const) {
+  test(`SQLite retrieved continuation preserves an exact ${prefixLength === 1 ? "partial" : "complete"} event prefix`, async () => {
+    const fixture = await continuationFixture();
+    const recovered = await prepareRecoveredRound(fixture);
+    appendSqliteWorkflowRetrievedEventSuffix(fixture.database, {
+      tenantId: "tenant-1",
+      runId: "run-1",
+      attemptId: fixture.authority.attempt.attemptId,
+      dispatchOperationId: recovered.retrieval.recovery.dispatch.operationId,
+      segmentId: recovered.payload.next.segmentId,
+      payload: {
+        ...recovered.payload,
+        events: recovered.payload.events.slice(0, prefixLength),
+      },
+      committedAt: now,
+      digester,
+    });
+    const beforeEvents = count(fixture.database, "run_events");
+    const beforeOutbox = countOutbox(fixture.database);
+
+    const result = await fixture.store.commitRetrievedWorkflowNodeContinuation(
+      recoveredCommitInput(fixture, recovered),
+    );
+
+    assert.equal(result.disposition, "resumeRequired");
+    assert.equal(
+      count(fixture.database, "run_events"),
+      beforeEvents + (3 - prefixLength),
+    );
+    assert.equal(
+      countOutbox(fixture.database),
+      beforeOutbox + (3 - prefixLength),
+    );
+    assert.deepEqual(
+      result.resume.continuation.history,
+      recovered.payload.next.history,
+    );
+    fixture.database.close();
+  });
+}
+
+test("SQLite commits a tool-only retrieved continuation without inventing assistant history", async () => {
+  const fixture = await continuationFixture();
+  const recovered = await prepareRecoveredRound(fixture, { toolOnly: true });
+
+  const result = await fixture.store.commitRetrievedWorkflowNodeContinuation(
+    recoveredCommitInput(fixture, recovered),
+  );
+
+  assert.equal(result.disposition, "resumeRequired");
+  assert.deepEqual(
+    result.resume.continuation.history,
+    recovered.payload.next.history,
+  );
+  assert.equal(
+    result.resume.continuation.history.filter(
+      (item) => item.type === "message" && item.content === "next tool",
+    ).length,
+    0,
+  );
+  fixture.database.close();
+});
+
+test("SQLite rolls retrieved events and every adopted authority back together", async () => {
+  const fixture = await continuationFixture();
+  const recovered = await prepareRecoveredRound(fixture);
+  const beforeEvents = count(fixture.database, "run_events");
+  const beforeOutbox = countOutbox(fixture.database);
+  const beforeCheckpoint = storedContinuation(fixture.database);
+  fixture.database.exec(`CREATE TRIGGER fail_retrieved_continuation
+    BEFORE UPDATE ON workflow_executions
+    BEGIN SELECT RAISE(ABORT, 'retrieved-crash'); END`);
+
+  await assert.rejects(
+    fixture.store.commitRetrievedWorkflowNodeContinuation(
+      recoveredCommitInput(fixture, recovered),
+    ),
+    (error: unknown) =>
+      error instanceof RunStoreError &&
+      error.code === "workflow_composition_store_failed" &&
+      error.cause instanceof Error &&
+      error.cause.message === "retrieved-crash",
+  );
+  assert.equal(count(fixture.database, "run_events"), beforeEvents);
+  assert.equal(countOutbox(fixture.database), beforeOutbox);
+  assert.deepEqual(storedContinuation(fixture.database), beforeCheckpoint);
+  assert.deepEqual(
+    dispatchState(fixture, recovered.retrieval.recovery.dispatch.operationId),
+    {
+      status: "responseObserved",
+      revision: recovered.retrieval.recovery.dispatch.revision,
+      terminalOutcome: null,
+    },
+  );
+
+  fixture.database.exec("DROP TRIGGER fail_retrieved_continuation");
+  assert.equal(
+    (
+      await fixture.store.commitRetrievedWorkflowNodeContinuation(
+        recoveredCommitInput(fixture, recovered),
+      )
+    ).disposition,
+    "resumeRequired",
+  );
+  fixture.database.close();
+});
+
 for (const corruption of [
   {
     name: "stored schema",
@@ -1063,6 +1225,175 @@ function retrievedPrefixInput(
   };
 }
 
+async function prepareRecoveredRound(
+  fixture: Awaited<ReturnType<typeof continuationFixture>>,
+  options: Readonly<{ toolOnly?: boolean }> = {},
+) {
+  await fixture.store.reconcileWorkflowNode(fixture.reconcileInput);
+  const providerCheckpoint = {
+    schemaVersion: "crewon.provider-checkpoint.v0" as const,
+    adapterName: "responses",
+    adapterVersion: "1",
+    modelId: "model-1",
+    opaquePayload: { responseId: "retrieved-response" },
+  };
+  const checkpointDigest = digester.sha256(canonicalJson(providerCheckpoint));
+  const segmentId = `segment:${fixture.authority.attempt.attemptId}:round:2`;
+  const prepared = prepareSqliteModelDispatch(fixture.database, {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease: fixture.reconcileInput.lease,
+    attempt: fixture.authority.attempt,
+    operationId: `${segmentId}:request:2`,
+    requestSequence: 2,
+    operation: "dispatch",
+    requestDigest: digester.sha256("retrieved-request"),
+    provider: fixture.observed.provider,
+    preparedAt: now,
+  });
+  const sent = markSqliteModelDispatchPossiblySent(fixture.database, {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease: fixture.reconcileInput.lease,
+    attempt: fixture.authority.attempt,
+    operationId: prepared.operationId,
+    requestSequence: prepared.requestSequence,
+    expectedRevision: prepared.revision,
+    transitionedAt: now,
+  });
+  observeSqliteModelDispatchResponse(fixture.database, {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease: fixture.reconcileInput.lease,
+    attempt: fixture.authority.attempt,
+    operationId: prepared.operationId,
+    requestSequence: prepared.requestSequence,
+    expectedRevision: sent.revision,
+    checkpointDigest,
+    transitionedAt: now,
+  });
+  checkpointSqliteRunAttempt(
+    fixture.database,
+    { tenantId: "tenant-1", runId: "run-1", ...fixture.authority.attempt },
+    fixture.reconcileInput.lease.workItemId,
+    fixture.reconcileInput.lease.leaseEpoch,
+    providerCheckpoint,
+    checkpointDigest,
+    now,
+    "replace",
+  );
+  const retrieval = await fixture.store.reconcileWorkflowNode(
+    fixture.reconcileInput,
+  );
+  assert.equal(retrieval.disposition, "retrieveRequired");
+  if (retrieval.disposition !== "retrieveRequired")
+    assert.fail("retrieve required");
+  const toolRequested = {
+    schemaVersion: "crewon.agent-event.v0" as const,
+    runId: "run-1",
+    segmentId,
+    sequence: options.toolOnly ? 1 : 3,
+    type: "tool.requested" as const,
+    data: {
+      callId: "retrieved-call",
+      kind: "function" as const,
+      name: "tool.read",
+      input: "{}",
+    },
+  };
+  const payload: WorkflowRetrievedContinuationPayload = {
+    events: options.toolOnly
+      ? [toolRequested]
+      : [
+          {
+            schemaVersion: "crewon.agent-event.v0" as const,
+            runId: "run-1",
+            segmentId,
+            sequence: 1,
+            type: "segment.started" as const,
+            data: { attempt: 1 },
+          },
+          {
+            schemaVersion: "crewon.agent-event.v0" as const,
+            runId: "run-1",
+            segmentId,
+            sequence: 2,
+            type: "model.output.delta" as const,
+            data: { delta: "next tool" },
+          },
+          toolRequested,
+        ],
+    assistantContinuation: options.toolOnly
+      ? null
+      : {
+          segmentId,
+          sequence: 4,
+          output: "next tool",
+          completedAssistantItems: ["next tool"],
+          checkpoint: providerCheckpoint,
+          providerTurnState: null,
+        },
+    next: {
+      schemaVersion: "crewon.workflow-node-continuation.v0" as const,
+      segmentId,
+      modelSampleIndex: 1,
+      toolRoundsConsumed: 1,
+      providerCheckpoint,
+      providerTurnState: null,
+      history: [
+        ...fixture.history,
+        ...(options.toolOnly
+          ? []
+          : [
+              {
+                type: "message" as const,
+                role: "assistant" as const,
+                content: "next tool",
+              },
+            ]),
+        {
+          type: "tool_call" as const,
+          kind: "function" as const,
+          callId: "retrieved-call",
+          name: "tool.read",
+          input: "{}",
+        },
+      ],
+    },
+  };
+  return { retrieval, payload };
+}
+
+function recoveredCommitInput(
+  fixture: Awaited<ReturnType<typeof continuationFixture>>,
+  recovered: Awaited<ReturnType<typeof prepareRecoveredRound>>,
+) {
+  return {
+    ...fixture.reconcileInput,
+    agentVersionId: "agent-v1",
+    attempt: {
+      stepId: fixture.authority.attempt.stepId,
+      attemptId: fixture.authority.attempt.attemptId,
+      workItemId: fixture.reconcileInput.lease.workItemId,
+      leaseEpoch: fixture.reconcileInput.lease.leaseEpoch,
+    },
+    dispatch: {
+      operationId: recovered.retrieval.recovery.dispatch.operationId,
+      requestSequence: recovered.retrieval.recovery.dispatch.requestSequence,
+      expectedRevision: recovered.retrieval.recovery.dispatch.revision,
+      status: "responseObserved" as const,
+    },
+    priorContinuation: recovered.retrieval.recovery.priorContinuation,
+    payload: recovered.payload,
+  };
+}
+
+function countOutbox(database: DatabaseSync): number {
+  return Number(
+    database.prepare("SELECT count(*) AS count FROM outbox").get()!.count,
+  );
+}
+
 function seedPendingTools(
   database: DatabaseSync,
   input: Readonly<{
@@ -1425,13 +1756,14 @@ function rewritePendingReceipt(
 
 function dispatchState(
   fixture: Awaited<ReturnType<typeof continuationFixture>>,
+  operationId = fixture.observed.operationId,
 ) {
   const receipt = loadSqliteModelDispatchReceipt(fixture.database, {
     tenantId: "tenant-1",
     runId: "run-1",
     stepId: fixture.authority.attempt.stepId,
     attemptId: fixture.authority.attempt.attemptId,
-    operationId: fixture.observed.operationId,
+    operationId,
   })!;
   return {
     status: receipt.status,
