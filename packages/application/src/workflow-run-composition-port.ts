@@ -19,6 +19,7 @@ import type {
   WorkflowExecutionState,
   WorkflowNodeClaim,
 } from "./workflow-execution-types.ts";
+import type { WorkflowNodeContinuationCheckpoint } from "./workflow-node-continuation-store-port.ts";
 
 export type WorkflowAtomicNodeOutcome =
   | Readonly<{ status: "completed"; value: WorkflowSchemaValue }>
@@ -44,6 +45,21 @@ export type WorkflowNodeResponseRecovery = Readonly<{
     }>;
   inputValue: WorkflowExecutionValue;
   dispatch: ModelDispatchReceipt & Readonly<{ status: "responseObserved" }>;
+}>;
+
+/**
+ * Store-adopted authority for continuing a non-terminal Workflow Agent sample.
+ *
+ * The Store returns this only after atomically fencing the reconciliation Work
+ * Item lease, adopting the same Attempt to that lease, terminating the consumed
+ * model dispatch, and deep-validating the bounded continuation checkpoint.
+ */
+export type WorkflowNodeContinuationResume = Readonly<{
+  claim: WorkflowNodeClaim;
+  step: RunStepState;
+  attempt: RunAttemptState & Readonly<{ status: "running" }>;
+  reconciliationLease: WorkItemLeaseInput;
+  continuation: WorkflowNodeContinuationCheckpoint;
 }>;
 
 export type WorkflowNodeWorkAuthority = Readonly<{
@@ -125,14 +141,19 @@ export type WorkflowCancellationResult =
       execution: WorkflowExecutionState;
       handoff: WorkflowRetainedHandoff;
       runDisposition: "nonTerminal";
-    }> & WorkflowCancellationProof)
+    }> &
+      WorkflowCancellationProof)
   | (Readonly<{
-      disposition: "canceled" | "cancellationPending" | "replay" |
-        "reconciliationScheduled";
+      disposition:
+        | "canceled"
+        | "cancellationPending"
+        | "replay"
+        | "reconciliationScheduled";
       execution: WorkflowExecutionState;
       handoff: WorkflowAtomicHandoff;
       runDisposition: WorkflowRunDisposition;
-    }> & WorkflowCancellationProof);
+    }> &
+      WorkflowCancellationProof);
 
 export type WorkflowReconciliationResult =
   | Readonly<{
@@ -152,7 +173,20 @@ export type WorkflowReconciliationResult =
       runDisposition: "nonTerminal";
     }>
   | Readonly<{
-      disposition: "retryScheduled" | "evidenceInsufficient" | "settled" | "replay";
+      /** Grants exactly one continuation resume and never a fresh execution or GET. */
+      disposition: "resumeRequired";
+      evidenceStatus: "responseObserved";
+      resume: WorkflowNodeContinuationResume;
+      execution: WorkflowExecutionState;
+      handoff: WorkflowRetainedHandoff;
+      runDisposition: "nonTerminal";
+    }>
+  | Readonly<{
+      disposition:
+        | "retryScheduled"
+        | "evidenceInsufficient"
+        | "settled"
+        | "replay";
       evidenceStatus: WorkflowDispatchEvidenceStatus;
       execution: WorkflowExecutionState;
       handoff: WorkflowAtomicHandoff;
@@ -193,33 +227,33 @@ export interface WorkflowRunCompositionStore {
     workflowInput: WorkflowRunInputRef;
   }): Promise<
     | Readonly<{
-      disposition: "scheduled";
-      execution: WorkflowExecutionState;
-      nodeWorkItems: readonly WorkflowNodeWorkAuthority[];
-      gatePublications: readonly WorkflowGatePublicationAuthority[];
-      reconciliationClaims: readonly [];
-      handoff: WorkflowAtomicHandoff;
-      runDisposition: WorkflowRunDisposition;
-    }>
+        disposition: "scheduled";
+        execution: WorkflowExecutionState;
+        nodeWorkItems: readonly WorkflowNodeWorkAuthority[];
+        gatePublications: readonly WorkflowGatePublicationAuthority[];
+        reconciliationClaims: readonly [];
+        handoff: WorkflowAtomicHandoff;
+        runDisposition: WorkflowRunDisposition;
+      }>
     | Readonly<{
-      /** Receipt replay is observation-only and never grants side-effect permission. */
-      disposition: "replay";
-      execution: WorkflowExecutionState;
-      nodeWorkItems: readonly [];
-      gatePublications: readonly [];
-      reconciliationClaims: readonly [];
-      handoff: WorkflowAtomicHandoff;
-      runDisposition: WorkflowRunDisposition;
-    }>
+        /** Receipt replay is observation-only and never grants side-effect permission. */
+        disposition: "replay";
+        execution: WorkflowExecutionState;
+        nodeWorkItems: readonly [];
+        gatePublications: readonly [];
+        reconciliationClaims: readonly [];
+        handoff: WorkflowAtomicHandoff;
+        runDisposition: WorkflowRunDisposition;
+      }>
     | Readonly<{
-      disposition: "reconcileRequired";
-      execution: WorkflowExecutionState;
-      nodeWorkItems: readonly [];
-      gatePublications: readonly [];
-      reconciliationClaims: readonly WorkflowNodeClaim[];
-      handoff: WorkflowAtomicHandoff;
-      runDisposition: WorkflowRunDisposition;
-    }>
+        disposition: "reconcileRequired";
+        execution: WorkflowExecutionState;
+        nodeWorkItems: readonly [];
+        gatePublications: readonly [];
+        reconciliationClaims: readonly WorkflowNodeClaim[];
+        handoff: WorkflowAtomicHandoff;
+        runDisposition: WorkflowRunDisposition;
+      }>
   >;
 
   admitWorkflowNodeWork(input: {
