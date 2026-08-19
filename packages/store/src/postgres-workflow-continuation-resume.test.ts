@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { Pool } from "pg";
 
+import { canonicalActionIntent } from "@crewon/contracts/runtime";
 import {
   RunStoreError,
   type WorkflowExecutionState,
@@ -11,7 +12,10 @@ import {
 import {
   compileWorkflowVersion,
   createWorkflowNodeTerminalEvidence,
+  prepareToolExecutionReceipt,
+  reduceRunLifecycleEvent,
   serializeCompiledWorkflowVersion,
+  type RunLifecycleEvent,
   type RunState,
   type WorkflowVersionSource,
 } from "@crewon/domain";
@@ -127,6 +131,7 @@ test(
       });
       assert.equal(admitted.disposition, "fresh");
       const attempt = admitted.admission!.attempt;
+      const toolSegmentId = `segment:${attempt.attemptId}:round:1`;
       const authority = {
         tenantId: "tenant-1",
         runId: "run-1",
@@ -204,7 +209,7 @@ test(
         next: {
           schemaVersion: "crewon.workflow-node-continuation.v0",
           authority,
-          segmentId: "segment-agent-1",
+          segmentId: toolSegmentId,
           modelSampleIndex: 1,
           toolRoundsConsumed: 0,
           providerCheckpoint,
@@ -217,10 +222,90 @@ test(
           },
           history: [
             { type: "message", role: "assistant", content: "continue" },
+            {
+              type: "tool_call",
+              kind: "function",
+              callId: "call-1",
+              name: "workspace.read",
+              input: '{"path":"README.md"}',
+            },
           ],
         },
         committedAt: "2026-08-19T00:00:04.000Z",
         terminalResult: null,
+      });
+      const requested = await appendToolEvent(pool, schema, {
+        type: "tool.requested",
+        data: {
+          segmentId: toolSegmentId,
+          segmentSequence: 1,
+          callId: "call-1",
+          kind: "function",
+          name: "workspace.read",
+          input: '{"path":"README.md"}',
+        },
+      });
+      const actionIntent = {
+        schemaVersion: "crewon.action-intent.v0" as const,
+        runId: "run-1",
+        segmentId: toolSegmentId,
+        callId: "call-1",
+        tool: {
+          kind: "function" as const,
+          name: "workspace.read",
+          inputDigest: digester.sha256('{"path":"README.md"}'),
+        },
+        effect: "readOnly" as const,
+        recovery: "replaySafe" as const,
+        policySnapshotId: "policy-1",
+        workspaceBindingId: null,
+        resourceBindingId: null,
+        credentialBindingId: null,
+        executionTarget: { kind: "control" as const, bindingId: "control-1" },
+        capability: "workspace.read",
+        approvalRequirement: "none" as const,
+        limits: {
+          timeoutMs: 30_000,
+          maxOutputBytes: 32_768,
+          maxArtifactBytes: 1_048_576,
+        },
+      };
+      const actionDigest = digester.sha256(canonicalActionIntent(actionIntent));
+      const toolStepId = `tool:${actionDigest.slice("sha256:".length)}`;
+      const toolAttempt = await store.beginRunAttempt({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: nodeLease,
+        stepId: toolStepId,
+        kind: "tool",
+        attemptId: "tool-attempt-1",
+        startedAt: requested.occurredAt,
+      });
+      const pendingTool = prepareToolExecutionReceipt({
+        receiptId: "tool-receipt-1",
+        tenantId: "tenant-1",
+        runId: "run-1",
+        stepId: toolStepId,
+        attemptId: toolAttempt.attempt.attemptId,
+        workItemId: nodeLease.workItemId,
+        executionId: "tool-execution-1",
+        idempotencyKey: "run-1/tool/call-1",
+        actionDigest,
+        actionIntent,
+        call: {
+          segmentId: toolSegmentId,
+          callId: "call-1",
+          kind: "function",
+          name: "workspace.read",
+          inputDigest: actionIntent.tool.inputDigest,
+        },
+        effect: actionIntent.effect,
+        recovery: actionIntent.recovery,
+        preparedAt: requested.occurredAt,
+      });
+      await store.prepareToolExecution({
+        lease: nodeLease,
+        receipt: pendingTool,
       });
       const scheduledReconcile = await store.scheduleWorkflowReconciliation({
         tenantId: "tenant-1",
@@ -311,6 +396,72 @@ test(
           [beforeTakeover],
         );
       }
+      await pool.query(
+        `UPDATE ${schema}.run_events
+         SET event_json=jsonb_set(event_json,'{data,input}',$1::jsonb)
+         WHERE tenant_id='tenant-1' AND run_id='run-1' AND event_id=$2`,
+        [JSON.stringify("forged-input"), requested.eventId],
+      );
+      await assert.rejects(
+        store.reconcileWorkflowNode(reconciliationInput),
+        (error) =>
+          error instanceof RunStoreError &&
+          error.code === "workflow_reconciliation_evidence_corrupt",
+      );
+      await pool.query(
+        `UPDATE ${schema}.run_events SET event_json=$1::jsonb
+         WHERE tenant_id='tenant-1' AND run_id='run-1' AND event_id=$2`,
+        [requested, requested.eventId],
+      );
+      const driftedReceipt = {
+        ...pendingTool,
+        workItemId: schedulerLease.workItemId,
+      };
+      await pool.query(
+        `UPDATE ${schema}.tool_execution_receipts
+         SET work_item_id=$1,state_json=$2::jsonb
+         WHERE tenant_id='tenant-1' AND run_id='run-1' AND receipt_id=$3`,
+        [schedulerLease.workItemId, driftedReceipt, pendingTool.receiptId],
+      );
+      await assert.rejects(
+        store.reconcileWorkflowNode(reconciliationInput),
+        (error) =>
+          error instanceof RunStoreError &&
+          error.code === "workflow_reconciliation_evidence_corrupt",
+      );
+      await pool.query(
+        `UPDATE ${schema}.tool_execution_receipts
+         SET work_item_id=$1,state_json=$2::jsonb
+         WHERE tenant_id='tenant-1' AND run_id='run-1' AND receipt_id=$3`,
+        [pendingTool.workItemId, pendingTool, pendingTool.receiptId],
+      );
+      const rolledBackTool = await pool.query<{
+        attempt_work_item_id: string;
+        attempt_lease_epoch: number;
+        receipt_work_item_id: string;
+        receipt_revision: number;
+      }>(
+        `SELECT attempt.work_item_id attempt_work_item_id,
+          attempt.lease_epoch::int attempt_lease_epoch,
+          receipt.work_item_id receipt_work_item_id,
+          receipt.revision::int receipt_revision
+         FROM ${schema}.run_attempts attempt
+         JOIN ${schema}.tool_execution_receipts receipt
+           ON receipt.tenant_id=attempt.tenant_id
+           AND receipt.run_id=attempt.run_id
+           AND receipt.step_id=attempt.step_id
+           AND receipt.attempt_id=attempt.attempt_id
+         WHERE receipt.receipt_id=$1`,
+        [pendingTool.receiptId],
+      );
+      assert.deepEqual(rolledBackTool.rows, [
+        {
+          attempt_work_item_id: authority.workItemId,
+          attempt_lease_epoch: authority.leaseEpoch,
+          receipt_work_item_id: authority.workItemId,
+          receipt_revision: pendingTool.revision,
+        },
+      ]);
       const first = (await store.reconcileWorkflowNode(
         reconciliationInput,
       )) as unknown as ResumeResult;
@@ -344,10 +495,201 @@ test(
         ],
       );
       assert.deepEqual(
+        first.resume.pendingTools.map(({ receipt, step, attempt }) => ({
+          receiptId: receipt.receiptId,
+          receiptStatus: receipt.status,
+          receiptWorkItemId: receipt.workItemId,
+          stepKind: step.kind,
+          stepStatus: step.status,
+          attemptStatus: attempt.status,
+          attemptWorkItemId: attempt.workItemId,
+          attemptLeaseEpoch: attempt.leaseEpoch,
+        })),
+        [
+          {
+            receiptId: pendingTool.receiptId,
+            receiptStatus: "prepared",
+            receiptWorkItemId: firstLease.workItemId,
+            stepKind: "tool",
+            stepStatus: "running",
+            attemptStatus: "running",
+            attemptWorkItemId: firstLease.workItemId,
+            attemptLeaseEpoch: firstLease.leaseEpoch,
+          },
+        ],
+      );
+      assert.deepEqual(
         await store.reconcileWorkflowNode(reconciliationInput),
         first,
       );
       assert.deepEqual(await loadExecution(pool, schema), first.execution);
+      const dispatchedTool = await store.transitionToolExecution({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        receiptId: pendingTool.receiptId,
+        lease: firstLease,
+        expectedRevision: first.resume.pendingTools[0]!.receipt.revision,
+        transition: {
+          kind: "dispatch",
+          occurredAt: "2026-08-19T00:00:04.100Z",
+        },
+      });
+      const dispatchedResume = (await store.reconcileWorkflowNode(
+        reconciliationInput,
+      )) as ResumeResult;
+      assert.equal(
+        dispatchedResume.resume.pendingTools[0]?.receipt.status,
+        "dispatched",
+      );
+      const unknownTool = await store.transitionToolExecution({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        receiptId: pendingTool.receiptId,
+        lease: firstLease,
+        expectedRevision: dispatchedTool.revision,
+        transition: {
+          kind: "unknownOutcome",
+          occurredAt: "2026-08-19T00:00:04.200Z",
+          providerReceiptId: "provider-tool-unknown",
+        },
+      });
+      const unknownResume = (await store.reconcileWorkflowNode(
+        reconciliationInput,
+      )) as ResumeResult;
+      assert.equal(
+        unknownResume.resume.pendingTools[0]?.receipt.status,
+        "unknownOutcome",
+      );
+      await pool.query(
+        `UPDATE ${schema}.tool_execution_receipts
+         SET status=$1,revision=$2,state_json=$3::jsonb,updated_at=$4,resolved_at=$5
+         WHERE tenant_id=$6 AND run_id=$7 AND receipt_id=$8 AND revision=$9`,
+        [
+          dispatchedTool.status,
+          dispatchedTool.revision,
+          dispatchedTool,
+          dispatchedTool.updatedAt,
+          dispatchedTool.resolvedAt,
+          dispatchedTool.tenantId,
+          dispatchedTool.runId,
+          dispatchedTool.receiptId,
+          unknownTool.revision,
+        ],
+      );
+      const {
+        revision: _continuationRevision,
+        updatedAt: _continuationUpdatedAt,
+        ...continuationBase
+      } = dispatchedResume.resume.continuation;
+      const completedTool = await store.commitWorkflowToolContinuation({
+        lease: firstLease,
+        authority: dispatchedResume.resume.continuation.authority,
+        receipt: dispatchedTool,
+        toolAttempt: {
+          stepId: dispatchedResume.resume.pendingTools[0]!.attempt.stepId,
+          attemptId: dispatchedResume.resume.pendingTools[0]!.attempt.attemptId,
+        },
+        completedEvent: {
+          schemaVersion: "crewon.agent-event.v0",
+          runId: "run-1",
+          segmentId: toolSegmentId,
+          sequence: 2,
+          type: "tool.completed",
+          data: {
+            callId: "call-1",
+            kind: "function",
+            name: "workspace.read",
+            output: "README",
+            isError: false,
+            artifactRef: null,
+            outputTruncated: false,
+          },
+        },
+        providerReceiptId: "provider-tool-completed",
+        expectedContinuationRevision:
+          dispatchedResume.resume.continuation.revision,
+        next: {
+          ...continuationBase,
+          history: [
+            ...continuationBase.history,
+            {
+              type: "tool_result",
+              kind: "function",
+              callId: "call-1",
+              output: "README",
+            },
+          ],
+        },
+        committedAt: "2026-08-19T00:00:04.300Z",
+      });
+      assert.equal(completedTool.receipt.status, "completed");
+      assert.deepEqual(
+        await store.commitWorkflowToolContinuation({
+          lease: firstLease,
+          authority: dispatchedResume.resume.continuation.authority,
+          receipt: dispatchedTool,
+          toolAttempt: {
+            stepId: dispatchedResume.resume.pendingTools[0]!.attempt.stepId,
+            attemptId:
+              dispatchedResume.resume.pendingTools[0]!.attempt.attemptId,
+          },
+          completedEvent: {
+            schemaVersion: "crewon.agent-event.v0",
+            runId: "run-1",
+            segmentId: toolSegmentId,
+            sequence: 2,
+            type: "tool.completed",
+            data: {
+              callId: "call-1",
+              kind: "function",
+              name: "workspace.read",
+              output: "README",
+              isError: false,
+              artifactRef: null,
+              outputTruncated: false,
+            },
+          },
+          providerReceiptId: "provider-tool-completed",
+          expectedContinuationRevision:
+            dispatchedResume.resume.continuation.revision,
+          next: {
+            ...continuationBase,
+            history: [
+              ...continuationBase.history,
+              {
+                type: "tool_result",
+                kind: "function",
+                callId: "call-1",
+                output: "README",
+              },
+            ],
+          },
+          committedAt: "2026-08-19T00:00:04.300Z",
+        }),
+        completedTool,
+      );
+      const postCompletion = (await store.reconcileWorkflowNode(
+        reconciliationInput,
+      )) as ResumeResult;
+      assert.deepEqual(postCompletion.resume.pendingTools, []);
+      assert.deepEqual(
+        postCompletion.resume.continuation,
+        completedTool.continuation,
+      );
+      const lifecycle = await pool.query<{
+        completed_events: number;
+        outbox: number;
+      }>(
+        `SELECT
+         (SELECT count(*)::int FROM ${schema}.run_events
+          WHERE event_json->>'type'='tool.completed') completed_events,
+         (SELECT count(*)::int FROM ${schema}.outbox
+          WHERE message_id LIKE 'wf-tool:tool-outbox:%') outbox`,
+      );
+      assert.deepEqual(lifecycle.rows[0], {
+        completed_events: 1,
+        outbox: 1,
+      });
       const secondLease = await reclaim(
         pool,
         schema,
@@ -367,9 +709,10 @@ test(
         [
           secondLease.leaseEpoch,
           secondLease.leaseEpoch,
-          first.resume.continuation.revision + 1,
+          completedTool.continuation.revision + 1,
         ],
       );
+      assert.deepEqual(second.resume.pendingTools, []);
       assert.deepEqual(
         await store.reconcileWorkflowNode({
           ...reconciliationInput,
@@ -534,6 +877,62 @@ async function loadExecution(
   );
   assert.equal(result.rows.length, 1);
   return result.rows[0]!.state_json;
+}
+
+type ToolRunEventInput = Readonly<{
+  type: "tool.requested";
+  data: Extract<RunLifecycleEvent, { type: "tool.requested" }>["data"];
+}>;
+
+async function appendToolEvent(
+  pool: Pool,
+  schema: string,
+  input: ToolRunEventInput,
+): Promise<Extract<RunLifecycleEvent, { type: typeof input.type }>> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const row = await client.query<{ state_json: RunState }>(
+      `SELECT state_json FROM ${schema}.run_snapshots
+       WHERE tenant_id='tenant-1' AND run_id='run-1' FOR UPDATE`,
+    );
+    const current = row.rows[0]!.state_json;
+    const event = {
+      schemaVersion: "crewon.run-event.v0" as const,
+      identity: { runId: "run-1" },
+      eventId: `tool-event-${current.lastSequence + 1}`,
+      sequence: current.lastSequence + 1,
+      occurredAt: new Date(Date.parse(current.updatedAt) + 1).toISOString(),
+      ...input,
+    } as Extract<RunLifecycleEvent, { type: typeof input.type }>;
+    const next = reduceRunLifecycleEvent(current, event);
+    const updated = await client.query(
+      `UPDATE ${schema}.run_snapshots
+       SET revision=$1,last_sequence=$2,state_json=$3::jsonb,updated_at=$4
+       WHERE tenant_id='tenant-1' AND run_id='run-1' AND revision=$5`,
+      [
+        next.revision,
+        next.lastSequence,
+        next,
+        next.updatedAt,
+        current.revision,
+      ],
+    );
+    assert.equal(updated.rowCount, 1);
+    await client.query(
+      `INSERT INTO ${schema}.run_events
+       (tenant_id,run_id,sequence,event_id,event_json)
+       VALUES ('tenant-1','run-1',$1,$2,$3::jsonb)`,
+      [event.sequence, event.eventId, event],
+    );
+    await client.query("COMMIT");
+    return event;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
 }
 
 async function lease(
