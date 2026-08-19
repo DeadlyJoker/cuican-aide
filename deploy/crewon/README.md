@@ -140,6 +140,14 @@ docker build -t crewon-control-api:verify -f deploy/crewon/control-api.Dockerfil
 docker build -t crewon-runtime-worker:verify -f deploy/crewon/runtime-worker.Dockerfile .
 ```
 
+Server release tags use `server-v<semver>`. The release workflow accepts only an immutable tag whose commit is an ancestor of
+the current protected `main` branch and whose required checks passed. It builds the four Linux images with BuildKit SBOM and
+max-mode provenance attestations, signs every digest with GitHub OIDC/Sigstore, and publishes a signed
+`crewon.server-release.v0` manifest only after all four signatures verify. Production Compose inputs must use the manifest's
+`image@sha256:...` references; mutable registry tags are discovery aliases, never deployment authority. Configure
+`SERVER_RELEASE_TRUST_TOKEN` with the same branch-protection and Checks read access documented for desktop release trust when
+the default token cannot inspect repository rules.
+
 `production:gate` becomes green only when PostgreSQL production startup selects an explicit production composition with
 request-scoped `ControlApiIdentityPort`, dynamic `AuthorizationPort`, tenant-scoped route resolution and tenant-neutral
 readiness. The source gate also requires a trusted token verifier with expected issuer/audience, a policy authority, and

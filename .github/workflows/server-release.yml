@@ -1,0 +1,210 @@
+name: server-release
+
+on:
+  push:
+    tags: ["server-v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing server-v* tag to publish
+        required: true
+        type: string
+
+permissions: {}
+
+concurrency:
+  group: server-release-${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+
+jobs:
+  trust:
+    name: Bind release tag to trusted main commit
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      checks: read
+      contents: read
+    outputs:
+      release_sha: ${{ steps.release.outputs.release_sha }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .node-version
+      - name: Verify immutable tag, trusted main ancestry, and required CI
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.SERVER_RELEASE_TRUST_TOKEN || github.token }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_TAG" =~ ^server-v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+          origin_url="$(git remote get-url origin)"
+          [[ "$origin_url" == "https://github.com/$GITHUB_REPOSITORY" || \
+             "$origin_url" == "https://github.com/$GITHUB_REPOSITORY.git" ]]
+          git fetch --force --no-tags origin \
+            "+refs/heads/main:refs/remotes/origin/main" \
+            "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          release_sha="$(git rev-parse --verify "$RELEASE_TAG^{commit}")"
+          test "$(git rev-parse --verify HEAD)" = "$release_sha"
+          git merge-base --is-ancestor "$release_sha" refs/remotes/origin/main
+          expected_main="$(git rev-parse refs/remotes/origin/main)"$'\t'refs/heads/main
+          expected_tag="$(git rev-parse "refs/tags/$RELEASE_TAG")"$'\t'"refs/tags/$RELEASE_TAG"
+          test "$(git ls-remote --refs origin refs/heads/main)" = "$expected_main"
+          test "$(git ls-remote --refs origin "refs/tags/$RELEASE_TAG")" = "$expected_tag"
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+          rules="$RUNNER_TEMP/main-rules.json"
+          branch_protection="$RUNNER_TEMP/main-branch-protection.json"
+          check_runs="$RUNNER_TEMP/release-check-runs.json"
+          gh api -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/$GITHUB_REPOSITORY/rules/branches/main?per_page=100" > "$rules"
+          owner="${GITHUB_REPOSITORY%%/*}"
+          repository="${GITHUB_REPOSITORY#*/}"
+          gh api graphql -F owner="$owner" -F repository="$repository" \
+            -f query='query($owner:String!,$repository:String!){repository(owner:$owner,name:$repository){branchProtectionRules(first:100){totalCount pageInfo{hasNextPage} nodes{requiresStatusChecks requiredStatusChecks{context app{databaseId}} matchingRefs(first:100,query:"main"){totalCount pageInfo{hasNextPage} nodes{name}}}}}}' \
+            > "$branch_protection"
+          gh api -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/$GITHUB_REPOSITORY/commits/$release_sha/check-runs?filter=latest&per_page=100" \
+            > "$check_runs"
+          node scripts/desktop-release-tools.mjs verify-release-checks \
+            --commit "$release_sha" --rules "$rules" \
+            --branch-protection "$branch_protection" --check-runs "$check_runs"
+          echo "release_sha=$release_sha" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Build, attest, sign, and publish server images
+    needs: trust
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    permissions:
+      contents: write
+      id-token: write
+      packages: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.trust.outputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .node-version
+      - uses: sigstore/cosign-installer@dc72c7d5c4d10cd6bcb8cf6e3fd625a9e5e537da # v3.7.0
+      - name: Refuse to replace a published release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if release="$(gh release view "$RELEASE_TAG" --json isDraft,tagName 2>/dev/null)"; then
+            node -e 'const r=JSON.parse(process.argv[1]); if(r.tagName!==process.argv[2]||r.isDraft!==true)process.exit(1)' \
+              "$release" "$RELEASE_TAG"
+          fi
+      - name: Authenticate immutable registry publication
+        shell: bash
+        env:
+          REGISTRY_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          printf '%s' "$REGISTRY_TOKEN" | docker login ghcr.io \
+            --username "$GITHUB_ACTOR" --password-stdin
+          docker buildx create --name crewon-server-release --driver docker-container --use
+          docker buildx inspect --bootstrap
+      - name: Build, attest, sign, and bind the four images
+        id: images
+        shell: bash
+        env:
+          RELEASE_SHA: ${{ needs.trust.outputs.release_sha }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#server-v}"
+          namespace="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}"
+          published_at="$(date -u +%Y-%m-%dT%H:%M:%S.000Z)"
+          certificate_identity="https://github.com/$GITHUB_WORKFLOW_REF"
+          metadata_arguments=()
+          specifications=(
+            "control-api|deploy/crewon/control-api.Dockerfile|crewon-control-api"
+            "runtime-worker|deploy/crewon/runtime-worker.Dockerfile|crewon-runtime-worker"
+            "web-bff|deploy/crewon/web-bff.Dockerfile|crewon-web-bff"
+            "web|deploy/crewon/web.Dockerfile|crewon-web"
+          )
+          for specification in "${specifications[@]}"; do
+            IFS='|' read -r component dockerfile package <<< "$specification"
+            image="$namespace/$package"
+            metadata="$RUNNER_TEMP/$component.metadata.json"
+            docker buildx build . \
+              --file "$dockerfile" \
+              --platform linux/amd64 \
+              --tag "$image:$version" \
+              --tag "$image:sha-$RELEASE_SHA" \
+              --sbom=true \
+              --provenance=mode=max \
+              --metadata-file "$metadata" \
+              --push
+            digest="$(node -e 'const m=require(process.argv[1]); const d=m["containerimage.digest"]; if(!/^sha256:[a-f0-9]{64}$/.test(d))process.exit(1); process.stdout.write(d)' "$metadata")"
+            sbom="$RUNNER_TEMP/$component.sbom.json"
+            provenance="$RUNNER_TEMP/$component.provenance.json"
+            docker buildx imagetools inspect "$image@$digest" \
+              --format '{{ json .SBOM.SPDX }}' > "$sbom"
+            docker buildx imagetools inspect "$image@$digest" \
+              --format '{{ json .Provenance.SLSA }}' > "$provenance"
+            node -e 'const s=require(process.argv[1]); const p=require(process.argv[2]); if(s.SPDXID!=="SPDXRef-DOCUMENT"||typeof p.buildType!=="string"||!p.builder)process.exit(1)' \
+              "$sbom" "$provenance"
+            cosign sign --yes "$image@$digest"
+            cosign verify \
+              --certificate-identity "$certificate_identity" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+              "$image@$digest" >/dev/null
+            metadata_arguments+=(--image "$component,$image,$metadata")
+          done
+          node scripts/server-release-tools.mjs manifest \
+            --tag "$RELEASE_TAG" \
+            --commit "$RELEASE_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --published-at "$published_at" \
+            "${metadata_arguments[@]}" \
+            --output server-release-manifest.json
+          node scripts/server-release-tools.mjs verify \
+            --manifest server-release-manifest.json
+          cosign sign-blob --yes \
+            --bundle server-release-manifest.sigstore.json \
+            server-release-manifest.json
+          cosign verify-blob \
+            --bundle server-release-manifest.sigstore.json \
+            --certificate-identity "$certificate_identity" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            server-release-manifest.json
+      - name: Publish manifest only after every image is signed
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#server-v}"
+          if release="$(gh release view "$RELEASE_TAG" --json isDraft,tagName 2>/dev/null)"; then
+            node -e 'const r=JSON.parse(process.argv[1]); if(r.tagName!==process.argv[2]||r.isDraft!==true)process.exit(1)' \
+              "$release" "$RELEASE_TAG"
+          else
+            flags=(--verify-tag --draft --title "CrewON Server $version" --notes "Signed CrewON TypeScript server image manifest for $RELEASE_TAG.")
+            [[ "$version" == *-* ]] && flags+=(--prerelease)
+            gh release create "$RELEASE_TAG" "${flags[@]}"
+          fi
+          gh release upload "$RELEASE_TAG" --clobber \
+            server-release-manifest.json \
+            server-release-manifest.sigstore.json
+          gh release edit "$RELEASE_TAG" --draft=false --latest=false
+      - name: Remove registry credentials and builder
+        if: always()
+        run: |
+          docker logout ghcr.io || true
+          docker buildx rm crewon-server-release || true
