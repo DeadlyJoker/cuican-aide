@@ -382,10 +382,17 @@ test("shared engine consumes the supplied attempt and actual value without begin
           modelId: "model",
         },
         async *runSegment(contract: { history: readonly unknown[] }) {
-          assert.match(
-            (contract.history[0] as { content: string }).content,
-            /"task":"run"/,
-          );
+          const inputContent = contract.history
+            .filter(
+              (item): item is { type: "message"; content: string } =>
+                (item as { type?: string }).type === "message",
+            )
+            .map(
+              (item) =>
+                JSON.parse(item.content) as { kind: string; content: string },
+            )
+            .find((fragment) => fragment.kind === "inputJson")?.content;
+          assert.match(inputContent ?? "", /"task":"run"/);
           yield kernelEvent(1, "segment.started", {
             attempt: 7,
             model: "model",
@@ -716,6 +723,8 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
   let kernelRound = 0;
   let toolExecutions = 0;
   let committedToolAttempt = "";
+  let committedToolOutput: string | null = null;
+  let committedToolOutputTruncated: boolean | null = null;
   const dependencies = workflowEngineDependencies({
     loadRun: async () => ({ cancelRequested: false }),
     renew: async () => undefined,
@@ -746,8 +755,13 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
       toolAttempt: { attemptId: string };
       receipt: Record<string, unknown>;
       next: Record<string, unknown>;
+      completedEvent: {
+        data: { output: string; outputTruncated: boolean };
+      };
     }) {
       committedToolAttempt = input.toolAttempt.attemptId;
+      committedToolOutput = input.completedEvent.data.output;
+      committedToolOutputTruncated = input.completedEvent.data.outputTruncated;
       return {
         receipt: { ...input.receipt, status: "completed" },
         continuation: {
@@ -776,7 +790,22 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
       return;
     }
     assert.match(JSON.stringify(contract), /tool_result/);
-    assert.match(JSON.stringify(contract), /file contents/);
+    const projectedHistory = (
+      contract as { history: readonly Record<string, unknown>[] }
+    ).history;
+    const toolResult = projectedHistory.find(
+      (item) => item.type === "tool_result",
+    );
+    assert.match(
+      String(toolResult?.output),
+      /bytes omitted from model context/,
+    );
+    assert.ok(
+      projectedHistory.every(
+        (item) =>
+          new TextEncoder().encode(JSON.stringify(item)).length <= 10_000,
+      ),
+    );
     yield kernelEvent(1, "segment.started", { attempt: 1, model: "model" });
     yield kernelEvent(2, "model.output.delta", {
       delta: '{"answer":"done"}',
@@ -842,7 +871,7 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
           result: {
             schemaVersion: "crewon.tool-result.v0" as const,
             callId: "call-1",
-            output: "file contents",
+            output: `head-${"x".repeat(12 * 1024)}-tail`,
             isError: false,
             artifactRef: null,
           },
@@ -854,6 +883,9 @@ test("workflow executes a durable Tool sub-attempt and continues the same Agent 
   assert.equal(kernelRound, 2);
   assert.equal(toolExecutions, 1);
   assert.equal(committedToolAttempt, "tool-attempt-1");
+  assert.equal(committedToolOutputTruncated, true);
+  assert.match(committedToolOutput ?? "", /^head-/);
+  assert.match(committedToolOutput ?? "", /-tail$/);
 });
 
 test("workflow Tool round limit counts Tool batches instead of model samples", async () => {

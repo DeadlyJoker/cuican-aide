@@ -5,6 +5,7 @@ import type {
 import type { ModelDispatchReceipt } from "@crewon/domain";
 import type { AgentHistoryItem } from "@crewon/agent-kernel/runtime";
 import type { ProviderCheckpoint } from "@crewon/contracts/runtime";
+import { validateWorkflowModelHistory } from "./workflow-agent-value-projection.ts";
 
 export type WorkflowDurableExecutionAuthority = Readonly<{
   tenantId: string;
@@ -70,6 +71,6 @@ export function workflowContinuationCheckpoint(
             expectedRevision: input.dispatch.revision,
             status: input.dispatch.status,
           },
-    history: input.history,
+    history: validateWorkflowModelHistory(input.history),
   };
 }

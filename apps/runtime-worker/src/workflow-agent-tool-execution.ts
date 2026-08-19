@@ -29,6 +29,10 @@ import {
   type WorkflowDurableExecutionAuthority,
 } from "./workflow-agent-durable-continuation.ts";
 import { WorkflowNodeSideEffectUncertainError } from "./workflow-runtime-dispatcher.ts";
+import {
+  projectWorkflowModelVisibleText,
+  validateWorkflowModelHistory,
+} from "./workflow-agent-value-projection.ts";
 
 type WorkflowToolExecutionStore = DomainStore &
   DurableQueueStore &
@@ -209,6 +213,9 @@ export async function executeWorkflowTools(
     }
     if (resolution.status === "canceled")
       throw new Error("workflow_tool_execution_canceled");
+    const visibleOutput = projectWorkflowModelVisibleText(
+      resolution.result.output,
+    );
     sequence += 1;
     const completedEvent = {
       schemaVersion: "crewon.agent-event.v0" as const,
@@ -220,24 +227,24 @@ export async function executeWorkflowTools(
         callId: call.callId,
         kind: call.kind,
         name: call.name,
-        output: resolution.result.output,
+        output: visibleOutput.content,
         isError: resolution.result.isError,
         artifactRef: resolution.result.artifactRef,
-        outputTruncated: false,
+        outputTruncated: visibleOutput.truncated,
       },
     };
     if (receipt.status !== "completed") {
       if (toolAttempt === null)
         throw new Error("workflow_tool_attempt_missing");
-      const nextHistory = [
+      const nextHistory = validateWorkflowModelHistory([
         ...currentHistory,
         {
           type: "tool_result" as const,
           kind: call.kind,
           callId: call.callId,
-          output: resolution.result.output,
+          output: visibleOutput.content,
         },
-      ];
+      ]);
       const committed = await dependencies.store.commitWorkflowToolContinuation(
         {
           lease: leaseInput(input.authority.workItemClaim),

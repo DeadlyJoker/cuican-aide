@@ -43,6 +43,10 @@ import {
   prepareWorkflowNodeExecution,
   type WorkflowNodeEffectCertainty,
 } from "./workflow-node-execution-policy.ts";
+import {
+  projectWorkflowModelVisibleText,
+  validateWorkflowModelHistory,
+} from "./workflow-agent-value-projection.ts";
 
 export interface WorkflowAdmittedAgentExecutionEngine {
   readonly workflowStore: import("@crewon/application").WorkflowRuntimeStore;
@@ -235,10 +239,10 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
             kind,
             name,
           })),
-          history: [
+          history: validateWorkflowModelHistory([
             ...(runtime.governedContext?.modelItems() ?? []),
             ...prepared.history,
-          ],
+          ]),
           continuation: { kind: "manual" },
           reconcileCheckpoint: attempt.providerCheckpoint,
           ...(attempt.providerTurnState === null
@@ -393,10 +397,12 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
             kind,
             name,
           })),
-          history: continuationState?.history ?? [
-            ...(runtime.governedContext?.modelItems() ?? []),
-            ...prepared.history,
-          ],
+          history: validateWorkflowModelHistory(
+            continuationState?.history ?? [
+              ...(runtime.governedContext?.modelItems() ?? []),
+              ...prepared.history,
+            ],
+          ),
           continuation: continuationState?.continuation ?? {
             kind: "manual",
           },
@@ -524,7 +530,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
         ...(runtime.governedContext?.modelItems() ?? []),
         ...prepared.history,
       ];
-      const assistantHistory = [
+      const assistantHistory = validateWorkflowModelHistory([
         ...priorHistory,
         ...(executed.segment.assistantContinuation === null
           ? []
@@ -532,7 +538,9 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
               {
                 type: "message" as const,
                 role: "assistant" as const,
-                content: executed.segment.assistantContinuation.data.output,
+                content: projectWorkflowModelVisibleText(
+                  executed.segment.assistantContinuation.data.output,
+                ).content,
               },
             ]),
         ...executed.segment.requestedTools.map((event) => ({
@@ -542,7 +550,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
           name: event.data.name,
           input: event.data.input,
         })),
-      ];
+      ]);
       let continuationRevision = continuationState?.revision ?? null;
       let terminalCandidateId: string | null = null;
       const currentDispatch = dispatch as ModelDispatchReceipt | null;
