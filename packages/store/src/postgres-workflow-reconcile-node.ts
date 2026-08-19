@@ -619,6 +619,7 @@ export async function reconcilePostgresWorkflowNode(
           ) as WorkflowExecutionValue["value"],
         },
         dispatch: { ...dispatch, status: "responseObserved" as const },
+        priorContinuation: checkpoint,
       },
       handoff: {
         currentWorkItem: "retained" as const,
@@ -700,7 +701,7 @@ export async function reconcilePostgresWorkflowNode(
   return structuredClone(result);
 }
 
-async function resumePostgresWorkflowExecution(
+export async function resumePostgresWorkflowExecution(
   client: PoolClient,
   schema: string,
   execution: Result["execution"],
@@ -726,7 +727,7 @@ async function resumePostgresWorkflowExecution(
   return next;
 }
 
-function resumeRequiredResult(
+export function resumeRequiredResult(
   input: Input,
   execution: Result["execution"],
   definition: WorkflowNodeDefinition,
@@ -734,7 +735,7 @@ function resumeRequiredResult(
   step: NonNullable<Awaited<ReturnType<typeof loadPostgresRunStep>>>,
   resumed: Awaited<ReturnType<typeof takeOverPostgresWorkflowContinuation>>,
   pendingTools: Awaited<ReturnType<typeof adoptPostgresWorkflowPendingTools>>,
-): Result {
+): Extract<Result, { disposition: "resumeRequired" }> {
   return structuredClone({
     disposition: "resumeRequired" as const,
     evidenceStatus: "responseObserved" as const,
