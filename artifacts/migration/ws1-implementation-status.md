@@ -70,15 +70,26 @@
   不会被误判为 authority 缺失。真实 SQLite Worker close/reopen 纵向证明 external execute=`1`、reconcile=`1`、Tool Attempt
   数量=`1`、唯一 `tool.completed`、parent node 与 reconcile WorkItem 终态收敛。PostgreSQL 同时补齐 canonical
   `tool.completed` Run snapshot/event/outbox 原子持久化；本机 PG 条件用例仍因缺 URL 明确未验证。
+- Provider GET 返回合法 nonterminal Workflow response 时不再形成无限 retrieve：Application 提供必选的有界
+  `commitRetrievedWorkflowNodeContinuation`，SQLite/PostgreSQL 在单事务中复用已提交 event 的 exact semantic prefix、只追加
+  missing suffix/outbox，终结已消费的 `responseObserved` dispatch，并接管 parent Attempt/node/checkpoint 与 pending Tool authority。
+  真实 SQLite Worker close/reopen 证明首个 POST=`1`、retrieve GET=`1`；continuation commit 已成功但返回丢失后再次重开不会增加
+  GET，随后仅执行下一 model round 与一次 Verification，Run 唯一收敛。
+- 无 provider locator/idempotency proof 的 `possiblySent` 不再无限重试，也不盲目 POST。非取消路径由 SQLite/PostgreSQL
+  原子写入 `failed/operatorRequired` dispatch、failed Node/Step/Attempt、completed reconcile WorkItem、节点事件/outbox 与
+  composition receipt，并向 Worker 投影公开 code `workflow_model_dispatch_operator_required`；Worker 不会 requeue 已完成 WorkItem。
+  已持有 lease 的并行 sibling 保留独立执行权，失败分支按既有 DAG 规则收敛。取消请求仍优先写
+  `abandonedPossiblySent`。SQLite replay 深校验 receipt、dispatch、Attempt、Step、WorkItem、节点事件与 terminal Run/outbox。
 - desktop release workflow 现在同时绑定 immutable tag、`origin/main` ancestry、远端 tag/main 无漂移以及 exact commit SHA/App ID 的
   required checks；macOS/Windows 均验证实际 updater 签名后才允许上传，Windows launch smoke 还按本次 install root/app binary
   精确检测 GUI/Node/guardian orphan。确定性 release/staging/Windows process tests 为 `16/16`，YAML 与 smoke syntax 通过。
-- 当前仍是 `In progress`：正式 Apple Developer ID/notarization/staple、Windows PFX/AuthentiCode timestamp/NSIS 实机、GitHub hosted
+- 当前合并验证为 Domain `126/126`、Application `158/158`、Store `383 passed / 65 PostgreSQL 条件 skip / 0 failed`、
+  Runtime Worker `360 passed / 2 PostgreSQL 条件 skip / 0 failed`，四包 typecheck 全部通过。当前仍是 `In progress`：
+  正式 Apple Developer ID/notarization/staple、Windows PFX/AuthentiCode timestamp/NSIS 实机、GitHub hosted
   release publish、真实 Identity/PIM 多租户部署、跨主机 PostgreSQL/Worker 网络分区、备份恢复与 SLO 仍需外部 runner、凭据和环境。
   本地 Tauri 已生成 `.app` 与 updater archive，但因没有 `TAURI_SIGNING_PRIVATE_KEY` 按设计返回失败，未使用 unsigned fallback。
-  continuation 与 pending Tool 接管已落地，但完整迁移仍不能标记完成：resume 后新 response 的 GET 若返回合法 nonterminal
-  结果仍无法原子提交下一 continuation；`possiblySent` 在 provider 没有 durable locator/idempotency 保证时只能 fail closed，
-  尚缺有界 operator-required 终态。这两项仍是 transaction P0，不能用盲目重发 POST 或兼容 fallback 掩盖。
+  本轮 W01 continuation/retrieve/`possiblySent` transaction P0 已在源码与 SQLite 纵向闭合；最新 PostgreSQL 增量仍需在配置
+  `CREWON_TEST_POSTGRES_URL` 的 real host 串行复验，因此完整迁移和正式发布仍不能标记完成。
 
 ## 2026-08-13 执行方向覆盖：纯 TypeScript 快速切换
 
