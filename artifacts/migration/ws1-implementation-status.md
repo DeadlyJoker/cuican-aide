@@ -63,13 +63,13 @@
   reconcile WorkItem lease；Worker 只从已验证 history/provider checkpoint 继续，不执行旧 response GET。真实 SQLite
   close/reopen 纵向覆盖 assistant continuation，旧 GET=`0`、恢复模型采样=`1`，两个 dispatch、Attempt、原/重试 WorkItem、
   continuation 清理与唯一 terminal event 全部收敛。SQLite Store 全量 `357 passed / 64 conditional skips / 0 failed`，
-  Runtime Worker 定向 `7/7`；PostgreSQL 条件矩阵已落代码，但本机当前无 `CREWON_TEST_POSTGRES_URL`，未把 skip 记为通过。
+  Runtime Worker 定向 `7/7`；本轮一次性 PostgreSQL 16 上 continuation/retrieved focused `2/2`、0 skip 通过。
 - Pending Workflow Tool continuation 也已接入同一个 Store-owned resume authority：SQLite/PostgreSQL 原子接管未完成的
   Tool receipt、同一 running Tool Step/Attempt 与 parent continuation；`prepared` 只允许 execute 一次，`dispatched`/
   `unknownOutcome` 只能 reconcile。没有 receipt 的合法 crash window 会在当前 reconcile lease 下 fresh prepare 一次，
   不会被误判为 authority 缺失。真实 SQLite Worker close/reopen 纵向证明 external execute=`1`、reconcile=`1`、Tool Attempt
   数量=`1`、唯一 `tool.completed`、parent node 与 reconcile WorkItem 终态收敛。PostgreSQL 同时补齐 canonical
-  `tool.completed` Run snapshot/event/outbox 原子持久化；本机 PG 条件用例仍因缺 URL 明确未验证。
+  `tool.completed` Run snapshot/event/outbox 原子持久化；上述真实 PG continuation 用例同时覆盖 pending Tool adoption。
 - Provider GET 返回合法 nonterminal Workflow response 时不再形成无限 retrieve：Application 提供必选的有界
   `commitRetrievedWorkflowNodeContinuation`，SQLite/PostgreSQL 在单事务中复用已提交 event 的 exact semantic prefix、只追加
   missing suffix/outbox，终结已消费的 `responseObserved` dispatch，并接管 parent Attempt/node/checkpoint 与 pending Tool authority。
@@ -81,7 +81,8 @@
   已持有 lease 的并行 sibling 保留独立执行权，失败分支按既有 DAG 规则收敛。取消请求仍优先写
   `abandonedPossiblySent`。真实 SQLite Store+RuntimeWorker close/reopen 纵向证明 model POST=`1`、reconcile 后再次 wake=`idle`，
   Agent/Verification、Step/Attempt、dispatch、node/reconcile WorkItem、公开 Run failure 与 terminal events 精确收敛；SQLite replay
-  深校验 receipt、dispatch、Attempt、Step、WorkItem、节点事件与 terminal Run/outbox。
+  深校验 receipt、dispatch、Attempt、Step、WorkItem、节点事件与 terminal Run/outbox。一次性 PostgreSQL 16 的 operator first
+  commit/deep replay/tamper focused `1/1`、0 skip 通过，并修复了写入端与 replay 端 terminal authority 多余字段导致的 ID 漂移。
 - desktop release workflow 现在同时绑定 immutable tag、`origin/main` ancestry、远端 tag/main 无漂移以及 exact commit SHA/App ID 的
   required checks；macOS/Windows 均验证实际 updater 签名后才允许上传，Windows launch smoke 还按本次 install root/app binary
   精确检测 GUI/Node/guardian orphan。确定性 release/staging/Windows process tests 为 `16/16`，YAML 与 smoke syntax 通过。
@@ -90,8 +91,8 @@
   正式 Apple Developer ID/notarization/staple、Windows PFX/AuthentiCode timestamp/NSIS 实机、GitHub hosted
   release publish、真实 Identity/PIM 多租户部署、跨主机 PostgreSQL/Worker 网络分区、备份恢复与 SLO 仍需外部 runner、凭据和环境。
   本地 Tauri 已生成 `.app` 与 updater archive，但因没有 `TAURI_SIGNING_PRIVATE_KEY` 按设计返回失败，未使用 unsigned fallback。
-  本轮 W01 continuation/retrieve/`possiblySent` transaction P0 已在源码与 SQLite 纵向闭合；最新 PostgreSQL 增量仍需在配置
-  `CREWON_TEST_POSTGRES_URL` 的 real host 串行复验，因此完整迁移和正式发布仍不能标记完成。
+  本轮 W01 continuation/retrieve/`possiblySent` transaction P0 已在源码、SQLite 纵向及 PostgreSQL 16 focused real-host
+  验收中闭合；完整迁移和正式发布仍受上述跨主机、正式签名/公证、发布凭据与多租户部署门禁约束，不能标记完成。
 
 ## 2026-08-13 执行方向覆盖：纯 TypeScript 快速切换
 
