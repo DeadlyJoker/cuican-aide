@@ -6,10 +6,12 @@ import {
 import { Readable } from "node:stream";
 import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 
+import { createBoundedServerShutdown } from "./bounded-server-shutdown.ts";
 import { HttpIdentitySessionAdapter } from "./identity-session-adapter.ts";
 import { createWebBff } from "./web-bff.ts";
 
 const MAX_INCOMING_BODY_BYTES = 64 * 1024;
+const SHUTDOWN_GRACE_MS = 5_000;
 
 const publicOrigin = requiredEnvironment("CREWON_WEB_PUBLIC_ORIGIN");
 const bff = createWebBff({
@@ -31,8 +33,10 @@ const bff = createWebBff({
   }),
 });
 
+let shutdown: ReturnType<typeof createBoundedServerShutdown>;
 const server = createServer(async (incoming, outgoing) => {
   const controller = new AbortController();
+  const unregister = shutdown.register(controller);
   const abortUpstream = () => controller.abort();
   incoming.once("aborted", abortUpstream);
   outgoing.once("close", abortUpstream);
@@ -51,10 +55,12 @@ const server = createServer(async (incoming, outgoing) => {
       bodyTooLarge ? "request_body_too_large" : "web_bff_internal_error",
     );
   } finally {
+    unregister();
     incoming.removeListener("aborted", abortUpstream);
     outgoing.removeListener("close", abortUpstream);
   }
 });
+shutdown = createBoundedServerShutdown(server, SHUTDOWN_GRACE_MS);
 
 server.requestTimeout = 30_000;
 server.headersTimeout = 10_000;
@@ -67,7 +73,7 @@ server.listen(port, "127.0.0.1", () => {
 
 for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.once(signal, () => {
-    server.close(() => process.exit(0));
+    void shutdown.shutdown().then(() => process.exit(0));
   });
 }
 
