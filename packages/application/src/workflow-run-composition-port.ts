@@ -172,10 +172,18 @@ export type WorkflowCancellationResult =
 export type WorkflowReconciliationResult =
   | Readonly<{
       disposition: "retryRequired";
-      evidenceStatus: WorkflowDispatchEvidenceStatus;
+      evidenceStatus: Exclude<WorkflowDispatchEvidenceStatus, "possiblySent">;
       execution: WorkflowExecutionState;
       handoff: WorkflowRetainedHandoff;
       runDisposition: "nonTerminal";
+    }>
+  | Readonly<{
+      disposition: "operatorRequired";
+      evidenceStatus: "possiblySent";
+      execution: WorkflowExecutionState;
+      handoff: WorkflowAtomicHandoff &
+        Readonly<{ currentWorkItem: "completed" }>;
+      runDisposition: WorkflowRunDisposition;
     }>
   | Readonly<{
       /** Grants only provider GET/retrieve; it never authorizes a new dispatch. */

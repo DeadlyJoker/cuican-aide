@@ -118,6 +118,54 @@ test("explicit cancellation can abandon a possibly-sent model request", () => {
   );
 });
 
+test("possibly-sent dispatch requires an operator through one exact failed terminal", () => {
+  const sent = markModelDispatchPossiblySent(
+    prepareModelDispatchReceipt(null, PREPARE),
+    "2026-08-12T00:00:01Z",
+  );
+  const outcome = {
+    kind: "failed" as const,
+    code: "workflow_model_dispatch_operator_required",
+    certainty: "operatorRequired" as const,
+  };
+  const terminal = terminateModelDispatchReceipt(sent, {
+    outcome,
+    terminalAt: "2026-08-12T00:00:02Z",
+  });
+
+  assert.deepEqual(terminal, {
+    ...sent,
+    status: "terminal",
+    revision: sent.revision + 1,
+    terminalAt: "2026-08-12T00:00:02Z",
+    terminalOutcome: outcome,
+    updatedAt: "2026-08-12T00:00:02Z",
+  });
+  assert.equal(
+    terminateModelDispatchReceipt(terminal, {
+      outcome,
+      terminalAt: "2026-08-12T00:09:00Z",
+    }),
+    terminal,
+  );
+  assert.throws(
+    () =>
+      terminateModelDispatchReceipt(
+        prepareModelDispatchReceipt(null, PREPARE),
+        { outcome, terminalAt: "2026-08-12T00:00:02Z" },
+      ),
+    { message: "model_dispatch_transition_conflict" },
+  );
+  assert.throws(
+    () =>
+      terminateModelDispatchReceipt(sent, {
+        outcome: { ...outcome, kind: "canceled" },
+        terminalAt: "2026-08-12T00:00:02Z",
+      }),
+    { message: "model_dispatch_outcome_invalid" },
+  );
+});
+
 test("model dispatch mutations replay exactly and reject immutable conflicts", () => {
   const prepared = prepareModelDispatchReceipt(null, PREPARE);
   assert.equal(prepareModelDispatchReceipt(prepared, PREPARE), prepared);
