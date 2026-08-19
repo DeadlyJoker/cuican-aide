@@ -2355,6 +2355,119 @@ if (postgresUrl === undefined) {
       await store.close();
     }
   });
+
+  test("PostgreSQL possibly-sent reconciliation fails once for operator review", async () => {
+    const schema = `workflow_operator_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl });
+    const store = await PostgresWorkflowRunCompositionStore.open({ pool, schema, digester });
+    const operatorWorkflow = compileWorkflowVersion({ ...source,
+      workflowId: "operator-workflow", workflowVersionId: "operator-workflow-v1",
+      entryNodeIds: ["agent"], outputNodeIds: ["agent"], nodes: [
+        { ...common("agent"), kind: "agent", agentVersionId: "agent-v1" },
+      ] }, digester);
+    const operatorBinding = { workflowId: operatorWorkflow.workflowId,
+      workflowVersionId: operatorWorkflow.workflowVersionId,
+      contentDigest: operatorWorkflow.contentDigest };
+    try {
+      await seedPostgresComposition(pool, schema, operatorWorkflow, operatorBinding,
+        "schedule-operator");
+      const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1",
+        runId: "run-1", lease, binding: operatorBinding,
+        schedulerOperationId: "schedule-operator", workflowInput: {
+          valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+      const work = scheduled.nodeWorkItems[0]!;
+      await pool.query(`UPDATE ${schema}.work_items SET status='leased',
+        lease_owner_id='node-worker',lease_id='node-lease',lease_epoch=1,
+        lease_expires_at=clock_timestamp()+interval '1 minute' WHERE work_item_id=$1`,
+      [work.workItemId]);
+      const nodeLease = { workItemId: work.workItemId, ownerId: "node-worker",
+        leaseId: "node-lease", leaseEpoch: 1 } as const;
+      const admitted = await store.admitWorkflowNodeWork({ tenantId: "tenant-1",
+        runId: "run-1", lease: nodeLease, binding: operatorBinding, nodeId: work.nodeId,
+        claimId: work.claimId, claimEpoch: work.claimEpoch,
+        schedulerOperationId: "schedule-operator", admissionOperationId: "admit-operator",
+        attemptLeaseDurationMs: 30_000 });
+      const attempt = admitted.admission!.attempt;
+      const prepared = await store.prepareModelDispatch({ tenantId: "tenant-1",
+        runId: "run-1", lease: nodeLease, attempt, operationId: "dispatch-operator",
+        requestSequence: 1, operation: "dispatch", requestDigest: digester.sha256("operator-request"),
+        provider: { agentVersionId: "agent-v1", adapterName: "responses", adapterVersion: "1",
+          modelId: "model-1" }, preparedAt: "2026-08-19T00:00:01.000Z" });
+      await store.markModelDispatchPossiblySent({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, attempt, operationId: prepared.operationId,
+        requestSequence: prepared.requestSequence, expectedRevision: prepared.revision,
+        transitionedAt: "2026-08-19T00:00:02.000Z" });
+      const unknown = await store.settleWorkflowNode({ tenantId: "tenant-1", runId: "run-1",
+        lease: nodeLease, binding: operatorBinding, nodeId: work.nodeId,
+        claimId: work.claimId, claimEpoch: work.claimEpoch, stepId: attempt.stepId,
+        attemptId: attempt.attemptId, operationId: "unknown-operator",
+        outcome: { status: "unknown" } });
+      await pool.query(`UPDATE ${schema}.work_items SET status='leased',
+        lease_owner_id='reconcile-worker',lease_id='reconcile-lease',lease_epoch=1,
+        lease_expires_at=clock_timestamp()+interval '1 minute' WHERE work_item_id=$1`,
+      [unknown.handoff.nextWorkItemId]);
+      const input = { tenantId: "tenant-1", runId: "run-1", lease: {
+        workItemId: unknown.handoff.nextWorkItemId!, ownerId: "reconcile-worker",
+        leaseId: "reconcile-lease", leaseEpoch: 1 }, binding: operatorBinding,
+        nodeId: work.nodeId, claimId: work.claimId, claimEpoch: work.claimEpoch,
+        reconciliationOperationId: "unknown-operator" } as const;
+      const result = await store.reconcileWorkflowNode(input);
+      assert.deepEqual([result.disposition, result.evidenceStatus, result.execution.status,
+        result.execution.nodes[0]?.status, result.execution.nodes[0]?.failureCode,
+        result.handoff, result.runDisposition], ["operatorRequired", "possiblySent", "failed",
+        "failed", "workflow_model_dispatch_operator_required", {
+          currentWorkItem: "completed", nextWorkItemId: null, kind: "none" },
+        "terminalConverged"]);
+      const durable = await pool.query(`SELECT
+        (SELECT status FROM ${schema}.run_steps WHERE step_id='agent') step_status,
+        (SELECT status FROM ${schema}.run_attempts WHERE attempt_id=$1) attempt_status,
+        (SELECT state_json->'failure'->>'code' FROM ${schema}.run_attempts
+          WHERE attempt_id=$1) attempt_code,
+        (SELECT status FROM ${schema}.model_dispatch_receipts
+          WHERE operation_id='dispatch-operator') dispatch_status,
+        (SELECT state_json->'terminalOutcome' FROM ${schema}.model_dispatch_receipts
+          WHERE operation_id='dispatch-operator') dispatch_outcome,
+        (SELECT status FROM ${schema}.work_items WHERE work_item_id=$2) work_status,
+        (SELECT lease_id FROM ${schema}.work_items WHERE work_item_id=$2) work_lease,
+        (SELECT state_json->>'status' FROM ${schema}.run_snapshots
+          WHERE run_id='run-1') run_status,
+        (SELECT state_json->'failure'->>'code' FROM ${schema}.run_snapshots
+          WHERE run_id='run-1') run_code,
+        (SELECT count(*)::int FROM ${schema}.run_events
+          WHERE event_json->>'type'='workflow.node.terminal') node_events,
+        (SELECT count(*)::int FROM ${schema}.run_events
+          WHERE event_json->>'type'='run.failed') run_events,
+        (SELECT count(*)::int FROM ${schema}.workflow_execution_receipts
+          WHERE operation_id='reconcile:unknown-operator') receipts`,
+      [attempt.attemptId, input.lease.workItemId]);
+      assert.deepEqual(durable.rows[0], { step_status: "failed", attempt_status: "failed",
+        attempt_code: "workflow_model_dispatch_operator_required", dispatch_status: "terminal",
+        dispatch_outcome: { kind: "failed", code: "workflow_model_dispatch_operator_required",
+          certainty: "operatorRequired" }, work_status: "completed", work_lease: null,
+        run_status: "failed", run_code: "workflow_model_dispatch_operator_required",
+        node_events: 1, run_events: 1, receipts: 1 });
+      const replay = await store.reconcileWorkflowNode(input);
+      assert.deepEqual([replay.disposition, replay.evidenceStatus, replay.execution.revision,
+        replay.handoff.currentWorkItem], ["replay", "possiblySent",
+        result.execution.revision, "completed"]);
+      const once = await pool.query(`SELECT
+        (SELECT count(*)::int FROM ${schema}.run_events
+          WHERE event_json->>'type'='workflow.node.terminal') node_events,
+        (SELECT count(*)::int FROM ${schema}.run_events
+          WHERE event_json->>'type'='run.failed') run_events,
+        (SELECT count(*)::int FROM ${schema}.outbox) outbox_messages`);
+      assert.deepEqual(once.rows[0], { node_events: 1, run_events: 1, outbox_messages: 2 });
+      await pool.query(`UPDATE ${schema}.model_dispatch_receipts SET state_json=jsonb_set(
+        state_json,'{terminalOutcome,certainty}','"responseObserved"')
+        WHERE operation_id='dispatch-operator'`);
+      await assert.rejects(store.reconcileWorkflowNode(input),
+        (error: unknown) => error instanceof RunStoreError &&
+          error.code === "workflow_reconciliation_replay_corrupt");
+    } finally {
+      await pool.query(`DROP SCHEMA ${schema} CASCADE`);
+      await store.close();
+    }
+  });
 }
 
 async function seedPostgresComposition(

@@ -503,6 +503,11 @@ export async function convergePostgresWorkflowRun(
     );
   }
   const eventId = workflowAuthorityId("run-event", input, digester);
+  const failureCode = execution.nodes.some(
+    (node) => node.status === "failed" &&
+      node.failureCode === "workflow_model_dispatch_operator_required")
+    ? "workflow_model_dispatch_operator_required"
+    : "workflow_node_failed";
   const event = {
     schemaVersion: "crewon.run-event.v0" as const,
     identity: { runId: input.runId },
@@ -514,7 +519,7 @@ export async function convergePostgresWorkflowRun(
       : execution.status === "failed"
         ? {
             type: "run.failed" as const,
-            data: { code: "workflow_node_failed", retryable: false },
+            data: { code: failureCode, retryable: false },
           }
         : {
             type: "run.canceled" as const,

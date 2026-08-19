@@ -39,6 +39,10 @@ import {
 } from "./postgres-workflow-run-composition-transactions.ts";
 import { appendPostgresCanceledWorkflowNodeEvent } from "./postgres-workflow-cancellation-lifecycle.ts";
 import { adoptPostgresWorkflowPendingTools } from "./postgres-workflow-pending-tool-resume.ts";
+import {
+  settlePostgresWorkflowOperatorRequired,
+  validatePostgresWorkflowOperatorRequiredReplay,
+} from "./postgres-workflow-operator-required.ts";
 import { settlePostgresRetrievedWorkflowNode } from "./postgres-workflow-retrieved-settlement.ts";
 
 type Input = Parameters<
@@ -70,8 +74,18 @@ export async function reconcilePostgresWorkflowNode(
     "reconcileNode",
     fingerprint,
   );
-  if (replay !== null)
-    return { ...(structuredClone(replay) as Result), disposition: "replay" };
+  if (replay !== null) {
+    const stored = structuredClone(replay) as Result;
+    if (stored.disposition === "operatorRequired")
+      return validatePostgresWorkflowOperatorRequiredReplay(
+        client,
+        schema,
+        input,
+        stored,
+        digester,
+      );
+    return { ...stored, disposition: "replay" };
+  }
   const now = await validatePostgresWorkflowLease(client, schema, input);
   const workflow = await loadPostgresWorkflowAuthorities(
     client,
@@ -520,17 +534,18 @@ export async function reconcilePostgresWorkflowNode(
     return structuredClone(result);
   }
   if (evidenceStatus === "possiblySent")
-    return {
-      disposition: "retryRequired",
-      evidenceStatus,
+    return settlePostgresWorkflowOperatorRequired(
+      client,
+      schema,
+      input,
       execution,
-      handoff: {
-        currentWorkItem: "retained",
-        nextWorkItemId: null,
-        kind: "none",
-      },
-      runDisposition: "nonTerminal",
-    };
+      { ...attempt, status: "running" },
+      { ...dispatch!, status: "possiblySent" },
+      node.agentVersionId!,
+      fingerprint,
+      now,
+      digester,
+    );
   if (dispatch?.status !== "responseObserved")
     throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
   const candidate = checkpoint?.terminalCandidate;
