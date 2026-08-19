@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { CrewONAgentKernel } from "@crewon/agent-kernel";
+import type {
+  AgentSegmentRunOptions,
+  KernelAgentEvent,
+} from "@crewon/agent-kernel/runtime";
 import { DirectResponsesTransport } from "@crewon/agent-responses";
 import {
   SharedWorkflowAdmittedAgentExecutionEngine,
@@ -429,6 +433,136 @@ test("shared engine consumes the supplied attempt and actual value without begin
   });
   assert.deepEqual(outcome, { status: "unknown" });
   assert.deepEqual(calls, ["renew", "event", "renew", "renew", "event"]);
+});
+
+test("continuation commit uncertainty never becomes a Workflow business failure", async () => {
+  const checkpoint = {
+    schemaVersion: "crewon.provider-checkpoint.v0",
+    adapterName: "test",
+    adapterVersion: "1",
+    modelId: "model",
+    opaquePayload: { responseId: "response-1" },
+  } as const;
+  const evidence = {
+    operationId: "segment:attempt-admitted:dispatch",
+    requestSequence: 1,
+    operation: "dispatch",
+    requestDigest: `sha256:${"b".repeat(64)}`,
+    provider: {
+      agentVersionId: "node-agent",
+      adapterName: "test",
+      adapterVersion: "1",
+      modelId: "model",
+    },
+  } as const;
+  const receipt = {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    stepId: "step-admitted",
+    attemptId: "attempt-admitted",
+    workItemId: "node-work",
+    leaseEpoch: 3,
+    preparedAt: "2026-08-12T00:00:00.000Z",
+    updatedAt: "2026-08-12T00:00:00.000Z",
+    ...evidence,
+  };
+  let continuationCommits = 0;
+  const execution = {
+    async loadRun() {
+      return { cancelRequested: false };
+    },
+    async checkpointModelAttempt() {},
+    async recordAgentEvent() {
+      return {};
+    },
+    async recordProviderTurnState() {},
+  } as never;
+  const store = {
+    async loadRunAttempt() {
+      return {
+        tenantId: "tenant-1",
+        runId: "run-1",
+        stepId: "step-admitted",
+        attemptId: "attempt-admitted",
+        workItemId: "node-work",
+        leaseEpoch: 3,
+        status: "running",
+        attemptNumber: 1,
+        providerTurnState: null,
+      };
+    },
+    async loadRunStep() {
+      return { status: "running", currentAttemptId: "attempt-admitted" };
+    },
+    async renewWorkItemLease() {},
+    async prepareModelDispatch() {
+      return { ...receipt, status: "prepared", revision: 1 };
+    },
+    async markModelDispatchPossiblySent() {
+      return { ...receipt, status: "possiblySent", revision: 2 };
+    },
+    async loadModelDispatchReceipt() {
+      return {
+        ...receipt,
+        status: "responseObserved",
+        revision: 3,
+        responseCheckpointDigest: `sha256:${"c".repeat(64)}`,
+      };
+    },
+    async commitWorkflowAssistantContinuation() {
+      continuationCommits += 1;
+      throw new Error("postgres_commit_ack_lost");
+    },
+  } as never;
+  const engine = new SharedWorkflowAdmittedAgentExecutionEngine({
+    execution,
+    store,
+    leaseDurationMs: 30_000,
+  });
+  const input = workflowEngineInput(async function* (
+    contract: unknown,
+    _signal: AbortSignal,
+    options?: AgentSegmentRunOptions,
+  ) {
+    const { runId, segmentId } = contract as {
+      runId: string;
+      segmentId: string;
+    };
+    await options?.controlSink?.modelRequestPrepared?.(evidence);
+    await options?.controlSink?.dispatchBoundaryCrossed?.(evidence);
+    const base = {
+      schemaVersion: "crewon.agent-event.v0",
+      runId,
+      segmentId,
+    } as const;
+    yield {
+      ...base,
+      sequence: 1,
+      type: "segment.started",
+      data: { attempt: 1, model: "model" },
+    } as never;
+    yield {
+      ...base,
+      sequence: 2,
+      type: "segment.provider_response_created",
+      data: { checkpoint },
+    } as never;
+    yield {
+      ...base,
+      sequence: 3,
+      type: "model.output.delta",
+      data: { delta: "{}" },
+    } as never;
+    yield {
+      ...base,
+      sequence: 4,
+      type: "segment.completed",
+      data: { output: "{}" },
+    } as never;
+  });
+
+  assert.deepEqual(await engine.execute(input), { status: "unknown" });
+  assert.equal(continuationCommits, 1);
 });
 
 test("workflow lifecycle renews a stalled segment and aborts it on durable cancel", async () => {
@@ -1036,7 +1170,11 @@ function workflowEngineDependencies(input: {
 }
 
 function workflowEngineInput(
-  runSegment: (contract: unknown, signal: AbortSignal) => AsyncIterable<never>,
+  runSegment: (
+    contract: unknown,
+    signal: AbortSignal,
+    options?: AgentSegmentRunOptions,
+  ) => AsyncIterable<KernelAgentEvent>,
 ) {
   return {
     runtime: {

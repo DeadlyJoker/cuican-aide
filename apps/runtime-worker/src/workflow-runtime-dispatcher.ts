@@ -107,6 +107,15 @@ export class WorkflowNodeSideEffectUncertainError extends Error {
   }
 }
 
+/** Prevents an indeterminate durable commit from becoming a business failure. */
+export class WorkflowNodeDurabilityUncertainError extends Error {
+  constructor(cause: unknown) {
+    super("workflow_node_durability_uncertain", {
+      cause: cause instanceof Error ? cause : undefined,
+    });
+  }
+}
+
 /** Production dispatcher backed by one fail-closed Workflow transaction authority. */
 export class ProductionWorkflowRuntimeDispatcher
   implements WorkflowRuntimeDispatcherPort
@@ -508,7 +517,8 @@ export class ProductionWorkflowRuntimeDispatcher
         throw new Error("workflow_node_output_too_large");
     } catch (error) {
       outcome =
-        error instanceof WorkflowNodeSideEffectUncertainError
+        error instanceof WorkflowNodeSideEffectUncertainError ||
+        error instanceof WorkflowNodeDurabilityUncertainError
           ? { status: "unknown" }
           : {
               status: "failed",

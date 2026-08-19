@@ -23,7 +23,10 @@ import type {
   WorkflowAgentNodePort,
   WorkflowNodeOutcome,
 } from "./workflow-runtime-dispatcher.ts";
-import { WorkflowNodeSideEffectUncertainError } from "./workflow-runtime-dispatcher.ts";
+import {
+  WorkflowNodeDurabilityUncertainError,
+  WorkflowNodeSideEffectUncertainError,
+} from "./workflow-runtime-dispatcher.ts";
 import {
   loadPendingToolEventsForSegment,
   workflowContinuationHistoryStart,
@@ -555,8 +558,9 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       let terminalCandidateId: string | null = null;
       const currentDispatch = dispatch as ModelDispatchReceipt | null;
       if (currentDispatch?.status === "responseObserved") {
-        const committed = await this.#store.commitWorkflowAssistantContinuation(
-          {
+        let committed;
+        try {
+          committed = await this.#store.commitWorkflowAssistantContinuation({
             lease: leaseInput(authority.workItemClaim),
             authority: workflowAttemptAuthority(durableAuthority(input)),
             expectedContinuationRevision: continuationRevision,
@@ -585,8 +589,10 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
                       decision.outcome.status === "canceled"
                     ? { status: "canceled" }
                     : null,
-          },
-        );
+          });
+        } catch (error) {
+          throw new WorkflowNodeDurabilityUncertainError(error);
+        }
         continuationRevision = committed.revision;
         terminalCandidateId = committed.terminalCandidate?.candidateId ?? null;
         if (terminalCandidateId !== null)
@@ -685,6 +691,9 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
         return { status: "canceled" };
       }
       if (error instanceof WorkflowNodeSideEffectUncertainError) {
+        return { status: "unknown" };
+      }
+      if (error instanceof WorkflowNodeDurabilityUncertainError) {
         return { status: "unknown" };
       }
       if (error instanceof WorkflowToolApprovalWaitingError) {

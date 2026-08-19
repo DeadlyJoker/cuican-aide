@@ -28,7 +28,10 @@ import {
   workflowContinuationCheckpoint,
   type WorkflowDurableExecutionAuthority,
 } from "./workflow-agent-durable-continuation.ts";
-import { WorkflowNodeSideEffectUncertainError } from "./workflow-runtime-dispatcher.ts";
+import {
+  WorkflowNodeDurabilityUncertainError,
+  WorkflowNodeSideEffectUncertainError,
+} from "./workflow-runtime-dispatcher.ts";
 import {
   projectWorkflowModelVisibleText,
   validateWorkflowModelHistory,
@@ -245,8 +248,9 @@ export async function executeWorkflowTools(
           output: visibleOutput.content,
         },
       ]);
-      const committed = await dependencies.store.commitWorkflowToolContinuation(
-        {
+      let committed;
+      try {
+        committed = await dependencies.store.commitWorkflowToolContinuation({
           lease: leaseInput(input.authority.workItemClaim),
           authority: workflowAttemptAuthority(durableAuthority(input)),
           receipt,
@@ -265,8 +269,10 @@ export async function executeWorkflowTools(
             providerTurnState: continuation.providerTurnState,
           }),
           committedAt: new Date().toISOString(),
-        },
-      );
+        });
+      } catch (error) {
+        throw new WorkflowNodeDurabilityUncertainError(error);
+      }
       revision = committed.continuation.revision;
       currentHistory = committed.continuation.history;
     }

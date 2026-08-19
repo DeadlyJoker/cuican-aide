@@ -12,6 +12,7 @@ import {
 } from "@crewon/domain";
 import {
   ProductionWorkflowRuntimeDispatcher,
+  WorkflowNodeDurabilityUncertainError,
   WorkflowNodeSideEffectUncertainError,
 } from "./workflow-runtime-dispatcher.ts";
 
@@ -314,6 +315,16 @@ test("uses unknown only when node side effects may have been sent", async () => 
   const fixture = composition();
   await create(fixture.store, async () => {
     throw new WorkflowNodeSideEffectUncertainError();
+  }).dispatch(input("node"));
+  assert.deepEqual(fixture.outcomes, [{ status: "unknown" }]);
+});
+
+test("keeps an indeterminate continuation commit out of business failure settlement", async () => {
+  const fixture = composition();
+  await create(fixture.store, async () => {
+    throw new WorkflowNodeDurabilityUncertainError(
+      new Error("postgres_commit_ack_lost"),
+    );
   }).dispatch(input("node"));
   assert.deepEqual(fixture.outcomes, [{ status: "unknown" }]);
 });
