@@ -7,7 +7,11 @@ import type {
   WorkflowRuntimeStore,
   WorkflowVersionStore,
 } from "@crewon/application";
-import { canonicalJson, MAX_WORKFLOW_VALUE_BYTES } from "@crewon/application";
+import {
+  canonicalJson,
+  MAX_WORKFLOW_PENDING_TOOL_RESUMES,
+  MAX_WORKFLOW_VALUE_BYTES,
+} from "@crewon/application";
 import type {
   FrozenWorkflowVersionBinding,
   ModelDispatchTerminalOutcome,
@@ -307,6 +311,7 @@ export class ProductionWorkflowRuntimeDispatcher
       resume.claim.claimEpoch !== payload.claimEpoch ||
       canonicalJson(resume.reconciliationLease) !==
         canonicalJson(leaseInput(input.claim)) ||
+      invalidPendingToolResumeAuthority(resume, input.claim) ||
       resume.attempt.tenantId !== input.run.tenantId ||
       resume.attempt.runId !== input.run.runId ||
       resume.attempt.workItemId !== input.claim.workItem.workItemId ||
@@ -800,6 +805,45 @@ export class ProductionWorkflowRuntimeDispatcher
           code: "workflow_node_settled",
         };
   }
+}
+
+function invalidPendingToolResumeAuthority(
+  resume: WorkflowNodeContinuationResume,
+  claim: WorkItemClaim,
+): boolean {
+  if (resume.pendingTools.length > MAX_WORKFLOW_PENDING_TOOL_RESUMES)
+    return true;
+  const callIds = new Set<string>();
+  for (const { receipt, step, attempt } of resume.pendingTools) {
+    if (
+      callIds.has(receipt.call.callId) ||
+      !["prepared", "dispatched", "unknownOutcome"].includes(receipt.status) ||
+      receipt.actionIntent === null ||
+      receipt.tenantId !== claim.workItem.tenantId ||
+      receipt.runId !== claim.workItem.runId ||
+      receipt.workItemId !== claim.workItem.workItemId ||
+      receipt.stepId !== step.stepId ||
+      receipt.attemptId !== attempt.attemptId ||
+      step.tenantId !== claim.workItem.tenantId ||
+      step.runId !== claim.workItem.runId ||
+      step.kind !== "tool" ||
+      step.status !== "running" ||
+      step.currentAttemptId !== attempt.attemptId ||
+      attempt.tenantId !== claim.workItem.tenantId ||
+      attempt.runId !== claim.workItem.runId ||
+      attempt.stepId !== step.stepId ||
+      attempt.workItemId !== claim.workItem.workItemId ||
+      attempt.leaseEpoch !== claim.lease.epoch ||
+      attempt.status !== "running" ||
+      attempt.checkpointDigest !== null ||
+      attempt.providerCheckpoint !== null ||
+      attempt.providerTurnState !== null ||
+      attempt.failure !== null
+    )
+      return true;
+    callIds.add(receipt.call.callId);
+  }
+  return false;
 }
 
 function deterministicNodeFailureCode(error: unknown): string {

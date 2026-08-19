@@ -2,10 +2,14 @@ import type {
   DomainStore,
   DurableQueueStore,
   RunExecutionService,
+  WorkflowPendingToolResume,
   WorkflowNodeContinuationResume,
   WorkflowRuntimeStore,
 } from "@crewon/application";
-import { canonicalJson } from "@crewon/application";
+import {
+  canonicalJson,
+  MAX_WORKFLOW_PENDING_TOOL_RESUMES,
+} from "@crewon/application";
 import type {
   AgentContinuation,
   AgentHistoryItem,
@@ -81,6 +85,11 @@ export async function prepareWorkflowAgentContinuationResume(
     segmentId: resume.continuation.segmentId,
   });
   assertDurableToolHistory(resume.continuation.history, pending);
+  const pendingTools = validatePendingToolResumes(
+    dependencies.execution,
+    input,
+    pending.events,
+  );
   const base = {
     runtime,
     authority: {
@@ -126,6 +135,8 @@ export async function prepareWorkflowAgentContinuationResume(
             toolRoundsConsumed +
             (pending.completedCallIds.length === 0 ? 1 : 0),
         },
+        undefined,
+        pendingTools,
       );
       history = tool.history;
       revision = requireResumeRevision(tool.revision);
@@ -170,6 +181,63 @@ export async function prepareWorkflowAgentContinuationResume(
       adopted: { attempt: resume.attempt, step: resume.step },
     },
   };
+}
+
+function validatePendingToolResumes(
+  execution: RunExecutionService,
+  input: Parameters<WorkflowAgentNodePort["resume"]>[0] &
+    Readonly<{ runtime: AgentVersionRuntime }>,
+  events: readonly Extract<
+    import("@crewon/agent-kernel/runtime").KernelAgentEvent,
+    { type: "tool.requested" }
+  >[],
+): readonly WorkflowPendingToolResume[] {
+  const { claim, resume } = input;
+  if (
+    resume.pendingTools.length > MAX_WORKFLOW_PENDING_TOOL_RESUMES ||
+    resume.pendingTools.length !== events.length
+  )
+    throw new Error("workflow_node_resume_tool_authority_mismatch");
+  const byCallId = new Map(
+    resume.pendingTools.map((tool) => [tool.receipt.call.callId, tool]),
+  );
+  if (byCallId.size !== resume.pendingTools.length)
+    throw new Error("workflow_node_resume_tool_authority_mismatch");
+  for (const event of events) {
+    const tool = byCallId.get(event.data.callId);
+    if (tool === undefined)
+      throw new Error("workflow_node_resume_tool_authority_mismatch");
+    const { receipt, step, attempt } = tool;
+    if (
+      !["prepared", "dispatched", "unknownOutcome"].includes(receipt.status) ||
+      receipt.tenantId !== claim.workItem.tenantId ||
+      receipt.runId !== claim.workItem.runId ||
+      receipt.workItemId !== claim.workItem.workItemId ||
+      receipt.stepId !== step.stepId ||
+      receipt.attemptId !== attempt.attemptId ||
+      receipt.call.segmentId !== event.segmentId ||
+      receipt.call.kind !== event.data.kind ||
+      receipt.call.name !== event.data.name ||
+      step.tenantId !== claim.workItem.tenantId ||
+      step.runId !== claim.workItem.runId ||
+      step.kind !== "tool" ||
+      step.status !== "running" ||
+      step.currentAttemptId !== attempt.attemptId ||
+      attempt.tenantId !== claim.workItem.tenantId ||
+      attempt.runId !== claim.workItem.runId ||
+      attempt.stepId !== step.stepId ||
+      attempt.workItemId !== claim.workItem.workItemId ||
+      attempt.leaseEpoch !== claim.lease.epoch ||
+      attempt.status !== "running" ||
+      attempt.checkpointDigest !== null ||
+      attempt.providerCheckpoint !== null ||
+      attempt.providerTurnState !== null ||
+      attempt.failure !== null
+    )
+      throw new Error("workflow_node_resume_tool_authority_mismatch");
+    execution.validateToolExecutionInput(receipt, event.data.input);
+  }
+  return resume.pendingTools;
 }
 
 function assertResumeAuthority(

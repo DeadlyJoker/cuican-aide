@@ -7,6 +7,7 @@ import type {
   DurableQueueStore,
   RunExecutionService,
   WorkItemClaim,
+  WorkflowPendingToolResume,
   WorkflowRuntimeStore,
   WorkflowToolApprovalOutcome,
 } from "@crewon/application";
@@ -92,6 +93,7 @@ export async function executeWorkflowTools(
   signal: AbortSignal,
   continuation: WorkflowToolContinuationInput,
   adopted?: Extract<WorkflowToolApprovalOutcome, { kind: "approved" }>,
+  resumedTools: readonly WorkflowPendingToolResume[] = [],
 ): Promise<
   Readonly<{
     history: readonly AgentHistoryItem[];
@@ -104,6 +106,9 @@ export async function executeWorkflowTools(
   let revision = continuation.revision;
   for (const event of requests) {
     const call = event.data;
+    const resumed = resumedTools.find(
+      ({ receipt }) => receipt.call.callId === call.callId,
+    );
     const defined = input.runtime.version.tools.some(
       (candidate) =>
         candidate.kind === call.kind && candidate.name === call.name,
@@ -117,35 +122,41 @@ export async function executeWorkflowTools(
     if (input.node.kind === "humanGate")
       throw new Error("workflow_human_gate_model_execution_forbidden");
     const prepared =
-      adopted?.receipt.call.callId === call.callId
+      resumed !== undefined
         ? {
             disposition: "existing" as const,
-            receipt: adopted.receipt,
+            receipt: resumed.receipt,
             attempt: null,
           }
-        : await dependencies.execution.beginToolExecution(
-            input.authority.workItemClaim,
-            {
-              segmentId: event.segmentId,
-              callId: call.callId,
-              kind: call.kind,
-              name: call.name,
-              input: call.input,
-            },
-            policy,
-            {
-              kind: "workflowAgentAttempt",
-              attempt: {
-                stepId: input.authority.stepId,
-                attemptId: input.authority.attemptId,
+        : adopted?.receipt.call.callId === call.callId
+          ? {
+              disposition: "existing" as const,
+              receipt: adopted.receipt,
+              attempt: null,
+            }
+          : await dependencies.execution.beginToolExecution(
+              input.authority.workItemClaim,
+              {
+                segmentId: event.segmentId,
+                callId: call.callId,
+                kind: call.kind,
+                name: call.name,
+                input: call.input,
               },
-              nodeId: input.authority.nodeId,
-              nodeKind: input.node.kind,
-              claimId: input.authority.claimId,
-              claimEpoch: input.authority.claimEpoch,
-              agentVersionId: input.authority.agentVersionId,
-            },
-          );
+              policy,
+              {
+                kind: "workflowAgentAttempt",
+                attempt: {
+                  stepId: input.authority.stepId,
+                  attemptId: input.authority.attemptId,
+                },
+                nodeId: input.authority.nodeId,
+                nodeKind: input.node.kind,
+                claimId: input.authority.claimId,
+                claimEpoch: input.authority.claimEpoch,
+                agentVersionId: input.authority.agentVersionId,
+              },
+            );
     let receipt = prepared.receipt;
     const approval: ToolApprovalState | null =
       adopted?.receipt.call.callId === call.callId ? adopted.approval : null;
@@ -169,9 +180,14 @@ export async function executeWorkflowTools(
       throw new WorkflowToolApprovalWaitingError(published.approval.approvalId);
     }
     let toolAttempt =
-      adopted?.receipt.call.callId === call.callId
-        ? { stepId: receipt.stepId, attemptId: receipt.attemptId }
-        : null;
+      resumed !== undefined
+        ? {
+            stepId: resumed.attempt.stepId,
+            attemptId: resumed.attempt.attemptId,
+          }
+        : adopted?.receipt.call.callId === call.callId
+          ? { stepId: receipt.stepId, attemptId: receipt.attemptId }
+          : null;
     let resolution: ToolExecutionResolution;
     if (receipt.status === "completed") {
       resolution = completedToolResolution(receipt);
