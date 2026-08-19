@@ -2,6 +2,7 @@ import type {
   WorkItemClaim,
   WorkflowAtomicNodeOutcome,
   WorkflowCancellationResult,
+  WorkflowNodeContinuationResume,
   WorkflowNodeResponseRecovery,
   WorkflowRuntimeStore,
   WorkflowVersionStore,
@@ -72,6 +73,12 @@ export interface WorkflowAgentNodePort {
     binding: FrozenWorkflowVersionBinding;
     recovery: WorkflowNodeResponseRecovery;
   }): Promise<WorkflowAtomicNodeOutcome>;
+  resume(input: {
+    claim: WorkItemClaim;
+    binding: FrozenWorkflowVersionBinding;
+    node: WorkflowNodeDefinition;
+    resume: WorkflowNodeContinuationResume;
+  }): Promise<WorkflowNodeOutcome>;
   resumeToolApproval(input: {
     claim: WorkItemClaim;
     binding: import("@crewon/domain").FrozenWorkflowVersionBinding;
@@ -260,6 +267,8 @@ export class ProductionWorkflowRuntimeDispatcher
             workflow,
             reconciled.recovery,
           );
+        case "resumeRequired":
+          return this.#resumeNode(input, payload, workflow, reconciled.resume);
         case "settled":
         case "replay":
           assertCompletedHandoff(reconciled.handoff);
@@ -273,6 +282,142 @@ export class ProductionWorkflowRuntimeDispatcher
       }
     }
     throw new Error("workflow_reconciliation_contract_incomplete");
+  }
+
+  async #resumeNode(
+    input: { claim: WorkItemClaim; run: RunState },
+    payload: Extract<WorkflowWorkItemPayload, { trigger: "workflowReconcile" }>,
+    workflow: Awaited<ReturnType<typeof loadFrozenWorkflowVersion>>,
+    resume: WorkflowNodeContinuationResume,
+  ): Promise<WorkflowRuntimeDispatchOutcome> {
+    const node = workflow.nodes.find(
+      (candidate) => candidate.nodeId === payload.nodeId,
+    );
+    const agentVersionId =
+      node?.kind === "agent"
+        ? node.agentVersionId
+        : node?.kind === "verification"
+          ? node.verifierAgentVersionId
+          : null;
+    if (
+      node === undefined ||
+      agentVersionId === null ||
+      canonicalJson(resume.claim.node) !== canonicalJson(node) ||
+      resume.claim.claimId !== payload.claimId ||
+      resume.claim.claimEpoch !== payload.claimEpoch ||
+      canonicalJson(resume.reconciliationLease) !==
+        canonicalJson(leaseInput(input.claim)) ||
+      resume.attempt.tenantId !== input.run.tenantId ||
+      resume.attempt.runId !== input.run.runId ||
+      resume.attempt.workItemId !== input.claim.workItem.workItemId ||
+      resume.attempt.leaseEpoch !== input.claim.lease.epoch ||
+      resume.attempt.status !== "running" ||
+      resume.step.tenantId !== input.run.tenantId ||
+      resume.step.runId !== input.run.runId ||
+      resume.step.status !== "running" ||
+      resume.attempt.stepId !== resume.step.stepId ||
+      resume.attempt.attemptId !== resume.step.currentAttemptId ||
+      resume.continuation.activeDispatch !== null ||
+      resume.continuation.terminalCandidate !== null ||
+      canonicalJson(resume.continuation.providerCheckpoint) !==
+        canonicalJson(resume.attempt.providerCheckpoint) ||
+      resume.continuation.providerTurnState !==
+        resume.attempt.providerTurnState ||
+      (resume.continuation.providerCheckpoint === null
+        ? resume.attempt.checkpointDigest !== null
+        : resume.attempt.checkpointDigest !==
+          this.#digester.sha256(
+            canonicalJson(resume.continuation.providerCheckpoint),
+          )) ||
+      canonicalJson(resume.continuation.authority) !==
+        canonicalJson({
+          tenantId: input.run.tenantId,
+          runId: input.run.runId,
+          workItemId: input.claim.workItem.workItemId,
+          leaseEpoch: input.claim.lease.epoch,
+          nodeId: node.nodeId,
+          nodeKind: node.kind,
+          claimId: payload.claimId,
+          claimEpoch: payload.claimEpoch,
+          agentVersionId,
+          attempt: {
+            stepId: resume.attempt.stepId,
+            attemptId: resume.attempt.attemptId,
+          },
+        })
+    )
+      throw new Error("workflow_node_resume_identity_mismatch");
+    let outcome: WorkflowNodeOutcome;
+    try {
+      outcome = await this.#agent.resume({
+        claim: input.claim,
+        binding: input.run.workflowVersionBinding!,
+        node,
+        resume,
+      });
+    } catch {
+      return {
+        kind: "retry",
+        runId: input.run.runId,
+        code: "workflow_node_resume_failed",
+      };
+    }
+    if (outcome.status === "waitingApproval")
+      return {
+        kind: "waitingApproval",
+        runId: input.run.runId,
+        approvalId: outcome.approvalId,
+      };
+    if (outcome.status === "unknown")
+      return {
+        kind: "retry",
+        runId: input.run.runId,
+        code: "workflow_node_resume_result_unknown",
+      };
+    if (
+      outcome.status === "completed" &&
+      new TextEncoder().encode(canonicalJson(outcome.value)).length >
+        MAX_WORKFLOW_VALUE_BYTES
+    )
+      throw new Error("workflow_node_output_too_large");
+    try {
+      const settled =
+        outcome.status === "terminalCandidate"
+          ? await this.#store.settlePreparedWorkflowNodeTerminal({
+              binding: input.run.workflowVersionBinding!,
+              operationId: `node-model-terminal:${payload.claimId}`,
+              candidateId: outcome.modelTerminal.candidateId,
+              lease: leaseInput(input.claim),
+              authority: resume.continuation.authority,
+            })
+          : await this.#store.settleWorkflowNode({
+              tenantId: input.run.tenantId,
+              runId: input.run.runId,
+              lease: leaseInput(input.claim),
+              binding: input.run.workflowVersionBinding!,
+              nodeId: node.nodeId,
+              claimId: payload.claimId!,
+              claimEpoch: payload.claimEpoch!,
+              stepId: resume.attempt.stepId,
+              attemptId: resume.attempt.attemptId,
+              operationId: `node-resume-settle:${payload.claimId}:${resume.continuation.revision}`,
+              outcome,
+            });
+      assertCompletedHandoff(settled.handoff);
+      return settled.runDisposition === "terminalConverged"
+        ? { kind: "completed", runId: input.run.runId }
+        : {
+            kind: "recovery",
+            runId: input.run.runId,
+            code: "workflow_node_resumed_and_settled",
+          };
+    } catch {
+      return {
+        kind: "recovery",
+        runId: input.run.runId,
+        code: "workflow_resume_settlement_result_unknown",
+      };
+    }
   }
 
   async #retrieveNode(

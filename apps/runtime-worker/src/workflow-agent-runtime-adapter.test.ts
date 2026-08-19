@@ -41,6 +41,9 @@ test("resolves the frozen node runtime and preserves admitted authority and actu
       async reconcile() {
         throw new Error("not used");
       },
+      async resume() {
+        throw new Error("not used");
+      },
       async resumeToolApproval() {
         throw new Error("not used");
       },
@@ -89,6 +92,9 @@ test("fails closed instead of substituting the root Agent runtime", async () => 
     engine: {
       workflowStore: {} as never,
       async reconcile() {
+        throw new Error("not used");
+      },
+      async resume() {
         throw new Error("not used");
       },
       async resumeToolApproval() {

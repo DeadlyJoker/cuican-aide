@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 import type {
+  WorkflowNodeContinuationResume,
   WorkflowNodeResponseRecovery,
   WorkflowRuntimeStore,
 } from "@crewon/application";
+import { canonicalJson } from "@crewon/application";
 import {
   compileWorkflowVersion,
   createWorkflowNodeTerminalEvidence,
@@ -215,6 +217,188 @@ test("GET reconciliation unknown outcome retains work for retry without settleme
     code: "workflow_response_retrieve_retry_required",
   });
   assert.equal(fixture.retrievedSettlements, 0);
+});
+
+test("continuation reconciliation resumes once without execute or provider GET", async () => {
+  const fixture = composition();
+  fixture.resume = continuationResume();
+  let executions = 0;
+  let retrieves = 0;
+  let resumes = 0;
+  const dispatcher = create(
+    fixture.store,
+    async () => {
+      executions += 1;
+      return { status: "unknown" };
+    },
+    fixture.store,
+    async () => {
+      retrieves += 1;
+      return { status: "unknown" };
+    },
+    async ({ resume }) => {
+      resumes += 1;
+      assert.equal(resume, fixture.resume);
+      return { status: "completed", value: {} };
+    },
+  );
+
+  assert.deepEqual(await dispatcher.dispatch(input("reconcile")), {
+    kind: "completed",
+    runId: "r",
+  });
+  assert.equal(executions, 0);
+  assert.equal(retrieves, 0);
+  assert.equal(resumes, 1);
+  assert.equal(fixture.settlements, 1);
+});
+
+test("continuation resume drift fails closed before Agent execution", async () => {
+  const baseline = continuationResume();
+  const drifts: ReadonlyArray<
+    readonly [string, WorkflowNodeContinuationResume]
+  > = [
+    [
+      "reconciliation lease",
+      {
+        ...baseline,
+        reconciliationLease: { ...baseline.reconciliationLease, leaseEpoch: 2 },
+      },
+    ],
+    [
+      "attempt work item",
+      {
+        ...baseline,
+        attempt: { ...baseline.attempt, workItemId: "stale-work" },
+      },
+    ],
+    [
+      "attempt lease",
+      { ...baseline, attempt: { ...baseline.attempt, leaseEpoch: 2 } },
+    ],
+    [
+      "attempt tenant",
+      { ...baseline, attempt: { ...baseline.attempt, tenantId: "other" } },
+    ],
+    [
+      "step status",
+      { ...baseline, step: { ...baseline.step, status: "completed" } },
+    ],
+    ["step run", { ...baseline, step: { ...baseline.step, runId: "other" } }],
+    [
+      "checkpoint authority",
+      {
+        ...baseline,
+        continuation: {
+          ...baseline.continuation,
+          authority: { ...baseline.continuation.authority, claimEpoch: 2 },
+        },
+      },
+    ],
+    [
+      "checkpoint digest",
+      {
+        ...baseline,
+        attempt: { ...baseline.attempt, checkpointDigest: digest("stale") },
+      },
+    ],
+    [
+      "provider checkpoint",
+      {
+        ...baseline,
+        continuation: {
+          ...baseline.continuation,
+          providerCheckpoint: {
+            ...baseline.continuation.providerCheckpoint!,
+            modelId: "other-model",
+          },
+        },
+      },
+    ],
+    [
+      "provider turn state",
+      {
+        ...baseline,
+        continuation: {
+          ...baseline.continuation,
+          providerTurnState: "drifted",
+        },
+      },
+    ],
+    [
+      "active dispatch",
+      {
+        ...baseline,
+        continuation: {
+          ...baseline.continuation,
+          activeDispatch: {
+            operationId: "old-dispatch",
+            requestSequence: 1,
+            expectedRevision: 1,
+            status: "responseObserved",
+          },
+        },
+      },
+    ],
+    [
+      "terminal candidate",
+      {
+        ...baseline,
+        continuation: {
+          ...baseline.continuation,
+          terminalCandidate: {} as never,
+        },
+      },
+    ],
+  ];
+  for (const [label, resume] of drifts) {
+    const fixture = composition();
+    fixture.resume = resume;
+    let resumes = 0;
+    await assert.rejects(
+      create(
+        fixture.store,
+        async () => {
+          throw new Error("execute must not run");
+        },
+        fixture.store,
+        async () => {
+          throw new Error("GET must not run");
+        },
+        async () => {
+          resumes += 1;
+          return { status: "unknown" };
+        },
+      ).dispatch(input("reconcile")),
+      /workflow_node_resume_identity_mismatch/u,
+      label,
+    );
+    assert.equal(resumes, 0, label);
+  }
+});
+
+test("transient continuation resume failure retries the retained reconcile work", async () => {
+  const fixture = composition();
+  fixture.resume = continuationResume();
+  const dispatcher = create(
+    fixture.store,
+    async () => {
+      throw new Error("execute must not run");
+    },
+    fixture.store,
+    async () => {
+      throw new Error("GET must not run");
+    },
+    async () => {
+      throw new Error("provider temporarily unavailable");
+    },
+  );
+  assert.deepEqual(await dispatcher.dispatch(input("reconcile")), {
+    kind: "retry",
+    runId: "r",
+    code: "workflow_node_resume_failed",
+  });
+  assert.equal(fixture.settlements, 0);
 });
 
 test("rejects a split Workflow Store identity", () => {
@@ -465,6 +649,7 @@ function composition() {
     retrievedSettlements: 0,
     retrievedInputs: [] as unknown[],
     recovery: null as WorkflowNodeResponseRecovery | null,
+    resume: null as WorkflowNodeContinuationResume | null,
     outcomes: [] as unknown[],
     workflowInputs: [] as unknown[],
     nodeDisposition: "fresh" as "fresh" | "replay" | "reconcileRequired",
@@ -605,6 +790,19 @@ function composition() {
       };
     },
     async reconcileWorkflowNode() {
+      if (fixture.resume !== null)
+        return {
+          disposition: "resumeRequired" as const,
+          evidenceStatus: "responseObserved" as const,
+          resume: fixture.resume,
+          execution: state(),
+          handoff: {
+            currentWorkItem: "retained" as const,
+            nextWorkItemId: null,
+            kind: "none" as const,
+          },
+          runDisposition: "nonTerminal" as const,
+        };
       if (fixture.recovery === null)
         throw new Error("reconciliation evidence provider is not composed");
       return {
@@ -741,6 +939,9 @@ function create(
   reconcile: ConstructorParameters<
     typeof ProductionWorkflowRuntimeDispatcher
   >[0]["agent"]["reconcile"] = async () => ({ status: "unknown" }),
+  resume: ConstructorParameters<
+    typeof ProductionWorkflowRuntimeDispatcher
+  >[0]["agent"]["resume"] = async () => ({ status: "unknown" }),
 ) {
   return new ProductionWorkflowRuntimeDispatcher({
     versions: {
@@ -768,6 +969,7 @@ function create(
       workflowStore: agentStore,
       execute,
       reconcile,
+      resume,
       async resumeToolApproval() {
         throw new Error("not used");
       },
@@ -833,6 +1035,94 @@ function retrievalRecovery(): WorkflowNodeResponseRecovery {
       revision: 3,
       responseCheckpointDigest: digest(JSON.stringify(checkpoint)),
     } as never,
+  };
+}
+
+function continuationResume(): WorkflowNodeContinuationResume {
+  const providerCheckpoint = {
+    schemaVersion: "crewon.provider-checkpoint.v0",
+    adapterName: "responses",
+    adapterVersion: "1",
+    modelId: "model-1",
+    opaquePayload: { responseId: "resp-1" },
+  } as const;
+  const reconciliationLease = {
+    workItemId: "work-claim-1",
+    ownerId: "o",
+    leaseId: "l",
+    leaseEpoch: 1,
+  } as const;
+  const authority = {
+    tenantId: "t",
+    runId: "r",
+    workItemId: reconciliationLease.workItemId,
+    leaseEpoch: reconciliationLease.leaseEpoch,
+    nodeId: "a",
+    nodeKind: "agent",
+    claimId: "claim-1",
+    claimEpoch: 1,
+    agentVersionId: "agent-a",
+    attempt: { stepId: "step-a", attemptId: "attempt-1" },
+  } as const;
+  return {
+    claim: {
+      node: workflow.nodes[0]!,
+      claimId: "claim-1",
+      claimEpoch: 1,
+      gateRequestId: null,
+      inputDigest: digest("input"),
+    },
+    reconciliationLease,
+    step: {
+      schemaVersion: "crewon.run-step.v0",
+      stepId: "step-a",
+      tenantId: "t",
+      runId: "r",
+      kind: "workflowNode",
+      status: "running",
+      revision: 2,
+      currentAttemptId: "attempt-1",
+      attemptCount: 1,
+      createdAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:01.000Z",
+      terminalAt: null,
+    },
+    attempt: {
+      schemaVersion: "crewon.run-attempt.v0",
+      attemptId: "attempt-1",
+      tenantId: "t",
+      runId: "r",
+      stepId: "step-a",
+      workItemId: reconciliationLease.workItemId,
+      attemptNumber: 1,
+      retryOfAttemptId: null,
+      leaseEpoch: reconciliationLease.leaseEpoch,
+      status: "running",
+      checkpointDigest: digest(canonicalJson(providerCheckpoint)),
+      providerCheckpoint,
+      providerTurnState: null,
+      failure: null,
+      startedAt: "2026-08-19T00:00:00.000Z",
+      updatedAt: "2026-08-19T00:00:01.000Z",
+      terminalAt: null,
+    },
+    continuation: {
+      schemaVersion: "crewon.workflow-node-continuation.v0",
+      authority,
+      segmentId: "segment:attempt-1",
+      modelSampleIndex: 0,
+      toolRoundsConsumed: 0,
+      providerCheckpoint,
+      providerTurnState: null,
+      activeDispatch: null,
+      terminalCandidate: null,
+      history: [
+        { type: "message", role: "user", content: "do work" },
+        { type: "message", role: "assistant", content: "continuing" },
+      ],
+      revision: 2,
+      updatedAt: "2026-08-19T00:00:01.000Z",
+    },
   };
 }
 function input(kind: "scheduler" | "node" | "reconcile", claimId = "claim-1") {

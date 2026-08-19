@@ -41,6 +41,10 @@ import {
   type WorkflowDurableExecutionAuthority,
 } from "./workflow-agent-durable-continuation.ts";
 import {
+  prepareWorkflowAgentContinuationResume,
+  type WorkflowAgentResumeExecutionInput,
+} from "./workflow-agent-continuation-resume.ts";
+import {
   decideWorkflowNodeExecutionError,
   decideWorkflowNodeSegment,
   prepareWorkflowNodeExecution,
@@ -84,6 +88,13 @@ export interface WorkflowAdmittedAgentExecutionEngine {
     binding: Parameters<WorkflowAgentNodePort["reconcile"]>[0]["binding"];
     recovery: WorkflowNodeResponseRecovery;
   }): Promise<WorkflowAtomicNodeOutcome>;
+  resume(input: {
+    runtime: AgentVersionRuntime;
+    claim: Parameters<WorkflowAgentNodePort["resume"]>[0]["claim"];
+    binding: Parameters<WorkflowAgentNodePort["resume"]>[0]["binding"];
+    node: Parameters<WorkflowAgentNodePort["resume"]>[0]["node"];
+    resume: Parameters<WorkflowAgentNodePort["resume"]>[0]["resume"];
+  }): Promise<WorkflowNodeOutcome>;
   resumeToolApproval(input: {
     runtime: AgentVersionRuntime;
     claim: Parameters<WorkflowAgentNodePort["execute"]>[0]["workItemClaim"];
@@ -104,7 +115,10 @@ type WorkflowAgentExecutionBase = Omit<
   "inputValue"
 >;
 type WorkflowAgentContinuationExecutionInput = WorkflowAgentExecutionBase &
-  Readonly<{ continuationState: WorkflowAgentContinuationState }>;
+  Readonly<{
+    continuationState: WorkflowAgentContinuationState;
+    adopted?: WorkflowAgentResumeExecutionInput["adopted"];
+  }>;
 type WorkflowAgentEngineInput =
   | WorkflowAgentExecutionInput
   | WorkflowAgentContinuationExecutionInput;
@@ -150,6 +164,23 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
     input: Parameters<WorkflowAdmittedAgentExecutionEngine["execute"]>[0],
   ): Promise<WorkflowNodeOutcome> {
     return this.#execute(input);
+  }
+
+  async resume(
+    input: Parameters<WorkflowAdmittedAgentExecutionEngine["resume"]>[0],
+  ): Promise<WorkflowNodeOutcome> {
+    const prepared = await prepareWorkflowAgentContinuationResume(
+      {
+        execution: this.#execution,
+        store: this.#store,
+        approvalTtlMs: this.#approvalTtlMs,
+        approvalRecheckMs: this.#approvalRecheckMs,
+      },
+      input,
+    );
+    return prepared.kind === "outcome"
+      ? prepared.outcome
+      : this.#execute(prepared.input);
   }
 
   async reconcile(
@@ -328,16 +359,20 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       stepId: authority.stepId,
       attemptId: authority.attemptId,
     };
-    const storedAttempt = await this.#store.loadRunAttempt({
-      tenantId: authority.tenantId,
-      runId: authority.runId,
-      ...attempt,
-    });
-    const storedStep = await this.#store.loadRunStep({
-      tenantId: authority.tenantId,
-      runId: authority.runId,
-      stepId: authority.stepId,
-    });
+    const storedAttempt =
+      (isContinuation ? input.adopted?.attempt : undefined) ??
+      (await this.#store.loadRunAttempt({
+        tenantId: authority.tenantId,
+        runId: authority.runId,
+        ...attempt,
+      }));
+    const storedStep =
+      (isContinuation ? input.adopted?.step : undefined) ??
+      (await this.#store.loadRunStep({
+        tenantId: authority.tenantId,
+        runId: authority.runId,
+        stepId: authority.stepId,
+      }));
     if (
       storedAttempt?.status !== "running" ||
       storedAttempt.tenantId !== authority.tenantId ||
@@ -673,7 +708,9 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       await cancellationWatcher.close();
       await heartbeat.close();
       return this.#execute({
-        ...input,
+        runtime: input.runtime,
+        authority: input.authority,
+        node: input.node,
         continuationState: {
           modelSampleIndex: modelSampleIndex + 1,
           toolRoundsConsumed: toolContinuation.toolRoundsConsumed,
@@ -987,6 +1024,19 @@ export class WorkflowAgentRuntimeAdapter implements WorkflowAgentNodePort {
     )
       throw new Error("workflow_response_retrieve_route_mismatch");
     return this.#engine.reconcile({ ...input, runtime });
+  }
+
+  async resume(
+    input: Parameters<WorkflowAgentNodePort["resume"]>[0],
+  ): Promise<WorkflowNodeOutcome> {
+    const agentVersionId = input.resume.continuation.authority.agentVersionId;
+    const runtime = await this.#runtimes.resolve({
+      tenantId: input.claim.workItem.tenantId,
+      agentVersionId,
+    });
+    if (runtime === null || runtime.version.agentVersionId !== agentVersionId)
+      throw new Error("workflow_node_agent_runtime_unavailable");
+    return this.#engine.resume({ ...input, runtime });
   }
 
   async resumeToolApproval(
