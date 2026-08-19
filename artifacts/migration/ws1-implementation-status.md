@@ -1,11 +1,22 @@
 # WS1 实施状态
 
-日期：2026-08-14
+日期：2026-08-19
 状态：In progress
 
 本文件记录当前 source tree 已验证的事实，不把局部测试外推为 WS1 或完整迁移完成。
 
-## 2026-08-14 当前 HEAD 收口证据
+## 2026-08-19 当前 HEAD 收口证据
+
+- 执行方式已明确收敛为纯 TypeScript breaking cutover：不新建项目、不做 Rust Runtime/App Server/
+  Device/Gateway 兼容、不保留 fallback/dual-write/candidate gate。Rust 仅保留 Tauri 壳、guardian 与发布验签工具；
+  历史 Native 章节不再是迁移完成条件。
+- W01 PostgreSQL 终态收敛已补齐真实并行证据：两个 Agent sibling 在独立 Pool/连接上持有各自
+  WorkItem/claim/lease，先结算 right 不产生 scheduler，再结算 left 只产生一个 scheduler，Verification 按
+  frozen execution order 读取输入并唯一收敛。三个节点均写入 `workflow.node.terminal` 审计事件，
+  Run 终态后的历史 settlement replay 仍可精确验证。串行真实 PG Workflow 契约集为 `24/24`。
+- 取消与恢复不再为兼容留模糊语义：`possiblySent` 只能进入 durable reconciliation；用户取消后由
+  node-owned lease 以 `abandonedPossiblySent` 显式 certainty 原子终止 dispatch/Attempt/node/WorkItem，
+  dedicated cancellation coordinator 在所有 sibling 终止后才写唯一 `run.canceled`。晚到 Provider 结果不能复活终态 Run。
 
 - Runtime/Control/Workspace/Workflow 的 production execution path 已按 breaking cutover 收敛到 TypeScript。当前 macOS
   `.app` 只包含 `crewon-ui`、官方 Node 24.18.1、`crewon-process-guardian` 与 Control API、Provider coordinator、Runtime
@@ -15,7 +26,8 @@
 - Human Gate 已有独立 durable publication authority。SQLite/PostgreSQL 在同一事务中严格校验 exact Outbox lease 与 Gate
   payload，把 `publicationPending -> published` 并 ACK Outbox；失败由 dispatcher retry，完整内部 payload 不进入 RunEventHub。
   公共 `GET /api/v1/runs/{runId}/workflow-gates` 只返回有界审批字段，Control UI 从该 authority 展示批准/驳回并用稳定
-  idempotency key 提交决策。真实 PostgreSQL 16 全 Store 为 `564 passed / 1 反向缺 URL skip / 0 failed`。
+  idempotency key 提交决策。真实 PostgreSQL 还覆盖旧 Worker 关闭、公开决策 replay、新 Worker 接管
+  resume authority 并进入 Verification；基线全 Store 为 `568 passed / 1 反向缺 URL skip / 0 failed`。
 - production Runtime Release/Worker 使用 mode-exact database authority：production 强制显式 PostgreSQL URL/schema，并禁止
   SQLite/default standalone identity；standalone 禁止 PostgreSQL。Provider catalog 在同一个 `PostgresDomainStore` 上用确定性
   prepare/finalize CAS 引导；设置页的 runtime availability 不再是全局常量，而是按已认证 actor 的
@@ -23,9 +35,9 @@
 - Team Workspace list 与 read-only 共用认证 tenant route registry。创建阶段只根据 verified tenant/space/thread 选 route，执行阶段
   再校验冻结的 tenant/runtime/workspace binding、generation echo、auth、deadline 与 abort。真实 authenticated Control ->
   tenant-routed production client -> loopback Runtime Worker read-only 纵向已通过；standalone loopback 行为保持独立。
-- 当前未签名 `.app` 的隔离 HOME smoke 为
-  `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-QIQnif`，Run
-  `01a000a9-a23d-72fb-aefe-25f14a5fd0bb` 实际完成 Agent -> Human Gate -> Verification：start 同 key
+- 当前 HEAD 未签名 `.app` 的隔离 HOME smoke 为
+  `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-IFk9FM`，Run
+  `01a018d5-4f36-76f9-a034-724984966bd1` 实际完成 Agent -> Human Gate -> Verification：start 同 key
   `committed -> replayed`，Gate 决策 `recorded -> replay`，Worker `SIGKILL` 后同一 HOME 重启恢复，2 次真实 loopback Responses、
   2 个 Attempt、唯一 `run.completed`，GUI `SIGKILL` 后 guardian 清理全部受管进程并释放 3210。
 - desktop release workflow 现在同时绑定 immutable tag、`origin/main` ancestry、远端 tag/main 无漂移以及 exact commit SHA/App ID 的
@@ -812,7 +824,12 @@ run/step/attempt/call provenance、SHA-256、size、retention、AES-256-GCM key 
 attempt、key ID、scanner 或底层路径；`@crewon/control-client` 下载时有 1MiB hard cap 并复核 ETag SHA-256。真实 loopback E2E 已覆盖
 HTTP 创建 Run -> Worker 大 Tool 输出 -> 加密落盘 -> HTTP 读回完整原文，并证明 blob 不含明文。
 
-## 尚未完成，禁止外推
+## 历史未完成清单（不再驱动纯 TS cutover）
+
+本节保留早期审计记录。其中 Rust Device/Gateway/App Server parity、Native dispatcher、shared fixture 和
+三平台 Rust transport 均已由 2026-08-13 的纯 TypeScript breaking-cutover 决策取消，不得再作为生产上线前置。
+仍有效的外部边界只按本文顶部“当前 HEAD 收口证据”中的发布凭据、真实多租户部署、跨主机故障/
+备份恢复与 SLO 为准。
 
 - `ActionIntent v0` 与 Device WSS v0 的 TS types、JSON Schema、strict parser、TS/Rust shared fixture、Gateway 会话和 strict
   mTLS WSS entrypoint、signed command wire/canonicalization、TS/Rust Ed25519 verification、Worker-side Device Tool mapping、
@@ -865,7 +882,7 @@ HTTP 创建 Run -> Worker 大 Tool 输出 -> 加密落盘 -> HTTP 读回完整�
 - 当前测试证明本机 Node 24、SQLite 与隔离 PostgreSQL 15 完整 DomainStore、Worker conformance、进程级竞争和 SIGKILL
   recovery；不证明跨主机网络分区、备份恢复、staging、生产、三平台或用户可见功能等价。
 
-## 下一顺序
+## 历史下一顺序（已被顶部纯 TS 执行方向覆盖）
 
 1. CrewON UI 的 Thread/Turn/Run/Goal production composition 已支持单一 `ControlThreadRuntime`：同一个认证 client 承担 JSON、Run SSE
    与 Goal SSE，snapshot/eventSequence handoff、切线程 generation fence、unknown-outcome 同 key 重试和 clear 后新 Goal revision 1
