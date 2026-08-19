@@ -12,6 +12,12 @@ const productionSecurity = await readOptionalWorkspaceFile(
 );
 const nginx = await readWorkspaceFile("deploy/crewon/nginx.conf");
 const webDockerfile = await readWorkspaceFile("deploy/crewon/web.Dockerfile");
+const webEnvironment = await readWorkspaceFile(
+  "deploy/crewon/web-bff.production.env.example",
+);
+const controlEnvironment = await readWorkspaceFile(
+  "deploy/crewon/control.production.env.example",
+);
 
 const standaloneCompositionRemainsIsolated =
   controlComposition.includes("new StandaloneIdentity({") &&
@@ -43,12 +49,25 @@ const legacyAppServerRouteRemoved =
 const productionNginxConfigurationPackaged = webDockerfile.includes(
   "COPY deploy/crewon/nginx.conf /etc/nginx/conf.d/default.conf",
 );
+const publicHealthRoutesAreExact =
+  nginx.includes("location = /control-api/health/live") &&
+  nginx.includes("location = /control-api/health/ready");
+const publicOriginMatchesListener =
+  nginx.includes("listen 6175 ssl") &&
+  webEnvironment.includes(
+    "CREWON_WEB_PUBLIC_ORIGIN=https://crewon.example.com:6175",
+  ) &&
+  controlEnvironment.includes(
+    "CREWON_BFF_ALLOWED_ORIGINS=https://crewon.example.com:6175",
+  );
 
 if (
   !standaloneCompositionRemainsIsolated ||
   !productionIdentityCompositionPresent ||
   !legacyAppServerRouteRemoved ||
-  !productionNginxConfigurationPackaged
+  !productionNginxConfigurationPackaged ||
+  !publicHealthRoutesAreExact ||
+  !publicOriginMatchesListener
 ) {
   process.stderr.write(
     [
@@ -59,6 +78,7 @@ if (
       "It must also validate CREWON_CONTROL_BFF_TOKEN from X-CrewON-BFF-Authorization independently of the user token.",
       "nginx must not publish the removed Rust App Server or Agent Platform compatibility routes.",
       "The static Web image must install the checked-in production nginx configuration.",
+      "Public live/ready routes and the browser origin must match the only TLS listener exactly.",
       "The Web BFF boundary alone does not establish multi-user identity.",
     ].join("\n") + "\n",
   );
