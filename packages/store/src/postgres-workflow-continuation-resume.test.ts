@@ -5,6 +5,7 @@ import { Pool } from "pg";
 
 import { canonicalActionIntent } from "@crewon/contracts/runtime";
 import {
+  canonicalJson,
   RunStoreError,
   type WorkflowExecutionState,
   type WorkflowReconciliationResult,
@@ -944,6 +945,248 @@ test(
         lease: secondLease,
       });
       assert.equal(postCommit.disposition, "resumeRequired");
+    } finally {
+      await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+      await store.close();
+    }
+  },
+);
+
+test(
+  "PostgreSQL atomically commits a retrieved assistant continuation under reconciliation authority",
+  { skip: postgresUrl === undefined },
+  async () => {
+    assert.ok(postgresUrl);
+    const schema = `workflow_retrieved_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl, max: 1 });
+    const store = await PostgresWorkflowRunCompositionStore.open({
+      pool,
+      schema,
+      digester,
+    });
+    try {
+      await seed(pool, schema);
+      const scheduled = await store.scheduleWorkflowNodes({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: schedulerLease,
+        binding,
+        schedulerOperationId: "schedule-root",
+        workflowInput: rootInput,
+      });
+      const work = scheduled.nodeWorkItems[0]!;
+      const nodeLease = await lease(pool, schema, work.workItemId, "node-worker");
+      const admitted = await store.admitWorkflowNodeWork({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: nodeLease,
+        binding,
+        nodeId: work.nodeId,
+        claimId: work.claimId,
+        claimEpoch: work.claimEpoch,
+        schedulerOperationId: "schedule-root",
+        admissionOperationId: "admit-retrieved",
+        attemptLeaseDurationMs: 60_000,
+      });
+      assert.equal(admitted.disposition, "fresh");
+      const attempt = admitted.admission!.attempt;
+      const dispatch = await store.prepareModelDispatch({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: nodeLease,
+        attempt: { stepId: work.nodeId, attemptId: attempt.attemptId },
+        operationId: "dispatch-retrieved-1",
+        requestSequence: 1,
+        operation: "dispatch",
+        requestDigest: digester.sha256("retrieved-request"),
+        provider: {
+          agentVersionId: "agent-v1",
+          adapterName: "responses",
+          adapterVersion: "1",
+          modelId: "gpt-test",
+        },
+        preparedAt: "2026-08-19T01:00:01.000Z",
+      });
+      const sent = await store.markModelDispatchPossiblySent({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: nodeLease,
+        attempt: { stepId: work.nodeId, attemptId: attempt.attemptId },
+        operationId: dispatch.operationId,
+        requestSequence: dispatch.requestSequence,
+        expectedRevision: dispatch.revision,
+        transitionedAt: "2026-08-19T01:00:02.000Z",
+      });
+      const checkpoint = {
+        schemaVersion: "crewon.provider-checkpoint.v0" as const,
+        adapterName: "responses",
+        adapterVersion: "1",
+        modelId: "gpt-test",
+        opaquePayload: { responseId: "retrieved-response-1" },
+      };
+      await store.checkpointRunAttempt({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: nodeLease,
+        attempt: { stepId: work.nodeId, attemptId: attempt.attemptId },
+        checkpoint,
+        checkpointDigest: digester.sha256(canonicalJson(checkpoint)),
+        checkpointedAt: "2026-08-19T01:00:03.000Z",
+        modelDispatch: {
+          operationId: dispatch.operationId,
+          requestSequence: dispatch.requestSequence,
+          expectedRevision: sent.revision,
+        },
+      });
+      const scheduledReconcile = await store.scheduleWorkflowReconciliation({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: nodeLease,
+        binding,
+        operationId: "schedule-retrieved-reconcile",
+        reasonCode: "workflow_node_durability_uncertain",
+        nodeId: work.nodeId,
+        claimId: work.claimId,
+        claimEpoch: work.claimEpoch,
+      });
+      const reconcileLease = await lease(
+        pool,
+        schema,
+        scheduledReconcile.reconciliationWorkItemId,
+        "retrieved-reconcile-worker",
+      );
+      const reconcileInput = {
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: reconcileLease,
+        binding,
+        nodeId: work.nodeId,
+        claimId: work.claimId,
+        claimEpoch: work.claimEpoch,
+        reconciliationOperationId: "schedule-retrieved-reconcile",
+      };
+      const retrieval = await store.reconcileWorkflowNode(reconcileInput);
+      assert.equal(retrieval.disposition, "retrieveRequired");
+      if (retrieval.disposition !== "retrieveRequired") assert.fail();
+      const segmentId = `segment:${attempt.attemptId}`;
+      const payload = {
+        events: [
+          {
+            schemaVersion: "crewon.agent-event.v0" as const,
+            runId: "run-1",
+            segmentId,
+            sequence: 1,
+            type: "model.output.delta" as const,
+            data: { delta: "restored" },
+          },
+        ],
+        assistantContinuation: {
+          segmentId,
+          sequence: 2,
+          output: "restored",
+          completedAssistantItems: ["restored"],
+          checkpoint,
+          providerTurnState: null,
+        },
+        next: {
+          schemaVersion: "crewon.workflow-node-continuation.v0" as const,
+          segmentId,
+          modelSampleIndex: 0,
+          toolRoundsConsumed: 0,
+          providerCheckpoint: checkpoint,
+          providerTurnState: null,
+          history: [
+            { type: "message" as const, role: "assistant" as const, content: "restored" },
+          ],
+        },
+      };
+      const commitInput = {
+        ...reconcileInput,
+        agentVersionId: "agent-v1",
+        attempt: {
+          stepId: retrieval.recovery.attempt.stepId,
+          attemptId: retrieval.recovery.attempt.attemptId,
+          workItemId: retrieval.recovery.attempt.workItemId,
+          leaseEpoch: retrieval.recovery.attempt.leaseEpoch,
+        },
+        dispatch: {
+          operationId: retrieval.recovery.dispatch.operationId,
+          requestSequence: retrieval.recovery.dispatch.requestSequence,
+          expectedRevision: retrieval.recovery.dispatch.revision,
+          status: "responseObserved" as const,
+        },
+        priorContinuation: retrieval.recovery.priorContinuation,
+        payload,
+      };
+      await assert.rejects(
+        store.commitRetrievedWorkflowNodeContinuation({
+          ...commitInput,
+          payload: {
+            ...payload,
+            next: { ...payload.next, segmentId: "segment:forged" },
+          },
+        }),
+        (error) =>
+          error instanceof RunStoreError &&
+          error.code === "workflow_retrieved_continuation_corrupt",
+      );
+      const before = await loadExecution(pool, schema);
+      const committed =
+        await store.commitRetrievedWorkflowNodeContinuation(commitInput);
+      assert.deepEqual(
+        {
+          disposition: committed.disposition,
+          node: committed.execution.nodes.find(
+            (node) => node.nodeId === work.nodeId,
+          )?.status,
+          executionRevision: committed.execution.revision,
+          attemptWorkItemId: committed.resume.attempt.workItemId,
+          attemptLeaseEpoch: committed.resume.attempt.leaseEpoch,
+          continuationRevision: committed.resume.continuation.revision,
+          pendingTools: committed.resume.pendingTools,
+          handoff: committed.handoff,
+        },
+        {
+          disposition: "resumeRequired",
+          node: "running",
+          executionRevision: before.revision + 1,
+          attemptWorkItemId: reconcileLease.workItemId,
+          attemptLeaseEpoch: reconcileLease.leaseEpoch,
+          continuationRevision: 1,
+          pendingTools: [],
+          handoff: {
+            currentWorkItem: "retained",
+            nextWorkItemId: null,
+            kind: "none",
+          },
+        },
+      );
+      const durable = await pool.query<{
+        dispatch_status: string;
+        run_events: number;
+        agent_events: number;
+        outbox_messages: number;
+      }>(
+        `SELECT
+           (SELECT status FROM ${schema}.model_dispatch_receipts
+            WHERE operation_id='dispatch-retrieved-1') dispatch_status,
+           (SELECT count(*)::int FROM ${schema}.run_events
+            WHERE event_json->>'type'='model.output.delta') run_events,
+           (SELECT count(*)::int FROM ${schema}.workflow_agent_events
+            WHERE event_json->>'type'='model.output.delta') agent_events,
+           (SELECT count(*)::int FROM ${schema}.outbox
+            WHERE message_json->'payload'->>'eventType'='model.output.delta') outbox_messages`,
+      );
+      assert.deepEqual(durable.rows[0], {
+        dispatch_status: "terminal",
+        run_events: 1,
+        agent_events: 1,
+        outbox_messages: 1,
+      });
+      assert.equal(
+        (await store.reconcileWorkflowNode(reconcileInput)).disposition,
+        "resumeRequired",
+      );
     } finally {
       await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
       await store.close();
