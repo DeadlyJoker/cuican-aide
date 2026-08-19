@@ -322,6 +322,219 @@ test("SQLite Slice 4 completes checkpoint-only reconciliation without resampling
   });
 });
 
+test("SQLite possibly-sent Agent dispatch requires an operator without retrying", async (t) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "crewon-operator-required-vertical-"),
+  );
+  const path = join(directory, "runtime.sqlite");
+  let runtime:
+    | Awaited<ReturnType<typeof createStandaloneRuntimeWorker>>
+    | undefined;
+  t.after(async () => {
+    if (runtime !== undefined) await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+  const samples = new Map<string, number>();
+  const versions = ["operator-agent-v1", "operator-verification-v1"].map(
+    agentVersion,
+  );
+  const operatorWorkflow = compileWorkflowVersion(
+    {
+      schemaVersion: "crewon.workflow-version-source.v0",
+      workflowId: "wf-operator-required",
+      workflowVersionId: "wf-operator-required-v1",
+      name: "operator required",
+      description: "operator required",
+      inputSchema: schema,
+      outputSchema: schema,
+      entryNodeIds: ["agent"],
+      outputNodeIds: ["verification"],
+      nodes: [
+        {
+          nodeId: "agent",
+          title: "agent",
+          instruction: "agent",
+          kind: "agent",
+          agentVersionId: versions[0]!.agentVersionId,
+          dependsOn: [],
+          inputSchema: schema,
+          outputSchema: schema,
+        },
+        {
+          nodeId: "verification",
+          title: "verification",
+          instruction: "verification",
+          kind: "verification",
+          verifierAgentVersionId: versions[1]!.agentVersionId,
+          dependsOn: ["agent"],
+          inputSchema: schema,
+          outputSchema: schema,
+        },
+      ],
+    },
+    digester,
+  );
+  const config = {
+    ...baseConfig(),
+    agentVersionDeployments: versions.map((version) => ({
+      schemaVersion: "crewon.agent-version-deployment.v0" as const,
+      tenantId: "tenant-1",
+      agentVersionId: version.agentVersionId,
+      contentDigest: version.contentDigest,
+      materializationDigest: digester.sha256(
+        `operator-materialization:${version.agentVersionId}`,
+      ),
+      authorityId: `operator-authority:${version.agentVersionId}`,
+      workspaceBindingId: null,
+    })),
+    agentVersionRuntimeFactory: {
+      create: ({ version }: { version: { agentVersionId: string } }) =>
+        possiblySentNodeRuntime(version.agentVersionId, samples),
+    },
+  };
+  const setup = new SqliteRunStore(path, { workflowDigester: digester });
+  for (const version of versions)
+    await setup.registerAgentVersion(
+      createAgentVersionAsset({
+        tenantId: "tenant-1",
+        version,
+        createdAt: "2026-08-12T00:00:00.000Z",
+      }),
+    );
+  await activateStandaloneRuntimeAgentVersionRelease({
+    ...config,
+    databasePath: path,
+    actor: actor(),
+    authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    activationId: "activate-operator-required",
+  });
+  await new ThreadApplicationService({
+    store: setup,
+    authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    ids: { nextId: () => "operator-thread" },
+    digester,
+  }).createThread(actor(), {
+    kind: "thread.create",
+    idempotencyKey: "thread-operator-required",
+    title: "Operator required",
+  });
+  await setup.workflowVersionStore(digester).registerWorkflowVersion({
+    schemaVersion: "crewon.workflow-version-asset.v0",
+    tenantId: "tenant-1",
+    workflowId: operatorWorkflow.workflowId,
+    workflowVersionId: operatorWorkflow.workflowVersionId,
+    contentDigest: operatorWorkflow.contentDigest,
+    definitionJson: serializeCompiledWorkflowVersion(operatorWorkflow),
+    createdAt: "2026-08-12T00:00:00.000Z",
+  });
+  let id = 0;
+  const started = await new WorkflowRunApplicationService({
+    store: setup,
+    authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:01.000Z" },
+    workflowDigester: digester,
+    ids: { nextId: (kind) => `${kind}-${++id}` },
+    routeResolver: { resolveRoute: async () => config.route },
+  }).startWorkflowRun(actor(), {
+    kind: "workflowRun.start",
+    idempotencyKey: "start-operator-required",
+    workflowVersionId: operatorWorkflow.workflowVersionId,
+    threadId: "operator-thread",
+    input: {},
+  });
+  const runId = started.run.state.runId;
+  await setup.close();
+
+  runtime = await openPossiblySentRuntime(
+    path,
+    config,
+    samples,
+    "operator-dispatch-worker",
+  );
+  await runtime.worker.wake();
+  await runtime.worker.wake();
+  assert.deepEqual(samples, new Map([[versions[0]!.agentVersionId, 1]]));
+  assert.deepEqual(inspectOperatorRequired(path, runId), {
+    executionStatus: "running",
+    nodeStatus: "unknown",
+    verificationNodeStatus: "pending",
+    nodeFailureCode: null,
+    stepStatus: "running",
+    attemptStatus: "running",
+    dispatchStatus: "possiblySent",
+    dispatchOutcome: null,
+    nodeWorkStatus: "completed",
+    reconcileWorkStatus: "pending",
+    pendingWorkItems: 1,
+    runStatus: "running",
+    runFailure: null,
+    nodeTerminalEvents: 0,
+    runFailedEvents: 0,
+  });
+  await runtime.close();
+  runtime = await openPossiblySentRuntime(
+    path,
+    config,
+    samples,
+    "operator-reconcile-worker",
+  );
+
+  assert.deepEqual(await runtime.worker.wake(), {
+    kind: "workflowRecovery",
+    runId,
+    code: "workflow_model_dispatch_operator_required",
+  });
+  assert.deepEqual(samples, new Map([[versions[0]!.agentVersionId, 1]]));
+  const terminal = {
+    executionStatus: "failed",
+    nodeStatus: "failed",
+    verificationNodeStatus: "canceled",
+    nodeFailureCode: "workflow_model_dispatch_operator_required",
+    stepStatus: "failed",
+    attemptStatus: "failed",
+    dispatchStatus: "terminal",
+    dispatchOutcome: {
+      kind: "failed",
+      code: "workflow_model_dispatch_operator_required",
+      certainty: "operatorRequired",
+    },
+    nodeWorkStatus: "completed",
+    reconcileWorkStatus: "completed",
+    pendingWorkItems: 0,
+    runStatus: "failed",
+    runFailure: {
+      code: "workflow_model_dispatch_operator_required",
+      retryable: false,
+    },
+    nodeTerminalEvents: 2,
+    runFailedEvents: 1,
+  };
+  assert.deepEqual(inspectOperatorRequired(path, runId), terminal);
+  const publicStore = new SqliteRunStore(path, { workflowDigester: digester });
+  const publicRun = await new RunApplicationService({
+    store: publicStore,
+    authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:02.000Z" },
+    ids: { nextId: (kind) => `public-${kind}` },
+  }).getRun(actor(), runId);
+  assert.deepEqual(
+    { status: publicRun.status, failure: publicRun.failure },
+    {
+      status: "failed",
+      failure: {
+        code: "workflow_model_dispatch_operator_required",
+        retryable: false,
+      },
+    },
+  );
+  await publicStore.close();
+  assert.deepEqual(await runtime.worker.wake(), { kind: "idle" });
+  assert.deepEqual(samples, new Map([[versions[0]!.agentVersionId, 1]]));
+  assert.deepEqual(inspectOperatorRequired(path, runId), terminal);
+});
+
 test("SQLite restart resumes a durable assistant continuation without response GET", async (t) => {
   const directory = await mkdtemp(
     join(tmpdir(), "crewon-continuation-vertical-"),
@@ -1084,6 +1297,26 @@ async function openUncertainRuntime(path: string,
         runtime: uncertainNodeRuntime(agentVersionId, samples) })),
   });
 }
+async function openPossiblySentRuntime(
+  path: string,
+  config: ReturnType<typeof baseConfig> & Record<string, unknown>,
+  samples: Map<string, number>,
+  ownerId: string,
+) {
+  return createStandaloneRuntimeWorker({
+    ...config,
+    databasePath: path,
+    scanIntervalMs: null,
+    ownerId,
+    additionalAgentVersionRuntimes: [
+      "operator-agent-v1",
+      "operator-verification-v1",
+    ].map((agentVersionId) => ({
+      tenantId: "tenant-1",
+      runtime: possiblySentNodeRuntime(agentVersionId, samples),
+    })),
+  });
+}
 async function openPreparedOnlyRuntime(path: string,
   config: ReturnType<typeof baseConfig> & Record<string, unknown>, ownerId: string) {
   return createStandaloneRuntimeWorker({ ...config, databasePath: path, scanIntervalMs: null, ownerId,
@@ -1158,6 +1391,80 @@ function inspectReconciliation(path: string, runId: string) {
         AND status='pending' AND json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`)
         .get(runId)!.count };
   } finally { database.close(); }
+}
+function inspectOperatorRequired(path: string, runId: string) {
+  const database = new DatabaseSync(path);
+  try {
+    const scalar = (sql: string) =>
+      database.prepare(sql).get(runId) as Record<string, unknown>;
+    const execution = JSON.parse(
+      String(
+        scalar("SELECT state_json FROM workflow_executions WHERE run_id=?")
+          .state_json,
+      ),
+    );
+    const node = execution.nodes.find(
+      (value: { nodeId: string }) => value.nodeId === "agent",
+    );
+    const step = JSON.parse(
+      String(
+        scalar(
+          "SELECT state_json FROM run_steps WHERE run_id=? AND step_id='agent'",
+        ).state_json,
+      ),
+    );
+    const attempt = JSON.parse(
+      String(
+        scalar(
+          "SELECT state_json FROM run_attempts WHERE run_id=? AND step_id='agent'",
+        ).state_json,
+      ),
+    );
+    const dispatch = JSON.parse(
+      String(
+        scalar("SELECT state_json FROM model_dispatch_receipts WHERE run_id=?")
+          .state_json,
+      ),
+    );
+    const run = JSON.parse(
+      String(
+        scalar("SELECT state_json FROM run_snapshots WHERE run_id=?")
+          .state_json,
+      ),
+    );
+    const verification = execution.nodes.find(
+      (value: { nodeId: string }) => value.nodeId === "verification",
+    );
+    const workStatus = (trigger: string) =>
+      scalar(`SELECT status FROM work_items WHERE run_id=?
+      AND json_extract(work_item_json,'$.payload.trigger')='${trigger}'`)
+        .status;
+    return {
+      executionStatus: execution.status,
+      nodeStatus: node.status,
+      verificationNodeStatus: verification.status,
+      nodeFailureCode: node.failureCode,
+      stepStatus: step.status,
+      attemptStatus: attempt.status,
+      dispatchStatus: dispatch.status,
+      dispatchOutcome: dispatch.terminalOutcome,
+      nodeWorkStatus: workStatus("workflowNode"),
+      reconcileWorkStatus: workStatus("workflowReconcile"),
+      pendingWorkItems: scalar(
+        "SELECT count(*) count FROM work_items WHERE run_id=? AND status='pending'",
+      ).count,
+      runStatus: run.status,
+      runFailure: run.failure,
+      nodeTerminalEvents:
+        scalar(`SELECT count(*) count FROM run_events WHERE run_id=?
+        AND json_extract(event_json,'$.type')='workflow.node.terminal'`).count,
+      runFailedEvents:
+        scalar(`SELECT count(*) count FROM run_events WHERE run_id=?
+        AND json_extract(event_json,'$.type')='run.failed'`).count,
+    };
+  } finally {
+    database.close();
+  }
 }
 function inspectCandidateTerminal(path: string, runId: string) {
   const database = new DatabaseSync(path);
@@ -1469,6 +1776,58 @@ function uncertainNodeRuntime(agentVersionId: string, samples: Map<string, numbe
         modelId: "model", opaquePayload: { responseId: `${agentVersionId}-response` } } } };
       throw new WorkflowNodeSideEffectUncertainError();
     } } } as never;
+}
+function possiblySentNodeRuntime(
+  agentVersionId: string,
+  samples: Map<string, number>,
+) {
+  const version = agentVersion(agentVersionId);
+  return {
+    version,
+    policy: {} as never,
+    toolRuntime: {
+      definitions: () => [],
+      executionPolicy: () => null,
+      execute: async () => {
+        throw new Error("tool forbidden");
+      },
+      reconcile: async () => {
+        throw new Error("tool forbidden");
+      },
+    },
+    kernel: {
+      supportsModelDispatchEvidence: true,
+      modelIdentity: {
+        adapterName: "test",
+        adapterVersion: "1",
+        modelId: "model",
+      },
+      async *runSegment(
+        contract: { segmentId: string },
+        _signal: AbortSignal,
+        options: {
+          controlSink?: Record<string, (value: unknown) => Promise<void>>;
+        },
+      ) {
+        samples.set(agentVersionId, (samples.get(agentVersionId) ?? 0) + 1);
+        const evidence = {
+          operationId: `${contract.segmentId}:request:1`,
+          requestSequence: 1,
+          operation: "dispatch",
+          requestDigest: digester.sha256(agentVersionId),
+          provider: {
+            agentVersionId,
+            adapterName: "test",
+            adapterVersion: "1",
+            modelId: "model",
+          },
+        };
+        await options.controlSink?.modelRequestPrepared?.(evidence);
+        await options.controlSink?.dispatchBoundaryCrossed?.(evidence);
+        throw new WorkflowNodeSideEffectUncertainError();
+      },
+    },
+  } as never;
 }
 type WorkflowToolCounters = {
   modelPosts: number;
