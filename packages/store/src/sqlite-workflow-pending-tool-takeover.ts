@@ -282,8 +282,12 @@ function parseRequestedEvent(
   } catch {
     corrupt();
   }
-  const identity = isRecord(event.identity) ? event.identity : {};
-  const data = isRecord(event.data) ? event.data : {};
+  const rawIdentity: unknown = event.identity;
+  const rawData: unknown = event.data;
+  const identity: Record<string, unknown> = isRecord(rawIdentity)
+    ? rawIdentity
+    : {};
+  const data: Record<string, unknown> = isRecord(rawData) ? rawData : {};
   if (
     Object.keys(event).sort().join(",") !==
       "data,eventId,identity,occurredAt,schemaVersion,sequence,type" ||
