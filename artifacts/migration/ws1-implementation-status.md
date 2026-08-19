@@ -49,14 +49,24 @@
 - Command/Assistant composer 不再暴露尚无 Control Turn authority 的图片粘贴、预览和发送入口；
   文件/文件夹仍通过真实 Knowledge 导入生成 immutable `{knowledgeId, contentDigest}` 引用，已有
   Thread 的下一次 Control Turn 会带上该引用，不伪造 image compatibility。
-- 当前 Node 24.18.1 组合验证为 Store 串行真实 PostgreSQL 16：570 passed、1 conditional skip、
-  0 failed；UI 定向 `93/93` + lint/build；Web BFF `17/17` + production bundle/image contract `2/2`。
+- Control composer 已删除无 wire authority 的权限选择、Review 与 active-Run Steer；权限只来自 immutable AgentVersion/
+  Tool policy，运行中输入必须先停止再发送。UI 全量 `1281/1281`、lint 与 production build 通过，并更新用户可见快照。
+- 本地 Workspace read 在打开 handle 后复核真实 inode/path 仍位于 canonical root，拒绝中间/最终 symlink escape；读取改为
+  `maxOutputBytes + 1` 的有界分块，不再在可竞态的 `stat` 后执行无界 `readFile()`。Runtime Worker 全量为
+  `337 passed / 2 conditional skips / 0 failed`。
+- production Responses 全局与每个 AgentVersion binding 均要求 HTTPS，POST 与 retrieve GET 都拒绝 redirect；Release/Worker
+  对不安全 endpoint 在网络调用前 fail closed。Agent Responses 为 `76/76`。
+- Web 公开 `/control-api/health/ready` 精确代理 BFF，不能再落入 SPA HTML 200；checked-in Web/Control origin 与唯一
+  `6175` TLS listener 精确一致。Web BFF `17/17`、production gate 与 CI YAML 解析通过。
 - desktop release workflow 现在同时绑定 immutable tag、`origin/main` ancestry、远端 tag/main 无漂移以及 exact commit SHA/App ID 的
   required checks；macOS/Windows 均验证实际 updater 签名后才允许上传，Windows launch smoke 还按本次 install root/app binary
   精确检测 GUI/Node/guardian orphan。确定性 release/staging/Windows process tests 为 `16/16`，YAML 与 smoke syntax 通过。
 - 当前仍是 `In progress`：正式 Apple Developer ID/notarization/staple、Windows PFX/AuthentiCode timestamp/NSIS 实机、GitHub hosted
   release publish、真实 Identity/PIM 多租户部署、跨主机 PostgreSQL/Worker 网络分区、备份恢复与 SLO 仍需外部 runner、凭据和环境。
   本地 Tauri 已生成 `.app` 与 updater archive，但因没有 `TAURI_SIGNING_PRIVATE_KEY` 按设计返回失败，未使用 unsigned fallback。
+  代码内仍有一个 transaction P0：Workflow 已提交非终态 assistant/Tool continuation 后崩溃，reconcile 尚未原子采用该 checkpoint
+  到新 WorkItem lease 并继续下一 sample；当前只保证不误结算为业务失败。该 resume authority 必须同时落 SQLite、PostgreSQL 与 Worker，
+  在完成前不能把完整迁移标记为完成。
 
 ## 2026-08-13 执行方向覆盖：纯 TypeScript 快速切换
 
