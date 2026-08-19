@@ -156,10 +156,7 @@ describe("openControlLibraryAction", () => {
     expect(panel).toMatchObject({
       kind: "tools",
       catalogMode: "controlCapabilities",
-      actions: [
-        { id: "create-skill", disabled: true },
-        { id: "create-mcp", disabled: true },
-      ],
+      actions: [],
       items: [
         {
           title: "search_workspace",

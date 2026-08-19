@@ -27,8 +27,6 @@ export function libraryViewFromSearch(search: string): LibraryKind | null {
   const view = new URLSearchParams(search).get("view");
 
   switch (view) {
-    case "plugins":
-      return "plugins";
     case "tools":
       return "tools";
     case "agents":

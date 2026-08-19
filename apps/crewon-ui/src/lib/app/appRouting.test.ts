@@ -27,7 +27,8 @@ describe("app routing search parsing", () => {
   });
 
   it("returns the concrete library kind when supported", () => {
-    expect(libraryViewFromSearch("?view=plugins")).toBe("plugins");
+    expect(libraryViewFromSearch("?view=plugins")).toBeNull();
+    expect(libraryViewFromSearch("?view=tools")).toBe("tools");
     expect(libraryViewFromSearch("?view=office")).toBeNull();
     expect(libraryViewFromSearch("?view=settings")).toBeNull();
   });

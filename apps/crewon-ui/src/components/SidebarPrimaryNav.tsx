@@ -1,23 +1,15 @@
-import {
-  AtSign,
-  BookOpen,
-  Bot,
-  Clock3,
-  Plus,
-  Search,
-  Wrench,
-} from "lucide-react";
+import { BookOpen, Bot, Clock3, Plus, Search, Wrench } from "lucide-react";
 
 import type { Locale } from "../lib/i18n";
 import { sidebarNavLabels } from "./SidebarPresentation";
 
 export type SidebarLibraryKind =
-  | "plugins"
   | "tools"
   | "agents"
   | "office"
   | "automation"
-  | "knowledge";
+  | "knowledge"
+  | "plugins";
 
 export function SidebarPrimaryNav({
   activeLibraryKind,
@@ -31,7 +23,6 @@ export function SidebarPrimaryNav({
   onFocusSearch,
   onKnowledge,
   onNewThread,
-  onPlugins,
   onTools,
 }: {
   activeLibraryKind: SidebarLibraryKind | null;
@@ -45,7 +36,6 @@ export function SidebarPrimaryNav({
   onFocusSearch: () => void;
   onKnowledge: () => void;
   onNewThread: () => void;
-  onPlugins: () => void;
   onTools: () => void;
 }) {
   const navLabels = sidebarNavLabels(locale);
@@ -67,14 +57,6 @@ export function SidebarPrimaryNav({
       <button type="button" onClick={onFocusSearch}>
         <Search size={14} />
         <span>{searchPlaceholder}</span>
-      </button>
-      <button
-        type="button"
-        data-active={activeLibraryKind === "plugins"}
-        onClick={onPlugins}
-      >
-        <AtSign size={14} />
-        <span>{navLabels.plugins}</span>
       </button>
       <button
         type="button"

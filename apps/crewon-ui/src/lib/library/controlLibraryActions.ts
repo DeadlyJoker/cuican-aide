@@ -290,32 +290,7 @@ async function openControlCapabilityCatalog(params: {
         locale === "zh"
           ? `只读目录来自当前 active AgentVersion release 的 Tool metadata；不包含输入 schema、instructions、凭据或密钥。${truncated ? "为限制 renderer 资源占用，仅展示前 500 条。" : ""}`
           : `This read-only catalog contains Tool metadata from the active AgentVersion release; input schemas, instructions, credentials, and secrets are not exposed.${truncated ? " Renderer resource limits restrict this view to the first 500 entries." : ""}`,
-      actions: [
-        {
-          id: "create-skill",
-          label:
-            locale === "zh"
-              ? "创建 Skill（未迁移）"
-              : "Create Skill (not migrated)",
-          disabled: true,
-          disabledReason:
-            locale === "zh"
-              ? "Control 尚无 Skill mutation authority"
-              : "Control has no Skill mutation authority",
-        },
-        {
-          id: "create-mcp",
-          label:
-            locale === "zh"
-              ? "创建 MCP（未迁移）"
-              : "Create MCP (not migrated)",
-          disabled: true,
-          disabledReason:
-            locale === "zh"
-              ? "Control 尚无 MCP mutation authority"
-              : "Control has no MCP mutation authority",
-        },
-      ],
+      actions: [],
       items: capabilities.map((capability, index) => ({
         title: capability.name,
         meta: `${capability.kind} · ${capability.execution} · ${capability.inputFormat}`,

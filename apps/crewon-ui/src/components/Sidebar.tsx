@@ -1,5 +1,11 @@
 import { Settings2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import type { Thread } from "@crewon-ui-model/v2/Thread";
 import type { Locale } from "../lib/i18n";
 import {
@@ -7,7 +13,10 @@ import {
   groupSidebarThreads,
   sidebarNavLabels,
 } from "./SidebarPresentation";
-import { SidebarPrimaryNav, type SidebarLibraryKind } from "./SidebarPrimaryNav";
+import {
+  SidebarPrimaryNav,
+  type SidebarLibraryKind,
+} from "./SidebarPrimaryNav";
 import { SidebarSearchBox } from "./SidebarSearchBox";
 import { SidebarThreadList } from "./SidebarThreadList";
 
@@ -41,7 +50,6 @@ type SidebarProps = {
   onDeleteThread: (thread: Thread) => void;
   onAgents: () => void;
   onAutomation: () => void;
-  onPlugins: () => void;
   onKnowledge: () => void;
   onSearchChange?: (value: string) => void;
   onRenameThread: (thread: Thread) => void;
@@ -80,7 +88,6 @@ export function Sidebar({
   onDeleteThread,
   onAgents,
   onAutomation,
-  onPlugins,
   onKnowledge,
   onSearchChange,
   onRenameThread,
@@ -173,7 +180,6 @@ export function Sidebar({
         onFocusSearch={focusSearch}
         onKnowledge={onKnowledge}
         onNewThread={onNewThread}
-        onPlugins={onPlugins}
         onTools={onTools}
       />
 
@@ -216,7 +222,13 @@ export function Sidebar({
       />
 
       <div className="sidebar-footer">
-        <button className="sidebar-command" type="button" aria-label={settingsLabel} title={settingsLabel} onClick={onSettings}>
+        <button
+          className="sidebar-command"
+          type="button"
+          aria-label={settingsLabel}
+          title={settingsLabel}
+          onClick={onSettings}
+        >
           <Settings2 size={15} />
           <span>{settingsLabel}</span>
         </button>
