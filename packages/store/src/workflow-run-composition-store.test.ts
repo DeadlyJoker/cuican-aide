@@ -675,6 +675,16 @@ test("SQLite possibly-sent reconciliation requires an operator exactly once", as
   database.close();
   await assert.rejects(store.reconcileWorkflowNode(input), (error: unknown) =>
     error instanceof RunStoreError && error.code === "workflow_reconciliation_replay_corrupt");
+  const eventDatabase = new DatabaseSync(path);
+  eventDatabase.prepare(`UPDATE model_dispatch_receipts SET state_json=json_set(state_json,
+    '$.terminalOutcome.code','workflow_model_dispatch_operator_required')
+    WHERE operation_id='operator-dispatch'`).run();
+  eventDatabase.prepare(`UPDATE run_events SET event_json=json_set(event_json,
+    '$.data.failureCode','forged') WHERE json_extract(event_json,'$.type')='workflow.node.terminal'
+    AND json_extract(event_json,'$.data.nodeId')='agent'`).run();
+  eventDatabase.close();
+  await assert.rejects(store.reconcileWorkflowNode(input), (error: unknown) =>
+    error instanceof RunStoreError && error.code === "workflow_reconciliation_replay_corrupt");
 });
 
 test("SQLite operator-required settlement retains a foreign running sibling", async (t) => {
