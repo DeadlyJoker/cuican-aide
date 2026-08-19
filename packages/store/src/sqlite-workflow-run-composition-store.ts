@@ -69,6 +69,7 @@ import {
 } from "./workflow-run-composition-support.ts";
 import { SqliteWorkflowNodeContinuationAuthority } from "./sqlite-workflow-node-continuation.ts";
 import { takeOverSqliteWorkflowContinuation } from "./sqlite-workflow-continuation-takeover.ts";
+import { takeOverSqliteWorkflowPendingTools } from "./sqlite-workflow-pending-tool-takeover.ts";
 import { SqliteWorkflowToolApprovalAuthority } from "./sqlite-workflow-tool-approval.ts";
 import { settleSqliteWorkflowNodeWithinTransaction } from "./sqlite-workflow-node-settlement.ts";
 import { settleSqliteWorkflowNodeModelTerminalWithinTransaction } from "./sqlite-workflow-model-settlement.ts";
@@ -920,6 +921,13 @@ export class SqliteWorkflowRunCompositionStore
             new Date(leaseRow.lease_expires_at_ms).toISOString(),
           resumedAt: now,
         });
+        const pendingTools = takeOverSqliteWorkflowPendingTools(this.#database, {
+          priorAuthority: authority,
+          reconciliationLease: input.lease,
+          checkpoint,
+          adoptedAt: now,
+          digester: this.#digester,
+        });
         const result = {
           disposition: "resumeRequired" as const,
           evidenceStatus: "responseObserved" as const,
@@ -930,6 +938,7 @@ export class SqliteWorkflowRunCompositionStore
             step, attempt: resumed.attempt,
             reconciliationLease: input.lease,
             continuation: resumed.continuation,
+            pendingTools,
           },
           execution: resumed.execution, handoff: {
             currentWorkItem: "retained" as const,
