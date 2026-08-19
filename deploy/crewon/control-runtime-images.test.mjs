@@ -17,11 +17,18 @@ test("production Dockerfiles pin a reproducible non-root TypeScript runtime", as
       file: "control-api.Dockerfile",
       component: "control-api",
       command: 'CMD ["node", "/app/control-api.mjs"]',
+      artifactStore: true,
     },
     {
       file: "runtime-worker.Dockerfile",
       component: "runtime-worker",
       command: 'CMD ["node", "/app/runtime-worker.mjs"]',
+      artifactStore: true,
+    },
+    {
+      file: "web-bff.Dockerfile",
+      component: "web-bff",
+      command: 'CMD ["node", "/app/web-bff.mjs"]',
     },
   ];
 
@@ -35,16 +42,25 @@ test("production Dockerfiles pin a reproducible non-root TypeScript runtime", as
     assert.match(content, /--bundle/u);
     assert.match(content, /--platform=node/u);
     assert.match(content, /--target=node24/u);
+    assert.match(content, /! grep -aEi/u);
     assert.match(
       content,
       new RegExp(`com\\.crewon\\.component="${fixture.component}"`, "u"),
     );
     assert.match(content, /com\.crewon\.runtime="typescript"/u);
-    assert.match(content, /chown node:node \/var\/lib\/crewon\/artifacts/u);
+    if (fixture.artifactStore === true) {
+      assert.match(content, /chown node:node \/var\/lib\/crewon\/artifacts/u);
+    }
     assert.match(content, /^USER node$/mu);
     assert.equal(content.match(/^CMD /gmu)?.length, 1);
     assert.ok(content.includes(fixture.command));
-    assert.doesNotMatch(content, forbiddenCompatibility);
+    assert.doesNotMatch(
+      content
+        .split("\n")
+        .filter((line) => !line.includes("grep -aEi"))
+        .join("\n"),
+      forbiddenCompatibility,
+    );
   }
 
   const worker = await readFile(
@@ -73,6 +89,7 @@ test("production entries create self-contained bundles without compatibility cod
   try {
     const entries = [
       ["@crewon/control-api", "src/main.ts", "control-api.mjs"],
+      ["@crewon/web-bff", "src/main.ts", "web-bff.mjs"],
       ["@crewon/runtime-worker", "src/main.ts", "runtime-worker.mjs"],
       ["@crewon/runtime-worker", "src/release-main.ts", "release-main.mjs"],
       [

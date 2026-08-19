@@ -65,9 +65,10 @@ docker build -t crewon-control-api:local -f deploy/crewon/control-api.Dockerfile
 docker build -t crewon-runtime-worker:local -f deploy/crewon/runtime-worker.Dockerfile .
 ```
 
-The Control and Runtime images contain self-contained Node 24 bundles and run as the image's `node` user. The Runtime image
+The Control, Runtime, and Web BFF images contain self-contained Node 24 bundles and run as the image's `node` user. Their image
+builds fail before publication if a bundle contains a removed compatibility marker. The Runtime image
 also contains `/app/init/release-main.mjs`; production startup must run this finite release authority successfully before the
-long-lived Worker. Neither image contains a Rust Runtime, Device/Gateway/App Server, deterministic fake transport, or port
+long-lived Worker. None of these images contains a Rust Runtime, Device/Gateway/App Server, deterministic fake transport, or port
 6176 compatibility path.
 
 The checked-in nginx configuration and BFF both assume the existing host-network deployment: nginx, Web BFF and Control API

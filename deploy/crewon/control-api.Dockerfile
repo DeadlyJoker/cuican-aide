@@ -15,7 +15,8 @@ RUN pnpm --filter @crewon/control-api exec esbuild src/main.ts \
     --format=esm \
     --platform=node \
     --target=node24 \
-    --outfile=/out/control-api.mjs
+    --outfile=/out/control-api.mjs && \
+    ! grep -aEi "deterministic[ _-]?fake|device[ _-]?gateway|app[ _-]?server|6176" /out/control-api.mjs
 
 FROM ${NODE_IMAGE}
 

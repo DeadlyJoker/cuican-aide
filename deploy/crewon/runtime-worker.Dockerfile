@@ -34,7 +34,12 @@ RUN pnpm --filter @crewon/runtime-worker exec esbuild src/main.ts \
     --format=esm \
     --platform=node \
     --target=node24 \
-    --outfile=/out/production-backup-main.mjs
+    --outfile=/out/production-backup-main.mjs && \
+    ! grep -aEi "deterministic[ _-]?fake|device[ _-]?gateway|app[ _-]?server|6176" \
+      /out/runtime-worker.mjs \
+      /out/release-main.mjs \
+      /out/release-rollback-main.mjs \
+      /out/production-backup-main.mjs
 
 FROM ${NODE_IMAGE}
 
