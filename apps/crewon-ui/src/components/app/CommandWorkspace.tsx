@@ -1,4 +1,4 @@
-import { ListChecks, Plus, ShieldCheck, Target } from "lucide-react";
+import { ListChecks, Plus, Target } from "lucide-react";
 import type { Thread } from "@crewon-ui-model/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
 import {
@@ -79,7 +79,6 @@ import {
 import {
   commandComposerRuntimeSettings,
   fallbackCommandModelOptions,
-  type CommandComposerPermission,
   type CommandExecutionIntent,
   type CommandModelOption,
   type ThreadRuntimeSettings,
@@ -520,8 +519,6 @@ export function CommandWorkspace({
       officeStatus: "loading",
       status: "loading",
     });
-  const [permission, setPermission] =
-    useState<CommandComposerPermission>("approve-for-me");
   const [executionIntent, setExecutionIntent] =
     useState<CommandExecutionIntent>("none");
 
@@ -896,45 +893,6 @@ export function CommandWorkspace({
   ]);
   const localizedScenePresets = locale === "zh" ? scenePresets : scenePresetsEn;
   const scenePreset = localizedScenePresets[scene];
-  const localizedPermissionOptions: CommandComposerSelectOption<CommandComposerPermission>[] =
-    locale === "zh"
-      ? [
-          {
-            detail: "工作区内自动执行，必要时请求升级",
-            label: "本地自动",
-            value: "approve-for-me",
-          },
-          {
-            detail: "涉及授权时先请求确认",
-            label: "操作前确认",
-            value: "request-approval",
-          },
-          {
-            detail: "跳过沙箱与审批，可读写工作区外的文件并联网",
-            label: "完全访问",
-            tone: "warning",
-            value: "full-access",
-          },
-        ]
-      : [
-          {
-            detail: "Run automatically in the workspace and ask when needed",
-            label: "Workspace access",
-            value: "approve-for-me",
-          },
-          {
-            detail: "Ask before operations that require approval",
-            label: "Ask before actions",
-            value: "request-approval",
-          },
-          {
-            detail:
-              "Skip the sandbox and approvals; can read and write outside the workspace and reach the network",
-            label: "Full access",
-            tone: "warning",
-            value: "full-access",
-          },
-        ];
   const workspaceOptions = useMemo<CommandComposerSelectOption[]>(() => {
     const displayName = workspaceOperations?.nativeWorkspaceDisplayName;
     return [
@@ -1092,7 +1050,12 @@ export function CommandWorkspace({
 
   function sendComposerValue(submittedValue = composerValue) {
     const trimmed = submittedValue.trim();
-    if (isSending || !trimmed || (controlExecutionCatalog && !model)) {
+    if (
+      isSending ||
+      activeTurnId ||
+      !trimmed ||
+      (controlExecutionCatalog && !model)
+    ) {
       return;
     }
     onChangeComposerValue("");
@@ -1121,7 +1084,6 @@ export function CommandWorkspace({
       settings: commandComposerRuntimeSettings({
         executionTarget,
         model,
-        permission,
         ...(effectiveReasoningEffort
           ? { reasoningEffort: effectiveReasoningEffort }
           : {}),
@@ -1137,14 +1099,13 @@ export function CommandWorkspace({
 
   function sendAssistantComposerValue(submittedValue = assistantComposerValue) {
     const trimmed = submittedValue.trim();
-    if (isSending || !trimmed || !onSendAssistant) {
+    if (isSending || assistantActiveTurnId || !trimmed || !onSendAssistant) {
       return;
     }
     setAssistantComposerValue("");
     const settings = commandComposerRuntimeSettings({
       executionTarget: "crewon",
       model,
-      permission,
       ...(effectiveReasoningEffort
         ? { reasoningEffort: effectiveReasoningEffort }
         : {}),
@@ -1516,12 +1477,12 @@ export function CommandWorkspace({
       : "Sending"
     : commandThreadRunning && composerValue.trim()
       ? locale === "zh"
-        ? "继续补充指令"
-        : "Add more instructions"
+        ? "请先停止当前运行，再发送新指令"
+        : "Stop the current run before sending another instruction"
       : commandThreadRunning
         ? locale === "zh"
-          ? "Agent 正在执行，可继续输入补充指令"
-          : "Agent is running; you can add more instructions"
+          ? "Agent 正在执行；请先停止，再发送新指令"
+          : "Agent is running; stop it before sending another instruction"
         : composerValue.trim()
           ? locale === "zh"
             ? "草稿未发送"
@@ -1846,14 +1807,6 @@ export function CommandWorkspace({
                     >
                       <Plus aria-hidden="true" />
                     </button>
-                    <CommandComposerSelect
-                      ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
-                      className="permission-dropdown"
-                      icon={<ShieldCheck aria-hidden="true" />}
-                      options={localizedPermissionOptions}
-                      value={permission}
-                      onChange={setPermission}
-                    />
                     <SelectedExecutionIntent
                       intent={executionIntent}
                       locale={locale}
@@ -1862,7 +1815,7 @@ export function CommandWorkspace({
                   </>
                 }
                 dataOdId="ai-composer"
-                disabled={isSending}
+                disabled={isSending || Boolean(activeTurnId)}
                 id="desktop-task-input"
                 palettes={
                   <>
@@ -2113,18 +2066,10 @@ export function CommandWorkspace({
                     >
                       <Plus aria-hidden="true" />
                     </button>
-                    <CommandComposerSelect
-                      ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
-                      className="permission-dropdown"
-                      icon={<ShieldCheck aria-hidden="true" />}
-                      options={localizedPermissionOptions}
-                      value={permission}
-                      onChange={setPermission}
-                    />
                   </>
                 }
                 dataOdId="assistant-composer"
-                disabled={isSending}
+                disabled={isSending || Boolean(assistantActiveTurnId)}
                 id="assistant-task-input"
                 palettes={
                   <>

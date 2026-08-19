@@ -6,7 +6,7 @@ import {
   threadDeleteArchivedConfirmMessage,
   threadDeletedNotice,
   threadDeleteFailureNotice,
-  threadGuidanceAppendedNotice,
+  threadActiveTurnBlocksSendNotice,
   threadInterruptFailureNotice,
   threadInterruptRequestedNotice,
   threadListFailureNotice,
@@ -57,14 +57,14 @@ describe("thread action presentation", () => {
     });
   });
 
-  it("builds create, send, interrupt, and review feedback", () => {
+  it("builds create, send, and interrupt feedback", () => {
     expect(threadCreateFailureNotice(null, "zh")).toEqual({
       text: "创建后端会话失败，已保留当前会话。",
       tone: "warning",
     });
-    expect(threadGuidanceAppendedNotice("en")).toEqual({
-      text: "Added guidance to the current turn",
-      tone: "success",
+    expect(threadActiveTurnBlocksSendNotice("en")).toEqual({
+      text: "Stop the current run before sending another instruction",
+      tone: "warning",
     });
     expect(threadSendFailureNotice(null, "en")).toEqual({
       text: "Unable to send to backend. The message was kept in the composer.",

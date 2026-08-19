@@ -146,13 +146,13 @@ export function threadCreateUnavailableNotice(locale: Locale): NoticeState {
   };
 }
 
-export function threadGuidanceAppendedNotice(locale: Locale): NoticeState {
+export function threadActiveTurnBlocksSendNotice(locale: Locale): NoticeState {
   return {
     text:
       locale === "zh"
-        ? "已追加到当前任务"
-        : "Added guidance to the current turn",
-    tone: "success",
+        ? "请先停止当前运行，再发送新指令"
+        : "Stop the current run before sending another instruction",
+    tone: "warning",
   };
 }
 

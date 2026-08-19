@@ -1,14 +1,9 @@
 import type { Thread } from "@crewon-ui-model/v2/Thread";
 import type { Turn } from "@crewon-ui-model/v2/Turn";
 import type { TurnStartResponse } from "@crewon-ui-model/v2/TurnStartResponse";
-import type { ReviewStartResponse } from "@crewon-ui-model/v2/ReviewStartResponse";
-import type { ReviewTarget } from "@crewon-ui-model/v2/ReviewTarget";
 
 import type { PendingComposerMention } from "../shared/composerMentions";
-import {
-  activeTurnByThreadAfterTurn,
-  activeTurnByThreadAfterTurnId,
-} from "./threadRuntimeState";
+import { activeTurnByThreadAfterTurn } from "./threadRuntimeState";
 import type { NoticeState } from "../shared/noticeState";
 import type { Locale } from "../i18n";
 import {
@@ -21,7 +16,7 @@ import { removeRecordKey } from "../shared/recordState";
 import {
   threadCreateFailureNotice,
   threadCreateUnavailableNotice,
-  threadGuidanceAppendedNotice,
+  threadActiveTurnBlocksSendNotice,
   threadInterruptFailureNotice,
   threadInterruptRequestedNotice,
   threadSendFailureNotice,
@@ -64,15 +59,6 @@ type ThreadMessageClient = {
     settings?: ThreadRuntimeSettings,
     images?: ComposerImageInput[],
   ): Promise<TurnStartResponse>;
-  startReview?(
-    threadId: string,
-    target?: ReviewTarget,
-  ): Promise<ReviewStartResponse>;
-  steerTurn(
-    threadId: string,
-    text: string,
-    mentions?: PendingComposerMention[],
-  ): Promise<{ turnId: string }>;
   updateThreadSettings?(
     threadId: string,
     settings: ThreadRuntimeSettings,
@@ -115,12 +101,7 @@ export type SendMessageActionParams = {
   client:
     | Pick<
         ThreadMessageClient,
-        | "readThread"
-        | "resumeThread"
-        | "startReview"
-        | "startTurn"
-        | "steerTurn"
-        | "updateThreadSettings"
+        "readThread" | "resumeThread" | "startTurn" | "updateThreadSettings"
       >
     | null
     | undefined;
@@ -279,6 +260,13 @@ export async function sendMessageAction({
     return;
   }
 
+  if (activeTurnId) {
+    setComposerValue(text);
+    setComposerFocusSignal((signal) => signal + 1);
+    setNotice(threadActiveTurnBlocksSendNotice(locale));
+    return;
+  }
+
   if (!isConnected) {
     setComposerValue(text);
     setComposerFocusSignal((signal) => signal + 1);
@@ -296,26 +284,6 @@ export async function sendMessageAction({
   let createdThreadForMessage = false;
 
   try {
-    if (activeTurnId && selectedThreadId) {
-      const response = await client?.steerTurn(
-        selectedThreadId,
-        text,
-        visibleMentions,
-      );
-      setPendingComposerMentions([]);
-      if (response?.turnId) {
-        setActiveTurnByThread((current) =>
-          activeTurnByThreadAfterTurnId(
-            current,
-            selectedThreadId,
-            response.turnId,
-          ),
-        );
-      }
-      setNotice(threadGuidanceAppendedNotice(locale));
-      return;
-    }
-
     if (!thread) {
       thread = await createThread(text);
       createdThreadForMessage = true;
@@ -341,31 +309,6 @@ export async function sendMessageAction({
     failedThreadId = turnThreadId;
     if (threadSettings && !createdThreadForMessage) {
       await client?.updateThreadSettings?.(turnThreadId, threadSettings);
-    }
-    if (
-      threadSettings?.scene?.sceneId === "code" &&
-      threadSettings.scene.mode === "review"
-    ) {
-      const response = await client?.startReview?.(turnThreadId, {
-        type: "custom",
-        instructions: text,
-      });
-      if (!response) {
-        throw new Error("代码审查服务不可用");
-      }
-      setPendingComposerMentions([]);
-      setThreads((current) =>
-        upsertTurnInThread(current, response.reviewThreadId, response.turn),
-      );
-      setSelectedThreadId(response.reviewThreadId);
-      setActiveTurnByThread((current) =>
-        activeTurnByThreadAfterTurn(
-          current,
-          response.reviewThreadId,
-          response.turn,
-        ),
-      );
-      return;
     }
     const response = await client?.startTurn(
       turnThreadId,

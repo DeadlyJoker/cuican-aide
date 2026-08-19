@@ -22,7 +22,6 @@ describe("sceneCatalog", () => {
       "ask",
       "plan",
       "implement",
-      "review",
     ]);
     expect(scenePresets.design.modes.map((mode) => mode.value)).toEqual([
       "auto",
@@ -206,7 +205,6 @@ describe("sceneCatalog", () => {
   it("marks only write-capable modes for the draft-only risk notice", () => {
     expect(modeMayWrite("implement")).toBe(true);
     expect(modeMayWrite("produce")).toBe(true);
-    expect(modeMayWrite("review")).toBe(false);
     expect(modeMayWrite("auto")).toBe(false);
   });
 });

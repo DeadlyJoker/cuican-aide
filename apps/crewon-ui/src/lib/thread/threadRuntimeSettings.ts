@@ -9,11 +9,6 @@ export type RuntimeDynamicTool = {
   deferLoading: boolean;
 };
 
-export type CommandComposerPermission =
-  | "approve-for-me"
-  | "full-access"
-  | "request-approval";
-
 export type CommandExecutionIntent = "goal" | "none" | "plan";
 
 export type CommandModelReasoningEffort = {
@@ -57,7 +52,6 @@ export type ThreadSceneSelection = {
     | "ask"
     | "plan"
     | "implement"
-    | "review"
     | "explore"
     | "refine"
     | "produce"
@@ -77,24 +71,10 @@ export const fallbackCommandModelOptions: CommandModelOption[] = [
   { label: "gpt-5", value: "gpt-5" },
 ];
 
-export function commandPermissionRuntimeSettings(
-  permission: CommandComposerPermission,
-): Pick<ThreadRuntimeSettings, "approvalPolicy" | "sandboxMode"> {
-  switch (permission) {
-    case "approve-for-me":
-      return { approvalPolicy: "on-failure", sandboxMode: "workspace-write" };
-    case "request-approval":
-      return { approvalPolicy: "on-request", sandboxMode: "workspace-write" };
-    case "full-access":
-      return { approvalPolicy: "never", sandboxMode: "danger-full-access" };
-  }
-}
-
 export function commandComposerRuntimeSettings({
   executionTarget,
   model,
   reasoningEffort,
-  permission,
   scene,
   sceneMode,
   executionIntent = "none",
@@ -102,7 +82,6 @@ export function commandComposerRuntimeSettings({
   executionTarget?: string;
   model: string;
   reasoningEffort?: string;
-  permission: CommandComposerPermission;
   scene?: ThreadSceneSelection["sceneId"];
   sceneMode?: NonNullable<ThreadSceneSelection["mode"]>;
   executionIntent?: CommandExecutionIntent;
@@ -120,7 +99,6 @@ export function commandComposerRuntimeSettings({
           },
         }
       : {}),
-    ...commandPermissionRuntimeSettings(permission),
   };
 }
 

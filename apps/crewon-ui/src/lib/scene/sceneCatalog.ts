@@ -12,7 +12,6 @@ export type SceneInteractionMode =
   | "ask"
   | "plan"
   | "implement"
-  | "review"
   | "explore"
   | "refine"
   | "produce"
@@ -176,7 +175,6 @@ export const scenePresets: Record<CommandScene, ScenePreset> = {
       { detail: "只读回答并引用仓库证据", label: "询问", value: "ask" },
       { detail: "只读输出可执行实施计划", label: "计划", value: "plan" },
       { detail: "修改工作区并运行适用验证", label: "生码", value: "implement" },
-      { detail: "只读输出可定位的审阅发现", label: "审阅", value: "review" },
     ],
     placeholder: "例如：读取当前仓库规则，实现这个功能并运行适用测试",
     quickActions: [
@@ -196,14 +194,6 @@ export const scenePresets: Record<CommandScene, ScenePreset> = {
         prompt: "结合问题描述、日志和仓库证据定位根因，完成修复并验证回归。",
       },
       {
-        hint: "只读输出可定位问题",
-        icon: "searchCheck",
-        label: "审阅当前改动",
-        mode: "review",
-        prompt:
-          "只读审阅当前改动，按严重程度输出可定位的问题、证据和修复建议。",
-      },
-      {
         hint: "补齐覆盖与流水线",
         icon: "flaskConical",
         label: "补齐测试与 CI",
@@ -212,7 +202,7 @@ export const scenePresets: Record<CommandScene, ScenePreset> = {
       },
     ],
     scene: "code",
-    subtitle: "围绕仓库完成询问、计划、实现与审阅",
+    subtitle: "围绕仓库完成询问、计划与实现",
     tabLabel: "生码",
   },
   design: {
@@ -366,11 +356,6 @@ export const scenePresetsEn: Record<CommandScene, ScenePreset> = {
         label: "Code",
         value: "implement",
       },
-      {
-        detail: "Return read-only, locatable review findings",
-        label: "Review",
-        value: "review",
-      },
     ],
     placeholder:
       "For example: read the repository rules, implement this feature, and run the relevant tests",
@@ -392,14 +377,6 @@ export const scenePresetsEn: Record<CommandScene, ScenePreset> = {
           "Use the issue description, logs, and repository evidence to find the root cause, fix it, and verify the regression.",
       },
       {
-        hint: "Read-only, locatable findings",
-        icon: "searchCheck",
-        label: "Review current changes",
-        mode: "review",
-        prompt:
-          "Review the current changes without modifying files. Return locatable findings, evidence, and suggested fixes by severity.",
-      },
-      {
         hint: "Close coverage and pipeline gaps",
         icon: "flaskConical",
         label: "Complete tests and CI",
@@ -409,7 +386,7 @@ export const scenePresetsEn: Record<CommandScene, ScenePreset> = {
       },
     ],
     scene: "code",
-    subtitle: "Ask, plan, implement, and review in your repository",
+    subtitle: "Ask, plan, and implement in your repository",
     tabLabel: "Code",
   },
   design: {

@@ -144,9 +144,6 @@ function baseSendParams(
       async startTurn() {
         return turnStartResponse();
       },
-      async steerTurn() {
-        return { turnId: "turn-steered" };
-      },
     },
     createThread: async () => thread(),
     isConnected: true,
@@ -445,13 +442,9 @@ describe("thread message actions", () => {
     expect(state.notice).toEqual({ text: "create failed", tone: "warning" });
   });
 
-  it("steers an active turn instead of starting a new one", async () => {
+  it("keeps the draft and requires stopping an active run before sending", async () => {
     const state = threadState();
-    const steerCalls: Array<{
-      mentions: PendingComposerMention[];
-      text: string;
-      threadId: string;
-    }> = [];
+    const startTurn = vi.fn(async () => turnStartResponse());
 
     await sendMessageAction(
       baseSendParams({
@@ -460,78 +453,29 @@ describe("thread message actions", () => {
           async resumeThread(threadId) {
             return thread({ id: threadId });
           },
-          async startTurn() {
-            throw new Error("should not start turn");
-          },
-          async steerTurn(threadId, text, mentions = []) {
-            steerCalls.push({ mentions, text, threadId });
-            return { turnId: "turn-steered" };
-          },
+          startTurn,
         },
+        setComposerFocusSignal: state.setComposerFocusSignal,
+        setComposerValue: state.setComposerValue,
         setActiveTurnByThread: state.setActiveTurnByThread,
         setIsSending: state.setIsSending,
         setNotice: state.setNotice,
         setPendingComposerMentions: state.setPendingComposerMentions,
+        text: "Keep this instruction",
       }),
     );
 
-    expect(steerCalls).toEqual([
-      {
-        mentions: [{ name: "Files", path: "app://files" }],
-        text: "Hello",
-        threadId: "thread-1",
-      },
+    expect(startTurn).not.toHaveBeenCalled();
+    expect(state.composerValue).toBe("Keep this instruction");
+    expect(state.focusSignal).toBe(1);
+    expect(state.pendingMentions).toEqual([
+      { name: "Files", path: "app://files" },
     ]);
-    expect(state.pendingMentions).toEqual([]);
-    expect(state.activeTurns).toEqual({ "thread-1": "turn-steered" });
     expect(state.notice).toEqual({
-      text: "Added guidance to the current turn",
-      tone: "success",
+      text: "Stop the current run before sending another instruction",
+      tone: "warning",
     });
     expect(state.isSending).toBe(false);
-  });
-
-  it("filters removed slash mentions before steering an active turn", async () => {
-    const state = threadState();
-    const steerCalls: Array<{
-      mentions: PendingComposerMention[];
-      text: string;
-      threadId: string;
-    }> = [];
-
-    await sendMessageAction(
-      baseSendParams({
-        activeTurnId: "turn-active",
-        client: {
-          async resumeThread(threadId) {
-            return thread({ id: threadId });
-          },
-          async startTurn() {
-            throw new Error("should not start turn");
-          },
-          async steerTurn(threadId, text, mentions = []) {
-            steerCalls.push({ mentions, text, threadId });
-            return { turnId: "turn-steered" };
-          },
-        },
-        pendingComposerMentions: [
-          { name: "Files", path: "app://files", token: "$files" },
-        ],
-        setActiveTurnByThread: state.setActiveTurnByThread,
-        setIsSending: state.setIsSending,
-        setNotice: state.setNotice,
-        setPendingComposerMentions: state.setPendingComposerMentions,
-        text: "Hello",
-      }),
-    );
-
-    expect(steerCalls).toEqual([
-      {
-        mentions: [],
-        text: "Hello",
-        threadId: "thread-1",
-      },
-    ]);
   });
 
   it("preserves the composer and history when sending while disconnected", async () => {
@@ -583,9 +527,6 @@ describe("thread message actions", () => {
             calls.push(`start:${threadId}`);
             return turnStartResponse({ turn: turn({ id: "turn-started" }) });
           },
-          async steerTurn() {
-            throw new Error("should not steer");
-          },
         },
         selectedThread: thread({
           id: "thread-1",
@@ -630,9 +571,6 @@ describe("thread message actions", () => {
           async startTurn(_threadId, _text, _mentions, settings) {
             calls.push({ method: "start", settings, threadId: _threadId });
             return turnStartResponse({ turn: turn({ id: "turn-started" }) });
-          },
-          async steerTurn() {
-            throw new Error("should not steer");
           },
           async updateThreadSettings(threadId, settings) {
             calls.push({ method: "settings", settings, threadId });
@@ -696,9 +634,6 @@ describe("thread message actions", () => {
           });
           return turnStartResponse({ turn: turn({ id: "turn-started" }) });
         },
-        async steerTurn() {
-          throw new Error("should not steer");
-        },
       };
 
       await sendMessageAction(
@@ -756,9 +691,6 @@ describe("thread message actions", () => {
             markStartReached();
             return startResponse;
           },
-          async steerTurn() {
-            throw new Error("should not steer");
-          },
         },
         onExecutionIntentCommitted: committed,
         setActiveTurnByThread: state.setActiveTurnByThread,
@@ -790,9 +722,6 @@ describe("thread message actions", () => {
       setThreadGoal: legacySetGoal,
       async startTurn() {
         throw new Error("atomic Goal start failed");
-      },
-      async steerTurn() {
-        throw new Error("should not steer");
       },
     };
 
@@ -842,9 +771,6 @@ describe("thread message actions", () => {
             startCalls.push({ mentions, text, threadId });
             return turnStartResponse({ turn: turn({ id: "turn-started" }) });
           },
-          async steerTurn() {
-            throw new Error("should not steer");
-          },
         },
         pendingComposerMentions: [
           { name: "Files", path: "app://files", token: "$files" },
@@ -883,9 +809,6 @@ describe("thread message actions", () => {
           },
           async startTurn() {
             throw new Error("send failed");
-          },
-          async steerTurn() {
-            throw new Error("should not steer");
           },
         },
         setComposerFocusSignal: state.setComposerFocusSignal,

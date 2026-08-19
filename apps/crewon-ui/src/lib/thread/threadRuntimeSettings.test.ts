@@ -3,39 +3,14 @@ import { describe, expect, it } from "vitest";
 import { commandComposerRuntimeSettings } from "./threadRuntimeSettings";
 
 describe("thread runtime settings", () => {
-  it("maps command composer permission choices to thread runtime settings", () => {
+  it("keeps unsupported per-turn permission claims out of composer settings", () => {
     expect(
       commandComposerRuntimeSettings({
         model: "gpt-5.6-sol",
-        permission: "approve-for-me",
       }),
     ).toEqual({
-      approvalPolicy: "on-failure",
       executionIntent: "none",
       model: "gpt-5.6-sol",
-      sandboxMode: "workspace-write",
-    });
-    expect(
-      commandComposerRuntimeSettings({
-        model: "gpt-5.5",
-        permission: "request-approval",
-      }),
-    ).toEqual({
-      approvalPolicy: "on-request",
-      executionIntent: "none",
-      model: "gpt-5.5",
-      sandboxMode: "workspace-write",
-    });
-    expect(
-      commandComposerRuntimeSettings({
-        model: "gpt-5",
-        permission: "full-access",
-      }),
-    ).toEqual({
-      approvalPolicy: "never",
-      executionIntent: "none",
-      model: "gpt-5",
-      sandboxMode: "danger-full-access",
     });
   });
 
@@ -44,7 +19,6 @@ describe("thread runtime settings", () => {
       commandComposerRuntimeSettings({
         executionIntent: "plan",
         model: "gpt-5.6-sol",
-        permission: "approve-for-me",
       }),
     ).toMatchObject({ executionIntent: "plan" });
   });
@@ -54,7 +28,6 @@ describe("thread runtime settings", () => {
       commandComposerRuntimeSettings({
         executionTarget: "team:交付小队",
         model: "gpt-5.6-sol",
-        permission: "approve-for-me",
         scene: "design",
         sceneMode: "produce",
       }),
@@ -72,7 +45,6 @@ describe("thread runtime settings", () => {
       commandComposerRuntimeSettings({
         executionTarget: "provider-agent:opaque-selection",
         model: "gpt-5.6-sol",
-        permission: "approve-for-me",
         scene: "office",
         sceneMode: "auto",
       }),

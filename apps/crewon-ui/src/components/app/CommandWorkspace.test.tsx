@@ -712,7 +712,7 @@ describe("CommandWorkspace", () => {
       "例如：整理今天的项目事项，安排会议、跟进阻塞，并把结论写入知识库",
     );
     expect(markup).toContain(">CrewON</strong>");
-    expect(markup).toContain("本地自动");
+    expect(markup).not.toContain("本地自动");
     expect(markup).toContain('aria-label="执行主体"');
     expect(markup).not.toContain("执行主体：");
     expect(markup).not.toContain('data-od-id="workspace-pill"');
@@ -845,12 +845,12 @@ describe("CommandWorkspace", () => {
     });
   });
 
-  it("offers full access as a warning-toned permission", () => {
+  it("does not claim unsupported per-turn permission authority", () => {
     const markup = renderCommandWorkspace();
 
-    expect(markup).toContain('data-tone="warning" data-value="full-access"');
-    expect(markup).toContain("完全访问");
-    expect(markup).toContain("跳过沙箱与审批");
+    expect(markup).not.toContain('aria-label="权限选择"');
+    expect(markup).not.toContain('aria-label="Permissions"');
+    expect(markup).not.toContain("完全访问");
   });
 
   it("pairs the model with its reasoning effort in one control", () => {
@@ -1023,7 +1023,7 @@ describe("CommandWorkspace", () => {
       'class="icon-action composer-plus-action"',
     );
     expect(commandHomeMarkup).toContain('aria-label="添加上下文"');
-    expect(commandHomeMarkup).toContain('aria-label="权限选择"');
+    expect(commandHomeMarkup).not.toContain('aria-label="权限选择"');
     expect(commandHomeMarkup).not.toContain('aria-label="执行意图"');
     expect(commandHomeMarkup).not.toContain('data-execution-intent="goal"');
     expect(commandHomeMarkup).not.toContain('data-execution-intent="plan"');
@@ -1756,7 +1756,8 @@ describe("CommandWorkspace", () => {
     );
 
     expect(markup).toContain("Agent 正在执行");
-    expect(markup).toContain("继续补充指令");
+    expect(markup).toContain("请先停止当前运行，再发送新指令");
+    expect(markup).toContain('disabled=""');
     expect(markup).toContain('data-action="stop"');
     expect(markup).toContain('aria-label="停止"');
     expect(markup).toContain('title="停止"');
