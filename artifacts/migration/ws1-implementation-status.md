@@ -20,6 +20,9 @@
 - PostgreSQL reconciliation receipt 现在只验证 deterministic WorkItem ID、exact payload 与前后 handoff
   authority，不再把 downstream WorkItem 的 `pending/leased/completed` 瞬时状态当成不可变 receipt。
   因此网络响应丢失后，即使 downstream reconciliation 已完成，原调度请求仍可 exact replay。
+- 当前 W01 Store 已在一次性 PostgreSQL 16 上完成完整串行 sweep：`606 total / 605 passed / 1 反向缺 URL skip /
+0 failed`。sibling、Gate、cancel、retrieved continuation、pending Tool adoption、operator-required、receipt replay 与迁移
+  用例均实际执行；唯一 skip 只验证未配置 URL 时的反向行为。
 
 - Runtime/Control/Workspace/Workflow 的 production execution path 已按 breaking cutover 收敛到 TypeScript。当前 macOS
   `.app` 只包含 `crewon-ui`、官方 Node 24.18.1、`crewon-process-guardian` 与 Control API、Provider coordinator、Runtime
@@ -42,22 +45,30 @@
   再校验冻结的 tenant/runtime/workspace binding、generation echo、auth、deadline 与 abort。真实 authenticated Control ->
   tenant-routed production client -> loopback Runtime Worker read-only 纵向已通过；standalone loopback 行为保持独立。
 - 当前 HEAD 未签名 `.app` 的隔离 HOME smoke 为
-  `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-GhEc7E`，Run
-  `01a018e5-f009-765f-98b5-f188e1c78e7c` 实际完成 Agent -> Human Gate -> Verification：start 同 key
+  `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-HiapLy`，Run
+  `01a019b1-3bbd-762a-ba4a-db2abfef6090` 实际完成 Agent -> Human Gate -> Verification：start 同 key
   `committed -> replayed`，Gate 决策 `recorded -> replay`，Worker `SIGKILL` 后同一 HOME 重启恢复，2 次真实 loopback Responses、
   2 个 Attempt、唯一 `run.completed`，GUI `SIGKILL` 后 guardian 清理全部受管进程并释放 3210。
 - Command/Assistant composer 不再暴露尚无 Control Turn authority 的图片粘贴、预览和发送入口；
   文件/文件夹仍通过真实 Knowledge 导入生成 immutable `{knowledgeId, contentDigest}` 引用，已有
   Thread 的下一次 Control Turn 会带上该引用，不伪造 image compatibility。
 - Control composer 已删除无 wire authority 的权限选择、Review 与 active-Run Steer；权限只来自 immutable AgentVersion/
-  Tool policy，运行中输入必须先停止再发送。UI 全量 `1281/1281`、lint 与 production build 通过，并更新用户可见快照。
+  Tool policy，运行中输入必须先停止再发送。Browser Settings 现在读取真实 Control capability catalog；旧 `#view-projects`
+  不再进入硬编码运行态页面而会规范化回 Command 首页。UI 全量 `209 files / 1284 tests`、lint 与 production build 通过，
+  并更新用户可见快照。
 - 本地 Workspace read 在打开 handle 后复核真实 inode/path 仍位于 canonical root，拒绝中间/最终 symlink escape；读取改为
   `maxOutputBytes + 1` 的有界分块，不再在可竞态的 `stat` 后执行无界 `readFile()`。Runtime Worker 全量为
   `337 passed / 2 conditional skips / 0 failed`。
 - production Responses 全局与每个 AgentVersion binding 均要求 HTTPS，POST 与 retrieve GET 都拒绝 redirect；Release/Worker
-  对不安全 endpoint 在网络调用前 fail closed。Agent Responses 为 `76/76`。
+  对不安全 endpoint 在网络调用前 fail closed。WebSocket 在发送 `response.create` 前先持久化 dispatch boundary；断连转 HTTP
+  不重复 fence，Workflow retrieve 直接走 HTTP GET，零 WebSocket frame/POST。Agent Responses 为 `80/80`。
 - Web 公开 `/control-api/health/ready` 精确代理 BFF，不能再落入 SPA HTML 200；checked-in Web/Control origin 与唯一
-  `6175` TLS listener 精确一致。Web BFF `17/17`、production gate 与 CI YAML 解析通过。
+  `6175` TLS listener 精确一致。BFF 的 SIGTERM 会先停止接收新连接、允许短请求完成，再在 5 秒内 abort SSE/upstream 并释放
+  端口；compose stop grace 为 10 秒。nginx 以非 root `nginx`、read-only、drop-all-caps 运行并输出 CSP/HSTS 等安全头。
+  Web BFF `21/21`、production/topology gate、真实 hardened container smoke 与 CI YAML 解析通过。
+- Workspace execute/reconcile/cancel receipt 现在直接携带同事务绑定的 exact delivery attempt；进程在 receipt commit 后、claim 前
+  崩溃时，同 idempotency replay 只恢复该 `pending` attempt。`leased`、`possiblySent`、`settled` 均为零重复 dispatch，且不再用
+  audit list 猜 attempt。Application 为 `163/163`，无 PG 环境 Store 为 `385 pass / 65 conditional skip / 0 fail`。
 - Workflow durable continuation 已新增 Store-owned `resumeRequired`：SQLite/PostgreSQL 在一个事务内终结已消费的
   `responseObserved` dispatch，把 Attempt、canonical Workflow node 与 bounded continuation checkpoint 接管到当前
   reconcile WorkItem lease；Worker 只从已验证 history/provider checkpoint 继续，不执行旧 response GET。真实 SQLite
@@ -86,8 +97,10 @@
 - desktop release workflow 现在同时绑定 immutable tag、`origin/main` ancestry、远端 tag/main 无漂移以及 exact commit SHA/App ID 的
   required checks；macOS/Windows 均验证实际 updater 签名后才允许上传，Windows launch smoke 还按本次 install root/app binary
   精确检测 GUI/Node/guardian orphan。确定性 release/staging/Windows process tests 为 `16/16`，YAML 与 smoke syntax 通过。
-- 当前合并验证为 Domain `126/126`、Application `158/158`、Store `383 passed / 65 PostgreSQL 条件 skip / 0 failed`、
-  Runtime Worker `360 passed / 2 PostgreSQL 条件 skip / 0 failed`，四包 typecheck 全部通过。当前仍是 `In progress`：
+- 当前合并验证为 Domain `126/126`、Application `163/163`、Store `385 passed / 65 PostgreSQL 条件 skip / 0 failed`、
+  Agent Responses `80/80`、Runtime Worker `361 passed / 2 PostgreSQL 条件 skip / 0 failed`、UI `209 files / 1284 tests`、
+  Web BFF `21/21`；全部 architecture packages typecheck、依赖边界 `15/15`、desktop/server staging contracts `21/21`。
+  当前仍是 `In progress`：
   正式 Apple Developer ID/notarization/staple、Windows PFX/AuthentiCode timestamp/NSIS 实机、GitHub hosted
   release publish、真实 Identity/PIM 多租户部署、跨主机 PostgreSQL/Worker 网络分区、备份恢复与 SLO 仍需外部 runner、凭据和环境。
   本地 Tauri 已生成 `.app` 与 updater archive，但因没有 `TAURI_SIGNING_PRIVATE_KEY` 按设计返回失败，未使用 unsigned fallback。
