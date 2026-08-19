@@ -151,7 +151,7 @@ export class WorkspaceListApplicationService {
         actor,
         validated.operation.threadId,
       );
-      return validated;
+      return this.#resumePendingExecute(actor, command, validated, signal);
     }
 
     const thread = await this.#reads.loadThread(actor, command.threadId);
@@ -278,6 +278,55 @@ export class WorkspaceListApplicationService {
       return mutation(validated);
     }
     return this.#deliver(actor, command, validated, signal);
+  }
+
+  async #resumePendingExecute(
+    actor: ActorContext,
+    command: ExecuteWorkspaceListCommand,
+    replay: WorkspaceOperationMutationResult,
+    signal: AbortSignal,
+  ): Promise<WorkspaceOperationMutationResult> {
+    const operation = replay.operation;
+    if (operation.status !== "prepared") return replay;
+    const attempts = await this.#reads.storeCall(() =>
+      this.#store.listWorkspaceOperationDeliveryAttempts({
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        threadId: operation.threadId,
+        executionId: operation.executionId,
+        afterAttemptNumber: 0,
+        limit: 1,
+        view: "audit",
+      }),
+    );
+    const attempt =
+      attempts.length === 1
+        ? validateWorkspaceDeliveryAttempt(attempts[0])
+        : null;
+    if (
+      attempt === null ||
+      attempt.tenantId !== operation.tenantId ||
+      attempt.spaceId !== operation.spaceId ||
+      attempt.threadId !== operation.threadId ||
+      attempt.executionId !== operation.executionId ||
+      attempt.attemptNumber !== 1 ||
+      attempt.operationRevision !== operation.revision ||
+      attempt.phase !== "execute" ||
+      attempt.actionDigest !== operation.command.actionDigest ||
+      attempt.commandDigest !== operation.command.commandDigest
+    ) {
+      throw new ApplicationError(
+        "internal",
+        "workspace_delivery_attempt_invalid",
+      );
+    }
+    if (attempt.status !== "pending") return replay;
+    return this.#deliver(
+      actor,
+      command,
+      { ...replay, deliveryAttempt: attempt },
+      signal,
+    );
   }
 
   async #dispatch(

@@ -62,6 +62,28 @@ export function registerWorkspaceOperationStoreReadConformance(
         await store.loadWorkspaceOperationReceipt(receiptQuery("execute")),
         { disposition: "replayed", operation: input.operation },
       );
+      assert.deepEqual(
+        await store.listWorkspaceOperationDeliveryAttempts({
+          ...attemptQuery(input.operation),
+          limit: 1,
+        }),
+        [first.deliveryAttempt],
+      );
+      for (const drift of [
+        { tenantId: "tenant-substituted" },
+        { spaceId: "space-substituted" },
+        { threadId: "thread-substituted" },
+        { executionId: "execution-substituted" },
+      ]) {
+        assert.deepEqual(
+          await store.listWorkspaceOperationDeliveryAttempts({
+            ...attemptQuery(input.operation),
+            ...drift,
+            limit: 1,
+          }),
+          [],
+        );
+      }
     });
 
     test("keeps an exclusive cursor stable when a lower executionId appears between pages", async (context) => {

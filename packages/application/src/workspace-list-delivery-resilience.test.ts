@@ -110,6 +110,60 @@ test("does not synthesize a result when abandon or settle Store writes fail", as
   );
 });
 
+test("resumes the exact pending initial execute attempt after receipt commit", async () => {
+  const fixture = await preparedExecuteCrashFixture();
+
+  const recovered = await fixture.service.executeWorkspaceList(
+    actor,
+    executeCommand(),
+    signal(),
+  );
+
+  assert.equal(recovered.operation.status, "unknownOutcome");
+  assert.deepEqual(fixture.dispatches, ["execute"]);
+  assert.equal(fixture.store.counts.prepares, 1);
+  assert.equal(fixture.store.counts.claims, 2);
+  assert.equal(fixture.store.counts.settlements, 1);
+});
+
+test("fails closed when pending execute replay authority drifts", async () => {
+  for (const drift of [
+    { tenantId: "tenant-substituted" },
+    { spaceId: "space-substituted" },
+    { threadId: "thread-substituted" },
+    { executionId: "execution-substituted" },
+    { attemptNumber: 2 },
+    { operationRevision: 2 },
+    { phase: "reconcile" as const },
+  ]) {
+    const fixture = await preparedExecuteCrashFixture();
+    fixture.store.attempt = validateWorkspaceDeliveryAttempt({
+      ...fixture.store.attempt!,
+      ...drift,
+    });
+    await assert.rejects(
+      fixture.service.executeWorkspaceList(actor, executeCommand(), signal()),
+      applicationError("internal", "workspace_delivery_attempt_invalid"),
+    );
+    assert.deepEqual(fixture.dispatches, []);
+  }
+});
+
+test("never redispatches a leased initial execute receipt", async () => {
+  const fixture = await preparedExecuteCrashFixture();
+  await fixture.store.claimWorkspaceOperationDelivery({ ownerId: "owner-1" });
+
+  const replay = await fixture.service.executeWorkspaceList(
+    actor,
+    executeCommand(),
+    signal(),
+  );
+
+  assert.equal(replay.disposition, "replayed");
+  assert.equal(replay.operation.status, "prepared");
+  assert.deepEqual(fixture.dispatches, []);
+});
+
 test("receipt replay reauthorizes exact frozen thread without current reads", async () => {
   const fixture = createFixture();
   await fixture.service.executeWorkspaceList(actor, executeCommand(), signal());
@@ -284,3 +338,16 @@ test("uses the caller operation revision as the fresh action CAS", async () => {
   assert.equal(fixture.store.counts.actions, before.actions);
   assert.deepEqual(fixture.dispatches, ["execute"]);
 });
+
+async function preparedExecuteCrashFixture() {
+  const fixture = createFixture();
+  fixture.store.claimThrowsOnce = true;
+  await assert.rejects(
+    fixture.service.executeWorkspaceList(actor, executeCommand(), signal()),
+    applicationError("internal", "workspace_operation_store_failed"),
+  );
+  assert.equal(fixture.store.operation?.status, "prepared");
+  assert.equal(fixture.store.attempt?.status, "pending");
+  assert.deepEqual(fixture.dispatches, []);
+  return fixture;
+}

@@ -166,6 +166,7 @@ export class FakeStore {
   settlementReplay = false;
   abandonThrows = false;
   settleThrows = false;
+  claimThrowsOnce = false;
 
   resetCounters() {
     this.counts = emptyCounts();
@@ -266,6 +267,10 @@ export class FakeStore {
 
   async claimWorkspaceOperationDelivery(input: { ownerId: string }) {
     this.counts.claims += 1;
+    if (this.claimThrowsOnce) {
+      this.claimThrowsOnce = false;
+      throw new Error("claim_store_failed");
+    }
     this.attempt = validateWorkspaceDeliveryAttempt({
       ...this.attempt!,
       createdAt: this.forgeClaimCreatedAt

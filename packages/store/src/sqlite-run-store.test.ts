@@ -7,9 +7,11 @@ import { test, type TestContext } from "node:test";
 
 import {
   ApplicationError,
+  canonicalJson,
   RunApplicationService,
   RunExecutionService,
   RunStoreError,
+  WorkspaceListApplicationService,
   validateWorkspaceOperationRecord,
   type ActorContext,
   type ApplicationIdKind,
@@ -65,10 +67,13 @@ import {
 } from "./thread-rollback-store-conformance.test-support.ts";
 import { registerAutomationStoreConformance } from "./automation-store-conformance.test-support.ts";
 import {
+  operation,
   prepareInput,
   receiptQuery,
   registerWorkspaceOperationStoreConformance,
+  resolution,
   seedWorkspaceThread,
+  sha256,
 } from "./workspace-operation-store-conformance.test-support.ts";
 import { workspaceOperationResultDigest } from "./workspace-operation-store-support.ts";
 
@@ -76,6 +81,96 @@ registerWorkspaceOperationStoreConformance(
   "SqliteRunStore workspace operation authority (:memory:)",
   () => new SqliteRunStore(":memory:"),
 );
+
+test("resumes a receipt-committed execute delivery after SQLite restart", async (context) => {
+  const path = temporaryDatabasePath(context);
+  const command = {
+    kind: "workspaceList.execute" as const,
+    idempotencyKey: "execute-key-1",
+    threadId: "thread-1",
+    expectedRevision: 1,
+    maxEntries: 5,
+  };
+  const actor: ActorContext = {
+    principalId: "principal-1",
+    actorId: "actor-1",
+    tenantId: "tenant-1",
+    spaceId: "space-1",
+  };
+  const initial = new SqliteRunStore(path);
+  await seedWorkspaceThread(initial);
+  const prepared = operation(command.idempotencyKey);
+  await initial.prepareWorkspaceOperation({
+    tenantId: actor.tenantId,
+    spaceId: actor.spaceId,
+    threadFence: {
+      threadId: command.threadId,
+      expectedRevision: command.expectedRevision,
+    },
+    idempotency: {
+      scope: `workspace-list.execute:${actor.spaceId}`,
+      key: command.idempotencyKey,
+      requestFingerprint: sha256(
+        canonicalJson({
+          schemaVersion: "crewon.workspace-operation-request.v0",
+          phase: "execute",
+          actor,
+          command,
+        }),
+      ),
+    },
+    operation: prepared,
+  });
+  await initial.close();
+
+  const reopened = new SqliteRunStore(path);
+  context.after(() => reopened.close());
+  let dispatches = 0;
+  const service = new WorkspaceListApplicationService({
+    store: reopened,
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    digester: { sha256 },
+    commands: {
+      create: async () => {
+        throw new Error("receipt_replay_must_not_refreeze");
+      },
+    },
+    dispatcher: {
+      execute: async (current) => {
+        dispatches += 1;
+        return resolution(current, "completed");
+      },
+      reconcile: async () => {
+        throw new Error("reconcile_forbidden");
+      },
+      cancel: async () => {
+        throw new Error("cancel_forbidden");
+      },
+    },
+    deliveryOwnerId: "workspace-recovery-test",
+    deliveryLeaseDurationMs: 40_000,
+  });
+
+  const recovered = await service.executeWorkspaceList(
+    actor,
+    command,
+    new AbortController().signal,
+  );
+
+  assert.equal(recovered.operation.status, "completed");
+  assert.equal(dispatches, 1);
+  assert.equal(
+    (
+      await reopened.listWorkspaceOperationDeliveryAttempts({
+        ...workspaceOperationLocator(recovered.operation),
+        afterAttemptNumber: 0,
+        limit: 1,
+        view: "audit",
+      })
+    )[0]?.status,
+    "settled",
+  );
+});
 
 test("bounds SQLite snapshot and high-cursor reads independently of old revisions", async (context) => {
   const path = temporaryDatabasePath(context);
