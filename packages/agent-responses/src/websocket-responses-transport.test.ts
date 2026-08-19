@@ -186,6 +186,76 @@ test("does not repeat the durable boundary during disconnect fallback", async (c
   assert.equal(events.at(-1)?.type, "completed");
 });
 
+test("exposes Workflow evidence and routes response retrieval only through HTTP GET", async (context) => {
+  let websocketConnections = 0;
+  let websocketFrames = 0;
+  let gets = 0;
+  let posts = 0;
+  const responseId = "response-recovery";
+  const fixture = await websocketFixture(context, (request, response) => {
+    if (request.method === "GET") {
+      gets += 1;
+      assert.equal(request.url, `/v1/responses/${responseId}`);
+      response.writeHead(200, { "content-type": "application/json" }).end(
+        JSON.stringify({
+          id: responseId,
+          status: "completed",
+          output: [
+            {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text: "recovered" }],
+            },
+          ],
+          usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
+        }),
+      );
+      return;
+    }
+    posts += 1;
+    response.writeHead(500).end();
+  });
+  fixture.webSocketServer.on("connection", (socket) => {
+    websocketConnections += 1;
+    socket.on("message", () => {
+      websocketFrames += 1;
+    });
+  });
+  const transport = new ResilientResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+    storeResponses: true,
+  });
+  context.after(() => transport.close());
+  const kernel = new CrewONAgentKernel({ transport });
+
+  assert.equal(kernel.supportsModelDispatchEvidence, true);
+  const events = await collect(
+    kernel.runSegment(
+      {
+        ...segmentContract("run-recovery", "hello"),
+        reconcileCheckpoint: {
+          schemaVersion: "crewon.provider-checkpoint.v0",
+          adapterName: "direct-responses",
+          adapterVersion: "2",
+          modelId: "provider-model",
+          opaquePayload: { responseId },
+        },
+      },
+      signal(),
+    ),
+  );
+
+  assert.deepEqual(
+    { gets, posts, websocketConnections, websocketFrames },
+    { gets: 1, posts: 0, websocketConnections: 0, websocketFrames: 0 },
+  );
+  assert.equal(
+    events.find((event) => event.type === "segment.completed")?.data.output,
+    "recovered",
+  );
+});
+
 test("reuses one authenticated WebSocket and sends only the new Turn suffix", async (context) => {
   const fixture = await websocketFixture(context);
   const frames: Record<string, unknown>[] = [];

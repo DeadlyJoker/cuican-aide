@@ -49,6 +49,7 @@ export type WebSocketResponsesTransportConfig = DirectResponsesTransportConfig &
 export type WebSocketFactory = (url: URL, options: ClientOptions) => WebSocket;
 
 export class WebSocketResponsesTransport implements ModelTransportPort {
+  readonly supportsModelDispatchEvidence = true;
   readonly adapterName: string;
   readonly adapterVersion: string;
   readonly modelId: string;
@@ -409,6 +410,10 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
 }
 
 export class ResilientResponsesTransport implements ModelTransportPort {
+  readonly supportsModelDispatchEvidence = true;
+  get supportsResponseRetrieve(): boolean {
+    return this.#http.supportsResponseRetrieve;
+  }
   readonly adapterName: string;
   readonly adapterVersion: string;
   readonly modelId: string;
@@ -462,6 +467,10 @@ export class ResilientResponsesTransport implements ModelTransportPort {
     signal: AbortSignal,
     options?: ModelTransportStreamOptions,
   ): AsyncIterable<ModelTransportEvent> {
+    if (request.reconcileCheckpoint !== undefined) {
+      yield* this.#http.stream(request, signal, options);
+      return;
+    }
     if (this.#httpOnly) {
       if (this.#pendingFallbackCode !== null) {
         yield {
