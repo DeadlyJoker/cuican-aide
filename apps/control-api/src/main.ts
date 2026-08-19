@@ -13,10 +13,8 @@ import {
   ProductionControlApiIdentity,
   StaticTrustedBffRequestVerifier,
 } from "./production-security-adapters.ts";
-import {
-  createPostgresControlApi,
-  createStandaloneControlApi,
-} from "./standalone-composition.ts";
+import { createStandaloneControlApi } from "./standalone-composition.ts";
+import { resolveControlDatabaseAuthority } from "./control-database-environment.ts";
 import {
   candidateReadinessLine,
   resolvePausedAdmission,
@@ -30,6 +28,10 @@ import { resolveStandaloneWorkspaceWorkerEnvironment } from "./standalone-worksp
 const securityMode = parseSecurityMode(
   process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
 );
+const databaseAuthority = resolveControlDatabaseAuthority(
+  process.env,
+  securityMode,
+);
 const activationGate = resolvePausedAdmission(process.env, securityMode);
 const standaloneTenantId = environmentOr(
   "CREWON_TENANT_ID",
@@ -39,10 +41,6 @@ const workspaceWorker = resolveStandaloneWorkspaceWorkerEnvironment(
   process.env,
   securityMode,
 );
-const connectionString = process.env.CREWON_CONTROL_DATABASE_URL?.trim();
-if (securityMode === "production" && connectionString === undefined) {
-  throw new Error("CREWON_CONTROL_DATABASE_URL_required");
-}
 const artifactEncryptionKeyId = requiredEnvironment(
   "CREWON_ARTIFACT_ENCRYPTION_KEY_ID",
 );
@@ -69,9 +67,8 @@ const sharedConfig = {
 let runtime;
 try {
   if (securityMode === "production") {
-    const productionConnectionString = requiredEnvironment(
-      "CREWON_CONTROL_DATABASE_URL",
-    );
+    if (databaseAuthority.mode !== "production")
+      throw new Error("control_database_mode_mismatch");
     const authorityTimeoutMs = parsePositiveInteger(
       process.env.CREWON_SECURITY_AUTHORITY_TIMEOUT_MS ?? "2000",
       "CREWON_SECURITY_AUTHORITY_TIMEOUT_MS_invalid",
@@ -111,16 +108,16 @@ try {
     });
     runtime = await createProductionPostgresControlApi({
       ...sharedConfig,
-      connectionString: productionConnectionString,
+      connectionString: databaseAuthority.connectionString,
+      schema: databaseAuthority.schema,
       identity,
       authorization,
       providerProbeWorkers: resolveProductionProviderProbeWorkers(process.env),
       workspaceWorkers: resolveProductionWorkspaceWorkers(process.env),
-      ...(process.env.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
-        ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
-        : {}),
     });
   } else {
+    if (databaseAuthority.mode !== "standalone")
+      throw new Error("control_database_mode_mismatch");
     const providerProbeWorkers = resolveStandaloneProviderProbeWorkers(
       process.env,
       securityMode,
@@ -150,18 +147,10 @@ try {
       ...(providerProbeWorkers === undefined ? {} : { providerProbeWorkers }),
       ...(workspaceWorker === undefined ? {} : { workspaceWorker }),
     };
-    runtime = connectionString
-      ? await createPostgresControlApi({
-          ...standaloneConfig,
-          connectionString,
-          ...(process.env.CREWON_CONTROL_DATABASE_SCHEMA?.trim()
-            ? { schema: process.env.CREWON_CONTROL_DATABASE_SCHEMA.trim() }
-            : {}),
-        })
-      : createStandaloneControlApi({
-          ...standaloneConfig,
-          databasePath: requiredEnvironment("CREWON_CONTROL_DB_PATH"),
-        });
+    runtime = createStandaloneControlApi({
+      ...standaloneConfig,
+      databasePath: databaseAuthority.databasePath,
+    });
   }
 } catch (error) {
   await artifactStore.close();
