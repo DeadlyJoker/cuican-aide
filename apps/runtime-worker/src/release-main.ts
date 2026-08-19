@@ -68,7 +68,7 @@ const bindingsPath =
 const configuredDeployments = bindingsPath
   ? loadAgentVersionDeployments(bindingsPath, securityMode)
   : undefined;
-const transport = createModelTransport();
+const transport = createModelTransport({ securityMode });
 const toolRuntime = await createConfiguredToolRuntime();
 
 try {

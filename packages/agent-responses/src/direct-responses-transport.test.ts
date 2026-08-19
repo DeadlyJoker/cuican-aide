@@ -187,6 +187,7 @@ test("projects shared AR-042 reasoning through the real Direct transport boundar
 
 test("keeps unsupported request fields off Responses-compatible endpoints", async () => {
   let capturedBody: Record<string, unknown> | undefined;
+  let capturedRedirect: RequestRedirect | undefined;
   const transport = new DirectResponsesTransport(
     {
       endpoint: "https://self-hosted.example/v1/responses",
@@ -194,6 +195,7 @@ test("keeps unsupported request fields off Responses-compatible endpoints", asyn
     },
     {
       fetch: async (_input, init) => {
+        capturedRedirect = init?.redirect;
         capturedBody = JSON.parse(String(init?.body)) as Record<
           string,
           unknown
@@ -207,6 +209,7 @@ test("keeps unsupported request fields off Responses-compatible endpoints", asyn
 
   assert.equal(Object.hasOwn(capturedBody ?? {}, "reasoning"), false);
   assert.equal(Object.hasOwn(capturedBody ?? {}, "parallel_tool_calls"), false);
+  assert.equal(capturedRedirect, "error");
 });
 
 test("keeps manual replay and previous_response_id continuation mutually exclusive", async () => {
@@ -334,10 +337,18 @@ test("retrieves a completed response without resampling and rebuilds ordered tex
     completed: Record<string, unknown>;
   };
   let request:
-    | Readonly<{ url: string; method: string | undefined }>
+    | Readonly<{
+        url: string;
+        method: string | undefined;
+        redirect: RequestRedirect | undefined;
+      }>
     | undefined;
   const transport = retrievingTransport(async (input, init) => {
-    request = { url: String(input), method: init?.method };
+    request = {
+      url: String(input),
+      method: init?.method,
+      redirect: init?.redirect,
+    };
     return Response.json(reference.completed);
   });
   const checkpoint = reference.checkpoint;
@@ -350,6 +361,7 @@ test("retrieves a completed response without resampling and rebuilds ordered tex
   assert.deepEqual(request, {
     url: "https://provider.example/v1/responses/resp-lost",
     method: "GET",
+    redirect: "error",
   });
   assert.deepEqual(events, [
     { type: "response.created", checkpoint },

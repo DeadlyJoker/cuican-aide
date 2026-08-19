@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
@@ -105,6 +105,32 @@ test("production requires every configured Provider response to be retrievable",
   assert.doesNotThrow(() => loadAgentVersionDeployments(path, "production"));
   assert.doesNotThrow(() =>
     loadAgentVersionRuntimeFactory(path, {}, undefined, "production"),
+  );
+
+  const recoverable = JSON.parse(readFileSync(path, "utf8")) as ReturnType<
+    typeof config
+  >;
+  writeFileSync(
+    path,
+    JSON.stringify({
+      ...recoverable,
+      bindings: recoverable.bindings.map((binding) => ({
+        ...binding,
+        provider: {
+          ...binding.provider,
+          endpoint: "http://provider.example/v1/responses",
+        },
+      })),
+    }),
+    "utf8",
+  );
+  assert.throws(
+    () => loadAgentVersionDeployments(path, "production"),
+    hasMessage("production_responses_https_required"),
+  );
+  assert.throws(
+    () => loadAgentVersionRuntimeFactory(path, {}, undefined, "production"),
+    hasMessage("production_responses_https_required"),
   );
 });
 

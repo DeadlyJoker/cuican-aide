@@ -195,7 +195,10 @@ const initialized = await (async () => {
           securityMode,
         )
       : undefined;
-    transport = createModelTransport({ apiKey: nativeBootstrap?.apiKey });
+    transport = createModelTransport({
+      apiKey: nativeBootstrap?.apiKey,
+      securityMode,
+    });
     toolRuntime = await createConfiguredToolRuntime();
     artifactAuthority = createConfiguredArtifactAuthority();
     return {

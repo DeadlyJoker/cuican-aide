@@ -29,7 +29,10 @@ export function environmentOr(name: string, fallback: string): string {
 }
 
 export function createModelTransport(
-  native: { apiKey?: string | null } = {},
+  native: {
+    apiKey?: string | null;
+    securityMode?: "production" | "standalone";
+  } = {},
 ): ModelTransportPort {
   const config: DirectResponsesTransportConfig = {
     endpoint: environmentOr(
@@ -50,6 +53,7 @@ export function createModelTransport(
       process.env.CREWON_RESPONSES_SEQUENCE_POLICY ?? "required",
     ),
   };
+  validateResponsesEndpointSecurity(config.endpoint, native.securityMode);
   if (
     parseBoolean(
       process.env.CREWON_RESPONSES_WEBSOCKET_ENABLED ?? "false",
@@ -69,6 +73,14 @@ export function createModelTransport(
     });
   }
   return new DirectResponsesTransport(config);
+}
+
+export function validateResponsesEndpointSecurity(
+  endpoint: string,
+  securityMode: "production" | "standalone" | undefined,
+): void {
+  if (securityMode === "production" && new URL(endpoint).protocol !== "https:")
+    throw new Error("production_responses_https_required");
 }
 
 export async function createConfiguredToolRuntime(): Promise<

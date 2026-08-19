@@ -189,6 +189,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
       }
       const response = await this.#fetch(this.#endpoint, {
         method: "POST",
+        redirect: "error",
         headers: responsesHeaders(
           this.#apiKey,
           "text/event-stream",
@@ -323,6 +324,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
     try {
       const response = await this.#fetch(url, {
         method: "GET",
+        redirect: "error",
         headers: responsesHeaders(this.#apiKey, "application/json"),
         signal: idle.signal,
       });

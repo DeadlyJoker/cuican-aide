@@ -139,6 +139,14 @@ function requireRecoverableProductionBindings(
   ) {
     throw new Error("production_response_retrieval_required");
   }
+  if (
+    securityMode === "production" &&
+    config.bindings.some(
+      (binding) => new URL(binding.provider.endpoint).protocol !== "https:",
+    )
+  ) {
+    throw new Error("production_responses_https_required");
+  }
 }
 
 export function parseRuntimeBindingConfig(
