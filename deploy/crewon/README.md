@@ -65,7 +65,10 @@ docker build -t crewon-control-api:local -f deploy/crewon/control-api.Dockerfile
 docker build -t crewon-runtime-worker:local -f deploy/crewon/runtime-worker.Dockerfile .
 ```
 
-The Control, Runtime, and Web BFF images contain self-contained Node 24 bundles and run as the image's `node` user. Their image
+The Control, Runtime, and Web BFF images contain self-contained Node 24 bundles and run as the image's `node` user. The static
+Web image runs as the unprivileged nginx user, drops every Linux capability and stores its pid and request/proxy temp files only
+on the bounded `/tmp` tmpfs. Its CSP permits same-origin scripts without `unsafe-eval`; `'unsafe-inline'` is limited to styles
+because the current React UI emits bounded inline style attributes. Their image
 builds fail before publication if a bundle contains a removed compatibility marker. The Runtime image
 also contains `/app/init/release-main.mjs`; production startup must run this finite release authority successfully before the
 long-lived Worker. None of these images contains a Rust Runtime, Device/Gateway/App Server, deterministic fake transport, or port
@@ -97,9 +100,9 @@ Provider, Workspace and model credentials; BFF receives only browser-session cre
 authority. `compose.host.env` contains paths and immutable image identities, not secret contents. The artifact encryption key,
 reviewed AgentVersion bindings, Workspace root and TLS material are mounted read-only. The shared artifact volume is required
 because Control and Worker use the same local artifact authority in this single-host deployment. Both images initialize that
-named volume from a directory owned by the non-root Node user (UID/GID `1000`). Bind-mounted artifact keys, TLS material and
-Workspace roots must be readable by that UID; do not grant container root or broaden host permissions to work around an
-unreadable mount.
+named volume from a directory owned by the non-root Node user (UID/GID `1000`). Bind-mounted artifact keys and Workspace roots
+must be readable by that UID. TLS material must be readable by the pinned Alpine nginx user (UID/GID `101`) without being
+world-readable. Do not grant container root or broadly weaken host permissions to work around an unreadable mount.
 
 Validate interpolation before touching processes, then start the release/Worker/Control/BFF/Web dependency chain:
 

@@ -21,3 +21,10 @@ FROM ${BASE_IMAGE}
 
 COPY --from=build /workspace/apps/crewon-ui/dist/ /usr/share/nginx/html/
 COPY deploy/crewon/nginx.conf /etc/nginx/conf.d/default.conf
+
+# The public listener is unprivileged. Keep nginx's only process-owned state on
+# the runtime /tmp tmpfs instead of requiring root-owned /var/run.
+RUN sed -i '/^user  nginx;/d; s#^pid .*nginx\.pid;#pid /tmp/nginx.pid;#' \
+      /etc/nginx/nginx.conf
+
+USER nginx

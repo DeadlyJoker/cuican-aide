@@ -82,6 +82,32 @@ test("production Dockerfiles pin a reproducible non-root TypeScript runtime", as
   assert.match(worker, /apk add --no-cache postgresql16-client/u);
 });
 
+test("static Web edge runs non-root with a no-eval browser policy", async () => {
+  const [dockerfile, nginx, compose] = await Promise.all([
+    readFile(join(import.meta.dirname, "web.Dockerfile"), "utf8"),
+    readFile(join(import.meta.dirname, "nginx.conf"), "utf8"),
+    readFile(join(import.meta.dirname, "compose.production.yml"), "utf8"),
+  ]);
+
+  assert.match(dockerfile, /^USER nginx$/mu);
+  assert.match(dockerfile, /\/tmp\/nginx\.pid/u);
+  assert.match(nginx, /client_body_temp_path \/tmp\/client-body;/u);
+  assert.match(nginx, /proxy_temp_path \/tmp\/proxy;/u);
+  assert.match(nginx, /fastcgi_temp_path \/tmp\/fastcgi;/u);
+  assert.match(nginx, /uwsgi_temp_path \/tmp\/uwsgi;/u);
+  assert.match(nginx, /scgi_temp_path \/tmp\/scgi;/u);
+  assert.match(nginx, /Content-Security-Policy/u);
+  assert.match(nginx, /script-src 'self'/u);
+  assert.match(nginx, /style-src 'self' 'unsafe-inline'/u);
+  assert.match(nginx, /frame-ancestors 'none'/u);
+  assert.doesNotMatch(nginx, /unsafe-eval/u);
+  assert.match(compose, /web:[\s\S]*?cap_drop:\s*\n\s*- ALL/u);
+  assert.match(
+    compose,
+    /web:[\s\S]*?- \/tmp:size=64m,mode=1777,nosuid,nodev,noexec/u,
+  );
+});
+
 test("production entries create self-contained bundles without compatibility code", async () => {
   const outputDirectory = await mkdtemp(
     join(tmpdir(), "crewon-production-bundles-"),

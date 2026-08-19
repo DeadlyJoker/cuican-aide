@@ -12,6 +12,9 @@ const productionSecurity = await readOptionalWorkspaceFile(
 );
 const nginx = await readWorkspaceFile("deploy/crewon/nginx.conf");
 const webDockerfile = await readWorkspaceFile("deploy/crewon/web.Dockerfile");
+const productionCompose = await readWorkspaceFile(
+  "deploy/crewon/compose.production.yml",
+);
 const webEnvironment = await readWorkspaceFile(
   "deploy/crewon/web-bff.production.env.example",
 );
@@ -49,6 +52,13 @@ const legacyAppServerRouteRemoved =
 const productionNginxConfigurationPackaged = webDockerfile.includes(
   "COPY deploy/crewon/nginx.conf /etc/nginx/conf.d/default.conf",
 );
+const publicEdgeIsNonRootAndHardened =
+  webDockerfile.includes("USER nginx") &&
+  productionCompose.includes("- /tmp:size=64m,mode=1777,nosuid,nodev,noexec") &&
+  nginx.includes("Content-Security-Policy") &&
+  nginx.includes("script-src 'self'") &&
+  !nginx.includes("unsafe-eval") &&
+  nginx.includes("frame-ancestors 'none'");
 const publicHealthRoutesAreExact =
   nginx.includes("location = /control-api/health/live") &&
   nginx.includes("location = /control-api/health/ready");
@@ -66,6 +76,7 @@ if (
   !productionIdentityCompositionPresent ||
   !legacyAppServerRouteRemoved ||
   !productionNginxConfigurationPackaged ||
+  !publicEdgeIsNonRootAndHardened ||
   !publicHealthRoutesAreExact ||
   !publicOriginMatchesListener
 ) {
@@ -78,6 +89,7 @@ if (
       "It must also validate CREWON_CONTROL_BFF_TOKEN from X-CrewON-BFF-Authorization independently of the user token.",
       "nginx must not publish the removed Rust App Server or Agent Platform compatibility routes.",
       "The static Web image must install the checked-in production nginx configuration.",
+      "The public nginx edge must run non-root with a strict no-eval Content Security Policy.",
       "Public live/ready routes and the browser origin must match the only TLS listener exactly.",
       "The Web BFF boundary alone does not establish multi-user identity.",
     ].join("\n") + "\n",

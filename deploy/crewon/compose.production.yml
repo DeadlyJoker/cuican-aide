@@ -154,12 +154,13 @@ services:
     restart: unless-stopped
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     volumes:
       - ${CREWON_TLS_CERT_FILE:?set CREWON_TLS_CERT_FILE}:/etc/crewon/tls/crewon-ip.pem:ro
       - ${CREWON_TLS_KEY_FILE:?set CREWON_TLS_KEY_FILE}:/etc/crewon/tls/crewon-ip.key:ro
     tmpfs:
-      - /var/cache/nginx:size=64m
-      - /var/run:size=1m
+      - /tmp:size=64m,mode=1777,nosuid,nodev,noexec
 
 volumes:
   crewon-artifacts:
