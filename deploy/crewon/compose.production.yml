@@ -30,6 +30,19 @@ services:
     restart: "no"
     volumes: *runtime-volumes
 
+  runtime-rollback:
+    <<: *node-service
+    profiles: ["rollback"]
+    env_file:
+      - ${CREWON_RUNTIME_ENV_FILE:-./runtime.production.env}
+    image: ${CREWON_RUNTIME_WORKER_IMAGE:-crewon-runtime-worker:local}
+    build:
+      context: ../..
+      dockerfile: deploy/crewon/runtime-worker.Dockerfile
+    command: ["node", "/app/init/release-rollback-main.mjs"]
+    restart: "no"
+    volumes: *runtime-volumes
+
   runtime-worker:
     <<: *node-service
     env_file:
@@ -41,6 +54,18 @@ services:
     depends_on:
       runtime-release:
         condition: service_completed_successfully
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "require('node:fs').accessSync('/tmp/crewon-runtime-worker.ready')",
+        ]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
     volumes:
       - crewon-artifacts:/var/lib/crewon/artifacts
       - ${CREWON_ARTIFACT_KEY_FILE:?set CREWON_ARTIFACT_KEY_FILE}:/run/secrets/crewon-artifact-key:ro
@@ -57,7 +82,7 @@ services:
       dockerfile: deploy/crewon/control-api.Dockerfile
     depends_on:
       runtime-worker:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - crewon-artifacts:/var/lib/crewon/artifacts
       - ${CREWON_ARTIFACT_KEY_FILE:?set CREWON_ARTIFACT_KEY_FILE}:/run/secrets/crewon-artifact-key:ro
@@ -67,7 +92,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:3210/api/v1/health/live').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+          "fetch('http://127.0.0.1:3210/api/v1/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
         ]
       interval: 5s
       timeout: 3s
@@ -91,7 +116,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "fetch('http://127.0.0.1:3211/control-api/health/live').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
+          "fetch('http://127.0.0.1:3211/control-api/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
         ]
       interval: 5s
       timeout: 3s

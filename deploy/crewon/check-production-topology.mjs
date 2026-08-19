@@ -21,6 +21,7 @@ const forbidText = (source, text, code) => {
 
 for (const service of [
   "runtime-release:",
+  "runtime-rollback:",
   "runtime-worker:",
   "control-api:",
   "web-bff:",
@@ -37,6 +38,12 @@ requireText(
 );
 requireText(
   compose,
+  'command: ["node", "/app/init/release-rollback-main.mjs"]',
+  "release_rollback_job_missing",
+);
+requireText(compose, 'profiles: ["rollback"]', "rollback_profile_missing");
+requireText(
+  compose,
   "condition: service_completed_successfully",
   "release_completion_fence_missing",
 );
@@ -44,6 +51,22 @@ requireText(
   compose,
   "condition: service_healthy",
   "control_health_fence_missing",
+);
+requireText(
+  compose,
+  "/tmp/crewon-runtime-worker.ready",
+  "worker_readiness_probe_missing",
+);
+requireText(compose, "/api/v1/health/ready", "control_readiness_probe_missing");
+requireText(
+  compose,
+  "/control-api/health/ready",
+  "bff_readiness_probe_missing",
+);
+requireText(
+  runtime,
+  "CREWON_RUNTIME_READINESS_FILE=/tmp/crewon-runtime-worker.ready",
+  "worker_readiness_file_missing",
 );
 requireText(compose, "read_only: true", "readonly_root_missing");
 requireText(compose, "no-new-privileges:true", "privilege_fence_missing");

@@ -7,8 +7,9 @@ nginx serves the SPA and routes the following same-origin paths to the BFF on lo
 
 - `GET /control-api/session` resolves the existing HttpOnly identity session and returns exactly `{baseUrl, csrfToken}`.
 - `/api/v1` and `/api/v1/*` proxy Control API traffic. nginx and the BFF both discard a browser-supplied `Authorization` header.
-- `GET /control-api/health/live` proves only that the BFF process is alive. `/crewon-health` still proves only that static nginx is
-  alive; neither endpoint proves Identity Center or Control readiness.
+- `GET /control-api/health/live` proves only that the BFF process is alive. `GET /control-api/health/ready` additionally requires
+  the Control Store readiness probe. `/crewon-health` still proves only that static nginx is alive. None of these endpoints claims
+  Identity Center or Provider availability.
 
 The BFF uses only Node.js standard-library components. nginx and Node.js are open-source runtime components; no proprietary
 agent SDK or closed BFF framework is introduced.
@@ -106,9 +107,24 @@ docker compose --env-file deploy/crewon/compose.host.env \
   -f deploy/crewon/compose.production.yml up -d --build
 ```
 
-The release job has `restart: "no"`; Worker starts only after it exits successfully. Control starts after Worker, BFF only after
-Control liveness, and nginx only after BFF liveness. A production secret manager or orchestrator may project the same contract,
+The release job has `restart: "no"`; Worker starts only after it exits successfully. The Worker publishes its readiness marker
+only after composition, Provider prewarm and private listeners succeed. Control starts after that marker, BFF only after Control
+Store readiness, and nginx only after BFF confirms Control readiness. A production secret manager or orchestrator may project the same contract,
 but must preserve the process-specific secret scopes, loopback topology and release completion fence.
+
+Rollback is an explicit one-shot TypeScript authority in the same immutable Runtime image. Supply an existing release ID and a
+fresh idempotency key; the `rollback` profile is never part of a normal `up`:
+
+```bash
+docker compose --env-file deploy/crewon/compose.host.env \
+  -f deploy/crewon/compose.production.yml \
+  --profile rollback run --rm \
+  -e CREWON_RELEASE_ROLLBACK_TARGET_ID=<sha256-release-id> \
+  -e CREWON_RELEASE_IDEMPOTENCY_KEY=<operator-idempotency-key> \
+  runtime-rollback
+```
+
+After rollback, restart the long-lived Worker and verify Control readiness before admitting new work.
 
 The repository gates verify:
 

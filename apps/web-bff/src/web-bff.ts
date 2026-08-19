@@ -9,6 +9,7 @@ const MAX_REQUEST_BODY_BYTES = 64 * 1024;
 const MAX_HEADER_BYTES = 16 * 1024;
 const SESSION_PATH = "/control-api/session";
 const LIVE_PATH = "/control-api/health/live";
+const READY_PATH = "/control-api/health/ready";
 const API_PREFIX = "/api/v1";
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "::1", "localhost"]);
 const REQUEST_HEADER_ALLOWLIST = [
@@ -69,6 +70,22 @@ export function createWebBff(config: {
         return request.method === "GET"
           ? jsonResponse(200, { status: "ok" })
           : errorResponse(405, "method_not_allowed");
+      }
+      if (requestUrl.pathname === READY_PATH && requestUrl.search === "") {
+        if (request.method !== "GET") {
+          return errorResponse(405, "method_not_allowed");
+        }
+        try {
+          return proxyResponse(
+            await fetchImpl(new URL("/api/v1/health/ready", controlTarget), {
+              method: "GET",
+              redirect: "manual",
+              signal: request.signal,
+            }),
+          );
+        } catch {
+          return errorResponse(503, "control_api_unavailable");
+        }
       }
       if (requestUrl.pathname === SESSION_PATH && requestUrl.search === "") {
         if (request.method !== "GET") {

@@ -38,6 +38,11 @@ import { assertProductionProviderCatalogRoute } from "./production-provider-cata
 import { resolveRuntimeProductionWorkspaceEnvironment } from "./runtime-production-workspace-environment.ts";
 import { runtimeNativeReadinessLines } from "./runtime-native-readiness.ts";
 import {
+  clearRuntimeReadinessFile,
+  markRuntimeReady,
+  resolveRuntimeReadinessFile,
+} from "./runtime-readiness-file.ts";
+import {
   createRuntimeNativeRemoteMcpOwner,
   type RuntimeNativeRemoteMcpOwner,
 } from "./runtime-native-remote-mcp.ts";
@@ -51,6 +56,8 @@ const databaseAuthority = resolveRuntimeDatabaseAuthority(
 );
 const agentVersionRuntimeBindingsPath =
   process.env.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
+const readinessFile = resolveRuntimeReadinessFile(process.env);
+await clearRuntimeReadinessFile(readinessFile);
 const nativeBootstrap = takeRuntimeNativeBootstrap();
 const initialized = await (async () => {
   let remoteMcpOwner: RuntimeNativeRemoteMcpOwner | undefined;
@@ -389,6 +396,13 @@ if (process.env.CREWON_WORKER_ONCE === "1") {
   }
 } else {
   runtime.worker.start();
+  try {
+    await markRuntimeReady(readinessFile);
+  } catch (error) {
+    await runtime.close();
+    remoteMcpOwner?.destroy();
+    throw error;
+  }
   process.stdout.write("CrewON Runtime Worker started\n");
   for (const line of runtimeNativeReadinessLines({
     providerRuntimeBindingId:
@@ -403,7 +417,13 @@ if (process.env.CREWON_WORKER_ONCE === "1") {
   }
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, () => {
-      void runtime.close().finally(() => {
+      void (async () => {
+        try {
+          await clearRuntimeReadinessFile(readinessFile);
+        } finally {
+          await runtime.close();
+        }
+      })().finally(() => {
         remoteMcpOwner?.destroy();
         process.exit(0);
       });

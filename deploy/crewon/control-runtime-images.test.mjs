@@ -57,6 +57,11 @@ test("production Dockerfiles pin a reproducible non-root TypeScript runtime", as
   );
   assert.match(worker, /src\/release-main\.ts/u);
   assert.match(worker, /\/out\/release-main\.mjs \.\/init\/release-main\.mjs/u);
+  assert.match(worker, /src\/release-rollback-main\.ts/u);
+  assert.match(
+    worker,
+    /\/out\/release-rollback-main\.mjs \.\/init\/release-rollback-main\.mjs/u,
+  );
 });
 
 test("production entries create self-contained bundles without compatibility code", async () => {
@@ -68,6 +73,11 @@ test("production entries create self-contained bundles without compatibility cod
       ["@crewon/control-api", "src/main.ts", "control-api.mjs"],
       ["@crewon/runtime-worker", "src/main.ts", "runtime-worker.mjs"],
       ["@crewon/runtime-worker", "src/release-main.ts", "release-main.mjs"],
+      [
+        "@crewon/runtime-worker",
+        "src/release-rollback-main.ts",
+        "release-rollback-main.mjs",
+      ],
     ];
     await Promise.all(
       entries.map(([filter, entryPoint, output]) =>

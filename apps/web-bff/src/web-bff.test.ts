@@ -67,6 +67,45 @@ test("requires the HttpOnly identity session for bootstrap and proxy requests", 
   assert.equal(identity.calls.length, 2);
 });
 
+test("projects Control readiness without resolving a browser session", async () => {
+  const identity = fixedIdentity(null);
+  const upstream: Array<{ input: URL | RequestInfo; init?: RequestInit }> = [];
+  const bff = testBff({
+    identity,
+    fetch: async (input, init) => {
+      upstream.push({ input, init });
+      return new Response(JSON.stringify({ status: "ok" }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+    },
+  });
+
+  const response = await bff.handle(request("/control-api/health/ready"));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), { status: "ok" });
+  assert.equal(identity.calls.length, 0);
+  assert.equal(upstream.length, 1);
+  assert.equal(
+    String(upstream[0]?.input),
+    `${CONTROL_TARGET}/api/v1/health/ready`,
+  );
+  assert.equal(upstream[0]?.init?.method, "GET");
+});
+
+test("fails readiness closed when Control cannot be reached", async () => {
+  const response = await testBff({
+    identity: fixedIdentity(null),
+    fetch: async () => {
+      throw new TypeError("connection refused");
+    },
+  }).handle(request("/control-api/health/ready"));
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), {
+    error: { code: "control_api_unavailable" },
+  });
+});
+
 test("proxies reads with server authority and strips browser credentials", async () => {
   const upstream: Array<{ input: URL | RequestInfo; init?: RequestInit }> = [];
   const bff = testBff({

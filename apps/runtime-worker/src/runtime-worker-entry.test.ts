@@ -18,6 +18,7 @@ import type { RuntimeWorkerCompositionConfig } from "./standalone-composition.ts
 
 test("packaged entry starts the Workspace listener and emits only non-secret readiness", async (context) => {
   const databasePath = temporaryDatabasePath(context);
+  const readinessPath = `${databasePath}.ready`;
   const config = packagedConfig();
   await activateRelease(databasePath, config);
   const token = "packaged-workspace-private-token-at-least-32-bytes";
@@ -36,6 +37,7 @@ test("packaged entry starts the Workspace listener and emits only non-secret rea
       CREWON_AUTHORITY_ID: config.route.authorityId,
       CREWON_AGENT_VERSION_ID: config.route.agentVersionId,
       CREWON_NATIVE_WORKSPACE_READ_ENABLED: "1",
+      CREWON_RUNTIME_READINESS_FILE: readinessPath,
       CREWON_WORKER_SCAN_INTERVAL_MS: "1000",
     },
     stdio: ["pipe", "pipe", "pipe"],
@@ -70,6 +72,7 @@ test("packaged entry starts the Workspace listener and emits only non-secret rea
     output.stdout,
     /CrewON Workspace Runtime ready:http:\/\/127\.0\.0\.1:\d+:runtime-generation-1/u,
   );
+  assert.equal(existsSync(readinessPath), true);
   assert.doesNotMatch(
     `${output.stdout}\n${output.stderr}`,
     new RegExp(
@@ -81,6 +84,7 @@ test("packaged entry starts the Workspace listener and emits only non-secret rea
   );
   child.kill("SIGTERM");
   assert.equal(await waitForExit(child), 0);
+  assert.equal(existsSync(readinessPath), false);
 });
 
 test("production entry rejects SQLite before Provider readiness", async (context) => {
