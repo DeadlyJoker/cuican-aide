@@ -1,11 +1,13 @@
 import {
   canonicalJson,
   RunStoreError,
-  validateWorkflowNodeContinuationCheckpoint,
   type WorkflowExecutionValue,
   type WorkflowRunCompositionStore,
 } from "@crewon/application";
-import type { WorkflowContentDigester } from "@crewon/domain";
+import type {
+  WorkflowContentDigester,
+  WorkflowNodeDefinition,
+} from "@crewon/domain";
 import type { PoolClient } from "pg";
 
 import {
@@ -18,6 +20,10 @@ import {
   terminatePostgresModelDispatchForAttempt,
 } from "./postgres-model-dispatch-evidence.ts";
 import { stableJson } from "./store-invariants.ts";
+import {
+  loadPostgresWorkflowContinuationForReconciliation,
+  takeOverPostgresWorkflowContinuation,
+} from "./postgres-workflow-continuation-resume.ts";
 import { workflowAuthorityId } from "./workflow-run-composition-support.ts";
 import {
   completePostgresWorkflowLease,
@@ -160,6 +166,86 @@ export async function reconcilePostgresWorkflowNode(
       dispatch.leaseEpoch !== attempt.leaseEpoch)
   )
     throw new RunStoreError("workflow_reconciliation_evidence_missing");
+  const definition = workflow.nodes.find(
+    (candidate) => candidate.nodeId === input.nodeId,
+  );
+  const authority =
+    definition === undefined ||
+    definition.kind === "humanGate" ||
+    node.agentVersionId === null ||
+    node.inputDigest === null
+      ? null
+      : {
+          tenantId: input.tenantId,
+          runId: input.runId,
+          workItemId: attempt.workItemId,
+          leaseEpoch: attempt.leaseEpoch,
+          nodeId: input.nodeId,
+          nodeKind: definition.kind,
+          claimId: input.claimId,
+          claimEpoch: input.claimEpoch,
+          agentVersionId: node.agentVersionId,
+          attempt: {
+            stepId: input.nodeId,
+            attemptId: attempt.attemptId,
+          },
+        };
+  const checkpoint =
+    authority === null
+      ? null
+      : await loadPostgresWorkflowContinuationForReconciliation(
+          client,
+          schema,
+          authority,
+        );
+  if (
+    dispatch === null &&
+    checkpoint?.activeDispatch === null &&
+    checkpoint.terminalCandidate === null &&
+    attempt.workItemId === input.lease.workItemId
+  ) {
+    const resumed = await takeOverPostgresWorkflowContinuation(client, schema, {
+      authority: authority!,
+      reconciliationLease: input.lease,
+      attempt: { ...attempt, status: "running" },
+      checkpoint,
+      dispatch: null,
+      resumedAt: now,
+      digester,
+    });
+    return resumeRequiredResult(
+      input,
+      execution,
+      definition!,
+      node.inputDigest!,
+      step!,
+      resumed,
+    );
+  }
+  if (
+    dispatch?.status === "prepared" &&
+    checkpoint?.activeDispatch === null &&
+    checkpoint.terminalCandidate === null &&
+    attempt.workItemId === input.lease.workItemId
+  ) {
+    const resumed = await takeOverPostgresWorkflowContinuation(client, schema, {
+      authority: authority!,
+      reconciliationLease: input.lease,
+      attempt: { ...attempt, status: "running" },
+      checkpoint,
+      dispatch: { ...dispatch, status: "prepared" },
+      resumedAt: now,
+      digester,
+    });
+    return resumeRequiredResult(
+      input,
+      execution,
+      definition!,
+      node.inputDigest!,
+      step!,
+      resumed,
+    );
+  }
   const evidenceStatus =
     dispatch === null || dispatch.status === "prepared"
       ? ("notDispatched" as const)
@@ -171,28 +257,55 @@ export async function reconcilePostgresWorkflowNode(
   );
   if (evidenceStatus === "notDispatched") {
     if (run.rows[0]?.state_json.cancelRequested === true) {
-      const terminal = dispatch === null
-        ? null
-        : await terminatePostgresModelDispatchForAttempt(client, schema, {
-            tenantId: input.tenantId, runId: input.runId, lease: input.lease,
-            attempt: { stepId: input.nodeId, attemptId: attempt.attemptId },
-            attemptWorkItemId: attempt.workItemId,
-            attemptLeaseEpoch: attempt.leaseEpoch,
-            operationId: dispatch.operationId,
-            requestSequence: dispatch.requestSequence,
-            expectedRevision: dispatch.revision, transitionedAt: now,
-            outcome: { kind: "canceled", code: "user_requested", certainty: "notSent" },
-          });
+      const terminal =
+        dispatch === null
+          ? null
+          : await terminatePostgresModelDispatchForAttempt(client, schema, {
+              tenantId: input.tenantId,
+              runId: input.runId,
+              lease: input.lease,
+              attempt: { stepId: input.nodeId, attemptId: attempt.attemptId },
+              attemptWorkItemId: attempt.workItemId,
+              attemptLeaseEpoch: attempt.leaseEpoch,
+              operationId: dispatch.operationId,
+              requestSequence: dispatch.requestSequence,
+              expectedRevision: dispatch.revision,
+              transitionedAt: now,
+              outcome: {
+                kind: "canceled",
+                code: "user_requested",
+                certainty: "notSent",
+              },
+            });
       const next = await settleCanceledReconciliation(
-        client, schema, input, execution, attempt,
-        terminal?.responseCheckpointDigest ?? null, now, digester);
-      const result = { disposition: "settled" as const, evidenceStatus,
-        execution: next, handoff: { currentWorkItem: "completed" as const,
-          nextWorkItemId: null, kind: "none" as const },
-        runDisposition: "nonTerminal" as const };
+        client,
+        schema,
+        input,
+        execution,
+        attempt,
+        terminal?.responseCheckpointDigest ?? null,
+        now,
+        digester,
+      );
+      const result = {
+        disposition: "settled" as const,
+        evidenceStatus,
+        execution: next,
+        handoff: {
+          currentWorkItem: "completed" as const,
+          nextWorkItemId: null,
+          kind: "none" as const,
+        },
+        runDisposition: "nonTerminal" as const,
+      };
       await insertPostgresWorkflowReceipt(
-        client, schema, receiptInput, "reconcileNode", fingerprint,
-        result);
+        client,
+        schema,
+        receiptInput,
+        "reconcileNode",
+        fingerprint,
+        result,
+      );
       await completePostgresWorkflowLease(client, schema, input, now);
       return structuredClone(result);
     }
@@ -356,25 +469,18 @@ export async function reconcilePostgresWorkflowNode(
     };
   if (dispatch?.status !== "responseObserved")
     throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
-  const continuation = await client.query<{ state_json: unknown }>(
-    `SELECT state_json FROM ${schema}.workflow_node_continuations
-     WHERE tenant_id=$1 AND run_id=$2 AND node_id=$3 FOR UPDATE`,
-    [input.tenantId, input.runId, input.nodeId],
-  );
-  const checkpoint =
-    continuation.rows[0] === undefined
-      ? null
-      : validateWorkflowNodeContinuationCheckpoint(
-          continuation.rows[0].state_json,
-        );
   const candidate = checkpoint?.terminalCandidate;
   if (candidate === null || candidate === undefined) {
     const providerCheckpoint = attempt.providerCheckpoint;
     const checkpointDigest = attempt.checkpointDigest;
     const inputValue = await loadPostgresWorkflowValue(
-      client, schema, input, "nodeInput", input.nodeId, digester);
-    const definition = workflow.nodes.find(
-      (candidate) => candidate.nodeId === input.nodeId);
+      client,
+      schema,
+      input,
+      "nodeInput",
+      input.nodeId,
+      digester,
+    );
     if (
       providerCheckpoint === null ||
       checkpointDigest === null ||
@@ -391,6 +497,34 @@ export async function reconcilePostgresWorkflowNode(
       definition.kind === "humanGate"
     )
       throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
+    if (
+      checkpoint?.activeDispatch?.operationId === dispatch.operationId &&
+      checkpoint.activeDispatch.requestSequence === dispatch.requestSequence &&
+      checkpoint.activeDispatch.expectedRevision === dispatch.revision &&
+      checkpoint.activeDispatch.status === "responseObserved"
+    ) {
+      const resumed = await takeOverPostgresWorkflowContinuation(
+        client,
+        schema,
+        {
+          authority: authority!,
+          reconciliationLease: input.lease,
+          attempt: { ...attempt, status: "running" },
+          checkpoint,
+          dispatch: { ...dispatch, status: "responseObserved" },
+          resumedAt: now,
+          digester,
+        },
+      );
+      return resumeRequiredResult(
+        input,
+        execution,
+        definition,
+        node.inputDigest!,
+        step!,
+        resumed,
+      );
+    }
     return structuredClone({
       disposition: "retrieveRequired" as const,
       evidenceStatus: "responseObserved" as const,
@@ -408,8 +542,9 @@ export async function reconcilePostgresWorkflowNode(
         inputValue: {
           schemaVersion: "crewon.workflow-execution-value.v0" as const,
           ...inputValue,
-          value: structuredClone(inputValue.value) as
-            WorkflowExecutionValue["value"],
+          value: structuredClone(
+            inputValue.value,
+          ) as WorkflowExecutionValue["value"],
         },
         dispatch: { ...dispatch, status: "responseObserved" as const },
       },
@@ -421,29 +556,32 @@ export async function reconcilePostgresWorkflowNode(
       runDisposition: "nonTerminal" as const,
     });
   }
-  if (
-    checkpoint!.authority.attempt.attemptId !== attempt.attemptId
-  )
+  if (checkpoint!.authority.attempt.attemptId !== attempt.attemptId)
     throw new RunStoreError("workflow_terminal_candidate_corrupt");
   if (run.rows[0]?.state_json.cancelRequested !== true)
-    return settlePostgresRetrievedWorkflowNode(client, schema, {
-      ...input,
-      agentVersionId: node.agentVersionId!,
-      attempt: {
-        stepId: input.nodeId,
-        attemptId: attempt.attemptId,
-        workItemId: attempt.workItemId,
-        leaseEpoch: attempt.leaseEpoch,
+    return settlePostgresRetrievedWorkflowNode(
+      client,
+      schema,
+      {
+        ...input,
+        agentVersionId: node.agentVersionId!,
+        attempt: {
+          stepId: input.nodeId,
+          attemptId: attempt.attemptId,
+          workItemId: attempt.workItemId,
+          leaseEpoch: attempt.leaseEpoch,
+        },
+        dispatch: {
+          operationId: dispatch.operationId,
+          requestSequence: dispatch.requestSequence,
+          expectedRevision: dispatch.revision,
+          status: "responseObserved",
+        },
+        evidence: candidate.evidence,
+        dispatchTerminalOutcome: candidate.dispatchTerminalOutcome,
       },
-      dispatch: {
-        operationId: dispatch.operationId,
-        requestSequence: dispatch.requestSequence,
-        expectedRevision: dispatch.revision,
-        status: "responseObserved",
-      },
-      evidence: candidate.evidence,
-      dispatchTerminalOutcome: candidate.dispatchTerminalOutcome,
-    }, digester);
+      digester,
+    );
   await terminatePostgresModelDispatchForAttempt(client, schema, {
     tenantId: input.tenantId,
     runId: input.runId,
@@ -458,8 +596,15 @@ export async function reconcilePostgresWorkflowNode(
     outcome: candidate.dispatchTerminalOutcome,
   });
   const next = await settleCanceledReconciliation(
-    client, schema, input, execution, attempt,
-    dispatch.responseCheckpointDigest, now, digester);
+    client,
+    schema,
+    input,
+    execution,
+    attempt,
+    dispatch.responseCheckpointDigest,
+    now,
+    digester,
+  );
   const result = {
     disposition: "settled" as const,
     evidenceStatus,
@@ -483,6 +628,40 @@ export async function reconcilePostgresWorkflowNode(
   return structuredClone(result);
 }
 
+function resumeRequiredResult(
+  input: Input,
+  execution: Result["execution"],
+  definition: WorkflowNodeDefinition,
+  inputDigest: string,
+  step: NonNullable<Awaited<ReturnType<typeof loadPostgresRunStep>>>,
+  resumed: Awaited<ReturnType<typeof takeOverPostgresWorkflowContinuation>>,
+): Result {
+  return structuredClone({
+    disposition: "resumeRequired" as const,
+    evidenceStatus: "responseObserved" as const,
+    resume: {
+      claim: {
+        node: definition,
+        claimId: input.claimId,
+        claimEpoch: input.claimEpoch,
+        gateRequestId: null,
+        inputDigest,
+      },
+      step,
+      attempt: resumed.attempt,
+      reconciliationLease: input.lease,
+      continuation: resumed.continuation,
+    },
+    execution,
+    handoff: {
+      currentWorkItem: "retained" as const,
+      nextWorkItemId: null,
+      kind: "none" as const,
+    },
+    runDisposition: "nonTerminal" as const,
+  });
+}
+
 async function settleCanceledReconciliation(
   client: PoolClient,
   schema: string,
@@ -494,28 +673,58 @@ async function settleCanceledReconciliation(
   digester: WorkflowContentDigester,
 ): Promise<Result["execution"]> {
   await finishPostgresRunAttempt(client, schema, {
-    tenantId: input.tenantId, runId: input.runId,
-    workItemId: attempt.workItemId, leaseEpoch: attempt.leaseEpoch,
-    attempt: { stepId: input.nodeId, attemptId: attempt.attemptId,
-      status: "canceled", finishedAt: now, checkpointDigest },
+    tenantId: input.tenantId,
+    runId: input.runId,
+    workItemId: attempt.workItemId,
+    leaseEpoch: attempt.leaseEpoch,
+    attempt: {
+      stepId: input.nodeId,
+      attemptId: attempt.attemptId,
+      status: "canceled",
+      finishedAt: now,
+      checkpointDigest,
+    },
   });
-  await appendPostgresCanceledWorkflowNodeEvent(client, schema, {
-    tenantId: input.tenantId, runId: input.runId, binding: input.binding,
-    nodeId: input.nodeId, claimId: input.claimId, claimEpoch: input.claimEpoch,
-    attemptId: attempt.attemptId,
-    operationId: `reconcile:${input.reconciliationOperationId}:${input.nodeId}`,
-  }, now, digester);
-  const nodes = execution.nodes.map((node) => node.nodeId === input.nodeId
-    ? { ...node, status: "canceled" as const, leaseExpiresAt: null,
-        resultDigest: null, failureCode: null }
-    : node);
-  const next = { ...execution, revision: execution.revision + 1, nodes,
+  await appendPostgresCanceledWorkflowNodeEvent(
+    client,
+    schema,
+    {
+      tenantId: input.tenantId,
+      runId: input.runId,
+      binding: input.binding,
+      nodeId: input.nodeId,
+      claimId: input.claimId,
+      claimEpoch: input.claimEpoch,
+      attemptId: attempt.attemptId,
+      operationId: `reconcile:${input.reconciliationOperationId}:${input.nodeId}`,
+    },
+    now,
+    digester,
+  );
+  const nodes = execution.nodes.map((node) =>
+    node.nodeId === input.nodeId
+      ? {
+          ...node,
+          status: "canceled" as const,
+          leaseExpiresAt: null,
+          resultDigest: null,
+          failureCode: null,
+        }
+      : node,
+  );
+  const next = {
+    ...execution,
+    revision: execution.revision + 1,
+    nodes,
     status: nodes.some((node) =>
-      ["queued", "running", "unknown"].includes(node.status))
-      ? "running" as const
+      ["queued", "running", "unknown"].includes(node.status),
+    )
+      ? ("running" as const)
       : nodes.some((node) => node.status === "waitingHuman")
-        ? "waitingHuman" as const : "canceled" as const,
-    updatedAt: now };
+        ? ("waitingHuman" as const)
+        : ("canceled" as const),
+    updatedAt: now,
+  };
   await writePostgresWorkflowExecution(client, schema, next, now);
   return next;
 }
