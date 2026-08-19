@@ -81,9 +81,46 @@ jobs:
             --branch-protection "$branch_protection" --check-runs "$check_runs"
           echo "release_sha=$release_sha" >> "$GITHUB_OUTPUT"
 
+  postgres-production-workflow:
+    name: Revalidate PostgreSQL production Workflow recovery
+    needs: trust
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: crewon_test
+          POSTGRES_PASSWORD: crewon_test
+          POSTGRES_USER: crewon_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crewon_test -d crewon_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CREWON_TEST_POSTGRES_URL: postgresql://crewon_test:crewon_test@127.0.0.1:5432/crewon_test
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ needs.trust.outputs.release_sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        with:
+          run_install: false
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .node-version
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Exercise production PostgreSQL Workflow recovery
+        run: pnpm production:postgres-smoke
+
   publish:
     name: Build, attest, sign, and publish server images
-    needs: trust
+    needs: [trust, postgres-production-workflow]
     runs-on: ubuntu-24.04
     timeout-minutes: 90
     permissions:

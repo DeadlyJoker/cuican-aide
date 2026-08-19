@@ -5,6 +5,45 @@ on:
   push: { branches: [main] }
 
 jobs:
+  postgres-production-workflow:
+    name: PostgreSQL production Workflow recovery
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: crewon_test
+          POSTGRES_PASSWORD: crewon_test
+          POSTGRES_USER: crewon_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crewon_test -d crewon_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      CREWON_TEST_POSTGRES_URL: postgresql://crewon_test:crewon_test@127.0.0.1:5432/crewon_test
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        with:
+          run_install: false
+      - name: Setup Node.js
+        uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6.3.0
+        with:
+          node-version-file: .node-version
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Exercise production PostgreSQL Workflow recovery
+        run: pnpm production:postgres-smoke
+
   build-test:
     runs-on: ubuntu-latest
     timeout-minutes: 20

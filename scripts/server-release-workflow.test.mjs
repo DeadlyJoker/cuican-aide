@@ -17,10 +17,13 @@ test("server release binds trusted checks and least-privilege publication", () =
   assert.match(workflow, /verify-release-checks/u);
   assert.match(workflow, /git merge-base --is-ancestor/u);
   assert.match(workflow, /git ls-remote --refs origin/u);
+  assert.match(workflow, /Revalidate PostgreSQL production Workflow recovery/u);
+  assert.match(workflow, /pnpm production:postgres-smoke/u);
+  assert.match(workflow, /needs: \[trust, postgres-production-workflow\]/u);
   const actions = [
     ...workflow.matchAll(/^\s*- uses: ([^\s]+)(?:\s+#.*)?$/gmu),
   ].map((match) => match[1]);
-  assert.equal(actions.length, 5);
+  assert.equal(actions.length, 8);
   for (const action of actions) assert.match(action, /@[a-f0-9]{40}$/u);
 });
 
