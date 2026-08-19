@@ -44,7 +44,7 @@ export type WorkflowRetrievedContinuationNext = Omit<
 /** Bounded non-terminal provider GET result; it grants no caller-owned authority. */
 export type WorkflowRetrievedContinuationPayload = Readonly<{
   events: readonly CanonicalAgentEvent[];
-  assistantContinuation: WorkflowRetrievedAssistantContinuation;
+  assistantContinuation: WorkflowRetrievedAssistantContinuation | null;
   next: WorkflowRetrievedContinuationNext;
 }>;
 
@@ -83,21 +83,28 @@ export function validateWorkflowRetrievedContinuationPayload(
       invalidRetrievedContinuation();
     return structuredClone(parsed);
   });
-  const assistantContinuation = validateAssistantContinuation(
-    value.assistantContinuation,
-  );
+  const assistantContinuation =
+    value.assistantContinuation === null
+      ? null
+      : validateAssistantContinuation(value.assistantContinuation);
   const next = validateNext(value.next);
+  const toolRequested = events.filter(
+    (event) => event.type === "tool.requested",
+  );
   if (
-    next.segmentId !== assistantContinuation.segmentId ||
-    canonicalJson(next.providerCheckpoint) !==
-      canonicalJson(assistantContinuation.checkpoint) ||
-    next.providerTurnState !== assistantContinuation.providerTurnState ||
+    (assistantContinuation === null && toolRequested.length === 0) ||
+    (assistantContinuation !== null &&
+      (next.segmentId !== assistantContinuation.segmentId ||
+        canonicalJson(next.providerCheckpoint) !==
+          canonicalJson(assistantContinuation.checkpoint) ||
+        next.providerTurnState !== assistantContinuation.providerTurnState)) ||
     events.some(
       (event, index) =>
         event.runId !== events[0]?.runId ||
-        event.segmentId !== assistantContinuation.segmentId ||
+        event.segmentId !== next.segmentId ||
         (index > 0 && event.sequence <= events[index - 1]!.sequence) ||
-        event.sequence >= assistantContinuation.sequence,
+        (assistantContinuation !== null &&
+          event.sequence >= assistantContinuation.sequence),
     )
   )
     invalidRetrievedContinuation();
