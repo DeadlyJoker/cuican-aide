@@ -3057,6 +3057,7 @@ export function validateWorkItems(
     | "workflowCancel"
     | "workflowNode"
     | "workflowReconcile"
+    | "workflowGateResume"
     | "workflowToolApprovalResume"
     | "manualCompaction" = "default",
 ): void {
@@ -3126,40 +3127,52 @@ export function validateWorkItems(
                     "stepId",
                     "trigger",
                   ])
-                : payloadKind === "default"
-                  ? stableJson(payloadKeys) === stableJson(["throughSequence"])
-                  : payloadKind === "goalContinuation"
-                    ? stableJson(payloadKeys) ===
-                      stableJson([
-                        "goalId",
-                        "goalRevision",
-                        "previousRunId",
-                        "throughSequence",
-                        "trigger",
-                      ])
-                    : payloadKind === "goalActivation"
+                : payloadKind === "workflowGateResume"
+                  ? stableJson(payloadKeys) ===
+                    stableJson([
+                      "binding",
+                      "claimEpoch",
+                      "claimId",
+                      "decisionReceiptId",
+                      "gateRequestId",
+                      "nodeId",
+                      "schemaVersion",
+                      "trigger",
+                    ])
+                  : payloadKind === "default"
+                    ? stableJson(payloadKeys) === stableJson(["throughSequence"])
+                    : payloadKind === "goalContinuation"
                       ? stableJson(payloadKeys) ===
                         stableJson([
                           "goalId",
                           "goalRevision",
+                          "previousRunId",
                           "throughSequence",
                           "trigger",
                         ])
-                      : payloadKind === "automationInvocation"
+                      : payloadKind === "goalActivation"
                         ? stableJson(payloadKeys) ===
                           stableJson([
-                            "binding",
-                            "schemaVersion",
+                            "goalId",
+                            "goalRevision",
                             "throughSequence",
                             "trigger",
                           ])
-                        : stableJson(payloadKeys) ===
-                          stableJson([
-                            "expectedHistorySequence",
-                            "schemaVersion",
-                            "throughSequence",
-                            "trigger",
-                          ]);
+                        : payloadKind === "automationInvocation"
+                          ? stableJson(payloadKeys) ===
+                            stableJson([
+                              "binding",
+                              "schemaVersion",
+                              "throughSequence",
+                              "trigger",
+                            ])
+                          : stableJson(payloadKeys) ===
+                            stableJson([
+                              "expectedHistorySequence",
+                              "schemaVersion",
+                              "throughSequence",
+                              "trigger",
+                            ]);
     if (
       !payloadValid ||
       (![
@@ -3167,6 +3180,7 @@ export function validateWorkItems(
         "workflowCancel",
         "workflowNode",
         "workflowReconcile",
+        "workflowGateResume",
         "workflowToolApprovalResume",
       ].includes(payloadKind) &&
         workItem.payload.throughSequence !== throughSequence)
@@ -3240,6 +3254,30 @@ export function validateWorkItems(
             Number.isSafeInteger(value) &&
             value > 0,
         )
+      )
+        throw new RunStoreError("work_item_payload_invalid");
+      try {
+        parseFrozenWorkflowVersionBinding(payload.binding);
+      } catch {
+        throw new RunStoreError("work_item_payload_invalid");
+      }
+    }
+    if (payloadKind === "workflowGateResume") {
+      const payload = workItem.payload;
+      if (
+        payload.schemaVersion !== "crewon.workflow-gate-resume-work-item.v0" ||
+        payload.trigger !== "workflowGateResume" ||
+        ![
+          payload.nodeId,
+          payload.claimId,
+          payload.gateRequestId,
+          payload.decisionReceiptId,
+        ].every(
+          (value) => typeof value === "string" && value.trim().length > 0,
+        ) ||
+        typeof payload.claimEpoch !== "number" ||
+        !Number.isSafeInteger(payload.claimEpoch) ||
+        payload.claimEpoch <= 0
       )
         throw new RunStoreError("work_item_payload_invalid");
       try {

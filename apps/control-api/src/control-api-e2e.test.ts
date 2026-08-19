@@ -1501,6 +1501,154 @@ test(
 );
 
 test(
+  "publishes and resumes a PostgreSQL Human Gate across a Worker restart",
+  { skip: postgresConnectionString === undefined },
+  async (context) => {
+    const connectionString = requiredPostgresUrl();
+    const schema = postgresSchema("wf_gate");
+    const controlConfig = postgresConfig(connectionString, schema);
+    const control = await createPostgresControlApi(controlConfig);
+    const admin = new Pool({ connectionString, max: 1 });
+    context.after(() => closePostgresFixture(control.app, admin, schema));
+    await control.app.listen({ host: "127.0.0.1", port: 0 });
+    const baseUrl = serverBaseUrl(control.app);
+    const client = new ControlApiClient({
+      baseUrl,
+      accessToken: SESSION_TOKEN,
+      csrfToken: CSRF_TOKEN,
+      origin: ORIGIN,
+    });
+    const unauthorized = await fetch(
+      `${baseUrl}/api/v1/runs/not-visible/workflow-gates`,
+    );
+    assert.equal(unauthorized.status, 401);
+    const verifierSource = {
+      ...selectedAgentVersionSource(),
+      agentVersionId: "workflow-verifier-approve",
+      instructions: "Verify approved empty JSON.",
+    };
+    const verifier = compileAgentVersion(verifierSource, digest);
+    await client.publishAgentVersion(verifierSource);
+    const runtimeFactory = new ConfiguredAgentVersionRuntimeFactory([
+      {
+        tenantId: "tenant-e2e-1",
+        agentVersionId: verifier.agentVersionId,
+        contentDigest: verifier.contentDigest,
+        authorityId: "workflow-postgres-gate-verifier-authority",
+        workspaceBindingId: null,
+        materializationDigest: digest.sha256("workflow-postgres-gate-verifier"),
+        createTransport: workflowModelTransport,
+        createToolRuntime: () => new InMemoryToolBroker(),
+      },
+    ]);
+    await activatePostgresRuntimeAgentVersionRelease({
+      connectionString,
+      schema,
+      runtimeTenantId: "tenant-e2e-1",
+      route: postgresRuntimeRoute(),
+      transport: workflowModelTransport(),
+      agentVersionDeployments:
+        runtimeFactory.deploymentBindings("tenant-e2e-1"),
+      actor: {
+        principalId: "release-principal",
+        actorId: "release-actor",
+        tenantId: "tenant-e2e-1",
+        spaceId: "space-e2e-1",
+      },
+      authorization: { authorize: async () => ({ outcome: "allow" }) },
+      clock: { now: () => "2026-08-13T00:00:00.000Z" },
+      activationId: "postgres-workflow-gate-release",
+    });
+    const thread = await client.createThread(
+      { title: "PostgreSQL Human Gate" },
+      "postgres-workflow-gate-thread",
+    );
+    await client.publishWorkflowVersion(workflowGateSource("approve"));
+    const started = await client.startWorkflowRun(
+      {
+        workflowVersionId: "workflow-gate-approve-v1",
+        threadId: thread.thread.threadId,
+        input: {},
+      },
+      "postgres-workflow-gate-start",
+    );
+    const workerConfig = {
+      connectionString,
+      schema,
+      runtimeTenantId: "tenant-e2e-1",
+      route: postgresRuntimeRoute(),
+      transport: workflowModelTransport(),
+      agentVersionRuntimeFactory: runtimeFactory,
+      agentVersionDeployments:
+        runtimeFactory.deploymentBindings("tenant-e2e-1"),
+      scanIntervalMs: null,
+    } as const;
+    const firstWorker = await createPostgresRuntimeWorker(workerConfig);
+    context.after(() => firstWorker.close());
+    let published = await client.listWorkflowHumanGates(started.run.runId);
+    await wakeUntil(firstWorker.worker, async () => {
+      await control.outboxDispatcher.wake();
+      published = await client.listWorkflowHumanGates(started.run.runId);
+      return published.data.length === 1;
+    });
+    assert.equal(control.outboxDispatcher.lastFailureCode(), null);
+    assert.equal((await client.getRun(started.run.runId)).run.status, "running");
+    await firstWorker.close();
+    const gate = published.data[0]!;
+    const decision = {
+      runId: started.run.runId,
+      nodeId: gate.nodeId,
+      claimId: gate.claimId,
+      claimEpoch: gate.claimEpoch,
+      gateRequestId: gate.gateRequestId,
+      decision: "approve" as const,
+    };
+    const recorded = await client.decideWorkflowHumanGate(
+      decision,
+      "postgres-workflow-gate-decision",
+    );
+    assert.equal(recorded.disposition, "recorded");
+    assert.equal(
+      (await client.decideWorkflowHumanGate(
+        decision,
+        "postgres-workflow-gate-decision",
+      )).disposition,
+      "replay",
+    );
+    assert.deepEqual(
+      (await client.listWorkflowHumanGates(started.run.runId)).data,
+      [],
+    );
+    const secondWorker = await createPostgresRuntimeWorker(workerConfig);
+    context.after(() => secondWorker.close());
+    await wakeUntil(
+      secondWorker.worker,
+      async () =>
+        (await client.getRun(started.run.runId)).run.status === "completed",
+    );
+    await control.outboxDispatcher.wake();
+    assert.equal(control.outboxDispatcher.lastFailureCode(), null);
+    const durable = await admin.query<{
+      attempts: string;
+      gate_publications: string;
+      terminal_events: string;
+    }>(`SELECT
+      (SELECT count(*)::text FROM "${schema}".run_attempts WHERE run_id=$1) attempts,
+      (SELECT count(*)::text FROM "${schema}".outbox WHERE run_id=$1
+        AND topic='workflow.gate.requested'
+        AND status='delivered') gate_publications,
+      (SELECT count(*)::text FROM "${schema}".run_events WHERE run_id=$1
+        AND event_json->>'type'='run.completed') terminal_events`,
+    [started.run.runId]);
+    assert.deepEqual(durable.rows[0], {
+      attempts: "2",
+      gate_publications: "1",
+      terminal_events: "1",
+    });
+  },
+);
+
+test(
   "allows exactly one of two PostgreSQL Worker processes to execute a Run",
   { skip: postgresConnectionString === undefined },
   async (context) => {
