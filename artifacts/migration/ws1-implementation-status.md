@@ -64,16 +64,21 @@
   close/reopen 纵向覆盖 assistant continuation，旧 GET=`0`、恢复模型采样=`1`，两个 dispatch、Attempt、原/重试 WorkItem、
   continuation 清理与唯一 terminal event 全部收敛。SQLite Store 全量 `357 passed / 64 conditional skips / 0 failed`，
   Runtime Worker 定向 `7/7`；PostgreSQL 条件矩阵已落代码，但本机当前无 `CREWON_TEST_POSTGRES_URL`，未把 skip 记为通过。
+- Pending Workflow Tool continuation 也已接入同一个 Store-owned resume authority：SQLite/PostgreSQL 原子接管未完成的
+  Tool receipt、同一 running Tool Step/Attempt 与 parent continuation；`prepared` 只允许 execute 一次，`dispatched`/
+  `unknownOutcome` 只能 reconcile。没有 receipt 的合法 crash window 会在当前 reconcile lease 下 fresh prepare 一次，
+  不会被误判为 authority 缺失。真实 SQLite Worker close/reopen 纵向证明 external execute=`1`、reconcile=`1`、Tool Attempt
+  数量=`1`、唯一 `tool.completed`、parent node 与 reconcile WorkItem 终态收敛。PostgreSQL 同时补齐 canonical
+  `tool.completed` Run snapshot/event/outbox 原子持久化；本机 PG 条件用例仍因缺 URL 明确未验证。
 - desktop release workflow 现在同时绑定 immutable tag、`origin/main` ancestry、远端 tag/main 无漂移以及 exact commit SHA/App ID 的
   required checks；macOS/Windows 均验证实际 updater 签名后才允许上传，Windows launch smoke 还按本次 install root/app binary
   精确检测 GUI/Node/guardian orphan。确定性 release/staging/Windows process tests 为 `16/16`，YAML 与 smoke syntax 通过。
 - 当前仍是 `In progress`：正式 Apple Developer ID/notarization/staple、Windows PFX/AuthentiCode timestamp/NSIS 实机、GitHub hosted
   release publish、真实 Identity/PIM 多租户部署、跨主机 PostgreSQL/Worker 网络分区、备份恢复与 SLO 仍需外部 runner、凭据和环境。
   本地 Tauri 已生成 `.app` 与 updater archive，但因没有 `TAURI_SIGNING_PRIVATE_KEY` 按设计返回失败，未使用 unsigned fallback。
-  continuation 主接管已落地，但完整迁移仍不能标记完成：未提交 Tool continuation 的 prepared/dispatched Tool receipt 仍绑定旧
-  node WorkItem，恢复只会安全重试而不能接管；resume 后新 response 的 GET 若返回合法 nonterminal 结果仍无法原子提交下一
-  continuation；`possiblySent` 在 provider 没有 durable locator/idempotency 保证时只能 fail closed，尚缺有界 operator-required
-  终态。这三项仍是 transaction P0，不能用盲目重发 POST 或兼容 fallback 掩盖。
+  continuation 与 pending Tool 接管已落地，但完整迁移仍不能标记完成：resume 后新 response 的 GET 若返回合法 nonterminal
+  结果仍无法原子提交下一 continuation；`possiblySent` 在 provider 没有 durable locator/idempotency 保证时只能 fail closed，
+  尚缺有界 operator-required 终态。这两项仍是 transaction P0，不能用盲目重发 POST 或兼容 fallback 掩盖。
 
 ## 2026-08-13 执行方向覆盖：纯 TypeScript 快速切换
 
