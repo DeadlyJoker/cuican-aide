@@ -38,6 +38,7 @@ import {
   writePostgresWorkflowExecution,
 } from "./postgres-workflow-run-composition-transactions.ts";
 import { appendPostgresCanceledWorkflowNodeEvent } from "./postgres-workflow-cancellation-lifecycle.ts";
+import { adoptPostgresWorkflowPendingTools } from "./postgres-workflow-pending-tool-resume.ts";
 import { settlePostgresRetrievedWorkflowNode } from "./postgres-workflow-retrieved-settlement.ts";
 
 type Input = Parameters<
@@ -244,6 +245,17 @@ export async function reconcilePostgresWorkflowNode(
       reconciliationLeaseExpiresAt,
       now,
     );
+    const pendingTools = await adoptPostgresWorkflowPendingTools(
+      client,
+      schema,
+      {
+        sourceAuthority: authority,
+        reconciliationLease: input.lease,
+        continuation: resumed.continuation,
+        adoptedAt: now,
+        digester,
+      },
+    );
     return resumeRequiredResult(
       input,
       resumedExecution,
@@ -251,6 +263,7 @@ export async function reconcilePostgresWorkflowNode(
       node.inputDigest!,
       step!,
       resumed,
+      pendingTools,
     );
   }
   if (
@@ -276,6 +289,17 @@ export async function reconcilePostgresWorkflowNode(
       reconciliationLeaseExpiresAt,
       now,
     );
+    const pendingTools = await adoptPostgresWorkflowPendingTools(
+      client,
+      schema,
+      {
+        sourceAuthority: authority,
+        reconciliationLease: input.lease,
+        continuation: resumed.continuation,
+        adoptedAt: now,
+        digester,
+      },
+    );
     return resumeRequiredResult(
       input,
       resumedExecution,
@@ -283,6 +307,7 @@ export async function reconcilePostgresWorkflowNode(
       node.inputDigest!,
       step!,
       resumed,
+      pendingTools,
     );
   }
   const evidenceStatus =
@@ -551,6 +576,17 @@ export async function reconcilePostgresWorkflowNode(
         reconciliationLeaseExpiresAt,
         now,
       );
+      const pendingTools = await adoptPostgresWorkflowPendingTools(
+        client,
+        schema,
+        {
+          sourceAuthority: authority,
+          reconciliationLease: input.lease,
+          continuation: resumed.continuation,
+          adoptedAt: now,
+          digester,
+        },
+      );
       return resumeRequiredResult(
         input,
         resumedExecution,
@@ -558,6 +594,7 @@ export async function reconcilePostgresWorkflowNode(
         node.inputDigest!,
         step!,
         resumed,
+        pendingTools,
       );
     }
     return structuredClone({
@@ -696,6 +733,7 @@ function resumeRequiredResult(
   inputDigest: string,
   step: NonNullable<Awaited<ReturnType<typeof loadPostgresRunStep>>>,
   resumed: Awaited<ReturnType<typeof takeOverPostgresWorkflowContinuation>>,
+  pendingTools: Awaited<ReturnType<typeof adoptPostgresWorkflowPendingTools>>,
 ): Result {
   return structuredClone({
     disposition: "resumeRequired" as const,
@@ -712,6 +750,7 @@ function resumeRequiredResult(
       attempt: resumed.attempt,
       reconciliationLease: input.lease,
       continuation: resumed.continuation,
+      pendingTools,
     },
     execution,
     handoff: {
