@@ -11,7 +11,6 @@ import {
 } from "@crewon/application";
 import {
   compileWorkflowVersion,
-  createWorkflowNodeTerminalEvidence,
   prepareToolExecutionReceipt,
   reduceRunLifecycleEvent,
   serializeCompiledWorkflowVersion,
@@ -852,13 +851,9 @@ test(
       assert.equal(uncommittedResponse.disposition, "retrieveRequired");
       if (uncommittedResponse.disposition !== "retrieveRequired")
         assert.fail("retrieval required");
-      const evidence = createWorkflowNodeTerminalEvidence({
-        workflow,
-        nodeId: work.nodeId,
-        outcome: { status: "completed", value: {} },
-        digester,
-      });
-      const settled = await store.settleRetrievedWorkflowNode({
+      const retrievedSegmentId = `segment:${attempt.attemptId}:round:2`;
+      const prior = uncommittedResponse.recovery.priorContinuation;
+      const committed = await store.commitRetrievedWorkflowNodeContinuation({
         ...reconciliationInput,
         lease: secondLease,
         agentVersionId: "agent-v1",
@@ -875,22 +870,80 @@ test(
           expectedRevision: uncommittedResponse.recovery.dispatch.revision,
           status: "responseObserved",
         },
-        evidence,
-        dispatchTerminalOutcome: {
-          kind: "completed",
-          code: null,
-          certainty: "responseObserved",
+        priorContinuation: prior,
+        payload: {
+          events: [
+            {
+              schemaVersion: "crewon.agent-event.v0",
+              runId: "run-1",
+              segmentId: retrievedSegmentId,
+              sequence: 1,
+              type: "tool.requested",
+              data: {
+                callId: "retrieved-call-1",
+                kind: "function",
+                name: "workspace.read",
+                input: '{"path":"AGENTS.md"}',
+              },
+            },
+          ],
+          assistantContinuation: null,
+          next: {
+            schemaVersion: "crewon.workflow-node-continuation.v0",
+            segmentId: retrievedSegmentId,
+            modelSampleIndex: (prior?.modelSampleIndex ?? 0) + 1,
+            toolRoundsConsumed: prior?.toolRoundsConsumed ?? 0,
+            providerCheckpoint: nextProviderCheckpoint,
+            providerTurnState: null,
+            history: [
+              ...(prior?.history ?? []),
+              {
+                type: "tool_call",
+                kind: "function",
+                callId: "retrieved-call-1",
+                name: "workspace.read",
+                input: '{"path":"AGENTS.md"}',
+              },
+            ],
+          },
         },
       });
       assert.deepEqual(
         [
-          settled.disposition,
-          settled.execution.nodes.find((node) => node.nodeId === work.nodeId)
+          committed.disposition,
+          committed.execution.nodes.find((node) => node.nodeId === work.nodeId)
             ?.status,
-          settled.handoff.currentWorkItem,
+          committed.handoff.currentWorkItem,
+          committed.resume.pendingTools.length,
         ],
-        ["settled", "completed", "completed"],
+        ["resumeRequired", "running", "retained", 0],
       );
+      const retrievedDurable = await pool.query<{
+        run_events: number;
+        agent_events: number;
+        outbox_messages: number;
+      }>(
+        `SELECT
+           (SELECT count(*)::int FROM ${schema}.run_events
+            WHERE event_json->>'type'='tool.requested'
+              AND event_json->'data'->>'callId'='retrieved-call-1') run_events,
+           (SELECT count(*)::int FROM ${schema}.workflow_agent_events
+            WHERE event_json->>'type'='tool.requested'
+              AND event_json->'data'->>'callId'='retrieved-call-1') agent_events,
+           (SELECT count(*)::int FROM ${schema}.outbox
+            WHERE topic='run.updated'
+              AND message_json->'payload'->>'eventType'='tool.requested') outbox_messages`,
+      );
+      assert.deepEqual(retrievedDurable.rows[0], {
+        run_events: 1,
+        agent_events: 1,
+        outbox_messages: 1,
+      });
+      const postCommit = await store.reconcileWorkflowNode({
+        ...reconciliationInput,
+        lease: secondLease,
+      });
+      assert.equal(postCommit.disposition, "resumeRequired");
     } finally {
       await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
       await store.close();
