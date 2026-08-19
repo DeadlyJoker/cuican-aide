@@ -68,10 +68,16 @@ export async function settlePostgresWorkflowNode(
     model?.fingerprintAuthority ?? input,
     digester,
   );
-  const replay = model?.reconciliationAttempt === undefined
-    ? await loadPostgresWorkflowReceipt(
-        client, schema, input, "settleNode", fingerprint)
-    : null;
+  const replay =
+    model?.reconciliationAttempt === undefined
+      ? await loadPostgresWorkflowReceipt(
+          client,
+          schema,
+          input,
+          "settleNode",
+          fingerprint,
+        )
+      : null;
   if (replay !== null)
     return validateReplay(client, schema, input, replay, digester);
   const now = await validatePostgresWorkflowLease(client, schema, input);
@@ -173,7 +179,10 @@ export async function settlePostgresWorkflowNode(
       workItemId: attemptAuthority.workItemId,
       leaseEpoch: attemptAuthority.leaseEpoch,
       attempt: terminalAttempt(
-        input, now, model?.attemptCheckpointDigest ?? null),
+        input,
+        now,
+        model?.attemptCheckpointDigest ?? null,
+      ),
     });
   if (input.outcome.status !== "unknown")
     await appendPostgresWorkflowNodeTerminalEvent(
@@ -190,8 +199,8 @@ export async function settlePostgresWorkflowNode(
         operationId: input.operationId,
         status: input.outcome.status,
         resultDigest: resultDigest ?? null,
-        failureCode: input.outcome.status === "failed"
-          ? input.outcome.failureCode : null,
+        failureCode:
+          input.outcome.status === "failed" ? input.outcome.failureCode : null,
       },
       now,
       digester,
@@ -326,7 +335,13 @@ export async function settlePostgresWorkflowNode(
   };
   if (model?.reconciliationAttempt === undefined)
     await insertPostgresWorkflowReceipt(
-      client, schema, input, "settleNode", fingerprint, result);
+      client,
+      schema,
+      input,
+      "settleNode",
+      fingerprint,
+      result,
+    );
   await completePostgresWorkflowLease(client, schema, input, now);
   return structuredClone(result);
 }
@@ -408,10 +423,12 @@ async function validateReplay(
         attemptId: input.attemptId,
         operationId: input.operationId,
         status: input.outcome.status,
-        resultDigest: input.outcome.status === "completed"
-          ? node?.resultDigest ?? null : null,
-        failureCode: input.outcome.status === "failed"
-          ? input.outcome.failureCode : null,
+        resultDigest:
+          input.outcome.status === "completed"
+            ? (node?.resultDigest ?? null)
+            : null,
+        failureCode:
+          input.outcome.status === "failed" ? input.outcome.failureCode : null,
       },
       digester,
     );
@@ -504,8 +521,10 @@ export async function convergePostgresWorkflowRun(
   }
   const eventId = workflowAuthorityId("run-event", input, digester);
   const failureCode = execution.nodes.some(
-    (node) => node.status === "failed" &&
-      node.failureCode === "workflow_model_dispatch_operator_required")
+    (node) =>
+      node.status === "failed" &&
+      node.failureCode === "workflow_model_dispatch_operator_required",
+  )
     ? "workflow_model_dispatch_operator_required"
     : "workflow_node_failed";
   const event = {
