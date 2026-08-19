@@ -146,6 +146,12 @@ requireText(runtime, '"port":3221', "provider_worker_listener_missing");
 requireText(control, "127.0.0.1:3222", "workspace_control_route_missing");
 requireText(runtime, '"port":3222', "workspace_worker_listener_missing");
 requireText(bff, "CREWON_WEB_BFF_PORT=3211", "bff_port_missing");
+requireText(
+  bff,
+  "CREWON_WEB_BFF_SHUTDOWN_GRACE_MS=5000",
+  "bff_shutdown_grace_missing",
+);
+requireText(compose, "stop_grace_period: 10s", "bff_stop_grace_missing");
 requireText(control, "CREWON_CONTROL_PORT=3210", "control_port_missing");
 
 for (const name of [

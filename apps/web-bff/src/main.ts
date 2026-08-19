@@ -11,7 +11,7 @@ import { HttpIdentitySessionAdapter } from "./identity-session-adapter.ts";
 import { createWebBff } from "./web-bff.ts";
 
 const MAX_INCOMING_BODY_BYTES = 64 * 1024;
-const SHUTDOWN_GRACE_MS = 5_000;
+const MAX_SHUTDOWN_GRACE_MS = 5_000;
 
 const publicOrigin = requiredEnvironment("CREWON_WEB_PUBLIC_ORIGIN");
 const bff = createWebBff({
@@ -60,7 +60,14 @@ const server = createServer(async (incoming, outgoing) => {
     outgoing.removeListener("close", abortUpstream);
   }
 });
-shutdown = createBoundedServerShutdown(server, SHUTDOWN_GRACE_MS);
+shutdown = createBoundedServerShutdown(
+  server,
+  parseBoundedPositiveInteger(
+    process.env.CREWON_WEB_BFF_SHUTDOWN_GRACE_MS ?? "5000",
+    "CREWON_WEB_BFF_SHUTDOWN_GRACE_MS_invalid",
+    MAX_SHUTDOWN_GRACE_MS,
+  ),
+);
 
 server.requestTimeout = 30_000;
 server.headersTimeout = 10_000;
@@ -199,8 +206,16 @@ function parsePort(value: string): number {
 }
 
 function parsePositiveInteger(value: string, code: string): number {
+  return parseBoundedPositiveInteger(value, code, Number.MAX_SAFE_INTEGER);
+}
+
+function parseBoundedPositiveInteger(
+  value: string,
+  code: string,
+  maximum: number,
+): number {
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+  if (!Number.isSafeInteger(parsed) || parsed < 1 || parsed > maximum) {
     throw new Error(code);
   }
   return parsed;

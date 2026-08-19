@@ -119,6 +119,7 @@ services:
 
   web-bff:
     <<: *node-service
+    stop_grace_period: 10s
     env_file:
       - ${CREWON_WEB_BFF_ENV_FILE:-./web-bff.production.env}
     image: ${CREWON_WEB_BFF_IMAGE:-crewon-web-bff:local}
