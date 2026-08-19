@@ -473,6 +473,146 @@ test("SQLite restart resumes a durable assistant continuation without response G
   });
 });
 
+test("SQLite restart adopts a dispatched Workflow Tool Attempt before reconciling", async (t) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "crewon-tool-adoption-vertical-"),
+  );
+  const path = join(directory, "runtime.sqlite");
+  let runtime:
+    | Awaited<ReturnType<typeof createStandaloneRuntimeWorker>>
+    | undefined;
+  t.after(async () => {
+    if (runtime !== undefined) await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+  const counters = { modelPosts: 0, executes: 0, reconciles: 0 };
+  const versions = [
+    toolAgentVersion("gate-agent-v1"),
+    agentVersion("gate-verification-v1"),
+  ];
+  const config = {
+    ...baseConfig(),
+    agentVersionDeployments: versions.map((version) => ({
+      schemaVersion: "crewon.agent-version-deployment.v0" as const,
+      tenantId: "tenant-1",
+      agentVersionId: version.agentVersionId,
+      contentDigest: version.contentDigest,
+      materializationDigest: digester.sha256(
+        `materialization:${version.agentVersionId}`,
+      ),
+      authorityId: `authority-${version.agentVersionId}`,
+      workspaceBindingId: null,
+    })),
+    agentVersionRuntimeFactory: {
+      create: ({ version }: { version: { agentVersionId: string } }) =>
+        workflowToolCrashRuntime(version.agentVersionId, counters),
+    },
+  };
+  const setup = new SqliteRunStore(path, { workflowDigester: digester });
+  for (const version of versions)
+    await setup.registerAgentVersion(
+      createAgentVersionAsset({
+        tenantId: "tenant-1",
+        version,
+        createdAt: "2026-08-12T00:00:00.000Z",
+      }),
+    );
+  await activateStandaloneRuntimeAgentVersionRelease({
+    ...config,
+    databasePath: path,
+    actor: actor(),
+    authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    activationId: "activate-tool-adoption",
+  });
+  await new ThreadApplicationService({
+    store: setup,
+    authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    ids: { nextId: () => "tool-thread" },
+    digester,
+  }).createThread(actor(), {
+    kind: "thread.create",
+    idempotencyKey: "thread-tool-adoption",
+    title: "Tool adoption",
+  });
+  await setup.workflowVersionStore(digester).registerWorkflowVersion({
+    schemaVersion: "crewon.workflow-version-asset.v0",
+    tenantId: "tenant-1",
+    workflowId: workflow.workflowId,
+    workflowVersionId: workflow.workflowVersionId,
+    contentDigest: workflow.contentDigest,
+    definitionJson: serializeCompiledWorkflowVersion(workflow),
+    createdAt: "2026-08-12T00:00:00.000Z",
+  });
+  let id = 0;
+  const started = await new WorkflowRunApplicationService({
+    store: setup,
+    authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:01.000Z" },
+    workflowDigester: digester,
+    ids: { nextId: (kind) => `${kind}-${++id}` },
+    routeResolver: { resolveRoute: async () => config.route },
+  }).startWorkflowRun(actor(), {
+    kind: "workflowRun.start",
+    idempotencyKey: "start-tool-adoption",
+    workflowVersionId: workflow.workflowVersionId,
+    threadId: "tool-thread",
+    input: {},
+  });
+  const runId = started.run.state.runId;
+  await setup.close();
+
+  runtime = await openWorkflowToolCrashRuntime(
+    path,
+    config,
+    counters,
+    "tool-crash-worker",
+  );
+  await runtime.worker.wake();
+  await runtime.worker.wake();
+  assert.deepEqual(counters, { modelPosts: 1, executes: 1, reconciles: 0 });
+  assert.deepEqual(inspectWorkflowToolAdoption(path, runId), {
+    receiptStatus: "dispatched",
+    receiptWorkTrigger: "workflowNode",
+    toolAttemptStatuses: ["running"],
+    toolAttemptWorkTriggers: ["workflowNode"],
+    toolCompletedEvents: 0,
+    continuationCount: 1,
+    nodeStatus: "unknown",
+    parentAttemptStatus: "running",
+    reconcilePending: 1,
+    reconcileCompleted: 0,
+  });
+  await runtime.close();
+  runtime = undefined;
+
+  runtime = await openWorkflowToolCrashRuntime(
+    path,
+    config,
+    counters,
+    "tool-resume-worker",
+  );
+  assert.deepEqual(await runtime.worker.wake(), {
+    kind: "workflowRecovery",
+    runId,
+    code: "workflow_node_resumed_and_settled",
+  });
+  assert.deepEqual(counters, { modelPosts: 2, executes: 1, reconciles: 1 });
+  assert.deepEqual(inspectWorkflowToolAdoption(path, runId), {
+    receiptStatus: "completed",
+    receiptWorkTrigger: "workflowReconcile",
+    toolAttemptStatuses: ["completed"],
+    toolAttemptWorkTriggers: ["workflowReconcile"],
+    toolCompletedEvents: 1,
+    continuationCount: 0,
+    nodeStatus: "completed",
+    parentAttemptStatus: "completed",
+    reconcilePending: 0,
+    reconcileCompleted: 1,
+  });
+});
+
 test("SQLite Slice 4 restart settles a Store-owned terminal candidate once", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-slice-four-candidate-"));
   const path = join(directory, "runtime.sqlite");
@@ -741,6 +881,26 @@ async function openContinuationRuntime(path: string,
         runtime: continuationNodeRuntime(agentVersionId, counters) })),
   });
 }
+async function openWorkflowToolCrashRuntime(
+  path: string,
+  config: ReturnType<typeof baseConfig> & Record<string, unknown>,
+  counters: WorkflowToolCounters,
+  ownerId: string,
+) {
+  return createStandaloneRuntimeWorker({
+    ...config,
+    databasePath: path,
+    scanIntervalMs: null,
+    ownerId,
+    additionalAgentVersionRuntimes: [
+      "gate-agent-v1",
+      "gate-verification-v1",
+    ].map((agentVersionId) => ({
+      tenantId: "tenant-1",
+      runtime: workflowToolCrashRuntime(agentVersionId, counters),
+    })),
+  });
+}
 function inspectReconciliation(path: string, runId: string) {
   const database = new DatabaseSync(path);
   try {
@@ -877,6 +1037,68 @@ function inspectContinuationVertical(path: string, runId: string) {
     database.close();
   }
 }
+function inspectWorkflowToolAdoption(path: string, runId: string) {
+  const database = new DatabaseSync(path);
+  try {
+    const scalar = (sql: string) =>
+      database.prepare(sql).get(runId) as Record<string, unknown>;
+    const execution = JSON.parse(
+      String(
+        scalar("SELECT state_json FROM workflow_executions WHERE run_id=?")
+          .state_json,
+      ),
+    );
+    const toolAttempts = database
+      .prepare(
+        `SELECT run_attempts.status status,
+      json_extract(work_item_json,'$.payload.trigger') trigger FROM run_attempts
+      JOIN work_items USING(work_item_id) WHERE run_attempts.run_id=? AND step_id LIKE 'tool:%'
+      ORDER BY attempt_number`,
+      )
+      .all(runId);
+    const receipt = database
+      .prepare(
+        `SELECT tool_execution_receipts.status status,
+      json_extract(work_item_json,'$.payload.trigger') trigger FROM tool_execution_receipts
+      JOIN work_items USING(work_item_id) WHERE tool_execution_receipts.run_id=?`,
+      )
+      .get(runId)!;
+    const countWork = (status: string) =>
+      Number(
+        database
+          .prepare(
+            `SELECT count(*) count FROM work_items
+      WHERE run_id=? AND status=? AND json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`,
+          )
+          .get(runId, status)!.count,
+      );
+    return {
+      receiptStatus: receipt.status,
+      receiptWorkTrigger: receipt.trigger,
+      toolAttemptStatuses: toolAttempts.map(({ status }) => status),
+      toolAttemptWorkTriggers: toolAttempts.map(({ trigger }) => trigger),
+      toolCompletedEvents: Number(
+        scalar(`SELECT count(*) count FROM run_events WHERE run_id=?
+        AND json_extract(event_json,'$.type')='tool.completed'`).count,
+      ),
+      continuationCount: Number(
+        scalar(
+          "SELECT count(*) count FROM workflow_node_continuations WHERE run_id=?",
+        ).count,
+      ),
+      nodeStatus: execution.nodes.find(
+        (node: { nodeId: string }) => node.nodeId === "agent",
+      )?.status,
+      parentAttemptStatus: scalar(
+        "SELECT status FROM run_attempts WHERE run_id=? AND step_id='agent'",
+      ).status,
+      reconcilePending: countWork("pending"),
+      reconcileCompleted: countWork("completed"),
+    };
+  } finally {
+    database.close();
+  }
+}
 function actor() { return { principalId: "principal", actorId: "actor", tenantId: "tenant-1", spaceId: "space-1" }; }
 function allow() { return { authorize: async () => ({ outcome: "allow" as const }) }; }
 function baseConfig() { return { runtimeTenantId: "tenant-1", route: { authorityId: "authority",
@@ -941,6 +1163,135 @@ function uncertainNodeRuntime(agentVersionId: string, samples: Map<string, numbe
         modelId: "model", opaquePayload: { responseId: `${agentVersionId}-response` } } } };
       throw new WorkflowNodeSideEffectUncertainError();
     } } } as never;
+}
+type WorkflowToolCounters = {
+  modelPosts: number;
+  executes: number;
+  reconciles: number;
+};
+function workflowToolCrashRuntime(
+  agentVersionId: string,
+  counters: WorkflowToolCounters,
+) {
+  const version =
+    agentVersionId === "gate-agent-v1"
+      ? toolAgentVersion(agentVersionId)
+      : agentVersion(agentVersionId);
+  return {
+    version,
+    policy: {} as never,
+    toolRuntime: {
+      definitions: () => version.tools,
+      executionPolicy: (kind: string, name: string) =>
+        kind === "function" && name === "lookup"
+          ? {
+              effect: "readOnly" as const,
+              recovery: "replaySafe" as const,
+              resourceBindingId: null,
+              credentialBindingId: null,
+              executionTarget: {
+                kind: "control" as const,
+                bindingId: "lookup",
+              },
+              capability: "workspace.read",
+              approvalRequirement: "none" as const,
+              limits: {
+                timeoutMs: 1_000,
+                maxOutputBytes: 1_024,
+                maxArtifactBytes: 1_024,
+              },
+            }
+          : null,
+      execute: async () => {
+        counters.executes += 1;
+        throw new WorkflowNodeSideEffectUncertainError();
+      },
+      reconcile: async (command: { executionId: string }) => {
+        counters.reconciles += 1;
+        return {
+          status: "completed" as const,
+          executionId: command.executionId,
+          providerReceiptId: "tool-provider-1",
+          result: {
+            schemaVersion: "crewon.tool-result.v0" as const,
+            callId: "lookup-1",
+            output: "done",
+            isError: false,
+            artifactRef: null,
+          },
+        };
+      },
+    },
+    kernel: {
+      supportsModelDispatchEvidence: true,
+      modelIdentity: {
+        adapterName: "test",
+        adapterVersion: "1",
+        modelId: "model",
+      },
+      async *runSegment(
+        contract: {
+          runId: string;
+          segmentId: string;
+          continuation?: { kind: string };
+        },
+        _signal: AbortSignal,
+        options: {
+          controlSink?: Record<string, (value: unknown) => Promise<void>>;
+        },
+      ) {
+        counters.modelPosts += 1;
+        await crossModelDispatch(options, contract.segmentId, agentVersionId);
+        const base = {
+          schemaVersion: "crewon.agent-event.v0",
+          runId: contract.runId,
+          segmentId: contract.segmentId,
+        } as const;
+        const checkpoint = providerCheckpoint(
+          `${agentVersionId}-${counters.modelPosts}`,
+        );
+        yield {
+          ...base,
+          sequence: 1,
+          type: "segment.started",
+          data: { attempt: 1, model: "model" },
+        };
+        yield {
+          ...base,
+          sequence: 2,
+          type: "segment.provider_response_created",
+          data: { checkpoint },
+        };
+        if (counters.modelPosts === 1) {
+          yield {
+            ...base,
+            sequence: 3,
+            type: "tool.requested",
+            data: {
+              callId: "lookup-1",
+              kind: "function",
+              name: "lookup",
+              input: "{}",
+            },
+          };
+          return;
+        }
+        assert.equal(contract.continuation?.kind, "providerCheckpoint");
+        yield {
+          ...base,
+          sequence: 3,
+          type: "model.output.delta",
+          data: { delta: "{}" },
+        };
+        yield {
+          ...base,
+          sequence: 4,
+          type: "segment.completed",
+          data: { output: "{}" },
+        };
+      },
+    },
+  } as never;
 }
 type ContinuationCounters = {
   initialPosts: number;
@@ -1120,3 +1471,37 @@ function agentVersion(agentVersionId: string) { return compileAgentVersion({
     modelId: "model", contextWindowTokens: 128_000, autoCompactAtTokens: null },
   execution: { streamMaxRetries: 1, maxToolRounds: 1 }, resources: {
     workspaceRequired: false, governedContextDigest: null }, tools: [] }, digester); }
+function toolAgentVersion(agentVersionId: string) {
+  return compileAgentVersion(
+    {
+      schemaVersion: "crewon.agent-version-source.v0",
+      agentVersionId,
+      runtimeGeneration: "ts-v0",
+      policySnapshotId: "policy-1",
+      instructions: null,
+      model: {
+        adapterName: "test",
+        adapterVersion: "1",
+        modelId: "model",
+        contextWindowTokens: 128_000,
+        autoCompactAtTokens: null,
+      },
+      execution: { streamMaxRetries: 1, maxToolRounds: 1 },
+      resources: {
+        workspaceRequired: false,
+        governedContextDigest: null,
+      },
+      tools: [
+        {
+          schemaVersion: "crewon.tool-definition.v0",
+          kind: "function",
+          name: "lookup",
+          description: "Lookup",
+          execution: "serial",
+          inputSchema: schema,
+        },
+      ],
+    },
+    digester,
+  );
+}
