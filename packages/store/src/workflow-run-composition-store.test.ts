@@ -534,23 +534,6 @@ test("SQLite cancellation abandons possibly-sent model evidence and converges", 
     claimEpoch: work.claimEpoch, stepId: attempt.stepId, attemptId: attempt.attemptId,
     operationId: "settle-unknown", outcome: { status: "unknown" } });
   assert.equal(unknown.disposition, "reconciliationScheduled");
-  clock.set(Date.parse("2026-08-12T00:00:01.000Z"));
-  const firstReconcileClaim = await store.claimNextWorkItem({ ownerId: "reconcile-worker",
-    leaseId: "first-reconcile-lease", leaseDurationMs: 60_000 });
-  assert.equal(firstReconcileClaim?.workItem.workItemId, unknown.handoff.nextWorkItemId);
-  const firstReconcilePayload = firstReconcileClaim!.workItem.payload as Record<string, unknown>;
-  const firstReconcile = await store.reconcileWorkflowNode({ tenantId: "tenant-1", runId: "run-1",
-    binding, lease: { workItemId: firstReconcileClaim!.workItem.workItemId,
-      ownerId: "reconcile-worker", leaseId: "first-reconcile-lease",
-      leaseEpoch: firstReconcileClaim!.lease.epoch }, nodeId: work.nodeId, claimId: work.claimId,
-    claimEpoch: work.claimEpoch,
-    reconciliationOperationId: String(firstReconcilePayload.reconciliationOperationId) });
-  assert.deepEqual([firstReconcile.disposition, firstReconcile.evidenceStatus,
-    firstReconcile.handoff.currentWorkItem], ["retryRequired", "possiblySent", "retained"]);
-  await store.retryWorkItem({ workItemId: firstReconcileClaim!.workItem.workItemId,
-    ownerId: "reconcile-worker", leaseId: "first-reconcile-lease",
-    leaseEpoch: firstReconcileClaim!.lease.epoch, retryAfterMs: 0,
-    reasonCode: "workflow_reconciliation_retry_required" });
   await new RunApplicationService({ store,
     authorization: { authorize: async () => ({ outcome: "allow" }) },
     clock: { now: () => "2026-08-12T00:00:01.000Z" },
@@ -603,6 +586,170 @@ test("SQLite cancellation abandons possibly-sent model evidence and converges", 
   assert.equal(database.prepare(`SELECT count(*) count FROM work_items WHERE status='pending' AND
     json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`).get()!.count, 0);
   database.close();
+});
+
+test("SQLite possibly-sent reconciliation requires an operator exactly once", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-workflow-operator-required-"));
+  const path = join(directory, "operator.sqlite");
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  const store = new SqliteRunStore(path, { workflowDigester: digester, clock });
+  t.after(() => store.close());
+  const single = compileWorkflowVersion({ ...source,
+    workflowId: "operator-workflow", workflowVersionId: "operator-version",
+    entryNodeIds: ["agent"], outputNodeIds: ["verify"], nodes: [
+      { ...common("agent"), kind: "agent", agentVersionId: "agent-v1" },
+      { ...common("verify", ["agent"]),
+        kind: "verification", verifierAgentVersionId: "verifier-v1" },
+    ] }, digester);
+  const singleBinding = { workflowId: single.workflowId,
+    workflowVersionId: single.workflowVersionId, contentDigest: single.contentDigest };
+  await seed(path, clock.nowEpochMilliseconds() + 60_000, single, singleBinding);
+  const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+    lease, binding: singleBinding, schedulerOperationId: "operator-schedule",
+    workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+  const lane = await admitSqliteWorkflowLane(store, scheduled.nodeWorkItems[0]!, singleBinding, 0,
+    "operator-schedule");
+  const dispatchDatabase = new DatabaseSync(path);
+  const prepared = prepareSqliteModelDispatch(dispatchDatabase, { tenantId: "tenant-1",
+    runId: "run-1", lease: lane.lease, attempt: lane.attempt,
+    operationId: "operator-dispatch", requestSequence: 1, operation: "dispatch",
+    requestDigest: digester.sha256("request"), provider: { agentVersionId: "agent-v1",
+      adapterName: "responses", adapterVersion: "1", modelId: "model" },
+    preparedAt: "2026-08-12T00:00:00.000Z" });
+  markSqliteModelDispatchPossiblySent(dispatchDatabase, { tenantId: "tenant-1", runId: "run-1",
+    lease: lane.lease, attempt: lane.attempt, operationId: prepared.operationId,
+    requestSequence: 1, expectedRevision: prepared.revision,
+    transitionedAt: "2026-08-12T00:00:00.000Z" });
+  dispatchDatabase.close();
+  const unknown = await store.settleWorkflowNode({ tenantId: "tenant-1", runId: "run-1",
+    lease: lane.lease, binding: singleBinding, nodeId: lane.work.nodeId,
+    claimId: lane.work.claimId, claimEpoch: lane.work.claimEpoch, stepId: lane.attempt.stepId,
+    attemptId: lane.attempt.attemptId, operationId: "operator-unknown",
+    outcome: { status: "unknown" } });
+  clock.set(Date.parse("2026-08-12T00:00:01.000Z"));
+  const claim = await store.claimNextWorkItem({ ownerId: "reconcile-worker",
+    leaseId: "reconcile-lease", leaseDurationMs: 60_000 });
+  assert.equal(claim?.workItem.workItemId, unknown.handoff.nextWorkItemId);
+  const input = { tenantId: "tenant-1", runId: "run-1", binding: singleBinding,
+    lease: { workItemId: claim!.workItem.workItemId, ownerId: "reconcile-worker",
+      leaseId: "reconcile-lease", leaseEpoch: claim!.lease.epoch }, nodeId: lane.work.nodeId,
+    claimId: lane.work.claimId, claimEpoch: lane.work.claimEpoch,
+    reconciliationOperationId: String(claim!.workItem.payload.reconciliationOperationId) };
+  const result = await store.reconcileWorkflowNode(input);
+  assert.deepEqual([result.disposition, result.evidenceStatus, result.handoff.currentWorkItem,
+    result.execution.status, result.runDisposition], ["operatorRequired", "possiblySent",
+    "completed", "failed", "terminalConverged"]);
+  assert.deepEqual(result.execution.nodes.map((node) => ({ nodeId: node.nodeId,
+    status: node.status, failureCode: node.failureCode })), [
+      { nodeId: "agent", status: "failed",
+        failureCode: "workflow_model_dispatch_operator_required" },
+      { nodeId: "verify", status: "canceled", failureCode: null },
+    ]);
+  const replay = await store.reconcileWorkflowNode(input);
+  assert.deepEqual([replay.disposition, replay.evidenceStatus, replay.handoff.currentWorkItem,
+    replay.runDisposition], ["replay", "possiblySent", "completed", "terminalConverged"]);
+  const database = new DatabaseSync(path);
+  assert.deepEqual({ ...database.prepare(`SELECT
+    (SELECT status FROM work_items WHERE work_item_id=?) workStatus,
+    (SELECT status FROM run_steps WHERE step_id='agent') stepStatus,
+    (SELECT status FROM run_attempts WHERE attempt_id=?) attemptStatus,
+    (SELECT json_extract(state_json,'$.failure.code') FROM run_attempts
+      WHERE attempt_id=?) attemptCode,
+    (SELECT status FROM model_dispatch_receipts WHERE operation_id='operator-dispatch') dispatchStatus,
+    (SELECT json_extract(state_json,'$.terminalOutcome.certainty') FROM model_dispatch_receipts
+      WHERE operation_id='operator-dispatch') dispatchCertainty,
+    (SELECT json_extract(state_json,'$.terminalOutcome.code') FROM model_dispatch_receipts
+      WHERE operation_id='operator-dispatch') dispatchCode,
+    (SELECT json_extract(state_json,'$.failure.code') FROM run_snapshots
+      WHERE run_id='run-1') runCode,
+    (SELECT count(*) FROM workflow_composition_receipts
+      WHERE operation_id=?) receiptCount`).get(input.lease.workItemId, lane.attempt.attemptId,
+        lane.attempt.attemptId, input.reconciliationOperationId) }, {
+    workStatus: "completed", stepStatus: "failed", attemptStatus: "failed",
+    attemptCode: "workflow_model_dispatch_operator_required", dispatchStatus: "terminal",
+    dispatchCertainty: "operatorRequired", dispatchCode: "workflow_model_dispatch_operator_required",
+    runCode: "workflow_model_dispatch_operator_required", receiptCount: 1 });
+  database.prepare(`UPDATE model_dispatch_receipts SET state_json=json_set(state_json,
+    '$.terminalOutcome.code','forged') WHERE operation_id='operator-dispatch'`).run();
+  database.close();
+  await assert.rejects(store.reconcileWorkflowNode(input), (error: unknown) =>
+    error instanceof RunStoreError && error.code === "workflow_reconciliation_replay_corrupt");
+});
+
+test("SQLite operator-required settlement retains a foreign running sibling", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-workflow-operator-parallel-"));
+  const path = join(directory, "operator.sqlite");
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const clock = mutableClock(Date.parse("2026-08-12T00:00:00.000Z"));
+  const store = new SqliteRunStore(path, { workflowDigester: digester, clock });
+  t.after(() => store.close());
+  const parallel = compileWorkflowVersion({ ...source,
+    workflowId: "operator-parallel", workflowVersionId: "operator-parallel-v1",
+    entryNodeIds: ["left", "right"], outputNodeIds: ["join"], nodes: [
+      { ...common("left"), kind: "agent", agentVersionId: "agent-v1" },
+      { ...common("right"), kind: "agent", agentVersionId: "agent-v1" },
+      { ...common("join", ["left", "right"]), inputSchema: { ...fanInSchema,
+        properties: { left: objectSchema, right: objectSchema }, required: ["left", "right"] },
+        kind: "verification", verifierAgentVersionId: "verifier-v1" },
+    ] }, digester);
+  const parallelBinding = { workflowId: parallel.workflowId,
+    workflowVersionId: parallel.workflowVersionId, contentDigest: parallel.contentDigest };
+  await seed(path, clock.nowEpochMilliseconds() + 60_000, parallel, parallelBinding);
+  const scheduled = await store.scheduleWorkflowNodes({ tenantId: "tenant-1", runId: "run-1",
+    lease, binding: parallelBinding, schedulerOperationId: "operator-parallel-schedule",
+    workflowInput: { valueId: "root-value-1", valueDigest: digester.sha256("{}") } });
+  const left = await admitSqliteWorkflowLane(store, scheduled.nodeWorkItems[0]!, parallelBinding,
+    0, "operator-parallel-schedule");
+  const right = await admitSqliteWorkflowLane(store, scheduled.nodeWorkItems[1]!, parallelBinding,
+    1, "operator-parallel-schedule");
+  const dispatchDatabase = new DatabaseSync(path);
+  const prepared = prepareSqliteModelDispatch(dispatchDatabase, { tenantId: "tenant-1",
+    runId: "run-1", lease: left.lease, attempt: left.attempt,
+    operationId: "operator-parallel-dispatch", requestSequence: 1, operation: "dispatch",
+    requestDigest: digester.sha256("left"), provider: { agentVersionId: "agent-v1",
+      adapterName: "responses", adapterVersion: "1", modelId: "model" },
+    preparedAt: "2026-08-12T00:00:00.000Z" });
+  markSqliteModelDispatchPossiblySent(dispatchDatabase, { tenantId: "tenant-1", runId: "run-1",
+    lease: left.lease, attempt: left.attempt, operationId: prepared.operationId,
+    requestSequence: 1, expectedRevision: prepared.revision,
+    transitionedAt: "2026-08-12T00:00:00.000Z" });
+  dispatchDatabase.close();
+  const unknown = await store.settleWorkflowNode({ tenantId: "tenant-1", runId: "run-1",
+    lease: left.lease, binding: parallelBinding, nodeId: left.work.nodeId,
+    claimId: left.work.claimId, claimEpoch: left.work.claimEpoch, stepId: left.attempt.stepId,
+    attemptId: left.attempt.attemptId, operationId: "operator-parallel-unknown",
+    outcome: { status: "unknown" } });
+  clock.set(Date.parse("2026-08-12T00:00:01.000Z"));
+  const claim = await store.claimNextWorkItem({ ownerId: "reconcile-worker",
+    leaseId: "reconcile-lease", leaseDurationMs: 60_000 });
+  assert.equal(claim?.workItem.workItemId, unknown.handoff.nextWorkItemId);
+  const input = { tenantId: "tenant-1", runId: "run-1", binding: parallelBinding,
+    lease: { workItemId: claim!.workItem.workItemId, ownerId: "reconcile-worker",
+      leaseId: "reconcile-lease", leaseEpoch: claim!.lease.epoch }, nodeId: left.work.nodeId,
+    claimId: left.work.claimId, claimEpoch: left.work.claimEpoch,
+    reconciliationOperationId: String(claim!.workItem.payload.reconciliationOperationId) };
+  const result = await store.reconcileWorkflowNode(input);
+  assert.deepEqual([result.disposition, result.runDisposition, result.execution.status,
+    result.handoff.currentWorkItem, result.handoff.kind, result.handoff.nextWorkItemId],
+  ["operatorRequired", "nonTerminal", "running", "completed", "none", null]);
+  assert.deepEqual(result.execution.nodes.map((node) => ({ nodeId: node.nodeId,
+    status: node.status, failureCode: node.failureCode })), [
+      { nodeId: "left", status: "failed",
+        failureCode: "workflow_model_dispatch_operator_required" },
+      { nodeId: "right", status: "running", failureCode: null },
+      { nodeId: "join", status: "canceled", failureCode: null },
+    ]);
+  const database = new DatabaseSync(path);
+  assert.deepEqual({ ...database.prepare(`SELECT status,lease_owner_id ownerId,lease_id leaseId,
+    lease_epoch leaseEpoch FROM work_items WHERE work_item_id=?`).get(right.lease.workItemId) },
+  { status: "leased", ownerId: right.lease.ownerId, leaseId: right.lease.leaseId,
+    leaseEpoch: right.lease.leaseEpoch });
+  assert.deepEqual({ ...database.prepare(`SELECT status,work_item_id workItemId,
+    lease_epoch leaseEpoch FROM run_attempts WHERE attempt_id=?`).get(right.attempt.attemptId) },
+  { status: "running", workItemId: right.lease.workItemId, leaseEpoch: right.lease.leaseEpoch });
+  database.close();
+  assert.equal((await store.reconcileWorkflowNode(input)).disposition, "replay");
 });
 
 test("SQLite cancellation wins over a late response terminal candidate", async (t) => {
@@ -2548,6 +2695,27 @@ async function seedPostgresSchedulerWork(
       clock_timestamp()+$6::interval,1)`,
     [workItemId, item, now, lease.ownerId, lease.leaseId, expiry],
   );
+}
+
+async function admitSqliteWorkflowLane(
+  store: SqliteRunStore,
+  work: Readonly<{ nodeId: string; claimId: string; claimEpoch: number; workItemId: string }>,
+  bindingValue: typeof binding,
+  index: number,
+  schedulerOperationId: string,
+) {
+  const ownerId = `node-worker-${index}`;
+  const leaseId = `node-lease-${index}`;
+  const claim = await store.claimNextWorkItem({ ownerId, leaseId, leaseDurationMs: 60_000 });
+  assert.equal(claim?.workItem.workItemId, work.workItemId);
+  const laneLease = { workItemId: work.workItemId, ownerId, leaseId,
+    leaseEpoch: claim!.lease.epoch };
+  const admitted = await store.admitWorkflowNodeWork({ tenantId: "tenant-1", runId: "run-1",
+    lease: laneLease, binding: bindingValue, nodeId: work.nodeId, claimId: work.claimId,
+    claimEpoch: work.claimEpoch, schedulerOperationId,
+    admissionOperationId: `admit-${work.nodeId}`, attemptLeaseDurationMs: 60_000 });
+  assert.equal(admitted.disposition, "fresh");
+  return { work, lease: laneLease, attempt: admitted.admission!.attempt };
 }
 
 async function seed(

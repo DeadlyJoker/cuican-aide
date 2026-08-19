@@ -89,6 +89,9 @@ type Dependencies = Readonly<{
   clock?: LeaseClock;
 }>;
 
+const WORKFLOW_MODEL_DISPATCH_OPERATOR_REQUIRED =
+  "workflow_model_dispatch_operator_required";
+
 /** SQLite production composition authority. Every admission is one IMMEDIATE transaction. */
 export class SqliteWorkflowRunCompositionStore
   implements
@@ -786,6 +789,8 @@ export class SqliteWorkflowRunCompositionStore
         const envelope = replay as Record<string, unknown>;
         if (envelope.cancellationWinner === true)
           await this.#validateCanceledReconciliationReplay(input, replay);
+        if (envelope.disposition === "operatorRequired")
+          this.#validateOperatorRequiredReconciliationReplay(input, replay);
         const { cancellationWinner: _marker, ...publicReplay } = envelope;
         this.#database.exec("COMMIT");
         return structuredClone({ ...publicReplay, disposition: "replay" } as
@@ -1195,11 +1200,42 @@ export class SqliteWorkflowRunCompositionStore
           this.#database.exec("COMMIT");
           return structuredClone(result);
         }
+        const terminal = terminateSqliteModelDispatchForAttempt(this.#database, {
+          tenantId: input.tenantId, runId: input.runId,
+          attempt: { stepId: input.nodeId, attemptId: attempt.attemptId },
+          attemptWorkItemId: attempt.workItemId,
+          attemptLeaseEpoch: attempt.leaseEpoch,
+          operationId: dispatch!.operationId,
+          requestSequence: dispatch!.requestSequence,
+          expectedRevision: dispatch!.revision,
+          transitionedAt: now,
+          outcome: { kind: "failed",
+            code: WORKFLOW_MODEL_DISPATCH_OPERATOR_REQUIRED,
+            certainty: "operatorRequired" },
+        });
+        const settlementInput = { tenantId: input.tenantId, runId: input.runId,
+          lease: input.lease, binding: input.binding, nodeId: input.nodeId,
+          claimId: input.claimId, claimEpoch: input.claimEpoch,
+          stepId: input.nodeId, attemptId: attempt.attemptId,
+          operationId: `reconcile-operator:${input.reconciliationOperationId}`,
+          outcome: { status: "failed" as const,
+            failureCode: WORKFLOW_MODEL_DISPATCH_OPERATOR_REQUIRED } };
+        const settled = settleSqliteWorkflowNodeWithinTransaction(
+          { ...this.#nodeSettlementContext(), receipt: () => null,
+            insertReceipt: () => undefined }, settlementInput,
+          this.#fingerprint("reconcileOperatorRequired", { input, evidenceStatus }),
+          now, nowMs, { attemptAuthority: { workItemId: attempt.workItemId,
+            leaseEpoch: attempt.leaseEpoch },
+            attemptCheckpointDigest: terminal.responseCheckpointDigest });
+        if (settled.handoff.currentWorkItem !== "completed")
+          throw new RunStoreError("workflow_reconciliation_handoff_corrupt");
+        const result = { disposition: "operatorRequired" as const,
+          evidenceStatus, execution: settled.execution,
+          handoff: { ...settled.handoff, currentWorkItem: "completed" as const },
+          runDisposition: settled.runDisposition };
+        this.#insertReceipt(receiptInput, "reconcileNode", fingerprint, result);
         this.#database.exec("COMMIT");
-        return { disposition: "retryRequired" as const, evidenceStatus,
-          execution: execution!, handoff: { currentWorkItem: "retained" as const,
-            nextWorkItemId: null, kind: "none" as const },
-          runDisposition: "nonTerminal" as const };
+        return structuredClone(result);
       }
       const result = { disposition: "evidenceInsufficient" as const,
         evidenceStatus, execution: execution!, handoff: {
@@ -2544,6 +2580,113 @@ export class SqliteWorkflowRunCompositionStore
     }
   }
 
+  #validateOperatorRequiredReconciliationReplay(
+    input: Parameters<WorkflowRunCompositionStore["reconcileWorkflowNode"]>[0],
+    replay: unknown,
+  ): void {
+    try {
+      const result = replay as Record<string, unknown>;
+      if (stableJson(Object.keys(result).sort()) !== stableJson([
+        "disposition", "evidenceStatus", "execution", "handoff", "runDisposition",
+      ]) || result.disposition !== "operatorRequired" ||
+          result.evidenceStatus !== "possiblySent") throw new Error("receipt mismatch");
+      const receiptExecution = result.execution as
+        import("@crewon/application").WorkflowExecutionState;
+      validateWorkflowExecutionState(receiptExecution);
+      const receiptNode = receiptExecution.nodes.find((node) => node.nodeId === input.nodeId);
+      const execution = this.#loadExecution(input.tenantId, input.runId);
+      const node = execution?.nodes.find((candidate) => candidate.nodeId === input.nodeId);
+      const step = loadSqliteRunStep(this.#database, { tenantId: input.tenantId,
+        runId: input.runId, stepId: input.nodeId });
+      const attempt = step?.currentAttemptId === null || step === null ? null
+        : loadSqliteRunAttempt(this.#database, { tenantId: input.tenantId,
+            runId: input.runId, stepId: input.nodeId, attemptId: step.currentAttemptId });
+      const handoff = result.handoff as Record<string, unknown>;
+      const work = this.#database.prepare(`SELECT status,lease_owner_id,lease_id,lease_epoch,
+        lease_expires_at_ms,work_item_json FROM work_items WHERE work_item_id=?`)
+        .get(input.lease.workItemId) as { status: string; lease_owner_id: string | null;
+          lease_id: string | null; lease_epoch: number; lease_expires_at_ms: number | null;
+          work_item_json: string } | undefined;
+      const workPayload = work === undefined ? null
+        : (JSON.parse(work.work_item_json) as { payload?: unknown }).payload;
+      if (receiptNode?.status !== "failed" ||
+          receiptNode.failureCode !== WORKFLOW_MODEL_DISPATCH_OPERATOR_REQUIRED ||
+          receiptExecution.schemaVersion !== "crewon.workflow-execution.v0" ||
+          receiptExecution.tenantId !== input.tenantId || receiptExecution.runId !== input.runId ||
+          receiptExecution.workflowId !== input.binding.workflowId ||
+          receiptExecution.workflowVersionId !== input.binding.workflowVersionId ||
+          receiptExecution.contentDigest !== input.binding.contentDigest ||
+          receiptNode.claimId !== input.claimId || receiptNode.claimEpoch !== input.claimEpoch ||
+          node?.status !== "failed" || node.failureCode !== WORKFLOW_MODEL_DISPATCH_OPERATOR_REQUIRED ||
+          node.claimId !== input.claimId || node.claimEpoch !== input.claimEpoch ||
+          step?.status !== "failed" || step.currentAttemptId !== attempt?.attemptId ||
+          attempt?.status !== "failed" ||
+          attempt.failure?.code !== WORKFLOW_MODEL_DISPATCH_OPERATOR_REQUIRED ||
+          attempt.failure.retryable !== false || handoff.currentWorkItem !== "completed" ||
+          work?.status !== "completed" || work.lease_owner_id !== null || work.lease_id !== null ||
+          work.lease_expires_at_ms !== null || work.lease_epoch !== input.lease.leaseEpoch ||
+          stableJson(workPayload) !== stableJson({
+            schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+            trigger: "workflowReconcile", binding: input.binding, nodeId: input.nodeId,
+            claimId: input.claimId, claimEpoch: input.claimEpoch,
+            reconciliationOperationId: input.reconciliationOperationId }))
+        throw new Error("terminal authority mismatch");
+      const dispatchRows = this.#database.prepare(`SELECT operation_id FROM model_dispatch_receipts
+        WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=?
+        ORDER BY request_sequence,revision`).all(
+          input.tenantId, input.runId, input.nodeId, attempt.attemptId) as
+            { operation_id: string }[];
+      const dispatches = dispatchRows.map((row) =>
+        loadSqliteModelDispatchReceipt(this.#database, { tenantId: input.tenantId,
+            runId: input.runId, stepId: input.nodeId, attemptId: attempt.attemptId,
+            operationId: row.operation_id }));
+      const operatorDispatches = dispatches.filter((dispatch) =>
+        dispatch?.status === "terminal" &&
+        stableJson(dispatch.terminalOutcome) === stableJson({ kind: "failed",
+          code: WORKFLOW_MODEL_DISPATCH_OPERATOR_REQUIRED,
+          certainty: "operatorRequired" }));
+      const highestDispatch = dispatches.at(-1);
+      if (dispatches.length === 0 || dispatches.some((dispatch) => dispatch === null ||
+          dispatch.status !== "terminal" || dispatch.workItemId !== attempt.workItemId ||
+          dispatch.leaseEpoch !== attempt.leaseEpoch) || operatorDispatches.length !== 1 ||
+          highestDispatch !== operatorDispatches[0]) throw new Error("dispatch mismatch");
+      const terminalReplayInput = { tenantId: input.tenantId, runId: input.runId,
+        lease: input.lease, binding: input.binding, nodeId: input.nodeId,
+        claimId: input.claimId, claimEpoch: input.claimEpoch, stepId: input.nodeId,
+        attemptId: attempt.attemptId,
+        operationId: `reconcile-operator:${input.reconciliationOperationId}`,
+        outcome: { status: "failed" as const,
+          failureCode: WORKFLOW_MODEL_DISPATCH_OPERATOR_REQUIRED } };
+      this.#validateNodeTerminalReplay(terminalReplayInput);
+      if (result.runDisposition === "terminalConverged") {
+        if (receiptExecution.status !== "failed" || execution?.status !== "failed")
+          throw new Error("terminal run mismatch");
+        this.#validateTerminalReplay(terminalReplayInput, replay);
+      } else if (result.runDisposition === "nonTerminal") {
+        const next = handoff.nextWorkItemId;
+        if (receiptExecution.status !== "running" ||
+            (handoff.kind !== "none" && handoff.kind !== "scheduler") ||
+            (handoff.kind === "none" ? next !== null : typeof next !== "string"))
+          throw new Error("nonterminal handoff mismatch");
+        if (handoff.kind === "scheduler") {
+          if (typeof next !== "string") throw new Error("scheduler handoff mismatch");
+          const nextWork = this.#database.prepare(`SELECT tenant_id,run_id,work_item_json
+            FROM work_items WHERE work_item_id=?`).get(next) as
+              { tenant_id: string; run_id: string; work_item_json: string } | undefined;
+          const nextPayload = nextWork === undefined ? null
+            : (JSON.parse(nextWork.work_item_json) as { payload?: Record<string, unknown> }).payload;
+          if (nextWork?.tenant_id !== input.tenantId || nextWork.run_id !== input.runId ||
+              nextPayload?.trigger !== "workflowScheduler" ||
+              stableJson(nextPayload.binding) !== stableJson(input.binding))
+            throw new Error("scheduler handoff mismatch");
+        }
+      } else throw new Error("run disposition mismatch");
+    } catch (error) {
+      throw new RunStoreError("workflow_reconciliation_replay_corrupt", {
+        cause: error instanceof Error ? error : undefined });
+    }
+  }
+
   #loadRun(tenantId: string, runId: string): RunState | null {
     const row = this.#database
       .prepare(
@@ -2957,7 +3100,10 @@ export class SqliteWorkflowRunCompositionStore
         ? { type: "run.completed" as const, data: { outputRef } }
         : execution.status === "failed"
           ? { type: "run.failed" as const,
-              data: { code: "workflow_node_failed", retryable: false } }
+              data: { code: execution.nodes.some((node) =>
+                node.failureCode === WORKFLOW_MODEL_DISPATCH_OPERATOR_REQUIRED)
+                  ? WORKFLOW_MODEL_DISPATCH_OPERATOR_REQUIRED
+                  : "workflow_node_failed", retryable: false } }
           : { type: "run.canceled" as const,
               data: { reasonCode: "workflow_canceled" } }),
     };
@@ -3134,7 +3280,10 @@ export class SqliteWorkflowRunCompositionStore
     const expectedData = execution.status === "completed"
       ? { outputRef: run.outputRef }
       : execution.status === "failed"
-        ? { code: "workflow_node_failed", retryable: false }
+        ? { code: execution.nodes.some((node) =>
+            node.failureCode === WORKFLOW_MODEL_DISPATCH_OPERATOR_REQUIRED)
+              ? WORKFLOW_MODEL_DISPATCH_OPERATOR_REQUIRED
+              : "workflow_node_failed", retryable: false }
         : { reasonCode: "workflow_canceled" };
     if (event.eventId !== eventId || event.sequence !== run.lastSequence ||
         event.type !== expectedType || stableJson(event.data) !== stableJson(expectedData) ||
