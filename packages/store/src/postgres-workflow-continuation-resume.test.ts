@@ -975,7 +975,12 @@ test(
         workflowInput: rootInput,
       });
       const work = scheduled.nodeWorkItems[0]!;
-      const nodeLease = await lease(pool, schema, work.workItemId, "node-worker");
+      const nodeLease = await lease(
+        pool,
+        schema,
+        work.workItemId,
+        "node-worker",
+      );
       const admitted = await store.admitWorkflowNodeWork({
         tenantId: "tenant-1",
         runId: "run-1",
@@ -1096,7 +1101,11 @@ test(
           providerCheckpoint: checkpoint,
           providerTurnState: null,
           history: [
-            { type: "message" as const, role: "assistant" as const, content: "restored" },
+            {
+              type: "message" as const,
+              role: "assistant" as const,
+              content: "restored",
+            },
           ],
         },
       };

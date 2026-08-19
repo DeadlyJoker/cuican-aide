@@ -62,7 +62,9 @@ export async function commitPostgresRetrievedWorkflowNodeContinuation(
     input,
     true,
   );
-  const definition = workflow.nodes.find((node) => node.nodeId === input.nodeId);
+  const definition = workflow.nodes.find(
+    (node) => node.nodeId === input.nodeId,
+  );
   const node = execution?.nodes.find((item) => item.nodeId === input.nodeId);
   const step = await loadPostgresRunStep(
     client,
@@ -149,11 +151,13 @@ export async function commitPostgresRetrievedWorkflowNodeContinuation(
     dispatch.leaseEpoch !== attempt.leaseEpoch ||
     dispatch.provider.agentVersionId !== input.agentVersionId ||
     dispatch.provider.adapterName !== attempt.providerCheckpoint?.adapterName ||
-    dispatch.provider.adapterVersion !== attempt.providerCheckpoint?.adapterVersion ||
+    dispatch.provider.adapterVersion !==
+      attempt.providerCheckpoint?.adapterVersion ||
     dispatch.provider.modelId !== attempt.providerCheckpoint?.modelId ||
     checkpointDigest === null ||
     dispatch.responseCheckpointDigest !== checkpointDigest ||
-    digester.sha256(canonicalJson(attempt.providerCheckpoint)) !== checkpointDigest
+    digester.sha256(canonicalJson(attempt.providerCheckpoint)) !==
+      checkpointDigest
   )
     corrupt();
 
@@ -181,7 +185,13 @@ export async function commitPostgresRetrievedWorkflowNodeContinuation(
     transitionedAt: now,
     outcome: { kind: "completed", code: null, certainty: "responseObserved" },
   });
-  const resumedAttempt = await adoptAttempt(client, schema, attempt, input, now);
+  const resumedAttempt = await adoptAttempt(
+    client,
+    schema,
+    attempt,
+    input,
+    now,
+  );
   const resumedExecution = await resumePostgresWorkflowExecution(
     client,
     schema,
@@ -208,17 +218,13 @@ export async function commitPostgresRetrievedWorkflowNodeContinuation(
     },
     now,
   );
-  const pendingTools = await adoptPostgresWorkflowPendingTools(
-    client,
-    schema,
-    {
-      sourceAuthority,
-      reconciliationLease: input.lease,
-      continuation,
-      adoptedAt: now,
-      digester,
-    },
-  );
+  const pendingTools = await adoptPostgresWorkflowPendingTools(client, schema, {
+    sourceAuthority,
+    reconciliationLease: input.lease,
+    continuation,
+    adoptedAt: now,
+    digester,
+  });
   return resumeRequiredResult(
     input,
     resumedExecution,

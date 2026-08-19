@@ -81,7 +81,13 @@ export async function persistPostgresRetrievedWorkflowEvents(
       createdAt: occurredAt,
     });
   }
-  await writePostgresRunSnapshot(client, schema, current, next, current.revision);
+  await writePostgresRunSnapshot(
+    client,
+    schema,
+    current,
+    next,
+    current.revision,
+  );
   await writePostgresRunEvents(client, schema, events, input.tenantId);
   await writePostgresOutbox(client, schema, outbox);
   for (const event of agentEvents) {
