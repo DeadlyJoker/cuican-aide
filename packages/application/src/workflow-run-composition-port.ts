@@ -4,6 +4,7 @@ import type {
   ModelDispatchTerminalOutcome,
   RunAttemptState,
   RunStepState,
+  ToolExecutionReceiptState,
   WorkflowNodeTerminalEvidence,
   WorkflowSchemaValue,
 } from "@crewon/domain";
@@ -20,6 +21,8 @@ import type {
   WorkflowNodeClaim,
 } from "./workflow-execution-types.ts";
 import type { WorkflowNodeContinuationCheckpoint } from "./workflow-node-continuation-store-port.ts";
+
+export const MAX_WORKFLOW_PENDING_TOOL_RESUMES = 16;
 
 export type WorkflowAtomicNodeOutcome =
   | Readonly<{ status: "completed"; value: WorkflowSchemaValue }>
@@ -47,6 +50,14 @@ export type WorkflowNodeResponseRecovery = Readonly<{
   dispatch: ModelDispatchReceipt & Readonly<{ status: "responseObserved" }>;
 }>;
 
+/** Store-adopted Tool authority that is still missing its durable continuation. */
+export type WorkflowPendingToolResume = Readonly<{
+  receipt: ToolExecutionReceiptState &
+    Readonly<{ status: "prepared" | "dispatched" | "unknownOutcome" }>;
+  step: RunStepState & Readonly<{ kind: "tool"; status: "running" }>;
+  attempt: RunAttemptState & Readonly<{ status: "running" }>;
+}>;
+
 /**
  * Store-adopted authority for continuing a non-terminal Workflow Agent sample.
  *
@@ -60,6 +71,7 @@ export type WorkflowNodeContinuationResume = Readonly<{
   attempt: RunAttemptState & Readonly<{ status: "running" }>;
   reconciliationLease: WorkItemLeaseInput;
   continuation: WorkflowNodeContinuationCheckpoint;
+  pendingTools: readonly WorkflowPendingToolResume[];
 }>;
 
 export type WorkflowNodeWorkAuthority = Readonly<{
