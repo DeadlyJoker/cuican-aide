@@ -273,6 +273,26 @@ test("continuation resume drift fails closed before Agent execution", async () =
       },
     ],
     [
+      "pending Tool work item",
+      {
+        ...baseline,
+        pendingTools: [
+          {
+            receipt: {
+              call: { callId: "call-1" },
+              status: "prepared",
+              actionIntent: {},
+              tenantId: "t",
+              runId: "r",
+              workItemId: "stale-work",
+            } as never,
+            step: {} as never,
+            attempt: {} as never,
+          },
+        ],
+      },
+    ],
+    [
       "attempt lease",
       { ...baseline, attempt: { ...baseline.attempt, leaseEpoch: 2 } },
     ],
@@ -1073,6 +1093,7 @@ function continuationResume(): WorkflowNodeContinuationResume {
       inputDigest: digest("input"),
     },
     reconciliationLease,
+    pendingTools: [],
     step: {
       schemaVersion: "crewon.run-step.v0",
       stepId: "step-a",
