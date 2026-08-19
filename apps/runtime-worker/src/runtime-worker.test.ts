@@ -279,6 +279,119 @@ test("backs off an explicit Workflow retry and preserves recovery projection", a
   await worker.close();
 });
 
+test("retries Workflow cancellation failures without entering ordinary Run settlement", async () => {
+  const claim = {
+    workItem: {
+      workItemId: "workflow-cancel-work",
+      tenantId: "tenant-1",
+      runId: "workflow-run-1",
+      kind: "run.execute",
+      payload: {
+        schemaVersion: "crewon.workflow-cancel-work-item.v0",
+        trigger: "workflowCancel",
+        binding: {
+          workflowId: "workflow-1",
+          workflowVersionId: "workflow-version-1",
+          contentDigest: "sha256:workflow",
+        },
+        cancellationOperationId: "cancel-1",
+      },
+      createdAt: "2026-08-13T00:00:00.000Z",
+    },
+    lease: {
+      ownerId: "workflow-worker",
+      leaseId: "workflow-lease",
+      epoch: 7,
+      expiresAt: "2026-08-13T00:01:00.000Z",
+    },
+  } as WorkItemClaim;
+  const retries: unknown[] = [];
+  const unexpectedStoreCalls: string[] = [];
+  let claimed = false;
+  const store = new Proxy(
+    {
+      async claimNextWorkItem() {
+        if (claimed) return null;
+        claimed = true;
+        return claim;
+      },
+      async loadRun() {
+        return {
+          tenantId: "tenant-1",
+          runId: "workflow-run-1",
+          purpose: "workflow",
+          status: "running",
+          cancelRequested: true,
+          workflowVersionBinding: {
+            workflowId: "workflow-1",
+            workflowVersionId: "workflow-version-1",
+            contentDigest: "sha256:workflow",
+          },
+        } as never;
+      },
+      async retryWorkItem(input: unknown) {
+        retries.push(input);
+      },
+    },
+    {
+      get(target, property, receiver) {
+        if (Reflect.has(target, property)) {
+          return Reflect.get(target, property, receiver);
+        }
+        return async () => {
+          unexpectedStoreCalls.push(String(property));
+          throw new Error(`unexpected_store_call:${String(property)}`);
+        };
+      },
+    },
+  ) as unknown as DomainStore;
+  const worker = new RuntimeWorker(
+    {
+      store,
+      execution: new RunExecutionService({
+        store,
+        clock: { now: () => "2026-08-13T00:00:00.000Z" },
+        ids: { nextId: (kind) => `${kind}-1` },
+        digester: new Sha256Digester(),
+      }),
+      kernel: new CrewONAgentKernel({ transport: successfulTransport() }),
+      policy: new PinnedRunExecutionPolicy(ROUTE),
+      workflowDispatcher: {
+        async dispatch() {
+          throw new Error("workflow dispatch must not run during cancellation");
+        },
+        async cancel() {
+          throw new Error("postgres_commit_ack_lost");
+        },
+      },
+    },
+    {
+      ownerId: "workflow-worker",
+      nextLeaseId: () => "workflow-lease",
+      retryAfterMs: 4_321,
+      scanIntervalMs: null,
+    },
+  );
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "workflowRecovery",
+    runId: "workflow-run-1",
+    code: "postgres_commit_ack_lost",
+  });
+  assert.deepEqual(retries, [
+    {
+      workItemId: "workflow-cancel-work",
+      ownerId: "workflow-worker",
+      leaseId: "workflow-lease",
+      leaseEpoch: 7,
+      retryAfterMs: 4_321,
+      reasonCode: "postgres_commit_ack_lost",
+    },
+  ]);
+  assert.deepEqual(unexpectedStoreCalls, []);
+  await worker.close();
+});
+
 test("durably projects AR-042 summaries without persisting raw reasoning or history", async (context) => {
   const reference = JSON.parse(
     readFileSync(

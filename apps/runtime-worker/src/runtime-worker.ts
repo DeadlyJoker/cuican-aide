@@ -485,8 +485,24 @@ export class RuntimeWorker {
       if (isLeaseLoss(error)) {
         return { kind: "leaseLost", runId: claim.workItem.runId };
       }
+      const run = await this.#execution.loadRun(claim);
+      if (run.purpose === "workflow") {
+        const code = failureCode(error);
+        try {
+          await this.#store.retryWorkItem({
+            ...leaseInput(claim),
+            retryAfterMs: this.#retryAfterMs,
+            reasonCode: code,
+          });
+        } catch (retryError) {
+          if (isLeaseLoss(retryError)) {
+            return { kind: "leaseLost", runId: claim.workItem.runId };
+          }
+          throw retryError;
+        }
+        return { kind: "workflowRecovery", runId: run.runId, code };
+      }
       if (error instanceof PermanentWorkerError) {
-        const run = await this.#execution.loadRun(claim);
         if (run.cancelRequested) {
           return this.#cancel(claim);
         }
@@ -504,7 +520,6 @@ export class RuntimeWorker {
           code: error.code,
         };
       }
-      const run = await this.#execution.loadRun(claim);
       if (run.status === "reconciling") {
         const code = failureCode(error);
         await this.#store.retryWorkItem({
