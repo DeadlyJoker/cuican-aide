@@ -322,6 +322,157 @@ test("SQLite Slice 4 completes checkpoint-only reconciliation without resampling
   });
 });
 
+test("SQLite restart resumes a durable assistant continuation without response GET", async (t) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "crewon-continuation-vertical-"),
+  );
+  const path = join(directory, "runtime.sqlite");
+  let runtime:
+    | Awaited<ReturnType<typeof createStandaloneRuntimeWorker>>
+    | undefined;
+  t.after(async () => {
+    if (runtime !== undefined) await runtime.close();
+    await rm(directory, { recursive: true, force: true });
+  });
+  const counters = {
+    initialPosts: 0,
+    injectedBeforePost: 0,
+    resumePosts: 0,
+    responseGets: 0,
+  };
+  const versions = ["gate-agent-v1", "gate-verification-v1"].map(agentVersion);
+  const config = {
+    ...baseConfig(),
+    agentVersionDeployments: versions.map((version) => ({
+      schemaVersion: "crewon.agent-version-deployment.v0" as const,
+      tenantId: "tenant-1",
+      agentVersionId: version.agentVersionId,
+      contentDigest: version.contentDigest,
+      materializationDigest: digester.sha256(
+        `materialization:${version.agentVersionId}`,
+      ),
+      authorityId: `authority-${version.agentVersionId}`,
+      workspaceBindingId: null,
+    })),
+    agentVersionRuntimeFactory: {
+      create: ({ version }: { version: { agentVersionId: string } }) =>
+        continuationNodeRuntime(version.agentVersionId, counters),
+    },
+  };
+  const setup = new SqliteRunStore(path, { workflowDigester: digester });
+  for (const version of versions)
+    await setup.registerAgentVersion(
+      createAgentVersionAsset({
+        tenantId: "tenant-1",
+        version,
+        createdAt: "2026-08-12T00:00:00.000Z",
+      }),
+    );
+  await activateStandaloneRuntimeAgentVersionRelease({
+    ...config,
+    databasePath: path,
+    actor: actor(),
+    authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    activationId: "activate-continuation-vertical",
+  });
+  await new ThreadApplicationService({
+    store: setup,
+    authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:00.000Z" },
+    ids: { nextId: () => "continuation-thread" },
+    digester,
+  }).createThread(actor(), {
+    kind: "thread.create",
+    idempotencyKey: "thread-continuation",
+    title: "Continuation",
+  });
+  await setup.workflowVersionStore(digester).registerWorkflowVersion({
+    schemaVersion: "crewon.workflow-version-asset.v0",
+    tenantId: "tenant-1",
+    workflowId: workflow.workflowId,
+    workflowVersionId: workflow.workflowVersionId,
+    contentDigest: workflow.contentDigest,
+    definitionJson: serializeCompiledWorkflowVersion(workflow),
+    createdAt: "2026-08-12T00:00:00.000Z",
+  });
+  let id = 0;
+  const started = await new WorkflowRunApplicationService({
+    store: setup,
+    authorization: allow(),
+    clock: { now: () => "2026-08-12T00:00:01.000Z" },
+    workflowDigester: digester,
+    ids: { nextId: (kind) => `${kind}-${++id}` },
+    routeResolver: { resolveRoute: async () => config.route },
+  }).startWorkflowRun(actor(), {
+    kind: "workflowRun.start",
+    idempotencyKey: "start-continuation",
+    workflowVersionId: workflow.workflowVersionId,
+    threadId: "continuation-thread",
+    input: {},
+  });
+  const runId = started.run.state.runId;
+  await setup.close();
+
+  runtime = await openContinuationRuntime(
+    path,
+    config,
+    counters,
+    "continuation-crash-worker",
+  );
+  await runtime.worker.wake();
+  await runtime.worker.wake();
+  assert.deepEqual(counters, {
+    initialPosts: 1,
+    injectedBeforePost: 1,
+    resumePosts: 0,
+    responseGets: 0,
+  });
+  assert.deepEqual(inspectContinuationVertical(path, runId), {
+    dispatchStatuses: ["responseObserved"],
+    continuationCount: 1,
+    nodeStatus: "unknown",
+    attemptStatus: "running",
+    attemptWorkTrigger: "workflowNode",
+    terminalEventCount: 0,
+    nodeWorkCompleted: 1,
+    reconcilePending: 1,
+    reconcileCompleted: 0,
+  });
+  await runtime.close();
+  runtime = undefined;
+
+  runtime = await openContinuationRuntime(
+    path,
+    config,
+    counters,
+    "continuation-resume-worker",
+  );
+  const resumed = await runtime.worker.wake();
+  assert.deepEqual(counters, {
+    initialPosts: 1,
+    injectedBeforePost: 1,
+    resumePosts: 1,
+    responseGets: 0,
+  });
+  assert.deepEqual(resumed, {
+    kind: "workflowRecovery",
+    runId,
+    code: "workflow_node_resumed_and_settled",
+  });
+  assert.deepEqual(inspectContinuationVertical(path, runId), {
+    dispatchStatuses: ["terminal", "terminal"],
+    continuationCount: 0,
+    nodeStatus: "completed",
+    attemptStatus: "completed",
+    attemptWorkTrigger: "workflowReconcile",
+    terminalEventCount: 1,
+    nodeWorkCompleted: 1,
+    reconcilePending: 0,
+    reconcileCompleted: 1,
+  });
+});
+
 test("SQLite Slice 4 restart settles a Store-owned terminal candidate once", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-slice-four-candidate-"));
   const path = join(directory, "runtime.sqlite");
@@ -581,6 +732,15 @@ async function openPreparedOnlyRuntime(path: string,
       (agentVersionId) => ({ tenantId: "tenant-1", runtime: preparedOnlyNodeRuntime(agentVersionId) })),
   });
 }
+async function openContinuationRuntime(path: string,
+  config: ReturnType<typeof baseConfig> & Record<string, unknown>,
+  counters: ContinuationCounters, ownerId: string) {
+  return createStandaloneRuntimeWorker({ ...config, databasePath: path, scanIntervalMs: null, ownerId,
+    additionalAgentVersionRuntimes: ["gate-agent-v1", "gate-verification-v1"].map(
+      (agentVersionId) => ({ tenantId: "tenant-1",
+        runtime: continuationNodeRuntime(agentVersionId, counters) })),
+  });
+}
 function inspectReconciliation(path: string, runId: string) {
   const database = new DatabaseSync(path);
   try {
@@ -662,6 +822,61 @@ function inspectNodeAuthorities(path: string, runId: string) {
         .all(runId).map(({ claimId, claimEpoch }) => ({ claimId, claimEpoch })) };
   } finally { database.close(); }
 }
+function inspectContinuationVertical(path: string, runId: string) {
+  const database = new DatabaseSync(path);
+  try {
+    const scalar = (sql: string) =>
+      database.prepare(sql).get(runId) as Record<string, unknown>;
+    const countWork = (trigger: string, status: string) =>
+      Number(
+        database
+          .prepare(
+            `SELECT count(*) count
+      FROM work_items WHERE run_id=? AND status=? AND
+      json_extract(work_item_json,'$.payload.trigger')=?`,
+          )
+          .get(runId, status, trigger)!.count,
+      );
+    const execution = JSON.parse(
+      String(
+        scalar("SELECT state_json FROM workflow_executions WHERE run_id=?")
+          .state_json,
+      ),
+    );
+    return {
+      dispatchStatuses: database
+        .prepare(
+          "SELECT status FROM model_dispatch_receipts WHERE run_id=? ORDER BY rowid",
+        )
+        .all(runId)
+        .map(({ status }) => status),
+      continuationCount: Number(
+        scalar(
+          "SELECT count(*) count FROM workflow_node_continuations WHERE run_id=?",
+        ).count,
+      ),
+      nodeStatus: execution.nodes.find(
+        (node: { nodeId: string }) => node.nodeId === "agent",
+      )?.status,
+      attemptStatus: scalar(
+        "SELECT status FROM run_attempts WHERE run_id=? AND step_id='agent'",
+      ).status,
+      attemptWorkTrigger:
+        scalar(`SELECT json_extract(work_item_json,'$.payload.trigger') trigger
+        FROM run_attempts JOIN work_items USING(work_item_id) WHERE run_attempts.run_id=?
+        AND step_id='agent'`).trigger,
+      terminalEventCount: Number(
+        scalar(`SELECT count(*) count FROM run_events WHERE run_id=?
+        AND json_extract(event_json,'$.type')='workflow.node.terminal'`).count,
+      ),
+      nodeWorkCompleted: countWork("workflowNode", "completed"),
+      reconcilePending: countWork("workflowReconcile", "pending"),
+      reconcileCompleted: countWork("workflowReconcile", "completed"),
+    };
+  } finally {
+    database.close();
+  }
+}
 function actor() { return { principalId: "principal", actorId: "actor", tenantId: "tenant-1", spaceId: "space-1" }; }
 function allow() { return { authorize: async () => ({ outcome: "allow" as const }) }; }
 function baseConfig() { return { runtimeTenantId: "tenant-1", route: { authorityId: "authority",
@@ -726,6 +941,161 @@ function uncertainNodeRuntime(agentVersionId: string, samples: Map<string, numbe
         modelId: "model", opaquePayload: { responseId: `${agentVersionId}-response` } } } };
       throw new WorkflowNodeSideEffectUncertainError();
     } } } as never;
+}
+type ContinuationCounters = {
+  initialPosts: number;
+  injectedBeforePost: number;
+  resumePosts: number;
+  responseGets: number;
+};
+function continuationNodeRuntime(
+  agentVersionId: string,
+  counters: ContinuationCounters,
+) {
+  const version = agentVersion(agentVersionId);
+  return {
+    version,
+    policy: {} as never,
+    toolRuntime: {
+      definitions: () => [],
+      executionPolicy: () => null,
+      execute: async () => {
+        throw new Error("tool forbidden");
+      },
+      reconcile: async () => {
+        throw new Error("tool forbidden");
+      },
+    },
+    kernel: {
+      supportsModelDispatchEvidence: true,
+      modelIdentity: {
+        adapterName: "test",
+        adapterVersion: "1",
+        modelId: "model",
+      },
+      async *runSegment(
+        contract: {
+          runId: string;
+          segmentId: string;
+          continuation?: { kind: string };
+          reconcileCheckpoint?: unknown;
+        },
+        _signal: AbortSignal,
+        options: {
+          controlSink?: Record<string, (value: unknown) => Promise<void>>;
+        },
+      ) {
+        if (contract.reconcileCheckpoint !== undefined) {
+          counters.responseGets += 1;
+          throw new Error("legacy response GET forbidden");
+        }
+        const base = {
+          schemaVersion: "crewon.agent-event.v0",
+          runId: contract.runId,
+          segmentId: contract.segmentId,
+        } as const;
+        if (counters.initialPosts === 0) {
+          counters.initialPosts += 1;
+          await crossModelDispatch(options, contract.segmentId, agentVersionId);
+          const checkpoint = providerCheckpoint(
+            `${agentVersionId}-continuation`,
+          );
+          yield {
+            ...base,
+            sequence: 1,
+            type: "segment.started",
+            data: { attempt: 1, model: "model" },
+          };
+          yield {
+            ...base,
+            sequence: 2,
+            type: "segment.provider_response_created",
+            data: { checkpoint },
+          };
+          yield {
+            ...base,
+            sequence: 3,
+            type: "model.output.delta",
+            data: { delta: "working" },
+          };
+          yield {
+            ...base,
+            sequence: 4,
+            type: "segment.continuation_requested",
+            data: {
+              output: "working",
+              completedAssistantItems: ["working"],
+              checkpoint,
+            },
+          };
+          return;
+        }
+        if (counters.injectedBeforePost === 0) {
+          counters.injectedBeforePost += 1;
+          throw new WorkflowNodeSideEffectUncertainError();
+        }
+        assert.equal(contract.continuation?.kind, "providerCheckpoint");
+        counters.resumePosts += 1;
+        await crossModelDispatch(options, contract.segmentId, agentVersionId);
+        const checkpoint = providerCheckpoint(`${agentVersionId}-terminal`);
+        yield {
+          ...base,
+          sequence: 1,
+          type: "segment.started",
+          data: { attempt: 1, model: "model" },
+        };
+        yield {
+          ...base,
+          sequence: 2,
+          type: "segment.provider_response_created",
+          data: { checkpoint },
+        };
+        yield {
+          ...base,
+          sequence: 3,
+          type: "model.output.delta",
+          data: { delta: "{}" },
+        };
+        yield {
+          ...base,
+          sequence: 4,
+          type: "segment.completed",
+          data: { output: "{}" },
+        };
+      },
+    },
+  } as never;
+}
+function providerCheckpoint(responseId: string) {
+  return {
+    schemaVersion: "crewon.provider-checkpoint.v0" as const,
+    adapterName: "test",
+    adapterVersion: "1",
+    modelId: "model",
+    opaquePayload: { responseId },
+  };
+}
+async function crossModelDispatch(
+  options: {
+    controlSink?: Record<string, (value: unknown) => Promise<void>>;
+  },
+  segmentId: string,
+  agentVersionId: string,
+) {
+  const evidence = {
+    operationId: `${segmentId}:dispatch`,
+    requestSequence: 1,
+    operation: "dispatch",
+    requestDigest: digester.sha256(`${agentVersionId}:${segmentId}`),
+    provider: {
+      agentVersionId,
+      adapterName: "test",
+      adapterVersion: "1",
+      modelId: "model",
+    },
+  };
+  await options.controlSink?.modelRequestPrepared?.(evidence);
+  await options.controlSink?.dispatchBoundaryCrossed?.(evidence);
 }
 function preparedOnlyNodeRuntime(agentVersionId: string) {
   const version = agentVersion(agentVersionId);
