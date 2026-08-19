@@ -58,15 +58,22 @@
   对不安全 endpoint 在网络调用前 fail closed。Agent Responses 为 `76/76`。
 - Web 公开 `/control-api/health/ready` 精确代理 BFF，不能再落入 SPA HTML 200；checked-in Web/Control origin 与唯一
   `6175` TLS listener 精确一致。Web BFF `17/17`、production gate 与 CI YAML 解析通过。
+- Workflow durable continuation 已新增 Store-owned `resumeRequired`：SQLite/PostgreSQL 在一个事务内终结已消费的
+  `responseObserved` dispatch，把 Attempt、canonical Workflow node 与 bounded continuation checkpoint 接管到当前
+  reconcile WorkItem lease；Worker 只从已验证 history/provider checkpoint 继续，不执行旧 response GET。真实 SQLite
+  close/reopen 纵向覆盖 assistant continuation，旧 GET=`0`、恢复模型采样=`1`，两个 dispatch、Attempt、原/重试 WorkItem、
+  continuation 清理与唯一 terminal event 全部收敛。SQLite Store 全量 `357 passed / 64 conditional skips / 0 failed`，
+  Runtime Worker 定向 `7/7`；PostgreSQL 条件矩阵已落代码，但本机当前无 `CREWON_TEST_POSTGRES_URL`，未把 skip 记为通过。
 - desktop release workflow 现在同时绑定 immutable tag、`origin/main` ancestry、远端 tag/main 无漂移以及 exact commit SHA/App ID 的
   required checks；macOS/Windows 均验证实际 updater 签名后才允许上传，Windows launch smoke 还按本次 install root/app binary
   精确检测 GUI/Node/guardian orphan。确定性 release/staging/Windows process tests 为 `16/16`，YAML 与 smoke syntax 通过。
 - 当前仍是 `In progress`：正式 Apple Developer ID/notarization/staple、Windows PFX/AuthentiCode timestamp/NSIS 实机、GitHub hosted
   release publish、真实 Identity/PIM 多租户部署、跨主机 PostgreSQL/Worker 网络分区、备份恢复与 SLO 仍需外部 runner、凭据和环境。
   本地 Tauri 已生成 `.app` 与 updater archive，但因没有 `TAURI_SIGNING_PRIVATE_KEY` 按设计返回失败，未使用 unsigned fallback。
-  代码内仍有一个 transaction P0：Workflow 已提交非终态 assistant/Tool continuation 后崩溃，reconcile 尚未原子采用该 checkpoint
-  到新 WorkItem lease 并继续下一 sample；当前只保证不误结算为业务失败。该 resume authority 必须同时落 SQLite、PostgreSQL 与 Worker，
-  在完成前不能把完整迁移标记为完成。
+  continuation 主接管已落地，但完整迁移仍不能标记完成：未提交 Tool continuation 的 prepared/dispatched Tool receipt 仍绑定旧
+  node WorkItem，恢复只会安全重试而不能接管；resume 后新 response 的 GET 若返回合法 nonterminal 结果仍无法原子提交下一
+  continuation；`possiblySent` 在 provider 没有 durable locator/idempotency 保证时只能 fail closed，尚缺有界 operator-required
+  终态。这三项仍是 transaction P0，不能用盲目重发 POST 或兼容 fallback 掩盖。
 
 ## 2026-08-13 执行方向覆盖：纯 TypeScript 快速切换
 
