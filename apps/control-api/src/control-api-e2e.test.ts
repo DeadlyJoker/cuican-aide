@@ -1414,7 +1414,6 @@ test(
     const schema = postgresSchema("wf");
     const controlConfig = postgresConfig(connectionString, schema);
     const control = await createPostgresControlApi(controlConfig);
-    await activatePostgresReleaseProcess(connectionString, schema);
     const admin = new Pool({ connectionString, max: 1 });
     context.after(() => closePostgresFixture(control.app, admin, schema));
     await control.app.listen({ host: "127.0.0.1", port: 0 });
@@ -1447,7 +1446,7 @@ test(
       connectionString,
       schema,
       runtimeTenantId: "tenant-e2e-1",
-      route: config(":unused:").route,
+      route: postgresRuntimeRoute(),
       transport: workflowModelTransport(),
       agentVersionDeployments:
         runtimeFactory.deploymentBindings("tenant-e2e-1"),
@@ -1478,7 +1477,7 @@ test(
       connectionString,
       schema,
       runtimeTenantId: "tenant-e2e-1",
-      route: config(":unused:").route,
+      route: postgresRuntimeRoute(),
       transport: workflowModelTransport(),
       agentVersionRuntimeFactory: runtimeFactory,
       agentVersionDeployments:
@@ -1511,6 +1510,7 @@ test(
       postgresConfig(connectionString, schema),
     );
     await activatePostgresReleaseProcess(connectionString, schema);
+    await bootstrapPostgresProviderCatalog(connectionString, schema);
     const admin = new Pool({ connectionString, max: 1 });
     context.after(() => closePostgresFixture(control.app, admin, schema));
     await control.app.listen({ host: "127.0.0.1", port: 0 });
@@ -1520,6 +1520,7 @@ test(
       "postgres-compete",
       "run in PostgreSQL workers",
     );
+    const [workerAPort, workerBPort] = await unusedLoopbackPorts(2);
 
     const workers = await Promise.all([
       runWorkerProcess(
@@ -1531,6 +1532,7 @@ test(
           schema,
           "postgres-worker-a",
           "run in PostgreSQL workers",
+          workerAPort,
         ),
       ),
       runWorkerProcess(
@@ -1542,6 +1544,7 @@ test(
           schema,
           "postgres-worker-b",
           "run in PostgreSQL workers",
+          workerBPort,
         ),
       ),
     ]);
@@ -1590,6 +1593,7 @@ test(
       postgresConfig(connectionString, schema),
     );
     await activatePostgresReleaseProcess(connectionString, schema);
+    await bootstrapPostgresProviderCatalog(connectionString, schema);
     const admin = new Pool({ connectionString, max: 1 });
     context.after(() => closePostgresFixture(control.app, admin, schema));
     await control.app.listen({ host: "127.0.0.1", port: 0 });
@@ -1599,6 +1603,8 @@ test(
       "postgres-crash",
       "run after PostgreSQL crash",
     );
+    const [crashingWorkerPort, recoveryWorkerPort] =
+      await unusedLoopbackPorts(2);
 
     const crashed = await runWorkerProcess(
       fileURLToPath(
@@ -1612,6 +1618,7 @@ test(
         schema,
         "postgres-crashing-worker",
         "run after PostgreSQL crash",
+        crashingWorkerPort,
       ),
       "attempt-started-before-crash",
     );
@@ -1633,6 +1640,7 @@ test(
         schema,
         "postgres-recovery-worker",
         "run after PostgreSQL crash",
+        recoveryWorkerPort,
       ),
     );
     assert.equal(recovered.exitCode, 0, recovered.stderr);
@@ -2274,6 +2282,25 @@ async function activatePostgresReleaseProcess(
   assert.equal(JSON.parse(release.stdout).disposition, "activated");
 }
 
+async function bootstrapPostgresProviderCatalog(
+  connectionString: string,
+  schema: string,
+): Promise<void> {
+  const [providerProbePort] = await unusedLoopbackPorts(1);
+  const worker = await runWorkerProcess(
+    fileURLToPath(new URL("../../runtime-worker/src/main.ts", import.meta.url)),
+    postgresWorkerEnvironment(
+      connectionString,
+      schema,
+      "provider-bootstrap-worker",
+      "provider-bootstrap-idle",
+      providerProbePort,
+    ),
+  );
+  assert.equal(worker.exitCode, 0, worker.stderr);
+  assert.deepEqual(JSON.parse(worker.stdout.trim()), { kind: "idle" });
+}
+
 function postgresConfig(
   connectionString: string,
   schema: string,
@@ -2281,6 +2308,13 @@ function postgresConfig(
   const standalone = config(":unused:", new InMemoryArtifactStore());
   const { databasePath: _, route: _route, ...common } = standalone;
   return { ...common, connectionString, schema };
+}
+
+function postgresRuntimeRoute(): RunRoute {
+  return {
+    ...config(":unused:").route,
+    runtimeGeneration: "runtime-production-e2e-1",
+  };
 }
 
 async function createE2eRun(
@@ -2450,6 +2484,7 @@ function postgresWorkerEnvironment(
   schema: string,
   ownerId: string,
   expectedUserMessage: string,
+  providerProbePort?: number,
 ): NodeJS.ProcessEnv {
   const environment: NodeJS.ProcessEnv = {
     ...process.env,
@@ -2468,13 +2503,60 @@ function postgresWorkerEnvironment(
     CREWON_RELEASE_PRINCIPAL_ID: "release-principal-e2e",
     CREWON_RELEASE_ACTOR_ID: "release-actor-e2e",
     CREWON_AUTHORITY_ID: "standalone-e2e-1",
-    CREWON_RUNTIME_GENERATION: "ts-v0",
+    CREWON_RUNTIME_GENERATION: "runtime-production-e2e-1",
     CREWON_AGENT_VERSION_ID: "agent-version-e2e-1",
     CREWON_POLICY_SNAPSHOT_ID: "policy-e2e-1",
     CREWON_WORKSPACE_BINDING_ID: "workspace-e2e-1",
+    ...(providerProbePort === undefined
+      ? {}
+      : {
+          CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON: JSON.stringify({
+            schemaVersion: "crewon.runtime-provider-probe.v1",
+            port: providerProbePort,
+            tokenEnvironment: "CREWON_E2E_PROVIDER_PROBE_TOKEN",
+            tenantId: "tenant-e2e-1",
+            expectedCatalogRevision: 0,
+            providerId: "responses",
+            runtimeBindingId: "runtime-production-e2e-1",
+            endpoint: childResponsesEndpoint,
+            credentialEnvironment: "CREWON_E2E_PROVIDER_API_KEY",
+          }),
+          CREWON_E2E_PROVIDER_PROBE_TOKEN:
+            "production-provider-probe-token-at-least-32-bytes",
+          CREWON_E2E_PROVIDER_API_KEY:
+            "production-provider-api-key-at-least-32-bytes",
+        }),
   };
   delete environment.CREWON_CONTROL_DB_PATH;
   return environment;
+}
+
+async function unusedLoopbackPorts(count: number): Promise<number[]> {
+  const servers = Array.from({ length: count }, () => createServer());
+  await Promise.all(
+    servers.map(
+      (server) =>
+        new Promise<void>((resolve, reject) => {
+          server.once("error", reject);
+          server.listen(0, "127.0.0.1", () => {
+            server.off("error", reject);
+            resolve();
+          });
+        }),
+    ),
+  );
+  const ports = servers.map((server) => (server.address() as AddressInfo).port);
+  await Promise.all(
+    servers.map(
+      (server) =>
+        new Promise<void>((resolve, reject) => {
+          server.close((error) =>
+            error === undefined ? resolve() : reject(error),
+          );
+        }),
+    ),
+  );
+  return ports;
 }
 
 function readHeaders(): Record<string, string> {
