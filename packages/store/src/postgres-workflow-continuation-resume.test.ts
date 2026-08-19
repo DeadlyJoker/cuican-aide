@@ -3,9 +3,14 @@ import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { Pool } from "pg";
 
-import type { WorkflowReconciliationResult } from "@crewon/application";
+import {
+  RunStoreError,
+  type WorkflowExecutionState,
+  type WorkflowReconciliationResult,
+} from "@crewon/application";
 import {
   compileWorkflowVersion,
+  createWorkflowNodeTerminalEvidence,
   serializeCompiledWorkflowVersion,
   type RunState,
   type WorkflowVersionSource,
@@ -244,10 +249,80 @@ test(
         claimEpoch: work.claimEpoch,
         reconciliationOperationId: "schedule-reconcile-agent",
       };
+      const beforeTakeover = await loadExecution(pool, schema);
+      assert.equal(
+        beforeTakeover.nodes.find((node) => node.nodeId === work.nodeId)
+          ?.status,
+        "unknown",
+      );
+      for (const drift of [
+        { claimId: "drifted-claim" },
+        { agentVersionId: "agent-v2" },
+        { inputDigest: digester.sha256("drifted-input") },
+      ]) {
+        const drifted = {
+          ...beforeTakeover,
+          nodes: beforeTakeover.nodes.map((node) =>
+            node.nodeId === work.nodeId ? { ...node, ...drift } : node,
+          ),
+        };
+        await pool.query(
+          `UPDATE ${schema}.workflow_executions SET state_json=$1::jsonb
+           WHERE tenant_id='tenant-1' AND run_id='run-1'`,
+          [drifted],
+        );
+        await assert.rejects(
+          store.reconcileWorkflowNode(reconciliationInput),
+          (error) =>
+            error instanceof RunStoreError &&
+            error.code === "workflow_reconciliation_evidence_corrupt",
+        );
+        const authorityAfterFailure = await pool.query<{
+          work_item_id: string;
+          lease_epoch: number;
+          continuation_revision: number;
+          dispatch_status: string;
+        }>(
+          `SELECT attempt.work_item_id,attempt.lease_epoch::int,
+             continuation.revision::int continuation_revision,
+             dispatch.status dispatch_status
+           FROM ${schema}.run_attempts attempt
+           JOIN ${schema}.workflow_node_continuations continuation
+             ON continuation.tenant_id=attempt.tenant_id
+             AND continuation.run_id=attempt.run_id
+             AND continuation.node_id=attempt.step_id
+             AND continuation.attempt_id=attempt.attempt_id
+           JOIN ${schema}.model_dispatch_receipts dispatch
+             USING (tenant_id,run_id,step_id,attempt_id)
+           WHERE attempt.attempt_id=$1 AND dispatch.operation_id=$2`,
+          [attempt.attemptId, prepared.operationId],
+        );
+        assert.deepEqual(authorityAfterFailure.rows, [
+          {
+            work_item_id: authority.workItemId,
+            lease_epoch: authority.leaseEpoch,
+            continuation_revision: 1,
+            dispatch_status: "responseObserved",
+          },
+        ]);
+        await pool.query(
+          `UPDATE ${schema}.workflow_executions SET state_json=$1::jsonb
+           WHERE tenant_id='tenant-1' AND run_id='run-1'`,
+          [beforeTakeover],
+        );
+      }
       const first = (await store.reconcileWorkflowNode(
         reconciliationInput,
       )) as unknown as ResumeResult;
       assert.equal(first.disposition, "resumeRequired");
+      assert.equal(first.execution.revision, beforeTakeover.revision + 1);
+      assert.notEqual(first.execution.updatedAt, beforeTakeover.updatedAt);
+      assert.deepEqual(await loadExecution(pool, schema), first.execution);
+      const resumedNode = first.execution.nodes.find(
+        (node) => node.nodeId === work.nodeId,
+      );
+      assert.equal(resumedNode?.status, "running");
+      assert.notEqual(resumedNode?.leaseExpiresAt, null);
       assert.deepEqual(
         [
           first.resume.attempt.workItemId,
@@ -272,6 +347,7 @@ test(
         await store.reconcileWorkflowNode(reconciliationInput),
         first,
       );
+      assert.deepEqual(await loadExecution(pool, schema), first.execution);
       const secondLease = await reclaim(
         pool,
         schema,
@@ -301,6 +377,7 @@ test(
         }),
         second,
       );
+      assert.deepEqual(await loadExecution(pool, schema), second.execution);
       const durable = await pool.query<{
         active_dispatches: number;
         terminal_dispatches: number;
@@ -399,12 +476,65 @@ test(
         lease: secondLease,
       });
       assert.equal(uncommittedResponse.disposition, "retrieveRequired");
+      if (uncommittedResponse.disposition !== "retrieveRequired")
+        assert.fail("retrieval required");
+      const evidence = createWorkflowNodeTerminalEvidence({
+        workflow,
+        nodeId: work.nodeId,
+        outcome: { status: "completed", value: {} },
+        digester,
+      });
+      const settled = await store.settleRetrievedWorkflowNode({
+        ...reconciliationInput,
+        lease: secondLease,
+        agentVersionId: "agent-v1",
+        attempt: {
+          stepId: uncommittedResponse.recovery.attempt.stepId,
+          attemptId: uncommittedResponse.recovery.attempt.attemptId,
+          workItemId: uncommittedResponse.recovery.attempt.workItemId,
+          leaseEpoch: uncommittedResponse.recovery.attempt.leaseEpoch,
+        },
+        dispatch: {
+          operationId: uncommittedResponse.recovery.dispatch.operationId,
+          requestSequence:
+            uncommittedResponse.recovery.dispatch.requestSequence,
+          expectedRevision: uncommittedResponse.recovery.dispatch.revision,
+          status: "responseObserved",
+        },
+        evidence,
+        dispatchTerminalOutcome: {
+          kind: "completed",
+          code: null,
+          certainty: "responseObserved",
+        },
+      });
+      assert.deepEqual(
+        [
+          settled.disposition,
+          settled.execution.nodes.find((node) => node.nodeId === work.nodeId)
+            ?.status,
+          settled.handoff.currentWorkItem,
+        ],
+        ["settled", "completed", "completed"],
+      );
     } finally {
       await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
       await store.close();
     }
   },
 );
+
+async function loadExecution(
+  pool: Pool,
+  schema: string,
+): Promise<WorkflowExecutionState> {
+  const result = await pool.query<{ state_json: WorkflowExecutionState }>(
+    `SELECT state_json FROM ${schema}.workflow_executions
+     WHERE tenant_id='tenant-1' AND run_id='run-1'`,
+  );
+  assert.equal(result.rows.length, 1);
+  return result.rows[0]!.state_json;
+}
 
 async function lease(
   pool: Pool,

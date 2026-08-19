@@ -92,7 +92,13 @@ export async function settlePostgresRetrievedWorkflowNode(
   );
   if (
     execution === null ||
-    node?.status !== "unknown" ||
+    node === undefined ||
+    (node.status !== "unknown" &&
+      (node.status !== "running" ||
+        input.attempt.workItemId !== input.lease.workItemId ||
+        input.attempt.leaseEpoch !== input.lease.leaseEpoch)) ||
+    node.claimId !== input.claimId ||
+    node.claimEpoch !== input.claimEpoch ||
     node.agentVersionId !== input.agentVersionId
   )
     throw new RunStoreError("workflow_reconciliation_evidence_corrupt");

@@ -116,8 +116,12 @@ export async function settlePostgresWorkflowNode(
     definition.kind === "humanGate" ||
     step.kind !== expectedKind ||
     step.status !== "running" ||
-    node.status !==
-      (model?.reconciliationAttempt === undefined ? "running" : "unknown") ||
+    (model?.reconciliationAttempt === undefined
+      ? node.status !== "running"
+      : node.status !== "unknown" &&
+        (node.status !== "running" ||
+          model.reconciliationAttempt.workItemId !== input.lease.workItemId ||
+          model.reconciliationAttempt.leaseEpoch !== input.lease.leaseEpoch)) ||
     node.claimId !== input.claimId ||
     node.claimEpoch !== input.claimEpoch ||
     (model !== undefined && node.agentVersionId !== model.agentVersionId) ||

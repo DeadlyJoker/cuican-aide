@@ -78,8 +78,12 @@ export async function reconcilePostgresWorkflowNode(
     input,
     digester,
   );
-  const work = await client.query<{ work_item_json: { payload?: unknown } }>(
-    `SELECT work_item_json FROM ${schema}.work_items WHERE work_item_id=$1 FOR UPDATE`,
+  const work = await client.query<{
+    work_item_json: { payload?: unknown };
+    lease_expires_at: Date | string | null;
+  }>(
+    `SELECT work_item_json,lease_expires_at
+     FROM ${schema}.work_items WHERE work_item_id=$1 FOR UPDATE`,
     [input.lease.workItemId],
   );
   if (
@@ -130,7 +134,10 @@ export async function reconcilePostgresWorkflowNode(
         );
   if (
     execution === null ||
-    node?.status !== "unknown" ||
+    node === undefined ||
+    (node.status !== "unknown" &&
+      (node.status !== "running" ||
+        attempt?.workItemId !== input.lease.workItemId)) ||
     node.claimId !== input.claimId ||
     node.claimEpoch !== input.claimEpoch ||
     attempt?.status !== "running"
@@ -169,35 +176,51 @@ export async function reconcilePostgresWorkflowNode(
   const definition = workflow.nodes.find(
     (candidate) => candidate.nodeId === input.nodeId,
   );
-  const authority =
-    definition === undefined ||
-    definition.kind === "humanGate" ||
-    node.agentVersionId === null ||
-    node.inputDigest === null
-      ? null
-      : {
-          tenantId: input.tenantId,
-          runId: input.runId,
-          workItemId: attempt.workItemId,
-          leaseEpoch: attempt.leaseEpoch,
-          nodeId: input.nodeId,
-          nodeKind: definition.kind,
-          claimId: input.claimId,
-          claimEpoch: input.claimEpoch,
-          agentVersionId: node.agentVersionId,
-          attempt: {
-            stepId: input.nodeId,
-            attemptId: attempt.attemptId,
-          },
-        };
-  const checkpoint =
-    authority === null
-      ? null
-      : await loadPostgresWorkflowContinuationForReconciliation(
-          client,
-          schema,
-          authority,
-        );
+  const inputValue = await loadPostgresWorkflowValue(
+    client,
+    schema,
+    input,
+    "nodeInput",
+    input.nodeId,
+    digester,
+  );
+  if (definition === undefined || definition.kind === "humanGate")
+    throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
+  const expectedAgentVersionId =
+    definition.kind === "agent"
+      ? definition.agentVersionId
+      : definition.verifierAgentVersionId;
+  const leaseExpiresAt = work.rows[0]?.lease_expires_at;
+  if (
+    node.agentVersionId !== expectedAgentVersionId ||
+    node.inputDigest === null ||
+    inputValue === null ||
+    inputValue.valueDigest !== node.inputDigest ||
+    leaseExpiresAt === null ||
+    leaseExpiresAt === undefined
+  )
+    throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
+  const reconciliationLeaseExpiresAt = new Date(leaseExpiresAt).toISOString();
+  const authority = {
+    tenantId: input.tenantId,
+    runId: input.runId,
+    workItemId: attempt.workItemId,
+    leaseEpoch: attempt.leaseEpoch,
+    nodeId: input.nodeId,
+    nodeKind: definition.kind,
+    claimId: input.claimId,
+    claimEpoch: input.claimEpoch,
+    agentVersionId: node.agentVersionId,
+    attempt: {
+      stepId: input.nodeId,
+      attemptId: attempt.attemptId,
+    },
+  };
+  const checkpoint = await loadPostgresWorkflowContinuationForReconciliation(
+    client,
+    schema,
+    authority,
+  );
   if (
     dispatch === null &&
     checkpoint?.activeDispatch === null &&
@@ -205,7 +228,7 @@ export async function reconcilePostgresWorkflowNode(
     attempt.workItemId === input.lease.workItemId
   ) {
     const resumed = await takeOverPostgresWorkflowContinuation(client, schema, {
-      authority: authority!,
+      authority,
       reconciliationLease: input.lease,
       attempt: { ...attempt, status: "running" },
       checkpoint,
@@ -213,9 +236,17 @@ export async function reconcilePostgresWorkflowNode(
       resumedAt: now,
       digester,
     });
+    const resumedExecution = await resumePostgresWorkflowExecution(
+      client,
+      schema,
+      execution,
+      input.nodeId,
+      reconciliationLeaseExpiresAt,
+      now,
+    );
     return resumeRequiredResult(
       input,
-      execution,
+      resumedExecution,
       definition!,
       node.inputDigest!,
       step!,
@@ -229,7 +260,7 @@ export async function reconcilePostgresWorkflowNode(
     attempt.workItemId === input.lease.workItemId
   ) {
     const resumed = await takeOverPostgresWorkflowContinuation(client, schema, {
-      authority: authority!,
+      authority,
       reconciliationLease: input.lease,
       attempt: { ...attempt, status: "running" },
       checkpoint,
@@ -237,9 +268,17 @@ export async function reconcilePostgresWorkflowNode(
       resumedAt: now,
       digester,
     });
+    const resumedExecution = await resumePostgresWorkflowExecution(
+      client,
+      schema,
+      execution,
+      input.nodeId,
+      reconciliationLeaseExpiresAt,
+      now,
+    );
     return resumeRequiredResult(
       input,
-      execution,
+      resumedExecution,
       definition!,
       node.inputDigest!,
       step!,
@@ -473,14 +512,6 @@ export async function reconcilePostgresWorkflowNode(
   if (candidate === null || candidate === undefined) {
     const providerCheckpoint = attempt.providerCheckpoint;
     const checkpointDigest = attempt.checkpointDigest;
-    const inputValue = await loadPostgresWorkflowValue(
-      client,
-      schema,
-      input,
-      "nodeInput",
-      input.nodeId,
-      digester,
-    );
     if (
       providerCheckpoint === null ||
       checkpointDigest === null ||
@@ -490,11 +521,7 @@ export async function reconcilePostgresWorkflowNode(
       dispatch.provider.agentVersionId !== node.agentVersionId ||
       dispatch.provider.adapterName !== providerCheckpoint.adapterName ||
       dispatch.provider.adapterVersion !== providerCheckpoint.adapterVersion ||
-      dispatch.provider.modelId !== providerCheckpoint.modelId ||
-      inputValue === null ||
-      inputValue.valueDigest !== node.inputDigest ||
-      definition === undefined ||
-      definition.kind === "humanGate"
+      dispatch.provider.modelId !== providerCheckpoint.modelId
     )
       throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
     if (
@@ -507,7 +534,7 @@ export async function reconcilePostgresWorkflowNode(
         client,
         schema,
         {
-          authority: authority!,
+          authority,
           reconciliationLease: input.lease,
           attempt: { ...attempt, status: "running" },
           checkpoint,
@@ -516,9 +543,17 @@ export async function reconcilePostgresWorkflowNode(
           digester,
         },
       );
+      const resumedExecution = await resumePostgresWorkflowExecution(
+        client,
+        schema,
+        execution,
+        input.nodeId,
+        reconciliationLeaseExpiresAt,
+        now,
+      );
       return resumeRequiredResult(
         input,
-        execution,
+        resumedExecution,
         definition,
         node.inputDigest!,
         step!,
@@ -626,6 +661,32 @@ export async function reconcilePostgresWorkflowNode(
   );
   await completePostgresWorkflowLease(client, schema, input, now);
   return structuredClone(result);
+}
+
+async function resumePostgresWorkflowExecution(
+  client: PoolClient,
+  schema: string,
+  execution: Result["execution"],
+  nodeId: string,
+  leaseExpiresAt: string,
+  now: string,
+): Promise<Result["execution"]> {
+  const current = execution.nodes.find((node) => node.nodeId === nodeId);
+  if (current?.status === "running") return execution;
+  if (current?.status !== "unknown")
+    throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
+  const next = {
+    ...execution,
+    revision: execution.revision + 1,
+    nodes: execution.nodes.map((node) =>
+      node.nodeId === nodeId
+        ? { ...node, status: "running" as const, leaseExpiresAt }
+        : node,
+    ),
+    updatedAt: now,
+  };
+  await writePostgresWorkflowExecution(client, schema, next, now);
+  return next;
 }
 
 function resumeRequiredResult(
