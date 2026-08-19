@@ -19,6 +19,7 @@ describe("SettingsNavigation", () => {
     expect(markup).not.toContain("工作树");
     expect(markup).not.toContain("MCP 服务器");
     expect(markup).toContain("模型接入");
+    expect(markup).toContain("浏览器");
     expect(markup).toContain("外观");
     expect(markup).toContain("账号");
     expect(markup).toMatchSnapshot();

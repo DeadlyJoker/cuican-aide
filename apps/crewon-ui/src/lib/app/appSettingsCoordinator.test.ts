@@ -57,6 +57,12 @@ function createHarness(
         updatedAt: null,
       },
     })),
+    listActiveCapabilities: vi.fn(async () => ({
+      activatedAt: "2026-08-19T00:00:00Z",
+      data: [],
+      nextCursor: null,
+      releaseId: `sha256:${"a".repeat(64)}`,
+    })),
     probeModelProvider: vi.fn(),
     putLocalSettings: vi.fn(async (input) => ({
       settings: {
@@ -98,7 +104,7 @@ function createHarness(
 }
 
 describe("Control settings coordinator", () => {
-  it("routes only three sections to Control authorities", async () => {
+  it("routes only sections with Control authorities", async () => {
     const harness = createHarness();
 
     for (const section of SETTINGS_SECTIONS) {
@@ -106,6 +112,7 @@ describe("Control settings coordinator", () => {
       if (
         section !== "account" &&
         section !== "appearance" &&
+        section !== "browser" &&
         section !== "model-providers"
       ) {
         expect(harness.panel()).toMatchObject({
@@ -116,7 +123,38 @@ describe("Control settings coordinator", () => {
 
     expect(harness.client.getAccountSnapshot).toHaveBeenCalledOnce();
     expect(harness.client.getLocalSettings).toHaveBeenCalledTimes(2);
+    expect(harness.client.listActiveCapabilities).toHaveBeenCalledOnce();
     expect(harness.client.getModelProviderSettings).toHaveBeenCalledOnce();
+  });
+
+  it("renders Browser status from the active Control capability catalog", async () => {
+    const harness = createHarness({
+      listActiveCapabilities: vi.fn(async () => ({
+        activatedAt: "2026-08-19T00:00:00Z",
+        data: [
+          {
+            agentVersionDigest: `sha256:${"b".repeat(64)}`,
+            agentVersionId: "agent-version-1",
+            description: "Search the web",
+            execution: "parallel" as const,
+            inputFormat: "jsonSchema" as const,
+            kind: "function" as const,
+            name: "web_search",
+          },
+        ],
+        nextCursor: null,
+        releaseId: `sha256:${"a".repeat(64)}`,
+      })),
+    });
+
+    await harness.coordinator.refreshSection("browser");
+
+    expect(harness.panel()).toMatchObject({
+      actions: [{ id: "refresh-browser-capabilities" }],
+      body: expect.stringContaining("web_search · function · agent-version-1"),
+      subtitle: "Active Web capabilities from Control",
+      title: "Browser",
+    });
   });
 
   it("renders only locale and theme from the Control snapshot", async () => {

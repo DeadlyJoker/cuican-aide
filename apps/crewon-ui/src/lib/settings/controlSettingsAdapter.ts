@@ -9,12 +9,14 @@ export type ControlSettingsClient = Pick<
   | "getAccountSnapshot"
   | "getLocalSettings"
   | "getModelProviderSettings"
+  | "listActiveCapabilities"
   | "probeModelProvider"
   | "putLocalSettings"
 >;
 
 export type ControlSettingsAuthority =
   | "account-snapshot"
+  | "active-capability-catalog"
   | "local-settings"
   | "model-provider-settings";
 
@@ -27,6 +29,7 @@ const CONTROL_SETTINGS_AUTHORITIES: Partial<
 > = {
   "account": "account-snapshot",
   "appearance": "local-settings",
+  "browser": "active-capability-catalog",
   "model-providers": "model-provider-settings",
 };
 
@@ -82,6 +85,9 @@ export function createControlSettingsAdapter(
     getAccountSnapshot: () => client?.getAccountSnapshot(),
     getLocalSettings: () => client?.getLocalSettings(),
     getModelProviderSettings: () => client?.getModelProviderSettings(),
+    listActiveCapabilities: (
+      query: Parameters<ControlSettingsClient["listActiveCapabilities"]>[0],
+    ) => client?.listActiveCapabilities(query),
     probeModelProvider: (idempotencyKey: string) =>
       client?.probeModelProvider(idempotencyKey),
     putLocalSettings: (

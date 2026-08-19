@@ -17,6 +17,7 @@ import type { NoticeState } from "../shared/noticeState";
 import { trimmedPanelFieldValue } from "../shared/panelState";
 import type { SettingsSectionRefreshHandlers } from "../settings/settingsActions";
 import { controlSettingsUnavailablePanel } from "../settings/controlSettingsAdapter";
+import { readControlBrowserSettingsPanel } from "../settings/controlBrowserSettings";
 import {
   SETTINGS_SECTIONS,
   type SettingsSection,
@@ -28,6 +29,7 @@ type ControlSettingsClient = Pick<
   | "getAccountSnapshot"
   | "getLocalSettings"
   | "getModelProviderSettings"
+  | "listActiveCapabilities"
   | "probeModelProvider"
   | "putLocalSettings"
 >;
@@ -170,6 +172,23 @@ export function createAppSettingsCoordinator(
   const refreshModelProviders = () =>
     refreshControlModelProvidersPanel(modelProviderParams());
 
+  const refreshBrowser = async () => {
+    try {
+      params.setCapabilityPanel(
+        await readControlBrowserSettingsPanel(params.client, params.locale),
+      );
+    } catch (error) {
+      params.setCapabilityPanel({
+        title: params.locale === "zh" ? "浏览器" : "Browser",
+        subtitle:
+          params.locale === "zh"
+            ? "Control 当前生效的 Web 能力"
+            : "Active Web capabilities from Control",
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
+
   const refreshSection = async (section: SettingsSection) => {
     switch (section) {
       case "account":
@@ -178,11 +197,13 @@ export function createAppSettingsCoordinator(
       case "appearance":
         await refreshAppearance();
         return;
+      case "browser":
+        await refreshBrowser();
+        return;
       case "model-providers":
         await refreshModelProviders();
         return;
       case "app-snapshots":
-      case "browser":
       case "computer-control":
       case "config":
       case "connections":
@@ -307,6 +328,10 @@ export function createAppSettingsCoordinator(
       }
       if (actionId === "refresh-model-providers") {
         void refreshModelProviders();
+        return true;
+      }
+      if (actionId === "refresh-browser-capabilities") {
+        void refreshBrowser();
         return true;
       }
       return false;

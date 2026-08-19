@@ -21,6 +21,10 @@ describe("Control settings adapter", () => {
       authority: "model-provider-settings",
       status: "available",
     });
+    expect(controlSettingsAvailability("browser")).toEqual({
+      authority: "active-capability-catalog",
+      status: "available",
+    });
     expect(controlSettingsAvailability("mcp-servers")).toEqual({
       reason: "not-owned-by-control",
       status: "unavailable",
@@ -43,6 +47,7 @@ describe("Control settings adapter", () => {
       getAccountSnapshot: vi.fn(),
       getLocalSettings,
       getModelProviderSettings: vi.fn(),
+      listActiveCapabilities: vi.fn(),
       probeModelProvider,
       putLocalSettings,
     } as unknown as ControlSettingsClient;

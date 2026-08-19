@@ -171,6 +171,26 @@ export function settingsSectionLabel(
 
 export const settingsCatalog = [
   {
+    id: "integrations",
+    labelKey: "integrations",
+    items: [
+      {
+        id: "browser",
+        labelKey: "browser",
+        icon: "globe",
+        mode: "status",
+        description: {
+          zh: "查看当前发布中由 Control 管理的 Web 与浏览器能力",
+          en: "Inspect Web and browser capabilities in the active Control release",
+        },
+        backend: {
+          refreshTarget: "browser-capabilities",
+          scope: "runtime",
+        },
+      },
+    ],
+  },
+  {
     id: "personal",
     labelKey: "personal",
     items: [
