@@ -138,7 +138,8 @@ export function takeOverSqliteWorkflowContinuation(
   if (
     attempt.workItemId === input.reconciliationLease.workItemId &&
     attempt.leaseEpoch === input.reconciliationLease.leaseEpoch &&
-    executionNode.status === "running"
+    executionNode.status === "running" &&
+    checkpoint.activeDispatch === null
   ) {
     return {
       attempt: { ...attempt, status: "running" },

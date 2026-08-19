@@ -70,6 +70,7 @@ import {
 import { SqliteWorkflowNodeContinuationAuthority } from "./sqlite-workflow-node-continuation.ts";
 import { takeOverSqliteWorkflowContinuation } from "./sqlite-workflow-continuation-takeover.ts";
 import { takeOverSqliteWorkflowPendingTools } from "./sqlite-workflow-pending-tool-takeover.ts";
+import { commitSqliteRetrievedWorkflowContinuationWithinTransaction } from "./sqlite-workflow-retrieved-continuation.ts";
 import { SqliteWorkflowToolApprovalAuthority } from "./sqlite-workflow-tool-approval.ts";
 import { settleSqliteWorkflowNodeWithinTransaction } from "./sqlite-workflow-node-settlement.ts";
 import { settleSqliteWorkflowNodeModelTerminalWithinTransaction } from "./sqlite-workflow-model-settlement.ts";
@@ -987,7 +988,8 @@ export class SqliteWorkflowRunCompositionStore
                 ...inputValue,
                 value: structuredClone(inputValue.value) as
                   WorkflowExecutionValue["value"] },
-              dispatch: { ...dispatch, status: "responseObserved" as const } },
+              dispatch: { ...dispatch, status: "responseObserved" as const },
+              priorContinuation: checkpoint },
             handoff: { currentWorkItem: "retained" as const,
               nextWorkItemId: null, kind: "none" as const },
             runDisposition: "nonTerminal" as const });
@@ -1293,6 +1295,118 @@ export class SqliteWorkflowRunCompositionStore
         runDisposition: settled.runDisposition,
       };
       this.#insertReceipt(receiptInput, "reconcileNode", fingerprint, result);
+      this.#database.exec("COMMIT");
+      return structuredClone(result);
+    } catch (error) {
+      rollback(this.#database);
+      throw normalizeCompositionError(error);
+    }
+  }
+
+  async commitRetrievedWorkflowNodeContinuation(
+    input: Parameters<WorkflowRunCompositionStore["commitRetrievedWorkflowNodeContinuation"]>[0],
+  ): ReturnType<WorkflowRunCompositionStore["commitRetrievedWorkflowNodeContinuation"]> {
+    const nowMs = readLeaseClock(this.#clock);
+    const now = new Date(nowMs).toISOString();
+    try {
+      this.#database.exec("BEGIN IMMEDIATE");
+      this.#validateLease(input, nowMs);
+      assertCanonicalRun(this.#loadRun(input.tenantId, input.runId), input.binding);
+      const expectedPayload = {
+        schemaVersion: "crewon.workflow-reconcile-work-item.v0",
+        trigger: "workflowReconcile", binding: input.binding,
+        nodeId: input.nodeId, claimId: input.claimId,
+        claimEpoch: input.claimEpoch,
+        reconciliationOperationId: input.reconciliationOperationId,
+      };
+      if (stableJson(this.#loadWorkItemPayload(input.lease.workItemId)) !==
+          stableJson(expectedPayload))
+        throw new RunStoreError("workflow_composition_work_item_mismatch");
+      const execution = this.#loadExecution(input.tenantId, input.runId);
+      const node = executionNode(input, execution);
+      const workflow = this.#loadWorkflow(input);
+      const definition = workflow.nodes.find(
+        (candidate) => candidate.nodeId === input.nodeId);
+      const expectedAgentVersionId = definition?.kind === "agent"
+        ? definition.agentVersionId
+        : definition?.kind === "verification"
+          ? definition.verifierAgentVersionId : null;
+      const step = loadSqliteRunStep(this.#database, {
+        tenantId: input.tenantId, runId: input.runId,
+        stepId: input.attempt.stepId });
+      const attempt = loadSqliteRunAttempt(this.#database, {
+        tenantId: input.tenantId, runId: input.runId,
+        stepId: input.attempt.stepId, attemptId: input.attempt.attemptId });
+      const dispatch = loadSqliteModelDispatchReceipt(this.#database, {
+        tenantId: input.tenantId, runId: input.runId,
+        stepId: input.attempt.stepId, attemptId: input.attempt.attemptId,
+        operationId: input.dispatch.operationId });
+      const inputValue = this.#loadExecutionValue(
+        input.tenantId, input.runId, "nodeInput", input.nodeId);
+      const leaseRow = this.#database.prepare(
+        "SELECT lease_expires_at_ms FROM work_items WHERE work_item_id=?",
+      ).get(input.lease.workItemId) as
+        { lease_expires_at_ms: number | null } | undefined;
+      if (execution === null || definition === undefined ||
+          definition.kind === "humanGate" ||
+          expectedAgentVersionId !== input.agentVersionId ||
+          node.agentVersionId !== input.agentVersionId ||
+          node.claimId !== input.claimId || node.claimEpoch !== input.claimEpoch ||
+          (node.status !== "unknown" && node.status !== "running") ||
+          step === null || step.currentAttemptId !== input.attempt.attemptId ||
+          attempt === null || attempt.status !== "running" ||
+          attempt.workItemId !== input.attempt.workItemId ||
+          attempt.leaseEpoch !== input.attempt.leaseEpoch ||
+          dispatch === null || dispatch.status !== "responseObserved" ||
+          dispatch.operation !== "dispatch" ||
+          dispatch.requestSequence !== input.dispatch.requestSequence ||
+          dispatch.revision !== input.dispatch.expectedRevision ||
+          dispatch.workItemId !== input.attempt.workItemId ||
+          dispatch.leaseEpoch !== input.attempt.leaseEpoch ||
+          inputValue === null || inputValue.valueDigest !== node.inputDigest ||
+          leaseRow?.lease_expires_at_ms === null ||
+          leaseRow?.lease_expires_at_ms === undefined ||
+          leaseRow.lease_expires_at_ms <= nowMs)
+        throw new RunStoreError("workflow_retrieved_continuation_corrupt");
+      const authority = {
+        tenantId: input.tenantId, runId: input.runId,
+        workItemId: input.attempt.workItemId,
+        leaseEpoch: input.attempt.leaseEpoch, nodeId: input.nodeId,
+        nodeKind: node.kind === "verification"
+          ? "verification" as const : "agent" as const,
+        claimId: input.claimId, claimEpoch: input.claimEpoch,
+        agentVersionId: input.agentVersionId,
+        attempt: { stepId: input.attempt.stepId,
+          attemptId: input.attempt.attemptId },
+      };
+      const resumed = commitSqliteRetrievedWorkflowContinuationWithinTransaction(
+        this.#database, {
+          authority, reconciliationLease: input.lease,
+          priorContinuation: input.priorContinuation, payload: input.payload,
+          dispatch: { ...dispatch, status: "responseObserved" }, step,
+          currentAttempt: { ...attempt, status: "running" }, execution,
+          nodeInputDigest: inputValue.valueDigest,
+          reconciliationLeaseExpiresAt:
+            new Date(leaseRow.lease_expires_at_ms).toISOString(),
+          committedAt: now, digester: this.#digester,
+        });
+      const result = {
+        disposition: "resumeRequired" as const,
+        evidenceStatus: "responseObserved" as const,
+        resume: {
+          claim: { node: definition, claimId: input.claimId,
+            claimEpoch: input.claimEpoch, gateRequestId: null,
+            inputDigest: node.inputDigest! },
+          step: resumed.step, attempt: resumed.attempt,
+          reconciliationLease: input.lease,
+          continuation: resumed.continuation,
+          pendingTools: resumed.pendingTools,
+        },
+        execution: resumed.execution,
+        handoff: { currentWorkItem: "retained" as const,
+          nextWorkItemId: null, kind: "none" as const },
+        runDisposition: "nonTerminal" as const,
+      };
       this.#database.exec("COMMIT");
       return structuredClone(result);
     } catch (error) {
