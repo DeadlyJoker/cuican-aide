@@ -1135,7 +1135,7 @@ describe("Control thread runtime", () => {
     runtime.close();
   });
 
-  it("sends only immutable Control Knowledge references", async () => {
+  it("attaches immutable Control Knowledge references to an existing Thread", async () => {
     const client = fakeClient({
       messages: [messageView(1, "user", "Question")],
       runs: [runView()],

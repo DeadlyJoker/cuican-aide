@@ -3,7 +3,6 @@ import type { Thread } from "@crewon-ui-model/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
 import {
   type ChangeEvent,
-  type ClipboardEvent,
   type ReactNode,
   useEffect,
   useMemo,
@@ -56,11 +55,6 @@ import type { ControlKnowledgeSelection } from "../../lib/control-runtime/contro
 import type { Locale } from "../../lib/i18n";
 import type { ControlWorkflowAdapter } from "../../lib/workflow/controlWorkflowAdapter";
 import type { ConnectionState } from "../../lib/shared/connectionState";
-import {
-  pendingComposerImagesFromFiles,
-  pastedImageFiles,
-  type PendingComposerImage,
-} from "../../lib/shared/composerImageAttachments";
 import type { ComposerImageInput } from "../../lib/shared/composerImages";
 import {
   removeComposerMentionToken,
@@ -508,12 +502,6 @@ export function CommandWorkspace({
   >(selectedThreadId);
   const [newTaskDraft, setNewTaskDraft] = useState(false);
   const [assistantComposerValue, setAssistantComposerValue] = useState("");
-  const [commandImages, setCommandImages] = useState<PendingComposerImage[]>(
-    [],
-  );
-  const [assistantImages, setAssistantImages] = useState<
-    PendingComposerImage[]
-  >([]);
   const [scene, setScene] = useState<CommandScene>("office");
   const [sceneMode, setSceneMode] = useState<SceneInteractionMode>("auto");
   const [model, setModel] = useState(fallbackCommandModelOptions[0].value);
@@ -865,17 +853,6 @@ export function CommandWorkspace({
     [locale, pendingComposerMentions],
   );
 
-  function imageResources(
-    images: PendingComposerImage[],
-  ): ComposerResourceTag[] {
-    return images.map((image) => ({
-      id: image.id,
-      kind: "image",
-      label: locale === "zh" ? "图片" : "Image",
-      name: image.name,
-    }));
-  }
-
   function removePendingResource(
     resource: ComposerResourceTag,
     target: "assistant" | "command",
@@ -1084,29 +1061,6 @@ export function CommandWorkspace({
     ref.current?.focus();
   }
 
-  async function pasteImages(
-    event: ClipboardEvent<HTMLTextAreaElement>,
-    target: "assistant" | "command",
-  ) {
-    const files = pastedImageFiles(event.clipboardData.items);
-    if (files.length === 0) {
-      return;
-    }
-    event.preventDefault();
-    const currentImages =
-      target === "assistant" ? assistantImages : commandImages;
-    const nextImages = await pendingComposerImagesFromFiles(
-      files,
-      currentImages.length,
-    );
-    if (target === "assistant") {
-      setAssistantImages((current) => [...current, ...nextImages]);
-    } else {
-      setCommandImages((current) => [...current, ...nextImages]);
-    }
-    focusActiveComposer();
-  }
-
   async function addLocalResources(
     event: ChangeEvent<HTMLInputElement>,
     kind: LocalResourceSelectionKind,
@@ -1162,7 +1116,6 @@ export function CommandWorkspace({
       selectedThread,
     });
     submitCommandComposer({
-      images: commandImages.map(({ detail, url }) => ({ detail, url })),
       onSend,
       onSendNewThread,
       settings: commandComposerRuntimeSettings({
@@ -1179,7 +1132,6 @@ export function CommandWorkspace({
       shouldCreateNewThread,
       text: trimmed,
     });
-    setCommandImages([]);
     setNewTaskDraft(false);
   }
 
@@ -1198,13 +1150,7 @@ export function CommandWorkspace({
         : {}),
       executionIntent: "none",
     });
-    const images = assistantImages.map(({ detail, url }) => ({ detail, url }));
-    if (images.length) {
-      onSendAssistant(trimmed, settings, images);
-    } else {
-      onSendAssistant(trimmed, settings);
-    }
-    setAssistantImages([]);
+    onSendAssistant(trimmed, settings);
   }
 
   function openComposerPalette(kind: "add" | "context" | "provider" | "slash") {
@@ -1846,7 +1792,6 @@ export function CommandWorkspace({
                       resources={[
                         ...pendingComposerResources,
                         ...(providerComposerTag ? [providerComposerTag] : []),
-                        ...imageResources(commandImages),
                       ]}
                       onRemove={(resource) => {
                         if (providerComposerTag?.id === resource.id) {
@@ -1857,13 +1802,7 @@ export function CommandWorkspace({
                           }
                           return;
                         }
-                        if (resource.kind !== "image") {
-                          removePendingResource(resource, "command");
-                          return;
-                        }
-                        setCommandImages((current) =>
-                          current.filter((image) => image.id !== resource.id),
-                        );
+                        removePendingResource(resource, "command");
                       }}
                     />
                     <button
@@ -2070,7 +2009,6 @@ export function CommandWorkspace({
                 onChange={onChangeComposerValue}
                 onClosePalette={closeComposerPalette}
                 onOpenPalette={openComposerPalette}
-                onPaste={(event) => void pasteImages(event, "command")}
                 onStop={onStop}
                 onSubmit={sendComposerValue}
               />
@@ -2122,7 +2060,6 @@ export function CommandWorkspace({
                       resources={[
                         ...pendingComposerResources,
                         ...(providerComposerTag ? [providerComposerTag] : []),
-                        ...imageResources(assistantImages),
                       ]}
                       onRemove={(resource) => {
                         if (providerComposerTag?.id === resource.id) {
@@ -2133,13 +2070,7 @@ export function CommandWorkspace({
                           }
                           return;
                         }
-                        if (resource.kind !== "image") {
-                          removePendingResource(resource, "assistant");
-                          return;
-                        }
-                        setAssistantImages((current) =>
-                          current.filter((image) => image.id !== resource.id),
-                        );
+                        removePendingResource(resource, "assistant");
                       }}
                     />
                     <button
@@ -2309,7 +2240,6 @@ export function CommandWorkspace({
                 onChange={setAssistantComposerValue}
                 onClosePalette={closeComposerPalette}
                 onOpenPalette={openComposerPalette}
-                onPaste={(event) => void pasteImages(event, "assistant")}
                 onStop={onStop}
                 onSubmit={sendAssistantComposerValue}
               />

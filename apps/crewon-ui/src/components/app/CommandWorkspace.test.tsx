@@ -1032,6 +1032,8 @@ describe("CommandWorkspace", () => {
     expect(commandHomeMarkup).toContain("选择文件夹");
     expect(markup).toContain('aria-label="从本地电脑选择文件"');
     expect(markup).toContain('aria-label="从本地电脑选择文件夹"');
+    expect(commandHomeMarkup).not.toContain('data-kind="image"');
+    expect(commandHomeMarkup).not.toContain("图片");
     const addPanelMarkup = commandHomeMarkup.slice(
       commandHomeMarkup.indexOf('id="add-search-panel"'),
       commandHomeMarkup.indexOf('id="context-search-panel"'),
@@ -1132,12 +1134,14 @@ describe("CommandWorkspace", () => {
         inputId="add-menu-search"
         items={[
           {
+            action: "attach-files",
             detail: "选择本地内容",
             kind: "file",
             label: "文件",
             title: "选择文件",
           },
           {
+            action: "attach-folder",
             detail: "选择本地目录",
             kind: "folder",
             label: "文件夹",
@@ -1176,6 +1180,8 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('class="add-palette-group-label">知识库');
     expect(markup).toContain('class="add-palette-group-label">插件');
     expect(markup).toContain('class="add-palette-item"');
+    expect(markup).not.toContain('data-kind="image"');
+    expect(markup).toMatchSnapshot();
   });
 
   it("uses a compact connection light instead of visible connection copy", () => {

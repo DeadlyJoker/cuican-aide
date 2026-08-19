@@ -299,6 +299,22 @@ describe("App Workspace Control composition", () => {
     );
   });
 
+  it("does not expose image attachments without Control Turn authority", () => {
+    const source = readFileSync(
+      new URL(
+        "../../components/app/CommandWorkspace.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(source).not.toMatch(
+      /pendingComposerImagesFromFiles|pastedImageFiles|control_images_not_supported/u,
+    );
+    expect(source).toContain('action: "attach-files"');
+    expect(source).toContain("onAddLocalResources(files, kind)");
+  });
+
   it("sources the packaged command target and model catalogs only from Control", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),
