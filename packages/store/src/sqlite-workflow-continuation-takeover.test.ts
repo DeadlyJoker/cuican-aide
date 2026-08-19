@@ -6,18 +6,31 @@ import test from "node:test";
 import {
   canonicalJson,
   RunStoreError,
+  type WorkflowAgentAttemptAuthority,
   type WorkflowExecutionState,
   type WorkflowNodeContinuationCheckpoint,
+  type WorkflowPendingToolResume,
 } from "@crewon/application";
+import { canonicalActionIntent } from "@crewon/contracts/runtime";
 import {
   compileWorkflowVersion,
   createWorkflowNodeTerminalEvidence,
+  dispatchToolExecutionReceipt,
+  markToolExecutionUnknownOutcome,
+  prepareToolExecutionReceipt,
+  reduceRunLifecycleEvent,
+  resolveToolExecutionReceipt,
   serializeCompiledWorkflowVersion,
   type RunState,
+  type ToolExecutionReceiptState,
   type WorkflowVersionSource,
 } from "@crewon/domain";
 
-import { checkpointSqliteRunAttempt } from "./sqlite-execution-authority.ts";
+import {
+  beginSqliteRunAttempt,
+  checkpointSqliteRunAttempt,
+  loadSqliteRunAttempt,
+} from "./sqlite-execution-authority.ts";
 import type { LeaseClock } from "./lease-clock.ts";
 import {
   loadSqliteModelDispatchReceipt,
@@ -25,6 +38,10 @@ import {
   observeSqliteModelDispatchResponse,
   prepareSqliteModelDispatch,
 } from "./sqlite-model-dispatch-evidence.ts";
+import {
+  insertSqliteToolExecutionReceipt,
+  loadSqliteToolExecutionReceipt,
+} from "./sqlite-tool-execution-receipts.ts";
 import { SqliteWorkflowRunCompositionStore } from "./sqlite-workflow-run-composition-store.ts";
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
 
@@ -118,6 +135,7 @@ test("SQLite reconciliation atomically adopts a durable nonterminal continuation
   assert.equal(resumed.resume.continuation.activeDispatch, null);
   assert.equal(resumed.resume.continuation.terminalCandidate, null);
   assert.equal(resumed.resume.continuation.revision, 2);
+  assert.deepEqual(resumed.resume.pendingTools, []);
   assert.equal(resumed.execution.revision, beforeExecution.revision + 1);
   assert.deepEqual(resumed.execution.nodes[0], {
     ...beforeExecution.nodes[0],
@@ -175,8 +193,249 @@ test("SQLite reconciliation atomically adopts a durable nonterminal continuation
   fixture.database.close();
 });
 
+for (const status of ["prepared", "dispatched", "unknownOutcome"] as const) {
+  test(`SQLite reconciliation adopts one ${status} pending Tool without changing its dispatch state`, async () => {
+    const fixture = await continuationFixture({
+      pendingToolStatuses: [status],
+    });
+    const before = fixture.pendingTools[0]!.receipt;
+    const resumed = requireResume(
+      await fixture.store.reconcileWorkflowNode(fixture.reconcileInput),
+    );
+    const pending = resumed.resume.pendingTools[0]!;
+
+    assert.equal(resumed.resume.pendingTools.length, 1);
+    assert.equal(pending.receipt.status, status);
+    assert.equal(pending.receipt.revision, before.revision + 1);
+    assert.equal(
+      pending.receipt.workItemId,
+      fixture.reconcileInput.lease.workItemId,
+    );
+    assert.deepEqual(
+      {
+        stepId: pending.step.stepId,
+        stepKind: pending.step.kind,
+        stepStatus: pending.step.status,
+        attemptId: pending.attempt.attemptId,
+        attemptStatus: pending.attempt.status,
+        workItemId: pending.attempt.workItemId,
+        leaseEpoch: pending.attempt.leaseEpoch,
+      },
+      {
+        stepId: before.stepId,
+        stepKind: "tool",
+        stepStatus: "running",
+        attemptId: before.attemptId,
+        attemptStatus: "running",
+        workItemId: fixture.reconcileInput.lease.workItemId,
+        leaseEpoch: fixture.reconcileInput.lease.leaseEpoch,
+      },
+    );
+    assert.deepEqual(storedPendingTool(fixture), pending);
+
+    const retry = requireResume(
+      await fixture.store.reconcileWorkflowNode(fixture.reconcileInput),
+    );
+    assert.deepEqual(retry.resume.pendingTools, resumed.resume.pendingTools);
+    assert.deepEqual(storedPendingTool(fixture), pending);
+    fixture.database.close();
+  });
+}
+
+test("SQLite pending Tool adoption rolls parent and Tool authorities back together", async () => {
+  const fixture = await continuationFixture({
+    pendingToolStatuses: ["prepared"],
+  });
+  const beforeReceipt = fixture.pendingTools[0]!.receipt;
+  const beforeExecution = storedExecution(fixture.database);
+  fixture.database.exec(`CREATE TRIGGER fail_pending_tool_takeover
+    BEFORE UPDATE ON tool_execution_receipts
+    BEGIN SELECT RAISE(ABORT, 'pending-tool-crash'); END`);
+
+  await assert.rejects(
+    fixture.store.reconcileWorkflowNode(fixture.reconcileInput),
+    (error) =>
+      error instanceof RunStoreError &&
+      error.code === "workflow_composition_store_failed" &&
+      error.cause instanceof Error &&
+      error.cause.message === "pending-tool-crash",
+  );
+  assert.deepEqual(dispatchState(fixture), {
+    status: "responseObserved",
+    revision: fixture.observed.revision,
+    terminalOutcome: null,
+  });
+  assert.deepEqual(attemptAuthority(fixture), {
+    workItemId: fixture.authority.workItemId,
+    leaseEpoch: fixture.authority.leaseEpoch,
+  });
+  assert.deepEqual(storedExecution(fixture.database), beforeExecution);
+  assert.equal(storedContinuation(fixture.database).revision, 1);
+  assert.deepEqual(
+    loadSqliteToolExecutionReceipt(fixture.database, beforeReceipt),
+    beforeReceipt,
+  );
+  assert.deepEqual(toolAttemptAuthority(fixture), {
+    workItemId: fixture.authority.workItemId,
+    leaseEpoch: fixture.authority.leaseEpoch,
+  });
+  fixture.database.close();
+});
+
+test("SQLite pending Tool adoption fails closed across its durable authority matrix", async (context) => {
+  const cases = [
+    {
+      name: "segment",
+      mutate(receipt: ToolExecutionReceiptState) {
+        return {
+          ...receipt,
+          call: { ...receipt.call, segmentId: "segment:forged" },
+          actionIntent: {
+            ...receipt.actionIntent!,
+            segmentId: "segment:forged",
+          },
+        };
+      },
+    },
+    {
+      name: "call",
+      mutate(receipt: ToolExecutionReceiptState) {
+        return {
+          ...receipt,
+          call: { ...receipt.call, callId: "forged-call" },
+          actionIntent: { ...receipt.actionIntent!, callId: "forged-call" },
+        };
+      },
+    },
+    {
+      name: "action",
+      mutate(receipt: ToolExecutionReceiptState) {
+        return { ...receipt, actionDigest: digester.sha256("forged-action") };
+      },
+    },
+    {
+      name: "input",
+      mutate(receipt: ToolExecutionReceiptState) {
+        const actionIntent = {
+          ...receipt.actionIntent!,
+          tool: {
+            ...receipt.actionIntent!.tool,
+            inputDigest: digester.sha256("forged-input"),
+          },
+        };
+        return {
+          ...receipt,
+          call: {
+            ...receipt.call,
+            inputDigest: actionIntent.tool.inputDigest,
+          },
+          actionIntent,
+          actionDigest: digester.sha256(canonicalActionIntent(actionIntent)),
+        };
+      },
+    },
+    {
+      name: "result",
+      mutate(receipt: ToolExecutionReceiptState) {
+        return {
+          ...receipt,
+          result: {
+            output: "forged",
+            outputDigest: digester.sha256("forged"),
+            isError: false,
+            artifactRef: null,
+          },
+        };
+      },
+    },
+    {
+      name: "receipt work item",
+      mutate(receipt: ToolExecutionReceiptState) {
+        return { ...receipt, workItemId: "scheduler-work" };
+      },
+    },
+  ] as const;
+  for (const entry of cases) {
+    await context.test(entry.name, async () => {
+      const fixture = await continuationFixture({
+        pendingToolStatuses: ["prepared"],
+      });
+      rewritePendingReceipt(
+        fixture,
+        entry.mutate(fixture.pendingTools[0]!.receipt),
+      );
+      await assert.rejects(
+        fixture.store.reconcileWorkflowNode(fixture.reconcileInput),
+        (error) => error instanceof RunStoreError,
+      );
+      assert.deepEqual(attemptAuthority(fixture), {
+        workItemId: fixture.authority.workItemId,
+        leaseEpoch: fixture.authority.leaseEpoch,
+      });
+      assert.deepEqual(toolAttemptAuthority(fixture), {
+        workItemId: fixture.authority.workItemId,
+        leaseEpoch: fixture.authority.leaseEpoch,
+      });
+      fixture.database.close();
+    });
+  }
+});
+
+test("SQLite rejects terminal Tool receipts and more than sixteen pending Tool authorities", async (context) => {
+  for (const status of ["completed", "canceled"] as const) {
+    await context.test(status, async () => {
+      const fixture = await continuationFixture({
+        pendingToolStatuses: ["prepared"],
+      });
+      const current = fixture.pendingTools[0]!.receipt;
+      const terminal =
+        status === "completed"
+          ? resolveToolExecutionReceipt(
+              dispatchToolExecutionReceipt(current, now),
+              {
+                status,
+                resolvedAt: now,
+                providerReceiptId: "provider-terminal",
+                result: {
+                  output: "done",
+                  outputDigest: digester.sha256("done"),
+                  isError: false,
+                  artifactRef: null,
+                },
+              },
+            )
+          : resolveToolExecutionReceipt(current, {
+              status,
+              resolvedAt: now,
+              providerReceiptId: null,
+            });
+      rewritePendingReceipt(fixture, terminal);
+      await assert.rejects(
+        fixture.store.reconcileWorkflowNode(fixture.reconcileInput),
+        (error) => error instanceof RunStoreError,
+      );
+      fixture.database.close();
+    });
+  }
+  await context.test("bounded array", async () => {
+    const fixture = await continuationFixture({
+      pendingToolStatuses: Array.from(
+        { length: 17 },
+        () => "prepared" as const,
+      ),
+    });
+    await assert.rejects(
+      fixture.store.reconcileWorkflowNode(fixture.reconcileInput),
+      (error) => error instanceof RunStoreError,
+    );
+    fixture.database.close();
+  });
+});
+
 test("SQLite re-adopts a continuation after adoption crashes before the next model request", async () => {
-  const fixture = await continuationFixture();
+  const fixture = await continuationFixture({
+    pendingToolStatuses: ["prepared"],
+  });
   const first = requireResume(
     await fixture.store.reconcileWorkflowNode(fixture.reconcileInput),
   );
@@ -208,6 +467,12 @@ test("SQLite re-adopts a continuation after adoption crashes before the next mod
   assert.equal(result.resume.continuation.revision, 3);
   assert.equal(result.execution.revision, first.execution.revision + 1);
   assert.equal(result.execution.nodes[0]?.status, "running");
+  assert.equal(result.resume.pendingTools[0]?.receipt.status, "prepared");
+  assert.equal(
+    result.resume.pendingTools[0]?.receipt.revision,
+    first.resume.pendingTools[0]!.receipt.revision + 1,
+  );
+  assert.equal(result.resume.pendingTools[0]?.attempt.leaseEpoch, 2);
   assert.equal(result.resume.continuation.activeDispatch, null);
   assert.deepEqual(result.resume.continuation.history, fixture.history);
   assert.deepEqual(dispatchState(fixture), {
@@ -219,11 +484,11 @@ test("SQLite re-adopts a continuation after adoption crashes before the next mod
       certainty: "responseObserved",
     },
   });
-  assert.equal(
-    requireResume(await fixture.store.reconcileWorkflowNode(reclaimedInput))
-      .execution.revision,
-    result.execution.revision,
+  const retry = requireResume(
+    await fixture.store.reconcileWorkflowNode(reclaimedInput),
   );
+  assert.equal(retry.execution.revision, result.execution.revision);
+  assert.deepEqual(retry.resume.pendingTools, result.resume.pendingTools);
   assert.equal(storedContinuation(fixture.database).revision, 3);
   fixture.database.close();
 });
@@ -467,7 +732,15 @@ test("SQLite reconciliation never resumes a cleared checkpoint without terminal 
   fixture.database.close();
 });
 
-async function continuationFixture() {
+async function continuationFixture(
+  options: Readonly<{
+    pendingToolStatuses?: readonly (
+      | "prepared"
+      | "dispatched"
+      | "unknownOutcome"
+    )[];
+  }> = {},
+) {
   const database = new DatabaseSync(":memory:");
   const clock: LeaseClock = { nowEpochMilliseconds: () => nowMs };
   const store = new SqliteWorkflowRunCompositionStore(database, {
@@ -585,6 +858,8 @@ async function continuationFixture() {
     now,
     "initialOnly",
   );
+  const segmentId = "segment-1";
+  const pendingToolStatuses = options.pendingToolStatuses ?? [];
   const history = [
     {
       type: "message" as const,
@@ -597,6 +872,13 @@ async function continuationFixture() {
       callId: "committed-tool-call",
       output: "effect already committed",
     },
+    ...pendingToolStatuses.map((_status, index) => ({
+      type: "tool_call" as const,
+      kind: "function" as const,
+      callId: `pending-call-${index + 1}`,
+      name: "tool.read",
+      input: JSON.stringify({ index }),
+    })),
   ];
   await store.commitWorkflowAssistantContinuation({
     lease: nodeLease,
@@ -605,7 +887,7 @@ async function continuationFixture() {
     next: {
       schemaVersion: "crewon.workflow-node-continuation.v0",
       authority,
-      segmentId: "segment-1",
+      segmentId,
       modelSampleIndex: 0,
       toolRoundsConsumed: 1,
       providerCheckpoint,
@@ -620,6 +902,12 @@ async function continuationFixture() {
     },
     committedAt: now,
     terminalResult: null,
+  });
+  const pendingTools = seedPendingTools(database, {
+    authority,
+    lease: nodeLease,
+    segmentId,
+    statuses: pendingToolStatuses,
   });
   database
     .prepare(
@@ -684,8 +972,134 @@ async function continuationFixture() {
     observed,
     inputDigest,
     history,
+    pendingTools,
     reconcileInput,
   };
+}
+
+function seedPendingTools(
+  database: DatabaseSync,
+  input: Readonly<{
+    authority: WorkflowAgentAttemptAuthority;
+    lease: Readonly<{
+      workItemId: string;
+      ownerId: string;
+      leaseId: string;
+      leaseEpoch: number;
+    }>;
+    segmentId: string;
+    statuses: readonly ("prepared" | "dispatched" | "unknownOutcome")[];
+  }>,
+): readonly Readonly<{ receipt: ToolExecutionReceiptState }>[] {
+  let run = JSON.parse(
+    String(
+      database
+        .prepare("SELECT state_json FROM run_snapshots WHERE run_id='run-1'")
+        .get()!.state_json,
+    ),
+  ) as RunState;
+  const insertEvent = database.prepare(
+    `INSERT INTO run_events(tenant_id,run_id,sequence,event_id,event_json)
+     VALUES ('tenant-1','run-1',?,?,?)`,
+  );
+  return input.statuses.map((status, index) => {
+    const callId = `pending-call-${index + 1}`;
+    const rawInput = JSON.stringify({ index });
+    const stepId = `pending-tool-step-${index + 1}`;
+    const attemptId = `pending-tool-attempt-${index + 1}`;
+    database.exec("BEGIN IMMEDIATE");
+    beginSqliteRunAttempt(database, {
+      tenantId: "tenant-1",
+      runId: "run-1",
+      lease: input.lease,
+      stepId,
+      kind: "tool",
+      attemptId,
+      startedAt: now,
+    });
+    database.exec("COMMIT");
+    const actionIntent = {
+      schemaVersion: "crewon.action-intent.v0" as const,
+      runId: "run-1",
+      segmentId: input.segmentId,
+      callId,
+      tool: {
+        kind: "function" as const,
+        name: "tool.read",
+        inputDigest: digester.sha256(rawInput),
+      },
+      effect: "readOnly" as const,
+      recovery: "replaySafe" as const,
+      policySnapshotId: "policy-1",
+      workspaceBindingId: null,
+      resourceBindingId: null,
+      credentialBindingId: null,
+      executionTarget: { kind: "control" as const, bindingId: "tool-binding" },
+      capability: "workspace.read",
+      approvalRequirement: "none" as const,
+      limits: {
+        timeoutMs: 30_000,
+        maxOutputBytes: 65_536,
+        maxArtifactBytes: 1_048_576,
+      },
+    };
+    let receipt = prepareToolExecutionReceipt({
+      receiptId: `pending-tool-receipt-${index + 1}`,
+      tenantId: "tenant-1",
+      runId: "run-1",
+      stepId,
+      attemptId,
+      workItemId: input.authority.workItemId,
+      executionId: `pending-tool-execution-${index + 1}`,
+      idempotencyKey: `pending-tool-idempotency-${index + 1}`,
+      actionDigest: digester.sha256(canonicalActionIntent(actionIntent)),
+      actionIntent,
+      call: {
+        segmentId: input.segmentId,
+        callId,
+        kind: "function",
+        name: "tool.read",
+        inputDigest: digester.sha256(rawInput),
+      },
+      effect: "readOnly",
+      recovery: "replaySafe",
+      preparedAt: now,
+    });
+    if (status === "dispatched" || status === "unknownOutcome")
+      receipt = dispatchToolExecutionReceipt(receipt, now);
+    if (status === "unknownOutcome")
+      receipt = markToolExecutionUnknownOutcome(receipt, {
+        observedAt: now,
+        providerReceiptId: `provider-pending-${index + 1}`,
+      });
+    insertSqliteToolExecutionReceipt(database, receipt);
+    const event = {
+      schemaVersion: "crewon.run-event.v0" as const,
+      identity: { runId: "run-1" },
+      eventId: `pending-tool-requested-${index + 1}`,
+      sequence: run.lastSequence + 1,
+      occurredAt: now,
+      type: "tool.requested" as const,
+      data: {
+        segmentId: input.segmentId,
+        segmentSequence: index + 1,
+        callId,
+        kind: "function" as const,
+        name: "tool.read",
+        input: rawInput,
+      },
+    };
+    run = reduceRunLifecycleEvent(run, event);
+    insertEvent.run(event.sequence, event.eventId, JSON.stringify(event));
+    database
+      .prepare(
+        `UPDATE run_snapshots
+         SET revision=?,last_sequence=?,state_json=?,updated_at=?
+         WHERE tenant_id='tenant-1' AND run_id='run-1'`,
+      )
+      .run(run.revision, run.lastSequence, JSON.stringify(run), run.updatedAt);
+    return { receipt };
+  });
 }
 
 async function seed(database: DatabaseSync): Promise<void> {
@@ -844,6 +1258,7 @@ function requireResume(result: unknown) {
       attempt: { workItemId: string; leaseEpoch: number; status: string };
       reconciliationLease: unknown;
       continuation: WorkflowNodeContinuationCheckpoint;
+      pendingTools: readonly WorkflowPendingToolResume[];
     };
   };
   assert.equal(value.disposition, "resumeRequired");
@@ -864,6 +1279,62 @@ function storedContinuation(
     .prepare("SELECT checkpoint_json FROM workflow_node_continuations")
     .get() as { checkpoint_json: string };
   return JSON.parse(row.checkpoint_json) as WorkflowNodeContinuationCheckpoint;
+}
+
+function storedPendingTool(
+  fixture: Awaited<ReturnType<typeof continuationFixture>>,
+): WorkflowPendingToolResume {
+  const original = fixture.pendingTools[0]!.receipt;
+  const receipt = loadSqliteToolExecutionReceipt(fixture.database, original)!;
+  const step = fixture.database
+    .prepare("SELECT state_json FROM run_steps WHERE step_id=?")
+    .get(receipt.stepId) as { state_json: string };
+  const attempt = loadSqliteRunAttempt(fixture.database, {
+    tenantId: receipt.tenantId,
+    runId: receipt.runId,
+    stepId: receipt.stepId,
+    attemptId: receipt.attemptId,
+  })!;
+  return {
+    receipt: receipt as WorkflowPendingToolResume["receipt"],
+    step: JSON.parse(step.state_json) as WorkflowPendingToolResume["step"],
+    attempt: attempt as WorkflowPendingToolResume["attempt"],
+  };
+}
+
+function toolAttemptAuthority(
+  fixture: Awaited<ReturnType<typeof continuationFixture>>,
+) {
+  const receipt = fixture.pendingTools[0]!.receipt;
+  const attempt = loadSqliteRunAttempt(fixture.database, {
+    tenantId: receipt.tenantId,
+    runId: receipt.runId,
+    stepId: receipt.stepId,
+    attemptId: receipt.attemptId,
+  })!;
+  return { workItemId: attempt.workItemId, leaseEpoch: attempt.leaseEpoch };
+}
+
+function rewritePendingReceipt(
+  fixture: Awaited<ReturnType<typeof continuationFixture>>,
+  receipt: ToolExecutionReceiptState,
+): void {
+  fixture.database
+    .prepare(
+      `UPDATE tool_execution_receipts
+       SET work_item_id=?,action_digest=?,status=?,revision=?,state_json=?,
+           updated_at=?,resolved_at=? WHERE receipt_id=?`,
+    )
+    .run(
+      receipt.workItemId,
+      receipt.actionDigest,
+      receipt.status,
+      receipt.revision,
+      JSON.stringify(receipt),
+      receipt.updatedAt,
+      receipt.resolvedAt,
+      receipt.receiptId,
+    );
 }
 
 function dispatchState(
