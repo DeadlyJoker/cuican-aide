@@ -21,6 +21,7 @@ import type {
   WorkflowNodeClaim,
 } from "./workflow-execution-types.ts";
 import type { WorkflowNodeContinuationCheckpoint } from "./workflow-node-continuation-store-port.ts";
+import type { WorkflowRetrievedContinuationPayload } from "./workflow-retrieved-continuation.ts";
 
 export const MAX_WORKFLOW_PENDING_TOOL_RESUMES = 16;
 
@@ -48,6 +49,7 @@ export type WorkflowNodeResponseRecovery = Readonly<{
     }>;
   inputValue: WorkflowExecutionValue;
   dispatch: ModelDispatchReceipt & Readonly<{ status: "responseObserved" }>;
+  priorContinuation: WorkflowNodeContinuationCheckpoint | null;
 }>;
 
 /** Store-adopted Tool authority that is still missing its durable continuation. */
@@ -418,6 +420,35 @@ export interface WorkflowRunCompositionStore {
     evidence: WorkflowNodeTerminalEvidence;
     dispatchTerminalOutcome: ModelDispatchTerminalOutcome;
   }): Promise<WorkflowRetrievedNodeSettlementResult>;
+
+  /** Atomically replaces one retrieved dispatch with Store-owned resume authority. */
+  commitRetrievedWorkflowNodeContinuation(input: {
+    tenantId: string;
+    runId: string;
+    lease: WorkItemLeaseInput;
+    binding: FrozenWorkflowVersionBinding;
+    nodeId: string;
+    claimId: string;
+    claimEpoch: number;
+    reconciliationOperationId: string;
+    agentVersionId: string;
+    attempt: Readonly<{
+      stepId: string;
+      attemptId: string;
+      workItemId: string;
+      leaseEpoch: number;
+    }>;
+    dispatch: Readonly<{
+      operationId: string;
+      requestSequence: number;
+      expectedRevision: number;
+      status: "responseObserved";
+    }>;
+    priorContinuation: WorkflowNodeContinuationCheckpoint | null;
+    payload: WorkflowRetrievedContinuationPayload;
+  }): Promise<
+    Extract<WorkflowReconciliationResult, { disposition: "resumeRequired" }>
+  >;
 
   cancelWorkflowExecution(input: {
     tenantId: string;
