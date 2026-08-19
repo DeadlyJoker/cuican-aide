@@ -4,6 +4,7 @@ import type {
   WorkflowCancellationResult,
   WorkflowNodeContinuationResume,
   WorkflowNodeResponseRecovery,
+  WorkflowRetrievedContinuationPayload,
   WorkflowRuntimeStore,
   WorkflowVersionStore,
 } from "@crewon/application";
@@ -76,7 +77,13 @@ export interface WorkflowAgentNodePort {
     claim: WorkItemClaim;
     binding: FrozenWorkflowVersionBinding;
     recovery: WorkflowNodeResponseRecovery;
-  }): Promise<WorkflowAtomicNodeOutcome>;
+  }): Promise<
+    | Readonly<{ kind: "terminal"; outcome: WorkflowAtomicNodeOutcome }>
+    | Readonly<{
+        kind: "continuation";
+        payload: WorkflowRetrievedContinuationPayload;
+      }>
+  >;
   resume(input: {
     claim: WorkItemClaim;
     binding: FrozenWorkflowVersionBinding;
@@ -458,16 +465,58 @@ export class ProductionWorkflowRuntimeDispatcher
       recovery.inputValue.valueDigest !== recovery.claim.inputDigest
     )
       throw new Error("workflow_node_retrieval_identity_mismatch");
-    let outcome: WorkflowAtomicNodeOutcome;
+    let reconciled;
     try {
-      outcome = await this.#agent.reconcile({
+      reconciled = await this.#agent.reconcile({
         claim: input.claim,
         binding: input.run.workflowVersionBinding!,
         recovery,
       });
     } catch {
-      outcome = { status: "unknown" };
+      return {
+        kind: "retry",
+        runId: input.run.runId,
+        code: "workflow_response_retrieve_retry_required",
+      };
     }
+    if (reconciled.kind === "continuation") {
+      let adopted;
+      try {
+        adopted = await this.#store.commitRetrievedWorkflowNodeContinuation({
+          tenantId: input.run.tenantId,
+          runId: input.run.runId,
+          lease: leaseInput(input.claim),
+          binding: input.run.workflowVersionBinding!,
+          nodeId: node.nodeId,
+          claimId: payload.claimId!,
+          claimEpoch: payload.claimEpoch!,
+          reconciliationOperationId: payload.reconciliationOperationId,
+          agentVersionId,
+          attempt: {
+            stepId: recovery.attempt.stepId,
+            attemptId: recovery.attempt.attemptId,
+            workItemId: recovery.attempt.workItemId,
+            leaseEpoch: recovery.attempt.leaseEpoch,
+          },
+          dispatch: {
+            operationId: recovery.dispatch.operationId,
+            requestSequence: recovery.dispatch.requestSequence,
+            expectedRevision: recovery.dispatch.revision,
+            status: "responseObserved",
+          },
+          priorContinuation: recovery.priorContinuation,
+          payload: reconciled.payload,
+        });
+      } catch {
+        return {
+          kind: "recovery",
+          runId: input.run.runId,
+          code: "workflow_retrieved_continuation_commit_unknown",
+        };
+      }
+      return this.#resumeNode(input, payload, workflow, adopted.resume);
+    }
+    const outcome = reconciled.outcome;
     if (outcome.status === "unknown")
       return {
         kind: "retry",
@@ -482,10 +531,7 @@ export class ProductionWorkflowRuntimeDispatcher
       digester: this.#digester,
     });
     try {
-      const settleRetrieved = this.#store.settleRetrievedWorkflowNode;
-      if (settleRetrieved === undefined)
-        throw new Error("workflow_retrieved_settlement_not_configured");
-      const settled = await settleRetrieved.call(this.#store, {
+      const settled = await this.#store.settleRetrievedWorkflowNode({
         tenantId: input.run.tenantId,
         runId: input.run.runId,
         lease: leaseInput(input.claim),

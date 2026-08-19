@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { AgentKernelError } from "@crewon/agent-kernel/runtime";
 import type {
   DomainStore,
@@ -5,10 +6,15 @@ import type {
   RunExecutionService,
   WorkflowAtomicNodeOutcome,
   WorkflowNodeResponseRecovery,
+  WorkflowRetrievedContinuationPayload,
   WorkflowRuntimeStore,
 } from "@crewon/application";
-import { canonicalJson } from "@crewon/application";
+import {
+  canonicalJson,
+  validateWorkflowRetrievedContinuationPayload,
+} from "@crewon/application";
 import type { ModelDispatchReceipt, WorkflowSchemaValue } from "@crewon/domain";
+import type { CanonicalAgentEvent } from "@crewon/contracts/runtime";
 import { AgentSegmentExecutionEngine } from "./agent-segment-execution-engine.ts";
 import {
   CancellationWatcher,
@@ -87,7 +93,13 @@ export interface WorkflowAdmittedAgentExecutionEngine {
     claim: Parameters<WorkflowAgentNodePort["reconcile"]>[0]["claim"];
     binding: Parameters<WorkflowAgentNodePort["reconcile"]>[0]["binding"];
     recovery: WorkflowNodeResponseRecovery;
-  }): Promise<WorkflowAtomicNodeOutcome>;
+  }): Promise<
+    | Readonly<{ kind: "terminal"; outcome: WorkflowAtomicNodeOutcome }>
+    | Readonly<{
+        kind: "continuation";
+        payload: WorkflowRetrievedContinuationPayload;
+      }>
+  >;
   resume(input: {
     runtime: AgentVersionRuntime;
     claim: Parameters<WorkflowAgentNodePort["resume"]>[0]["claim"];
@@ -185,7 +197,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
 
   async reconcile(
     input: Parameters<WorkflowAdmittedAgentExecutionEngine["reconcile"]>[0],
-  ): Promise<WorkflowAtomicNodeOutcome> {
+  ): ReturnType<WorkflowAdmittedAgentExecutionEngine["reconcile"]> {
     const { claim, recovery, runtime } = input;
     const node = recovery.claim.node;
     const attempt = recovery.attempt;
@@ -207,12 +219,23 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       attemptId: recovery.dispatch.attemptId,
       operationId: recovery.dispatch.operationId,
     });
+    const segmentId = retrievedSegmentId(recovery.dispatch);
+    const prior = recovery.priorContinuation;
+    const modelSampleIndex = prior === null ? 0 : prior.modelSampleIndex + 1;
+    const expectedSegmentId =
+      modelSampleIndex === 0
+        ? `segment:${attempt.attemptId}`
+        : `segment:${attempt.attemptId}:round:${modelSampleIndex + 1}`;
     if (
       canonicalJson(storedAttempt) !== canonicalJson(attempt) ||
       canonicalJson(storedStep) !== canonicalJson(recovery.step) ||
       canonicalJson(storedDispatch) !== canonicalJson(recovery.dispatch) ||
       attempt.status !== "running" ||
       attempt.providerCheckpoint === null ||
+      attempt.checkpointDigest !==
+        `sha256:${createHash("sha256")
+          .update(canonicalJson(attempt.providerCheckpoint))
+          .digest("hex")}` ||
       attempt.checkpointDigest !== recovery.dispatch.responseCheckpointDigest ||
       recovery.dispatch.operation !== "dispatch" ||
       recovery.dispatch.status !== "responseObserved" ||
@@ -225,17 +248,32 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       recovery.dispatch.provider.modelId !==
         runtime.kernel.modelIdentity.modelId ||
       attempt.tenantId !== claim.workItem.tenantId ||
-      attempt.runId !== claim.workItem.runId
+      attempt.runId !== claim.workItem.runId ||
+      segmentId !== expectedSegmentId ||
+      invalidRetrievedPriorContinuation(
+        recovery,
+        runtime.version.agentVersionId,
+      )
     )
       throw new Error("workflow_response_retrieve_authority_mismatch");
     const prepared = prepareWorkflowNodeExecution({
       node,
       inputValue: recovery.inputValue,
     });
-    if (prepared.kind !== "executeSegment")
-      return prepared.kind === "settle"
-        ? (prepared.outcome as WorkflowAtomicNodeOutcome)
-        : { status: "unknown" };
+    if (prepared.kind !== "executeSegment") {
+      if (prepared.kind !== "settle")
+        throw new Error("workflow_response_retrieve_preparation_invalid");
+      return {
+        kind: "terminal",
+        outcome: prepared.outcome as WorkflowAtomicNodeOutcome,
+      };
+    }
+    const priorHistory = validateWorkflowModelHistory(
+      prior?.history ?? [
+        ...(runtime.governedContext?.modelItems() ?? []),
+        ...prepared.history,
+      ],
+    );
     await this.#execution.loadRun(claim);
     const controller = new AbortController();
     const renewLease = async () => {
@@ -258,13 +296,14 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
     heartbeat.start();
     cancellationWatcher.start();
     try {
+      const immediateEvents: CanonicalAgentEvent[] = [];
       const executed = await this.#segments.execute({
         kernel: runtime.kernel,
         contract: {
           schemaVersion: "crewon.agent-segment.v0",
           purpose: "agent",
           runId: attempt.runId,
-          segmentId: `reconcile:${attempt.attemptId}`,
+          segmentId,
           attempt: attempt.attemptNumber,
           agentVersionId: runtime.version.agentVersionId,
           policySnapshotId: runtime.version.policySnapshotId,
@@ -273,10 +312,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
             kind,
             name,
           })),
-          history: validateWorkflowModelHistory([
-            ...(runtime.governedContext?.modelItems() ?? []),
-            ...prepared.history,
-          ]),
+          history: priorHistory,
           continuation: { kind: "manual" },
           reconcileCheckpoint: attempt.providerCheckpoint,
           ...(attempt.providerTurnState === null
@@ -297,7 +333,9 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
             )
               throw new Error("workflow_response_retrieve_checkpoint_mismatch");
           },
-          persistImmediateEvent: async () => undefined,
+          persistImmediateEvent: async (event) => {
+            immediateEvents.push(event as CanonicalAgentEvent);
+          },
           recordProviderTurnState: async (providerTurnState) => {
             if (providerTurnState !== attempt.providerTurnState)
               throw new Error("workflow_response_retrieve_turn_state_mismatch");
@@ -308,12 +346,7 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
       if (cancellationWatcher.failure() !== null)
         throw cancellationWatcher.failure();
       if (executed.canceled || cancellationWatcher.cancellationRequested())
-        return { status: "canceled" };
-      if (
-        executed.segment.requestedTools.length !== 0 ||
-        executed.segment.assistantContinuation !== null
-      )
-        throw new Error("workflow_response_retrieve_nonterminal");
+        return { kind: "terminal", outcome: { status: "canceled" } };
       const failure = executed.segment.bufferedEvents.find(
         (event) => event.type === "segment.failed",
       );
@@ -321,16 +354,76 @@ export class SharedWorkflowAdmittedAgentExecutionEngine
         output: executed.segment.output,
         completed: executed.segment.completed,
         providerCheckpoint: executed.segment.providerCheckpoint,
-        bufferedEvents: [],
-        requestedTools: [],
-        assistantContinuation: null,
+        bufferedEvents: executed.segment.bufferedEvents,
+        requestedTools: executed.segment.requestedTools,
+        assistantContinuation: executed.segment.assistantContinuation,
         failure: failure?.type === "segment.failed" ? failure.data : null,
         canceled: executed.canceled,
         effectCertainty: "responseObserved",
       });
-      if (decision.kind !== "settle")
-        throw new Error("workflow_response_retrieve_nonterminal");
-      return decision.outcome as WorkflowAtomicNodeOutcome;
+      if (decision.kind === "settle")
+        return {
+          kind: "terminal",
+          outcome: decision.outcome as WorkflowAtomicNodeOutcome,
+        };
+      if (decision.kind !== "continue")
+        throw new Error("workflow_response_retrieve_nonterminal_invalid");
+      const assistant = executed.segment.assistantContinuation;
+      const history = validateWorkflowModelHistory([
+        ...priorHistory,
+        ...(assistant === null
+          ? []
+          : [
+              {
+                type: "message" as const,
+                role: "assistant" as const,
+                content: projectWorkflowModelVisibleText(assistant.data.output)
+                  .content,
+              },
+            ]),
+        ...executed.segment.requestedTools.map((event) => ({
+          type: "tool_call" as const,
+          kind: event.data.kind,
+          callId: event.data.callId,
+          name: event.data.name,
+          input: event.data.input,
+        })),
+      ]);
+      const events = [
+        ...immediateEvents,
+        ...executed.segment.bufferedEvents.map(
+          (event) => event as CanonicalAgentEvent,
+        ),
+        ...(executed.segment.checkpointEvent === null
+          ? []
+          : [executed.segment.checkpointEvent as CanonicalAgentEvent]),
+      ].sort((left, right) => left.sequence - right.sequence);
+      const payload = validateWorkflowRetrievedContinuationPayload({
+        events,
+        assistantContinuation:
+          assistant === null
+            ? null
+            : {
+                segmentId: assistant.segmentId,
+                sequence: assistant.sequence,
+                output: assistant.data.output,
+                completedAssistantItems: assistant.data.completedAssistantItems,
+                checkpoint: assistant.data.checkpoint,
+                providerTurnState:
+                  assistant.data.providerTurnState ??
+                  executed.segment.providerTurnState,
+              },
+        next: {
+          schemaVersion: "crewon.workflow-node-continuation.v0",
+          segmentId,
+          modelSampleIndex,
+          toolRoundsConsumed: prior?.toolRoundsConsumed ?? 0,
+          providerCheckpoint: executed.segment.providerCheckpoint,
+          providerTurnState: executed.segment.providerTurnState,
+          history,
+        },
+      });
+      return { kind: "continuation", payload };
     } finally {
       await cancellationWatcher.close();
       await heartbeat.close();
@@ -995,7 +1088,7 @@ export class WorkflowAgentRuntimeAdapter implements WorkflowAgentNodePort {
 
   async reconcile(
     input: Parameters<WorkflowAgentNodePort["reconcile"]>[0],
-  ): Promise<WorkflowAtomicNodeOutcome> {
+  ): ReturnType<WorkflowAgentNodePort["reconcile"]> {
     const node = input.recovery.claim.node;
     const agentVersionId =
       node.kind === "agent"
@@ -1064,4 +1157,48 @@ function leaseInput(
     leaseId: claim.lease.leaseId,
     leaseEpoch: claim.lease.epoch,
   };
+}
+
+function retrievedSegmentId(
+  dispatch: Pick<ModelDispatchReceipt, "operationId" | "requestSequence">,
+): string {
+  const suffix = `:request:${dispatch.requestSequence}`;
+  if (
+    !Number.isSafeInteger(dispatch.requestSequence) ||
+    dispatch.requestSequence < 1 ||
+    !dispatch.operationId.endsWith(suffix)
+  )
+    throw new Error("workflow_response_retrieve_operation_invalid");
+  const segmentId = dispatch.operationId.slice(0, -suffix.length);
+  if (segmentId.length === 0 || segmentId.startsWith("reconcile:"))
+    throw new Error("workflow_response_retrieve_operation_invalid");
+  return segmentId;
+}
+
+function invalidRetrievedPriorContinuation(
+  recovery: WorkflowNodeResponseRecovery,
+  agentVersionId: string,
+): boolean {
+  const prior = recovery.priorContinuation;
+  if (prior === null) return false;
+  return (
+    prior.activeDispatch !== null ||
+    prior.terminalCandidate !== null ||
+    canonicalJson(prior.authority) !==
+      canonicalJson({
+        tenantId: recovery.attempt.tenantId,
+        runId: recovery.attempt.runId,
+        workItemId: recovery.attempt.workItemId,
+        leaseEpoch: recovery.attempt.leaseEpoch,
+        nodeId: recovery.claim.node.nodeId,
+        nodeKind: recovery.claim.node.kind,
+        claimId: recovery.claim.claimId,
+        claimEpoch: recovery.claim.claimEpoch,
+        agentVersionId,
+        attempt: {
+          stepId: recovery.attempt.stepId,
+          attemptId: recovery.attempt.attemptId,
+        },
+      })
+  );
 }
