@@ -17,12 +17,18 @@
 - 取消与恢复不再为兼容留模糊语义：`possiblySent` 只能进入 durable reconciliation；用户取消后由
   node-owned lease 以 `abandonedPossiblySent` 显式 certainty 原子终止 dispatch/Attempt/node/WorkItem，
   dedicated cancellation coordinator 在所有 sibling 终止后才写唯一 `run.canceled`。晚到 Provider 结果不能复活终态 Run。
+- PostgreSQL reconciliation receipt 现在只验证 deterministic WorkItem ID、exact payload 与前后 handoff
+  authority，不再把 downstream WorkItem 的 `pending/leased/completed` 瞬时状态当成不可变 receipt。
+  因此网络响应丢失后，即使 downstream reconciliation 已完成，原调度请求仍可 exact replay。
 
 - Runtime/Control/Workspace/Workflow 的 production execution path 已按 breaking cutover 收敛到 TypeScript。当前 macOS
   `.app` 只包含 `crewon-ui`、官方 Node 24.18.1、`crewon-process-guardian` 与 Control API、Provider coordinator、Runtime
   Release、Runtime Worker 四个 TS bundle；发布期 minisign verifier 改为 CI 显式构建的 Cargo example，不进入 `.app`。
   对 Device Tool、Gateway、Responses Lite、Rust App Server、6176、deterministic fake、demo Thread/Turn 的 staged/package
   marker 扫描均为 0。
+- production Web BFF 已构建为单一自包含 Node 24 ESM bundle，最终镜像只保留非 root
+  运行用户和 `/app/web-bff.mjs`。Control/Worker/Release/Rollback/Backup/BFF 的 Docker build 均在
+  推送、attestation 与 cosign 前扫描 removed-runtime markers；required CI 还校验 BFF 镜像不包含源码树。
 - Human Gate 已有独立 durable publication authority。SQLite/PostgreSQL 在同一事务中严格校验 exact Outbox lease 与 Gate
   payload，把 `publicationPending -> published` 并 ACK Outbox；失败由 dispatcher retry，完整内部 payload 不进入 RunEventHub。
   公共 `GET /api/v1/runs/{runId}/workflow-gates` 只返回有界审批字段，Control UI 从该 authority 展示批准/驳回并用稳定
@@ -36,10 +42,15 @@
   再校验冻结的 tenant/runtime/workspace binding、generation echo、auth、deadline 与 abort。真实 authenticated Control ->
   tenant-routed production client -> loopback Runtime Worker read-only 纵向已通过；standalone loopback 行为保持独立。
 - 当前 HEAD 未签名 `.app` 的隔离 HOME smoke 为
-  `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-IFk9FM`，Run
-  `01a018d5-4f36-76f9-a034-724984966bd1` 实际完成 Agent -> Human Gate -> Verification：start 同 key
+  `/var/folders/21/g7vtj67957zg65l1117cmgqr0000gn/T/crewon-slice7-app-GhEc7E`，Run
+  `01a018e5-f009-765f-98b5-f188e1c78e7c` 实际完成 Agent -> Human Gate -> Verification：start 同 key
   `committed -> replayed`，Gate 决策 `recorded -> replay`，Worker `SIGKILL` 后同一 HOME 重启恢复，2 次真实 loopback Responses、
   2 个 Attempt、唯一 `run.completed`，GUI `SIGKILL` 后 guardian 清理全部受管进程并释放 3210。
+- Command/Assistant composer 不再暴露尚无 Control Turn authority 的图片粘贴、预览和发送入口；
+  文件/文件夹仍通过真实 Knowledge 导入生成 immutable `{knowledgeId, contentDigest}` 引用，已有
+  Thread 的下一次 Control Turn 会带上该引用，不伪造 image compatibility。
+- 当前 Node 24.18.1 组合验证为 Store 串行真实 PostgreSQL 16：570 passed、1 conditional skip、
+  0 failed；UI 定向 `93/93` + lint/build；Web BFF `17/17` + production bundle/image contract `2/2`。
 - desktop release workflow 现在同时绑定 immutable tag、`origin/main` ancestry、远端 tag/main 无漂移以及 exact commit SHA/App ID 的
   required checks；macOS/Windows 均验证实际 updater 签名后才允许上传，Windows launch smoke 还按本次 install root/app binary
   精确检测 GUI/Node/guardian orphan。确定性 release/staging/Windows process tests 为 `16/16`，YAML 与 smoke syntax 通过。
