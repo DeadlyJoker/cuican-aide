@@ -82,9 +82,7 @@ export function snapshotArtifactAuthority({
     copyDurably(sourceDatabase, metadataPath);
     const blobRoot = join(destination, "files");
     mkdirSync(blobRoot, { recursive: false, mode: 0o700 });
-    const sourceFiles = regularFiles(sourceRoot);
-    if (sourceFiles.length > MAX_BLOBS)
-      throw new Error("backup_artifact_blob_limit_exceeded");
+    const sourceFiles = referencedArtifactFiles(database, sourceRoot);
     const blobs = sourceFiles.map((sourcePath) => {
       const relativePath = normalizedRelativePath(sourceRoot, sourcePath);
       const targetPath = join(blobRoot, ...relativePath.split("/"));
@@ -113,7 +111,11 @@ export function snapshotArtifactAuthority({
   }
 }
 
-export function snapshotServerRelease({ destinationPath, manifestPath }) {
+export function snapshotServerRelease({
+  destinationPath,
+  manifestPath,
+  signatureBundlePath,
+}) {
   const source = absoluteExistingFile(
     manifestPath,
     "backup_server_release_manifest_invalid",
@@ -124,13 +126,34 @@ export function snapshotServerRelease({ destinationPath, manifestPath }) {
   );
   if (lstatSync(source).size > 1024 * 1024)
     throw new Error("backup_server_release_manifest_invalid");
+  const sourceSignature = absoluteExistingFile(
+    signatureBundlePath,
+    "backup_server_release_signature_invalid",
+  );
+  if (lstatSync(sourceSignature).size > 1024 * 1024)
+    throw new Error("backup_server_release_signature_invalid");
   const raw = readFileSync(source);
   const release = parseServerReleaseManifest(JSON.parse(raw.toString("utf8")));
+  const signatureRaw = readFileSync(sourceSignature);
+  validateSigstoreBundle(signatureRaw);
   mkdirSync(dirname(destination), { recursive: true, mode: 0o700 });
   writeFileSync(destination, raw, { flag: "wx", mode: 0o600 });
   syncFile(destination);
+  const signatureDestination = join(
+    dirname(destination),
+    "server-release-manifest.sigstore.json",
+  );
+  writeFileSync(signatureDestination, signatureRaw, {
+    flag: "wx",
+    mode: 0o600,
+  });
+  syncFile(signatureDestination);
   return {
     manifest: fileDescriptor(destination, basename(destination)),
+    signatureBundle: fileDescriptor(
+      signatureDestination,
+      "server-release-manifest.sigstore.json",
+    ),
     tag: release.tag,
     commit: release.commit,
     images: Object.fromEntries(
@@ -226,7 +249,17 @@ export function verifyBackupFiles(rootDirectory, manifest) {
     parsed.artifacts.metadata,
     ...parsed.artifacts.blobs,
     parsed.serverRelease.manifest,
+    parsed.serverRelease.signatureBundle,
   ];
+  const expectedPaths = descriptors.map((descriptor) => descriptor.path);
+  if (existsSync(join(root, "backup-manifest.json")))
+    expectedPaths.push("backup-manifest.json");
+  expectedPaths.sort(byteOrder);
+  const actualPaths = regularFiles(root, MAX_BLOBS + 5)
+    .map((path) => normalizedRelativePath(root, path))
+    .sort(byteOrder);
+  if (JSON.stringify(actualPaths) !== JSON.stringify(expectedPaths))
+    throw new Error("backup_file_set_mismatch");
   for (const descriptor of descriptors) {
     const path = resolve(root, ...descriptor.path.split("/"));
     if (relative(root, path).startsWith(".."))
@@ -243,6 +276,11 @@ export function verifyBackupFiles(rootDirectory, manifest) {
         resolve(root, ...parsed.serverRelease.manifest.path.split("/")),
         "utf8",
       ),
+    ),
+  );
+  validateSigstoreBundle(
+    readFileSync(
+      resolve(root, ...parsed.serverRelease.signatureBundle.path.split("/")),
     ),
   );
   if (
@@ -295,15 +333,41 @@ function validateReleaseEvidence(value) {
   );
   if (value.manifest?.bytes > 1024 * 1024)
     throw new Error("backup_server_release_invalid");
+  if (value.signatureBundle?.bytes > 1024 * 1024)
+    throw new Error("backup_server_release_invalid");
   return {
     manifest: validateDescriptor(
       value.manifest,
       "server-release-manifest.json",
     ),
+    signatureBundle: validateDescriptor(
+      value.signatureBundle,
+      "server-release-manifest.sigstore.json",
+    ),
     tag: value.tag,
     commit: value.commit,
     images,
   };
+}
+
+function validateSigstoreBundle(raw) {
+  let value;
+  try {
+    value = JSON.parse(raw.toString("utf8"));
+  } catch {
+    throw new Error("backup_server_release_signature_invalid");
+  }
+  if (
+    value === null ||
+    typeof value !== "object" ||
+    Array.isArray(value) ||
+    typeof value.mediaType !== "string" ||
+    !/^application\/vnd\.dev\.sigstore\.bundle\.v\d+\.\d+\+json$/u.test(
+      value.mediaType,
+    )
+  ) {
+    throw new Error("backup_server_release_signature_invalid");
+  }
 }
 
 function validateBlobDescriptors(value) {
@@ -344,7 +408,7 @@ function validateDescriptor(value, expectedPath) {
   return { path: value.path, bytes: value.bytes, digest: value.digest };
 }
 
-function regularFiles(root) {
+function regularFiles(root, maximumFiles = MAX_BLOBS) {
   const files = [];
   const visit = (directory) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
@@ -354,12 +418,58 @@ function regularFiles(root) {
       if (entry.isDirectory()) visit(path);
       else if (entry.isFile()) files.push(path);
       else throw new Error("backup_artifact_file_type_forbidden");
-      if (files.length > MAX_BLOBS)
+      if (files.length > maximumFiles)
         throw new Error("backup_artifact_blob_limit_exceeded");
     }
   };
   visit(root);
   return files;
+}
+
+function referencedArtifactFiles(database, root) {
+  const rows = database
+    .prepare(
+      "SELECT relative_path AS relativePath FROM artifacts WHERE state = 'ready'",
+    )
+    .all();
+  if (rows.length > MAX_BLOBS)
+    throw new Error("backup_artifact_blob_limit_exceeded");
+  const discovered = regularFiles(root).map((path) => ({
+    path,
+    relativePath: normalizedRelativePath(root, path),
+  }));
+  const byRelativePath = new Map(
+    discovered.map((entry) => [entry.relativePath, entry.path]),
+  );
+  const declared = rows.map((row) => {
+    if (typeof row.relativePath !== "string")
+      throw new Error("backup_artifact_path_invalid");
+    const path = resolve(root, ...row.relativePath.split("/"));
+    if (normalizedRelativePath(root, path) !== row.relativePath)
+      throw new Error("backup_artifact_path_invalid");
+    const discoveredPath = byRelativePath.get(row.relativePath);
+    if (discoveredPath === undefined)
+      throw new Error("backup_artifact_blob_missing");
+    return discoveredPath;
+  });
+  const declaredRelativePaths = declared
+    .map((path) => normalizedRelativePath(root, path))
+    .sort(byteOrder);
+  const discoveredRelativePaths = discovered
+    .map((entry) => entry.relativePath)
+    .sort(byteOrder);
+  if (
+    new Set(declaredRelativePaths).size !== declaredRelativePaths.length ||
+    JSON.stringify(declaredRelativePaths) !==
+      JSON.stringify(discoveredRelativePaths)
+  ) {
+    throw new Error("backup_artifact_file_set_mismatch");
+  }
+  return declared;
+}
+
+function byteOrder(left, right) {
+  return Buffer.compare(Buffer.from(left), Buffer.from(right));
 }
 
 function normalizedRelativePath(root, path) {

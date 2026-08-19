@@ -74,17 +74,38 @@ test("fails snapshot rather than capturing an in-flight Artifact", () => {
   }
 });
 
+test("fails snapshot on an orphaned Artifact blob", () => {
+  const fixture = artifactFixture();
+  try {
+    writeFileSync(join(fixture.rootDirectory, "orphan.bin"), "orphan");
+    assert.throws(
+      () =>
+        snapshotArtifactAuthority({
+          databasePath: fixture.databasePath,
+          destinationDirectory: fixture.destination,
+          rootDirectory: fixture.rootDirectory,
+        }),
+      /artifact_file_set_mismatch/u,
+    );
+  } finally {
+    rmSync(fixture.base, { recursive: true, force: true });
+  }
+});
+
 test("binds PostgreSQL, Artifact and signed server release evidence", () => {
   const base = mkdtempSync(join(tmpdir(), "crewon-backup-manifest-"));
   try {
     const releasePath = join(base, "source-release.json");
+    const signaturePath = join(base, "source-release.sigstore.json");
     writeFileSync(
       releasePath,
       `${JSON.stringify(releaseManifest(), null, 2)}\n`,
     );
+    writeFileSync(signaturePath, JSON.stringify(signatureBundle()));
     const release = snapshotServerRelease({
       destinationPath: join(base, "server-release-manifest.json"),
       manifestPath: releasePath,
+      signatureBundlePath: signaturePath,
     });
     const dump = join(base, "postgres.dump");
     const metadata = join(base, "metadata.sqlite3");
@@ -116,6 +137,10 @@ test("binds PostgreSQL, Artifact and signed server release evidence", () => {
       [
         join(base, "server-release-manifest.json"),
         join(backup, "server-release-manifest.json"),
+      ],
+      [
+        join(base, "server-release-manifest.sigstore.json"),
+        join(backup, "server-release-manifest.sigstore.json"),
       ],
     ]) {
       writeFileSync(target, readFileSync(source));
@@ -149,8 +174,10 @@ function artifactFixture(options = {}) {
   const database = new DatabaseSync(databasePath);
   database.exec(`
     PRAGMA journal_mode = WAL;
-    CREATE TABLE artifacts (state TEXT NOT NULL);
-    INSERT INTO artifacts VALUES ('ready'), ('${options.pending ? "writing" : "ready"}');
+    CREATE TABLE artifacts (state TEXT NOT NULL, relative_path TEXT NOT NULL);
+    INSERT INTO artifacts VALUES
+      ('ready', 'blobs/tenant-a/artifact-a.bin'),
+      ('${options.pending ? "writing" : "ready"}', 'blobs/tenant-b/artifact-b.bin');
   `);
   database.close();
   return { base, databasePath, destination, rootDirectory };
@@ -170,4 +197,11 @@ function releaseManifest() {
     repository: "crewon/cuican-aide",
     tag: "server-v1.2.3",
   });
+}
+
+function signatureBundle() {
+  return {
+    mediaType: "application/vnd.dev.sigstore.bundle.v0.3+json",
+    verificationMaterial: {},
+  };
 }
