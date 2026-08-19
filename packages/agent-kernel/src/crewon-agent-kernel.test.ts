@@ -245,7 +245,7 @@ test("continues an empty end_turn=false stored response from its checkpoint", as
   );
 });
 
-test("never turns GET-only response reconciliation into a continuation sample", async () => {
+test("returns the retrieved nonterminal boundary without issuing another sample", async () => {
   const checkpoint = {
     schemaVersion: "crewon.provider-checkpoint.v0",
     adapterName: "stored-retrieve",
@@ -262,23 +262,34 @@ test("never turns GET-only response reconciliation into a continuation sample", 
     async *stream() {
       requests += 1;
       yield { type: "response.created", checkpoint };
+      yield { type: "output.delta", delta: "working" };
+      yield {
+        type: "output.item.completed",
+        item: { type: "message", role: "assistant", content: "working" },
+      };
       yield { type: "completed", checkpoint, endTurn: false };
     },
   };
 
-  await assert.rejects(
-    collect(
-      new CrewONAgentKernel({ transport }).runSegment(
-        { ...segmentContract(), reconcileCheckpoint: checkpoint },
-        new AbortController().signal,
-      ),
+  const events = await collect(
+    new CrewONAgentKernel({ transport }).runSegment(
+      { ...segmentContract(), reconcileCheckpoint: checkpoint },
+      new AbortController().signal,
     ),
-    (error) =>
-      error instanceof AgentKernelError &&
-      error.code === "provider_response_retrieve_nonterminal" &&
-      error.retryable === false,
   );
   assert.equal(requests, 1);
+  assert.deepEqual(events.at(-1), {
+    schemaVersion: "crewon.agent-event.v0",
+    runId: "run-1",
+    segmentId: "segment-1",
+    sequence: 4,
+    type: "segment.continuation_requested",
+    data: {
+      output: "working",
+      completedAssistantItems: ["working"],
+      checkpoint,
+    },
+  });
 });
 
 test("returns a durable boundary for stored end_turn=false assistant output", async () => {

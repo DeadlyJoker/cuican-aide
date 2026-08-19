@@ -149,7 +149,7 @@ test("responseObserved reconciliation retrieves once and atomically settles evid
     async ({ recovery }) => {
       retrieves += 1;
       assert.equal(recovery, fixture.recovery);
-      return { status: "completed", value: {} };
+      return { kind: "terminal", outcome: { status: "completed", value: {} } };
     },
   );
 
@@ -208,7 +208,7 @@ test("GET reconciliation unknown outcome retains work for retry without settleme
     fixture.store,
     async () => ({ status: "unknown" }),
     fixture.store,
-    async () => ({ status: "unknown" }),
+    async () => ({ kind: "terminal", outcome: { status: "unknown" } }),
   );
 
   assert.deepEqual(await dispatcher.dispatch(input("reconcile")), {
@@ -217,6 +217,79 @@ test("GET reconciliation unknown outcome retains work for retry without settleme
     code: "workflow_response_retrieve_retry_required",
   });
   assert.equal(fixture.retrievedSettlements, 0);
+});
+
+test("retrieved nonterminal commits once and resumes without another GET or POST", async () => {
+  const fixture = composition();
+  fixture.recovery = retrievalRecovery();
+  let retrieves = 0;
+  let resumes = 0;
+  const dispatcher = create(
+    fixture.store,
+    async () => {
+      throw new Error("fresh execution forbidden");
+    },
+    fixture.store,
+    async () => {
+      retrieves += 1;
+      return { kind: "continuation", payload: retrievedContinuationPayload() };
+    },
+    async () => {
+      resumes += 1;
+      return { status: "completed", value: {} };
+    },
+  );
+
+  assert.deepEqual(await dispatcher.dispatch(input("reconcile")), {
+    kind: "completed",
+    runId: "r",
+  });
+  assert.deepEqual(
+    {
+      retrieves,
+      commits: fixture.retrievedContinuationCommits,
+      resumes,
+      terminalSettlements: fixture.retrievedSettlements,
+    },
+    { retrieves: 1, commits: 1, resumes: 1, terminalSettlements: 0 },
+  );
+});
+
+test("lost continuation commit response replays resume without another GET", async () => {
+  const fixture = composition();
+  fixture.recovery = retrievalRecovery();
+  fixture.loseRetrievedContinuationResponse = true;
+  let retrieves = 0;
+  let resumes = 0;
+  const dispatcher = create(
+    fixture.store,
+    async () => {
+      throw new Error("fresh execution forbidden");
+    },
+    fixture.store,
+    async () => {
+      retrieves += 1;
+      return { kind: "continuation", payload: retrievedContinuationPayload() };
+    },
+    async () => {
+      resumes += 1;
+      return { status: "completed", value: {} };
+    },
+  );
+
+  assert.deepEqual(await dispatcher.dispatch(input("reconcile")), {
+    kind: "recovery",
+    runId: "r",
+    code: "workflow_retrieved_continuation_commit_unknown",
+  });
+  assert.deepEqual(await dispatcher.dispatch(input("reconcile")), {
+    kind: "completed",
+    runId: "r",
+  });
+  assert.deepEqual(
+    { retrieves, commits: fixture.retrievedContinuationCommits, resumes },
+    { retrieves: 1, commits: 1, resumes: 1 },
+  );
 });
 
 test("continuation reconciliation resumes once without execute or provider GET", async () => {
@@ -234,7 +307,7 @@ test("continuation reconciliation resumes once without execute or provider GET",
     fixture.store,
     async () => {
       retrieves += 1;
-      return { status: "unknown" };
+      return { kind: "terminal", outcome: { status: "unknown" } };
     },
     async ({ resume }) => {
       resumes += 1;
@@ -668,6 +741,9 @@ function composition() {
     cancellations: 0,
     retrievedSettlements: 0,
     retrievedInputs: [] as unknown[],
+    retrievedContinuationCommits: 0,
+    retrievedContinuationInputs: [] as unknown[],
+    loseRetrievedContinuationResponse: false,
     recovery: null as WorkflowNodeResponseRecovery | null,
     resume: null as WorkflowNodeContinuationResume | null,
     outcomes: [] as unknown[],
@@ -855,6 +931,25 @@ function composition() {
         dispatchTerminalOutcome: input.dispatchTerminalOutcome,
       };
     },
+    async commitRetrievedWorkflowNodeContinuation(input) {
+      fixture.retrievedContinuationCommits += 1;
+      fixture.retrievedContinuationInputs.push(input);
+      fixture.resume = continuationResume();
+      if (fixture.loseRetrievedContinuationResponse)
+        throw new Error("response lost after commit");
+      return {
+        disposition: "resumeRequired",
+        evidenceStatus: "responseObserved",
+        resume: fixture.resume,
+        execution: state(),
+        handoff: {
+          currentWorkItem: "retained",
+          nextWorkItemId: null,
+          kind: "none",
+        },
+        runDisposition: "nonTerminal",
+      };
+    },
     async cancelWorkflowExecution() {
       fixture.cancellations += 1;
       return {
@@ -958,7 +1053,10 @@ function create(
   agentStore: WorkflowRuntimeStore = store,
   reconcile: ConstructorParameters<
     typeof ProductionWorkflowRuntimeDispatcher
-  >[0]["agent"]["reconcile"] = async () => ({ status: "unknown" }),
+  >[0]["agent"]["reconcile"] = async () => ({
+    kind: "terminal",
+    outcome: { status: "unknown" },
+  }),
   resume: ConstructorParameters<
     typeof ProductionWorkflowRuntimeDispatcher
   >[0]["agent"]["resume"] = async () => ({ status: "unknown" }),
@@ -1055,6 +1153,37 @@ function retrievalRecovery(): WorkflowNodeResponseRecovery {
       revision: 3,
       responseCheckpointDigest: digest(JSON.stringify(checkpoint)),
     } as never,
+    priorContinuation: null,
+  };
+}
+
+function retrievedContinuationPayload() {
+  return {
+    events: [
+      {
+        schemaVersion: "crewon.agent-event.v0" as const,
+        runId: "r",
+        segmentId: "segment:attempt-1",
+        sequence: 2,
+        type: "tool.requested" as const,
+        data: {
+          callId: "call-1",
+          kind: "function",
+          name: "lookup",
+          input: "{}",
+        },
+      },
+    ],
+    assistantContinuation: null,
+    next: {
+      schemaVersion: "crewon.workflow-node-continuation.v0" as const,
+      segmentId: "segment:attempt-1",
+      modelSampleIndex: 0,
+      toolRoundsConsumed: 0,
+      providerCheckpoint: retrievalRecovery().attempt.providerCheckpoint,
+      providerTurnState: null,
+      history: [],
+    },
   };
 }
 

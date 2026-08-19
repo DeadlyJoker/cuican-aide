@@ -48,3 +48,36 @@ test("rejects a nonterminal payload without assistant or Tool authority", () => 
     /workflow_retrieved_continuation_invalid/,
   );
 });
+
+test("rejects caller authority fields and oversized event bundles", () => {
+  assert.throws(
+    () =>
+      validateWorkflowRetrievedContinuationPayload({
+        events: [],
+        assistantContinuation: null,
+        next: { ...next, authority: { tenantId: "forged" } },
+      }),
+    /workflow_retrieved_continuation_invalid/,
+  );
+  assert.throws(
+    () =>
+      validateWorkflowRetrievedContinuationPayload({
+        events: Array.from({ length: 65 }, (_, index) => ({
+          schemaVersion: "crewon.agent-event.v0",
+          runId: "run-1",
+          segmentId: "segment-1",
+          sequence: index + 1,
+          type: "tool.requested",
+          data: {
+            callId: `call-${index}`,
+            kind: "function",
+            name: "lookup",
+            input: "{}",
+          },
+        })),
+        assistantContinuation: null,
+        next,
+      }),
+    /workflow_retrieved_continuation_invalid/,
+  );
+});

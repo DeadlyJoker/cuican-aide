@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import test from "node:test";
+import { canonicalJson } from "@crewon/application";
 import { CrewONAgentKernel } from "@crewon/agent-kernel";
 import type {
   AgentSegmentRunOptions,
@@ -129,7 +131,7 @@ test("fails closed instead of substituting the root Agent runtime", async () => 
   );
 });
 
-test("responseObserved recovery performs exactly one GET and no dispatch mutation", async () => {
+test("responseObserved nonterminal recovery performs one GET and returns durable continuation", async () => {
   const methods: string[] = [];
   const checkpoint = {
     schemaVersion: "crewon.provider-checkpoint.v0",
@@ -148,7 +150,9 @@ test("responseObserved recovery performs exactly one GET and no dispatch mutatio
     retryOfAttemptId: null,
     leaseEpoch: 4,
     status: "running",
-    checkpointDigest: `sha256:${"a".repeat(64)}`,
+    checkpointDigest: `sha256:${createHash("sha256")
+      .update(canonicalJson(checkpoint))
+      .digest("hex")}`,
     providerCheckpoint: checkpoint,
     providerTurnState: null,
   } as const;
@@ -198,9 +202,10 @@ test("responseObserved recovery performs exactly one GET and no dispatch mutatio
           status: "completed",
           output: [
             {
-              type: "message",
-              role: "assistant",
-              content: [{ type: "output_text", text: "{}" }],
+              type: "function_call",
+              call_id: "call-1",
+              name: "lookup",
+              arguments: "{}",
             },
           ],
           usage: { input_tokens: 1, output_tokens: 1, total_tokens: 2 },
@@ -257,40 +262,72 @@ test("responseObserved recovery performs exactly one GET and no dispatch mutatio
     leaseDurationMs: 30_000,
   });
 
-  assert.deepEqual(
-    await engine.reconcile({
-      runtime: {
-        version: {
-          agentVersionId: "node-agent",
-          policySnapshotId: "node-policy",
-          execution: { maxToolRounds: 4 },
-          tools: [],
+  const reconciled = await engine.reconcile({
+    runtime: {
+      version: {
+        agentVersionId: "node-agent",
+        policySnapshotId: "node-policy",
+        execution: { maxToolRounds: 4 },
+        tools: [{ kind: "function", name: "lookup" }],
+      },
+      kernel: new CrewONAgentKernel({
+        transport,
+        toolCatalog: {
+          definitions: () => [
+            {
+              schemaVersion: "crewon.tool-definition.v0",
+              kind: "function",
+              name: "lookup",
+              description: "lookup",
+              execution: "serial",
+              inputSchema: {
+                type: "object",
+                properties: {},
+                required: [],
+                additionalProperties: false,
+              },
+            },
+          ],
         },
-        kernel: new CrewONAgentKernel({ transport }),
-      } as never,
-      claim,
-      binding,
-      recovery: {
-        claim: {
-          node: agentNode(),
-          claimId: "claim-1",
-          claimEpoch: 1,
-          gateRequestId: null,
-          inputDigest: "sha256:value",
-        },
-        step,
-        attempt,
-        inputValue: {
-          schemaVersion: "crewon.workflow-execution-value.v0",
-          valueId: "value-1",
-          value: { task: "run" },
-          valueDigest: "sha256:value",
-        },
-        dispatch,
-      } as never,
-    }),
-    { status: "completed", value: {} },
-  );
+      }),
+    } as never,
+    claim,
+    binding,
+    recovery: {
+      claim: {
+        node: agentNode(),
+        claimId: "claim-1",
+        claimEpoch: 1,
+        gateRequestId: null,
+        inputDigest: "sha256:value",
+      },
+      step,
+      attempt,
+      inputValue: {
+        schemaVersion: "crewon.workflow-execution-value.v0",
+        valueId: "value-1",
+        value: { task: "run" },
+        valueDigest: "sha256:value",
+      },
+      dispatch,
+      priorContinuation: null,
+    } as never,
+  });
+  assert.equal(reconciled.kind, "continuation");
+  if (reconciled.kind === "continuation") {
+    assert.equal(reconciled.payload.assistantContinuation, null);
+    assert.deepEqual(
+      reconciled.payload.events.map((event) => event.type),
+      [
+        "segment.started",
+        "usage.recorded",
+        "tool.requested",
+        "segment.checkpointed",
+      ],
+    );
+    assert.deepEqual(reconciled.payload.next.providerCheckpoint, checkpoint);
+    assert.equal(reconciled.payload.next.segmentId, "segment:attempt-old");
+  }
   assert.deepEqual(methods, ["GET"]);
   assert.ok(renewals > 0);
 });
