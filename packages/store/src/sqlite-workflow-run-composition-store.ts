@@ -1001,9 +1001,7 @@ export class SqliteWorkflowRunCompositionStore
         this.#database.exec("COMMIT");
         return structuredClone(result);
       }
-      const completeEvidenceInsufficient =
-        evidenceStatus === "possiblySent" || evidenceStatus === "responseObserved";
-      if (run!.cancelRequested && evidenceStatus === "possiblySent") {
+      if (evidenceStatus === "possiblySent") {
         this.#database.exec("COMMIT");
         return { disposition: "retryRequired" as const, evidenceStatus,
           execution: execution!, handoff: { currentWorkItem: "retained" as const,
@@ -1012,11 +1010,11 @@ export class SqliteWorkflowRunCompositionStore
       }
       const result = { disposition: "evidenceInsufficient" as const,
         evidenceStatus, execution: execution!, handoff: {
-          currentWorkItem: completeEvidenceInsufficient
+          currentWorkItem: evidenceStatus === "responseObserved"
             ? "completed" as const : "retained" as const,
           nextWorkItemId: null,
           kind: "none" as const }, runDisposition: "nonTerminal" as const };
-      if (completeEvidenceInsufficient) {
+      if (evidenceStatus === "responseObserved") {
         this.#insertReceipt(receiptInput, "reconcileNode", fingerprint, result);
         this.#completeLease(input, nowMs);
       }

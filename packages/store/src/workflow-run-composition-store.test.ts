@@ -534,6 +534,23 @@ test("SQLite cancellation retains possibly-sent node reconciliation", async (t) 
     claimEpoch: work.claimEpoch, stepId: attempt.stepId, attemptId: attempt.attemptId,
     operationId: "settle-unknown", outcome: { status: "unknown" } });
   assert.equal(unknown.disposition, "reconciliationScheduled");
+  clock.set(Date.parse("2026-08-12T00:00:01.000Z"));
+  const firstReconcileClaim = await store.claimNextWorkItem({ ownerId: "reconcile-worker",
+    leaseId: "first-reconcile-lease", leaseDurationMs: 60_000 });
+  assert.equal(firstReconcileClaim?.workItem.workItemId, unknown.handoff.nextWorkItemId);
+  const firstReconcilePayload = firstReconcileClaim!.workItem.payload as Record<string, unknown>;
+  const firstReconcile = await store.reconcileWorkflowNode({ tenantId: "tenant-1", runId: "run-1",
+    binding, lease: { workItemId: firstReconcileClaim!.workItem.workItemId,
+      ownerId: "reconcile-worker", leaseId: "first-reconcile-lease",
+      leaseEpoch: firstReconcileClaim!.lease.epoch }, nodeId: work.nodeId, claimId: work.claimId,
+    claimEpoch: work.claimEpoch,
+    reconciliationOperationId: String(firstReconcilePayload.reconciliationOperationId) });
+  assert.deepEqual([firstReconcile.disposition, firstReconcile.evidenceStatus,
+    firstReconcile.handoff.currentWorkItem], ["retryRequired", "possiblySent", "retained"]);
+  await store.retryWorkItem({ workItemId: firstReconcileClaim!.workItem.workItemId,
+    ownerId: "reconcile-worker", leaseId: "first-reconcile-lease",
+    leaseEpoch: firstReconcileClaim!.lease.epoch, retryAfterMs: 0,
+    reasonCode: "workflow_reconciliation_retry_required" });
   await new RunApplicationService({ store,
     authorization: { authorize: async () => ({ outcome: "allow" }) },
     clock: { now: () => "2026-08-12T00:00:01.000Z" },
