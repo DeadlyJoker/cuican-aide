@@ -87,16 +87,18 @@ manager:
 cp deploy/crewon/control.production.env.example deploy/crewon/control.production.env
 cp deploy/crewon/runtime.production.env.example deploy/crewon/runtime.production.env
 cp deploy/crewon/web-bff.production.env.example deploy/crewon/web-bff.production.env
+cp deploy/crewon/backup.production.env.example deploy/crewon/backup.production.env
 cp deploy/crewon/compose.host.env.example deploy/crewon/compose.host.env
 ```
 
 Do not merge these files. Control receives database/identity/policy and private route credentials; Runtime receives database,
-Provider, Workspace and model credentials; BFF receives only browser-session credentials. `compose.host.env` contains paths and
-immutable image identities, not secret contents. The artifact encryption key, reviewed AgentVersion bindings, Workspace root
-and TLS material are mounted read-only. The shared artifact volume is required because Control and Worker use the same local
-artifact authority in this single-host deployment. Both images initialize that named volume from a directory owned by the
-non-root Node user (UID/GID `1000`). Bind-mounted artifact keys, TLS material and Workspace roots must be readable by that UID;
-do not grant container root or broaden host permissions to work around an unreadable mount.
+Provider, Workspace and model credentials; BFF receives only browser-session credentials; Backup receives only its PostgreSQL
+authority. `compose.host.env` contains paths and immutable image identities, not secret contents. The artifact encryption key,
+reviewed AgentVersion bindings, Workspace root and TLS material are mounted read-only. The shared artifact volume is required
+because Control and Worker use the same local artifact authority in this single-host deployment. Both images initialize that
+named volume from a directory owned by the non-root Node user (UID/GID `1000`). Bind-mounted artifact keys, TLS material and
+Workspace roots must be readable by that UID; do not grant container root or broaden host permissions to work around an
+unreadable mount.
 
 Validate interpolation before touching processes, then start the release/Worker/Control/BFF/Web dependency chain:
 
@@ -126,6 +128,66 @@ docker compose --env-file deploy/crewon/compose.host.env \
 
 After rollback, restart the long-lived Worker and verify Control readiness before admitting new work.
 
+## Backup and restore drill
+
+The Runtime image contains one finite pure-TypeScript backup authority plus PostgreSQL 16 client tools. A backup binds the
+selected PostgreSQL schema, the encrypted Artifact metadata and ciphertext set, the Artifact key ID, and the signed immutable
+server release manifest. It never copies the encryption key. Verify the release signature before mounting the evidence into the
+backup container; the backup command then records and hashes that exact manifest and Sigstore bundle.
+
+Stop every writer before taking a backup so PostgreSQL and the local Artifact authority describe the same product state:
+
+```bash
+docker compose --env-file deploy/crewon/compose.host.env \
+  -f deploy/crewon/compose.production.yml \
+  stop web web-bff control-api runtime-worker
+
+cosign verify-blob \
+  --bundle /etc/crewon/server-release-manifest.sigstore.json \
+  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+  --certificate-identity-regexp '^https://github.com/[^/]+/[^/]+/.github/workflows/server-release[.]yml@refs/tags/server-v[0-9]+[.][0-9]+[.][0-9]+.*$' \
+  /etc/crewon/server-release-manifest.json
+
+docker compose --env-file deploy/crewon/compose.host.env \
+  -f deploy/crewon/compose.production.yml \
+  --profile backup run --rm runtime-backup backup \
+  --artifact-database /var/lib/crewon/artifacts/metadata.sqlite3 \
+  --artifact-root /var/lib/crewon/artifacts/files \
+  --artifact-key-id <current-artifact-key-id> \
+  --output /var/lib/crewon/backups/<new-backup-id> \
+  --server-release-manifest /run/config/server-release-manifest.json \
+  --server-release-signature /run/config/server-release-manifest.sigstore.json
+
+docker compose --env-file deploy/crewon/compose.host.env \
+  -f deploy/crewon/compose.production.yml up -d runtime-worker control-api web-bff web
+```
+
+Backup fails closed on a pending Artifact write, SQLite checkpoint contention, an orphan/missing ciphertext, an unsupported
+PostgreSQL URL option, release evidence drift, or any extra/symlinked file. Keep the completed directory immutable; its
+`backup-manifest.json` is written last after every file is flushed and verified.
+
+Restore is intentionally not an in-place operation. Provision a new empty PostgreSQL database and a new Compose project/volume,
+point a copied Runtime environment file at that database, then restore under a new Artifact authority directory:
+
+```bash
+COMPOSE_PROJECT_NAME=crewon-restore-<drill-id> \
+docker compose --env-file deploy/crewon/compose.host.env \
+  -f deploy/crewon/compose.production.yml \
+  --profile backup run --rm runtime-backup restore \
+  --artifact-authority-directory /var/lib/crewon/artifacts/restored-authority \
+  --artifact-key-id <current-artifact-key-id> \
+  --backup /var/lib/crewon/backups/<backup-id> \
+  --server-release-manifest /run/config/server-release-manifest.json \
+  --server-release-signature /run/config/server-release-manifest.sigstore.json
+```
+
+For the drill deployment, set `CREWON_ARTIFACT_DB_PATH` to
+`/var/lib/crewon/artifacts/restored-authority/metadata.sqlite3` and `CREWON_ARTIFACT_ROOT` to
+`/var/lib/crewon/artifacts/restored-authority/files`. Start the restored stack with the immutable image digests recorded in the
+backup, run authenticated Thread/Workflow/Artifact reads and one disposable mutation, then destroy the drill database and
+volume. Promote only by an explicit database/volume configuration switch after the drill is green; never overwrite the current
+database, Artifact volume, backup directory, or release evidence.
+
 The repository gates verify:
 
 ```bash
@@ -138,6 +200,8 @@ docker build -t crewon-web:verify -f deploy/crewon/web.Dockerfile .
 docker build -t crewon-web-bff:verify -f deploy/crewon/web-bff.Dockerfile .
 docker build -t crewon-control-api:verify -f deploy/crewon/control-api.Dockerfile .
 docker build -t crewon-runtime-worker:verify -f deploy/crewon/runtime-worker.Dockerfile .
+CREWON_RUNTIME_WORKER_BACKUP_IMAGE=crewon-runtime-worker:verify \
+  node --experimental-strip-types --test scripts/production-backup-postgres-smoke.test.ts
 ```
 
 Server release tags use `server-v<semver>`. The release workflow accepts only an immutable tag whose commit is an ancestor of

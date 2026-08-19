@@ -47,15 +47,28 @@ test("creates one atomic production backup without putting secrets in command ar
       calls[0].args.includes(fixture.config.connectionString),
       false,
     );
-    assert.equal(
-      calls[0].environment.PGDATABASE,
-      fixture.config.connectionString,
+    assert.deepEqual(
+      {
+        host: calls[0].environment.PGHOST,
+        port: calls[0].environment.PGPORT,
+        database: calls[0].environment.PGDATABASE,
+        user: calls[0].environment.PGUSER,
+        password: calls[0].environment.PGPASSWORD,
+      },
+      {
+        host: "127.0.0.1",
+        port: "5432",
+        database: "crewon",
+        user: "crewon",
+        password: "secret",
+      },
     );
     assert.equal(
       calls[0].args.includes(fixture.config.connectionString),
       false,
     );
     assert.equal(calls[0].args.includes("--schema=crewon"), true);
+    assert.equal("CREWON_CONTROL_DATABASE_URL" in calls[0].environment, false);
   } finally {
     rmSync(fixture.base, { recursive: true, force: true });
   }
@@ -95,16 +108,14 @@ test("restores only verified evidence into a new Artifact authority", async () =
           "--single-transaction",
           "--no-owner",
           "--no-privileges",
-          "--schema=crewon",
+          "--dbname=crewon",
           join(fixture.config.outputDirectory, "postgres.dump"),
         ],
         environment: calls[0].environment,
       },
     ]);
-    assert.equal(
-      calls[0].environment.PGDATABASE,
-      fixture.config.connectionString,
-    );
+    assert.equal(calls[0].environment.PGDATABASE, "crewon");
+    assert.equal(calls[0].environment.PGPASSWORD, "secret");
     assert.equal(
       readFileSync(join(restored, "files", "blobs", "artifact.bin"), "utf8"),
       "ciphertext",
@@ -215,7 +226,7 @@ function backupFixture() {
   database.exec(`
     PRAGMA journal_mode = WAL;
     CREATE TABLE artifacts (state TEXT NOT NULL, relative_path TEXT NOT NULL);
-    INSERT INTO artifacts VALUES ('ready', 'blobs/artifact.bin');
+    INSERT INTO artifacts VALUES ('ready', 'artifact.bin');
   `);
   database.close();
   const serverReleaseManifestPath = join(base, "server-release.json");

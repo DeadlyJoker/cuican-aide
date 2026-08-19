@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const COMPONENTS = ["control-api", "runtime-worker", "web-bff", "web"];
@@ -188,7 +188,10 @@ function runCli(args) {
   throw new Error("server_release_command_invalid");
 }
 
-if (process.argv[1] === fileURLToPath(import.meta.url)) {
+if (
+  process.argv[1] === fileURLToPath(import.meta.url) &&
+  basename(process.argv[1]) === "server-release-tools.mjs"
+) {
   try {
     runCli(process.argv.slice(2));
   } catch (error) {

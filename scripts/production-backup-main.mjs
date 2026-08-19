@@ -171,7 +171,7 @@ export async function restoreProductionBackup({
         "--single-transaction",
         "--no-owner",
         "--no-privileges",
-        `--schema=${databaseSchema}`,
+        `--dbname=${postgresDatabaseName(connectionString)}`,
         join(backup, "postgres.dump"),
       ],
       postgresEnvironment(connectionString),
@@ -257,24 +257,76 @@ async function runProgramSafely(program, args, environment) {
   await new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(program, args, {
       env: environment,
-      stdio: "ignore",
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let standardError = "";
+    child.stderr.setEncoding("utf8");
+    child.stderr.on("data", (chunk) => {
+      if (Buffer.byteLength(standardError, "utf8") < 4096)
+        standardError += chunk;
     });
     child.once("error", () =>
       rejectPromise(new Error(`${program}_start_failed`)),
     );
     child.once("exit", (code, signal) => {
       if (code === 0 && signal === null) resolvePromise();
-      else rejectPromise(new Error(`${program}_failed`));
+      else
+        rejectPromise(
+          new Error(`${program}_failed${boundedProgramError(standardError)}`),
+        );
     });
   });
 }
 
+function boundedProgramError(value) {
+  const normalized = value
+    .replaceAll(/[\r\n\t]+/gu, " ")
+    .replaceAll(/[^\x20-\x7e]/gu, "?")
+    .trim()
+    .slice(0, 2048);
+  return normalized.length === 0 ? "" : `:${normalized}`;
+}
+
 function postgresEnvironment(connectionString) {
-  return {
-    ...process.env,
-    PGDATABASE: connectionString,
-    PGAPPNAME: "crewon-production-backup",
-  };
+  const parsed = new URL(connectionString);
+  const environment = Object.fromEntries(
+    Object.entries(process.env).filter(
+      ([name]) =>
+        !name.startsWith("PG") && name !== "CREWON_CONTROL_DATABASE_URL",
+    ),
+  );
+  environment.PGHOST = parsed.hostname.replace(/^\[(.*)\]$/u, "$1");
+  environment.PGPORT = parsed.port || "5432";
+  environment.PGDATABASE = decodeURIComponent(parsed.pathname.slice(1));
+  if (parsed.username.length > 0)
+    environment.PGUSER = decodeURIComponent(parsed.username);
+  if (parsed.password.length > 0)
+    environment.PGPASSWORD = decodeURIComponent(parsed.password);
+  const supportedOptions = new Map([
+    ["channel_binding", "PGCHANNELBINDING"],
+    ["connect_timeout", "PGCONNECT_TIMEOUT"],
+    ["sslcert", "PGSSLCERT"],
+    ["sslkey", "PGSSLKEY"],
+    ["sslmode", "PGSSLMODE"],
+    ["sslrootcert", "PGSSLROOTCERT"],
+    ["target_session_attrs", "PGTARGETSESSIONATTRS"],
+  ]);
+  for (const [name, value] of parsed.searchParams) {
+    const environmentName = supportedOptions.get(name);
+    if (
+      environmentName === undefined ||
+      parsed.searchParams.getAll(name).length !== 1
+    ) {
+      throw new Error("backup_postgres_url_option_unsupported");
+    }
+    environment[environmentName] = value;
+  }
+  environment.PGAPPNAME = "crewon-production-backup";
+  return environment;
+}
+
+function postgresDatabaseName(connectionString) {
+  return decodeURIComponent(new URL(connectionString).pathname.slice(1));
 }
 
 function requirePostgresConnection(value) {

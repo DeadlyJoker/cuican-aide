@@ -441,13 +441,16 @@ function referencedArtifactFiles(database, root) {
   const byRelativePath = new Map(
     discovered.map((entry) => [entry.relativePath, entry.path]),
   );
+  const blobRoot = resolve(root, "blobs");
   const declared = rows.map((row) => {
     if (typeof row.relativePath !== "string")
       throw new Error("backup_artifact_path_invalid");
-    const path = resolve(root, ...row.relativePath.split("/"));
-    if (normalizedRelativePath(root, path) !== row.relativePath)
+    const path = resolve(blobRoot, ...row.relativePath.split("/"));
+    if (normalizedRelativePath(blobRoot, path) !== row.relativePath)
       throw new Error("backup_artifact_path_invalid");
-    const discoveredPath = byRelativePath.get(row.relativePath);
+    const discoveredPath = byRelativePath.get(
+      normalizedRelativePath(root, path),
+    );
     if (discoveredPath === undefined)
       throw new Error("backup_artifact_blob_missing");
     return discoveredPath;

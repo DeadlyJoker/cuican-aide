@@ -43,6 +43,24 @@ services:
     restart: "no"
     volumes: *runtime-volumes
 
+  runtime-backup:
+    <<: *node-service
+    profiles: ["backup"]
+    env_file:
+      - ${CREWON_BACKUP_ENV_FILE:-./backup.production.env}
+    image: ${CREWON_RUNTIME_WORKER_IMAGE:-crewon-runtime-worker:local}
+    build:
+      context: ../..
+      dockerfile: deploy/crewon/runtime-worker.Dockerfile
+    entrypoint: ["node", "/app/ops/production-backup-main.mjs"]
+    command: ["require-explicit-backup-or-restore"]
+    restart: "no"
+    volumes:
+      - crewon-artifacts:/var/lib/crewon/artifacts
+      - ${CREWON_BACKUP_ROOT:?set CREWON_BACKUP_ROOT}:/var/lib/crewon/backups
+      - ${CREWON_SERVER_RELEASE_MANIFEST_FILE:?set CREWON_SERVER_RELEASE_MANIFEST_FILE}:/run/config/server-release-manifest.json:ro
+      - ${CREWON_SERVER_RELEASE_SIGNATURE_FILE:?set CREWON_SERVER_RELEASE_SIGNATURE_FILE}:/run/config/server-release-manifest.sigstore.json:ro
+
   runtime-worker:
     <<: *node-service
     env_file:

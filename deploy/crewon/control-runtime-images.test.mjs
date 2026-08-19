@@ -62,6 +62,8 @@ test("production Dockerfiles pin a reproducible non-root TypeScript runtime", as
     worker,
     /\/out\/release-rollback-main\.mjs \.\/init\/release-rollback-main\.mjs/u,
   );
+  assert.match(worker, /production-backup-main\.mjs/u);
+  assert.match(worker, /apk add --no-cache postgresql16-client/u);
 });
 
 test("production entries create self-contained bundles without compatibility code", async () => {
@@ -77,6 +79,11 @@ test("production entries create self-contained bundles without compatibility cod
         "@crewon/runtime-worker",
         "src/release-rollback-main.ts",
         "release-rollback-main.mjs",
+      ],
+      [
+        "@crewon/runtime-worker",
+        "../../scripts/production-backup-main.mjs",
+        "production-backup-main.mjs",
       ],
     ];
     await Promise.all(

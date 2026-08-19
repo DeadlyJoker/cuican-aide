@@ -7,7 +7,7 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 20
     env:
       NODE_OPTIONS: --max-old-space-size=4096
     steps:
@@ -113,8 +113,13 @@ jobs:
             test -f /app/runtime-worker.mjs &&
             test -f /app/init/release-main.mjs &&
             test -f /app/init/release-rollback-main.mjs &&
-            ! grep -aEi "deterministic[ _-]?fake|device[ _-]?gateway|app[ _-]?server|6176" /app/runtime-worker.mjs /app/init/release-main.mjs /app/init/release-rollback-main.mjs
+            test -f /app/ops/production-backup-main.mjs &&
+            pg_dump --version | grep -E " 16[.]" && command -v pg_restore &&
+            ! grep -aEi "deterministic[ _-]?fake|device[ _-]?gateway|app[ _-]?server|6176" /app/runtime-worker.mjs /app/init/release-main.mjs /app/init/release-rollback-main.mjs /app/ops/production-backup-main.mjs
           '
+          CREWON_RUNTIME_WORKER_BACKUP_IMAGE=crewon-runtime-worker:ci \
+            node --experimental-strip-types --test \
+            scripts/production-backup-postgres-smoke.test.ts
           volume="crewon-artifacts-ci-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           docker volume create "$volume"
           cleanup_artifact_volume() {
@@ -132,6 +137,7 @@ jobs:
           CREWON_CONTROL_ENV_FILE=control.production.env.example \
           CREWON_RUNTIME_ENV_FILE=runtime.production.env.example \
           CREWON_WEB_BFF_ENV_FILE=web-bff.production.env.example \
+          CREWON_BACKUP_ENV_FILE=backup.production.env.example \
           CREWON_CONTROL_API_IMAGE=crewon-control-api:ci \
           CREWON_RUNTIME_WORKER_IMAGE=crewon-runtime-worker:ci \
           CREWON_WEB_BFF_IMAGE=crewon-web-bff:ci \

@@ -176,8 +176,8 @@ function artifactFixture(options = {}) {
     PRAGMA journal_mode = WAL;
     CREATE TABLE artifacts (state TEXT NOT NULL, relative_path TEXT NOT NULL);
     INSERT INTO artifacts VALUES
-      ('ready', 'blobs/tenant-a/artifact-a.bin'),
-      ('${options.pending ? "writing" : "ready"}', 'blobs/tenant-b/artifact-b.bin');
+      ('ready', 'tenant-a/artifact-a.bin'),
+      ('${options.pending ? "writing" : "ready"}', 'tenant-b/artifact-b.bin');
   `);
   database.close();
   return { base, databasePath, destination, rootDirectory };

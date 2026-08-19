@@ -1,12 +1,13 @@
 import { readFile } from "node:fs/promises";
 
 const root = new URL("../../", import.meta.url);
-const [compose, control, runtime, bff, host] = await Promise.all(
+const [compose, control, runtime, bff, backup, host] = await Promise.all(
   [
     "deploy/crewon/compose.production.yml",
     "deploy/crewon/control.production.env.example",
     "deploy/crewon/runtime.production.env.example",
     "deploy/crewon/web-bff.production.env.example",
+    "deploy/crewon/backup.production.env.example",
     "deploy/crewon/compose.host.env.example",
   ].map((path) => readFile(new URL(path, root), "utf8")),
 );
@@ -22,6 +23,7 @@ const forbidText = (source, text, code) => {
 for (const service of [
   "runtime-release:",
   "runtime-rollback:",
+  "runtime-backup:",
   "runtime-worker:",
   "control-api:",
   "web-bff:",
@@ -42,6 +44,12 @@ requireText(
   "release_rollback_job_missing",
 );
 requireText(compose, 'profiles: ["rollback"]', "rollback_profile_missing");
+requireText(compose, 'profiles: ["backup"]', "backup_profile_missing");
+requireText(
+  compose,
+  'entrypoint: ["node", "/app/ops/production-backup-main.mjs"]',
+  "backup_entrypoint_missing",
+);
 requireText(
   compose,
   "condition: service_completed_successfully",
@@ -86,6 +94,11 @@ requireText(
   "CREWON_WEB_BFF_ENV_FILE:-./web-bff.production.env",
   "bff_env_boundary_missing",
 );
+requireText(
+  compose,
+  "CREWON_BACKUP_ENV_FILE:-./backup.production.env",
+  "backup_env_boundary_missing",
+);
 
 for (const [source, forbidden] of [
   [
@@ -108,6 +121,15 @@ for (const [source, forbidden] of [
       "CREWON_POLICY_SERVICE_TOKEN",
     ],
   ],
+  [
+    backup,
+    [
+      "OPENAI_API_KEY",
+      "CREWON_MODEL_API_KEY",
+      "CREWON_PROVIDER_ROUTE_TOKEN",
+      "CREWON_WORKSPACE_ROUTE_TOKEN",
+    ],
+  ],
 ]) {
   for (const name of forbidden) {
     forbidText(source, name, `secret_scope_violation:${name}`);
@@ -125,6 +147,10 @@ for (const name of [
   "CREWON_ARTIFACT_KEY_FILE",
   "CREWON_AGENT_BINDINGS_FILE",
   "CREWON_WORKSPACE_ROOT",
+  "CREWON_BACKUP_ENV_FILE",
+  "CREWON_BACKUP_ROOT",
+  "CREWON_SERVER_RELEASE_MANIFEST_FILE",
+  "CREWON_SERVER_RELEASE_SIGNATURE_FILE",
   "CREWON_TLS_CERT_FILE",
   "CREWON_TLS_KEY_FILE",
 ]) {
@@ -139,7 +165,7 @@ for (const marker of [
   "deterministic-fake",
 ]) {
   forbidText(
-    `${compose}\n${control}\n${runtime}\n${bff}\n${host}`,
+    `${compose}\n${control}\n${runtime}\n${bff}\n${backup}\n${host}`,
     marker,
     `removed_runtime_marker:${marker}`,
   );
