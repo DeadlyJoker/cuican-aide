@@ -15,13 +15,7 @@ import type { SettingsSection } from "../../settings/settingsCatalog";
 export type AppViewSyncEffectsParams = {
   appView: AppView;
   connectionState: ConnectionState;
-  demoSettingsPanel: (
-    section: SettingsSection,
-    locale: Locale,
-  ) => CapabilityPanel;
   isConnected: boolean;
-  isDemo: boolean;
-  locale: Locale;
   openLibrary: (kind: LibraryKind) => void | Promise<void>;
   refreshSettingsSection: (section: SettingsSection) => void | Promise<void>;
   settingsSection: SettingsSection;
@@ -33,10 +27,7 @@ export type AppViewSyncEffectsParams = {
 export function useAppViewSyncEffects({
   appView,
   connectionState,
-  demoSettingsPanel,
   isConnected,
-  isDemo,
-  locale,
   openLibrary,
   refreshSettingsSection,
   settingsSection,
@@ -68,11 +59,8 @@ export function useAppViewSyncEffects({
     const syncViewFromUrl = () => {
       const search = window.location.search;
       syncViewFromSearchAction({
-        demoSettingsPanel,
         isConnected,
-        isDemo,
         lastSyncedSearch: lastSyncedViewSearchRef.current,
-        locale,
         openLibrary,
         refreshSettingsSection,
         search,
@@ -92,18 +80,15 @@ export function useAppViewSyncEffects({
       window.clearInterval(intervalId);
       window.removeEventListener("popstate", syncViewFromUrl);
     };
-  }, [connectionState, isConnected, isDemo, locale]);
+  }, [connectionState, isConnected]);
 
   useEffect(() => {
     syncSettingsViewPanelAction({
       appView,
-      demoSettingsPanel,
       isConnected,
-      isDemo,
-      locale,
       refreshSettingsSection,
       section: settingsSection,
       setCapabilityPanel,
     });
-  }, [appView, isConnected, isDemo, locale, settingsSection]);
+  }, [appView, isConnected, settingsSection]);
 }

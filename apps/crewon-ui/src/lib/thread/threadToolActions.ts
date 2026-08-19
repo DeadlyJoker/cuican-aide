@@ -4,7 +4,6 @@ import type { Thread } from "@crewon-ui-model/v2/Thread";
 
 import type { NoticeState } from "../shared/noticeState";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
-import { demoCapabilityPanel } from "../demo/demoContent";
 import type { Locale, ToolId } from "../i18n";
 import {
   sideChatCreatedPanel,
@@ -34,7 +33,6 @@ type BaseThreadToolActionParams = {
   client: ThreadToolClient | null | undefined;
   createThread: () => Promise<Thread | null>;
   isConnected: boolean;
-  isDemo: boolean;
   locale: Locale;
   selectedThread: Thread | null;
   setBusyToolId: (toolId: ToolId | null) => void;
@@ -55,7 +53,6 @@ export async function startReviewAction(params: StartReviewActionParams) {
     client,
     createThread,
     isConnected,
-    isDemo,
     locale,
     selectedThread,
     setBusyToolId,
@@ -66,10 +63,6 @@ export async function startReviewAction(params: StartReviewActionParams) {
   } = params;
 
   if (busyToolId) {
-    return;
-  }
-  if (isDemo) {
-    setCapabilityPanel(demoCapabilityPanel("review", locale));
     return;
   }
   if (!isConnected) {
@@ -107,7 +100,6 @@ export async function startSideChatAction(params: StartSideChatActionParams) {
     client,
     createThread,
     isConnected,
-    isDemo,
     locale,
     selectedThread,
     setBusyToolId,
@@ -116,10 +108,6 @@ export async function startSideChatAction(params: StartSideChatActionParams) {
     setThreads,
   } = params;
 
-  if (isDemo) {
-    setCapabilityPanel(demoCapabilityPanel("sidechat", locale));
-    return;
-  }
   if (busyToolId || !isConnected) {
     return;
   }

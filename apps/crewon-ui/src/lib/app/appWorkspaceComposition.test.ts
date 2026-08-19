@@ -162,9 +162,11 @@ describe("App Workspace Control composition", () => {
   it("keeps production composition free of demo preview threads and turns", () => {
     const productionSources = [
       "../../App.tsx",
+      "./appViewActions.ts",
       "./useAppEnvironment.ts",
       "./effects/useAppThreadListEffects.ts",
       "./effects/useAppViewSyncEffects.ts",
+      "./handlers/appShellActionHandlers.ts",
       "./handlers/appThreadRuntimeHandlers.ts",
       "../thread/threadMessageActions.ts",
       "../thread/threadSearchActions.ts",
@@ -172,7 +174,7 @@ describe("App Workspace Control composition", () => {
     ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
 
     expect(productionSources.join("\n")).not.toMatch(
-      /demoItems|isDemoPreview|showDemoThreads|createDemoThread|createDemoTurn|createDraftDemoThread|demoData/u,
+      /demoItems|isDemo|showDemoThreads|createDemoThread|createDemoTurn|createDraftDemoThread|demoContent|demoData/u,
     );
   });
 

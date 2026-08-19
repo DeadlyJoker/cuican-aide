@@ -11,7 +11,6 @@ import {
 import type { CapabilityPanel } from "../../capability/capabilityPanelTypes";
 import type { LibraryPanel } from "../../domain/crewonDomain";
 import { defaultCapabilityPanel } from "../../capability/capabilityPanelText";
-import { demoSettingsPanel } from "../../demo/demoContent";
 import type { Locale } from "../../i18n";
 import {
   refreshSettingsSectionAction,
@@ -44,7 +43,6 @@ export type AppShellActionHandlersParams = {
   capabilityPanel: CapabilityPanel | null;
   commitLocale: (locale: Locale) => void;
   commitThemeToggle: () => void;
-  isDemo: boolean;
   locale: Locale;
   refreshSettingsHandlers: SettingsSectionRefreshHandlers;
   setAppView: (view: AppView) => void;
@@ -94,9 +92,6 @@ export function createAppShellActionHandlers(
     },
     openSettings: () => {
       openSettingsAction({
-        demoSettingsPanel,
-        isDemo: params.isDemo,
-        locale: params.locale,
         refreshDefaultSettingsPanel: params.refreshSettingsHandlers.appearance,
         setAppView: params.setAppView,
         setCapabilityDockOpen: params.setCapabilityDockOpen,
@@ -107,9 +102,6 @@ export function createAppShellActionHandlers(
     },
     openSettingsSection: (section) => {
       openSettingsSectionAction({
-        demoSettingsPanel,
-        isDemo: params.isDemo,
-        locale: params.locale,
         refreshSettingsSection,
         section,
         setCapabilityPanel: params.setCapabilityPanel,

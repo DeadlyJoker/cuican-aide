@@ -36,12 +36,6 @@ function hasViewParam(search: string): boolean {
 }
 
 export function openSettingsAction(params: {
-  demoSettingsPanel: (
-    section: SettingsSection,
-    locale: Locale,
-  ) => CapabilityPanel;
-  isDemo: boolean;
-  locale: Locale;
   refreshDefaultSettingsPanel: () => void | Promise<void>;
   setAppView: AppViewSetter;
   setCapabilityDockOpen: BooleanSetter;
@@ -53,34 +47,16 @@ export function openSettingsAction(params: {
   params.setAppView("settings");
   params.setCapabilityDockOpen(false);
   params.setInspectorOpen(false);
-  if (params.isDemo) {
-    params.setCapabilityPanel(
-      params.demoSettingsPanel("appearance", params.locale),
-    );
-    return;
-  }
   void params.refreshDefaultSettingsPanel();
 }
 
 export function openSettingsSectionAction(params: {
-  demoSettingsPanel: (
-    section: SettingsSection,
-    locale: Locale,
-  ) => CapabilityPanel;
-  isDemo: boolean;
-  locale: Locale;
   refreshSettingsSection: (section: SettingsSection) => void | Promise<void>;
   section: SettingsSection;
   setCapabilityPanel: CapabilityPanelSetter;
   setSettingsSection: SettingsSectionSetter;
 }): void {
   params.setSettingsSection(params.section);
-  if (params.isDemo) {
-    params.setCapabilityPanel(
-      params.demoSettingsPanel(params.section, params.locale),
-    );
-    return;
-  }
   void params.refreshSettingsSection(params.section);
 }
 
@@ -200,14 +176,8 @@ export function closeCrampedInspectorAction(params: {
 }
 
 export function syncViewFromSearchAction(params: {
-  demoSettingsPanel: (
-    section: SettingsSection,
-    locale: Locale,
-  ) => CapabilityPanel;
   isConnected: boolean;
-  isDemo: boolean;
   lastSyncedSearch: string;
-  locale: Locale;
   openLibrary: (kind: LibraryKind) => void | Promise<void>;
   refreshSettingsSection: (section: SettingsSection) => void | Promise<void>;
   search: string;
@@ -236,10 +206,6 @@ export function syncViewFromSearchAction(params: {
     params.setSettingsSection(settingsViewSection);
     if (params.isConnected) {
       void params.refreshSettingsSection(settingsViewSection);
-    } else if (params.isDemo) {
-      params.setCapabilityPanel(
-        params.demoSettingsPanel(settingsViewSection, params.locale),
-      );
     }
     return true;
   }
@@ -256,13 +222,7 @@ export function syncViewFromSearchAction(params: {
 
 export function syncSettingsViewPanelAction(params: {
   appView: AppView;
-  demoSettingsPanel: (
-    section: SettingsSection,
-    locale: Locale,
-  ) => CapabilityPanel;
   isConnected: boolean;
-  isDemo: boolean;
-  locale: Locale;
   refreshSettingsSection: (section: SettingsSection) => void | Promise<void>;
   section: SettingsSection;
   setCapabilityPanel: CapabilityPanelSetter;
@@ -273,13 +233,6 @@ export function syncSettingsViewPanelAction(params: {
 
   if (params.isConnected) {
     void params.refreshSettingsSection(params.section);
-    return true;
-  }
-
-  if (params.isDemo) {
-    params.setCapabilityPanel(
-      params.demoSettingsPanel(params.section, params.locale),
-    );
     return true;
   }
 

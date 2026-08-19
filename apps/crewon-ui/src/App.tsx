@@ -55,7 +55,6 @@ import {
 import { withKnowledgeReferenceMention } from "./lib/shared/composerMentions";
 import type { CapabilityPanelItem } from "./lib/capability/capabilityPanelTypes";
 import { useControlComposerResourceDiscovery } from "./lib/control-runtime/useControlComposerResourceDiscovery";
-import { demoCapabilityPanel, demoSettingsPanel } from "./lib/demo/demoContent";
 import { persistLocale, translate } from "./lib/i18n";
 import { persistTheme } from "./lib/theme";
 import { isSingleConversationThread } from "./lib/thread/threadSourceFilters";
@@ -191,20 +190,14 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     ? ("connected" as const)
     : ("connecting" as const);
 
-  const {
-    activeTurnId,
-    cwd,
-    isConnected,
-    isDemo,
-    selectedThread,
-    titlebarTitle,
-  } = useAppThreadSelection({
-    ...threadState,
-    connectionState: threadConnectionState,
-    draftWorkspaceCwd,
-    newDraftThreadLabel: t.newDraftThread,
-    untitledThreadLabel: t.untitledThread,
-  });
+  const { activeTurnId, cwd, isConnected, selectedThread, titlebarTitle } =
+    useAppThreadSelection({
+      ...threadState,
+      connectionState: threadConnectionState,
+      draftWorkspaceCwd,
+      newDraftThreadLabel: t.newDraftThread,
+      untitledThreadLabel: t.untitledThread,
+    });
   const commandModelOptions: CommandModelOption[] = [];
   const controlComposerResources = useControlComposerResourceDiscovery({
     client: controlRuntimeConnected ? controlClient : null,
@@ -271,10 +264,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   useAppViewSyncEffects({
     appView,
     connectionState: threadConnectionState,
-    demoSettingsPanel,
     isConnected,
-    isDemo,
-    locale,
     openLibrary: (kind) => openLibraryRef.current(kind),
     refreshSettingsSection: (section) =>
       refreshSettingsSectionRef.current(section),
@@ -362,7 +352,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     confirm: requestConfirm,
     getShowArchivedThreads: () => showArchivedThreadsRef.current,
     isConnected: threadRuntimeConnected,
-    isDemo,
     ...composerState,
     locale,
     onExecutionIntentCommitted: (intent) => {
@@ -497,7 +486,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         theme === "light" ? "dark" : "light",
       );
     },
-    isDemo,
     locale,
     refreshSettingsHandlers: settingsSectionRefreshHandlers,
     setAppView,
@@ -581,13 +569,9 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       <CommandSettingsLazyRoute
         activeSection={settingsSection}
         dataMode={
-          isDemo
-            ? "demo"
-            : threadConnectionState === "connected"
-              ? "live"
-              : "disconnected"
+          threadConnectionState === "connected" ? "live" : "disconnected"
         }
-        disabled={!isConnected || isDemo}
+        disabled={!isConnected}
         locale={locale}
         notice={notice}
         panel={capabilityPanel}
@@ -787,8 +771,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         composerValue={composerValue}
         connectionState={threadConnectionState}
         cwd={cwd}
-        disabled={!isConnected && !isDemo}
-        isDemo={isDemo}
+        disabled={!isConnected}
         isSending={isSending}
         libraryPanel={libraryPanel}
         locale={locale}
@@ -823,7 +806,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         appView={appView}
         capabilityDockOpen={capabilityDockOpen}
         capabilityPanel={capabilityPanel}
-        disabled={!isConnected && !isDemo}
+        disabled={!isConnected}
         inspectorOpen={inspectorOpen}
         loadedThreadIds={loadedThreadIds}
         locale={locale}

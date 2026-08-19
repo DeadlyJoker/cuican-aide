@@ -95,7 +95,6 @@ function baseParams(
     client: baseClient(),
     createThread: async () => thread({ id: "created-thread" }),
     isConnected: true,
-    isDemo: false,
     locale: "en",
     selectedThread: thread(),
     setBusyToolId: () => {},
@@ -108,30 +107,6 @@ function baseParams(
 }
 
 describe("thread tool actions", () => {
-  it("opens review demo panel without backend calls", async () => {
-    const sink = panelSink();
-    let called = false;
-
-    await startReviewAction(
-      baseParams({
-        client: baseClient({
-          async startReview() {
-            called = true;
-            return { reviewThreadId: "thread-1", turn: turn() };
-          },
-        }),
-        isDemo: true,
-        setCapabilityPanel: sink.setCapabilityPanel,
-      }),
-    );
-
-    expect(called).toBe(false);
-    expect(sink.panel).toMatchObject({
-      subtitle: "Code review · demo-1",
-      title: "Review",
-    });
-  });
-
   it("starts review on the selected thread and inserts the review turn", async () => {
     const busyStates: Array<string | null> = [];
     const selectedIds: string[] = [];
@@ -262,30 +237,6 @@ describe("thread tool actions", () => {
     expect(sink.panel).toEqual({
       body: "Forked side chat created",
       subtitle: "side-thread",
-      title: "Side chat",
-    });
-  });
-
-  it("opens side chat demo panel without forking", async () => {
-    const sink = panelSink();
-    let called = false;
-
-    await startSideChatAction({
-      ...baseParams({
-        client: baseClient({
-          async forkThread() {
-            called = true;
-            return { thread: thread({ id: "side-thread" }) };
-          },
-        }),
-        isDemo: true,
-        setCapabilityPanel: sink.setCapabilityPanel,
-      }),
-    });
-
-    expect(called).toBe(false);
-    expect(sink.panel).toMatchObject({
-      subtitle: "Forked from current session",
       title: "Side chat",
     });
   });

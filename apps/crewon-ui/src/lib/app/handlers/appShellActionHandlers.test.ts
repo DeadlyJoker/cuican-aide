@@ -70,7 +70,6 @@ function createParams(
       locale = nextLocale;
     },
     commitThemeToggle: vi.fn(),
-    isDemo: false,
     locale,
     refreshSettingsHandlers: refreshHandlers(),
     setAppView: (nextView) => {

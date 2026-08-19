@@ -132,7 +132,6 @@ function createParams(
     confirm: () => true,
     getShowArchivedThreads: () => false,
     isConnected: true,
-    isDemo: false,
     isSending: false,
     locale: "en",
     pendingComposerMentions: [],
@@ -331,11 +330,9 @@ describe("app thread runtime handlers", () => {
     await threadToolSpy.sideChatParams?.createThread();
 
     expect(threadToolSpy.reviewParams).toMatchObject({
-      isDemo: false,
       selectedThread: thread("selected-thread"),
     });
     expect(threadToolSpy.sideChatParams).toMatchObject({
-      isDemo: false,
       selectedThread: thread("selected-thread"),
     });
     expect(threadMessageSpy.create).toHaveBeenCalledTimes(2);

@@ -109,7 +109,6 @@ export type AppThreadRuntimeHandlersParams = {
   confirm: ConfirmHandler;
   getShowArchivedThreads: () => boolean;
   isConnected: boolean;
-  isDemo: boolean;
   isSending: boolean;
   locale: Locale;
   onExecutionIntentCommitted?: (
@@ -349,7 +348,6 @@ export function createAppThreadRuntimeHandlers(
         client: params.client,
         createThread,
         isConnected: params.isConnected,
-        isDemo: params.isDemo,
         locale: params.locale,
         selectedThread: params.selectedThread,
         setBusyToolId: params.setBusyToolId,
@@ -364,7 +362,6 @@ export function createAppThreadRuntimeHandlers(
         client: params.client,
         createThread,
         isConnected: params.isConnected,
-        isDemo: params.isDemo,
         locale: params.locale,
         selectedThread: params.selectedThread,
         setBusyToolId: params.setBusyToolId,

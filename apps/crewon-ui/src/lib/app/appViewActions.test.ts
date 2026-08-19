@@ -18,12 +18,6 @@ import {
   toggleInspectorAction,
 } from "./appViewActions";
 
-function demoPanel(section: SettingsSection): CapabilityPanel {
-  return {
-    title: `Demo ${section}`,
-  };
-}
-
 function defaultPanel(locale: "en" | "zh"): CapabilityPanel {
   return {
     title: `Demo ${locale}`,
@@ -42,9 +36,6 @@ describe("app view actions", () => {
     const refreshDefaultSettingsPanel = vi.fn();
 
     openSettingsAction({
-      demoSettingsPanel: demoPanel,
-      isDemo: false,
-      locale: "en",
       refreshDefaultSettingsPanel,
       setAppView: (view) => {
         state.appView = view;
@@ -73,37 +64,12 @@ describe("app view actions", () => {
     expect(refreshDefaultSettingsPanel).toHaveBeenCalledOnce();
   });
 
-  it("opens demo settings using a local panel", () => {
-    let capabilityPanel: CapabilityPanel | null = null;
-    const refreshDefaultSettingsPanel = vi.fn();
-
-    openSettingsAction({
-      demoSettingsPanel: demoPanel,
-      isDemo: true,
-      locale: "en",
-      refreshDefaultSettingsPanel,
-      setAppView: () => {},
-      setCapabilityDockOpen: () => {},
-      setCapabilityPanel: (panel) => {
-        capabilityPanel = panel;
-      },
-      setInspectorOpen: () => {},
-      setSettingsSection: () => {},
-    });
-
-    expect(capabilityPanel).toEqual({ title: "Demo appearance" });
-    expect(refreshDefaultSettingsPanel).not.toHaveBeenCalled();
-  });
-
-  it("opens a settings section through either demo content or refresh", () => {
+  it("opens a settings section through its Control refresh", () => {
     let settingsSection: SettingsSection = "account";
     let capabilityPanel: CapabilityPanel | null = null;
     const refreshSettingsSection = vi.fn();
 
     openSettingsSectionAction({
-      demoSettingsPanel: demoPanel,
-      isDemo: false,
-      locale: "en",
       refreshSettingsSection,
       section: "git",
       setCapabilityPanel: (panel) => {
@@ -116,22 +82,6 @@ describe("app view actions", () => {
     expect(settingsSection).toBe("git");
     expect(capabilityPanel).toBeNull();
     expect(refreshSettingsSection).toHaveBeenCalledWith("git");
-
-    openSettingsSectionAction({
-      demoSettingsPanel: demoPanel,
-      isDemo: true,
-      locale: "en",
-      refreshSettingsSection,
-      section: "browser",
-      setCapabilityPanel: (panel) => {
-        capabilityPanel = panel;
-      },
-      setSettingsSection: (section) => {
-        settingsSection = section;
-      },
-    });
-    expect(settingsSection).toBe("browser");
-    expect(capabilityPanel).toEqual({ title: "Demo browser" });
   });
 
   it("closes settings and library views", () => {
@@ -341,11 +291,8 @@ describe("app view actions", () => {
 
     expect(
       syncViewFromSearchAction({
-        demoSettingsPanel: demoPanel,
         isConnected: true,
-        isDemo: false,
         lastSyncedSearch,
-        locale: "en",
         openLibrary: () => {},
         refreshSettingsSection: (section) => {
           refreshedSection = section;
@@ -373,16 +320,13 @@ describe("app view actions", () => {
     expect(lastSyncedSearch).toBe("?view=settings&section=appearance");
   });
 
-  it("syncs demo settings and library views from URL search", () => {
+  it("does not synthesize settings while disconnected and still opens real libraries", () => {
     let capabilityPanel: CapabilityPanel | null = null;
     const openedLibraries: string[] = [];
 
     syncViewFromSearchAction({
-      demoSettingsPanel: demoPanel,
       isConnected: false,
-      isDemo: true,
       lastSyncedSearch: "",
-      locale: "en",
       openLibrary: (kind) => {
         openedLibraries.push(kind);
       },
@@ -395,14 +339,11 @@ describe("app view actions", () => {
       setLastSyncedSearch: () => {},
       setSettingsSection: () => {},
     });
-    expect(capabilityPanel).toEqual({ title: "Demo git" });
+    expect(capabilityPanel).toBeNull();
 
     syncViewFromSearchAction({
-      demoSettingsPanel: demoPanel,
       isConnected: false,
-      isDemo: true,
       lastSyncedSearch: "?view=settings&section=git",
-      locale: "en",
       openLibrary: (kind) => {
         openedLibraries.push(kind);
       },
@@ -423,11 +364,8 @@ describe("app view actions", () => {
 
     expect(
       syncViewFromSearchAction({
-        demoSettingsPanel: demoPanel,
         isConnected: false,
-        isDemo: false,
         lastSyncedSearch,
-        locale: "en",
         openLibrary: () => {},
         refreshSettingsSection: () => {},
         search: "?view=tools",
@@ -445,11 +383,8 @@ describe("app view actions", () => {
 
     expect(
       syncViewFromSearchAction({
-        demoSettingsPanel: demoPanel,
         isConnected: false,
-        isDemo: false,
         lastSyncedSearch,
-        locale: "en",
         openLibrary: () => {},
         refreshSettingsSection: () => {},
         search: "",
@@ -473,11 +408,8 @@ describe("app view actions", () => {
 
     expect(
       syncViewFromSearchAction({
-        demoSettingsPanel: demoPanel,
         isConnected: false,
-        isDemo: false,
         lastSyncedSearch,
-        locale: "en",
         openLibrary: () => {},
         refreshSettingsSection: () => {},
         search: "?platform=mac",
@@ -495,17 +427,14 @@ describe("app view actions", () => {
     expect(lastSyncedSearch).toBe("?platform=mac");
   });
 
-  it("syncs the visible settings panel for connected and demo modes", () => {
+  it("syncs the visible settings panel only from Control", () => {
     let refreshedSection: SettingsSection | null = null;
     let capabilityPanel: CapabilityPanel | null = null;
 
     expect(
       syncSettingsViewPanelAction({
         appView: "chat",
-        demoSettingsPanel: demoPanel,
         isConnected: true,
-        isDemo: false,
-        locale: "en",
         refreshSettingsSection: (section) => {
           refreshedSection = section;
         },
@@ -520,10 +449,7 @@ describe("app view actions", () => {
     expect(
       syncSettingsViewPanelAction({
         appView: "settings",
-        demoSettingsPanel: demoPanel,
         isConnected: true,
-        isDemo: false,
-        locale: "en",
         refreshSettingsSection: (section) => {
           refreshedSection = section;
         },
@@ -539,17 +465,14 @@ describe("app view actions", () => {
     expect(
       syncSettingsViewPanelAction({
         appView: "settings",
-        demoSettingsPanel: demoPanel,
         isConnected: false,
-        isDemo: true,
-        locale: "zh",
         refreshSettingsSection: () => {},
         section: "browser",
         setCapabilityPanel: (panel) => {
           capabilityPanel = panel;
         },
       }),
-    ).toBe(true);
-    expect(capabilityPanel).toEqual({ title: "Demo browser" });
+    ).toBe(false);
+    expect(capabilityPanel).toBeNull();
   });
 });
