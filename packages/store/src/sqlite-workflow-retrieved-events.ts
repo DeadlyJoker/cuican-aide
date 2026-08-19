@@ -93,22 +93,73 @@ function loadSegmentEvents(
 ): readonly RunLifecycleEvent[] {
   const rows = database
     .prepare(
-      `SELECT event_json FROM run_events
+      `SELECT tenant_id,run_id,sequence,event_id,event_json FROM run_events
        WHERE tenant_id=? AND run_id=?
          AND json_extract(event_json,'$.data.segmentId')=?
        ORDER BY CAST(json_extract(event_json,'$.data.segmentSequence') AS INTEGER),
                 sequence`,
     )
     .all(input.tenantId, input.runId, input.segmentId) as unknown as {
+    tenant_id: string;
+    run_id: string;
+    sequence: number;
+    event_id: string;
     event_json: string;
   }[];
+  return rows.map((row) => decodeSegmentEventRow(row, input));
+}
+
+function decodeSegmentEventRow(
+  row: Readonly<{
+    tenant_id: string;
+    run_id: string;
+    sequence: number;
+    event_id: string;
+    event_json: string;
+  }>,
+  input: Readonly<{ tenantId: string; runId: string; segmentId: string }>,
+): RunLifecycleEvent {
+  let value: unknown;
   try {
-    return rows.map(
-      ({ event_json }) => JSON.parse(event_json) as RunLifecycleEvent,
-    );
+    value = JSON.parse(row.event_json);
   } catch {
     corrupt();
   }
+  if (!isRecord(value) || !isRecord(value.identity) || !isRecord(value.data))
+    corrupt();
+  const event = value as RunLifecycleEvent;
+  if (
+    Object.keys(value).sort().join(",") !==
+      "data,eventId,identity,occurredAt,schemaVersion,sequence,type" ||
+    Object.keys(value.identity).join(",") !== "runId" ||
+    row.tenant_id !== input.tenantId ||
+    row.run_id !== input.runId ||
+    event.schemaVersion !== "crewon.run-event.v0" ||
+    event.identity.runId !== row.run_id ||
+    event.eventId !== row.event_id ||
+    typeof event.eventId !== "string" ||
+    event.eventId.length === 0 ||
+    event.sequence !== row.sequence ||
+    !Number.isSafeInteger(row.sequence) ||
+    row.sequence < 1 ||
+    typeof event.occurredAt !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/u.test(
+      event.occurredAt,
+    ) ||
+    Number.isNaN(Date.parse(event.occurredAt)) ||
+    typeof event.type !== "string" ||
+    !("segmentId" in event.data) ||
+    event.data.segmentId !== input.segmentId ||
+    !("segmentSequence" in event.data) ||
+    !Number.isSafeInteger(event.data.segmentSequence) ||
+    event.data.segmentSequence < 1
+  )
+    corrupt();
+  return event;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function loadRun(
@@ -252,7 +303,7 @@ function updateRun(
   const result = database
     .prepare(
       `UPDATE run_snapshots SET revision=?,last_sequence=?,state_json=?,updated_at=?
-       WHERE tenant_id=? AND run_id=? AND revision=? AND state_json=?`,
+       WHERE tenant_id=? AND run_id=? AND revision=? AND last_sequence=?`,
     )
     .run(
       next.revision,
@@ -262,7 +313,7 @@ function updateRun(
       current.tenantId,
       current.runId,
       current.revision,
-      stableJson(current),
+      current.lastSequence,
     );
   if (result.changes !== 1) throw new RunStoreError("revision_conflict");
 }

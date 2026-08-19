@@ -42,6 +42,7 @@ import {
   insertSqliteToolExecutionReceipt,
   loadSqliteToolExecutionReceipt,
 } from "./sqlite-tool-execution-receipts.ts";
+import { appendSqliteWorkflowRetrievedEventSuffix } from "./sqlite-workflow-retrieved-events.ts";
 import { SqliteWorkflowRunCompositionStore } from "./sqlite-workflow-run-composition-store.ts";
 import { SqliteWorkflowVersionStore } from "./workflow-version-store.ts";
 
@@ -658,6 +659,50 @@ test("SQLite settles a retrieved sample after continuation takeover restored run
   fixture.database.close();
 });
 
+for (const corruption of [
+  {
+    name: "stored schema",
+    sql: `UPDATE run_events SET event_json=json_set(
+      event_json,'$.schemaVersion','forged')
+      WHERE json_extract(event_json,'$.data.segmentId')='strict-segment'`,
+  },
+  {
+    name: "stored identity",
+    sql: `UPDATE run_events SET event_json=json_set(
+      event_json,'$.identity.runId','forged')
+      WHERE json_extract(event_json,'$.data.segmentId')='strict-segment'`,
+  },
+  {
+    name: "physical sequence",
+    sql: `UPDATE run_events SET sequence=sequence+1000
+      WHERE json_extract(event_json,'$.data.segmentId')='strict-segment'`,
+  },
+  {
+    name: "physical event ID",
+    sql: `UPDATE run_events SET event_id='forged-event-id'
+      WHERE json_extract(event_json,'$.data.segmentId')='strict-segment'`,
+  },
+] as const) {
+  test(`SQLite retrieved prefix fails closed on corrupted ${corruption.name}`, async () => {
+    const fixture = await continuationFixture();
+    const input = retrievedPrefixInput(fixture);
+    assert.equal(
+      appendSqliteWorkflowRetrievedEventSuffix(fixture.database, input).appended
+        .length,
+      1,
+    );
+    fixture.database.exec(corruption.sql);
+
+    assert.throws(
+      () => appendSqliteWorkflowRetrievedEventSuffix(fixture.database, input),
+      (error: unknown) =>
+        error instanceof RunStoreError &&
+        error.code === "workflow_retrieved_continuation_corrupt",
+    );
+    fixture.database.close();
+  });
+}
+
 test("SQLite continuation takeover rolls every authority back at the execution crash boundary", async () => {
   const fixture = await continuationFixture();
   const beforeExecution = storedExecution(fixture.database);
@@ -974,6 +1019,47 @@ async function continuationFixture(
     history,
     pendingTools,
     reconcileInput,
+  };
+}
+
+function retrievedPrefixInput(
+  fixture: Awaited<ReturnType<typeof continuationFixture>>,
+) {
+  return {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    attemptId: fixture.authority.attempt.attemptId,
+    dispatchOperationId: "strict-dispatch",
+    segmentId: "strict-segment",
+    payload: {
+      events: [
+        {
+          schemaVersion: "crewon.agent-event.v0" as const,
+          runId: "run-1",
+          segmentId: "strict-segment",
+          sequence: 1,
+          type: "tool.requested" as const,
+          data: {
+            callId: "strict-call",
+            kind: "function" as const,
+            name: "tool.read",
+            input: "{}",
+          },
+        },
+      ],
+      assistantContinuation: null,
+      next: {
+        schemaVersion: "crewon.workflow-node-continuation.v0" as const,
+        segmentId: "strict-segment",
+        modelSampleIndex: 0,
+        toolRoundsConsumed: 0,
+        providerCheckpoint: null,
+        providerTurnState: null,
+        history: [],
+      },
+    },
+    committedAt: now,
+    digester,
   };
 }
 
