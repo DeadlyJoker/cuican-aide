@@ -492,7 +492,7 @@ test("SQLite cancellation replaces completed sibling reconciles and replays afte
     { ...final, disposition: "replay" });
 });
 
-test("SQLite cancellation retains possibly-sent node reconciliation", async (t) => {
+test("SQLite cancellation abandons possibly-sent model evidence and converges", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "crewon-workflow-cancel-unknown-"));
   const path = join(directory, "cancel.sqlite");
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -563,16 +563,21 @@ test("SQLite cancellation retains possibly-sent node reconciliation", async (t) 
     leaseId: "reconcile-lease", leaseDurationMs: 60_000 });
   assert.equal(reconcileClaim?.workItem.workItemId, unknown.handoff.nextWorkItemId);
   const reconcilePayload = reconcileClaim!.workItem.payload as Record<string, unknown>;
-  const retained = await store.reconcileWorkflowNode({ tenantId: "tenant-1", runId: "run-1",
+  const reconciled = await store.reconcileWorkflowNode({ tenantId: "tenant-1", runId: "run-1",
     binding, lease: { workItemId: reconcileClaim!.workItem.workItemId,
       ownerId: "reconcile-worker", leaseId: "reconcile-lease",
       leaseEpoch: reconcileClaim!.lease.epoch }, nodeId: work.nodeId, claimId: work.claimId,
     claimEpoch: work.claimEpoch,
     reconciliationOperationId: String(reconcilePayload.reconciliationOperationId) });
-  assert.equal(retained.disposition, "retryRequired");
-  await store.retryWorkItem({ workItemId: reconcileClaim!.workItem.workItemId,
-    ownerId: "reconcile-worker", leaseId: "reconcile-lease", leaseEpoch: reconcileClaim!.lease.epoch,
-    retryAfterMs: 60_000, reasonCode: "workflow_reconciliation_retry_required" });
+  assert.deepEqual([reconciled.disposition, reconciled.evidenceStatus,
+    reconciled.execution.nodes[0]!.status], ["settled", "possiblySent", "canceled"]);
+  assert.equal((await store.reconcileWorkflowNode({ tenantId: "tenant-1", runId: "run-1",
+    binding, lease: { workItemId: reconcileClaim!.workItem.workItemId,
+      ownerId: "reconcile-worker", leaseId: "reconcile-lease",
+      leaseEpoch: reconcileClaim!.lease.epoch }, nodeId: work.nodeId, claimId: work.claimId,
+    claimEpoch: work.claimEpoch,
+    reconciliationOperationId: String(reconcilePayload.reconciliationOperationId) })).disposition,
+  "replay");
   const cancelClaim = await store.claimNextWorkItem({ ownerId: "cancel-worker",
     leaseId: "cancel-lease", leaseDurationMs: 60_000 });
   assert.equal(cancelClaim?.workItem.payload.trigger, "workflowCancel");
@@ -581,22 +586,22 @@ test("SQLite cancellation retains possibly-sent node reconciliation", async (t) 
     reasonCode: "user_requested", lease: { workItemId: cancelClaim!.workItem.workItemId,
       ownerId: "cancel-worker", leaseId: "cancel-lease", leaseEpoch: cancelClaim!.lease.epoch } };
   const canceled = await store.cancelWorkflowExecution(cancelInput);
-  assert.equal(canceled.disposition, "retryRequired");
-  assert.equal(canceled.execution.nodes[0]!.status, "unknown");
-  assert.equal(canceled.runDisposition, "nonTerminal");
-  assert.deepEqual(canceled.reconciliationWorkItemIds,
-    [reconcileClaim!.workItem.workItemId]);
+  assert.deepEqual([canceled.disposition, canceled.execution.status,
+    canceled.runDisposition], ["reconciliationScheduled", "canceled", "terminalConverged"]);
+  assert.deepEqual(canceled.reconciliationWorkItemIds, [reconcileClaim!.workItem.workItemId]);
   const retainedAgain = await store.cancelWorkflowExecution(cancelInput);
-  assert.equal(retainedAgain.disposition, "retryRequired");
+  assert.equal(retainedAgain.disposition, "replay");
   assert.deepEqual(retainedAgain.reconciliationWorkItemIds,
     canceled.reconciliationWorkItemIds);
   const database = new DatabaseSync(path);
   assert.equal(database.prepare(`SELECT count(*) count FROM
-    workflow_composition_receipts WHERE kind='cancelExecution'`).get()!.count, 0);
-  assert.deepEqual({ ...database.prepare(`SELECT status FROM model_dispatch_receipts
-    WHERE operation_id='possibly-sent-dispatch'`).get() }, { status: "possiblySent" });
+    workflow_composition_receipts WHERE kind='cancelExecution'`).get()!.count, 1);
+  assert.deepEqual({ ...database.prepare(`SELECT status,
+    json_extract(state_json,'$.terminalOutcome.certainty') certainty
+    FROM model_dispatch_receipts WHERE operation_id='possibly-sent-dispatch'`).get() },
+  { status: "terminal", certainty: "abandonedPossiblySent" });
   assert.equal(database.prepare(`SELECT count(*) count FROM work_items WHERE status='pending' AND
-    json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`).get()!.count, 1);
+    json_extract(work_item_json,'$.payload.trigger')='workflowReconcile'`).get()!.count, 0);
   database.close();
 });
 
@@ -2135,7 +2140,7 @@ if (postgresUrl === undefined) {
     }
   });
 
-  test("PostgreSQL cancellation retains possibly-sent reconciliation authority", async () => {
+  test("PostgreSQL cancellation abandons possibly-sent reconciliation authority", async () => {
     const schema = `workflow_cancel_unknown_${randomUUID().replaceAll("-", "")}`;
     const pool = new Pool({ connectionString: postgresUrl });
     const store = await PostgresWorkflowRunCompositionStore.open({ pool, schema, digester });
@@ -2191,7 +2196,14 @@ if (postgresUrl === undefined) {
         binding, nodeId: work.nodeId, claimId: work.claimId, claimEpoch: work.claimEpoch,
         reconciliationOperationId: "cancel-unknown:agent" });
       assert.deepEqual([reconciled.disposition, reconciled.evidenceStatus,
-        reconciled.handoff.currentWorkItem], ["retryRequired", "possiblySent", "retained"]);
+        reconciled.handoff.currentWorkItem,
+        reconciled.execution.nodes.find((node) => node.nodeId === work.nodeId)?.status],
+      ["settled", "possiblySent", "completed", "canceled"]);
+      const durable = await pool.query(`SELECT status,
+        state_json->'terminalOutcome'->>'certainty' certainty
+        FROM ${schema}.model_dispatch_receipts WHERE operation_id='dispatch-unknown'`);
+      assert.deepEqual(durable.rows[0],
+        { status: "terminal", certainty: "abandonedPossiblySent" });
     } finally {
       await pool.query(`DROP SCHEMA ${schema} CASCADE`);
       await store.close();

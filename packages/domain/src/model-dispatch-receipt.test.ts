@@ -77,6 +77,47 @@ test("possibly-sent uncertainty cannot be erased by terminalization", () => {
   );
 });
 
+test("explicit cancellation can abandon a possibly-sent model request", () => {
+  const sent = markModelDispatchPossiblySent(
+    prepareModelDispatchReceipt(null, PREPARE),
+    "2026-08-12T00:00:01Z",
+  );
+  assert.deepEqual(
+    terminateModelDispatchReceipt(sent, {
+      outcome: {
+        kind: "canceled",
+        code: "user_requested",
+        certainty: "abandonedPossiblySent",
+      },
+      terminalAt: "2026-08-12T00:00:02Z",
+    }),
+    {
+      ...sent,
+      status: "terminal",
+      revision: sent.revision + 1,
+      terminalAt: "2026-08-12T00:00:02Z",
+      terminalOutcome: {
+        kind: "canceled",
+        code: "user_requested",
+        certainty: "abandonedPossiblySent",
+      },
+      updatedAt: "2026-08-12T00:00:02Z",
+    },
+  );
+  assert.throws(
+    () =>
+      terminateModelDispatchReceipt(sent, {
+        outcome: {
+          kind: "failed",
+          code: "timeout",
+          certainty: "abandonedPossiblySent",
+        },
+        terminalAt: "2026-08-12T00:00:02Z",
+      }),
+    { message: "model_dispatch_outcome_invalid" },
+  );
+});
+
 test("model dispatch mutations replay exactly and reject immutable conflicts", () => {
   const prepared = prepareModelDispatchReceipt(null, PREPARE);
   assert.equal(prepareModelDispatchReceipt(prepared, PREPARE), prepared);

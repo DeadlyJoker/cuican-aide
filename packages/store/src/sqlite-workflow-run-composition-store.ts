@@ -1011,6 +1011,76 @@ export class SqliteWorkflowRunCompositionStore
         return structuredClone(result);
       }
       if (evidenceStatus === "possiblySent") {
+        if (run!.cancelRequested) {
+          const terminal = terminateSqliteModelDispatchForAttempt(
+            this.#database,
+            {
+              tenantId: input.tenantId,
+              runId: input.runId,
+              attempt: {
+                stepId: input.nodeId,
+                attemptId: attempt.attemptId,
+              },
+              attemptWorkItemId: attempt.workItemId,
+              attemptLeaseEpoch: attempt.leaseEpoch,
+              operationId: dispatch!.operationId,
+              requestSequence: dispatch!.requestSequence,
+              expectedRevision: dispatch!.revision,
+              transitionedAt: now,
+              outcome: {
+                kind: "canceled",
+                code: "user_requested",
+                certainty: "abandonedPossiblySent",
+              },
+            },
+          );
+          const settlementInput = {
+            tenantId: input.tenantId,
+            runId: input.runId,
+            lease: input.lease,
+            binding: input.binding,
+            nodeId: input.nodeId,
+            claimId: input.claimId,
+            claimEpoch: input.claimEpoch,
+            stepId: input.nodeId,
+            attemptId: attempt.attemptId,
+            operationId: `reconcile-cancel:${input.reconciliationOperationId}`,
+            outcome: { status: "canceled" as const },
+          };
+          const settled = settleSqliteWorkflowNodeWithinTransaction(
+            {
+              ...this.#nodeSettlementContext(),
+              receipt: () => null,
+              insertReceipt: () => undefined,
+              convergeTerminalRun: () => "nonTerminal",
+            },
+            settlementInput,
+            this.#fingerprint("reconcileCancel", { input, evidenceStatus }),
+            now,
+            nowMs,
+            {
+              attemptAuthority: {
+                workItemId: attempt.workItemId,
+                leaseEpoch: attempt.leaseEpoch,
+              },
+              attemptCheckpointDigest: terminal.responseCheckpointDigest,
+              suppressContinuation: true,
+            },
+          );
+          const result = {
+            disposition: "settled" as const,
+            evidenceStatus,
+            execution: settled.execution,
+            handoff: settled.handoff,
+            runDisposition: "nonTerminal" as const,
+          };
+          this.#insertReceipt(receiptInput, "reconcileNode", fingerprint, {
+            ...result,
+            cancellationWinner: true,
+          });
+          this.#database.exec("COMMIT");
+          return structuredClone(result);
+        }
         this.#database.exec("COMMIT");
         return { disposition: "retryRequired" as const, evidenceStatus,
           execution: execution!, handoff: { currentWorkItem: "retained" as const,
@@ -2164,7 +2234,9 @@ export class SqliteWorkflowRunCompositionStore
       const result = replay as { disposition?: unknown; evidenceStatus?: unknown;
         handoff?: unknown; runDisposition?: unknown; cancellationWinner?: unknown };
       if (result.disposition !== "settled" ||
-          !["notDispatched", "responseObserved"].includes(String(result.evidenceStatus)) ||
+          !["notDispatched", "possiblySent", "responseObserved"].includes(
+            String(result.evidenceStatus),
+          ) ||
           result.cancellationWinner !== true ||
           stableJson(Object.keys(result).sort()) !== stableJson([
             "cancellationWinner", "disposition", "evidenceStatus", "execution", "handoff",
@@ -2195,7 +2267,10 @@ export class SqliteWorkflowRunCompositionStore
           dispatch.leaseEpoch !== attempt.leaseEpoch) ||
           (result.evidenceStatus === "responseObserved" &&
             !dispatches.some((dispatch) => dispatch?.terminalOutcome?.certainty ===
-              "responseObserved")))
+              "responseObserved")) ||
+          (result.evidenceStatus === "possiblySent" &&
+            !dispatches.some((dispatch) => dispatch?.terminalOutcome?.certainty ===
+              "abandonedPossiblySent")))
         throw new Error("cancel reconcile dispatch mismatch");
       if (result.evidenceStatus === "responseObserved") {
         const responseDispatch = dispatches.at(-1)!;

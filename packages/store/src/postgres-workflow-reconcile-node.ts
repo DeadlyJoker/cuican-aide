@@ -285,6 +285,63 @@ export async function reconcilePostgresWorkflowNode(
     await completePostgresWorkflowLease(client, schema, input, now);
     return structuredClone(result);
   }
+  if (
+    evidenceStatus === "possiblySent" &&
+    run.rows[0]?.state_json.cancelRequested === true
+  ) {
+    const terminal = await terminatePostgresModelDispatchForAttempt(
+      client,
+      schema,
+      {
+        tenantId: input.tenantId,
+        runId: input.runId,
+        lease: input.lease,
+        attempt: { stepId: input.nodeId, attemptId: attempt.attemptId },
+        attemptWorkItemId: attempt.workItemId,
+        attemptLeaseEpoch: attempt.leaseEpoch,
+        operationId: dispatch!.operationId,
+        requestSequence: dispatch!.requestSequence,
+        expectedRevision: dispatch!.revision,
+        transitionedAt: now,
+        outcome: {
+          kind: "canceled",
+          code: "user_requested",
+          certainty: "abandonedPossiblySent",
+        },
+      },
+    );
+    const next = await settleCanceledReconciliation(
+      client,
+      schema,
+      input,
+      execution,
+      attempt,
+      terminal.responseCheckpointDigest,
+      now,
+      digester,
+    );
+    const result = {
+      disposition: "settled" as const,
+      evidenceStatus,
+      execution: next,
+      handoff: {
+        currentWorkItem: "completed" as const,
+        nextWorkItemId: null,
+        kind: "none" as const,
+      },
+      runDisposition: "nonTerminal" as const,
+    };
+    await insertPostgresWorkflowReceipt(
+      client,
+      schema,
+      receiptInput,
+      "reconcileNode",
+      fingerprint,
+      result,
+    );
+    await completePostgresWorkflowLease(client, schema, input, now);
+    return structuredClone(result);
+  }
   if (evidenceStatus === "possiblySent")
     return {
       disposition: "retryRequired",

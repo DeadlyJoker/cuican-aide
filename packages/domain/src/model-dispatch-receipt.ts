@@ -16,7 +16,7 @@ export type ModelDispatchOperation = "dispatch" | "retrieve";
 export type ModelDispatchTerminalOutcome = Readonly<{
   kind: "completed" | "failed" | "canceled";
   code: string | null;
-  certainty: "notSent" | "responseObserved";
+  certainty: "notSent" | "responseObserved" | "abandonedPossiblySent";
 }>;
 
 /** Durable evidence for one model request owned by a Run Step Attempt. */
@@ -170,6 +170,8 @@ export function terminateModelDispatchReceipt(
     (input.outcome.certainty === "notSent" && current.status !== "prepared") ||
     (input.outcome.certainty === "responseObserved" &&
       current.status !== "responseObserved") ||
+    (input.outcome.certainty === "abandonedPossiblySent" &&
+      (current.status !== "possiblySent" || input.outcome.kind !== "canceled")) ||
     (input.outcome.kind === "completed" &&
       input.outcome.certainty !== "responseObserved")
   ) {
@@ -297,7 +299,9 @@ function sameAuthority(
 function validateOutcome(outcome: ModelDispatchTerminalOutcome): void {
   if (
     (outcome.kind === "completed" && outcome.code !== null) ||
-    (outcome.kind !== "completed" && (outcome.code?.trim().length ?? 0) === 0)
+    (outcome.kind !== "completed" && (outcome.code?.trim().length ?? 0) === 0) ||
+    (outcome.certainty === "abandonedPossiblySent" &&
+      outcome.kind !== "canceled")
   ) {
     throw new ModelDispatchReceiptError("model_dispatch_outcome_invalid");
   }
