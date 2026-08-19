@@ -193,19 +193,19 @@ function validatePendingToolResumes(
   >[],
 ): readonly WorkflowPendingToolResume[] {
   const { claim, resume } = input;
-  if (
-    resume.pendingTools.length > MAX_WORKFLOW_PENDING_TOOL_RESUMES ||
-    resume.pendingTools.length !== events.length
-  )
+  if (resume.pendingTools.length > MAX_WORKFLOW_PENDING_TOOL_RESUMES)
     throw new Error("workflow_node_resume_tool_authority_mismatch");
+  const eventsByCallId = new Map(
+    events.map((event) => [event.data.callId, event]),
+  );
   const byCallId = new Map(
     resume.pendingTools.map((tool) => [tool.receipt.call.callId, tool]),
   );
   if (byCallId.size !== resume.pendingTools.length)
     throw new Error("workflow_node_resume_tool_authority_mismatch");
-  for (const event of events) {
-    const tool = byCallId.get(event.data.callId);
-    if (tool === undefined)
+  for (const tool of resume.pendingTools) {
+    const event = eventsByCallId.get(tool.receipt.call.callId);
+    if (event === undefined)
       throw new Error("workflow_node_resume_tool_authority_mismatch");
     const { receipt, step, attempt } = tool;
     if (

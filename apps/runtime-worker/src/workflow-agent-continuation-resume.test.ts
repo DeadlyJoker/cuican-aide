@@ -110,31 +110,51 @@ test("adopted pending Tool authority resumes each receipt status without a new A
     });
 });
 
-test("pending Tool adoption drift fails closed before Tool effects", async () => {
-  const fixture = pendingToolFixture("dispatched");
-  const adopted = fixture.resume.pendingTools[0]!;
-  fixture.resume.pendingTools = [
-    {
-      ...adopted,
-      attempt: { ...adopted.attempt, leaseEpoch: 99 },
-    },
-  ];
-  await assert.rejects(
-    prepareWorkflowAgentContinuationResume(
-      fixture.dependencies,
-      fixture.input(),
-    ),
-    /workflow_node_resume_tool_authority_mismatch/u,
+test("pending Tool without a durable receipt begins once under the reconciliation lease", async () => {
+  const fixture = pendingToolFixture("prepared", false);
+  const prepared = await prepareWorkflowAgentContinuationResume(
+    fixture.dependencies,
+    fixture.input(),
   );
+  assert.equal(prepared.kind, "execute");
   assert.deepEqual(fixture.calls, {
-    begin: 0,
+    begin: 1,
     recovery: 0,
     validate: 0,
-    dispatch: 0,
-    execute: 0,
+    dispatch: 1,
+    execute: 1,
     reconcile: 0,
-    commit: 0,
+    commit: 1,
   });
+});
+
+test("extra and duplicate pending Tool adoption fail closed before effects", async (t) => {
+  for (const drift of ["extra", "duplicate"] as const)
+    await t.test(drift, async () => {
+      const fixture = pendingToolFixture("dispatched");
+      const adopted = fixture.resume.pendingTools[0]!;
+      fixture.resume.pendingTools =
+        drift === "duplicate"
+          ? [adopted, adopted]
+          : [
+              {
+                ...adopted,
+                receipt: {
+                  ...adopted.receipt,
+                  call: { ...adopted.receipt.call, callId: "extra-call" },
+                },
+              },
+            ];
+      await assert.rejects(
+        prepareWorkflowAgentContinuationResume(
+          fixture.dependencies,
+          fixture.input(),
+        ),
+        /workflow_node_resume_tool_authority_mismatch/u,
+      );
+      assert.equal(fixture.calls.execute + fixture.calls.reconcile, 0);
+      assert.equal(fixture.calls.begin, 0);
+    });
 });
 
 test("provider identity drift and an unprovable history boundary fail closed", async () => {
@@ -347,6 +367,7 @@ function resumeFixture() {
 
 function pendingToolFixture(
   status: "prepared" | "dispatched" | "unknownOutcome",
+  adopted = true,
 ) {
   const fixture = resumeFixture();
   const call = {
@@ -367,7 +388,8 @@ function pendingToolFixture(
       data: { ...call, segmentSequence: 1 },
     },
   ];
-  fixture.resume.pendingTools = [adoptedTool(fixture, call, status)];
+  const tool = adoptedTool(fixture, call, status);
+  fixture.resume.pendingTools = adopted ? [tool] : [];
   Object.assign(fixture.runtime.version, {
     policySnapshotId: "policy-1",
     tools: [{ kind: "function", name: "lookup" }],
@@ -387,7 +409,16 @@ function pendingToolFixture(
     },
     async beginToolExecution() {
       calls.begin += 1;
-      throw new Error("new Tool Attempt forbidden");
+      if (adopted) throw new Error("new Tool Attempt forbidden");
+      return {
+        disposition: "prepared",
+        receipt: tool.receipt,
+        attempt: {
+          step: tool.step,
+          attempt: tool.attempt,
+          abandonedAttempt: null,
+        },
+      };
     },
     async beginToolRecovery() {
       calls.recovery += 1;
