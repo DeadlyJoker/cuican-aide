@@ -105,6 +105,7 @@ export type WorkflowRuntimeDispatchOutcome =
   | Readonly<{ kind: "completed"; runId: string }>
   | Readonly<{ kind: "waitingApproval"; runId: string; approvalId: string }>
   | Readonly<{ kind: "retry"; runId: string; code: string }>
+  | Readonly<{ kind: "operatorRequired"; runId: string; code: string }>
   | Readonly<{ kind: "recovery"; runId: string; code: string }>;
 
 export interface WorkflowRuntimeDispatcherPort {
@@ -271,6 +272,34 @@ export class ProductionWorkflowRuntimeDispatcher
             runId: input.run.runId,
             code: "workflow_reconciliation_retry_required",
           };
+        case "operatorRequired": {
+          assertCompletedHandoff(reconciled.handoff);
+          const operatorNode = reconciled.execution.nodes.find(
+            (node) => node.nodeId === payload.nodeId,
+          );
+          if (
+            operatorNode?.status !== "failed" ||
+            operatorNode.failureCode !==
+              "workflow_model_dispatch_operator_required"
+          )
+            throw new Error("workflow_operator_required_node_invalid");
+          if (reconciled.runDisposition === "terminalConverged") {
+            if (
+              reconciled.execution.status !== "failed" ||
+              reconciled.handoff.kind !== "none"
+            )
+              throw new Error("workflow_operator_required_terminal_invalid");
+          } else if (
+            reconciled.handoff.kind !== "none" &&
+            reconciled.handoff.kind !== "scheduler"
+          )
+            throw new Error("workflow_operator_required_handoff_invalid");
+          return {
+            kind: "operatorRequired",
+            runId: input.run.runId,
+            code: "workflow_model_dispatch_operator_required",
+          };
+        }
         case "retrieveRequired":
           return this.#retrieveNode(
             input,

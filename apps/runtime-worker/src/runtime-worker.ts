@@ -644,6 +644,12 @@ export class RuntimeWorker {
           retryAfterMs: this.#retryAfterMs,
           reasonCode: outcome.code,
         });
+      if (outcome.kind === "operatorRequired")
+        return {
+          kind: "workflowRecovery",
+          runId: outcome.runId,
+          code: outcome.code,
+        };
       return outcome.kind === "recovery" || outcome.kind === "retry"
         ? {
             kind: "workflowRecovery",

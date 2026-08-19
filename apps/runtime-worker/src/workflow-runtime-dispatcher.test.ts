@@ -682,11 +682,11 @@ test("rejects non-canonical cancellation proof from composition authority", asyn
 test("routes cancel-requested reconciliation without invoking cancellation", async () => {
   const fixture = composition();
   fixture.store.reconcileWorkflowNode = async () => ({
-    disposition: "retryRequired",
+    disposition: "settled",
     evidenceStatus: "possiblySent",
     execution: {} as never,
     handoff: {
-      currentWorkItem: "retained",
+      currentWorkItem: "completed",
       nextWorkItemId: null,
       kind: "none",
     },
@@ -696,11 +696,131 @@ test("routes cancel-requested reconciliation without invoking cancellation", asy
     throw new Error("agent must not execute");
   }).cancel(input("reconcile"));
   assert.deepEqual(outcome, {
-    kind: "retry",
+    kind: "recovery",
     runId: "r",
-    code: "workflow_reconciliation_retry_required",
+    code: "workflow_reconciliation_settled",
   });
   assert.equal(fixture.cancellations, 0);
+});
+
+test("projects completed possibly-sent reconciliation as operator required", async () => {
+  const fixture = composition();
+  const current = (await fixture.store.loadWorkflowExecution({
+    tenantId: "t",
+    runId: "r",
+  }))!;
+  const execution = {
+    ...current,
+    status: "failed" as const,
+    nodes: current.nodes.map((node) =>
+      node.nodeId === "a"
+        ? {
+            ...node,
+            status: "failed" as const,
+            failureCode: "workflow_model_dispatch_operator_required",
+          }
+        : node,
+    ),
+  };
+  fixture.store.reconcileWorkflowNode = async () => ({
+    disposition: "operatorRequired",
+    evidenceStatus: "possiblySent",
+    execution,
+    handoff: {
+      currentWorkItem: "completed",
+      nextWorkItemId: null,
+      kind: "none",
+    },
+    runDisposition: "terminalConverged",
+  });
+
+  assert.deepEqual(
+    await create(fixture.store, async () => {
+      throw new Error("agent must not execute");
+    }).dispatch(input("reconcile")),
+    {
+      kind: "operatorRequired",
+      runId: "r",
+      code: "workflow_model_dispatch_operator_required",
+    },
+  );
+});
+
+test("projects nonterminal operator action without retrying a parallel lane", async () => {
+  const fixture = composition();
+  const current = (await fixture.store.loadWorkflowExecution({
+    tenantId: "t",
+    runId: "r",
+  }))!;
+  fixture.store.reconcileWorkflowNode = async () => ({
+    disposition: "operatorRequired",
+    evidenceStatus: "possiblySent",
+    execution: {
+      ...current,
+      nodes: [
+        {
+          ...current.nodes[0]!,
+          status: "failed",
+          failureCode: "workflow_model_dispatch_operator_required",
+        },
+        {
+          ...current.nodes[0]!,
+          nodeId: "b",
+          status: "running",
+          failureCode: null,
+        },
+      ],
+    },
+    handoff: {
+      currentWorkItem: "completed",
+      nextWorkItemId: null,
+      kind: "none",
+    },
+    runDisposition: "nonTerminal",
+  });
+  assert.deepEqual(
+    await create(fixture.store, async () => {
+      throw new Error("agent must not execute");
+    }).dispatch(input("reconcile")),
+    {
+      kind: "operatorRequired",
+      runId: "r",
+      code: "workflow_model_dispatch_operator_required",
+    },
+  );
+});
+
+test("rejects forged operator-required node projection", async () => {
+  const fixture = composition();
+  const current = (await fixture.store.loadWorkflowExecution({
+    tenantId: "t",
+    runId: "r",
+  }))!;
+  fixture.store.reconcileWorkflowNode = async () => ({
+    disposition: "operatorRequired",
+    evidenceStatus: "possiblySent",
+    execution: {
+      ...current,
+      status: "failed",
+      nodes: current.nodes.map((node) =>
+        node.nodeId === "a"
+          ? { ...node, status: "failed", failureCode: "forged" }
+          : node,
+      ),
+    },
+    handoff: {
+      currentWorkItem: "completed",
+      nextWorkItemId: null,
+      kind: "none",
+    },
+    runDisposition: "terminalConverged",
+  });
+  await assert.rejects(
+    create(fixture.store, async () => {
+      throw new Error("agent must not execute");
+    }).dispatch(input("reconcile")),
+    /workflow_operator_required_node_invalid/u,
+  );
 });
 
 function composition() {
