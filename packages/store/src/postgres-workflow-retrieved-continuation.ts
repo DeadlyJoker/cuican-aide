@@ -1,18 +1,12 @@
 import {
   canonicalJson,
-  projectWorkflowRetrievedContinuationEvent,
   RunStoreError,
   validateWorkflowNodeContinuationCheckpoint,
   validateWorkflowRetrievedContinuationPayload,
   type WorkflowAgentAttemptAuthority,
   type WorkflowRunCompositionStore,
 } from "@crewon/application";
-import {
-  reduceRunLifecycleEvent,
-  type RunLifecycleEvent,
-  type RunState,
-  type WorkflowContentDigester,
-} from "@crewon/domain";
+import type { WorkflowContentDigester } from "@crewon/domain";
 import type { PoolClient } from "pg";
 
 import {
@@ -29,20 +23,14 @@ import {
   resumeRequiredResult,
 } from "./postgres-workflow-reconcile-node.ts";
 import { loadPostgresWorkflowContinuationForReconciliation } from "./postgres-workflow-continuation-resume.ts";
-import {
-  writePostgresOutbox,
-  writePostgresRunEvents,
-  writePostgresRunSnapshot,
-} from "./postgres-run-writer.ts";
+import { persistPostgresRetrievedWorkflowEvents } from "./postgres-workflow-retrieved-events.ts";
 import { stableJson } from "./store-invariants.ts";
-import { normalizeStoredRunState } from "./stored-run-state.ts";
 import {
   loadPostgresWorkflowAuthorities,
   loadPostgresWorkflowExecution,
   loadPostgresWorkflowValue,
   validatePostgresWorkflowLease,
 } from "./postgres-workflow-run-composition-transactions.ts";
-import { workflowAuthorityId } from "./workflow-run-composition-support.ts";
 
 type Input = Parameters<
   WorkflowRunCompositionStore["commitRetrievedWorkflowNodeContinuation"]
@@ -138,6 +126,7 @@ export async function commitPostgresRetrievedWorkflowNodeContinuation(
     sourceAuthority,
   );
   if (stableJson(prior) !== stableJson(input.priorContinuation)) corrupt();
+  validateProgression(input.attempt.attemptId, prior, payload.next);
   const dispatch = await loadPostgresModelDispatchReceipt(
     client,
     schema,
@@ -168,12 +157,14 @@ export async function commitPostgresRetrievedWorkflowNodeContinuation(
   )
     corrupt();
 
-  const run = await loadRun(client, schema, input);
-  const lifecycle = buildLifecycle(run, input, payload.events, now, digester);
-  await writePostgresRunSnapshot(client, schema, run, lifecycle.next, run.revision);
-  await writePostgresRunEvents(client, schema, lifecycle.events, input.tenantId);
-  await writePostgresOutbox(client, schema, lifecycle.outbox);
-  await persistAgentEvents(client, schema, input, payload.events);
+  await persistPostgresRetrievedWorkflowEvents(
+    client,
+    schema,
+    input,
+    payload.events,
+    now,
+    digester,
+  );
   await terminatePostgresModelDispatchForAttempt(client, schema, {
     tenantId: input.tenantId,
     runId: input.runId,
@@ -292,111 +283,6 @@ function authority(
   };
 }
 
-async function loadRun(
-  client: PoolClient,
-  schema: string,
-  input: Input,
-): Promise<RunState> {
-  const result = await client.query<{ state_json: RunState }>(
-    `SELECT state_json FROM ${schema}.run_snapshots
-     WHERE tenant_id=$1 AND run_id=$2 FOR UPDATE`,
-    [input.tenantId, input.runId],
-  );
-  if (result.rows[0] === undefined) corrupt();
-  const run = normalizeStoredRunState(
-    result.rows[0].state_json,
-    "workflow_retrieved_continuation_corrupt",
-  );
-  if (
-    run.tenantId !== input.tenantId ||
-    run.runId !== input.runId ||
-    run.purpose !== "workflow" ||
-    run.status !== "running"
-  )
-    corrupt();
-  return run;
-}
-
-function buildLifecycle(
-  current: RunState,
-  input: Input,
-  agentEvents: ReturnType<typeof validateWorkflowRetrievedContinuationPayload>["events"],
-  occurredAt: string,
-  digester: WorkflowContentDigester,
-) {
-  const events: RunLifecycleEvent[] = [];
-  const outbox: import("@crewon/application").OutboxMessage[] = [];
-  let next = current;
-  for (const agentEvent of agentEvents) {
-    const eventId = workflowAuthorityId(
-      "run-event",
-      {
-        tenantId: input.tenantId,
-        runId: input.runId,
-        nodeId: input.nodeId,
-        attemptId: input.attempt.attemptId,
-        operationId: input.dispatch.operationId,
-        requestSequence: input.dispatch.requestSequence,
-        segmentId: agentEvent.segmentId,
-        segmentSequence: agentEvent.sequence,
-        eventType: agentEvent.type,
-      },
-      digester,
-    );
-    const event = projectWorkflowRetrievedContinuationEvent(
-      agentEvent,
-      next.lastSequence + 1,
-      eventId,
-      occurredAt,
-      (checkpoint) => digester.sha256(canonicalJson(checkpoint)),
-    );
-    next = reduceRunLifecycleEvent(next, event);
-    events.push(event);
-    outbox.push({
-      messageId: workflowAuthorityId(
-        "run-outbox",
-        { tenantId: input.tenantId, runId: input.runId, eventId },
-        digester,
-      ),
-      tenantId: input.tenantId,
-      runId: input.runId,
-      topic: "run.updated",
-      payload: {
-        eventId,
-        eventType: event.type,
-        throughSequence: event.sequence,
-      },
-      createdAt: occurredAt,
-    });
-  }
-  return { next, events, outbox };
-}
-
-async function persistAgentEvents(
-  client: PoolClient,
-  schema: string,
-  input: Input,
-  events: ReturnType<typeof validateWorkflowRetrievedContinuationPayload>["events"],
-): Promise<void> {
-  for (const event of events) {
-    await client.query(
-      `INSERT INTO ${schema}.workflow_agent_events
-       (tenant_id,run_id,node_id,attempt_id,segment_id,sequence,event_type,event_json)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
-      [
-        input.tenantId,
-        input.runId,
-        input.nodeId,
-        input.attempt.attemptId,
-        event.segmentId,
-        event.sequence,
-        event.type,
-        stableJson(event),
-      ],
-    );
-  }
-}
-
 async function adoptAttempt(
   client: PoolClient,
   schema: string,
@@ -486,6 +372,27 @@ function segmentMatchesAttempt(attemptId: string, segmentId: string): boolean {
     segmentId.startsWith(roundPrefix) &&
     /^[1-9][0-9]{0,3}$/u.test(segmentId.slice(roundPrefix.length))
   );
+}
+
+function validateProgression(
+  attemptId: string,
+  prior: Input["priorContinuation"],
+  next: Input["payload"]["next"],
+): void {
+  const expectedSampleIndex = (prior?.modelSampleIndex ?? -1) + 1;
+  const expectedSegmentId =
+    expectedSampleIndex === 0
+      ? `segment:${attemptId}`
+      : `segment:${attemptId}:round:${expectedSampleIndex + 1}`;
+  const prefix = prior?.history ?? [];
+  if (
+    next.modelSampleIndex !== expectedSampleIndex ||
+    next.toolRoundsConsumed !== (prior?.toolRoundsConsumed ?? 0) ||
+    next.segmentId !== expectedSegmentId ||
+    next.history.length < prefix.length ||
+    stableJson(next.history.slice(0, prefix.length)) !== stableJson(prefix)
+  )
+    corrupt();
 }
 
 function corrupt(): never {
