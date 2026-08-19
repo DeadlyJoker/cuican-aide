@@ -68,6 +68,7 @@ import {
   workflowAuthorityId,
 } from "./workflow-run-composition-support.ts";
 import { SqliteWorkflowNodeContinuationAuthority } from "./sqlite-workflow-node-continuation.ts";
+import { takeOverSqliteWorkflowContinuation } from "./sqlite-workflow-continuation-takeover.ts";
 import { SqliteWorkflowToolApprovalAuthority } from "./sqlite-workflow-tool-approval.ts";
 import { settleSqliteWorkflowNodeWithinTransaction } from "./sqlite-workflow-node-settlement.ts";
 import { settleSqliteWorkflowNodeModelTerminalWithinTransaction } from "./sqlite-workflow-model-settlement.ts";
@@ -815,6 +816,14 @@ export class SqliteWorkflowRunCompositionStore
             attemptId: step.currentAttemptId });
       if (step === null || attempt === null || attempt.status !== "running")
         throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
+      const authority = { tenantId: input.tenantId, runId: input.runId,
+        workItemId: attempt.workItemId, leaseEpoch: attempt.leaseEpoch,
+        nodeId: input.nodeId,
+        nodeKind: node.kind === "verification" ? "verification" as const : "agent" as const,
+        claimId: input.claimId, claimEpoch: input.claimEpoch,
+        agentVersionId: node.agentVersionId!, attempt: {
+          stepId: input.nodeId, attemptId: attempt.attemptId } };
+      const checkpoint = await this.#continuations.loadForReconciliation(authority);
       const dispatchAuthority = this.#database.prepare(
         `SELECT operation_id FROM model_dispatch_receipts
          WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=?
@@ -830,20 +839,87 @@ export class SqliteWorkflowRunCompositionStore
             attemptId: attempt.attemptId,
             operationId: dispatchAuthority[0].operation_id,
           });
+      const latestDispatchAuthority = this.#database.prepare(
+        `SELECT operation_id FROM model_dispatch_receipts
+         WHERE tenant_id=? AND run_id=? AND step_id=? AND attempt_id=?
+         ORDER BY request_sequence DESC, revision DESC LIMIT 1`,
+      ).get(input.tenantId, input.runId, input.nodeId, attempt.attemptId) as
+        { operation_id: string } | undefined;
+      const latestDispatch = latestDispatchAuthority === undefined ? null
+        : loadSqliteModelDispatchReceipt(this.#database, {
+            tenantId: input.tenantId, runId: input.runId, stepId: input.nodeId,
+            attemptId: attempt.attemptId,
+            operationId: latestDispatchAuthority.operation_id,
+          });
       if (dispatch !== null && (dispatch.workItemId !== attempt.workItemId ||
           dispatch.leaseEpoch !== attempt.leaseEpoch))
         throw new RunStoreError("workflow_reconciliation_evidence_missing");
       const evidenceStatus = dispatch === null || dispatch.status === "prepared"
         ? "notDispatched" as const : dispatch.status;
+      if (checkpoint !== null && checkpoint.terminalCandidate === null &&
+          checkpoint.activeDispatch === null &&
+          dispatch === null && attempt.workItemId === input.lease.workItemId &&
+          latestDispatch?.status !== "terminal")
+        throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
+      const durableResume = checkpoint !== null &&
+        checkpoint.terminalCandidate === null &&
+        ((dispatch?.status === "responseObserved" &&
+            checkpoint.activeDispatch !== null) ||
+          (dispatch?.status === "prepared" &&
+            checkpoint.activeDispatch === null &&
+            attempt.workItemId === input.lease.workItemId) ||
+          (dispatch === null && latestDispatch?.status === "terminal" &&
+            checkpoint.activeDispatch === null &&
+            attempt.workItemId === input.lease.workItemId));
+      if (durableResume) {
+        const workflow = this.#loadWorkflow(input);
+        const definition = workflow.nodes.find(
+          (candidate) => candidate.nodeId === input.nodeId);
+        const providerCheckpoint = attempt.providerCheckpoint;
+        const checkpointDigest = attempt.checkpointDigest;
+        if (providerCheckpoint === null || checkpointDigest === null ||
+            this.#digester.sha256(canonicalJson(providerCheckpoint)) !== checkpointDigest ||
+            (dispatch !== null &&
+              ((dispatch.status === "responseObserved" &&
+                  dispatch.responseCheckpointDigest !== checkpointDigest) ||
+                dispatch.operation !== "dispatch" ||
+                dispatch.provider.agentVersionId !== node.agentVersionId ||
+                dispatch.provider.adapterName !== providerCheckpoint.adapterName ||
+                dispatch.provider.adapterVersion !== providerCheckpoint.adapterVersion ||
+                dispatch.provider.modelId !== providerCheckpoint.modelId)) ||
+            definition === undefined || definition.kind === "humanGate")
+          throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
+        const resumed = takeOverSqliteWorkflowContinuation(this.#database, {
+          priorAuthority: authority,
+          reconciliationLease: input.lease,
+          checkpoint,
+          dispatch: dispatch?.status === "responseObserved"
+            ? { ...dispatch, status: "responseObserved" as const }
+            : dispatch?.status === "prepared"
+              ? { ...dispatch, status: "prepared" as const }
+            : { ...latestDispatch!, status: "terminal" as const },
+          resumedAt: now,
+        });
+        const result = {
+          disposition: "resumeRequired" as const,
+          evidenceStatus: "responseObserved" as const,
+          resume: {
+            claim: { node: definition, claimId: input.claimId,
+              claimEpoch: input.claimEpoch, gateRequestId: null,
+              inputDigest: node.inputDigest! },
+            step, attempt: resumed.attempt,
+            reconciliationLease: input.lease,
+            continuation: resumed.continuation,
+          },
+          execution: execution!, handoff: {
+            currentWorkItem: "retained" as const,
+            nextWorkItemId: null, kind: "none" as const },
+          runDisposition: "nonTerminal" as const,
+        };
+        this.#database.exec("COMMIT");
+        return structuredClone(result);
+      }
       if (dispatch?.status === "responseObserved") {
-        const authority = { tenantId: input.tenantId, runId: input.runId,
-          workItemId: attempt.workItemId, leaseEpoch: attempt.leaseEpoch,
-          nodeId: input.nodeId,
-          nodeKind: node.kind === "verification" ? "verification" as const : "agent" as const,
-          claimId: input.claimId, claimEpoch: input.claimEpoch,
-          agentVersionId: node.agentVersionId!, attempt: {
-            stepId: input.nodeId, attemptId: attempt.attemptId } };
-        const checkpoint = await this.#continuations.loadForReconciliation(authority);
         const candidate = checkpoint?.terminalCandidate ?? null;
         const workflow = this.#loadWorkflow(input);
         if (candidate === null) {
