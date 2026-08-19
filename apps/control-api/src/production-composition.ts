@@ -32,6 +32,7 @@ import { PostgresDomainStore } from "@crewon/store";
 
 import { buildControlApi } from "./control-api.ts";
 import { AutomationSchedulerLoop } from "./automation-scheduler-loop.ts";
+import { ControlOperationalMetrics } from "./control-operational-metrics.ts";
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
 import { OutboxDispatcher } from "./outbox-dispatcher.ts";
 import {
@@ -262,7 +263,13 @@ async function composeProductionControlApi(
       store,
       authorization: config.authorization,
     });
+    const readiness = new ProductionStoreReadiness(store);
     const app = buildControlApi({
+      operationalMetrics: new ControlOperationalMetrics({
+        readiness,
+        outboxFailure: () => outboxDispatcher.lastFailureCode(),
+        automationFailure: () => automationScheduler?.lastFailureCode() ?? null,
+      }),
       application,
       offices,
       officeDelegations,
@@ -322,7 +329,7 @@ async function composeProductionControlApi(
       clock,
       identity: config.identity,
       routeResolver,
-      readiness: new ProductionStoreReadiness(store),
+      readiness,
       eventHub,
       outboxWakeup: outboxDispatcher,
       heartbeatIntervalMs: config.heartbeatIntervalMs,

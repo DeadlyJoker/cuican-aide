@@ -214,8 +214,10 @@ import {
   projectWorkflowVersion,
   projectWorkflowVersionSummary,
 } from "./workflow-version-projection.ts";
+import type { ControlOperationalMetrics } from "./control-operational-metrics.ts";
 
 export type ControlApiDependencies = Readonly<{
+  operationalMetrics?: ControlOperationalMetrics;
   localSettings?: Readonly<{
     get(): {
       locale: "en" | "zh";
@@ -330,6 +332,7 @@ export function buildControlApi(
     logger: false,
     trustProxy: false,
   });
+  dependencies.operationalMetrics?.install(app);
 
   const activationGate = dependencies.activationGate;
   if (activationGate !== undefined) {

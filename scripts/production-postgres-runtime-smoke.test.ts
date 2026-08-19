@@ -313,6 +313,13 @@ test(
     assert.match(workerMetrics, /crewon_runtime_worker_outcomes_total/u);
     assert.equal(workerMetrics.includes(runId), false);
     assert.equal(workerMetrics.includes("tenant-production-smoke"), false);
+    const controlMetrics = await (
+      await fetch(`http://127.0.0.1:${controlPort}/internal/v1/metrics`)
+    ).text();
+    assert.match(controlMetrics, /crewon_control_ready 1/u);
+    assert.match(controlMetrics, /crewon_control_http_requests_total/u);
+    assert.equal(controlMetrics.includes(runId), false);
+    assert.equal(controlMetrics.includes("tenant-production-smoke"), false);
     context.diagnostic(
       JSON.stringify({
         agentPosts: responses.agentPosts,

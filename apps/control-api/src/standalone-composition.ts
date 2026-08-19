@@ -40,6 +40,7 @@ import type { FastifyInstance } from "fastify";
 
 import { buildControlApi } from "./control-api.ts";
 import { AutomationSchedulerLoop } from "./automation-scheduler-loop.ts";
+import { ControlOperationalMetrics } from "./control-operational-metrics.ts";
 import { OutboxDispatcher } from "./outbox-dispatcher.ts";
 import { RunEventHub } from "./run-event-hub.ts";
 import {
@@ -327,7 +328,16 @@ function composeControlApi(
       store,
       authorization,
     });
+    const readiness = new StoreReadiness(store, {
+      tenantId: config.actor.tenantId,
+      defaultAgentVersionId: config.defaultAgentVersionId,
+    });
     const app = buildControlApi({
+      operationalMetrics: new ControlOperationalMetrics({
+        readiness,
+        outboxFailure: () => outboxDispatcher.lastFailureCode(),
+        automationFailure: () => automationScheduler?.lastFailureCode() ?? null,
+      }),
       localSettings,
       application,
       offices,
@@ -411,10 +421,7 @@ function composeControlApi(
         allowedOrigins: config.allowedOrigins,
       }),
       routeResolver,
-      readiness: new StoreReadiness(store, {
-        tenantId: config.actor.tenantId,
-        defaultAgentVersionId: config.defaultAgentVersionId,
-      }),
+      readiness,
       eventHub,
       outboxWakeup: outboxDispatcher,
       heartbeatIntervalMs: config.heartbeatIntervalMs,

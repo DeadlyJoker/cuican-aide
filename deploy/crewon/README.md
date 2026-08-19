@@ -119,6 +119,26 @@ fence used by Compose, and `GET /metrics` exposes Prometheus counters/gauges for
 Outcome labels contain only bounded kind/error code values—never tenant, actor, Thread, Run, prompt or credential data. Scrape
 the loopback endpoint from the host collector; nginx and the Web BFF do not proxy it.
 
+Control exposes `GET http://127.0.0.1:3210/internal/v1/metrics` only on its loopback listener. It reports Store readiness,
+Outbox/Automation loop failures, and request counts/latency histograms by static Fastify route template and status class. It
+never labels a metric with a request path, request ID, tenant, actor, Thread, Run, prompt or credential. The BFF and nginx do not
+proxy `/internal`.
+
+The initial production SLO and alert contract is:
+
+- availability: Worker and Control readiness are both `1` for at least `99.9%` of five-minute samples over 30 days;
+- Control latency: 99% of non-streaming `/api/v1` requests complete within two seconds, evaluated from the histogram while
+  excluding expected `4xx` policy/user errors;
+- durable execution: page immediately on any current background-loop failure, and page when failed/retried/recovery Worker
+  outcomes exceed 1% of non-idle outcomes for ten minutes;
+- crash recovery: every release candidate must pass the real PostgreSQL kill/restart smoke and the backup/restore drill before
+  promotion.
+
+For an incident, first stop admission, capture both loopback metric documents, container stdout/stderr, the immutable server
+release manifest/signature, current release ID, and most recent verified backup ID. Preserve the client-visible `x-request-id`
+from failed responses. Roll back only with the finite rollback authority above; restore only into a new database and volume.
+Do not lower readiness, retry indefinitely, or switch to a legacy Runtime to make the alert green.
+
 Rollback is an explicit one-shot TypeScript authority in the same immutable Runtime image. Supply an existing release ID and a
 fresh idempotency key; the `rollback` profile is never part of a normal `up`:
 
