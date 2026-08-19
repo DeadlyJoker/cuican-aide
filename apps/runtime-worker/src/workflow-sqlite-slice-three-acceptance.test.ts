@@ -1152,7 +1152,7 @@ function uncertainNodeRuntime(agentVersionId: string, samples: Map<string, numbe
         return;
       }
       samples.set(agentVersionId, (samples.get(agentVersionId) ?? 0) + 1);
-      const evidence = { operationId: `${contract.segmentId}:dispatch`, requestSequence: 1,
+      const evidence = { operationId: `${contract.segmentId}:request:1`, requestSequence: 1,
         operation: "dispatch", requestDigest: digester.sha256(agentVersionId), provider: {
           agentVersionId, adapterName: "test", adapterVersion: "1", modelId: "model" } };
       await options.controlSink?.modelRequestPrepared?.(evidence);
