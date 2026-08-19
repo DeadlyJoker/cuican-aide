@@ -13,6 +13,7 @@ import {
   ModelTransportError,
   type AgentSegmentContract,
   type ModelRequest,
+  type ModelRequestDispatchEvidence,
   type ModelTransportEvent,
 } from "@crewon/agent-kernel";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -58,6 +59,132 @@ const websocketParity = JSON.parse(
     "utf8",
   ),
 ) as WebSocketParityReference;
+
+test("persists the dispatch boundary before sending response.create", async (context) => {
+  const fixture = await websocketFixture(context);
+  const order: string[] = [];
+  fixture.webSocketServer.on("connection", (socket) => {
+    socket.once("message", () => {
+      order.push("frame");
+      sendCompleted(socket, "response-1", "done");
+    });
+  });
+  const transport = new WebSocketResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+  });
+  context.after(() => transport.close());
+  const request = manualRequest("hello");
+  const evidence = dispatchEvidence(request);
+
+  await collect(
+    transport.stream(request, signal(), {
+      dispatchEvidence: evidence,
+      controlSink: {
+        providerTurnStateObserved: async () => undefined,
+        dispatchBoundaryCrossed: async (actual) => {
+          assert.deepEqual(actual, evidence);
+          order.push("fence");
+        },
+      },
+    }),
+  );
+
+  assert.deepEqual(order, ["fence", "frame"]);
+});
+
+test("sends no frame or fallback POST when the dispatch fence fails", async (context) => {
+  let websocketFrames = 0;
+  let httpRequests = 0;
+  let fenceCalls = 0;
+  const fixture = await websocketFixture(context, (_request, response) => {
+    httpRequests += 1;
+    sendHttpCompleted(response, "unexpected-http", "unexpected");
+  });
+  fixture.webSocketServer.on("connection", (socket) => {
+    socket.on("message", () => {
+      websocketFrames += 1;
+    });
+  });
+  const transport = new ResilientResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+    websocketMaxRetries: 0,
+  });
+  context.after(() => transport.close());
+  const request = manualRequest("hello");
+  const fenceFailure = new Error("durable_fence_failed");
+
+  await assert.rejects(
+    collect(
+      transport.stream(request, signal(), {
+        dispatchEvidence: dispatchEvidence(request),
+        controlSink: {
+          providerTurnStateObserved: async () => undefined,
+          dispatchBoundaryCrossed: async () => {
+            fenceCalls += 1;
+            throw fenceFailure;
+          },
+        },
+      }),
+    ),
+    (error) => error === fenceFailure,
+  );
+
+  assert.deepEqual(
+    { fenceCalls, websocketFrames, httpRequests },
+    {
+      fenceCalls: 1,
+      websocketFrames: 0,
+      httpRequests: 0,
+    },
+  );
+});
+
+test("does not repeat the durable boundary during disconnect fallback", async (context) => {
+  let websocketFrames = 0;
+  let httpRequests = 0;
+  let fenceCalls = 0;
+  const fixture = await websocketFixture(context, (_request, response) => {
+    httpRequests += 1;
+    sendHttpCompleted(response, "http-response", "done");
+  });
+  fixture.webSocketServer.on("connection", (socket) => {
+    socket.once("message", () => {
+      websocketFrames += 1;
+      socket.close();
+    });
+  });
+  const transport = new ResilientResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+    websocketMaxRetries: 0,
+  });
+  context.after(() => transport.close());
+  const request = manualRequest("hello");
+  const events = await collect(
+    transport.stream(request, signal(), {
+      dispatchEvidence: dispatchEvidence(request),
+      controlSink: {
+        providerTurnStateObserved: async () => undefined,
+        dispatchBoundaryCrossed: async () => {
+          fenceCalls += 1;
+        },
+      },
+    }),
+  );
+
+  assert.deepEqual(
+    { fenceCalls, websocketFrames, httpRequests },
+    {
+      fenceCalls: 1,
+      websocketFrames: 1,
+      httpRequests: 1,
+    },
+  );
+  assert.equal(events[0]?.type, "transport.fallback");
+  assert.equal(events.at(-1)?.type, "completed");
+});
 
 test("reuses one authenticated WebSocket and sends only the new Turn suffix", async (context) => {
   const fixture = await websocketFixture(context);
@@ -895,6 +1022,21 @@ function manualRequest(content: string): ModelRequest {
     },
     tools: [],
     maxOutputBytes: 32 * 1024,
+  };
+}
+
+function dispatchEvidence(request: ModelRequest): ModelRequestDispatchEvidence {
+  return {
+    requestSequence: 1,
+    operationId: `${request.segmentId}:request:1`,
+    operation: "dispatch",
+    requestDigest: `sha256:${"a".repeat(64)}`,
+    provider: {
+      agentVersionId: request.agentVersionId,
+      adapterName: "direct-responses",
+      adapterVersion: "2",
+      modelId: "provider-model",
+    },
   };
 }
 

@@ -2,6 +2,7 @@ import {
   ModelTransportError,
   type ModelInputItem,
   type ModelRequest,
+  type ModelRequestDispatchEvidence,
   type ModelTransportStreamOptions,
   type ModelTransportEvent,
   type ModelTransportPort,
@@ -177,6 +178,19 @@ export class WebSocketResponsesTransport implements ModelTransportPort {
       );
       let completed = false;
       try {
+        if (options?.controlSink?.dispatchBoundaryCrossed !== undefined) {
+          if (options.dispatchEvidence === undefined) {
+            throw protocolError("model_dispatch_evidence_missing");
+          }
+          try {
+            await options.controlSink.dispatchBoundaryCrossed(
+              options.dispatchEvidence,
+            );
+          } catch (error) {
+            controlSinkFailure = { failed: true, value: error };
+            throw error;
+          }
+        }
         await sendFrame(
           socket,
           JSON.stringify({
@@ -463,11 +477,31 @@ export class ResilientResponsesTransport implements ModelTransportPort {
       return;
     }
     let emittedObservation = false;
+    let dispatchBoundaryCrossed = false;
+    const controlSink = options?.controlSink;
+    const dispatchBoundary = controlSink?.dispatchBoundaryCrossed;
+    const websocketOptions =
+      options === undefined ||
+      controlSink === undefined ||
+      dispatchBoundary === undefined
+        ? options
+        : {
+            ...options,
+            controlSink: {
+              ...controlSink,
+              dispatchBoundaryCrossed: async (
+                evidence: ModelRequestDispatchEvidence,
+              ) => {
+                await dispatchBoundary(evidence);
+                dispatchBoundaryCrossed = true;
+              },
+            },
+          };
     try {
       for await (const event of this.#websocket.stream(
         request,
         signal,
-        options,
+        websocketOptions,
       )) {
         if (
           event.type === "output.delta" ||
@@ -508,7 +542,7 @@ export class ResilientResponsesTransport implements ModelTransportPort {
         signal,
         error.code,
         emittedObservation,
-        options,
+        dispatchBoundaryCrossed ? withoutDispatchBoundary(options) : options,
       );
     }
   }
@@ -560,6 +594,20 @@ export class ResilientResponsesTransport implements ModelTransportPort {
     };
     yield* this.#http.stream(request, signal, options);
   }
+}
+
+function withoutDispatchBoundary(
+  options: ModelTransportStreamOptions | undefined,
+): ModelTransportStreamOptions | undefined {
+  if (options?.controlSink === undefined) return options;
+  const controlSink = options.controlSink;
+  return {
+    ...options,
+    controlSink: {
+      providerTurnStateObserved: (providerTurnState) =>
+        controlSink.providerTurnStateObserved(providerTurnState),
+    },
+  };
 }
 
 type IncrementalBaseline = Readonly<{
