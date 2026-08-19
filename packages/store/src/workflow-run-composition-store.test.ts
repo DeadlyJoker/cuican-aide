@@ -2519,8 +2519,10 @@ if (postgresUrl === undefined) {
     const store = await PostgresWorkflowRunCompositionStore.open({ pool, schema, digester });
     const operatorWorkflow = compileWorkflowVersion({ ...source,
       workflowId: "operator-workflow", workflowVersionId: "operator-workflow-v1",
-      entryNodeIds: ["agent"], outputNodeIds: ["agent"], nodes: [
+      entryNodeIds: ["agent"], outputNodeIds: ["verify"], nodes: [
         { ...common("agent"), kind: "agent", agentVersionId: "agent-v1" },
+        { ...common("verify", ["agent"]), kind: "verification",
+          verifierAgentVersionId: "verifier-v1" },
       ] }, digester);
     const operatorBinding = { workflowId: operatorWorkflow.workflowId,
       workflowVersionId: operatorWorkflow.workflowVersionId,
@@ -2594,7 +2596,7 @@ if (postgresUrl === undefined) {
           WHERE event_json->>'type'='workflow.node.terminal') node_events,
         (SELECT count(*)::int FROM ${schema}.run_events
           WHERE event_json->>'type'='run.failed') run_events,
-        (SELECT count(*)::int FROM ${schema}.workflow_execution_receipts
+        (SELECT count(*)::int FROM ${schema}.workflow_composition_receipts
           WHERE operation_id='reconcile:unknown-operator') receipts`,
       [attempt.attemptId, input.lease.workItemId]);
       assert.deepEqual(durable.rows[0], { step_status: "failed", attempt_status: "failed",
@@ -2602,7 +2604,7 @@ if (postgresUrl === undefined) {
         dispatch_outcome: { kind: "failed", code: "workflow_model_dispatch_operator_required",
           certainty: "operatorRequired" }, work_status: "completed", work_lease: null,
         run_status: "failed", run_code: "workflow_model_dispatch_operator_required",
-        node_events: 1, run_events: 1, receipts: 1 });
+        node_events: 2, run_events: 1, receipts: 1 });
       const replay = await store.reconcileWorkflowNode(input);
       assert.deepEqual([replay.disposition, replay.evidenceStatus, replay.execution.revision,
         replay.handoff.currentWorkItem], ["replay", "possiblySent",
@@ -2613,7 +2615,7 @@ if (postgresUrl === undefined) {
         (SELECT count(*)::int FROM ${schema}.run_events
           WHERE event_json->>'type'='run.failed') run_events,
         (SELECT count(*)::int FROM ${schema}.outbox) outbox_messages`);
-      assert.deepEqual(once.rows[0], { node_events: 1, run_events: 1, outbox_messages: 2 });
+      assert.deepEqual(once.rows[0], { node_events: 2, run_events: 1, outbox_messages: 3 });
       await pool.query(`UPDATE ${schema}.model_dispatch_receipts SET state_json=jsonb_set(
         state_json,'{terminalOutcome,certainty}','"responseObserved"')
         WHERE operation_id='dispatch-operator'`);
