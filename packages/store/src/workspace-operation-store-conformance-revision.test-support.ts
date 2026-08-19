@@ -168,7 +168,7 @@ export function registerWorkspaceOperationStoreRevisionConformance(
         {
           disposition: "replayed",
           operation: completed.operation,
-          deliveryAttempt: null,
+          deliveryAttempt: completed.deliveryAttempt,
         },
       );
     });

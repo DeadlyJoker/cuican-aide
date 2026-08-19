@@ -183,7 +183,7 @@ export type PrepareWorkspaceOperationActionInput = Readonly<{
 export interface WorkspaceOperationStore {
   loadWorkspaceOperationReceipt(
     query: WorkspaceOperationReceiptQuery,
-  ): Promise<WorkspaceOperationMutationResult | null>;
+  ): Promise<WorkspaceOperationPreparationResult | null>;
   prepareWorkspaceOperation(
     input: PrepareWorkspaceOperationInput,
   ): Promise<WorkspaceOperationPreparationResult>;

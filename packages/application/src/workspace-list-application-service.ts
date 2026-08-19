@@ -142,16 +142,17 @@ export class WorkspaceListApplicationService {
     );
     const replay = await this.#reads.loadReceipt(actor, "execute", idempotency);
     if (replay !== null) {
-      const validated = this.#resultValidator.validatedResult(
+      const validated = this.#resultValidator.validatedPreparation(
         actor,
         command,
         replay,
+        replay.operation,
       );
       await this.#commandCoordinator.authorize(
         actor,
         validated.operation.threadId,
       );
-      return this.#resumePendingExecute(actor, command, validated, signal);
+      return this.#resumeReceiptDelivery(actor, command, validated, signal);
     }
 
     const thread = await this.#reads.loadThread(actor, command.threadId);
@@ -183,8 +184,7 @@ export class WorkspaceListApplicationService {
       prepared,
       operation,
     );
-    if (validated.disposition === "replayed") return mutation(validated);
-    return this.#deliver(actor, command, validated, signal);
+    return this.#resumeReceiptDelivery(actor, command, validated, signal);
   }
 
   reconcileWorkspaceList(
@@ -219,16 +219,17 @@ export class WorkspaceListApplicationService {
     );
     const replay = await this.#reads.loadReceipt(actor, phase, idempotency);
     if (replay !== null) {
-      const validated = this.#resultValidator.validatedResult(
+      const validated = this.#resultValidator.validatedPreparation(
         actor,
         command,
         replay,
+        replay.operation,
       );
       await this.#commandCoordinator.authorize(
         actor,
         validated.operation.threadId,
       );
-      return validated;
+      return this.#resumeReceiptDelivery(actor, command, validated, signal);
     }
 
     const operation = await this.#reads.storeCall(() =>
@@ -271,62 +272,23 @@ export class WorkspaceListApplicationService {
       prepared,
       validatedOperation,
     );
-    if (
-      validated.disposition === "replayed" ||
-      validated.deliveryAttempt === null
-    ) {
-      return mutation(validated);
-    }
-    return this.#deliver(actor, command, validated, signal);
+    return this.#resumeReceiptDelivery(actor, command, validated, signal);
   }
 
-  async #resumePendingExecute(
+  async #resumeReceiptDelivery(
     actor: ActorContext,
-    command: ExecuteWorkspaceListCommand,
-    replay: WorkspaceOperationMutationResult,
+    command:
+      | ExecuteWorkspaceListCommand
+      | ReconcileWorkspaceListCommand
+      | CancelWorkspaceListCommand,
+    replay: WorkspaceOperationPreparationResult,
     signal: AbortSignal,
   ): Promise<WorkspaceOperationMutationResult> {
-    const operation = replay.operation;
-    if (operation.status !== "prepared") return replay;
-    const attempts = await this.#reads.storeCall(() =>
-      this.#store.listWorkspaceOperationDeliveryAttempts({
-        tenantId: actor.tenantId,
-        spaceId: actor.spaceId,
-        threadId: operation.threadId,
-        executionId: operation.executionId,
-        afterAttemptNumber: 0,
-        limit: 1,
-        view: "audit",
-      }),
-    );
-    const attempt =
-      attempts.length === 1
-        ? validateWorkspaceDeliveryAttempt(attempts[0])
-        : null;
-    if (
-      attempt === null ||
-      attempt.tenantId !== operation.tenantId ||
-      attempt.spaceId !== operation.spaceId ||
-      attempt.threadId !== operation.threadId ||
-      attempt.executionId !== operation.executionId ||
-      attempt.attemptNumber !== 1 ||
-      attempt.operationRevision !== operation.revision ||
-      attempt.phase !== "execute" ||
-      attempt.actionDigest !== operation.command.actionDigest ||
-      attempt.commandDigest !== operation.command.commandDigest
-    ) {
-      throw new ApplicationError(
-        "internal",
-        "workspace_delivery_attempt_invalid",
-      );
+    const attempt = replay.deliveryAttempt;
+    if (attempt === null || attempt.status !== "pending") {
+      return mutation(replay);
     }
-    if (attempt.status !== "pending") return replay;
-    return this.#deliver(
-      actor,
-      command,
-      { ...replay, deliveryAttempt: attempt },
-      signal,
-    );
+    return this.#deliver(actor, command, replay, signal);
   }
 
   async #dispatch(

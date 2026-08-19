@@ -22,7 +22,6 @@ import {
   type WorkspaceDeliveryAttempt,
   type WorkspaceDeliveryAttemptQuery,
   type WorkspaceDeliverySettlementResult,
-  type WorkspaceOperationMutationResult,
   type WorkspaceOperationEvent,
   type WorkspaceOperationEventQuery,
   type WorkspaceOperationLocator,
@@ -51,7 +50,6 @@ import {
   workspaceAttemptMatchesResult,
   workspaceDeliveryLease,
   workspaceDeliveryAttemptIdentity,
-  workspaceMutationResult,
   workspaceOperationResultDigest,
   workspacePreparation,
   workspaceReceiptQuery,
@@ -77,8 +75,7 @@ export class InMemoryWorkspaceOperationStore
     validatePrepareWorkspaceOperationInput(input);
     const query = workspaceReceiptQuery(input, "execute");
     const replay = this.replay(query);
-    if (replay !== null)
-      return workspacePreparation("replayed", replay.operation, null);
+    if (replay !== null) return replay;
     const thread = this.threads(input.tenantId, input.threadFence.threadId);
     if (
       thread === null ||
@@ -128,8 +125,7 @@ export class InMemoryWorkspaceOperationStore
     validatePrepareWorkspaceOperationActionInput(input);
     const query = workspaceReceiptQuery(input, input.phase);
     const replay = this.replay(query);
-    if (replay !== null)
-      return workspacePreparation("replayed", replay.operation, null);
+    if (replay !== null) return replay;
     const operationKey = key(input.tenantId, input.executionId);
     const current = this.operations.get(operationKey);
     if (

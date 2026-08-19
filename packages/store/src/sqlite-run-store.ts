@@ -583,13 +583,19 @@ export class SqliteRunStore
     return this.#workflow().loadWorkflowExecution(input);
   }
   async publishWorkflowHumanGate(
-    input: Parameters<WorkflowHumanGatePublicationStore["publishWorkflowHumanGate"]>[0],
+    input: Parameters<
+      WorkflowHumanGatePublicationStore["publishWorkflowHumanGate"]
+    >[0],
   ): ReturnType<WorkflowHumanGatePublicationStore["publishWorkflowHumanGate"]> {
     return this.#workflow().publishWorkflowHumanGate(input);
   }
   listPublishedWorkflowHumanGates(
-    input: Parameters<WorkflowHumanGatePublicationStore["listPublishedWorkflowHumanGates"]>[0],
-  ): ReturnType<WorkflowHumanGatePublicationStore["listPublishedWorkflowHumanGates"]> {
+    input: Parameters<
+      WorkflowHumanGatePublicationStore["listPublishedWorkflowHumanGates"]
+    >[0],
+  ): ReturnType<
+    WorkflowHumanGatePublicationStore["listPublishedWorkflowHumanGates"]
+  > {
     return this.#workflow().listPublishedWorkflowHumanGates(input);
   }
   async publishWorkflowToolApproval(
@@ -651,7 +657,9 @@ export class SqliteRunStore
     return this.#workflow().reconcileWorkflowNode(input);
   }
   async settleRetrievedWorkflowNode(
-    input: Parameters<WorkflowRunCompositionStore["settleRetrievedWorkflowNode"]>[0],
+    input: Parameters<
+      WorkflowRunCompositionStore["settleRetrievedWorkflowNode"]
+    >[0],
   ): ReturnType<WorkflowRunCompositionStore["settleRetrievedWorkflowNode"]> {
     return this.#workflow().settleRetrievedWorkflowNode(input);
   }
@@ -1276,7 +1284,7 @@ export class SqliteRunStore
 
   async loadWorkspaceOperationReceipt(
     query: WorkspaceOperationReceiptQuery,
-  ): Promise<WorkspaceOperationMutationResult | null> {
+  ): Promise<WorkspaceOperationPreparationResult | null> {
     this.#assertOpen();
     return loadSqliteWorkspaceOperationReceipt(this.#database, query);
   }

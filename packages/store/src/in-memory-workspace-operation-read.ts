@@ -22,7 +22,6 @@ import {
   type WorkspaceDeliveryAttempt,
   type WorkspaceDeliveryAttemptQuery,
   type WorkspaceDeliverySettlementResult,
-  type WorkspaceOperationMutationResult,
   type WorkspaceOperationEvent,
   type WorkspaceOperationEventQuery,
   type WorkspaceOperationLocator,
@@ -51,7 +50,6 @@ import {
   workspaceAttemptMatchesResult,
   workspaceDeliveryLease,
   workspaceDeliveryAttemptIdentity,
-  workspaceMutationResult,
   workspaceOperationResultDigest,
   workspacePreparation,
   workspaceReceiptQuery,
@@ -70,7 +68,7 @@ import {
 export class InMemoryWorkspaceOperationReadAuthority extends InMemoryWorkspaceOperationState {
   async loadWorkspaceOperationReceipt(
     query: WorkspaceOperationReceiptQuery,
-  ): Promise<WorkspaceOperationMutationResult | null> {
+  ): Promise<WorkspaceOperationPreparationResult | null> {
     validateWorkspaceOperationReceiptQuery(query);
     return this.replay(query);
   }

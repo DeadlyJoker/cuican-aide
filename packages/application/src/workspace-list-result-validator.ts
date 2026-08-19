@@ -122,11 +122,26 @@ export class WorkspaceListResultValidator {
     }
     if (
       result.deliveryAttempt !== null &&
-      (result.deliveryAttempt.phase !== phaseForCommand(command) ||
+      (result.deliveryAttempt.tenantId !== result.operation.tenantId ||
+        result.deliveryAttempt.spaceId !== result.operation.spaceId ||
+        result.deliveryAttempt.threadId !== result.operation.threadId ||
+        result.deliveryAttempt.executionId !== result.operation.executionId ||
+        result.deliveryAttempt.phase !== phaseForCommand(command) ||
         result.deliveryAttempt.actionDigest !==
           result.operation.command.actionDigest ||
         result.deliveryAttempt.commandDigest !==
-          result.operation.command.commandDigest)
+          result.operation.command.commandDigest ||
+        (result.deliveryAttempt.status !== "settled" &&
+          result.deliveryAttempt.operationRevision !==
+            result.operation.revision) ||
+        (result.deliveryAttempt.status === "settled" &&
+          (result.deliveryAttempt.settlement === null ||
+            result.deliveryAttempt.settlement.resultRevision !==
+              result.operation.revision ||
+            result.deliveryAttempt.settlement.resultDigest !==
+              this.#digester.sha256(
+                canonicalWorkspaceOperationResult(result.operation),
+              ))))
     ) {
       throw new ApplicationError(
         "internal",

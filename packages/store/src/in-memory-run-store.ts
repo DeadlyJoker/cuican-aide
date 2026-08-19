@@ -1066,7 +1066,7 @@ export class InMemoryRunStore implements DomainStore {
 
   loadWorkspaceOperationReceipt(
     query: WorkspaceOperationReceiptQuery,
-  ): Promise<WorkspaceOperationMutationResult | null> {
+  ): Promise<WorkspaceOperationPreparationResult | null> {
     return this.#workspaceOperations.loadWorkspaceOperationReceipt(query);
   }
 

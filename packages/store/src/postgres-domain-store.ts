@@ -436,7 +436,7 @@ export class PostgresDomainStore
 
   async loadWorkspaceOperationReceipt(
     query: WorkspaceOperationReceiptQuery,
-  ): Promise<WorkspaceOperationMutationResult | null> {
+  ): Promise<WorkspaceOperationPreparationResult | null> {
     this.assertOpen();
     return loadPostgresWorkspaceOperationReceipt(
       this.pool,

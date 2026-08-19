@@ -14,6 +14,7 @@ import {
   type FrozenWorkspaceListCommand,
   type WorkspaceListResolution,
   type WorkspaceOperationMutationResult,
+  type WorkspaceOperationPreparationResult,
   type WorkspaceOperationReceiptQuery,
   type WorkspaceOperationRecord,
 } from "./workspace-operation-store-port.ts";
@@ -109,8 +110,8 @@ export function mutation(
 export function preparation(
   disposition: WorkspaceOperationMutationResult["disposition"],
   operation: WorkspaceOperationRecord,
-  deliveryAttempt: WorkspaceDeliveryAttempt,
-) {
+  deliveryAttempt: WorkspaceDeliveryAttempt | null,
+): WorkspaceOperationPreparationResult {
   return { ...mutation(disposition, operation), deliveryAttempt };
 }
 

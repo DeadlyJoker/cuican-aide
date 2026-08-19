@@ -24,7 +24,6 @@ import {
   type WorkspaceDeliveryAttempt,
   type WorkspaceDeliveryAttemptQuery,
   type WorkspaceDeliverySettlementResult,
-  type WorkspaceOperationMutationResult,
   type WorkspaceOperationEvent,
   type WorkspaceOperationEventQuery,
   type WorkspaceOperationLocator,
@@ -114,7 +113,7 @@ type SqliteWorkspaceOperationListRow = SqliteWorkspaceOperationRow &
 export function replay(
   database: DatabaseSync,
   query: WorkspaceOperationReceiptQuery,
-): WorkspaceOperationMutationResult | null {
+): WorkspaceOperationPreparationResult | null {
   const row = database
     .prepare(
       `SELECT tenant_id, space_id, phase, scope, idempotency_key, thread_id,
@@ -189,7 +188,7 @@ export function replay(
       throw new RunStoreError("workspace_operation_stored_state_invalid");
     }
   }
-  return workspaceMutationResult("replayed", frozen);
+  return workspacePreparation("replayed", frozen, attempt);
 }
 
 export function replaySettlement(

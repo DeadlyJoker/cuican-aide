@@ -22,7 +22,6 @@ import {
   type WorkspaceDeliveryAttempt,
   type WorkspaceDeliveryAttemptQuery,
   type WorkspaceDeliverySettlementResult,
-  type WorkspaceOperationMutationResult,
   type WorkspaceOperationEvent,
   type WorkspaceOperationEventQuery,
   type WorkspaceOperationLocator,
@@ -51,7 +50,6 @@ import {
   workspaceAttemptMatchesResult,
   workspaceDeliveryLease,
   workspaceDeliveryAttemptIdentity,
-  workspaceMutationResult,
   workspaceOperationResultDigest,
   workspacePreparation,
   workspaceReceiptQuery,
@@ -159,7 +157,7 @@ export class InMemoryWorkspaceOperationState {
 
   protected replay(
     query: WorkspaceOperationReceiptQuery,
-  ): WorkspaceOperationMutationResult | null {
+  ): WorkspaceOperationPreparationResult | null {
     const receipt = this.receipts.get(workspaceOperationReceiptKey(query));
     if (receipt === undefined) return null;
     if (receipt.fingerprint !== query.idempotency.requestFingerprint) {
@@ -214,7 +212,7 @@ export class InMemoryWorkspaceOperationState {
         throw new RunStoreError("workspace_operation_stored_state_invalid");
       }
     }
-    return workspaceMutationResult("replayed", frozen);
+    return workspacePreparation("replayed", frozen, attempt);
   }
 
   protected validOperationRevisionChain(

@@ -44,7 +44,6 @@ import {
   type FrozenWorkspaceListCommand,
   type WorkspaceListOperationPhase,
   type WorkspaceListResolution,
-  type WorkspaceOperationMutationResult,
   type WorkspaceOperationReceiptQuery,
   type WorkspaceOperationRecord,
 } from "./workspace-operation-store-port.ts";
@@ -149,13 +148,25 @@ export class FakeStore {
   operation: WorkspaceOperationRecord | null = null;
   readonly receipts = new Map<
     string,
-    Readonly<{ fingerprint: string; executionId: string }>
+    Readonly<{
+      fingerprint: string;
+      executionId: string;
+      attemptNumber: number | null;
+    }>
   >();
+  readonly attempts = new Map<number, WorkspaceDeliveryAttempt>();
   counts = emptyCounts();
   settlementOverride:
     | ((operation: WorkspaceOperationRecord) => WorkspaceListResolution)
     | null = null;
-  attempt: WorkspaceDeliveryAttempt | null = null;
+  #attempt: WorkspaceDeliveryAttempt | null = null;
+  get attempt(): WorkspaceDeliveryAttempt | null {
+    return this.#attempt;
+  }
+  set attempt(value: WorkspaceDeliveryAttempt | null) {
+    this.#attempt = value;
+    if (value !== null) this.attempts.set(value.attemptNumber, value);
+  }
   forgeLeaseOwner = false;
   forgeLeaseEpoch = false;
   forgeClaimCreatedAt = false;
@@ -194,23 +205,30 @@ export class FakeStore {
       throw storeError("workspace_operation_idempotency_conflict");
     }
     assert.equal(receipt.executionId, this.operation?.executionId);
-    if (!this.forgeReceiptAuthority) {
-      return mutation("replayed", this.operation!);
-    }
+    const attempt =
+      receipt.attemptNumber === null
+        ? null
+        : (this.attempts.get(receipt.attemptNumber) ?? null);
+    if (!this.forgeReceiptAuthority)
+      return preparation("replayed", this.operation!, attempt);
     const command = {
       ...this.operation!.command,
       runtimeBindingId: "substituted-runtime",
     };
     const actionDigest = `sha256:${"f".repeat(64)}`;
     const commandDigest = `sha256:${"e".repeat(64)}`;
-    return mutation("replayed", {
-      ...this.operation!,
-      command: { ...command, actionDigest, commandDigest },
-      resolution:
-        this.operation!.resolution === null
-          ? null
-          : { ...this.operation!.resolution, actionDigest, commandDigest },
-    });
+    return preparation(
+      "replayed",
+      {
+        ...this.operation!,
+        command: { ...command, actionDigest, commandDigest },
+        resolution:
+          this.operation!.resolution === null
+            ? null
+            : { ...this.operation!.resolution, actionDigest, commandDigest },
+      },
+      attempt,
+    );
   }
 
   async prepareWorkspaceOperation(input: {
@@ -219,6 +237,7 @@ export class FakeStore {
   }) {
     this.counts.prepares += 1;
     this.operation = validateWorkspaceOperationRecord(input.operation);
+    this.attempt = pendingAttempt(this.operation, "execute", 1);
     this.receipts.set(
       receiptKey({
         tenantId: this.operation.tenantId,
@@ -229,9 +248,9 @@ export class FakeStore {
       {
         fingerprint: input.idempotency.requestFingerprint,
         executionId: this.operation.executionId,
+        attemptNumber: this.attempt.attemptNumber,
       },
     );
-    this.attempt = pendingAttempt(this.operation, "execute", 1);
     return preparation("committed", this.operation, this.attempt);
   }
 
@@ -260,6 +279,7 @@ export class FakeStore {
       {
         fingerprint: input.idempotency.requestFingerprint,
         executionId: this.operation!.executionId,
+        attemptNumber: this.attempt.attemptNumber,
       },
     );
     return preparation("committed", this.operation!, this.attempt);

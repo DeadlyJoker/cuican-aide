@@ -19,7 +19,9 @@ import {
 } from "./workspace-delivery-store-port.ts";
 import {
   WorkspaceListApplicationService,
+  type CancelWorkspaceListCommand,
   type ExecuteWorkspaceListCommand,
+  type ReconcileWorkspaceListCommand,
 } from "./workspace-list-application-service.ts";
 import {
   canonicalWorkspaceListAction,
@@ -143,7 +145,8 @@ test("fails closed when pending execute replay authority drifts", async () => {
     });
     await assert.rejects(
       fixture.service.executeWorkspaceList(actor, executeCommand(), signal()),
-      applicationError("internal", "workspace_delivery_attempt_invalid"),
+      (error: unknown) =>
+        error instanceof ApplicationError && error.category === "internal",
     );
     assert.deepEqual(fixture.dispatches, []);
   }
@@ -162,6 +165,100 @@ test("never redispatches a leased initial execute receipt", async () => {
   assert.equal(replay.disposition, "replayed");
   assert.equal(replay.operation.status, "prepared");
   assert.deepEqual(fixture.dispatches, []);
+});
+
+test("resumes only the receipt-linked pending reconcile and cancel attempt", async () => {
+  for (const phase of ["reconcile", "cancel"] as const) {
+    const fixture = createFixture();
+    const initial = await fixture.service.executeWorkspaceList(
+      actor,
+      executeCommand(),
+      signal(),
+    );
+    const command: ReconcileWorkspaceListCommand | CancelWorkspaceListCommand =
+      {
+        kind:
+          phase === "reconcile"
+            ? ("workspaceList.reconcile" as const)
+            : ("workspaceList.cancel" as const),
+        idempotencyKey: `${phase}-crash-key`,
+        threadId: initial.operation.threadId,
+        executionId: initial.operation.executionId,
+        expectedOperationRevision: initial.operation.revision,
+      } as const;
+    const invoke = () => invokeAction(fixture, command);
+    fixture.store.claimThrowsOnce = true;
+    await assert.rejects(
+      invoke(),
+      applicationError("internal", "workspace_operation_store_failed"),
+    );
+    assert.equal(fixture.store.attempt?.phase, phase);
+    assert.equal(fixture.store.attempt?.status, "pending");
+
+    fixture.dispatches.length = 0;
+    const recovered = await invoke();
+    assert.equal(
+      recovered.operation.status,
+      phase === "reconcile" ? "completed" : "canceled",
+    );
+    assert.deepEqual(fixture.dispatches, [phase]);
+
+    fixture.dispatches.length = 0;
+    assert.equal((await invoke()).disposition, "replayed");
+    assert.deepEqual(fixture.dispatches, []);
+  }
+});
+
+test("never redispatches leased or possibly-sent action receipts", async () => {
+  for (const phase of ["reconcile", "cancel"] as const) {
+    const fixture = createFixture();
+    const initial = await fixture.service.executeWorkspaceList(
+      actor,
+      executeCommand(),
+      signal(),
+    );
+    const command: ReconcileWorkspaceListCommand | CancelWorkspaceListCommand =
+      {
+        kind:
+          phase === "reconcile"
+            ? ("workspaceList.reconcile" as const)
+            : ("workspaceList.cancel" as const),
+        idempotencyKey: `${phase}-leased-key`,
+        threadId: initial.operation.threadId,
+        executionId: initial.operation.executionId,
+        expectedOperationRevision: initial.operation.revision,
+      } as const;
+    const invoke = () => invokeAction(fixture, command);
+    fixture.store.claimThrowsOnce = true;
+    await assert.rejects(invoke());
+    await fixture.store.claimWorkspaceOperationDelivery({ ownerId: "owner-1" });
+
+    fixture.dispatches.length = 0;
+    assert.equal((await invoke()).disposition, "replayed");
+    assert.deepEqual(fixture.dispatches, []);
+
+    const possiblySent = createFixture();
+    const possiblySentInitial = await possiblySent.service.executeWorkspaceList(
+      actor,
+      executeCommand(),
+      signal(),
+    );
+    const possiblySentCommand = {
+      ...command,
+      executionId: possiblySentInitial.operation.executionId,
+      expectedOperationRevision: possiblySentInitial.operation.revision,
+      idempotencyKey: `${phase}-possibly-sent-key`,
+    };
+    const invokePossiblySent = () =>
+      invokeAction(possiblySent, possiblySentCommand);
+    possiblySent.dispatchFailures[phase] = "possiblySent";
+    possiblySent.store.settleThrows = true;
+    await assert.rejects(invokePossiblySent());
+    possiblySent.dispatches.length = 0;
+    possiblySent.store.settleThrows = false;
+    assert.equal((await invokePossiblySent()).disposition, "replayed");
+    assert.deepEqual(possiblySent.dispatches, []);
+  }
 });
 
 test("receipt replay reauthorizes exact frozen thread without current reads", async () => {
@@ -350,4 +447,13 @@ async function preparedExecuteCrashFixture() {
   assert.equal(fixture.store.attempt?.status, "pending");
   assert.deepEqual(fixture.dispatches, []);
   return fixture;
+}
+
+function invokeAction(
+  fixture: ReturnType<typeof createFixture>,
+  command: ReconcileWorkspaceListCommand | CancelWorkspaceListCommand,
+) {
+  return command.kind === "workspaceList.reconcile"
+    ? fixture.service.reconcileWorkspaceList(actor, command, signal())
+    : fixture.service.cancelWorkspaceList(actor, command, signal());
 }

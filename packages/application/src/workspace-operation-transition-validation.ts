@@ -51,17 +51,19 @@ export function validateWorkspaceOperationPreparationResult(
       ? null
       : validateWorkspaceDeliveryAttempt(input.deliveryAttempt);
   if (
-    (result.disposition === "replayed" && deliveryAttempt !== null) ||
-    (deliveryAttempt !== null &&
-      (deliveryAttempt.tenantId !== result.operation.tenantId ||
-        deliveryAttempt.spaceId !== result.operation.spaceId ||
-        deliveryAttempt.threadId !== result.operation.threadId ||
-        deliveryAttempt.executionId !== result.operation.executionId ||
-        deliveryAttempt.operationRevision !== result.operation.revision ||
-        deliveryAttempt.actionDigest !==
-          result.operation.command.actionDigest ||
-        deliveryAttempt.commandDigest !==
-          result.operation.command.commandDigest))
+    deliveryAttempt !== null &&
+    (deliveryAttempt.tenantId !== result.operation.tenantId ||
+      deliveryAttempt.spaceId !== result.operation.spaceId ||
+      deliveryAttempt.threadId !== result.operation.threadId ||
+      deliveryAttempt.executionId !== result.operation.executionId ||
+      deliveryAttempt.actionDigest !== result.operation.command.actionDigest ||
+      deliveryAttempt.commandDigest !==
+        result.operation.command.commandDigest ||
+      (deliveryAttempt.status !== "settled" &&
+        deliveryAttempt.operationRevision !== result.operation.revision) ||
+      (deliveryAttempt.status === "settled" &&
+        deliveryAttempt.settlement?.resultRevision !==
+          result.operation.revision))
   ) {
     throw workspaceStoreError("workspace_operation_result_invalid");
   }

@@ -342,6 +342,7 @@ test("SQLite v22 to v23 freezes legacy receipts at the preserved head", async (c
     assert.deepEqual(await migrated.loadWorkspaceOperationReceipt(query), {
       disposition: "replayed",
       operation: input.operation,
+      deliveryAttempt: null,
     });
     assert.deepEqual(
       await migrated.loadWorkspaceOperation({

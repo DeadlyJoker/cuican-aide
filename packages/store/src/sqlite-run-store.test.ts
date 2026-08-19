@@ -15,6 +15,8 @@ import {
   validateWorkspaceOperationRecord,
   type ActorContext,
   type ApplicationIdKind,
+  type CancelWorkspaceListCommand,
+  type ReconcileWorkspaceListCommand,
   type RunStore,
   type WorkspaceOperationRecord,
 } from "@crewon/application";
@@ -67,6 +69,7 @@ import {
 } from "./thread-rollback-store-conformance.test-support.ts";
 import { registerAutomationStoreConformance } from "./automation-store-conformance.test-support.ts";
 import {
+  claim,
   operation,
   prepareInput,
   receiptQuery,
@@ -170,6 +173,107 @@ test("resumes a receipt-committed execute delivery after SQLite restart", async 
     )[0]?.status,
     "settled",
   );
+});
+
+test("resumes receipt-linked reconcile and cancel delivery after SQLite restart", async (context) => {
+  for (const phase of ["reconcile", "cancel"] as const) {
+    const path = temporaryDatabasePath(context);
+    const actor: ActorContext = {
+      principalId: "principal-1",
+      actorId: "actor-1",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+    };
+    const initial = new SqliteRunStore(path);
+    await seedWorkspaceThread(initial);
+    const execute = await initial.prepareWorkspaceOperation(prepareInput());
+    const executeLease = await claim(
+      initial,
+      execute.deliveryAttempt!,
+      "execute-owner",
+    );
+    const unknown = await initial.settleWorkspaceOperationDelivery({
+      ...workspaceOperationLocator(execute.operation),
+      expectedOperationRevision: execute.operation.revision,
+      deliveryLease: executeLease.lease!,
+      resolution: resolution(execute.operation, "unknownOutcome"),
+    });
+    const command: ReconcileWorkspaceListCommand | CancelWorkspaceListCommand =
+      {
+        kind:
+          phase === "reconcile"
+            ? ("workspaceList.reconcile" as const)
+            : ("workspaceList.cancel" as const),
+        idempotencyKey: `${phase}-restart-key`,
+        threadId: unknown.operation.threadId,
+        executionId: unknown.operation.executionId,
+        expectedOperationRevision: unknown.operation.revision,
+      } as const;
+    await initial.prepareWorkspaceOperationAction({
+      ...workspaceOperationLocator(unknown.operation),
+      expectedOperationRevision: unknown.operation.revision,
+      phase,
+      idempotency: {
+        scope: `workspace-list.${phase}:${actor.spaceId}`,
+        key: command.idempotencyKey,
+        requestFingerprint: sha256(
+          canonicalJson({
+            schemaVersion: "crewon.workspace-operation-request.v0",
+            phase,
+            actor,
+            command,
+          }),
+        ),
+      },
+    });
+    await initial.close();
+
+    const reopened = new SqliteRunStore(path);
+    const dispatches: string[] = [];
+    const service = new WorkspaceListApplicationService({
+      store: reopened,
+      authorization: { authorize: async () => ({ outcome: "allow" }) },
+      digester: { sha256 },
+      commands: {
+        create: async () => {
+          throw new Error("action_replay_must_not_create");
+        },
+      },
+      dispatcher: {
+        execute: async () => {
+          throw new Error("execute_forbidden");
+        },
+        reconcile: async (current) => {
+          dispatches.push("reconcile");
+          return resolution(current, "completed");
+        },
+        cancel: async (current) => {
+          dispatches.push("cancel");
+          return resolution(current, "canceled");
+        },
+      },
+      deliveryOwnerId: "workspace-action-recovery-test",
+      deliveryLeaseDurationMs: 40_000,
+    });
+    const recovered =
+      command.kind === "workspaceList.reconcile"
+        ? await service.reconcileWorkspaceList(
+            actor,
+            command,
+            new AbortController().signal,
+          )
+        : await service.cancelWorkspaceList(
+            actor,
+            command,
+            new AbortController().signal,
+          );
+    assert.equal(
+      recovered.operation.status,
+      phase === "reconcile" ? "completed" : "canceled",
+    );
+    assert.deepEqual(dispatches, [phase]);
+    await reopened.close();
+  }
 });
 
 test("bounds SQLite snapshot and high-cursor reads independently of old revisions", async (context) => {

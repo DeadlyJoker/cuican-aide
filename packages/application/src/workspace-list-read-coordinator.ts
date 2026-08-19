@@ -7,9 +7,9 @@ import type {
   ThreadStore,
 } from "./thread-store-port.ts";
 import {
-  validateWorkspaceOperationMutationResult,
+  validateWorkspaceOperationPreparationResult,
   type WorkspaceListOperationPhase,
-  type WorkspaceOperationMutationResult,
+  type WorkspaceOperationPreparationResult,
   type WorkspaceOperationStore,
 } from "./workspace-operation-store-port.ts";
 import { mapStoreError } from "./workspace-list-command-validation.ts";
@@ -26,7 +26,7 @@ export class WorkspaceListReadCoordinator {
     actor: ActorContext,
     phase: WorkspaceListOperationPhase,
     idempotency: IdempotencyDescriptor,
-  ): Promise<WorkspaceOperationMutationResult | null> {
+  ): Promise<WorkspaceOperationPreparationResult | null> {
     const result = await this.storeCall(() =>
       this.store.loadWorkspaceOperationReceipt({
         tenantId: actor.tenantId,
@@ -37,7 +37,7 @@ export class WorkspaceListReadCoordinator {
     );
     if (result === null) return null;
     try {
-      return validateWorkspaceOperationMutationResult(result);
+      return validateWorkspaceOperationPreparationResult(result);
     } catch (error) {
       throw new ApplicationError(
         "internal",

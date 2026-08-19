@@ -23,7 +23,6 @@ import {
   type WorkspaceDeliveryAttempt,
   type WorkspaceDeliveryAttemptQuery,
   type WorkspaceDeliverySettlementResult,
-  type WorkspaceOperationMutationResult,
   type WorkspaceOperationEvent,
   type WorkspaceOperationEventQuery,
   type WorkspaceOperationLocator,
@@ -122,7 +121,7 @@ export async function replay(
   client: PoolClient,
   schemaSql: string,
   query: WorkspaceOperationReceiptQuery,
-): Promise<WorkspaceOperationMutationResult | null> {
+): Promise<WorkspaceOperationPreparationResult | null> {
   const receipt = await client.query<ReceiptRow>(
     `SELECT tenant_id, space_id, phase, scope, idempotency_key, thread_id,
             execution_id, action_digest, command_digest, fingerprint,
@@ -212,7 +211,7 @@ export async function replay(
       throw new RunStoreError("workspace_operation_stored_state_invalid");
     }
   }
-  return workspaceMutationResult("replayed", frozen);
+  return workspacePreparation("replayed", frozen, attempt);
 }
 
 export async function replaySettlement(

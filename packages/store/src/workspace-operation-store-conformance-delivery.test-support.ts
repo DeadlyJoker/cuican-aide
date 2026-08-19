@@ -181,7 +181,11 @@ export function registerWorkspaceOperationStoreDeliveryConformance(
       );
       assert.deepEqual(
         await store.loadWorkspaceOperationReceipt(receiptQuery("execute")),
-        { disposition: "replayed", operation: canceled.operation },
+        {
+          disposition: "replayed",
+          operation: canceled.operation,
+          deliveryAttempt: lost.deliveryAttempt,
+        },
       );
       assert.deepEqual(
         await store.loadWorkspaceOperation(locator(prepared.operation)),

@@ -41,7 +41,7 @@ export function registerWorkspaceOperationStoreReadConformance(
   createStore: () => ConformanceStore | Promise<ConformanceStore>,
 ): void {
   describe(name, () => {
-    test("atomically prepares operation and execute delivery intent without replay delivery", async (context) => {
+    test("receipt replay returns only its exact durable delivery attempt", async (context) => {
       const store = await managed(context, createStore);
       await seedWorkspaceThread(store);
       const input = prepareInput();
@@ -56,11 +56,15 @@ export function registerWorkspaceOperationStoreReadConformance(
       assert.deepEqual(await store.prepareWorkspaceOperation(input), {
         disposition: "replayed",
         operation: input.operation,
-        deliveryAttempt: null,
+        deliveryAttempt: first.deliveryAttempt,
       });
       assert.deepEqual(
         await store.loadWorkspaceOperationReceipt(receiptQuery("execute")),
-        { disposition: "replayed", operation: input.operation },
+        {
+          disposition: "replayed",
+          operation: input.operation,
+          deliveryAttempt: first.deliveryAttempt,
+        },
       );
       assert.deepEqual(
         await store.listWorkspaceOperationDeliveryAttempts({
@@ -203,7 +207,11 @@ export function registerWorkspaceOperationStoreReadConformance(
       });
       assert.deepEqual(
         await store.loadWorkspaceOperationReceipt(receiptQuery("execute")),
-        { disposition: "replayed", operation: unknown.operation },
+        {
+          disposition: "replayed",
+          operation: unknown.operation,
+          deliveryAttempt: unknown.deliveryAttempt,
+        },
       );
       const reconcileLease = await claim(
         store,
@@ -212,7 +220,11 @@ export function registerWorkspaceOperationStoreReadConformance(
       );
       assert.deepEqual(
         await store.loadWorkspaceOperationReceipt(receiptQuery("execute")),
-        { disposition: "replayed", operation: unknown.operation },
+        {
+          disposition: "replayed",
+          operation: unknown.operation,
+          deliveryAttempt: unknown.deliveryAttempt,
+        },
       );
       const secondUnknown = await store.settleWorkspaceOperationDelivery({
         ...locator(reconcile.operation),
@@ -241,18 +253,30 @@ export function registerWorkspaceOperationStoreReadConformance(
       assert.equal(completed.operation.revision, 4);
       assert.deepEqual(
         await store.loadWorkspaceOperationReceipt(receiptQuery("execute")),
-        { disposition: "replayed", operation: unknown.operation },
+        {
+          disposition: "replayed",
+          operation: unknown.operation,
+          deliveryAttempt: unknown.deliveryAttempt,
+        },
       );
       assert.deepEqual(
         await store.loadWorkspaceOperationReceipt(receiptQuery("reconcile")),
-        { disposition: "replayed", operation: secondUnknown.operation },
+        {
+          disposition: "replayed",
+          operation: secondUnknown.operation,
+          deliveryAttempt: secondUnknown.deliveryAttempt,
+        },
       );
       assert.deepEqual(
         await store.loadWorkspaceOperationReceipt({
           ...receiptQuery("reconcile"),
           idempotency: secondReconcileIdempotency,
         }),
-        { disposition: "replayed", operation: completed.operation },
+        {
+          disposition: "replayed",
+          operation: completed.operation,
+          deliveryAttempt: completed.deliveryAttempt,
+        },
       );
       assert.deepEqual(
         await store.loadWorkspaceOperation(locator(completed.operation)),

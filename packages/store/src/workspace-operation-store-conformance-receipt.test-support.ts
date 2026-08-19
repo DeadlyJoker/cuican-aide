@@ -174,7 +174,11 @@ export function registerWorkspaceOperationStoreReceiptConformance(
       assert.equal(lost.deliveryAttempt.settlement?.kind, "superseded");
       assert.deepEqual(
         await store.loadWorkspaceOperationReceipt(receiptQuery("cancel")),
-        { disposition: "replayed", operation: completed.operation },
+        {
+          disposition: "replayed",
+          operation: completed.operation,
+          deliveryAttempt: lost.deliveryAttempt,
+        },
       );
     });
 

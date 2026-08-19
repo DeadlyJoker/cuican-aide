@@ -23,7 +23,6 @@ import {
   type WorkspaceDeliveryAttempt,
   type WorkspaceDeliveryAttemptQuery,
   type WorkspaceDeliverySettlementResult,
-  type WorkspaceOperationMutationResult,
   type WorkspaceOperationEvent,
   type WorkspaceOperationEventQuery,
   type WorkspaceOperationLocator,
@@ -84,7 +83,6 @@ import {
   workspaceAttemptMatchesResult,
   workspaceDeliveryLease,
   workspaceDeliveryAttemptIdentity,
-  workspaceMutationResult,
   workspaceOperationResultDigest,
   workspacePreparation,
   workspaceReceiptQuery,
@@ -132,7 +130,7 @@ export async function loadPostgresWorkspaceOperationReceipt(
   schemaSql: string,
   schemaName: string,
   query: WorkspaceOperationReceiptQuery,
-): Promise<WorkspaceOperationMutationResult | null> {
+): Promise<WorkspaceOperationPreparationResult | null> {
   validateWorkspaceOperationReceiptQuery(query);
   const client = await pool.connect();
   try {
@@ -162,8 +160,7 @@ export async function preparePostgresWorkspaceOperation(
   return write(pool, async (client) => {
     await lockReceipt(client, schemaName, query);
     const prior = await replay(client, schemaSql, query);
-    if (prior !== null)
-      return workspacePreparation("replayed", prior.operation, null);
+    if (prior !== null) return prior;
     const thread = await client.query<{
       tenant_id: string;
       space_id: string;
@@ -229,8 +226,7 @@ export async function preparePostgresWorkspaceOperationAction(
   return write(pool, async (client) => {
     await lockReceipt(client, schemaName, query);
     const prior = await replay(client, schemaSql, query);
-    if (prior !== null)
-      return workspacePreparation("replayed", prior.operation, null);
+    if (prior !== null) return prior;
     const authority = await requireOperation(
       client,
       schemaSql,

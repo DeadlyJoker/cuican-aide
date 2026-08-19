@@ -24,7 +24,6 @@ import {
   type WorkspaceDeliveryAttempt,
   type WorkspaceDeliveryAttemptQuery,
   type WorkspaceDeliverySettlementResult,
-  type WorkspaceOperationMutationResult,
   type WorkspaceOperationEvent,
   type WorkspaceOperationEventQuery,
   type WorkspaceOperationLocator,
@@ -77,7 +76,6 @@ import {
   workspaceAttemptMatchesResult,
   workspaceDeliveryLease,
   workspaceDeliveryAttemptIdentity,
-  workspaceMutationResult,
   workspaceOperationResultDigest,
   workspacePreparation,
   workspaceReceiptQuery,
@@ -121,7 +119,7 @@ import {
 export function loadSqliteWorkspaceOperationReceipt(
   database: DatabaseSync,
   query: WorkspaceOperationReceiptQuery,
-): WorkspaceOperationMutationResult | null {
+): WorkspaceOperationPreparationResult | null {
   validateWorkspaceOperationReceiptQuery(query);
   return transaction(database, "deferred", () => replay(database, query));
 }
@@ -135,8 +133,7 @@ export function prepareSqliteWorkspaceOperation(
   return transaction(database, "immediate", () => {
     const query = workspaceReceiptQuery(input, "execute");
     const prior = replay(database, query);
-    if (prior !== null)
-      return workspacePreparation("replayed", prior.operation, null);
+    if (prior !== null) return prior;
     const thread = database
       .prepare(
         `SELECT tenant_id, space_id, revision, status
@@ -196,8 +193,7 @@ export function prepareSqliteWorkspaceOperationAction(
   return transaction(database, "immediate", () => {
     const query = workspaceReceiptQuery(input, input.phase);
     const prior = replay(database, query);
-    if (prior !== null)
-      return workspacePreparation("replayed", prior.operation, null);
+    if (prior !== null) return prior;
     const authority = requireOperation(database, input);
     if (authority.revision !== input.expectedOperationRevision) {
       throw new RunStoreError("workspace_operation_revision_conflict");
