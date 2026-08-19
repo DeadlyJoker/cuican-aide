@@ -6,7 +6,12 @@ import {
   type WorkflowNodeContinuationCheckpoint,
 } from "@crewon/application";
 import { parseCanonicalAgentEvent } from "@crewon/contracts/runtime";
-import type { WorkflowContentDigester } from "@crewon/domain";
+import {
+  reduceRunLifecycleEvent,
+  type RunLifecycleEvent,
+  type RunState,
+  type WorkflowContentDigester,
+} from "@crewon/domain";
 import type { PoolClient } from "pg";
 
 import {
@@ -18,12 +23,17 @@ import {
   loadPostgresToolExecutionReceipt,
   updatePostgresToolExecutionReceipt,
 } from "./postgres-tool-execution.ts";
+import {
+  decodePostgresRunEvent,
+  type PostgresRunEventRow,
+} from "./postgres-run-codec.ts";
 import { assertPostgresSchemaNotNewer } from "./postgres-store-support.ts";
 import {
   applyToolExecutionTransition,
   stableJson,
 } from "./store-invariants.ts";
 import { loadPostgresWorkflowExecution } from "./postgres-workflow-run-composition-transactions.ts";
+import { normalizeStoredRunState } from "./stored-run-state.ts";
 
 type Row = Readonly<{
   tenant_id: string;
@@ -136,6 +146,8 @@ export async function commitPostgresWorkflowToolContinuation(
   };
   let receipt = current;
   if (current.status !== "completed") {
+    await validateFreshToolCompletion(client, schema, input, current);
+    const lifecycle = await buildToolLifecycle(client, schema, input, digester);
     receipt = applyToolExecutionTransition(current, {
       tenantId: current.tenantId,
       runId: current.runId,
@@ -177,8 +189,9 @@ export async function commitPostgresWorkflowToolContinuation(
         JSON.stringify(input.completedEvent),
       ],
     );
+    await commitToolLifecycle(client, schema, lifecycle);
   } else {
-    await validateToolReplay(client, schema, input, current, result);
+    await validateToolReplay(client, schema, input, current, result, digester);
   }
   const continuation = await writePostgresWorkflowNodeContinuation(
     client,
@@ -334,6 +347,7 @@ async function validateToolReplay(
   input: CommitWorkflowToolContinuationInput,
   receipt: import("@crewon/domain").ToolExecutionReceiptState,
   result: import("@crewon/domain").ToolExecutionResult,
+  digester: WorkflowContentDigester,
 ): Promise<void> {
   const attempt = await loadPostgresRunAttempt(
     client,
@@ -364,6 +378,12 @@ async function validateToolReplay(
     ],
   );
   const row = event.rows[0];
+  const lifecycle = await loadToolLifecycleForReplay(
+    client,
+    schema,
+    input,
+    digester,
+  );
   if (
     receipt.revision !== input.receipt.revision + 1 ||
     receipt.providerReceiptId !== input.providerReceiptId ||
@@ -376,9 +396,339 @@ async function validateToolReplay(
     row?.segment_id !== input.completedEvent.segmentId ||
     Number(row.sequence) !== input.completedEvent.sequence ||
     row.event_type !== "tool.completed" ||
-    stableJson(row.event_json) !== stableJson(input.completedEvent)
+    stableJson(row.event_json) !== stableJson(input.completedEvent) ||
+    !lifecycle.valid
   )
     throw new RunStoreError("workflow_tool_continuation_replay_conflict");
+}
+
+type ToolCompletedEvent = Extract<
+  RunLifecycleEvent,
+  { type: "tool.completed" }
+>;
+
+type ToolLifecycle = Readonly<{
+  current: RunState;
+  next: RunState;
+  event: ToolCompletedEvent;
+  message: Readonly<{
+    messageId: string;
+    tenantId: string;
+    runId: string;
+    topic: "run.updated";
+    payload: Readonly<{
+      eventId: string;
+      eventType: "tool.completed";
+      throughSequence: number;
+    }>;
+    createdAt: string;
+  }>;
+}>;
+
+async function validateFreshToolCompletion(
+  client: PoolClient,
+  schema: string,
+  input: CommitWorkflowToolContinuationInput,
+  receipt: import("@crewon/domain").ToolExecutionReceiptState,
+): Promise<void> {
+  const attempt = await loadPostgresRunAttempt(
+    client,
+    schema,
+    {
+      tenantId: input.authority.tenantId,
+      runId: input.authority.runId,
+      ...input.toolAttempt,
+    },
+    true,
+  );
+  const prior = await client.query<PostgresRunEventRow>(
+    `SELECT tenant_id,run_id,sequence,event_id,event_json
+     FROM ${schema}.run_events
+     WHERE tenant_id=$1 AND run_id=$2
+       AND event_json->'data'->>'segmentId'=$3
+     ORDER BY sequence DESC LIMIT 1 FOR UPDATE`,
+    [
+      input.authority.tenantId,
+      input.authority.runId,
+      input.completedEvent.segmentId,
+    ],
+  );
+  const priorEvent =
+    prior.rows[0] === undefined
+      ? null
+      : decodePostgresRunEvent(prior.rows[0], input.authority);
+  if (
+    stableJson(receipt) !== stableJson(input.receipt) ||
+    receipt.status !== "dispatched" ||
+    receipt.tenantId !== input.authority.tenantId ||
+    receipt.runId !== input.authority.runId ||
+    receipt.workItemId !== input.authority.workItemId ||
+    receipt.stepId !== input.toolAttempt.stepId ||
+    receipt.attemptId !== input.toolAttempt.attemptId ||
+    attempt?.status !== "running" ||
+    attempt.workItemId !== input.authority.workItemId ||
+    attempt.leaseEpoch !== input.authority.leaseEpoch ||
+    !toolSegmentMatches(
+      input.authority.attempt.attemptId,
+      receipt.call.segmentId,
+    ) ||
+    priorEvent?.type !== "tool.requested" ||
+    priorEvent.data.segmentId !== receipt.call.segmentId ||
+    priorEvent.data.callId !== receipt.call.callId ||
+    priorEvent.data.kind !== receipt.call.kind ||
+    priorEvent.data.name !== receipt.call.name ||
+    input.completedEvent.sequence !== priorEvent.data.segmentSequence + 1
+  )
+    throw new RunStoreError("workflow_tool_continuation_mismatch");
+}
+
+async function buildToolLifecycle(
+  client: PoolClient,
+  schema: string,
+  input: CommitWorkflowToolContinuationInput,
+  digester: WorkflowContentDigester,
+): Promise<ToolLifecycle> {
+  const row = await client.query<{ state_json: RunState }>(
+    `SELECT state_json FROM ${schema}.run_snapshots
+     WHERE tenant_id=$1 AND run_id=$2 FOR UPDATE`,
+    [input.authority.tenantId, input.authority.runId],
+  );
+  if (row.rows[0] === undefined)
+    throw new RunStoreError("workflow_tool_continuation_mismatch");
+  const current = normalizeStoredRunState(
+    row.rows[0].state_json,
+    "workflow_tool_continuation_corrupt",
+  );
+  if (
+    current.tenantId !== input.authority.tenantId ||
+    current.runId !== input.authority.runId ||
+    current.purpose !== "workflow" ||
+    current.status !== "running"
+  )
+    throw new RunStoreError("workflow_tool_continuation_mismatch");
+  const eventId = toolAuthorityId(
+    "tool-event",
+    toolEventAuthority(input),
+    digester,
+  );
+  const event: ToolCompletedEvent = {
+    schemaVersion: "crewon.run-event.v0",
+    identity: { runId: input.authority.runId },
+    eventId,
+    sequence: current.lastSequence + 1,
+    occurredAt: input.committedAt,
+    type: "tool.completed",
+    data: {
+      segmentId: input.completedEvent.segmentId,
+      segmentSequence: input.completedEvent.sequence,
+      ...input.completedEvent.data,
+    },
+  };
+  const next = reduceRunLifecycleEvent(current, event);
+  const messageId = toolAuthorityId(
+    "tool-outbox",
+    { authority: input.authority, eventId },
+    digester,
+  );
+  return {
+    current,
+    next,
+    event,
+    message: {
+      messageId,
+      tenantId: input.authority.tenantId,
+      runId: input.authority.runId,
+      topic: "run.updated",
+      payload: {
+        eventId,
+        eventType: event.type,
+        throughSequence: event.sequence,
+      },
+      createdAt: input.committedAt,
+    },
+  };
+}
+
+async function commitToolLifecycle(
+  client: PoolClient,
+  schema: string,
+  lifecycle: ToolLifecycle,
+): Promise<void> {
+  const updated = await client.query(
+    `UPDATE ${schema}.run_snapshots
+     SET revision=$1,last_sequence=$2,state_json=$3::jsonb,updated_at=$4
+     WHERE tenant_id=$5 AND run_id=$6 AND revision=$7`,
+    [
+      lifecycle.next.revision,
+      lifecycle.next.lastSequence,
+      stableJson(lifecycle.next),
+      lifecycle.next.updatedAt,
+      lifecycle.next.tenantId,
+      lifecycle.next.runId,
+      lifecycle.current.revision,
+    ],
+  );
+  if (updated.rowCount !== 1) throw new RunStoreError("revision_conflict");
+  await client.query(
+    `INSERT INTO ${schema}.run_events
+     (tenant_id,run_id,sequence,event_id,event_json)
+     VALUES ($1,$2,$3,$4,$5::jsonb)`,
+    [
+      lifecycle.next.tenantId,
+      lifecycle.next.runId,
+      lifecycle.event.sequence,
+      lifecycle.event.eventId,
+      stableJson(lifecycle.event),
+    ],
+  );
+  await client.query(
+    `INSERT INTO ${schema}.outbox
+     (message_id,tenant_id,run_id,topic,message_json,created_at,status,
+      available_at,lease_epoch,attempt_count)
+     VALUES ($1,$2,$3,$4,$5::jsonb,$6,'pending',$6,0,0)`,
+    [
+      lifecycle.message.messageId,
+      lifecycle.message.tenantId,
+      lifecycle.message.runId,
+      lifecycle.message.topic,
+      stableJson(lifecycle.message),
+      lifecycle.message.createdAt,
+    ],
+  );
+}
+
+async function loadToolLifecycleForReplay(
+  client: PoolClient,
+  schema: string,
+  input: CommitWorkflowToolContinuationInput,
+  digester: WorkflowContentDigester,
+): Promise<Readonly<{ valid: boolean }>> {
+  const eventId = toolAuthorityId(
+    "tool-event",
+    toolEventAuthority(input),
+    digester,
+  );
+  const messageId = toolAuthorityId(
+    "tool-outbox",
+    { authority: input.authority, eventId },
+    digester,
+  );
+  const event = await client.query<{
+    sequence: string | number;
+    event_json: ToolCompletedEvent;
+  }>(
+    `SELECT sequence,event_json FROM ${schema}.run_events
+     WHERE tenant_id=$1 AND run_id=$2 AND event_id=$3 FOR UPDATE`,
+    [input.authority.tenantId, input.authority.runId, eventId],
+  );
+  const outbox = await client.query<{
+    tenant_id: string;
+    run_id: string;
+    topic: string;
+    message_json: unknown;
+  }>(
+    `SELECT tenant_id,run_id,topic,message_json FROM ${schema}.outbox
+     WHERE tenant_id=$1 AND run_id=$2 AND message_id=$3 FOR UPDATE`,
+    [input.authority.tenantId, input.authority.runId, messageId],
+  );
+  const run = await client.query<{
+    revision: string | number;
+    last_sequence: string | number;
+    updated_at: Date | string;
+    state_json: RunState;
+  }>(
+    `SELECT revision,last_sequence,updated_at,state_json
+     FROM ${schema}.run_snapshots
+     WHERE tenant_id=$1 AND run_id=$2 FOR UPDATE`,
+    [input.authority.tenantId, input.authority.runId],
+  );
+  const storedEvent = event.rows[0]?.event_json;
+  const expectedData = {
+    segmentId: input.completedEvent.segmentId,
+    segmentSequence: input.completedEvent.sequence,
+    ...input.completedEvent.data,
+  };
+  const runRow = run.rows[0];
+  const storedRun =
+    runRow === undefined
+      ? null
+      : normalizeStoredRunState(
+          runRow.state_json,
+          "workflow_tool_continuation_corrupt",
+        );
+  const outboxRow = outbox.rows[0];
+  const valid =
+    storedEvent?.schemaVersion === "crewon.run-event.v0" &&
+    storedEvent?.type === "tool.completed" &&
+    storedEvent.identity.runId === input.authority.runId &&
+    storedEvent.eventId === eventId &&
+    storedEvent.sequence === Number(event.rows[0]?.sequence) &&
+    storedEvent.occurredAt === input.committedAt &&
+    stableJson(storedEvent.data) === stableJson(expectedData) &&
+    Number(runRow?.last_sequence) === storedEvent.sequence &&
+    Number(runRow?.revision) === storedEvent.sequence &&
+    storedRun?.lastSequence === storedEvent.sequence &&
+    storedRun.revision === storedEvent.sequence &&
+    storedRun.tenantId === input.authority.tenantId &&
+    storedRun.runId === input.authority.runId &&
+    storedRun.purpose === "workflow" &&
+    storedRun.status === "running" &&
+    storedRun.updatedAt === input.committedAt &&
+    (runRow?.updated_at instanceof Date
+      ? runRow.updated_at.getTime()
+      : Date.parse(runRow?.updated_at ?? "")) ===
+      Date.parse(input.committedAt) &&
+    outboxRow?.tenant_id === input.authority.tenantId &&
+    outboxRow.run_id === input.authority.runId &&
+    outboxRow.topic === "run.updated" &&
+    stableJson(outboxRow.message_json) ===
+      stableJson({
+        messageId,
+        tenantId: input.authority.tenantId,
+        runId: input.authority.runId,
+        topic: "run.updated",
+        payload: {
+          eventId,
+          eventType: storedEvent.type,
+          throughSequence: storedEvent.sequence,
+        },
+        createdAt: input.committedAt,
+      });
+  return { valid };
+}
+
+function toolEventAuthority(input: CommitWorkflowToolContinuationInput) {
+  return {
+    authority: input.authority,
+    segmentId: input.completedEvent.segmentId,
+    sequence: input.completedEvent.sequence,
+    callId: input.completedEvent.data.callId,
+  };
+}
+
+function toolAuthorityId(
+  role: "tool-event" | "tool-outbox",
+  value: unknown,
+  digester: WorkflowContentDigester,
+): string {
+  const digest = digester.sha256(
+    stableJson({
+      schemaVersion: "crewon.workflow-tool-authority.v0",
+      role,
+      value,
+    }),
+  );
+  if (!/^sha256:[a-f0-9]{64}$/u.test(digest))
+    throw new RunStoreError("workflow_composition_digest_invalid");
+  return `wf-tool:${role}:${digest.slice(7)}`;
+}
+
+function toolSegmentMatches(
+  parentAttemptId: string,
+  segmentId: string,
+): boolean {
+  const prefix = `segment:${parentAttemptId}`;
+  return segmentId === prefix || segmentId.startsWith(`${prefix}:round:`);
 }
 
 async function assertPhysicalSchema(
