@@ -263,6 +263,64 @@ test(
   },
 );
 
+test(
+  "PostgreSQL reconciliation scheduling replays after the handoff has completed",
+  { skip: postgresUrl === undefined },
+  async () => {
+    assert.ok(postgresUrl);
+    const schema = `workflow_reconciliation_replay_${randomUUID().replaceAll("-", "")}`;
+    const pool = new Pool({ connectionString: postgresUrl, max: 1 });
+    const store = await PostgresWorkflowRunCompositionStore.open({
+      pool,
+      schema,
+      digester: digest,
+    });
+    try {
+      await seed(pool, schema);
+      const scheduled = await store.scheduleWorkflowNodes({
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: schedulerLease,
+        binding,
+        schedulerOperationId: "schedule-root",
+        workflowInput: rootInput,
+      });
+      const work = scheduled.nodeWorkItems[0]!;
+      const nodeLease = await leaseNode(
+        pool,
+        schema,
+        work.workItemId,
+        "node-worker",
+      );
+      const input = {
+        tenantId: "tenant-1",
+        runId: "run-1",
+        lease: nodeLease,
+        binding,
+        operationId: "recover-unknown-node",
+        reasonCode: "workflow_node_side_effect_uncertain",
+        nodeId: work.nodeId,
+        claimId: work.claimId,
+        claimEpoch: work.claimEpoch,
+      };
+      const first = await store.scheduleWorkflowReconciliation(input);
+      await pool.query(
+        `UPDATE ${schema}.work_items SET status='completed',completed_at=clock_timestamp()
+         WHERE work_item_id=$1`,
+        [first.reconciliationWorkItemId],
+      );
+
+      const replay = await store.scheduleWorkflowReconciliation(input);
+
+      assert.deepEqual(replay, { ...first, disposition: "replay" });
+    } finally {
+      await store.close();
+      await pool.query(`DROP SCHEMA IF EXISTS ${schema} CASCADE`);
+      await pool.end();
+    }
+  },
+);
+
 type WorkAuthority = Readonly<{
   workItemId: string;
   nodeId: string;

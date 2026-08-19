@@ -102,19 +102,16 @@ async function validateReplay(
   await loadPostgresWorkflowAuthorities(client, schema, input, digester, true);
   const expected = expectedId(input, digester);
   const work = await client.query<{
-    status: string;
     work_item_json: { payload?: unknown };
-  }>(
-    `SELECT status,work_item_json FROM ${schema}.work_items WHERE work_item_id=$1`,
-    [expected],
-  );
+  }>(`SELECT work_item_json FROM ${schema}.work_items WHERE work_item_id=$1`, [
+    expected,
+  ]);
   if (
     result.reconciliationWorkItemId !== expected ||
     result.handoff.currentWorkItem !== "completed" ||
     result.handoff.nextWorkItemId !== expected ||
     result.handoff.kind !== "reconcile" ||
-    work.rows[0]?.status !== "pending" ||
-    stableJson(work.rows[0].work_item_json.payload) !==
+    stableJson(work.rows[0]?.work_item_json.payload) !==
       stableJson(expectedPayload(input))
   )
     throw new RunStoreError("workflow_composition_receipt_corrupt");
