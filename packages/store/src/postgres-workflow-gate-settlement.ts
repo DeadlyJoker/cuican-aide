@@ -17,6 +17,7 @@ import {
 } from "./postgres-workflow-node-settlement.ts";
 import { stableJson } from "./store-invariants.ts";
 import {
+  hasReadyWorkflowNodes,
   settleWorkflowClaim,
   workflowAuthorityId,
 } from "./workflow-run-composition-support.ts";
@@ -32,6 +33,8 @@ import {
   validatePostgresWorkflowLease,
   writePostgresWorkflowExecution,
 } from "./postgres-workflow-run-composition-transactions.ts";
+import { appendPostgresCanceledWorkflowNodeEvent } from "./postgres-workflow-cancellation-lifecycle.ts";
+import { insertPostgresCanceledWorkflowStep } from "./postgres-workflow-cancellation.ts";
 type Decision = Parameters<
   WorkflowRunCompositionStore["recordWorkflowHumanGateDecision"]
 >[0];
@@ -259,6 +262,38 @@ export async function settlePostgresWorkflowGate(
     resultDigest,
     now,
   });
+  for (const blocked of next.nodes) {
+    if (
+      blocked.status === "canceled" &&
+      execution.nodes.find((candidate) => candidate.nodeId === blocked.nodeId)
+        ?.status === "pending"
+    ) {
+      await insertPostgresCanceledWorkflowStep(
+        client,
+        schema,
+        input,
+        blocked.nodeId,
+        blocked.kind,
+        now,
+      );
+      await appendPostgresCanceledWorkflowNodeEvent(
+        client,
+        schema,
+        {
+          tenantId: input.tenantId,
+          runId: input.runId,
+          binding: input.binding,
+          nodeId: blocked.nodeId,
+          claimId: null,
+          claimEpoch: null,
+          attemptId: null,
+          operationId: `${input.operationId}:${blocked.nodeId}:blocked`,
+        },
+        now,
+        digester,
+      );
+    }
+  }
   await writePostgresWorkflowExecution(client, schema, next, now);
   const runDisposition = await convergePostgresWorkflowRun(
     client,
@@ -274,11 +309,7 @@ export async function settlePostgresWorkflowGate(
   let schedulerContinuationWorkItemId: string | null = null;
   if (
     next.status === "running" &&
-    !next.nodes.some((candidate) =>
-      ["queued", "running", "unknown", "waitingHuman"].includes(
-        candidate.status,
-      ),
-    )
+    hasReadyWorkflowNodes(next, workflow)
   ) {
     schedulerContinuationWorkItemId = workflowAuthorityId(
       "scheduler",

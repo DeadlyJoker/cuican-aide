@@ -59,6 +59,7 @@ import {
   assertExecutionBinding,
   attemptId,
   gateStep,
+  hasReadyWorkflowNodes,
   initialExecution,
   parseBoundWorkflow,
   reconciliationClaims,
@@ -427,12 +428,13 @@ export class SqliteWorkflowRunCompositionStore
         node.gateRequestId !== input.gateRequestId ||
         node.inputDigest !== gate.inputDigest
       ) throw new RunStoreError("workflow_composition_gate_mismatch");
+      const workflow = this.#loadWorkflow(input);
       let gateValue: WorkflowSchemaValue | undefined;
       if (outcome.status === "completed") {
         const inputAuthority = this.#composeNodeInputValue({
           ...input, schedulerOperationId: node.claimOperationId!,
           admissionOperationId: input.operationId, attemptLeaseDurationMs: 1,
-        }, this.#loadWorkflow(input), now);
+        }, workflow, now);
         gateValue = inputAuthority.value as WorkflowSchemaValue;
         this.#insertExecutionValue({ ...input,
           valueId: workflowAuthorityId("value", { tenantId: input.tenantId,
@@ -447,15 +449,22 @@ export class SqliteWorkflowRunCompositionStore
           ? { status: "completed", value: gateValue! }
           : outcome,
         resultDigest: outcome.status === "completed" ? node.inputDigest! : undefined, now });
+      for (const blocked of next.nodes) {
+        if (
+          blocked.status === "canceled" &&
+          execution.nodes.find((candidate) => candidate.nodeId === blocked.nodeId)
+            ?.status === "pending"
+        ) {
+          this.#cancelPendingNode(input, blocked, now, nowMs);
+        }
+      }
       this.#writeExecution(next, now);
       const runDisposition = this.#convergeTerminalRun(
-        input, this.#loadWorkflow(input), next, now, nowMs);
+        input, workflow, next, now, nowMs);
       let schedulerContinuationWorkItemId: string | null = null;
       if (
         next.status === "running" &&
-        !next.nodes.some((node) =>
-          ["queued", "running", "unknown", "waitingHuman"].includes(node.status),
-        )
+        hasReadyWorkflowNodes(next, workflow)
       ) {
         schedulerContinuationWorkItemId = workflowAuthorityId(
           "scheduler",
@@ -1726,6 +1735,8 @@ export class SqliteWorkflowRunCompositionStore
         this.#appendNodeTerminalEvent({ ...value, outcome: value.outcome },
           digest, timestamp, clock);
       },
+      cancelPendingNode: (value, node, timestamp, clock) =>
+        this.#cancelPendingNode(value, node, timestamp, clock),
       writeExecution: (value, timestamp) => this.#writeExecution(value, timestamp),
       convergeTerminalRun: (value, workflow, execution, timestamp, clock) =>
         this.#convergeTerminalRun(value, workflow, execution, timestamp, clock),
@@ -1739,7 +1750,7 @@ export class SqliteWorkflowRunCompositionStore
   }
 
   #cancelUnadmittedStep(
-    input: Parameters<WorkflowRunCompositionStore["cancelWorkflowExecution"]>[0],
+    input: Readonly<{ tenantId: string; runId: string }>,
     nodeId: string,
     nodeKind: "agent" | "verification" | "humanGate",
     now: string,
@@ -1756,7 +1767,36 @@ export class SqliteWorkflowRunCompositionStore
       (tenant_id,run_id,step_id,kind,status,revision,current_attempt_id,attempt_count,
        state_json,created_at,updated_at,terminal_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
         input.tenantId, input.runId, nodeId, step.kind, step.status, step.revision,
-        null, 0, stableJson(step), now, now, now);
+       null, 0, stableJson(step), now, now, now);
+  }
+
+  #cancelPendingNode(
+    input: Readonly<{
+      tenantId: string;
+      runId: string;
+      binding: import("@crewon/domain").FrozenWorkflowVersionBinding;
+      operationId: string;
+    }>,
+    node: import("@crewon/application").WorkflowExecutionState["nodes"][number],
+    now: string,
+    nowMs: number,
+  ): void {
+    this.#cancelUnadmittedStep(input, node.nodeId, node.kind, now);
+    this.#appendNodeTerminalEvent(
+      {
+        ...input,
+        nodeId: node.nodeId,
+        claimId: null,
+        claimEpoch: null,
+        stepId: node.nodeId,
+        attemptId: null,
+        operationId: `${input.operationId}:${node.nodeId}:blocked`,
+        outcome: { status: "canceled" },
+      },
+      null,
+      now,
+      nowMs,
+    );
   }
 
   #cancelOwnedWorkflowNode(

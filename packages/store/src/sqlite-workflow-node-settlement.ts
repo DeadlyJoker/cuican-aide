@@ -19,6 +19,7 @@ import {
   loadSqliteRunStep,
 } from "./sqlite-execution-authority.ts";
 import {
+  hasReadyWorkflowNodes,
   settleWorkflowClaim,
   workflowAuthorityId,
 } from "./workflow-run-composition-support.ts";
@@ -45,6 +46,12 @@ export type SqliteWorkflowNodeSettlementContext = Readonly<{
   }): void;
   appendNodeTerminalEvent(input: Input, resultDigest: string | null,
     now: string, nowMs: number): void;
+  cancelPendingNode(
+    input: Input,
+    node: WorkflowExecutionState["nodes"][number],
+    now: string,
+    nowMs: number,
+  ): void;
   writeExecution(execution: WorkflowExecutionState, now: string): void;
   convergeTerminalRun(
     input: Input,
@@ -140,6 +147,15 @@ export function settleSqliteWorkflowNodeWithinTransaction<Result = SqliteWorkflo
       ),
     });
   }
+  for (const node of next.nodes) {
+    if (
+      node.status === "canceled" &&
+      execution.nodes.find((candidate) => candidate.nodeId === node.nodeId)
+        ?.status === "pending"
+    ) {
+      context.cancelPendingNode(input, node, now, nowMs);
+    }
+  }
   context.writeExecution(next, now);
   if (options.deferOuterSettlement) return structuredClone({
     disposition: "settled", execution: next,
@@ -167,10 +183,8 @@ export function settleSqliteWorkflowNodeWithinTransaction<Result = SqliteWorkflo
     }, now, nowMs);
   } else if (
     !options.suppressContinuation &&
-    !next.nodes.some((node) =>
-      ["queued", "running", "unknown", "waitingHuman"].includes(node.status),
-    ) &&
-    next.status === "running"
+    next.status === "running" &&
+    hasReadyWorkflowNodes(next, workflow)
   ) {
     schedulerContinuationWorkItemId = workflowAuthorityId(
       "scheduler",

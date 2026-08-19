@@ -60,8 +60,9 @@ export function validateWorkflowExecutionState(
   )
     throw new RunStoreError("workflow_execution_state_invalid");
   for (const node of state.nodes) validateNode(node);
-  const active = state.nodes.some(
+  const unsettled = state.nodes.some(
     (node) =>
+      node.status === "pending" ||
       node.status === "queued" ||
       node.status === "running" ||
       node.status === "waitingHuman" ||
@@ -74,9 +75,9 @@ export function validateWorkflowExecutionState(
       node.status === "unknown",
   );
   const projected =
-    state.cancelRequested && !active
+    state.cancelRequested && !unsettled
       ? "canceled"
-      : state.nodes.some((node) => node.status === "failed") && !active
+      : state.nodes.some((node) => node.status === "failed") && !unsettled
         ? "failed"
         : state.nodes.every((node) => node.status === "completed")
           ? "completed"

@@ -127,7 +127,7 @@ export async function cancelPostgresWorkflowExecution(
   const nodes = [];
   for (const node of execution.nodes) {
     if (node.status === "pending") {
-      await insertCanceledStep(
+      await insertPostgresCanceledWorkflowStep(
         client,
         schema,
         input,
@@ -443,7 +443,14 @@ async function cancelQueuedNode(
   );
   if (updated.rowCount !== 1)
     throw new RunStoreError("workflow_cancellation_reconciliation_required");
-  await insertCanceledStep(client, schema, input, node.nodeId, node.kind, now);
+  await insertPostgresCanceledWorkflowStep(
+    client,
+    schema,
+    input,
+    node.nodeId,
+    node.kind,
+    now,
+  );
   return true;
 }
 
@@ -507,10 +514,10 @@ async function cancelGate(
   if (updated.rowCount !== 1) throw new RunStoreError("revision_conflict");
 }
 
-async function insertCanceledStep(
+export async function insertPostgresCanceledWorkflowStep(
   client: PoolClient,
   schema: string,
-  input: Input,
+  input: Readonly<{ tenantId: string; runId: string }>,
   nodeId: string,
   nodeKind: "agent" | "verification" | "humanGate",
   now: string,

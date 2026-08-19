@@ -22,6 +22,7 @@ import { normalizeStoredRunState } from "./stored-run-state.ts";
 import { validateWorkflowExecutionState } from "./workflow-execution-state.ts";
 import {
   assertExecutionBinding,
+  hasReadyWorkflowNodes,
   settleWorkflowClaim,
   workflowAuthorityId,
 } from "./workflow-run-composition-support.ts";
@@ -37,6 +38,8 @@ import {
   validatePostgresWorkflowLease,
   writePostgresWorkflowExecution,
 } from "./postgres-workflow-run-composition-transactions.ts";
+import { appendPostgresCanceledWorkflowNodeEvent } from "./postgres-workflow-cancellation-lifecycle.ts";
+import { insertPostgresCanceledWorkflowStep } from "./postgres-workflow-cancellation.ts";
 type Input = Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0];
 type Result = Awaited<
   ReturnType<WorkflowRunCompositionStore["settleWorkflowNode"]>
@@ -164,6 +167,38 @@ export async function settlePostgresWorkflowNode(
       attempt: terminalAttempt(
         input, now, model?.attemptCheckpointDigest ?? null),
     });
+  for (const blocked of next.nodes) {
+    if (
+      blocked.status === "canceled" &&
+      execution.nodes.find((candidate) => candidate.nodeId === blocked.nodeId)
+        ?.status === "pending"
+    ) {
+      await insertPostgresCanceledWorkflowStep(
+        client,
+        schema,
+        input,
+        blocked.nodeId,
+        blocked.kind,
+        now,
+      );
+      await appendPostgresCanceledWorkflowNodeEvent(
+        client,
+        schema,
+        {
+          tenantId: input.tenantId,
+          runId: input.runId,
+          binding: input.binding,
+          nodeId: blocked.nodeId,
+          claimId: null,
+          claimEpoch: null,
+          attemptId: null,
+          operationId: `${input.operationId}:${blocked.nodeId}:blocked`,
+        },
+        now,
+        digester,
+      );
+    }
+  }
   await writePostgresWorkflowExecution(client, schema, next, now);
   const runDisposition = await convergePostgresWorkflowRun(
     client,
@@ -209,9 +244,7 @@ export async function settlePostgresWorkflowNode(
     );
   } else if (
     next.status === "running" &&
-    !next.nodes.some((node) =>
-      ["queued", "running", "unknown", "waitingHuman"].includes(node.status),
-    )
+    hasReadyWorkflowNodes(next, workflow)
   ) {
     kind = "scheduler";
     nextWorkItemId = workflowAuthorityId(

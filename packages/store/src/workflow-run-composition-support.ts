@@ -281,22 +281,7 @@ export function scheduleReadyNodes(input: {
   execution: WorkflowExecutionState;
   claims: readonly import("@crewon/application").WorkflowNodeClaim[];
 }> {
-  if (input.execution.nodes.some((node) => node.status === "unknown"))
-    return { execution: input.execution, claims: [] };
-  const readyIds = input.workflow.executionOrder.filter((nodeId) => {
-    const state = input.execution.nodes.find((node) => node.nodeId === nodeId)!;
-    const definition = input.workflow.nodes.find(
-      (node) => node.nodeId === nodeId,
-    )!;
-    return (
-      state.status === "pending" &&
-      definition.dependsOn.every(
-        (dependency) =>
-          input.execution.nodes.find((node) => node.nodeId === dependency)
-            ?.status === "completed",
-      )
-    );
-  });
+  const readyIds = readyWorkflowNodeIds(input.execution, input.workflow);
   if (readyIds.length === 0) return { execution: input.execution, claims: [] };
   const claims: import("@crewon/application").WorkflowNodeClaim[] = [];
   const nodes = input.execution.nodes.map((state) => {
@@ -371,6 +356,14 @@ export function scheduleReadyNodes(input: {
   };
 }
 
+/** Returns true when a scheduler transaction can claim at least one pending node. */
+export function hasReadyWorkflowNodes(
+  execution: WorkflowExecutionState,
+  workflow: CompiledWorkflowVersion,
+): boolean {
+  return readyWorkflowNodeIds(execution, workflow).length > 0;
+}
+
 export function settleWorkflowClaim(input: {
   execution: WorkflowExecutionState;
   nodeId: string;
@@ -389,7 +382,7 @@ export function settleWorkflowClaim(input: {
     target.claimEpoch !== input.claimEpoch
   )
     throw new RunStoreError("workflow_composition_claim_mismatch");
-  const nodes = input.execution.nodes.map((node) =>
+  let nodes = input.execution.nodes.map((node) =>
     node.nodeId !== input.nodeId
       ? node
       : {
@@ -406,20 +399,30 @@ export function settleWorkflowClaim(input: {
               : null,
         },
   );
-  const active = nodes.some((node) =>
-    ["queued", "running", "unknown", "waitingHuman"].includes(node.status),
+  if (nodes.some((node) => node.status === "failed")) {
+    nodes = nodes.map((node) =>
+      node.status === "pending"
+        ? { ...node, status: "canceled" as const }
+        : node,
+    );
+  }
+  const unsettled = nodes.some((node) =>
+    ["pending", "queued", "running", "unknown", "waitingHuman"].includes(
+      node.status,
+    ),
   );
-  const status = nodes.some((node) => node.status === "failed") && !active
+  const executableActive = nodes.some((node) =>
+    ["queued", "running", "unknown"].includes(node.status),
+  );
+  const status = nodes.some((node) => node.status === "failed") && !unsettled
     ? "failed"
     : nodes.every((node) => node.status === "completed")
       ? "completed"
-      : input.execution.cancelRequested && !active
+      : input.execution.cancelRequested && !unsettled
         ? "canceled"
         : nodes.some((node) => node.status === "waitingHuman") &&
             !nodes.some((node) => node.status === "failed") &&
-            !nodes.some((node) =>
-              ["queued", "running", "unknown"].includes(node.status),
-            )
+            !executableActive
           ? "waitingHuman"
           : "running";
   return {
@@ -429,6 +432,25 @@ export function settleWorkflowClaim(input: {
     status,
     updatedAt: input.now,
   };
+}
+
+function readyWorkflowNodeIds(
+  execution: WorkflowExecutionState,
+  workflow: CompiledWorkflowVersion,
+): readonly string[] {
+  if (execution.nodes.some((node) => node.status === "unknown")) return [];
+  return workflow.executionOrder.filter((nodeId) => {
+    const state = execution.nodes.find((node) => node.nodeId === nodeId)!;
+    const definition = workflow.nodes.find((node) => node.nodeId === nodeId)!;
+    return (
+      state.status === "pending" &&
+      definition.dependsOn.every(
+        (dependency) =>
+          execution.nodes.find((node) => node.nodeId === dependency)?.status ===
+          "completed",
+      )
+    );
+  });
 }
 
 function stripDigest(value: string): string {
