@@ -164,7 +164,7 @@ export async function commitPostgresRetrievedWorkflowNodeContinuation(
   await persistPostgresRetrievedWorkflowEvents(
     client,
     schema,
-    input,
+    { ...input, payload },
     payload.events,
     now,
     digester,

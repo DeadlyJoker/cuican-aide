@@ -3,12 +3,17 @@ import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { Pool } from "pg";
 
-import { canonicalActionIntent } from "@crewon/contracts/runtime";
+import {
+  canonicalActionIntent,
+  type CanonicalAgentEvent,
+} from "@crewon/contracts/runtime";
 import {
   canonicalJson,
+  projectWorkflowRetrievedContinuationEvent,
   RunStoreError,
   type WorkflowExecutionState,
   type WorkflowReconciliationResult,
+  type WorkflowRetrievedContinuationPayload,
 } from "@crewon/application";
 import {
   compileWorkflowVersion,
@@ -1074,7 +1079,7 @@ test(
       assert.equal(retrieval.disposition, "retrieveRequired");
       if (retrieval.disposition !== "retrieveRequired") assert.fail();
       const segmentId = `segment:${attempt.attemptId}`;
-      const payload = {
+      const payload: WorkflowRetrievedContinuationPayload = {
         events: [
           {
             schemaVersion: "crewon.agent-event.v0" as const,
@@ -1084,10 +1089,23 @@ test(
             type: "model.output.delta" as const,
             data: { delta: "restored" },
           },
+          {
+            schemaVersion: "crewon.agent-event.v0" as const,
+            runId: "run-1",
+            segmentId,
+            sequence: 2,
+            type: "usage.recorded" as const,
+            data: {
+              inputTokens: 10,
+              cachedInputTokens: 0,
+              outputTokens: 2,
+              totalTokens: 12,
+            },
+          },
         ],
         assistantContinuation: {
           segmentId,
-          sequence: 2,
+          sequence: 3,
           output: "restored",
           completedAssistantItems: ["restored"],
           checkpoint,
@@ -1127,6 +1145,11 @@ test(
         priorContinuation: retrieval.recovery.priorContinuation,
         payload,
       };
+      const prefix = await appendImmediateRunEvent(
+        pool,
+        schema,
+        payload.events[0],
+      );
       await assert.rejects(
         store.commitRetrievedWorkflowNodeContinuation({
           ...commitInput,
@@ -1138,6 +1161,58 @@ test(
         (error) =>
           error instanceof RunStoreError &&
           error.code === "workflow_retrieved_continuation_corrupt",
+      );
+      for (const corruption of [
+        {
+          corrupt: `UPDATE ${schema}.run_events SET event_json=jsonb_set(
+            event_json,'{schemaVersion}','"forged"') WHERE event_id=$1`,
+          restore: `UPDATE ${schema}.run_events SET event_json=$2::jsonb
+            WHERE event_id=$1`,
+        },
+        {
+          corrupt: `UPDATE ${schema}.run_events SET sequence=sequence+1000
+            WHERE event_id=$1`,
+          restore: `UPDATE ${schema}.run_events SET sequence=$2
+            WHERE event_id=$1`,
+        },
+        {
+          corrupt: `UPDATE ${schema}.run_events SET event_id='forged-event-id'
+            WHERE event_id=$1`,
+          restore: `UPDATE ${schema}.run_events SET event_id=$1
+            WHERE event_id='forged-event-id'`,
+        },
+      ] as const) {
+        await pool.query(corruption.corrupt, [prefix.eventId]);
+        await assert.rejects(
+          store.commitRetrievedWorkflowNodeContinuation(commitInput),
+          (error) =>
+            error instanceof RunStoreError &&
+            error.code === "workflow_retrieved_continuation_corrupt",
+        );
+        await pool.query(
+          corruption.restore,
+          corruption.restore.includes("event_json")
+            ? [prefix.eventId, prefix]
+            : corruption.restore.includes("sequence=$2")
+              ? [prefix.eventId, prefix.sequence]
+              : [prefix.eventId],
+        );
+      }
+      await pool.query(
+        `UPDATE ${schema}.run_snapshots
+         SET state_json=jsonb_set(state_json,'{cancelRequested}','true')
+         WHERE tenant_id='tenant-1' AND run_id='run-1'`,
+      );
+      await assert.rejects(
+        store.commitRetrievedWorkflowNodeContinuation(commitInput),
+        (error) =>
+          error instanceof RunStoreError &&
+          error.code === "workflow_retrieved_continuation_corrupt",
+      );
+      await pool.query(
+        `UPDATE ${schema}.run_snapshots
+         SET state_json=jsonb_set(state_json,'{cancelRequested}','false')
+         WHERE tenant_id='tenant-1' AND run_id='run-1'`,
       );
       const before = await loadExecution(pool, schema);
       const committed =
@@ -1180,17 +1255,19 @@ test(
            (SELECT status FROM ${schema}.model_dispatch_receipts
             WHERE operation_id='dispatch-retrieved-1') dispatch_status,
            (SELECT count(*)::int FROM ${schema}.run_events
-            WHERE event_json->>'type'='model.output.delta') run_events,
+            WHERE event_json->'data'->>'segmentId'=$1) run_events,
            (SELECT count(*)::int FROM ${schema}.workflow_agent_events
-            WHERE event_json->>'type'='model.output.delta') agent_events,
+            WHERE segment_id=$1) agent_events,
            (SELECT count(*)::int FROM ${schema}.outbox
-            WHERE message_json->'payload'->>'eventType'='model.output.delta') outbox_messages`,
+            WHERE message_json->'payload'->>'eventType'
+              IN ('model.output.delta','usage.recorded')) outbox_messages`,
+        [segmentId],
       );
       assert.deepEqual(durable.rows[0], {
         dispatch_status: "terminal",
-        run_events: 1,
-        agent_events: 1,
-        outbox_messages: 1,
+        run_events: 2,
+        agent_events: 2,
+        outbox_messages: 2,
       });
       assert.equal(
         (await store.reconcileWorkflowNode(reconcileInput)).disposition,
@@ -1260,6 +1337,79 @@ async function appendToolEvent(
        (tenant_id,run_id,sequence,event_id,event_json)
        VALUES ('tenant-1','run-1',$1,$2,$3::jsonb)`,
       [event.sequence, event.eventId, event],
+    );
+    await client.query("COMMIT");
+    return event;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function appendImmediateRunEvent(
+  pool: Pool,
+  schema: string,
+  source: CanonicalAgentEvent,
+): Promise<RunLifecycleEvent> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const row = await client.query<{ state_json: RunState }>(
+      `SELECT state_json FROM ${schema}.run_snapshots
+       WHERE tenant_id='tenant-1' AND run_id='run-1' FOR UPDATE`,
+    );
+    const current = row.rows[0]!.state_json;
+    const occurredAt = new Date(
+      Date.parse(current.updatedAt) + 1,
+    ).toISOString();
+    const event = projectWorkflowRetrievedContinuationEvent(
+      source,
+      current.lastSequence + 1,
+      `immediate-prefix-${source.sequence}`,
+      occurredAt,
+      (checkpoint) => digester.sha256(canonicalJson(checkpoint)),
+    );
+    const next = reduceRunLifecycleEvent(current, event);
+    const updated = await client.query(
+      `UPDATE ${schema}.run_snapshots
+       SET revision=$1,last_sequence=$2,state_json=$3::jsonb,updated_at=$4
+       WHERE tenant_id='tenant-1' AND run_id='run-1'
+         AND revision=$5 AND last_sequence=$6`,
+      [
+        next.revision,
+        next.lastSequence,
+        next,
+        next.updatedAt,
+        current.revision,
+        current.lastSequence,
+      ],
+    );
+    assert.equal(updated.rowCount, 1);
+    await client.query(
+      `INSERT INTO ${schema}.run_events
+       (tenant_id,run_id,sequence,event_id,event_json)
+       VALUES ('tenant-1','run-1',$1,$2,$3::jsonb)`,
+      [event.sequence, event.eventId, event],
+    );
+    const message = {
+      messageId: `immediate-prefix-outbox-${source.sequence}`,
+      tenantId: "tenant-1",
+      runId: "run-1",
+      topic: "run.updated" as const,
+      payload: {
+        eventId: event.eventId,
+        eventType: event.type,
+        throughSequence: event.sequence,
+      },
+      createdAt: occurredAt,
+    };
+    await client.query(
+      `INSERT INTO ${schema}.outbox
+       (message_id,tenant_id,run_id,topic,message_json,created_at,available_at)
+       VALUES ($1,'tenant-1','run-1','run.updated',$2::jsonb,$3,$3)`,
+      [message.messageId, message, occurredAt],
     );
     await client.query("COMMIT");
     return event;
