@@ -147,10 +147,10 @@ test(
     );
     common.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH = bindingsPath;
 
-    const release = spawnChild("apps/runtime-worker/src/release-main.ts", {
-      ...common,
-      CREWON_NATIVE_WORKSPACE_READ_ENABLED: "1",
-    });
+    const release = spawnChild(
+      "apps/runtime-worker/src/release-main.ts",
+      common,
+    );
     children.add(release.child);
     const released = await release.waitFor('"disposition":"activated"');
     assert.match(

@@ -17,6 +17,7 @@ import {
   resolveRuntimeDatabaseAuthority,
 } from "./runtime-database-environment.ts";
 import { parseRuntimeWorkerSecurityMode } from "./runtime-provider-probe-environment.ts";
+import { resolveRuntimeProductionWorkspaceEnvironment } from "./runtime-production-workspace-environment.ts";
 import { SystemApplicationClock } from "./standalone-adapters.ts";
 import {
   loadRuntimeReleaseActor,
@@ -25,6 +26,10 @@ import {
 
 const securityMode = parseRuntimeWorkerSecurityMode(
   process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
+);
+const productionWorkspace = resolveRuntimeProductionWorkspaceEnvironment(
+  process.env,
+  securityMode,
 );
 const databaseAuthority = resolveRuntimeDatabaseAuthority(
   process.env,
@@ -78,9 +83,12 @@ try {
     transport,
     agentInstructions: process.env.CREWON_AGENT_INSTRUCTIONS?.trim() || null,
     toolRuntime,
-    nativeWorkspaceReadCatalog: parseNativeWorkspaceReadCatalog(
-      process.env.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
-    ),
+    nativeWorkspaceReadCatalog:
+      productionWorkspace === undefined
+        ? parseNativeWorkspaceReadCatalog(
+            process.env.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
+          )
+        : "enabled",
     streamMaxRetries: parseNonNegativeInteger(
       process.env.CREWON_RESPONSES_STREAM_MAX_RETRIES ?? "5",
       "CREWON_RESPONSES_STREAM_MAX_RETRIES_invalid",

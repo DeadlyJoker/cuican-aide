@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import test from "node:test";
 
@@ -21,6 +22,37 @@ test("production parses one exact secret-referenced Workspace deployment", () =>
     privateServer: { port: 43125, token: TOKEN },
     authority: authority(),
   });
+});
+
+test("production deployment example is accepted by the release and worker parser", () => {
+  const environment = environmentFile(
+    readFileSync(
+      new URL(
+        "../../../deploy/crewon/runtime.production.env.example",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(
+    resolveRuntimeProductionWorkspaceEnvironment(environment, "production"),
+    {
+      trustedLocalPath: "/workspace",
+      deadlineMs: 30_000,
+      privateServer: {
+        port: 3222,
+        token: "<different-at-least-32-random-bytes>",
+      },
+      authority: {
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        workspaceBindingId: "workspace-1",
+        incarnationId: "workspace-incarnation-1",
+        runtimeBindingId: "runtime-1",
+        policySnapshotId: "policy-1",
+      },
+    },
+  );
 });
 
 test("production rejects desktop flags, missing secrets, and authority drift", () => {
@@ -89,4 +121,17 @@ function authority() {
     runtimeBindingId: "runtime-generation-1",
     policySnapshotId: "policy-1",
   };
+}
+
+function environmentFile(source: string): Record<string, string> {
+  return Object.fromEntries(
+    source
+      .split("\n")
+      .filter((line) => line.length > 0 && !line.startsWith("#"))
+      .map((line) => {
+        const separator = line.indexOf("=");
+        assert.notEqual(separator, -1);
+        return [line.slice(0, separator), line.slice(separator + 1)];
+      }),
+  );
 }
