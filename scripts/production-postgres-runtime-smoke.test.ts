@@ -46,8 +46,14 @@ test(
       rmSync(fixture, { recursive: true, force: true });
     });
 
-    const ports = await reservePorts(4);
-    const [controlPort, providerPort, workspacePort, authorityPort] = ports;
+    const ports = await reservePorts(5);
+    const [
+      controlPort,
+      providerPort,
+      workspacePort,
+      authorityPort,
+      operationalPort,
+    ] = ports;
     const authority = await startAuthorityServer(fixture, authorityPort);
     context.after(() => closeServer(authority.server));
     const responses = await startResponsesServer();
@@ -59,6 +65,7 @@ test(
       schema,
       providerPort,
       workspacePort,
+      operationalPort,
       responsesEndpoint: responses.endpoint,
     });
     const controlEnvironment = { ...common };
@@ -162,6 +169,10 @@ test(
     });
     children.add(worker.child);
     await worker.waitFor("CrewON Runtime Worker started");
+    await eventually(
+      async () =>
+        (await fetch(`http://127.0.0.1:${operationalPort}/health/ready`)).ok,
+    );
     await worker.waitFor(
       "CrewON Provider Runtime ready:runtime-production-smoke",
     );
@@ -235,6 +246,10 @@ test(
     children.add(worker.child);
     await worker.waitFor("CrewON Runtime Worker started");
     await eventually(
+      async () =>
+        (await fetch(`http://127.0.0.1:${operationalPort}/health/ready`)).ok,
+    );
+    await eventually(
       async () => {
         const run = await client.json("GET", `/api/v1/runs/${runId}`);
         return run.status === 200 && run.body.run.status === "completed";
@@ -291,6 +306,13 @@ test(
     assert.equal(responses.agentPosts, 1);
     assert.ok(responses.retrieveGets >= 1);
     assert.equal(responses.verificationPosts, 1);
+    const workerMetrics = await (
+      await fetch(`http://127.0.0.1:${operationalPort}/metrics`)
+    ).text();
+    assert.match(workerMetrics, /crewon_runtime_worker_ready 1/u);
+    assert.match(workerMetrics, /crewon_runtime_worker_outcomes_total/u);
+    assert.equal(workerMetrics.includes(runId), false);
+    assert.equal(workerMetrics.includes("tenant-production-smoke"), false);
     context.diagnostic(
       JSON.stringify({
         agentPosts: responses.agentPosts,
@@ -309,6 +331,7 @@ function runtimeEnvironment(input: {
   schema: string;
   providerPort: number;
   workspacePort: number;
+  operationalPort: number;
   responsesEndpoint: string;
 }): NodeJS.ProcessEnv {
   const workspaceRoot = join(input.fixture, "workspace");
@@ -332,6 +355,7 @@ function runtimeEnvironment(input: {
     CREWON_WORKER_SCAN_INTERVAL_MS: "25",
     CREWON_WORKER_LEASE_DURATION_MS: "30000",
     CREWON_WORKER_RETRY_AFTER_MS: "0",
+    CREWON_RUNTIME_OPERATIONAL_PORT: String(input.operationalPort),
     PROVIDER_PRIVATE_TOKEN: secret("provider-private"),
     WORKSPACE_PRIVATE_TOKEN: secret("workspace-private"),
     PROVIDER_API_KEY: secret("provider-api-key"),

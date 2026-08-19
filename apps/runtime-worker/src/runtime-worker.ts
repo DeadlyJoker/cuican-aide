@@ -153,6 +153,7 @@ export type RuntimeWorkerConfig = Readonly<{
   afterGoalToolExecuted?:
     | ((result: GoalToolExecutionResult) => Promise<void>)
     | undefined;
+  outcomeObserver?: ((outcome: RuntimeWorkerOutcome) => void) | undefined;
 }>;
 
 export type RuntimeWorkerOutcome =
@@ -234,6 +235,9 @@ export class RuntimeWorker {
     | undefined;
   readonly #afterGoalToolExecuted:
     | ((result: GoalToolExecutionResult) => Promise<void>)
+    | undefined;
+  readonly #outcomeObserver:
+    | ((outcome: RuntimeWorkerOutcome) => void)
     | undefined;
   #timer: ReturnType<typeof setInterval> | null = null;
   #drain: Promise<RuntimeWorkerOutcome> | null = null;
@@ -409,6 +413,7 @@ export class RuntimeWorker {
     this.#afterToolProviderResolved = config.afterToolProviderResolved;
     this.#afterToolReceiptCommitted = config.afterToolReceiptCommitted;
     this.#afterGoalToolExecuted = config.afterGoalToolExecuted;
+    this.#outcomeObserver = config.outcomeObserver;
   }
 
   start(): void {
@@ -435,6 +440,11 @@ export class RuntimeWorker {
     try {
       const outcome = await drain;
       this.#lastOutcome = outcome;
+      try {
+        this.#outcomeObserver?.(outcome);
+      } catch {
+        // Operational observation cannot change durable worker execution.
+      }
       return outcome;
     } finally {
       if (this.#drain === drain) {

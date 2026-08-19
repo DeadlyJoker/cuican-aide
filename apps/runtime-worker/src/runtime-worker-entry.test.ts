@@ -124,6 +124,7 @@ test("production entry rejects standalone route defaults before readiness", asyn
         CREWON_CONTROL_SECURITY_MODE: "production",
         CREWON_CONTROL_DATABASE_URL: "postgresql://127.0.0.1:1/unused",
         CREWON_CONTROL_DATABASE_SCHEMA: "runtime_entry_test",
+        CREWON_RUNTIME_OPERATIONAL_PORT: "3223",
         CREWON_TENANT_ID: "tenant-production",
         CREWON_AUTHORITY_ID: "standalone-authority",
         CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON: JSON.stringify({

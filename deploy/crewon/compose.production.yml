@@ -78,7 +78,7 @@ services:
           "CMD",
           "node",
           "-e",
-          "require('node:fs').accessSync('/tmp/crewon-runtime-worker.ready')",
+          "fetch('http://127.0.0.1:3223/health/ready').then(r=>process.exit(r.ok?0:1),()=>process.exit(1))",
         ]
       interval: 5s
       timeout: 3s

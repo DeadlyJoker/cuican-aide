@@ -86,6 +86,23 @@ registerRuntimeWorkerConformance(
   (clock) => new InMemoryRunStore({ clock }),
 );
 
+test("reports one bounded observation after a durable worker outcome", async (context) => {
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  const outcomes: unknown[] = [];
+  const worker = fixture.worker({
+    transport: successfulTransport(),
+    outcomeObserver(outcome) {
+      outcomes.push(outcome);
+    },
+  });
+  const outcome = await worker.wake();
+  assert.deepEqual(outcomes, [outcome]);
+  await worker.close();
+});
+
 test("completes a durable Run through the Direct Responses transport", async (context) => {
   const fixture = await createFixture(
     context,
@@ -8818,6 +8835,7 @@ async function createFixture(
       autoCompactAtTokens?: number | null;
       modelContextWindowTokens?: number;
       workflowDispatcher?: WorkflowRuntimeDispatcherPort;
+      outcomeObserver?: RuntimeWorkerConfig["outcomeObserver"];
     }) => {
       const workerStore = options.store ?? store;
       const workerExecution =
@@ -8874,6 +8892,7 @@ async function createFixture(
           afterToolProviderResolved: options.afterToolProviderResolved,
           afterToolReceiptCommitted: options.afterToolReceiptCommitted,
           afterGoalToolExecuted: options.afterGoalToolExecuted,
+          outcomeObserver: options.outcomeObserver,
         },
       );
     },

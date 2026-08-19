@@ -8,6 +8,7 @@ import {
   createStandaloneRuntimeWorker,
   type StandaloneRuntimeWorker,
 } from "./standalone-composition.ts";
+import type { RuntimeWorkerOutcome } from "./runtime-worker.ts";
 import {
   loadAgentVersionRuntimeFactory,
   loadRemoteMcpManifestBindings,
@@ -43,6 +44,12 @@ import {
   resolveRuntimeReadinessFile,
 } from "./runtime-readiness-file.ts";
 import {
+  resolveRuntimeOperationalPort,
+  RuntimeOperationalMetrics,
+  startRuntimeOperationalServer,
+  type RuntimeOperationalServer,
+} from "./runtime-operational-server.ts";
+import {
   createRuntimeNativeRemoteMcpOwner,
   type RuntimeNativeRemoteMcpOwner,
 } from "./runtime-native-remote-mcp.ts";
@@ -54,6 +61,12 @@ const databaseAuthority = resolveRuntimeDatabaseAuthority(
   process.env,
   securityMode,
 );
+const workerOnce = process.env.CREWON_WORKER_ONCE === "1";
+const operationalPort = resolveRuntimeOperationalPort(
+  process.env,
+  securityMode === "production" && !workerOnce,
+);
+const operationalMetrics = new RuntimeOperationalMetrics();
 const agentVersionRuntimeBindingsPath =
   process.env.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
 const readinessFile = resolveRuntimeReadinessFile(process.env);
@@ -275,6 +288,8 @@ try {
       process.env.CREWON_WORKER_CANCELLATION_POLL_INTERVAL_MS ?? "250",
       "CREWON_WORKER_CANCELLATION_POLL_INTERVAL_MS_invalid",
     ),
+    outcomeObserver: (outcome: RuntimeWorkerOutcome) =>
+      operationalMetrics.recordOutcome(outcome),
     autoCompactAtTokens: parsePositiveInteger(
       process.env.CREWON_AUTO_COMPACT_AT_TOKENS ?? "200000",
       "CREWON_AUTO_COMPACT_AT_TOKENS_invalid",
@@ -386,7 +401,7 @@ try {
   throw error;
 }
 
-if (process.env.CREWON_WORKER_ONCE === "1") {
+if (workerOnce) {
   try {
     const outcome = await runtime.worker.wake();
     process.stdout.write(`${JSON.stringify(outcome)}\n`);
@@ -395,15 +410,30 @@ if (process.env.CREWON_WORKER_ONCE === "1") {
     remoteMcpOwner?.destroy();
   }
 } else {
-  runtime.worker.start();
+  let operationalServer: RuntimeOperationalServer | null = null;
   try {
+    operationalServer =
+      operationalPort === null
+        ? null
+        : await startRuntimeOperationalServer({
+            port: operationalPort,
+            metrics: operationalMetrics,
+          });
+    runtime.worker.start();
     await markRuntimeReady(readinessFile);
+    operationalMetrics.setReady(true);
   } catch (error) {
+    await operationalServer?.close();
     await runtime.close();
     remoteMcpOwner?.destroy();
     throw error;
   }
   process.stdout.write("CrewON Runtime Worker started\n");
+  if (operationalServer !== null) {
+    process.stdout.write(
+      `CrewON Runtime Operations ready:${operationalServer.origin}\n`,
+    );
+  }
   for (const line of runtimeNativeReadinessLines({
     providerRuntimeBindingId:
       nativeBootstrap?.provider?.runtimeBindingId ??
@@ -418,10 +448,14 @@ if (process.env.CREWON_WORKER_ONCE === "1") {
   for (const signal of ["SIGINT", "SIGTERM"] as const) {
     process.once(signal, () => {
       void (async () => {
+        operationalMetrics.setReady(false);
         try {
           await clearRuntimeReadinessFile(readinessFile);
         } finally {
-          await runtime.close();
+          await Promise.allSettled([
+            operationalServer?.close() ?? Promise.resolve(),
+            runtime.close(),
+          ]);
         }
       })().finally(() => {
         remoteMcpOwner?.destroy();

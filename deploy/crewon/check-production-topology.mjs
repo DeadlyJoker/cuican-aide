@@ -62,7 +62,7 @@ requireText(
 );
 requireText(
   compose,
-  "/tmp/crewon-runtime-worker.ready",
+  "http://127.0.0.1:3223/health/ready",
   "worker_readiness_probe_missing",
 );
 requireText(compose, "/api/v1/health/ready", "control_readiness_probe_missing");
@@ -75,6 +75,11 @@ requireText(
   runtime,
   "CREWON_RUNTIME_READINESS_FILE=/tmp/crewon-runtime-worker.ready",
   "worker_readiness_file_missing",
+);
+requireText(
+  runtime,
+  "CREWON_RUNTIME_OPERATIONAL_PORT=3223",
+  "worker_operational_port_missing",
 );
 requireText(compose, "read_only: true", "readonly_root_missing");
 requireText(compose, "no-new-privileges:true", "privilege_fence_missing");

@@ -77,8 +77,8 @@ weaken the boundary.
 
 `compose.production.yml` is the checked-in single-host topology. It uses host networking because Control, BFF, Provider Probe
 and Workspace private listeners deliberately bind only loopback; it never publishes one of those ports onto a bridge network.
-The fixed port allocation is Control `3210`, Web BFF `3211`, Provider Probe `3221`, Workspace private `3222`, and public TLS
-nginx `6175`.
+The fixed port allocation is Control `3210`, Web BFF `3211`, Provider Probe `3221`, Workspace private `3222`, Runtime
+operations `3223`, and public TLS nginx `6175`.
 
 Copy the three process-specific examples outside source control and inject their real values from the deployment secret
 manager:
@@ -113,6 +113,11 @@ The release job has `restart: "no"`; Worker starts only after it exits successfu
 only after composition, Provider prewarm and private listeners succeed. Control starts after that marker, BFF only after Control
 Store readiness, and nginx only after BFF confirms Control readiness. A production secret manager or orchestrator may project the same contract,
 but must preserve the process-specific secret scopes, loopback topology and release completion fence.
+
+Runtime operations bind only `127.0.0.1:3223`. `GET /health/live` is process liveness, `GET /health/ready` is the same startup
+fence used by Compose, and `GET /metrics` exposes Prometheus counters/gauges for readiness, uptime and durable Worker outcomes.
+Outcome labels contain only bounded kind/error code values—never tenant, actor, Thread, Run, prompt or credential data. Scrape
+the loopback endpoint from the host collector; nginx and the Web BFF do not proxy it.
 
 Rollback is an explicit one-shot TypeScript authority in the same immutable Runtime image. Supply an existing release ID and a
 fresh idempotency key; the `rollback` profile is never part of a normal `up`:

@@ -118,6 +118,7 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   afterToolDispatched?: RuntimeWorkerConfig["afterToolDispatched"];
   afterToolProviderResolved?: RuntimeWorkerConfig["afterToolProviderResolved"];
   afterToolReceiptCommitted?: RuntimeWorkerConfig["afterToolReceiptCommitted"];
+  outcomeObserver?: RuntimeWorkerConfig["outcomeObserver"];
   /** Crash-boundary verification hook; omitted in production composition. */
   afterWorkflowTerminalCandidateCommitted?: () => Promise<void>;
   providerProbe?: Readonly<{
@@ -423,6 +424,7 @@ async function composeRuntimeWorker(
       afterToolDispatched: config.afterToolDispatched,
       afterToolProviderResolved: config.afterToolProviderResolved,
       afterToolReceiptCommitted: config.afterToolReceiptCommitted,
+      outcomeObserver: config.outcomeObserver,
     },
   );
   let providerProbeServer: RuntimeProviderProbeServer | null = null;
