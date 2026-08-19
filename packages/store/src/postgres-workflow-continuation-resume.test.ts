@@ -184,7 +184,7 @@ test(
         opaquePayload: { responseId: "response-1" },
       };
       const checkpointDigest = digester.sha256(
-        JSON.stringify(providerCheckpoint),
+        canonicalJson(providerCheckpoint),
       );
       const checkpointed = await store.checkpointRunAttempt({
         tenantId: "tenant-1",
@@ -312,21 +312,23 @@ test(
         lease: nodeLease,
         receipt: pendingTool,
       });
-      const scheduledReconcile = await store.scheduleWorkflowReconciliation({
+      const scheduledReconcile = await store.settleWorkflowNode({
         tenantId: "tenant-1",
         runId: "run-1",
         lease: nodeLease,
         binding,
-        operationId: "schedule-reconcile-agent",
-        reasonCode: "workflow_node_durability_uncertain",
         nodeId: work.nodeId,
         claimId: work.claimId,
         claimEpoch: work.claimEpoch,
+        stepId: attempt.stepId,
+        attemptId: attempt.attemptId,
+        operationId: "schedule-reconcile-agent",
+        outcome: { status: "unknown" },
       });
       const firstLease = await lease(
         pool,
         schema,
-        scheduledReconcile.reconciliationWorkItemId,
+        scheduledReconcile.handoff.nextWorkItemId!,
         "reconcile-worker-1",
       );
       const reconciliationInput = {
@@ -383,7 +385,10 @@ test(
              AND continuation.node_id=attempt.step_id
              AND continuation.attempt_id=attempt.attempt_id
            JOIN ${schema}.model_dispatch_receipts dispatch
-             USING (tenant_id,run_id,step_id,attempt_id)
+             ON dispatch.tenant_id=attempt.tenant_id
+             AND dispatch.run_id=attempt.run_id
+             AND dispatch.step_id=attempt.step_id
+             AND dispatch.attempt_id=attempt.attempt_id
            WHERE attempt.attempt_id=$1 AND dispatch.operation_id=$2`,
           [attempt.attemptId, prepared.operationId],
         );
@@ -559,6 +564,9 @@ test(
         first,
       );
       assert.deepEqual(await loadExecution(pool, schema), first.execution);
+      const adoptedAt = Date.parse(
+        first.resume.pendingTools[0]!.receipt.updatedAt,
+      );
       const dispatchedTool = await store.transitionToolExecution({
         tenantId: "tenant-1",
         runId: "run-1",
@@ -567,7 +575,7 @@ test(
         expectedRevision: first.resume.pendingTools[0]!.receipt.revision,
         transition: {
           kind: "dispatch",
-          occurredAt: "2026-08-19T00:00:04.100Z",
+          occurredAt: new Date(adoptedAt + 1).toISOString(),
         },
       });
       const dispatchedResume = (await store.reconcileWorkflowNode(
@@ -585,7 +593,7 @@ test(
         expectedRevision: dispatchedTool.revision,
         transition: {
           kind: "unknownOutcome",
-          occurredAt: "2026-08-19T00:00:04.200Z",
+          occurredAt: new Date(adoptedAt + 2).toISOString(),
           providerReceiptId: "provider-tool-unknown",
         },
       });
@@ -656,7 +664,7 @@ test(
             },
           ],
         },
-        committedAt: "2026-08-19T00:00:04.300Z",
+        committedAt: new Date(adoptedAt + 3).toISOString(),
       });
       assert.equal(completedTool.receipt.status, "completed");
       assert.deepEqual(
@@ -700,7 +708,7 @@ test(
               },
             ],
           },
-          committedAt: "2026-08-19T00:00:04.300Z",
+          committedAt: new Date(adoptedAt + 3).toISOString(),
         }),
         completedTool,
       );
@@ -757,6 +765,7 @@ test(
         second,
       );
       assert.deepEqual(await loadExecution(pool, schema), second.execution);
+      const reclaimedAt = Date.parse(second.resume.attempt.updatedAt);
       const durable = await pool.query<{
         active_dispatches: number;
         terminal_dispatches: number;
@@ -786,7 +795,7 @@ test(
         operation: "dispatch",
         requestDigest: digester.sha256("request-2"),
         provider: prepared.provider,
-        preparedAt: "2026-08-19T00:00:05.000Z",
+        preparedAt: new Date(reclaimedAt + 1).toISOString(),
       });
       const resumedUnsent = (await store.reconcileWorkflowNode({
         ...reconciliationInput,
@@ -808,17 +817,20 @@ test(
           certainty: "notSent",
         },
       );
+      const retrievedSampleIndex =
+        resumedUnsent.resume.continuation.modelSampleIndex + 1;
+      const retrievedSegmentId = `segment:${attempt.attemptId}:round:${retrievedSampleIndex + 1}`;
       const nextPrepared = await store.prepareModelDispatch({
         tenantId: "tenant-1",
         runId: "run-1",
         lease: secondLease,
         attempt: authority.attempt,
-        operationId: "dispatch-agent-3",
+        operationId: `${retrievedSegmentId}:request:3`,
         requestSequence: 3,
         operation: "dispatch",
         requestDigest: digester.sha256("request-3"),
         provider: prepared.provider,
-        preparedAt: "2026-08-19T00:00:06.000Z",
+        preparedAt: new Date(reclaimedAt + 2).toISOString(),
       });
       const nextSent = await store.markModelDispatchPossiblySent({
         tenantId: "tenant-1",
@@ -828,7 +840,7 @@ test(
         operationId: nextPrepared.operationId,
         requestSequence: 3,
         expectedRevision: nextPrepared.revision,
-        transitionedAt: "2026-08-19T00:00:07.000Z",
+        transitionedAt: new Date(reclaimedAt + 3).toISOString(),
       });
       const nextProviderCheckpoint = {
         ...providerCheckpoint,
@@ -841,9 +853,9 @@ test(
         attempt: authority.attempt,
         checkpoint: nextProviderCheckpoint,
         checkpointDigest: digester.sha256(
-          JSON.stringify(nextProviderCheckpoint),
+          canonicalJson(nextProviderCheckpoint),
         ),
-        checkpointedAt: "2026-08-19T00:00:08.000Z",
+        checkpointedAt: new Date(reclaimedAt + 4).toISOString(),
         modelDispatch: {
           operationId: nextPrepared.operationId,
           requestSequence: 3,
@@ -857,7 +869,6 @@ test(
       assert.equal(uncommittedResponse.disposition, "retrieveRequired");
       if (uncommittedResponse.disposition !== "retrieveRequired")
         assert.fail("retrieval required");
-      const retrievedSegmentId = `segment:${attempt.attemptId}:round:2`;
       const prior = uncommittedResponse.recovery.priorContinuation;
       const committed = await store.commitRetrievedWorkflowNodeContinuation({
         ...reconciliationInput,
@@ -897,7 +908,7 @@ test(
           next: {
             schemaVersion: "crewon.workflow-node-continuation.v0",
             segmentId: retrievedSegmentId,
-            modelSampleIndex: (prior?.modelSampleIndex ?? 0) + 1,
+            modelSampleIndex: retrievedSampleIndex,
             toolRoundsConsumed: prior?.toolRoundsConsumed ?? 0,
             providerCheckpoint: nextProviderCheckpoint,
             providerTurnState: null,
@@ -1048,21 +1059,23 @@ test(
           expectedRevision: sent.revision,
         },
       });
-      const scheduledReconcile = await store.scheduleWorkflowReconciliation({
+      const scheduledReconcile = await store.settleWorkflowNode({
         tenantId: "tenant-1",
         runId: "run-1",
         lease: nodeLease,
         binding,
-        operationId: "schedule-retrieved-reconcile",
-        reasonCode: "workflow_node_durability_uncertain",
         nodeId: work.nodeId,
         claimId: work.claimId,
         claimEpoch: work.claimEpoch,
+        stepId: attempt.stepId,
+        attemptId: attempt.attemptId,
+        operationId: "schedule-retrieved-reconcile",
+        outcome: { status: "unknown" },
       });
       const reconcileLease = await lease(
         pool,
         schema,
-        scheduledReconcile.reconciliationWorkItemId,
+        scheduledReconcile.handoff.nextWorkItemId!,
         "retrieved-reconcile-worker",
       );
       const reconcileInput = {
@@ -1160,7 +1173,7 @@ test(
         }),
         (error) =>
           error instanceof RunStoreError &&
-          error.code === "workflow_retrieved_continuation_corrupt",
+          error.code === "workflow_retrieved_continuation_invalid",
       );
       for (const corruption of [
         {
@@ -1470,6 +1483,14 @@ async function reclaim(
 async function seed(pool: Pool, schema: string): Promise<void> {
   const run = runState();
   await pool.query(
+    `INSERT INTO ${schema}.threads
+     (thread_id,tenant_id,space_id,created_by_actor_id,title,revision,
+      last_event_sequence,last_message_sequence,status,state_json,created_at,updated_at)
+     VALUES ($1,'tenant-1','space-1','actor-1','Continuation',1,1,0,
+       'active','{}',$2,$2)`,
+    [run.threadId, run.createdAt],
+  );
+  await pool.query(
     `INSERT INTO ${schema}.workflow_versions
        (tenant_id,workflow_id,workflow_version_id,content_digest,definition_json,created_at)
      VALUES ('tenant-1',$1,$2,$3,$4,$5)`,
@@ -1486,6 +1507,11 @@ async function seed(pool: Pool, schema: string): Promise<void> {
        (tenant_id,space_id,run_id,revision,last_sequence,state_json,updated_at)
      VALUES ('tenant-1','space-1','run-1',2,2,$1,$2)`,
     [run, run.updatedAt],
+  );
+  await pool.query(
+    `INSERT INTO ${schema}.run_thread_bindings(tenant_id,run_id,thread_id)
+     VALUES ('tenant-1','run-1',$1)`,
+    [run.threadId],
   );
   await pool.query(
     `INSERT INTO ${schema}.workflow_execution_values
