@@ -396,6 +396,37 @@ test(
           [beforeTakeover],
         );
       }
+      const continuationRow = await pool.query<{ state_json: unknown }>(
+        `SELECT state_json FROM ${schema}.workflow_node_continuations
+         WHERE tenant_id='tenant-1' AND run_id='run-1' AND node_id=$1`,
+        [work.nodeId],
+      );
+      const storedContinuation = continuationRow.rows[0]!.state_json as Record<
+        string,
+        unknown
+      >;
+      await pool.query(
+        `UPDATE ${schema}.workflow_node_continuations
+         SET state_json=jsonb_set(state_json,'{segmentId}',$1::jsonb)
+         WHERE tenant_id='tenant-1' AND run_id='run-1' AND node_id=$2`,
+        [
+          JSON.stringify(
+            `segment:${"x".repeat(attempt.attemptId.length)}:round:1`,
+          ),
+          work.nodeId,
+        ],
+      );
+      await assert.rejects(
+        store.reconcileWorkflowNode(reconciliationInput),
+        (error) =>
+          error instanceof RunStoreError &&
+          error.code === "workflow_reconciliation_evidence_corrupt",
+      );
+      await pool.query(
+        `UPDATE ${schema}.workflow_node_continuations SET state_json=$1::jsonb
+         WHERE tenant_id='tenant-1' AND run_id='run-1' AND node_id=$2`,
+        [storedContinuation, work.nodeId],
+      );
       await pool.query(
         `UPDATE ${schema}.run_events
          SET event_json=jsonb_set(event_json,'{data,input}',$1::jsonb)

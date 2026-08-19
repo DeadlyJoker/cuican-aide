@@ -353,7 +353,11 @@ function toolSegmentMatchesParent(
 ): boolean {
   const prefix = `segment:${parentAttemptId}`;
   if (segmentId === prefix) return true;
-  return /^:round:[1-9][0-9]{0,3}$/u.test(segmentId.slice(prefix.length));
+  const roundPrefix = `${prefix}:round:`;
+  return (
+    segmentId.startsWith(roundPrefix) &&
+    /^[1-9][0-9]{0,3}$/u.test(segmentId.slice(roundPrefix.length))
+  );
 }
 
 function corrupt(): never {
