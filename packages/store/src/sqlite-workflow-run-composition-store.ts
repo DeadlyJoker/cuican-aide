@@ -804,7 +804,8 @@ export class SqliteWorkflowRunCompositionStore
         throw new RunStoreError("workflow_composition_work_item_mismatch");
       const execution = this.#loadExecution(input.tenantId, input.runId);
       const node = executionNode(input, execution);
-      if (node.status !== "unknown" || node.claimId !== input.claimId ||
+      if ((node.status !== "unknown" && node.status !== "running") ||
+          node.claimId !== input.claimId ||
           node.claimEpoch !== input.claimEpoch)
         throw new RunStoreError("workflow_composition_claim_mismatch");
       const step = loadSqliteRunStep(this.#database, {
@@ -875,8 +876,18 @@ export class SqliteWorkflowRunCompositionStore
         const workflow = this.#loadWorkflow(input);
         const definition = workflow.nodes.find(
           (candidate) => candidate.nodeId === input.nodeId);
+        const inputValue = this.#loadExecutionValue(
+          input.tenantId, input.runId, "nodeInput", input.nodeId);
         const providerCheckpoint = attempt.providerCheckpoint;
         const checkpointDigest = attempt.checkpointDigest;
+        const leaseRow = this.#database.prepare(
+          `SELECT lease_expires_at_ms FROM work_items WHERE work_item_id=?`,
+        ).get(input.lease.workItemId) as
+          { lease_expires_at_ms: number | null } | undefined;
+        const expectedAgentVersionId = definition?.kind === "agent"
+          ? definition.agentVersionId
+          : definition?.kind === "verification"
+            ? definition.verifierAgentVersionId : null;
         if (providerCheckpoint === null || checkpointDigest === null ||
             this.#digester.sha256(canonicalJson(providerCheckpoint)) !== checkpointDigest ||
             (dispatch !== null &&
@@ -887,17 +898,26 @@ export class SqliteWorkflowRunCompositionStore
                 dispatch.provider.adapterName !== providerCheckpoint.adapterName ||
                 dispatch.provider.adapterVersion !== providerCheckpoint.adapterVersion ||
                 dispatch.provider.modelId !== providerCheckpoint.modelId)) ||
-            definition === undefined || definition.kind === "humanGate")
+            definition === undefined || definition.kind === "humanGate" ||
+            node.agentVersionId !== expectedAgentVersionId ||
+            inputValue === null || inputValue.valueDigest !== node.inputDigest ||
+            leaseRow?.lease_expires_at_ms === null ||
+            leaseRow?.lease_expires_at_ms === undefined ||
+            leaseRow.lease_expires_at_ms <= nowMs)
           throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
         const resumed = takeOverSqliteWorkflowContinuation(this.#database, {
           priorAuthority: authority,
           reconciliationLease: input.lease,
           checkpoint,
+          execution: execution!,
+          nodeInputDigest: inputValue.valueDigest,
           dispatch: dispatch?.status === "responseObserved"
             ? { ...dispatch, status: "responseObserved" as const }
             : dispatch?.status === "prepared"
               ? { ...dispatch, status: "prepared" as const }
             : { ...latestDispatch!, status: "terminal" as const },
+          reconciliationLeaseExpiresAt:
+            new Date(leaseRow.lease_expires_at_ms).toISOString(),
           resumedAt: now,
         });
         const result = {
@@ -911,7 +931,7 @@ export class SqliteWorkflowRunCompositionStore
             reconciliationLease: input.lease,
             continuation: resumed.continuation,
           },
-          execution: execution!, handoff: {
+          execution: resumed.execution, handoff: {
             currentWorkItem: "retained" as const,
             nextWorkItemId: null, kind: "none" as const },
           runDisposition: "nonTerminal" as const,
@@ -919,6 +939,13 @@ export class SqliteWorkflowRunCompositionStore
         this.#database.exec("COMMIT");
         return structuredClone(result);
       }
+      const resumedRetrieval = node.status === "running" &&
+        dispatch?.status === "responseObserved" && checkpoint !== null &&
+        checkpoint.activeDispatch === null && checkpoint.terminalCandidate === null &&
+        attempt.workItemId === input.lease.workItemId &&
+        attempt.leaseEpoch === input.lease.leaseEpoch;
+      if (node.status === "running" && !resumedRetrieval)
+        throw new RunStoreError("workflow_composition_claim_mismatch");
       if (dispatch?.status === "responseObserved") {
         const candidate = checkpoint?.terminalCandidate ?? null;
         const workflow = this.#loadWorkflow(input);
@@ -1219,7 +1246,12 @@ export class SqliteWorkflowRunCompositionStore
         throw new RunStoreError("workflow_composition_work_item_mismatch");
       const execution = this.#loadExecution(input.tenantId, input.runId);
       const node = executionNode(input, execution);
-      if (node.status !== "unknown" || node.agentVersionId !== input.agentVersionId)
+      const resumedAuthority = node.status === "running" &&
+        input.attempt.workItemId === input.lease.workItemId &&
+        input.attempt.leaseEpoch === input.lease.leaseEpoch;
+      if ((node.status !== "unknown" && !resumedAuthority) ||
+          node.claimId !== input.claimId || node.claimEpoch !== input.claimEpoch ||
+          node.agentVersionId !== input.agentVersionId)
         throw new RunStoreError("workflow_reconciliation_evidence_corrupt");
       const authority = {
         tenantId: input.tenantId, runId: input.runId,

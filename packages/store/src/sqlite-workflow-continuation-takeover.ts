@@ -4,6 +4,7 @@ import {
   validateWorkflowNodeContinuationCheckpoint,
   type WorkItemLeaseInput,
   type WorkflowAgentAttemptAuthority,
+  type WorkflowExecutionState,
   type WorkflowNodeContinuationCheckpoint,
 } from "@crewon/application";
 import type { ModelDispatchReceipt, RunAttemptState } from "@crewon/domain";
@@ -14,6 +15,7 @@ import {
   terminateSqliteModelDispatchForAttempt,
 } from "./sqlite-model-dispatch-evidence.ts";
 import { stableJson } from "./store-invariants.ts";
+import { validateWorkflowExecutionState } from "./workflow-execution-state.ts";
 
 export function takeOverSqliteWorkflowContinuation(
   database: DatabaseSync,
@@ -21,13 +23,17 @@ export function takeOverSqliteWorkflowContinuation(
     priorAuthority: WorkflowAgentAttemptAuthority;
     reconciliationLease: WorkItemLeaseInput;
     checkpoint: WorkflowNodeContinuationCheckpoint;
+    execution: WorkflowExecutionState;
+    nodeInputDigest: string;
     dispatch: ModelDispatchReceipt &
       Readonly<{ status: "prepared" | "responseObserved" | "terminal" }>;
+    reconciliationLeaseExpiresAt: string;
     resumedAt: string;
   }>,
 ): Readonly<{
   attempt: RunAttemptState & Readonly<{ status: "running" }>;
   continuation: WorkflowNodeContinuationCheckpoint;
+  execution: WorkflowExecutionState;
 }> {
   const { checkpoint, dispatch, priorAuthority } = input;
   const activeDispatch = checkpoint.activeDispatch;
@@ -44,6 +50,23 @@ export function takeOverSqliteWorkflowContinuation(
         dispatch.operation !== "dispatch" ||
         dispatch.workItemId !== priorAuthority.workItemId ||
         dispatch.leaseEpoch !== priorAuthority.leaseEpoch)
+  ) {
+    corrupt();
+  }
+  const executionNode = input.execution.nodes.find(
+    (candidate) => candidate.nodeId === priorAuthority.nodeId,
+  );
+  if (
+    input.execution.tenantId !== priorAuthority.tenantId ||
+    input.execution.runId !== priorAuthority.runId ||
+    executionNode === undefined ||
+    (executionNode.status !== "unknown" &&
+      executionNode.status !== "running") ||
+    executionNode.kind !== priorAuthority.nodeKind ||
+    executionNode.claimId !== priorAuthority.claimId ||
+    executionNode.claimEpoch !== priorAuthority.claimEpoch ||
+    executionNode.agentVersionId !== priorAuthority.agentVersionId ||
+    executionNode.inputDigest !== input.nodeInputDigest
   ) {
     corrupt();
   }
@@ -114,11 +137,13 @@ export function takeOverSqliteWorkflowContinuation(
   }
   if (
     attempt.workItemId === input.reconciliationLease.workItemId &&
-    attempt.leaseEpoch === input.reconciliationLease.leaseEpoch
+    attempt.leaseEpoch === input.reconciliationLease.leaseEpoch &&
+    executionNode.status === "running"
   ) {
     return {
       attempt: { ...attempt, status: "running" },
       continuation: checkpoint,
+      execution: input.execution,
     };
   }
   const resumedAttempt = {
@@ -178,9 +203,40 @@ export function takeOverSqliteWorkflowContinuation(
       checkpoint.revision,
     );
   if (checkpointUpdate.changes !== 1) corrupt();
+  const execution = {
+    ...input.execution,
+    revision: input.execution.revision + 1,
+    nodes: input.execution.nodes.map((candidate) =>
+      candidate.nodeId === priorAuthority.nodeId
+        ? {
+            ...candidate,
+            status: "running" as const,
+            leaseExpiresAt: input.reconciliationLeaseExpiresAt,
+          }
+        : candidate,
+    ),
+    updatedAt: input.resumedAt,
+  };
+  validateWorkflowExecutionState(execution);
+  const executionUpdate = database
+    .prepare(
+      `UPDATE workflow_executions SET revision=?,state_json=?,updated_at=?
+       WHERE tenant_id=? AND run_id=? AND revision=? AND state_json=?`,
+    )
+    .run(
+      execution.revision,
+      stableJson(execution),
+      execution.updatedAt,
+      execution.tenantId,
+      execution.runId,
+      input.execution.revision,
+      stableJson(input.execution),
+    );
+  if (executionUpdate.changes !== 1) corrupt();
   return {
     attempt: { ...resumedAttempt, status: "running" },
     continuation,
+    execution,
   };
 }
 

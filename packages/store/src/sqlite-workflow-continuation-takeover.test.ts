@@ -6,10 +6,12 @@ import test from "node:test";
 import {
   canonicalJson,
   RunStoreError,
+  type WorkflowExecutionState,
   type WorkflowNodeContinuationCheckpoint,
 } from "@crewon/application";
 import {
   compileWorkflowVersion,
+  createWorkflowNodeTerminalEvidence,
   serializeCompiledWorkflowVersion,
   type RunState,
   type WorkflowVersionSource,
@@ -81,6 +83,7 @@ const binding = {
 test("SQLite reconciliation atomically adopts a durable nonterminal continuation", async () => {
   const fixture = await continuationFixture();
   const beforeEventCount = count(fixture.database, "run_events");
+  const beforeExecution = storedExecution(fixture.database);
   const result = await fixture.store.reconcileWorkflowNode(
     fixture.reconcileInput,
   );
@@ -115,6 +118,13 @@ test("SQLite reconciliation atomically adopts a durable nonterminal continuation
   assert.equal(resumed.resume.continuation.activeDispatch, null);
   assert.equal(resumed.resume.continuation.terminalCandidate, null);
   assert.equal(resumed.resume.continuation.revision, 2);
+  assert.equal(resumed.execution.revision, beforeExecution.revision + 1);
+  assert.deepEqual(resumed.execution.nodes[0], {
+    ...beforeExecution.nodes[0],
+    status: "running",
+    leaseExpiresAt: new Date(nowMs + 60_000).toISOString(),
+  });
+  assert.deepEqual(storedExecution(fixture.database), resumed.execution);
   assert.equal(count(fixture.database, "run_events"), beforeEventCount);
   assert.deepEqual(dispatchState(fixture), {
     status: "terminal",
@@ -136,6 +146,10 @@ test("SQLite reconciliation atomically adopts a durable nonterminal continuation
     fixture.reconcileInput,
   );
   assert.equal(replay.disposition, "resumeRequired");
+  assert.equal(
+    requireResume(replay).execution.revision,
+    resumed.execution.revision,
+  );
   assert.equal(storedContinuation(fixture.database).revision, 2);
   assert.deepEqual(dispatchState(fixture), {
     status: "terminal",
@@ -146,15 +160,25 @@ test("SQLite reconciliation atomically adopts a durable nonterminal continuation
       certainty: "responseObserved",
     },
   });
+  const { revision, updatedAt, terminalCandidate, ...next } =
+    resumed.resume.continuation;
+  const committed = await fixture.store.commitWorkflowAssistantContinuation({
+    lease: fixture.reconcileInput.lease,
+    authority: resumed.resume.continuation.authority,
+    expectedContinuationRevision: revision,
+    next,
+    committedAt: updatedAt,
+    terminalResult: null,
+  });
+  assert.equal(terminalCandidate, null);
+  assert.equal(committed.revision, revision + 1);
   fixture.database.close();
 });
 
 test("SQLite re-adopts a continuation after adoption crashes before the next model request", async () => {
   const fixture = await continuationFixture();
-  assert.equal(
-    (await fixture.store.reconcileWorkflowNode(fixture.reconcileInput))
-      .disposition,
-    "resumeRequired",
+  const first = requireResume(
+    await fixture.store.reconcileWorkflowNode(fixture.reconcileInput),
   );
   fixture.database
     .prepare(
@@ -182,6 +206,8 @@ test("SQLite re-adopts a continuation after adoption crashes before the next mod
   );
   assert.equal(result.resume.attempt.leaseEpoch, 2);
   assert.equal(result.resume.continuation.revision, 3);
+  assert.equal(result.execution.revision, first.execution.revision + 1);
+  assert.equal(result.execution.nodes[0]?.status, "running");
   assert.equal(result.resume.continuation.activeDispatch, null);
   assert.deepEqual(result.resume.continuation.history, fixture.history);
   assert.deepEqual(dispatchState(fixture), {
@@ -194,8 +220,9 @@ test("SQLite re-adopts a continuation after adoption crashes before the next mod
     },
   });
   assert.equal(
-    (await fixture.store.reconcileWorkflowNode(reclaimedInput)).disposition,
-    "resumeRequired",
+    requireResume(await fixture.store.reconcileWorkflowNode(reclaimedInput))
+      .execution.revision,
+    result.execution.revision,
   );
   assert.equal(storedContinuation(fixture.database).revision, 3);
   fixture.database.close();
@@ -264,11 +291,114 @@ test("SQLite consumes a prepared next sample before re-adopting its continuation
   fixture.database.close();
 });
 
-test("SQLite continuation takeover rolls every authority back at the checkpoint crash boundary", async () => {
+test("SQLite settles a retrieved sample after continuation takeover restored running authority", async () => {
   const fixture = await continuationFixture();
+  const resumed = requireResume(
+    await fixture.store.reconcileWorkflowNode(fixture.reconcileInput),
+  );
+  const providerCheckpoint = {
+    schemaVersion: "crewon.provider-checkpoint.v0" as const,
+    adapterName: "responses",
+    adapterVersion: "1",
+    modelId: "model-1",
+    opaquePayload: { responseId: "response-2" },
+  };
+  const checkpointDigest = digester.sha256(canonicalJson(providerCheckpoint));
+  const prepared = prepareSqliteModelDispatch(fixture.database, {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease: fixture.reconcileInput.lease,
+    attempt: fixture.authority.attempt,
+    operationId: "dispatch-2",
+    requestSequence: 2,
+    operation: "dispatch",
+    requestDigest: digester.sha256("request-2"),
+    provider: fixture.observed.provider,
+    preparedAt: now,
+  });
+  const sent = markSqliteModelDispatchPossiblySent(fixture.database, {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease: fixture.reconcileInput.lease,
+    attempt: fixture.authority.attempt,
+    operationId: prepared.operationId,
+    requestSequence: prepared.requestSequence,
+    expectedRevision: prepared.revision,
+    transitionedAt: now,
+  });
+  const observed = observeSqliteModelDispatchResponse(fixture.database, {
+    tenantId: "tenant-1",
+    runId: "run-1",
+    lease: fixture.reconcileInput.lease,
+    attempt: fixture.authority.attempt,
+    operationId: prepared.operationId,
+    requestSequence: prepared.requestSequence,
+    expectedRevision: sent.revision,
+    checkpointDigest,
+    transitionedAt: now,
+  });
+  checkpointSqliteRunAttempt(
+    fixture.database,
+    { tenantId: "tenant-1", runId: "run-1", ...fixture.authority.attempt },
+    fixture.reconcileInput.lease.workItemId,
+    fixture.reconcileInput.lease.leaseEpoch,
+    providerCheckpoint,
+    checkpointDigest,
+    now,
+    "replace",
+  );
+
+  const retrieval = await fixture.store.reconcileWorkflowNode(
+    fixture.reconcileInput,
+  );
+  assert.equal(retrieval.disposition, "retrieveRequired");
+  if (retrieval.disposition !== "retrieveRequired")
+    assert.fail("retrieve required");
+  assert.equal(retrieval.execution.nodes[0]?.status, "running");
+  assert.equal(
+    retrieval.recovery.attempt.workItemId,
+    fixture.reconcileInput.lease.workItemId,
+  );
+  const evidence = createWorkflowNodeTerminalEvidence({
+    workflow,
+    nodeId: fixture.work.nodeId,
+    outcome: { status: "completed", value: {} },
+    digester,
+  });
+  const settled = await fixture.store.settleRetrievedWorkflowNode({
+    ...fixture.reconcileInput,
+    agentVersionId: "agent-v1",
+    attempt: {
+      stepId: fixture.authority.attempt.stepId,
+      attemptId: fixture.authority.attempt.attemptId,
+      workItemId: fixture.reconcileInput.lease.workItemId,
+      leaseEpoch: fixture.reconcileInput.lease.leaseEpoch,
+    },
+    dispatch: {
+      operationId: observed.operationId,
+      requestSequence: observed.requestSequence,
+      expectedRevision: observed.revision,
+      status: "responseObserved",
+    },
+    evidence,
+    dispatchTerminalOutcome: {
+      kind: "completed",
+      code: null,
+      certainty: "responseObserved",
+    },
+  });
+  assert.equal(settled.disposition, "settled");
+  assert.equal(settled.execution.nodes[0]?.status, "completed");
+  assert.equal(resumed.execution.nodes[0]?.status, "running");
+  fixture.database.close();
+});
+
+test("SQLite continuation takeover rolls every authority back at the execution crash boundary", async () => {
+  const fixture = await continuationFixture();
+  const beforeExecution = storedExecution(fixture.database);
   fixture.database.exec(`CREATE TRIGGER fail_continuation_takeover
-    BEFORE UPDATE ON workflow_node_continuations
-    BEGIN SELECT RAISE(ABORT, 'checkpoint-crash'); END`);
+    BEFORE UPDATE ON workflow_executions
+    BEGIN SELECT RAISE(ABORT, 'execution-crash'); END`);
 
   await assert.rejects(
     fixture.store.reconcileWorkflowNode(fixture.reconcileInput),
@@ -276,7 +406,7 @@ test("SQLite continuation takeover rolls every authority back at the checkpoint 
       error instanceof RunStoreError &&
       error.code === "workflow_composition_store_failed" &&
       error.cause instanceof Error &&
-      error.cause.message === "checkpoint-crash",
+      error.cause.message === "execution-crash",
   );
   assert.deepEqual(dispatchState(fixture), {
     status: "responseObserved",
@@ -287,6 +417,7 @@ test("SQLite continuation takeover rolls every authority back at the checkpoint 
     workItemId: fixture.authority.workItemId,
     leaseEpoch: fixture.authority.leaseEpoch,
   });
+  assert.deepEqual(storedExecution(fixture.database), beforeExecution);
   const checkpoint = storedContinuation(fixture.database);
   assert.equal(checkpoint.revision, 1);
   assert.deepEqual(checkpoint.authority, fixture.authority);
@@ -707,6 +838,7 @@ function runState(): RunState {
 function requireResume(result: unknown) {
   const value = result as {
     disposition: string;
+    execution: WorkflowExecutionState;
     resume: {
       claim: unknown;
       attempt: { workItemId: string; leaseEpoch: number; status: string };
@@ -716,6 +848,13 @@ function requireResume(result: unknown) {
   };
   assert.equal(value.disposition, "resumeRequired");
   return value;
+}
+
+function storedExecution(database: DatabaseSync): WorkflowExecutionState {
+  const row = database
+    .prepare("SELECT state_json FROM workflow_executions WHERE run_id='run-1'")
+    .get() as { state_json: string };
+  return JSON.parse(row.state_json) as WorkflowExecutionState;
 }
 
 function storedContinuation(

@@ -65,7 +65,12 @@ export function settleSqliteWorkflowNodeModelTerminalWithinTransaction(
     dispatch.status !== input.dispatch.status ||
     dispatch.provider.agentVersionId !== input.authority.agentVersionId
   ) mismatch();
-  validateContinuation(context, input, dispatch.responseCheckpointDigest);
+  validateContinuation(
+    context,
+    input,
+    dispatch.responseCheckpointDigest,
+    source,
+  );
   const terminalInput = {
     tenantId: input.authority.tenantId,
     runId: input.authority.runId,
@@ -156,8 +161,12 @@ function validateInputAuthority(
     ...authority.attempt,
   });
   if (node === undefined) mismatch();
+  const reconciliationNodeAuthority = node.status === "unknown" ||
+    (node.status === "running" &&
+      input.lease.workItemId === authority.workItemId &&
+      input.lease.leaseEpoch === authority.leaseEpoch);
   if (
-    (source === "liveNode" ? node?.status !== "running" : node?.status !== "unknown") ||
+    (source === "liveNode" ? node.status !== "running" : !reconciliationNodeAuthority) ||
     node.kind !== authority.nodeKind ||
     node.claimId !== authority.claimId ||
     node.claimEpoch !== authority.claimEpoch ||
@@ -219,6 +228,7 @@ function validateContinuation(
   context: SqliteWorkflowNodeSettlementContext,
   input: SettleWorkflowNodeModelTerminalInput,
   checkpointDigest: string | null,
+  source: "liveNode" | "reconciliation",
 ): void {
   const row = context.database.prepare(
     `SELECT checkpoint_json FROM workflow_node_continuations
@@ -235,14 +245,21 @@ function validateContinuation(
       tenantId: input.authority.tenantId, runId: input.authority.runId,
       ...input.authority.attempt,
     });
+    const resumedRetrieval = source === "reconciliation" &&
+      input.authority.workItemId === input.lease.workItemId &&
+      input.authority.leaseEpoch === input.lease.leaseEpoch &&
+      checkpoint.activeDispatch === null && checkpoint.terminalCandidate === null &&
+      input.dispatch.status === "responseObserved";
+    const checkpointedDispatch = checkpoint.activeDispatch !== null &&
+      checkpoint.activeDispatch.operationId === input.dispatch.operationId &&
+      checkpoint.activeDispatch.requestSequence === input.dispatch.requestSequence &&
+      checkpoint.activeDispatch.expectedRevision === input.dispatch.expectedRevision &&
+      checkpoint.activeDispatch.status === input.dispatch.status &&
+      (checkpointDigest === null ||
+        checkpoint.activeDispatch.status === "responseObserved");
     if (stableJson(checkpoint.authority) !== stableJson(input.authority) ||
-        checkpoint.activeDispatch?.operationId !== input.dispatch.operationId ||
-        checkpoint.activeDispatch.requestSequence !== input.dispatch.requestSequence ||
-        checkpoint.activeDispatch.expectedRevision !== input.dispatch.expectedRevision ||
-        checkpoint.activeDispatch.status !== input.dispatch.status ||
         attempt?.providerTurnState !== checkpoint.providerTurnState ||
-        (checkpointDigest !== null &&
-          checkpoint.activeDispatch.status !== "responseObserved")) mismatch();
+        (!resumedRetrieval && !checkpointedDispatch)) mismatch();
   } catch (error) {
     if (error instanceof RunStoreError) throw error;
     mismatch();
@@ -437,6 +454,22 @@ function validSettlementWorkItemPayload(
   if (stableJson(value) === stableJson(nodePayload)) return true;
   if (typeof value !== "object" || value === null) return false;
   const payload = value as Record<string, unknown>;
+  if (
+    authority.workItemId === input.lease.workItemId &&
+    authority.leaseEpoch === input.lease.leaseEpoch &&
+    stableJson(Object.keys(payload).sort()) === stableJson([
+      "binding", "claimEpoch", "claimId", "nodeId",
+      "reconciliationOperationId", "schemaVersion", "trigger",
+    ]) &&
+    payload.schemaVersion === "crewon.workflow-reconcile-work-item.v0" &&
+    payload.trigger === "workflowReconcile" &&
+    stableJson(payload.binding) === stableJson(input.binding) &&
+    payload.nodeId === authority.nodeId &&
+    payload.claimId === authority.claimId &&
+    payload.claimEpoch === authority.claimEpoch &&
+    typeof payload.reconciliationOperationId === "string" &&
+    payload.reconciliationOperationId.length > 0
+  ) return true;
   const handoff = context.database
     .prepare(
       `SELECT approval_id,action_digest,receipt_id,node_id,claim_id,claim_epoch,
