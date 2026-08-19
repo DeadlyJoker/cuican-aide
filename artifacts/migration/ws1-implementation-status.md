@@ -79,7 +79,9 @@
   原子写入 `failed/operatorRequired` dispatch、failed Node/Step/Attempt、completed reconcile WorkItem、节点事件/outbox 与
   composition receipt，并向 Worker 投影公开 code `workflow_model_dispatch_operator_required`；Worker 不会 requeue 已完成 WorkItem。
   已持有 lease 的并行 sibling 保留独立执行权，失败分支按既有 DAG 规则收敛。取消请求仍优先写
-  `abandonedPossiblySent`。SQLite replay 深校验 receipt、dispatch、Attempt、Step、WorkItem、节点事件与 terminal Run/outbox。
+  `abandonedPossiblySent`。真实 SQLite Store+RuntimeWorker close/reopen 纵向证明 model POST=`1`、reconcile 后再次 wake=`idle`，
+  Agent/Verification、Step/Attempt、dispatch、node/reconcile WorkItem、公开 Run failure 与 terminal events 精确收敛；SQLite replay
+  深校验 receipt、dispatch、Attempt、Step、WorkItem、节点事件与 terminal Run/outbox。
 - desktop release workflow 现在同时绑定 immutable tag、`origin/main` ancestry、远端 tag/main 无漂移以及 exact commit SHA/App ID 的
   required checks；macOS/Windows 均验证实际 updater 签名后才允许上传，Windows launch smoke 还按本次 install root/app binary
   精确检测 GUI/Node/guardian orphan。确定性 release/staging/Windows process tests 为 `16/16`，YAML 与 smoke syntax 通过。
