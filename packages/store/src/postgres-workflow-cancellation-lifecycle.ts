@@ -22,10 +22,38 @@ export type PostgresCanceledWorkflowNode = Readonly<{
   operationId: string;
 }>;
 
+export type PostgresWorkflowNodeTerminal = PostgresCanceledWorkflowNode &
+  Readonly<{
+    status: "completed" | "failed" | "canceled";
+    resultDigest: string | null;
+    failureCode: string | null;
+  }>;
+
 export async function appendPostgresCanceledWorkflowNodeEvent(
   client: PoolClient,
   schema: string,
   input: PostgresCanceledWorkflowNode,
+  now: string,
+  digester: WorkflowContentDigester,
+): Promise<void> {
+  return appendPostgresWorkflowNodeTerminalEvent(
+    client,
+    schema,
+    {
+      ...input,
+      status: "canceled",
+      resultDigest: null,
+      failureCode: null,
+    },
+    now,
+    digester,
+  );
+}
+
+export async function appendPostgresWorkflowNodeTerminalEvent(
+  client: PoolClient,
+  schema: string,
+  input: PostgresWorkflowNodeTerminal,
   now: string,
   digester: WorkflowContentDigester,
 ): Promise<void> {
@@ -47,7 +75,7 @@ export async function appendPostgresCanceledWorkflowNodeEvent(
     stableJson(current.workflowVersionBinding) !== stableJson(input.binding)
   )
     throw new RunStoreError("workflow_composition_run_authority_mismatch");
-  const authority = { ...input, lifecycle: "workflow.node.terminal" };
+  const authority = terminalAuthority(input);
   const eventId = workflowAuthorityId("run-event", authority, digester);
   const event = {
     schemaVersion: "crewon.run-event.v0" as const,
@@ -63,9 +91,9 @@ export async function appendPostgresCanceledWorkflowNodeEvent(
       claimEpoch: input.claimEpoch,
       stepId: input.nodeId,
       attemptId: input.attemptId,
-      status: "canceled" as const,
-      resultDigest: null,
-      failureCode: null,
+      status: input.status,
+      resultDigest: input.resultDigest,
+      failureCode: input.failureCode,
     },
   };
   const next = reduceRunLifecycleEvent(current, event);
@@ -167,4 +195,84 @@ export async function validatePostgresCanceledWorkflowNodeEvent(
       createdAt: storedEvent.occurredAt })
   )
     throw new RunStoreError("workflow_cancellation_replay_corrupt");
+}
+
+export async function validatePostgresWorkflowNodeTerminalEvent(
+  client: PoolClient,
+  schema: string,
+  input: PostgresWorkflowNodeTerminal,
+  digester: WorkflowContentDigester,
+): Promise<void> {
+  const authority = terminalAuthority(input);
+  const eventId = workflowAuthorityId("run-event", authority, digester);
+  const messageId = workflowAuthorityId("run-outbox", authority, digester);
+  const [event, outbox] = await Promise.all([
+    client.query<{ sequence: number | string;
+      event_json: Record<string, unknown> }>(
+      `SELECT sequence,event_json FROM ${schema}.run_events
+       WHERE tenant_id=$1 AND run_id=$2 AND event_id=$3`,
+      [input.tenantId, input.runId, eventId],
+    ),
+    client.query<{ tenant_id: string; run_id: string; topic: string;
+      message_json: Record<string, unknown> }>(
+      `SELECT tenant_id,run_id,topic,message_json
+       FROM ${schema}.outbox WHERE message_id=$1`,
+      [messageId],
+    ),
+  ]);
+  const eventRow = event.rows[0];
+  const outboxRow = outbox.rows[0];
+  const storedEvent = eventRow?.event_json;
+  const sequence = Number(eventRow?.sequence);
+  const expectedData = {
+    binding: input.binding,
+    nodeId: input.nodeId,
+    claimId: input.claimId,
+    claimEpoch: input.claimEpoch,
+    stepId: input.nodeId,
+    attemptId: input.attemptId,
+    status: input.status,
+    resultDigest: input.resultDigest,
+    failureCode: input.failureCode,
+  };
+  const expectedMessage = {
+    messageId,
+    tenantId: input.tenantId,
+    runId: input.runId,
+    topic: "run.updated",
+    payload: {
+      eventId,
+      eventType: "workflow.node.terminal",
+      throughSequence: sequence,
+    },
+    createdAt: storedEvent?.occurredAt,
+  };
+  if (
+    event.rows.length !== 1 ||
+    outbox.rows.length !== 1 ||
+    storedEvent?.schemaVersion !== "crewon.run-event.v0" ||
+    (storedEvent.identity as Record<string, unknown> | undefined)?.runId !== input.runId ||
+    storedEvent.eventId !== eventId ||
+    storedEvent.sequence !== sequence ||
+    storedEvent.type !== "workflow.node.terminal" ||
+    stableJson(storedEvent.data) !== stableJson(expectedData) ||
+    outboxRow?.tenant_id !== input.tenantId ||
+    outboxRow.run_id !== input.runId ||
+    outboxRow.topic !== "run.updated" ||
+    stableJson(outboxRow.message_json) !== stableJson(expectedMessage)
+  )
+    throw new RunStoreError("workflow_node_terminal_lifecycle_corrupt");
+}
+
+function terminalAuthority(input: PostgresWorkflowNodeTerminal) {
+  const {
+    status: _status,
+    resultDigest: _resultDigest,
+    failureCode: _failureCode,
+    ...authority
+  } = input;
+  return {
+    ...authority,
+    lifecycle: "workflow.node.terminal",
+  };
 }

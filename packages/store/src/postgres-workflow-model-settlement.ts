@@ -52,6 +52,7 @@ export async function settlePostgresWorkflowNodeModelTerminal(
     schema,
     scope,
     digester,
+    true,
   );
   const evidence = validateWorkflowNodeTerminalEvidence({
     workflow,

@@ -38,7 +38,11 @@ import {
   validatePostgresWorkflowLease,
   writePostgresWorkflowExecution,
 } from "./postgres-workflow-run-composition-transactions.ts";
-import { appendPostgresCanceledWorkflowNodeEvent } from "./postgres-workflow-cancellation-lifecycle.ts";
+import {
+  appendPostgresCanceledWorkflowNodeEvent,
+  appendPostgresWorkflowNodeTerminalEvent,
+  validatePostgresWorkflowNodeTerminalEvent,
+} from "./postgres-workflow-cancellation-lifecycle.ts";
 import { insertPostgresCanceledWorkflowStep } from "./postgres-workflow-cancellation.ts";
 type Input = Parameters<WorkflowRunCompositionStore["settleWorkflowNode"]>[0];
 type Result = Awaited<
@@ -167,6 +171,27 @@ export async function settlePostgresWorkflowNode(
       attempt: terminalAttempt(
         input, now, model?.attemptCheckpointDigest ?? null),
     });
+  if (input.outcome.status !== "unknown")
+    await appendPostgresWorkflowNodeTerminalEvent(
+      client,
+      schema,
+      {
+        tenantId: input.tenantId,
+        runId: input.runId,
+        binding: input.binding,
+        nodeId: input.nodeId,
+        claimId: input.claimId,
+        claimEpoch: input.claimEpoch,
+        attemptId: input.attemptId,
+        operationId: input.operationId,
+        status: input.outcome.status,
+        resultDigest: resultDigest ?? null,
+        failureCode: input.outcome.status === "failed"
+          ? input.outcome.failureCode : null,
+      },
+      now,
+      digester,
+    );
   for (const blocked of next.nodes) {
     if (
       blocked.status === "canceled" &&
@@ -314,6 +339,7 @@ async function validateReplay(
     schema,
     input,
     digester,
+    true,
   );
   validateWorkflowExecutionState(result.execution);
   assertExecutionBinding(
@@ -360,6 +386,31 @@ async function validateReplay(
           ?.resultDigest
     )
       replayCorrupt();
+  }
+  if (input.outcome.status !== "unknown") {
+    const node = result.execution.nodes.find(
+      (candidate) => candidate.nodeId === input.nodeId,
+    );
+    await validatePostgresWorkflowNodeTerminalEvent(
+      client,
+      schema,
+      {
+        tenantId: input.tenantId,
+        runId: input.runId,
+        binding: input.binding,
+        nodeId: input.nodeId,
+        claimId: input.claimId,
+        claimEpoch: input.claimEpoch,
+        attemptId: input.attemptId,
+        operationId: input.operationId,
+        status: input.outcome.status,
+        resultDigest: input.outcome.status === "completed"
+          ? node?.resultDigest ?? null : null,
+        failureCode: input.outcome.status === "failed"
+          ? input.outcome.failureCode : null,
+      },
+      digester,
+    );
   }
   if (result.runDisposition === "terminalConverged")
     await validatePostgresTerminalWorkflowRun(
@@ -683,7 +734,7 @@ async function validateReplayHandoff(
     row === undefined ||
     row.tenant_id !== input.tenantId ||
     row.run_id !== input.runId ||
-    row.status !== "pending"
+    !["pending", "leased", "completed"].includes(row.status)
   )
     replayCorrupt();
   const payload =
