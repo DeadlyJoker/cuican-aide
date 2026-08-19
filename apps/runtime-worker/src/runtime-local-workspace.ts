@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, open, readdir, realpath } from "node:fs/promises";
+import { open, readdir, realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
+import { platform } from "node:process";
 
 import type {
   WorkspaceDeliveryLease,
@@ -213,20 +214,27 @@ async function readBoundedLocalFile(
   const relativePath = relative(canonicalRoot, candidate);
   if (relativePath.startsWith("..") || isAbsolute(relativePath))
     throw readError("workspace_read_path_invalid", "notSent");
-  let current = canonicalRoot;
-  for (const segment of segments) {
-    current = resolve(current, segment);
-    if ((await lstat(current)).isSymbolicLink())
-      throw readError("workspace_read_link_unsupported", "notSent");
-  }
   const flags = constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0);
-  const handle = await open(candidate, flags);
+  let handle;
+  try {
+    handle = await open(candidate, flags);
+  } catch (error) {
+    if (isNodeError(error, "ELOOP"))
+      throw readError("workspace_read_link_unsupported", "notSent", error);
+    throw readError("workspace_read_failed", "notSent", error);
+  }
   try {
     const stats = await handle.stat();
     if (!stats.isFile()) throw readError("workspace_read_not_file", "notSent");
-    if (stats.size > maximumBytes)
-      throw readError("workspace_read_output_too_large", "notSent");
-    const bytes = await handle.readFile();
+    const openedPath = await openedFilePath(handle.fd, candidate, stats);
+    const openedRelativePath = relative(canonicalRoot, openedPath);
+    if (
+      openedRelativePath === "" ||
+      openedRelativePath.startsWith("..") ||
+      isAbsolute(openedRelativePath)
+    )
+      throw readError("workspace_read_link_unsupported", "notSent");
+    const bytes = await readAtMost(handle, maximumBytes, signal);
     if (signal.aborted)
       throw readError("workspace_read_aborted", "possiblySent");
     return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
@@ -236,6 +244,55 @@ async function readBoundedLocalFile(
   } finally {
     await handle.close();
   }
+}
+
+async function openedFilePath(
+  fd: number,
+  candidate: string,
+  openedStats: Awaited<ReturnType<Awaited<ReturnType<typeof open>>["stat"]>>,
+): Promise<string> {
+  try {
+    if (platform === "linux") return await realpath(`/proc/self/fd/${fd}`);
+    const resolvedCandidate = await realpath(candidate);
+    const currentStats = await stat(resolvedCandidate);
+    if (
+      currentStats.dev !== openedStats.dev ||
+      currentStats.ino !== openedStats.ino
+    )
+      throw readError("workspace_read_handle_changed", "notSent");
+    return resolvedCandidate;
+  } catch (error) {
+    if (error instanceof RuntimeWorkspaceError) throw error;
+    throw readError("workspace_read_handle_unverifiable", "notSent", error);
+  }
+}
+
+async function readAtMost(
+  handle: Awaited<ReturnType<typeof open>>,
+  maximumBytes: number,
+  signal: AbortSignal,
+): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  let total = 0;
+  while (total <= maximumBytes) {
+    if (signal.aborted)
+      throw readError("workspace_read_aborted", "possiblySent");
+    const remaining = maximumBytes + 1 - total;
+    const chunk = Buffer.allocUnsafe(Math.min(64 * 1024, remaining));
+    const { bytesRead } = await handle.read(chunk, 0, chunk.length, total);
+    if (bytesRead === 0) return Buffer.concat(chunks, total);
+    chunks.push(chunk.subarray(0, bytesRead));
+    total += bytesRead;
+  }
+  throw readError("workspace_read_output_too_large", "notSent");
+}
+
+function isNodeError(error: unknown, code: string): boolean {
+  return (
+    error instanceof Error &&
+    "code" in error &&
+    (error as NodeJS.ErrnoException).code === code
+  );
 }
 
 function requireAbsoluteRoot(value: string) {

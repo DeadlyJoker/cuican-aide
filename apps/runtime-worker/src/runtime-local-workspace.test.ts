@@ -93,6 +93,44 @@ test("local Workspace read is replayable and rejects symbolic-link escape", asyn
     ),
     /workspace_read_link_unsupported/u,
   );
+
+  const outside = await workspace(context);
+  await writeFile(join(outside, "secret.txt"), "outside secret");
+  await mkdir(join(root, "nested"));
+  symlinkSync(outside, join(root, "nested", "escape"));
+  await assert.rejects(
+    workspaceRead.execute(
+      {
+        ...command,
+        executionId: "filesystem-read-intermediate-symlink",
+        relativePathSegments: ["nested", "escape", "secret.txt"],
+      },
+      new AbortController().signal,
+    ),
+    /workspace_read_link_unsupported/u,
+  );
+});
+
+test("local Workspace read never buffers beyond its output limit", async (context) => {
+  const root = await workspace(context);
+  await mkdir(join(root, "docs"));
+  await writeFile(join(root, "docs", "README.md"), "x".repeat(65));
+  const workspaceRead = new LocalWorkspaceReadAuthority({ root, authority });
+
+  await assert.rejects(
+    workspaceRead.execute(
+      {
+        ...readCommand(),
+        executionId: "filesystem-read-too-large",
+        limits: {
+          ...readCommand().limits,
+          maxOutputBytes: 64,
+        },
+      },
+      new AbortController().signal,
+    ),
+    /workspace_read_output_too_large/u,
+  );
 });
 
 async function workspace(context: TestContext) {
