@@ -3,7 +3,6 @@ import type { CommandShellView } from "./commandWorkspaceState";
 const shellViewIds: readonly CommandShellView[] = [
   "command",
   "assist",
-  "projects",
   "agents",
   "knowledge",
   "team",

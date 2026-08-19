@@ -82,11 +82,23 @@ describe("command Workspace hash routing", () => {
   });
 
   it("keeps ordinary shell hashes local and canonicalizes catalog views", () => {
-    expect(commandShellViewFromHash("#view-assist")).toBe("assist");
-    expect(commandShellViewFromHash("#view-team")).toBe("team");
-    expect(commandShellViewFromHash("#view-agents")).toBe("command");
-    expect(commandShellViewFromHash("#view-knowledge")).toBe("command");
-    expect(commandShellViewFromHash("#view-unknown")).toBe("command");
+    expect({
+      agents: commandShellViewFromHash("#view-agents"),
+      assist: commandShellViewFromHash("#view-assist"),
+      knowledge: commandShellViewFromHash("#view-knowledge"),
+      projects: commandShellViewFromHash("#view-projects"),
+      team: commandShellViewFromHash("#view-team"),
+      unknown: commandShellViewFromHash("#view-unknown"),
+    }).toMatchInlineSnapshot(`
+      {
+        "agents": "command",
+        "assist": "assist",
+        "knowledge": "command",
+        "projects": "command",
+        "team": "team",
+        "unknown": "command",
+      }
+    `);
   });
 
   it("canonicalizes an in-app catalog selection before opening Control", () => {
