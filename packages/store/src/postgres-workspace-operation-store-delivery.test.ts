@@ -153,7 +153,11 @@ if (connectionString !== undefined) {
       try {
         assert.deepEqual(
           await store.loadWorkspaceOperationReceipt(receiptQuery("execute")),
-          { disposition: "replayed", operation: prepared.operation },
+          {
+            disposition: "replayed",
+            operation: prepared.operation,
+            deliveryAttempt: prepared.deliveryAttempt,
+          },
         );
       } finally {
         await blocker.query("COMMIT");
@@ -343,6 +347,7 @@ if (connectionString !== undefined) {
       assert.deepEqual(await store.loadWorkspaceOperationReceipt(query), {
         disposition: "replayed",
         operation: input.operation,
+        deliveryAttempt: null,
       });
       const migration = await store.admin.query<{ version: number }>(
         `SELECT version FROM ${store.quotedSchema}.schema_migrations

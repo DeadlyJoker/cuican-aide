@@ -168,6 +168,7 @@ if (connectionString !== undefined) {
       assert.deepEqual(await loader, {
         disposition: "replayed",
         operation: committed.operation,
+        deliveryAttempt: committed.deliveryAttempt,
       });
     } finally {
       await store.close();
@@ -332,11 +333,19 @@ if (connectionString !== undefined) {
         );
         assert.deepEqual(
           await first.loadWorkspaceOperationReceipt(receiptQuery("execute")),
-          { disposition: "replayed", operation: winnerOperation },
+          {
+            disposition: "replayed",
+            operation: winnerOperation,
+            deliveryAttempt: attempts.find(({ phase }) => phase === "execute"),
+          },
         );
         assert.deepEqual(
           await first.loadWorkspaceOperationReceipt(cancelReceipt),
-          { disposition: "replayed", operation: winnerOperation },
+          {
+            disposition: "replayed",
+            operation: winnerOperation,
+            deliveryAttempt: attempts.find(({ phase }) => phase === "cancel"),
+          },
         );
       } finally {
         await second.close();
