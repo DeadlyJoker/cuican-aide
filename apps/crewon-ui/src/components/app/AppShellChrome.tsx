@@ -16,8 +16,6 @@ type AppShellChromeProps = {
   dismissLabel: string;
   hasCapabilityPanel: boolean;
   hideSidebarLabel: string;
-  inspectorLabel: string;
-  inspectorOpen: boolean;
   languageLabel: string;
   locale: Locale;
   notice: NoticeState | null;
@@ -31,7 +29,6 @@ type AppShellChromeProps = {
   onDismissNotice: () => void;
   onLocaleChange: (locale: Locale) => void;
   onToggleCapabilityDock: () => void;
-  onToggleInspector: () => void;
   onToggleSidebar: () => void;
   onToggleTheme: () => void;
 };
@@ -44,8 +41,6 @@ export function AppShellChrome({
   dismissLabel,
   hasCapabilityPanel,
   hideSidebarLabel,
-  inspectorLabel,
-  inspectorOpen,
   languageLabel,
   locale,
   notice,
@@ -59,14 +54,12 @@ export function AppShellChrome({
   onDismissNotice,
   onLocaleChange,
   onToggleCapabilityDock,
-  onToggleInspector,
   onToggleSidebar,
   onToggleTheme,
 }: AppShellChromeProps) {
   return (
     <div
       className="app-shell"
-      data-inspector-open={inspectorOpen}
       data-right-sidebar-open={
         capabilityDockOpen && hasCapabilityPanel && appView !== "settings"
       }
@@ -75,7 +68,6 @@ export function AppShellChrome({
     >
       <TitleBar
         capabilityDockOpen={capabilityDockOpen}
-        inspectorOpen={inspectorOpen}
         locale={locale}
         platform={platform}
         sidebarOpen={sidebarOpen}
@@ -83,13 +75,11 @@ export function AppShellChrome({
         title={title}
         hideSidebarLabel={hideSidebarLabel}
         capabilityLabel={capabilityLabel}
-        inspectorLabel={inspectorLabel}
         languageLabel={languageLabel}
         showSidebarLabel={showSidebarLabel}
         themeLabel={themeLabel}
         onToggleSidebar={onToggleSidebar}
         onToggleCapabilityDock={onToggleCapabilityDock}
-        onToggleInspector={onToggleInspector}
         onLocaleChange={onLocaleChange}
         onToggleTheme={onToggleTheme}
       />

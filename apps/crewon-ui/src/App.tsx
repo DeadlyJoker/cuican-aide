@@ -96,7 +96,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   const chromeState = useAppChromeState();
   const {
     capabilityDockOpen,
-    inspectorOpen,
     setCapabilityDockOpen,
     setSidebarOpen,
     sidebarOpen,
@@ -109,7 +108,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   const threadState = useAppThreadState();
   const {
     isSearchingThreads,
-    loadedThreadIds,
     selectedThreadId,
     selectedThreadIdRef,
     setSelectedThreadId,
@@ -122,14 +120,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     threadsRef,
   } = threadState;
   const workspaceStatus = useAppWorkspaceStatusState();
-  const {
-    accountStatus,
-    busyToolId,
-    conversationSummary,
-    gitRemoteDiff,
-    threadGoal,
-    threadGoalBusy,
-  } = workspaceStatus;
+  const { busyToolId, threadGoal, threadGoalBusy } = workspaceStatus;
   const {
     connected: controlRuntimeConnected,
     rehydrateThreadAuthority: rehydrateControlThreadAuthority,
@@ -292,7 +283,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     libraryLoadRequestRef.current = requestId;
     setAppView("library");
     setCapabilityDockOpen(false);
-    chromeState.setInspectorOpen(false);
     await openControlLibraryAction({
       client: controlClient,
       kind,
@@ -471,7 +461,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     openSettingsSection,
     refreshSettingsSection,
     toggleCapabilityDock,
-    toggleInspector,
     toggleTheme,
   } = createAppShellActionHandlers({
     appView,
@@ -701,7 +690,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       appView={appView}
       capabilityDockOpen={capabilityDockOpen}
       hasCapabilityPanel={Boolean(capabilityPanel)}
-      inspectorOpen={inspectorOpen}
       locale={locale}
       notice={notice}
       platform={platform}
@@ -712,7 +700,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       onDismissNotice={() => setNotice(null)}
       onLocaleChange={changeLocale}
       onToggleCapabilityDock={toggleCapabilityDock}
-      onToggleInspector={toggleInspector}
       onToggleSidebar={() => setSidebarOpen((open) => !open)}
       onToggleTheme={toggleTheme}
     >
@@ -807,12 +794,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         capabilityDockOpen={capabilityDockOpen}
         capabilityPanel={capabilityPanel}
         disabled={!isConnected}
-        inspectorOpen={inspectorOpen}
-        loadedThreadIds={loadedThreadIds}
         locale={locale}
-        serverUrl=""
-        thread={selectedThread}
-        threadGoal={threadGoal}
         onPanelAction={handleCapabilityPanelAction}
         onPanelFieldChange={handleCapabilityPanelFieldChange}
         onPanelItem={handleComposerCapabilityPanelItem}

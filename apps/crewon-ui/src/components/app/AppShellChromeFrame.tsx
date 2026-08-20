@@ -3,10 +3,7 @@ import type { ReactNode } from "react";
 import { AppShellChrome } from "./AppShellChrome";
 import type { AppView } from "../../lib/shared/appView";
 import type { NoticeState } from "../../lib/shared/noticeState";
-import {
-  translate,
-  type Locale,
-} from "../../lib/i18n";
+import { translate, type Locale } from "../../lib/i18n";
 import type { PlatformKind } from "../../lib/platform";
 import type { Theme } from "../../lib/theme";
 
@@ -15,7 +12,6 @@ type AppShellChromeFrameProps = {
   capabilityDockOpen: boolean;
   children: ReactNode;
   hasCapabilityPanel: boolean;
-  inspectorOpen: boolean;
   locale: Locale;
   notice: NoticeState | null;
   platform: PlatformKind;
@@ -26,7 +22,6 @@ type AppShellChromeFrameProps = {
   onDismissNotice: () => void;
   onLocaleChange: (locale: Locale) => void;
   onToggleCapabilityDock: () => void;
-  onToggleInspector: () => void;
   onToggleSidebar: () => void;
   onToggleTheme: () => void;
 };
@@ -36,7 +31,6 @@ export function AppShellChromeFrame({
   capabilityDockOpen,
   children,
   hasCapabilityPanel,
-  inspectorOpen,
   locale,
   notice,
   platform,
@@ -47,7 +41,6 @@ export function AppShellChromeFrame({
   onDismissNotice,
   onLocaleChange,
   onToggleCapabilityDock,
-  onToggleInspector,
   onToggleSidebar,
   onToggleTheme,
 }: AppShellChromeFrameProps) {
@@ -61,8 +54,6 @@ export function AppShellChromeFrame({
       dismissLabel={t.dismiss}
       hasCapabilityPanel={hasCapabilityPanel}
       hideSidebarLabel={t.hideSidebar}
-      inspectorLabel={locale === "zh" ? "环境信息" : "Environment"}
-      inspectorOpen={inspectorOpen}
       languageLabel={t.language}
       locale={locale}
       notice={notice}
@@ -76,7 +67,6 @@ export function AppShellChromeFrame({
       onDismissNotice={onDismissNotice}
       onLocaleChange={onLocaleChange}
       onToggleCapabilityDock={onToggleCapabilityDock}
-      onToggleInspector={onToggleInspector}
       onToggleSidebar={onToggleSidebar}
       onToggleTheme={onToggleTheme}
     >

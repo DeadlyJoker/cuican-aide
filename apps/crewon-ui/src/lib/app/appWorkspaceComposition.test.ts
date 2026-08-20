@@ -232,6 +232,27 @@ describe("App Workspace Control composition", () => {
     expect(source).not.toContain("onComposerResourceSelect=");
   });
 
+  it("does not expose the authority-less legacy Inspector in production chrome", () => {
+    const app = readFileSync(new URL("../../App.tsx", import.meta.url), "utf8");
+    const titleBarActions = readFileSync(
+      new URL("../../components/TitleBarActions.tsx", import.meta.url),
+      "utf8",
+    );
+    const sidePanels = readFileSync(
+      new URL(
+        "../../components/app/AppWorkspaceSidePanels.tsx",
+        import.meta.url,
+      ),
+      "utf8",
+    );
+
+    expect(app).not.toContain("onToggleInspector=");
+    expect(titleBarActions).not.toMatch(
+      /SlidersHorizontal|titlebar-env-toggle/u,
+    );
+    expect(sidePanels).not.toMatch(/<Inspector|from "\.\.\/Inspector"/u);
+  });
+
   it("routes Library interactions only through Control", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),
@@ -301,10 +322,7 @@ describe("App Workspace Control composition", () => {
 
   it("does not expose image attachments without Control Turn authority", () => {
     const source = readFileSync(
-      new URL(
-        "../../components/app/CommandWorkspace.tsx",
-        import.meta.url,
-      ),
+      new URL("../../components/app/CommandWorkspace.tsx", import.meta.url),
       "utf8",
     );
 

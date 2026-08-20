@@ -9,18 +9,15 @@ type TitleBarProps = {
   locale: Locale;
   platform: PlatformKind;
   capabilityDockOpen: boolean;
-  inspectorOpen: boolean;
   sidebarOpen: boolean;
   theme: Theme;
   title: string;
   hideSidebarLabel: string;
-  inspectorLabel: string;
   languageLabel: string;
   showSidebarLabel: string;
   themeLabel: string;
   capabilityLabel: string;
   onToggleSidebar: () => void;
-  onToggleInspector: () => void;
   onToggleCapabilityDock: () => void;
   onLocaleChange: (locale: Locale) => void;
   onToggleTheme: () => void;
@@ -28,20 +25,17 @@ type TitleBarProps = {
 
 export function TitleBar({
   capabilityDockOpen,
-  inspectorOpen,
   locale,
   platform,
   sidebarOpen,
   theme,
   title,
   hideSidebarLabel,
-  inspectorLabel,
   languageLabel,
   showSidebarLabel,
   themeLabel,
   capabilityLabel,
   onToggleSidebar,
-  onToggleInspector,
   onToggleCapabilityDock,
   onLocaleChange,
   onToggleTheme,
@@ -67,15 +61,12 @@ export function TitleBar({
       <TitleBarActions
         capabilityDockOpen={capabilityDockOpen}
         capabilityLabel={capabilityLabel}
-        inspectorLabel={inspectorLabel}
-        inspectorOpen={inspectorOpen}
         languageLabel={languageLabel}
         locale={locale}
         theme={theme}
         themeLabel={themeLabel}
         onLocaleChange={onLocaleChange}
         onToggleCapabilityDock={onToggleCapabilityDock}
-        onToggleInspector={onToggleInspector}
         onToggleTheme={onToggleTheme}
       />
     </header>
