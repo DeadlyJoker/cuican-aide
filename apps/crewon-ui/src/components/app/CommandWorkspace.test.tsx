@@ -1081,9 +1081,7 @@ describe("CommandWorkspace", () => {
     expect(commandHomeMarkup).not.toContain('aria-label="执行意图"');
     expect(commandHomeMarkup).not.toContain('data-execution-intent="goal"');
     expect(commandHomeMarkup).not.toContain('data-execution-intent="plan"');
-    expect(commandHomeMarkup).toContain('aria-label="任务意图"');
-    expect(commandHomeMarkup).toContain(">目标</button>");
-    expect(commandHomeMarkup).toContain(">计划</button>");
+    expect(commandHomeMarkup).not.toContain('aria-label="任务意图"');
     expect(commandHomeMarkup).toContain('placeholder="添加"');
     expect(commandHomeMarkup).toContain("选择文件");
     expect(commandHomeMarkup).toContain("选择文件夹");
@@ -1096,9 +1094,9 @@ describe("CommandWorkspace", () => {
       commandHomeMarkup.indexOf('id="context-search-panel"'),
     );
     expect(addPanelMarkup).toContain('class="add-palette-group"');
-    expect(addPanelMarkup).not.toContain('data-kind="intent"');
-    expect(addPanelMarkup).not.toContain('data-label="目标"');
-    expect(addPanelMarkup).not.toContain('data-label="计划模式"');
+    expect(addPanelMarkup).toContain('data-kind="intent"');
+    expect(addPanelMarkup).toContain('data-label="目标"');
+    expect(addPanelMarkup).toContain('data-label="计划模式"');
     expect(addPanelMarkup).toContain('class="add-palette-item"');
     expect(addPanelMarkup).not.toContain(">工作空间<");
     expect(commandHomeMarkup).toContain('aria-label="执行主体"');

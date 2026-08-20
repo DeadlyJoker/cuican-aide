@@ -30,11 +30,7 @@ import {
   type CommandWorkspaceOperationsPanelProps,
 } from "./CommandWorkspaceOperationsPanel";
 import { CommandSceneHeader, CommandSceneQuickRow } from "./CommandSceneHeader";
-import {
-  CommandHomeCapabilityStrip,
-  commandSceneMayWrite,
-  type CommandHomeResource,
-} from "./CommandHomeCapabilityStrip";
+import { CommandHomeCapabilityStrip } from "./CommandHomeCapabilityStrip";
 import { TeamView } from "./CommandWorkspaceViews";
 import { CommandProjectBoardView } from "./CommandTaskBoard";
 import { CommandControlScheduleView } from "./CommandControlScheduleView";
@@ -781,6 +777,26 @@ export function CommandWorkspace({
   const addPaletteItems = useMemo<PaletteItemWithCommand[]>(
     () => [
       {
+        action: "toggle-goal",
+        detail:
+          locale === "zh"
+            ? "让任务围绕一个持续目标推进"
+            : "Keep the task moving toward an ongoing goal",
+        kind: "intent",
+        label: locale === "zh" ? "任务意图" : "Task intent",
+        title: locale === "zh" ? "目标" : "Goal",
+      },
+      {
+        action: "toggle-plan",
+        detail:
+          locale === "zh"
+            ? "先生成计划，再按步骤推进"
+            : "Create a plan before proceeding step by step",
+        kind: "intent",
+        label: locale === "zh" ? "任务意图" : "Task intent",
+        title: locale === "zh" ? "计划模式" : "Plan mode",
+      },
+      {
         action: "attach-files",
         detail: "从本地电脑选择一个或多个文件",
         kind: "file",
@@ -811,7 +827,7 @@ export function CommandWorkspace({
           item.kind === "skill" || item.kind === "mcp" || item.kind === "tool",
       ),
     ],
-    [contextPaletteItems, providerResourceAvailable, slashPaletteItems],
+    [contextPaletteItems, locale, providerResourceAvailable, slashPaletteItems],
   );
   const providerComposerTag =
     providerResourceAvailable && providerResource?.selectedResource
@@ -897,23 +913,6 @@ export function CommandWorkspace({
   ]);
   const localizedScenePresets = locale === "zh" ? scenePresets : scenePresetsEn;
   const scenePreset = localizedScenePresets[scene];
-  const homeResourceEntries = [
-    ...contextPaletteItems.filter((item) => item.kind === "knowledge"),
-    ...slashPaletteItems.filter(
-      (item) =>
-        item.kind === "skill" || item.kind === "mcp" || item.kind === "tool",
-    ),
-  ]
-    .slice(0, 4)
-    .map((item, index) => ({
-      item,
-      resource: {
-        id: `${item.kind}:${"token" in item ? (item.token ?? item.title) : item.title}:${index}`,
-        kind: item.kind as CommandHomeResource["kind"],
-        label: item.label,
-        title: item.title,
-      } satisfies CommandHomeResource,
-    }));
   const workspaceOptions = useMemo<CommandComposerSelectOption[]>(() => {
     const displayName = workspaceOperations?.nativeWorkspaceDisplayName;
     return [
@@ -1855,30 +1854,9 @@ export function CommandWorkspace({
                     onSceneChange={switchScene}
                   />
                   <CommandHomeCapabilityStrip
-                    intent={executionIntent}
                     locale={locale}
                     mode={sceneMode}
                     preset={scenePreset}
-                    resources={homeResourceEntries.map(
-                      (entry) => entry.resource,
-                    )}
-                    risky={commandSceneMayWrite(scene, sceneMode)}
-                    onIntentChange={(nextIntent) =>
-                      setExecutionIntent((current) =>
-                        nextExecutionIntent(current, nextIntent),
-                      )
-                    }
-                    onResourceSelect={(resource) => {
-                      const entry = homeResourceEntries.find(
-                        (candidate) => candidate.resource.id === resource.id,
-                      );
-                      if (!entry) return;
-                      if (entry.item.kind === "knowledge") {
-                        insertContextItem(entry.item);
-                      } else {
-                        insertSlashItem(entry.item);
-                      }
-                    }}
                   />
                   <CommandSceneQuickRow
                     locale={locale}
@@ -1892,33 +1870,37 @@ export function CommandWorkspace({
 
               <CommandComposer
                 actions={
-                  <>
-                    <CommandComposerSelect
-                      ariaLabel={locale === "zh" ? "执行主体" : "Run with"}
-                      className="execution-target-dropdown"
-                      groups={executionTargetGroups(locale)}
-                      options={executionTargets}
-                      value={executionTarget}
-                      onChange={selectExecutionTarget}
-                    />
-                    <CommandComposerSelect
-                      activeValues={[
-                        model,
-                        ...(effectiveReasoningEffort
-                          ? [effortOptionValue(effectiveReasoningEffort)]
-                          : []),
-                      ]}
-                      ariaLabel={
-                        locale === "zh" ? "模型与推理档位" : "Model and effort"
-                      }
-                      className="model-dropdown"
-                      groups={modelEffortGroups(locale)}
-                      options={displayedModelOptions}
-                      triggerLabel={displayedModelLabel}
-                      value={displayedModelValue}
-                      onChange={selectModelOrEffort}
-                    />
-                  </>
+                  showCommandThread ? (
+                    <>
+                      <CommandComposerSelect
+                        ariaLabel={locale === "zh" ? "执行主体" : "Run with"}
+                        className="execution-target-dropdown"
+                        groups={executionTargetGroups(locale)}
+                        options={executionTargets}
+                        value={executionTarget}
+                        onChange={selectExecutionTarget}
+                      />
+                      <CommandComposerSelect
+                        activeValues={[
+                          model,
+                          ...(effectiveReasoningEffort
+                            ? [effortOptionValue(effectiveReasoningEffort)]
+                            : []),
+                        ]}
+                        ariaLabel={
+                          locale === "zh"
+                            ? "模型与推理档位"
+                            : "Model and effort"
+                        }
+                        className="model-dropdown"
+                        groups={modelEffortGroups(locale)}
+                        options={displayedModelOptions}
+                        triggerLabel={displayedModelLabel}
+                        value={displayedModelValue}
+                        onChange={selectModelOrEffort}
+                      />
+                    </>
+                  ) : null
                 }
                 beforeTextarea={
                   <>
@@ -2016,31 +1998,35 @@ export function CommandWorkspace({
                           onChange={setSceneMode}
                         />
                         <CommandComposerSelect
+                          activeValues={[
+                            model,
+                            ...(effectiveReasoningEffort
+                              ? [effortOptionValue(effectiveReasoningEffort)]
+                              : []),
+                          ]}
                           ariaLabel={
-                            locale === "zh" ? "工作空间选择" : "Workspace"
+                            locale === "zh"
+                              ? "模型与推理档位"
+                              : "Model and effort"
                           }
-                          className="workspace-dropdown"
-                          options={workspaceOptions}
-                          value={
-                            workspaceOperations?.nativeWorkspaceDisplayName
-                              ? "__native_workspace__"
-                              : noWorkspaceValue
-                          }
-                          onChange={(nextWorkspace) => {
-                            const action =
-                              nextWorkspace === noWorkspaceValue
-                                ? workspaceOperations?.onClearNativeWorkspace
-                                : workspaceOperations?.onSelectNativeWorkspace;
-                            if (action) {
-                              void Promise.resolve(action()).catch(
-                                () => undefined,
-                              );
-                            }
-                          }}
+                          className="model-dropdown"
+                          groups={modelEffortGroups(locale)}
+                          options={displayedModelOptions}
+                          triggerLabel={displayedModelLabel}
+                          value={displayedModelValue}
+                          onChange={selectModelOrEffort}
+                        />
+                        <CommandComposerSelect
+                          ariaLabel={locale === "zh" ? "执行主体" : "Run with"}
+                          className="execution-target-dropdown"
+                          groups={executionTargetGroups(locale)}
+                          options={executionTargets}
+                          value={executionTarget}
+                          onChange={selectExecutionTarget}
                         />
                       </>
                     ) : null}
-                    {showCommandThread ? (
+                    {executionIntent !== "none" ? (
                       <SelectedExecutionIntent
                         intent={executionIntent}
                         locale={locale}
@@ -2137,7 +2123,31 @@ export function CommandWorkspace({
                         {workspaceOperations?.nativeWorkspaceDisplayName ??
                           (locale === "zh" ? "无工作空间" : "No workspace")}
                       </span>
-                    ) : null}
+                    ) : (
+                      <CommandComposerSelect
+                        ariaLabel={
+                          locale === "zh" ? "工作空间选择" : "Workspace"
+                        }
+                        className="workspace-dropdown"
+                        options={workspaceOptions}
+                        value={
+                          workspaceOperations?.nativeWorkspaceDisplayName
+                            ? "__native_workspace__"
+                            : noWorkspaceValue
+                        }
+                        onChange={(nextWorkspace) => {
+                          const action =
+                            nextWorkspace === noWorkspaceValue
+                              ? workspaceOperations?.onClearNativeWorkspace
+                              : workspaceOperations?.onSelectNativeWorkspace;
+                          if (action) {
+                            void Promise.resolve(action()).catch(
+                              () => undefined,
+                            );
+                          }
+                        }}
+                      />
+                    )}
                     {composerActivityLabel ? (
                       <span className="composer-state">
                         {composerActivityLabel}

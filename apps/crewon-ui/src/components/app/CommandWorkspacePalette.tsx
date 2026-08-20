@@ -36,6 +36,11 @@ export function Palette({
     kind === "add"
       ? [
           {
+            id: "intent",
+            label: "任务意图",
+            items: items.filter((item) => item.kind === "intent"),
+          },
+          {
             id: "add",
             label: null,
             items: items.filter(

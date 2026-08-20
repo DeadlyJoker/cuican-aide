@@ -43,6 +43,7 @@ export function CommandSceneHeader({
   return (
     <>
       <header className="home-title" data-od-id="desktop-command-header">
+        <span className="home-eyebrow">CREWON</span>
         <h1>
           {locale === "zh" ? "让 CrewON 完成你的工作" : "Put CrewON to work"}
         </h1>
@@ -86,7 +87,6 @@ export function CommandSceneHeader({
           </button>
         ))}
       </div>
-
     </>
   );
 }

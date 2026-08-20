@@ -23,7 +23,12 @@ import type { Locale } from "../../lib/i18n";
 import { detectRuntimeSurface } from "../../lib/platform";
 
 export type PaletteItemWithCommand = CommandPaletteItem & {
-  action?: "attach-files" | "attach-folder" | "provider-resources";
+  action?:
+    | "attach-files"
+    | "attach-folder"
+    | "provider-resources"
+    | "toggle-goal"
+    | "toggle-plan";
   command?: ComposerSlashCommand;
   selected?: boolean;
 };

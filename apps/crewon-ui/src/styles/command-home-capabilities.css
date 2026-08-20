@@ -55,124 +55,101 @@
   font-weight: 600;
 }
 
-.command-home-capability-strip > .execution-intent-switch {
-  justify-content: center;
-}
-
-.command-home-capability-strip > .execution-intent-switch button {
-  display: inline-flex;
-  min-height: 30px;
-  align-items: center;
-  gap: 6px;
-  padding: 0 11px;
-  border: 1px solid transparent;
-  border-radius: 999px;
-  background: transparent;
-  color: var(--n-700);
-  cursor: pointer;
-  font: inherit;
-  font-size: calc(12px + var(--user-ui-font-delta));
-  font-weight: 500;
-}
-
-.command-home-capability-strip > .execution-intent-switch button:hover,
-.command-home-capability-strip > .execution-intent-switch button:focus-visible {
-  background: var(--n-150);
-  color: var(--n-950);
-  outline: 0;
-}
-
-.command-home-capability-strip > .execution-intent-switch button.is-selected {
-  border-color: color-mix(in oklch, var(--accent) 28%, transparent);
-  background: color-mix(in oklch, var(--accent) 14%, var(--n-0));
-  color: color-mix(in oklch, var(--accent) 90%, var(--n-1000));
-  box-shadow: var(--shadow-raised);
-}
-
-.command-home-capability-strip > .execution-intent-switch svg {
-  width: 14px;
-  height: 14px;
-}
-
-.command-home-resource-dock {
-  display: flex;
-  min-width: 0;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  overflow-x: auto;
-}
-
-.command-home-resource-dock button {
-  display: grid;
-  min-width: 0;
-  grid-template-columns: 16px minmax(0, auto);
-  grid-template-rows: auto auto;
-  column-gap: 7px;
-  align-items: center;
-  padding: 7px 10px;
-  border: 1px solid var(--n-250);
-  border-radius: 10px;
-  background: var(--n-50);
-  color: var(--n-800);
-  cursor: pointer;
-  font: inherit;
-  text-align: left;
-}
-
-.command-home-resource-dock button:hover,
-.command-home-resource-dock button:focus-visible {
-  border-color: var(--n-350);
-  background: var(--n-100);
-  outline: 0;
-}
-
-.command-home-resource-dock svg {
-  width: 15px;
-  height: 15px;
-  grid-row: 1 / 3;
-  color: var(--n-600);
-}
-
-.command-home-resource-dock span,
-.command-home-resource-dock small {
-  max-width: 150px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.command-home-resource-dock span {
-  font-size: 11px;
-  font-weight: 600;
-}
-
-.command-home-resource-dock small {
-  color: var(--n-600);
-  font-size: 9px;
-}
-
-.command-home-risk {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  margin: 0;
-  color: var(--n-600);
-  font-size: calc(10px + var(--user-ui-font-delta));
-}
-
-.command-home-risk.is-risky {
-  color: oklch(48% 0.11 55);
-}
-
-.command-home-risk svg {
-  width: 13px;
-  height: 13px;
-}
-
 .command-home-view:not(.has-command-thread) .composer-state-row:empty {
   display: none;
+}
+
+.screen-shell.command-screen .command-window:not(.sidebar-collapsed) {
+  grid-template-columns: 264px minmax(0, 1fr);
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  > .workspace-pill {
+  right: 18px;
+  left: auto;
+  max-width: min(360px, calc(100% - 36px));
+  transform: none;
+}
+
+.screen-shell.command-screen .command-home-view:not(.has-command-thread) {
+  justify-content: flex-start;
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .hero-center {
+  position: relative;
+  top: auto;
+  left: auto;
+  width: min(780px, calc(100% - 80px));
+  margin: 36px auto 0;
+  transform: none;
+  gap: 10px;
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .home-eyebrow {
+  display: inline-flex;
+  margin-bottom: 7px;
+  color: var(--accent);
+  font-size: calc(10px + var(--user-ui-font-delta));
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .home-title
+  h1 {
+  font-size: calc(34px + var(--user-ui-font-delta));
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .home-title {
+  margin-bottom: -10px;
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .quick-row {
+  display: flex;
+  width: 100%;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 0;
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .quick-row
+  .quick-card {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  padding: 0 14px;
+  border-color: var(--n-300);
+  border-radius: var(--radius-md);
+  background: var(--n-0);
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .quick-card-icon,
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .quick-card-hint {
+  display: none;
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .quick-card-label {
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 550;
 }
 
 /* Keep the command canvas balanced while the real task workbench is open. */
@@ -187,13 +164,6 @@
   .command-home-view:not(.has-command-thread)
   .quick-row {
   grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-@media (max-height: 720px) {
-  .command-home-resource-dock,
-  .command-home-risk {
-    display: none;
-  }
 }
 
 @media (max-width: 760px) {
