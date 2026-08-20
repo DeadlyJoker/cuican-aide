@@ -153,16 +153,40 @@ test("standalone SQLite Slice 1 converges real shared Agent to Verification", as
   const events = await store.listRunEvents({ tenantId: "tenant-1", runId }, 0, 100);
   assert.equal(events[1]?.type, "run.started");
   assert.deepEqual(replayRunLifecycle(events), run);
+  const secondStart = await starts.startWorkflowRun(actor, {
+    ...command,
+    idempotencyKey: "start-slice-again",
+  });
+  const secondOutcomes = [];
+  for (let index = 0; index < 5; index += 1) {
+    const outcome = await runtime.worker.wake();
+    secondOutcomes.push(outcome);
+    if (outcome.kind === "completed") break;
+  }
+  const secondRunId = secondStart.run.state.runId;
+  assert.equal((await store.loadRun({ tenantId: "tenant-1", runId: secondRunId }))?.status,
+    "completed", JSON.stringify(secondOutcomes));
+  assert.deepEqual(samples,
+    new Map([["agent-v1", 2], ["verification-v1", 2]]));
   const database = new DatabaseSync(path);
   assert.deepEqual(database.prepare(
     "SELECT status,count(*) count FROM run_attempts GROUP BY status",
-  ).all().map((row) => ({ ...row })), [{ status: "completed", count: 2 }]);
+  ).all().map((row) => ({ ...row })), [{ status: "completed", count: 4 }]);
   assert.equal(database.prepare(
     "SELECT count(DISTINCT work_item_id) count FROM run_attempts",
-  ).get()!.count, 2);
+  ).get()!.count, 4);
   assert.equal(database.prepare(
     "SELECT count(*) count FROM model_dispatch_receipts WHERE status='terminal'",
-  ).get()!.count, 2);
+  ).get()!.count, 4);
+  assert.deepEqual(database.prepare(
+    "SELECT run_id runId,step_id stepId FROM run_steps ORDER BY run_id,step_id",
+  ).all().map((row) => ({ ...row })), [
+    { runId, stepId: "agent" },
+    { runId, stepId: "verification" },
+    { runId: secondRunId, stepId: "agent" },
+    { runId: secondRunId, stepId: "verification" },
+  ].sort((left, right) => `${left.runId}:${left.stepId}`.localeCompare(
+    `${right.runId}:${right.stepId}`)));
   database.close();
   await runtime.close();
   runtime = undefined;
