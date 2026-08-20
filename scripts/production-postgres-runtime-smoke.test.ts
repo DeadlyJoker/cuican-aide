@@ -56,7 +56,10 @@ test(
     ] = ports;
     const authority = await startAuthorityServer(fixture, authorityPort);
     context.after(() => closeServer(authority.server));
-    const responses = await startResponsesServer();
+    const responses = await startResponsesServer(
+      authority.key,
+      authority.certificate,
+    );
     context.after(() => closeServer(responses.server));
 
     const common = runtimeEnvironment({
@@ -67,6 +70,7 @@ test(
       workspacePort,
       operationalPort,
       responsesEndpoint: responses.endpoint,
+      trustedCertificate: authority.certificate,
     });
     const controlEnvironment = { ...common };
     delete controlEnvironment.CREWON_RUNTIME_PROVIDER_PROBE_CONFIG_JSON;
@@ -74,7 +78,6 @@ test(
     delete controlEnvironment.CREWON_WORKSPACE_BINDING_ID;
     const control = spawnChild("apps/control-api/src/main.ts", {
       ...controlEnvironment,
-      NODE_EXTRA_CA_CERTS: authority.certificate,
       CREWON_CONTROL_PORT: String(controlPort),
       CREWON_ARTIFACT_ROOT: join(fixture, "control-artifacts"),
       CREWON_ARTIFACT_DB_PATH: join(fixture, "control-artifacts.sqlite3"),
@@ -340,6 +343,7 @@ function runtimeEnvironment(input: {
   workspacePort: number;
   operationalPort: number;
   responsesEndpoint: string;
+  trustedCertificate: string;
 }): NodeJS.ProcessEnv {
   const workspaceRoot = join(input.fixture, "workspace");
   const environment: NodeJS.ProcessEnv = {
@@ -359,6 +363,7 @@ function runtimeEnvironment(input: {
     CREWON_MODEL_ID: "smoke-model",
     CREWON_RESPONSES_ENDPOINT: input.responsesEndpoint,
     CREWON_RESPONSES_STORE: "true",
+    NODE_EXTRA_CA_CERTS: input.trustedCertificate,
     CREWON_WORKER_SCAN_INTERVAL_MS: "25",
     CREWON_WORKER_LEASE_DURATION_MS: "30000",
     CREWON_WORKER_RETRY_AFTER_MS: "0",
@@ -559,6 +564,7 @@ async function startAuthorityServer(directory: string, port: number) {
   return {
     server,
     certificate,
+    key,
     origin: `https://127.0.0.1:${port}`,
     get identityCalls() {
       return identityCalls;
@@ -569,82 +575,86 @@ async function startAuthorityServer(directory: string, port: number) {
   };
 }
 
-async function startResponsesServer() {
+async function startResponsesServer(key: string, certificate: string) {
   const responseId = `resp-${randomUUID()}`;
   let agentPosts = 0;
   let retrieveGets = 0;
   let verificationPosts = 0;
-  const server = createHttpServer(async (request, response) => {
-    request.resume();
-    await once(request, "end");
-    if (
-      request.method === "GET" &&
-      request.url === `/v1/responses/${responseId}`
-    ) {
-      retrieveGets += 1;
-      response.setHeader("content-type", "application/json");
-      response.end(JSON.stringify(completedResponse(responseId)));
-      return;
-    }
-    assert.equal(request.method, "POST");
-    assert.equal(request.url, "/v1/responses");
-    if (agentPosts === 0) {
-      agentPosts += 1;
-      response.writeHead(200, { "content-type": "text/event-stream" });
-      response.write(
-        `event: response.created\ndata: ${JSON.stringify({
+  const server = createHttpsServer(
+    { key: readFileSync(key), cert: readFileSync(certificate) },
+    async (request, response) => {
+      request.resume();
+      await once(request, "end");
+      if (
+        request.method === "GET" &&
+        request.url === `/v1/responses/${responseId}`
+      ) {
+        retrieveGets += 1;
+        response.setHeader("content-type", "application/json");
+        response.end(JSON.stringify(completedResponse(responseId)));
+        return;
+      }
+      assert.equal(request.method, "POST");
+      assert.equal(request.url, "/v1/responses");
+      if (agentPosts === 0) {
+        agentPosts += 1;
+        response.writeHead(200, { "content-type": "text/event-stream" });
+        response.write(
+          `event: response.created\ndata: ${JSON.stringify({
+            type: "response.created",
+            sequence_number: 0,
+            response: { id: responseId },
+          })}\n\n`,
+        );
+        return;
+      }
+      verificationPosts += 1;
+      const verificationId = `resp-${randomUUID()}`;
+      const output = {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "{}" }],
+      };
+      const events = [
+        {
           type: "response.created",
           sequence_number: 0,
-          response: { id: responseId },
-        })}\n\n`,
-      );
-      return;
-    }
-    verificationPosts += 1;
-    const verificationId = `resp-${randomUUID()}`;
-    const output = {
-      type: "message",
-      role: "assistant",
-      content: [{ type: "output_text", text: "{}" }],
-    };
-    const events = [
-      {
-        type: "response.created",
-        sequence_number: 0,
-        response: { id: verificationId },
-      },
-      { type: "response.output_text.delta", sequence_number: 1, delta: "{}" },
-      { type: "response.output_item.done", sequence_number: 2, item: output },
-      {
-        type: "response.completed",
-        sequence_number: 3,
-        response: {
-          id: verificationId,
-          status: "completed",
-          output: [output],
-          usage: {
-            input_tokens: 5,
-            input_tokens_details: { cached_tokens: 0 },
-            output_tokens: 1,
-            total_tokens: 6,
+          response: { id: verificationId },
+        },
+        { type: "response.output_text.delta", sequence_number: 1, delta: "{}" },
+        { type: "response.output_item.done", sequence_number: 2, item: output },
+        {
+          type: "response.completed",
+          sequence_number: 3,
+          response: {
+            id: verificationId,
+            status: "completed",
+            output: [output],
+            usage: {
+              input_tokens: 5,
+              input_tokens_details: { cached_tokens: 0 },
+              output_tokens: 1,
+              total_tokens: 6,
+            },
           },
         },
-      },
-    ];
-    response.writeHead(200, { "content-type": "text/event-stream" });
-    response.end(
-      events
-        .map(
-          (event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-        )
-        .join(""),
-    );
-  });
+      ];
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end(
+        events
+          .map(
+            (event) =>
+              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          )
+          .join(""),
+      );
+    },
+  );
   await listen(server, 0);
   const port = (server.address() as AddressInfo).port;
   return {
     server,
-    endpoint: `http://127.0.0.1:${port}/v1/responses`,
+    endpoint: `https://127.0.0.1:${port}/v1/responses`,
     get agentPosts() {
       return agentPosts;
     },
