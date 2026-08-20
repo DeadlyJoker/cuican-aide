@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { createServer } from "node:http";
+import { createServer as createHttpServer } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
 import type { AddressInfo } from "node:net";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -61,57 +62,96 @@ const digest = {
   sha256: (value: string) =>
     `sha256:${createHash("sha256").update(value).digest("hex")}`,
 };
-const childResponsesServer = createServer((request, response) => {
-  request.resume();
-  request.once("end", () => {
-    const responseId = `resp-${randomUUID()}`;
-    const output = {
-      type: "message",
-      role: "assistant",
-      content: [{ type: "output_text", text: "child completed" }],
-    };
-    const events = [
-      {
-        type: "response.created",
-        sequence_number: 0,
-        response: { id: responseId },
-      },
-      {
-        type: "response.output_text.delta",
-        sequence_number: 1,
-        delta: "child completed",
-      },
-      {
-        type: "response.output_item.done",
-        sequence_number: 2,
-        item: output,
-      },
-      {
-        type: "response.completed",
-        sequence_number: 3,
-        response: {
-          id: responseId,
-          status: "completed",
-          output: [output],
-          usage: {
-            input_tokens: 5,
-            input_tokens_details: { cached_tokens: 0 },
-            output_tokens: 2,
-            total_tokens: 7,
+const childResponsesTlsDirectory = mkdtempSync(
+  join(tmpdir(), "crewon-control-e2e-responses-"),
+);
+const childResponsesKeyPath = join(
+  childResponsesTlsDirectory,
+  "responses-key.pem",
+);
+const childResponsesCertificatePath = join(
+  childResponsesTlsDirectory,
+  "responses-cert.pem",
+);
+execFileSync(
+  "openssl",
+  [
+    "req",
+    "-x509",
+    "-newkey",
+    "rsa:2048",
+    "-nodes",
+    "-days",
+    "1",
+    "-subj",
+    "/CN=127.0.0.1",
+    "-addext",
+    "subjectAltName=IP:127.0.0.1",
+    "-keyout",
+    childResponsesKeyPath,
+    "-out",
+    childResponsesCertificatePath,
+  ],
+  { stdio: "ignore" },
+);
+const childResponsesServer = createHttpsServer(
+  {
+    key: readFileSync(childResponsesKeyPath),
+    cert: readFileSync(childResponsesCertificatePath),
+  },
+  (request, response) => {
+    request.resume();
+    request.once("end", () => {
+      const responseId = `resp-${randomUUID()}`;
+      const output = {
+        type: "message",
+        role: "assistant",
+        content: [{ type: "output_text", text: "child completed" }],
+      };
+      const events = [
+        {
+          type: "response.created",
+          sequence_number: 0,
+          response: { id: responseId },
+        },
+        {
+          type: "response.output_text.delta",
+          sequence_number: 1,
+          delta: "child completed",
+        },
+        {
+          type: "response.output_item.done",
+          sequence_number: 2,
+          item: output,
+        },
+        {
+          type: "response.completed",
+          sequence_number: 3,
+          response: {
+            id: responseId,
+            status: "completed",
+            output: [output],
+            usage: {
+              input_tokens: 5,
+              input_tokens_details: { cached_tokens: 0 },
+              output_tokens: 2,
+              total_tokens: 7,
+            },
           },
         },
-      },
-    ];
-    response.writeHead(200, { "content-type": "text/event-stream" });
-    response.end(
-      events
-        .map(
-          (event) => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
-        )
-        .join(""),
-    );
-  });
-});
+      ];
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      response.end(
+        events
+          .map(
+            (event) =>
+              `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          )
+          .join(""),
+      );
+    });
+  },
+);
 await new Promise<void>((resolve, reject) => {
   childResponsesServer.once("error", reject);
   childResponsesServer.listen(0, "127.0.0.1", () => {
@@ -119,15 +159,15 @@ await new Promise<void>((resolve, reject) => {
     resolve();
   });
 });
-const childResponsesEndpoint = `http://127.0.0.1:${(childResponsesServer.address() as AddressInfo).port}/v1/responses`;
-after(
-  () =>
-    new Promise<void>((resolve, reject) => {
-      childResponsesServer.close((error) =>
-        error === undefined ? resolve() : reject(error),
-      );
-    }),
-);
+const childResponsesEndpoint = `https://127.0.0.1:${(childResponsesServer.address() as AddressInfo).port}/v1/responses`;
+after(async () => {
+  await new Promise<void>((resolve, reject) => {
+    childResponsesServer.close((error) =>
+      error === undefined ? resolve() : reject(error),
+    );
+  });
+  rmSync(childResponsesTlsDirectory, { recursive: true, force: true });
+});
 
 test("creates, replays, reads and paginates scoped Knowledge over Control HTTP", async (context) => {
   const control = createStandaloneControlApi(
@@ -2610,6 +2650,7 @@ function workerEnvironment(databasePath: string): NodeJS.ProcessEnv {
     CREWON_CONTROL_DB_PATH: databasePath,
     CREWON_MODEL_ID: "fake-model",
     CREWON_RESPONSES_ENDPOINT: childResponsesEndpoint,
+    NODE_EXTRA_CA_CERTS: childResponsesCertificatePath,
     CREWON_WORKER_ONCE: "1",
     CREWON_WORKER_OWNER_ID: "recovery-worker",
     CREWON_WORKER_LEASE_DURATION_MS: "30000",
@@ -2641,6 +2682,8 @@ function postgresWorkerEnvironment(
     CREWON_CONTROL_DATABASE_SCHEMA: schema,
     CREWON_MODEL_ID: "fake-model",
     CREWON_RESPONSES_ENDPOINT: childResponsesEndpoint,
+    CREWON_RESPONSES_STORE: "true",
+    NODE_EXTRA_CA_CERTS: childResponsesCertificatePath,
     CREWON_E2E_EXPECTED_USER_MESSAGE: expectedUserMessage,
     CREWON_WORKER_ONCE: "1",
     CREWON_WORKER_OWNER_ID: ownerId,
@@ -2680,7 +2723,7 @@ function postgresWorkerEnvironment(
 }
 
 async function unusedLoopbackPorts(count: number): Promise<number[]> {
-  const servers = Array.from({ length: count }, () => createServer());
+  const servers = Array.from({ length: count }, () => createHttpServer());
   await Promise.all(
     servers.map(
       (server) =>
