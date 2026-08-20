@@ -131,6 +131,35 @@ test("calls the bounded typed Workspace read-only product route", async () => {
     query: "needle",
     maxMatches: 10,
   });
+
+  const readClient = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    csrfToken: "csrf-token",
+    fetch: async () =>
+      jsonResponse(200, {
+        schemaVersion: "crewon.workspace-native-readonly-response.v0",
+        operation: "readTextFile",
+        path: "src/main.ts",
+        content: "export {};",
+        size: 10,
+        truncated: false,
+      }),
+  });
+  assert.deepEqual(
+    await readClient.executeWorkspaceReadonly("thread/1", {
+      schemaVersion: "crewon.workspace-native-readonly-request.v0",
+      operation: "readTextFile",
+      pathSegments: ["src", "main.ts"],
+    }),
+    {
+      schemaVersion: "crewon.workspace-native-readonly-response.v0",
+      operation: "readTextFile",
+      path: "src/main.ts",
+      content: "export {};",
+      size: 10,
+      truncated: false,
+    },
+  );
 });
 
 test("uses typed Knowledge create, read and pagination routes", async () => {
@@ -552,10 +581,20 @@ test("decides a Workflow Human Gate with only public claim authority", async () 
 
 test("lists the bounded public Human Gate decision projection", async () => {
   let request: { input: string; init: RequestInit } | undefined;
-  const response = { data: [{ runId: "run/1", nodeId: "gate",
-    claimId: "claim-1", claimEpoch: 1, gateRequestId: "gate-request-1",
-    approvalPolicyId: "approval-1", status: "published" as const,
-    createdAt: "2026-08-12T00:00:00.000Z" }] };
+  const response = {
+    data: [
+      {
+        runId: "run/1",
+        nodeId: "gate",
+        claimId: "claim-1",
+        claimEpoch: 1,
+        gateRequestId: "gate-request-1",
+        approvalPolicyId: "approval-1",
+        status: "published" as const,
+        createdAt: "2026-08-12T00:00:00.000Z",
+      },
+    ],
+  };
   const client = new ControlApiClient({
     baseUrl: "https://control.example",
     accessToken: "session-1",

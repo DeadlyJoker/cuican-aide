@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import {
   CommandWorkspaceGitStatus,
+  CommandWorkspaceFiles,
   CommandWorkspaceSearch,
   executeWorkspaceReadonly,
   WorkspaceReadonlyRequestGuard,
@@ -84,6 +85,66 @@ describe("workspace native readonly workbench", () => {
         scannedBytes: 2048,
         truncated: false,
       },
+    });
+  });
+
+  it("uses the same frozen thread authority for directory and file reads", async () => {
+    const executeWorkspaceReadonlyRequest = vi
+      .fn()
+      .mockResolvedValueOnce({
+        schemaVersion: "crewon.workspace-native-readonly-response.v0",
+        operation: "listDirectory",
+        path: "src",
+        entries: [{ name: "App.tsx", kind: "file" }],
+        truncated: false,
+      })
+      .mockResolvedValueOnce({
+        schemaVersion: "crewon.workspace-native-readonly-response.v0",
+        operation: "readTextFile",
+        path: "src/App.tsx",
+        content: "export function App() {}",
+        size: 24,
+        truncated: false,
+      });
+    const client = {
+      executeWorkspaceReadonly: executeWorkspaceReadonlyRequest,
+    } as unknown as ReadonlyClient;
+
+    await expect(
+      executeWorkspaceReadonly(
+        client,
+        "thread-1",
+        {
+          schemaVersion: "crewon.workspace-native-readonly-request.v0",
+          operation: "listDirectory",
+          pathSegments: ["src"],
+        },
+        "zh",
+      ),
+    ).resolves.toEqual({
+      status: "ready",
+      result: {
+        schemaVersion: "crewon.workspace-native-readonly-response.v0",
+        operation: "listDirectory",
+        path: "src",
+        entries: [{ name: "App.tsx", kind: "file" }],
+        truncated: false,
+      },
+    });
+    await expect(
+      executeWorkspaceReadonly(
+        client,
+        "thread-1",
+        {
+          schemaVersion: "crewon.workspace-native-readonly-request.v0",
+          operation: "readTextFile",
+          pathSegments: ["src", "App.tsx"],
+        },
+        "zh",
+      ),
+    ).resolves.toMatchObject({
+      status: "ready",
+      result: { operation: "readTextFile", path: "src/App.tsx" },
     });
   });
 
@@ -205,6 +266,9 @@ describe("workspace native readonly workbench", () => {
     const surfaces = {
       gitStatus: renderToStaticMarkup(
         <CommandWorkspaceGitStatus client={null} locale="zh" threadId={null} />,
+      ),
+      files: renderToStaticMarkup(
+        <CommandWorkspaceFiles client={null} locale="zh" threadId={null} />,
       ),
       search: renderToStaticMarkup(
         <CommandWorkspaceSearch client={null} locale="zh" threadId={null} />,

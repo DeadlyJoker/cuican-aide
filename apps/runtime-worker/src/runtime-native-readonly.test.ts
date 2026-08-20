@@ -18,6 +18,7 @@ import {
   RuntimeNativeReadonlyService,
   decodeGitOutput,
 } from "./runtime-native-readonly.ts";
+import { WORKSPACE_NATIVE_READONLY_LIMITS } from "@crewon/contracts/runtime";
 
 const run = promisify(execFile);
 const authority = {
@@ -90,6 +91,99 @@ test("search rejects linked path components and cancellation", async (context) =
   );
 });
 
+test("directory browsing and text preview remain inside the frozen root", async (context) => {
+  const root = await fixture(context);
+  const outside = await fixture(context);
+  await mkdir(join(root, "src"));
+  await writeFile(join(root, "src", "app.ts"), "export const app = true;\n");
+  await writeFile(
+    join(root, "large.txt"),
+    Buffer.alloc(WORKSPACE_NATIVE_READONLY_LIMITS.maxReadTextBytes + 32, "a"),
+  );
+  await symlink(outside, join(root, "escape"));
+  const service = new RuntimeNativeReadonlyService({ root, authority });
+
+  assert.deepEqual(
+    await service.execute(
+      {
+        schemaVersion: "crewon.workspace-native-readonly-request.v0",
+        operation: "listDirectory",
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        workspaceBindingId: "workspace-1",
+        pathSegments: [],
+      },
+      new AbortController().signal,
+    ),
+    {
+      schemaVersion: "crewon.workspace-native-readonly-response.v0",
+      operation: "listDirectory",
+      workspaceBindingId: "workspace-1",
+      path: "",
+      entries: [
+        { name: "large.txt", kind: "file" },
+        { name: "src", kind: "directory" },
+      ],
+      truncated: false,
+    },
+  );
+  assert.deepEqual(
+    await service.execute(
+      {
+        schemaVersion: "crewon.workspace-native-readonly-request.v0",
+        operation: "readTextFile",
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        workspaceBindingId: "workspace-1",
+        pathSegments: ["src", "app.ts"],
+      },
+      new AbortController().signal,
+    ),
+    {
+      schemaVersion: "crewon.workspace-native-readonly-response.v0",
+      operation: "readTextFile",
+      workspaceBindingId: "workspace-1",
+      path: "src/app.ts",
+      content: "export const app = true;\n",
+      size: 25,
+      truncated: false,
+    },
+  );
+  const large = await service.execute(
+    {
+      schemaVersion: "crewon.workspace-native-readonly-request.v0",
+      operation: "readTextFile",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      workspaceBindingId: "workspace-1",
+      pathSegments: ["large.txt"],
+    },
+    new AbortController().signal,
+  );
+  assert.equal(large.operation, "readTextFile");
+  if (large.operation === "readTextFile") {
+    assert.equal(
+      large.content.length,
+      WORKSPACE_NATIVE_READONLY_LIMITS.maxReadTextBytes,
+    );
+    assert.equal(large.truncated, true);
+  }
+  await assert.rejects(
+    service.execute(
+      {
+        schemaVersion: "crewon.workspace-native-readonly-request.v0",
+        operation: "listDirectory",
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        workspaceBindingId: "workspace-1",
+        pathSegments: ["escape"],
+      },
+      new AbortController().signal,
+    ),
+    /workspace_native_path_invalid/u,
+  );
+});
+
 test("Git status exposes fixed read-only metadata", async (context) => {
   const root = await fixture(context);
   await run("git", ["init", "-q", "-b", "main"], { cwd: root });
@@ -125,6 +219,24 @@ test("Git status exposes fixed read-only metadata", async (context) => {
     { index: "?", worktree: "?", path: "malicious-fsmonitor.sh" },
     { index: "?", worktree: "?", path: "new.txt" },
   ]);
+  const diff = await service.execute(
+    {
+      schemaVersion: "crewon.workspace-native-readonly-request.v0",
+      operation: "gitDiff",
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      workspaceBindingId: "workspace-1",
+      pathSegments: ["tracked.txt"],
+    },
+    new AbortController().signal,
+  );
+  assert.equal(diff.operation, "gitDiff");
+  if (diff.operation === "gitDiff") {
+    assert.equal(diff.path, "tracked.txt");
+    assert.match(diff.patch, /-one/u);
+    assert.match(diff.patch, /\+two/u);
+    assert.equal(diff.truncated, false);
+  }
   await assert.rejects(readFile(marker), { code: "ENOENT" });
 });
 

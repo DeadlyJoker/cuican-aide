@@ -88,11 +88,10 @@ test("keeps standalone readonly on its explicit loopback Workspace binding", asy
         observed.push(input);
         return {
           schemaVersion: "crewon.workspace-native-readonly-response.v0",
-          operation: "gitStatus",
+          operation: "listDirectory",
           workspaceBindingId: "workspace-binding-1",
-          branch: "main",
-          head: "a".repeat(40),
-          entries: [],
+          path: "src",
+          entries: [{ name: "main.ts", kind: "file" }],
           truncated: false,
         };
       },
@@ -121,22 +120,23 @@ test("keeps standalone readonly on its explicit loopback Workspace binding", asy
     headers: { ...readHeaders(), "x-csrf-token": CSRF_TOKEN },
     payload: {
       schemaVersion: "crewon.workspace-native-readonly-request.v0",
-      operation: "gitStatus",
+      operation: "listDirectory",
+      pathSegments: ["src"],
     },
   });
   assert.equal(response.statusCode, 200, response.body);
   assert.deepEqual(response.json(), {
     schemaVersion: "crewon.workspace-native-readonly-response.v0",
-    operation: "gitStatus",
-    branch: "main",
-    head: "a".repeat(40),
-    entries: [],
+    operation: "listDirectory",
+    path: "src",
+    entries: [{ name: "main.ts", kind: "file" }],
     truncated: false,
   });
   assert.deepEqual(observed, [
     {
       schemaVersion: "crewon.workspace-native-readonly-request.v0",
-      operation: "gitStatus",
+      operation: "listDirectory",
+      pathSegments: ["src"],
       tenantId: ACTOR.tenantId,
       spaceId: ACTOR.spaceId,
       workspaceBindingId: "workspace-binding-1",

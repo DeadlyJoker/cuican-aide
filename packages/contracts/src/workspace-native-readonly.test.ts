@@ -8,6 +8,7 @@ import {
   parseWorkspaceNativeReadonlyResponse,
   type WorkspaceContentSearchRequest,
   type WorkspaceGitStatusRequest,
+  type WorkspaceListDirectoryRequest,
 } from "./workspace-native-readonly.ts";
 
 const search: WorkspaceContentSearchRequest = {
@@ -26,6 +27,14 @@ const git: WorkspaceGitStatusRequest = {
   tenantId: "tenant-1",
   spaceId: "space-1",
   workspaceBindingId: "workspace-1",
+};
+const list: WorkspaceListDirectoryRequest = {
+  schemaVersion: "crewon.workspace-native-readonly-request.v0",
+  operation: "listDirectory",
+  tenantId: "tenant-1",
+  spaceId: "space-1",
+  workspaceBindingId: "workspace-1",
+  pathSegments: ["src"],
 };
 
 test("public Workspace read-only contract owns no binding authority", () => {
@@ -87,6 +96,29 @@ test("public Workspace read-only contract owns no binding authority", () => {
       { schemaVersion: git.schemaVersion, operation: git.operation },
     ),
   );
+  assert.deepEqual(
+    parseWorkspaceNativeReadonlyControlResponse(
+      {
+        schemaVersion: "crewon.workspace-native-readonly-response.v0",
+        operation: "gitDiff",
+        path: "src/main.ts",
+        patch: "@@ -1 +1 @@\n-old\n+new\n",
+        truncated: false,
+      },
+      {
+        schemaVersion: "crewon.workspace-native-readonly-request.v0",
+        operation: "gitDiff",
+        pathSegments: ["src", "main.ts"],
+      },
+    ),
+    {
+      schemaVersion: "crewon.workspace-native-readonly-response.v0",
+      operation: "gitDiff",
+      path: "src/main.ts",
+      patch: "@@ -1 +1 @@\n-old\n+new\n",
+      truncated: false,
+    },
+  );
 });
 
 test("private response enforces scan counters and porcelain status codes", () => {
@@ -129,6 +161,61 @@ test("private response enforces scan counters and porcelain status codes", () =>
         truncated: false,
       },
       git,
+    ),
+  );
+});
+
+test("directory and text-file requests stay path-scoped and bounded", () => {
+  assert.deepEqual(
+    parseWorkspaceNativeReadonlyControlRequest({
+      schemaVersion: list.schemaVersion,
+      operation: list.operation,
+      pathSegments: ["src"],
+    }),
+    {
+      schemaVersion: list.schemaVersion,
+      operation: list.operation,
+      pathSegments: ["src"],
+    },
+  );
+  assert.deepEqual(
+    parseWorkspaceNativeReadonlyResponse(
+      {
+        schemaVersion: "crewon.workspace-native-readonly-response.v0",
+        operation: "listDirectory",
+        workspaceBindingId: "workspace-1",
+        path: "src",
+        entries: [
+          { name: "components", kind: "directory" },
+          { name: "main.ts", kind: "file" },
+        ],
+        truncated: false,
+      },
+      list,
+    ),
+    {
+      schemaVersion: "crewon.workspace-native-readonly-response.v0",
+      operation: "listDirectory",
+      workspaceBindingId: "workspace-1",
+      path: "src",
+      entries: [
+        { name: "components", kind: "directory" },
+        { name: "main.ts", kind: "file" },
+      ],
+      truncated: false,
+    },
+  );
+  assert.throws(() =>
+    parseWorkspaceNativeReadonlyResponse(
+      {
+        schemaVersion: "crewon.workspace-native-readonly-response.v0",
+        operation: "listDirectory",
+        workspaceBindingId: "workspace-1",
+        path: "other",
+        entries: [],
+        truncated: false,
+      },
+      list,
     ),
   );
 });
