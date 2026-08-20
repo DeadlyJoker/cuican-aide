@@ -2390,9 +2390,167 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 18px;
   padding: 28px 32px 32px;
+}
+
+.command-project-board-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.command-project-board-controls .segmented-tabs {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--n-250);
+  border-radius: 9px;
+  background: var(--n-100);
+}
+
+.command-project-board-controls .segmented-tabs button {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--n-650);
+  cursor: pointer;
+  font-size: calc(12px + var(--user-ui-font-delta));
+}
+
+.command-project-board-controls .segmented-tabs button.active {
+  background: var(--n-25);
+  color: var(--n-950);
+  box-shadow: var(--shadow-raised);
+}
+
+.command-project-board-controls .catalog-search {
+  width: min(320px, 42%);
+}
+
+.command-library-shell-view {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--n-25);
+}
+
+.command-library-shell-view > .library-page {
+  height: 100%;
+  padding: 30px clamp(24px, 5vw, 72px) 64px;
+}
+
+.command-library-mode-switch {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 12px 24px 0;
+  background: var(--n-25);
+}
+
+.command-library-mode-switch button {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--n-650);
+  cursor: pointer;
+}
+
+.command-library-mode-switch button.active {
+  border-color: var(--n-250);
+  background: var(--n-100);
+  color: var(--n-950);
+}
+
+.command-control-schedule-page {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 30px 36px;
+}
+
+.command-control-schedule-page .catalog-market-header {
+  position: static;
+}
+
+.command-control-schedule-page .schedule-calendar-shell {
+  min-height: 560px;
+}
+
+.command-schedule-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.command-schedule-list .library-item {
+  max-width: none;
+  text-align: left;
+}
+
+.team-experts-shell {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 20px 4px 36px;
+}
+
+.team-experts-shell[hidden] {
+  display: none;
+}
+
+.team-experts-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.team-experts-header h2,
+.team-experts-header p {
+  margin: 4px 0 0;
+}
+
+.team-experts-header > strong {
+  min-width: 32px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--n-100);
+  text-align: center;
+}
+
+.team-expert-grid {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.command-workbench .library-page {
+  height: 100%;
+  padding: 20px;
+}
+
+.command-workbench .library-heading,
+.command-workbench .library-item,
+.command-workbench .library-empty,
+.command-workbench .library-error {
+  max-width: none;
+}
+
+.sidebar-runtime-account > button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
 }
 
 .command-project-board-toolbar {
@@ -2433,9 +2591,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   grid-template-columns: repeat(3, minmax(120px, 1fr));
 }
 
-:root[data-theme="light"]
-  .command-project-board-page
-  > .command-task-board {
+:root[data-theme="light"] .command-project-board-page > .command-task-board {
   --workbench-bg: #fff;
   --workbench-surface: #fff;
   --workbench-raised: #f6f6f6;
@@ -4299,9 +4455,167 @@ exports[`command workspace conversation style > snapshots the resizable workbenc
   display: grid;
   height: 100%;
   min-height: 0;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto auto minmax(0, 1fr);
   gap: 18px;
   padding: 28px 32px 32px;
+}
+
+.command-project-board-controls {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.command-project-board-controls .segmented-tabs {
+  display: inline-flex;
+  gap: 3px;
+  padding: 3px;
+  border: 1px solid var(--n-250);
+  border-radius: 9px;
+  background: var(--n-100);
+}
+
+.command-project-board-controls .segmented-tabs button {
+  height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--n-650);
+  cursor: pointer;
+  font-size: calc(12px + var(--user-ui-font-delta));
+}
+
+.command-project-board-controls .segmented-tabs button.active {
+  background: var(--n-25);
+  color: var(--n-950);
+  box-shadow: var(--shadow-raised);
+}
+
+.command-project-board-controls .catalog-search {
+  width: min(320px, 42%);
+}
+
+.command-library-shell-view {
+  min-width: 0;
+  overflow: hidden;
+  background: var(--n-25);
+}
+
+.command-library-shell-view > .library-page {
+  height: 100%;
+  padding: 30px clamp(24px, 5vw, 72px) 64px;
+}
+
+.command-library-mode-switch {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 4px;
+  padding: 12px 24px 0;
+  background: var(--n-25);
+}
+
+.command-library-mode-switch button {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--n-650);
+  cursor: pointer;
+}
+
+.command-library-mode-switch button.active {
+  border-color: var(--n-250);
+  background: var(--n-100);
+  color: var(--n-950);
+}
+
+.command-control-schedule-page {
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 24px 30px 36px;
+}
+
+.command-control-schedule-page .catalog-market-header {
+  position: static;
+}
+
+.command-control-schedule-page .schedule-calendar-shell {
+  min-height: 560px;
+}
+
+.command-schedule-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+}
+
+.command-schedule-list .library-item {
+  max-width: none;
+  text-align: left;
+}
+
+.team-experts-shell {
+  display: grid;
+  align-content: start;
+  gap: 18px;
+  padding: 20px 4px 36px;
+}
+
+.team-experts-shell[hidden] {
+  display: none;
+}
+
+.team-experts-header {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.team-experts-header h2,
+.team-experts-header p {
+  margin: 4px 0 0;
+}
+
+.team-experts-header > strong {
+  min-width: 32px;
+  padding: 5px 10px;
+  border-radius: 999px;
+  background: var(--n-100);
+  text-align: center;
+}
+
+.team-expert-grid {
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+}
+
+.command-workbench .library-page {
+  height: 100%;
+  padding: 20px;
+}
+
+.command-workbench .library-heading,
+.command-workbench .library-item,
+.command-workbench .library-empty,
+.command-workbench .library-error {
+  max-width: none;
+}
+
+.sidebar-runtime-account > button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
 }
 
 .command-project-board-toolbar {
@@ -4342,9 +4656,7 @@ exports[`command workspace conversation style > snapshots the resizable workbenc
   grid-template-columns: repeat(3, minmax(120px, 1fr));
 }
 
-:root[data-theme="light"]
-  .command-project-board-page
-  > .command-task-board {
+:root[data-theme="light"] .command-project-board-page > .command-task-board {
   --workbench-bg: #fff;
   --workbench-surface: #fff;
   --workbench-raised: #f6f6f6;
