@@ -76,19 +76,12 @@ Backpressure behavior:
 - When request ingress is saturated, new requests are rejected with a JSON-RPC error code `-32001` and message `"Server overloaded; retry later."`.
 - Clients should treat this as retryable and use exponential backoff with jitter.
 
-## Rollout writer generation compatibility
+## Rollout writer coordination
 
 Before State or listener initialization, app-server acquires a process-lifetime generation guard
-for its canonical `CREWON_HOME`. The default artifact uses `LeaseAwareShared`, so compatible
-processes may initialize together while per-thread leases serialize one Thread. The
-`legacy-fence-artifact` feature selects `LegacyFenceExclusive`, excluding every other generation
-for that home; an incompatibility fails before State databases, sessions, or listeners are created.
-
-Pre-fence binaries do not honor this guard. Deployment must reject their immutable artifact SHAs
-before execution and keep only the approved legacy-fence artifact as rollback. The standalone
-`scripts/verify-app-server-deployment-artifact.py` verifier currently reports
-`productionWiring:notConnected`; without a production binary/container authority it does not make
-the SHA Gate Green. PID, port, marker, or self-reported version checks are not substitutes.
+for its canonical `CREWON_HOME`. It uses `LeaseAwareShared`, so compatible processes may initialize
+together while per-thread leases serialize one Thread. An incompatible generation fails before
+State databases, sessions, or listeners are created.
 
 ## Message Schema
 
