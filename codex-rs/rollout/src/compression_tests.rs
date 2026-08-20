@@ -1,7 +1,5 @@
 use std::fs;
 use std::fs::FileTimes;
-#[cfg(feature = "legacy-fence-artifact")]
-use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::time::Duration;
@@ -15,10 +13,6 @@ use crewon_protocol::protocol::RolloutLine;
 use crewon_protocol::protocol::SessionMeta;
 use crewon_protocol::protocol::SessionMetaLine;
 use crewon_protocol::protocol::SessionSource;
-#[cfg(feature = "legacy-fence-artifact")]
-use crewon_protocol::protocol::UserInputOnceMarker;
-#[cfg(feature = "legacy-fence-artifact")]
-use crewon_protocol::protocol::UserInputOnceMarkerPhase;
 use crewon_protocol::protocol::UserMessageEvent;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
@@ -394,50 +388,6 @@ async fn worker_skips_active_writer_then_compresses_after_shutdown() -> anyhow::
     Ok(())
 }
 
-#[cfg(feature = "legacy-fence-artifact")]
-#[tokio::test]
-async fn worker_skips_marker_bearing_and_unreadable_rollouts_without_changing_bytes()
--> anyhow::Result<()> {
-    let home = TempDir::new()?;
-    let marker_uuid = Uuid::from_u128(1601);
-    let marker_thread_id = ThreadId::from_string(&marker_uuid.to_string())?;
-    let marker_path = archived_rollout_path(home.path(), "2025-01-03T12-00-00", marker_uuid);
-    write_rollout(&marker_path, marker_thread_id, "marker bearing")?;
-    append_raw_rollout_item(
-        marker_path.as_path(),
-        RolloutItem::UserInputOnceMarker(UserInputOnceMarker {
-            version: 1,
-            phase: UserInputOnceMarkerPhase::Admission,
-            thread_id: marker_thread_id,
-            client_id: "compression-fence".to_string(),
-            payload_hash: "hash".to_string(),
-            turn_id: "turn".to_string(),
-        }),
-    )?;
-    set_old_mtime(marker_path.as_path())?;
-    let marker_bytes = fs::read(marker_path.as_path())?;
-
-    let unreadable_uuid = Uuid::from_u128(1602);
-    let unreadable_thread_id = ThreadId::from_string(&unreadable_uuid.to_string())?;
-    let unreadable_path =
-        archived_rollout_path(home.path(), "2025-01-03T12-00-01", unreadable_uuid);
-    write_rollout(&unreadable_path, unreadable_thread_id, "unreadable")?;
-    fs::OpenOptions::new()
-        .append(true)
-        .open(unreadable_path.as_path())?
-        .write_all(b"{not-json}\n")?;
-    set_old_mtime(unreadable_path.as_path())?;
-    let unreadable_bytes = fs::read(unreadable_path.as_path())?;
-
-    worker::run(home.path().to_path_buf()).await?;
-
-    assert_eq!(fs::read(marker_path.as_path())?, marker_bytes);
-    assert!(!compressed_rollout_path(marker_path.as_path()).exists());
-    assert_eq!(fs::read(unreadable_path.as_path())?, unreadable_bytes);
-    assert!(!compressed_rollout_path(unreadable_path.as_path()).exists());
-    Ok(())
-}
-
 #[tokio::test]
 async fn worker_skips_when_fresh_run_marker_exists() -> anyhow::Result<()> {
     let home = TempDir::new()?;
@@ -581,17 +531,6 @@ fn write_rollout(path: &std::path::Path, thread_id: ThreadId, message: &str) -> 
         .collect::<Result<Vec<_>, _>>()?
         .join("\n");
     fs::write(path, format!("{jsonl}\n"))?;
-    Ok(())
-}
-
-#[cfg(feature = "legacy-fence-artifact")]
-fn append_raw_rollout_item(path: &Path, item: RolloutItem) -> anyhow::Result<()> {
-    let line = RolloutLine {
-        timestamp: "2025-01-03T12:00:02Z".to_string(),
-        item,
-    };
-    let mut file = fs::OpenOptions::new().append(true).open(path)?;
-    writeln!(file, "{}", serde_json::to_string(&line)?)?;
     Ok(())
 }
 
