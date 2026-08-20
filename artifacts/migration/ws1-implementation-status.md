@@ -72,21 +72,30 @@
   Thread 的下一次 Control Turn 会带上该引用，不伪造 image compatibility。
 - Control composer 已删除无 wire authority 的权限选择、Review 与 active-Run Steer；权限只来自 immutable AgentVersion/
   Tool policy，运行中输入必须先停止再发送。Browser Settings 现在读取真实 Control capability catalog；旧 `#view-projects`
-  不再进入硬编码运行态页面而会规范化回 Command 首页。UI 全量 `209 files / 1284 tests`、lint 与 production build 通过，
-  并更新用户可见快照。
+  不再进入硬编码运行态页面而会规范化回 Command 首页。Control Thread 终态连接错误会投影为 unavailable/retry，而不是
+  无限 connecting；Desktop provider credential availability 只来自与 Control catalog 精确匹配的 native secret，Web 只显示
+  deployment-managed 中性状态；Automation 文案与真实 daily durable scheduler 对齐。UI 全量 `210 files / 1298 tests`、lint 与
+  production build 通过，并更新用户可见快照。
 - 本地 Workspace read 在打开 handle 后复核真实 inode/path 仍位于 canonical root，拒绝中间/最终 symlink escape；读取改为
   `maxOutputBytes + 1` 的有界分块，不再在可竞态的 `stat` 后执行无界 `readFile()`。Runtime Worker 全量为
   `337 passed / 2 conditional skips / 0 failed`。
-- production Responses 全局与每个 AgentVersion binding 均要求 HTTPS，POST 与 retrieve GET 都拒绝 redirect；Release/Worker
-  对不安全 endpoint 在网络调用前 fail closed。WebSocket 在发送 `response.create` 前先持久化 dispatch boundary；断连转 HTTP
-  不重复 fence，Workflow retrieve 直接走 HTTP GET，零 WebSocket frame/POST。Agent Responses 为 `80/80`。
+- production Responses 全局与每个 AgentVersion binding 均要求 HTTPS；ambient/bootstrap 与 active binding 同样强制
+  `storeResponses=true`，POST 与 retrieve GET 都拒绝 redirect。Release/Worker 对不安全或不可恢复的配置在网络调用前 fail
+  closed。真实 bootstrap Workflow 在 `response.created` 后丢失 Worker lease，重开只执行一次 GET，不重复原 POST。WebSocket
+  在发送 `response.create` 前先持久化 dispatch boundary；断连转 HTTP 不重复 fence，成功预热后重连收到 426 的 fallback 仍保留
+  exact control sink，Workflow retrieve 直接走 HTTP GET，零 WebSocket frame/POST。Agent Responses 为 `82/82`。
 - Web 公开 `/control-api/health/ready` 精确代理 BFF，不能再落入 SPA HTML 200；checked-in Web/Control origin 与唯一
   `6175` TLS listener 精确一致。BFF 的 SIGTERM 会先停止接收新连接、允许短请求完成，再在 5 秒内 abort SSE/upstream 并释放
   端口；compose stop grace 为 10 秒。nginx 以非 root `nginx`、read-only、drop-all-caps 运行并输出 CSP/HSTS 等安全头。
   Web BFF `21/21`、production/topology gate、真实 hardened container smoke 与 CI YAML 解析通过。
 - Workspace execute/reconcile/cancel receipt 现在直接携带同事务绑定的 exact delivery attempt；进程在 receipt commit 后、claim 前
   崩溃时，同 idempotency replay 只恢复该 `pending` attempt。`leased`、`possiblySent`、`settled` 均为零重复 dispatch，且不再用
-  audit list 猜 attempt。Application 为 `163/163`，无 PG 环境 Store 为 `385 pass / 65 conditional skip / 0 fail`。
+  audit list 猜 attempt。Application 为 `163/163`。
+- Execution Step authority 已统一为 `(tenantId, runId, stepId)`：InMemory、SQLite schema v26 与 PostgreSQL execution schema v6
+  均允许同一 WorkflowVersion 的连续/并发 Runs 复用相同 nodeId 和 Attempt number 1，而不互相读取或覆盖 Step、Attempt 与 Tool
+  receipt。共享 conformance 覆盖 concurrent same-named Tool Step、receipt prepare/load/replay、wrong-Run lookup=null；真实 SQLite
+  Worker 纵向连续运行同一 WorkflowVersion 两次并全部 terminal。PG v5 -> v6 migration 会按 catalog 状态幂等重绑 dependent FK、
+  移除旧全局 PK/重复索引，并与 fresh v6 catalog 深比较。
 - Workflow durable continuation 已新增 Store-owned `resumeRequired`：SQLite/PostgreSQL 在一个事务内终结已消费的
   `responseObserved` dispatch，把 Attempt、canonical Workflow node 与 bounded continuation checkpoint 接管到当前
   reconcile WorkItem lease；Worker 只从已验证 history/provider checkpoint 继续，不执行旧 response GET。真实 SQLite
@@ -112,12 +121,19 @@
   Agent/Verification、Step/Attempt、dispatch、node/reconcile WorkItem、公开 Run failure 与 terminal events 精确收敛；SQLite replay
   深校验 receipt、dispatch、Attempt、Step、WorkItem、节点事件与 terminal Run/outbox。一次性 PostgreSQL 16 的 operator first
   commit/deep replay/tamper focused `1/1`、0 skip 通过，并修复了写入端与 replay 端 terminal authority 多余字段导致的 ID 漂移。
-- desktop release workflow 现在同时绑定 immutable tag、`origin/main` ancestry、远端 tag/main 无漂移以及 exact commit SHA/App ID 的
+- desktop release workflow 现在同时绑定 immutable tag、authoritative GitHub `main` ancestry、远端 tag/main 无漂移以及 exact commit SHA/App ID 的
   required checks；macOS/Windows 均验证实际 updater 签名后才允许上传，Windows launch smoke 还按本次 install root/app binary
-  精确检测 GUI/Node/guardian orphan。确定性 release/staging/Windows process tests 为 `16/16`，YAML 与 smoke syntax 通过。
-- 当前合并验证为 Domain `126/126`、Application `163/163`、Store `385 passed / 65 PostgreSQL 条件 skip / 0 failed`、
-  Agent Responses `80/80`、Runtime Worker `361 passed / 2 PostgreSQL 条件 skip / 0 failed`、UI `209 files / 1284 tests`、
-  Web BFF `21/21`；全部 architecture packages typecheck、依赖边界 `15/15`、desktop/server staging contracts `21/21`。
+  精确检测 GUI/Node/guardian orphan。launcher 从 Tauri updater endpoint 推导 repository，只接受唯一匹配的 GitHub push remote，
+  当前仓库会选择 `github` 而拒绝 CodeUp `origin`。确定性 release/staging/Windows process tests、YAML 与 smoke syntax 通过。
+- server backup/restore 不再只检查 Sigstore JSON 形状：工具在容器内对 exact manifest bytes、repository、workflow/tag identity 执行
+  `cosign verify-blob`，并在 restore 时再次验证 bundle 内证据；required CI/server release 使用 pinned PostgreSQL 16 串行执行完整
+  Store contract gate。
+- PostgreSQL 16 Store 完整串行门禁为 `614 total / 613 passed / 1 reverse missing-URL skip / 0 failed`，真实 PG
+  production recovery `1/1` 通过。
+- 其余当前合并验证为 Domain `126/126`、Application `163/163`、Agent Responses `82/82`、Runtime Worker
+  `365 passed / 2 PostgreSQL 条件 skip / 0 failed`、Control API `141 passed / 5 PostgreSQL 条件 skip / 0 failed`、UI
+  `210 files / 1298 tests`、Web BFF `21/21`；全部相关 packages typecheck、UI lint/production build 与
+  release/backup/static contract `36/36` 通过。
   当前仍是 `In progress`：
   正式 Apple Developer ID/notarization/staple、Windows PFX/AuthentiCode timestamp/NSIS 实机、GitHub hosted
   release publish、真实 Identity/PIM 多租户部署、跨主机 PostgreSQL/Worker 网络分区、备份恢复与 SLO 仍需外部 runner、凭据和环境。
