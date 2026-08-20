@@ -1,4 +1,5 @@
 import type { ControlApiClient } from "@crewon/control-client";
+import type { ModelProviderSettingsSnapshot } from "@crewon/contracts";
 
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
@@ -66,17 +67,63 @@ function credentialStoreFor(
 async function readCatalog(
   params: ControlModelProviderParams,
 ): Promise<ProviderCredentialCatalog> {
+  return (await readPanelState(params)).credentialCatalog;
+}
+
+function assertCatalogIdentity(
+  settings: ModelProviderSettingsSnapshot,
+  catalog: ProviderCredentialCatalog,
+): void {
+  const identityMatches =
+    settings.activeProviderId === catalog.activeProviderId &&
+    settings.providers.length === catalog.bindings.length &&
+    settings.providers.every((provider) => {
+      const binding = catalog.bindings.find(
+        (candidate) => candidate.providerId === provider.providerId,
+      );
+      return (
+        binding !== undefined &&
+        provider.credentialKind === binding.credentialKind &&
+        provider.endpoint === binding.endpoint &&
+        provider.environmentVariable === binding.environmentVariable &&
+        provider.isActive === binding.isActive &&
+        provider.isActive ===
+          (provider.providerId === settings.activeProviderId)
+      );
+    });
+  if (!identityMatches) {
+    throw new Error("model_provider_credential_catalog_identity_mismatch");
+  }
+}
+
+async function readPanelState(params: ControlModelProviderParams): Promise<{
+  credentialCatalog: ProviderCredentialCatalog;
+  runtimeAvailability: ModelProviderSettingsSnapshot["runtimeAvailability"];
+}> {
   const { settings } = await params.client.getModelProviderSettings();
-  return {
+  const controlCatalog: ProviderCredentialCatalog = {
     activeProviderId: settings.activeProviderId,
     bindings: settings.providers.map((provider) => ({
-      credentialAvailable: true,
+      credentialAvailable: false,
       credentialKind: provider.credentialKind,
       endpoint: provider.endpoint,
       environmentVariable: provider.environmentVariable,
       isActive: provider.isActive,
       providerId: provider.providerId,
     })),
+  };
+  const credentialStore = credentialStoreFor(params);
+  if (credentialStore === null) {
+    return {
+      credentialCatalog: controlCatalog,
+      runtimeAvailability: settings.runtimeAvailability,
+    };
+  }
+  const credentialCatalog = await credentialStore.catalog();
+  assertCatalogIdentity(settings, credentialCatalog);
+  return {
+    credentialCatalog,
+    runtimeAvailability: settings.runtimeAvailability,
   };
 }
 
@@ -105,14 +152,16 @@ export async function refreshControlModelProvidersPanel(
 ): Promise<void> {
   params.setCapabilityPanel(modelProviderLoadingPanel(params.locale));
   try {
+    const state = await readPanelState(params);
     params.setCapabilityPanel(
       modelProviderListPanel({
-        credentialCatalog: await readCatalog(params),
+        credentialCatalog: state.credentialCatalog,
         credentialMutationsAvailable: credentialStoreFor(params) !== null,
         configRead: null,
         cwd: null,
         locale: params.locale,
         probeText,
+        runtimeAvailability: state.runtimeAvailability,
       }),
     );
   } catch (error) {

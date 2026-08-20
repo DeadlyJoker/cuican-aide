@@ -7,6 +7,7 @@
  */
 
 import type { ConfigReadResponse } from "@crewon-ui-model/v2/ConfigReadResponse";
+import type { ModelProviderSettingsSnapshot } from "@crewon/contracts";
 
 import type {
   CapabilityPanel,
@@ -53,15 +54,24 @@ function panelTitle(locale: Locale): string {
 
 function credentialKindLabel(
   entry: ModelProviderEntry,
+  credentialMutationsAvailable: boolean,
   locale: Locale,
 ): string {
   switch (entry.credentialKind) {
     case "bearer-token":
-      return locale === "zh" ? "已保存密钥" : "key stored";
+      if (!credentialMutationsAvailable) {
+        return locale === "zh"
+          ? "密钥由部署管理"
+          : "credential managed by deployment";
+      }
+      if (entry.hasStoredToken) {
+        return locale === "zh" ? "已保存密钥" : "key stored";
+      }
+      return locale === "zh" ? "密钥缺失" : "key missing";
     case "env-key":
       return locale === "zh"
-        ? `环境变量 ${entry.envKey}`
-        : `env var ${entry.envKey}`;
+        ? `已配置环境变量 ${entry.envKey}`
+        : `configured env var ${entry.envKey}`;
     case "none":
       return locale === "zh" ? "无需密钥" : "no credential";
   }
@@ -128,6 +138,9 @@ function modelProviderListBody(params: {
   entries: ModelProviderEntry[];
   locale: Locale;
   probeText: string | null;
+  runtimeAvailability:
+    | ModelProviderSettingsSnapshot["runtimeAvailability"]
+    | null;
   selectedId: string;
 }): string {
   const {
@@ -135,6 +148,7 @@ function modelProviderListBody(params: {
     entries,
     locale,
     probeText,
+    runtimeAvailability,
     selectedId,
   } = params;
   const sections: string[] = [];
@@ -158,7 +172,7 @@ function modelProviderListBody(params: {
           const marks = [
             vendor?.name ?? null,
             entry.baseUrl,
-            credentialKindLabel(entry, locale),
+            credentialKindLabel(entry, credentialMutationsAvailable, locale),
             entry.id === selectedId
               ? locale === "zh"
                 ? "当前使用"
@@ -168,6 +182,26 @@ function modelProviderListBody(params: {
           return `- ${entry.name} (${entry.id}) · ${marks.join(" · ")}`;
         }),
       ].join("\n"),
+    );
+  }
+
+  if (runtimeAvailability !== null) {
+    const runtimeLabels =
+      locale === "zh"
+        ? {
+            available: "可用",
+            switchPending: "切换中",
+            unavailable: "不可用",
+            unconfigured: "未配置",
+          }
+        : {
+            available: "available",
+            switchPending: "switch pending",
+            unavailable: "unavailable",
+            unconfigured: "unconfigured",
+          };
+    sections.push(
+      `${locale === "zh" ? "Worker 运行时" : "Worker runtime"}: ${runtimeLabels[runtimeAvailability]}`,
     );
   }
 
@@ -210,6 +244,9 @@ export function modelProviderListPanel(params: {
   cwd: string | null;
   locale: Locale;
   probeText?: string | null;
+  runtimeAvailability?:
+    | ModelProviderSettingsSnapshot["runtimeAvailability"]
+    | null;
 }): CapabilityPanel {
   const {
     configRead,
@@ -218,6 +255,7 @@ export function modelProviderListPanel(params: {
     cwd,
     locale,
     probeText = null,
+    runtimeAvailability = null,
   } = params;
   const entries = modelProviderEntries(configRead, credentialCatalog);
   const selectedId = selectedModelProviderId(configRead, credentialCatalog);
@@ -242,6 +280,7 @@ export function modelProviderListPanel(params: {
       entries,
       locale,
       probeText,
+      runtimeAvailability,
       selectedId,
     }),
     actions: [

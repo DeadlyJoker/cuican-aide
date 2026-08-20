@@ -124,6 +124,7 @@ describe("modelProviderListPanel", () => {
       credentialMutationsAvailable: false,
       cwd: null,
       locale: "en",
+      runtimeAvailability: "unavailable",
     });
 
     expect({
@@ -143,8 +144,10 @@ describe("modelProviderListPanel", () => {
           },
         ],
         "body": "Configured model services
-      - My gateway (gateway) · https://api.example.com/v1 · key stored · in use
+      - My gateway (gateway) · https://api.example.com/v1 · credential managed by deployment · in use
       - local (local) · Ollama · http://127.0.0.1:11434/v1 · no credential
+
+      Worker runtime: unavailable
 
       Notes
       - Responses-compatible APIs only; Chat Completions endpoints are not supported.

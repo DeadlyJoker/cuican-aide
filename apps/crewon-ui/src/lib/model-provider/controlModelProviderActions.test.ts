@@ -9,6 +9,7 @@ import {
 } from "./controlModelProviderActions";
 import { MODEL_PROVIDER_FIELD_IDS } from "./modelProviderPanel";
 import type {
+  ProviderCredentialBinding,
   ProviderCredentialStorePort,
   ProviderCredentialUpsert,
 } from "./providerCredentialStore";
@@ -24,13 +25,20 @@ const gateway = {
   providerId: "gateway",
 };
 
-function settings(activeProviderId: string | null = "gateway") {
+function settings(
+  activeProviderId: string | null = "gateway",
+  runtimeAvailability:
+    | "available"
+    | "switchPending"
+    | "unavailable"
+    | "unconfigured" = "available",
+) {
   return {
     settings: {
       activeProviderId,
       providers: [{ ...gateway, isActive: activeProviderId === "gateway" }],
       revision: 3,
-      runtimeAvailability: "available" as const,
+      runtimeAvailability,
       updatedAt: null,
     },
   };
@@ -41,7 +49,15 @@ function harness(
     activeProviderId?: string | null;
     credentialStore?: ProviderCredentialStorePort | null;
     fields?: Record<string, string>;
+    nativeActiveProviderId?: string | null;
+    nativeBinding?: Partial<ProviderCredentialBinding>;
+    nativeCredentialAvailable?: boolean;
     probeProviderId?: string;
+    runtimeAvailability?:
+      | "available"
+      | "switchPending"
+      | "unavailable"
+      | "unconfigured";
   } = {},
 ) {
   let panel: CapabilityPanel | null = null;
@@ -53,6 +69,7 @@ function harness(
       options.activeProviderId === undefined
         ? "gateway"
         : options.activeProviderId,
+      options.runtimeAvailability,
     ),
   );
   const probeModelProvider = vi.fn(async () => ({
@@ -67,6 +84,19 @@ function harness(
     status: "ok" as const,
   }));
   const client: Client = { getModelProviderSettings, probeModelProvider };
+  const activeProviderId =
+    options.activeProviderId === undefined
+      ? "gateway"
+      : options.activeProviderId;
+  const nativeBinding: ProviderCredentialBinding = {
+    credentialAvailable: options.nativeCredentialAvailable ?? true,
+    credentialKind: gateway.credentialKind,
+    endpoint: gateway.endpoint,
+    environmentVariable: gateway.environmentVariable,
+    isActive: activeProviderId === "gateway",
+    providerId: gateway.providerId,
+    ...options.nativeBinding,
+  };
   const store: ProviderCredentialStorePort | null =
     options.credentialStore === undefined
       ? {
@@ -75,7 +105,13 @@ function harness(
             return { activeProviderId: providerId, bindings: [] };
           },
           async catalog() {
-            return { activeProviderId: "gateway", bindings: [] };
+            return {
+              activeProviderId:
+                options.nativeActiveProviderId === undefined
+                  ? activeProviderId
+                  : options.nativeActiveProviderId,
+              bindings: [nativeBinding],
+            };
           },
           async delete(providerId) {
             deletions.push(providerId);
@@ -125,7 +161,7 @@ describe("Control model provider actions", () => {
 
     expect(test.client.getModelProviderSettings).toHaveBeenCalledOnce();
     expect(test.panel()).toMatchObject({
-      body: expect.stringContaining("gateway"),
+      body: expect.stringContaining("Worker runtime: available"),
       title: "Model access",
     });
   });
@@ -140,6 +176,65 @@ describe("Control model provider actions", () => {
       "refresh-model-providers",
     ]);
     expect(test.panel()?.body).toContain("managed by the deployment authority");
+    expect(test.panel()?.body).toContain("credential managed by deployment");
+    expect(test.panel()?.body).not.toContain("key stored");
+  });
+
+  it.each(["switchPending", "unavailable"] as const)(
+    "projects the settings-level %s runtime availability",
+    async (runtimeAvailability) => {
+      const test = harness({ runtimeAvailability });
+
+      await refreshControlModelProvidersPanel(test.params);
+
+      expect(test.panel()?.body).toContain(
+        `Worker runtime: ${runtimeAvailability === "switchPending" ? "switch pending" : runtimeAvailability}`,
+      );
+    },
+  );
+
+  it("requires a missing desktop key instead of preserving a blank secret", async () => {
+    const test = harness({
+      fields: { ...validFields, [MODEL_PROVIDER_FIELD_IDS.apiKey]: "" },
+      nativeCredentialAvailable: false,
+    });
+
+    await refreshControlModelProvidersPanel(test.params);
+    expect(test.panel()?.body).toContain("key missing");
+    handleControlModelProviderAction(test.params, "save", null);
+    await vi.waitUntil(() => test.panel()?.error !== undefined);
+
+    expect(test.upserts).toEqual([]);
+    expect(test.panel()?.error).toBe("API key is required");
+  });
+
+  it.each([
+    ["endpoint", { endpoint: "https://drift.example/v1" }],
+    ["credential kind", { credentialKind: "none" as const }],
+    ["environment variable", { environmentVariable: "API_KEY" }],
+    ["active flag", { isActive: false }],
+    ["provider id", { providerId: "other" }],
+  ])(
+    "fails the whole desktop panel closed on %s identity drift",
+    async (_label, nativeBinding) => {
+      const test = harness({ nativeBinding });
+
+      await refreshControlModelProvidersPanel(test.params);
+
+      expect(test.panel()?.error).toBe(
+        "model_provider_credential_catalog_identity_mismatch",
+      );
+    },
+  );
+
+  it("fails the whole desktop panel closed on active provider drift", async () => {
+    const test = harness({ nativeActiveProviderId: null });
+
+    await refreshControlModelProvidersPanel(test.params);
+
+    expect(test.panel()?.error).toBe(
+      "model_provider_credential_catalog_identity_mismatch",
+    );
   });
 
   it("writes provider credentials through the desktop authority", async () => {
