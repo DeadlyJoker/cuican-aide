@@ -1,9 +1,29 @@
 # WS1 实施状态
 
-日期：2026-08-19
+日期：2026-08-20
 状态：In progress
 
 本文件记录当前 source tree 已验证的事实，不把局部测试外推为 WS1 或完整迁移完成。
+
+## 2026-08-20 production closeout 复审
+
+- 完成性复审发现并关闭 Responses WebSocket 重连 426 的 durable fence P0：成功预热后若重连升级被拒绝，HTTP fallback
+  继续携带原始 stream options，Direct POST 前必须先完成同一 `dispatchBoundaryCrossed`。真实 transport 测试严格证明
+  `fence -> POST`；fence 失败时 HTTP POST=`0`、WebSocket frame=`0`。`@crewon/agent-responses` 当前 `82/82`。
+- 当前 Store 使用 Node 24.19.0 和一次性 PostgreSQL 16 完成串行全量回归：`608 total / 607 passed /
+1 reverse missing-URL skip / 0 failed`。唯一 skip 是反向验证没有 URL 时必须跳过，实际 PostgreSQL authority 用例均已执行。
+- 产品真实性复审关闭三个可达 P1：Control Office 只显示已发布定义、成员与显式 Workflow 委派；Control Knowledge source
+  显示“已保存”而非无 authority 的“已索引”；Library 顶栏无内容的 Inspector toggle 已删除。UI 全量为 `1286/1286`，
+  lint、snapshots 与 production build 通过。
+- production Compose 不再 build 或接受 `:local` 默认值；四个 image 必须逐项等于同一 signed server manifest 的
+  `name@sha256`，并在启动前通过 exact GitHub repository/workflow/tag identity 的 `cosign verify-blob`。四个生产 Dockerfile
+  锁定 Node/nginx OCI digest，Runtime Worker 锁定 PostgreSQL client 16.15。Desktop prerelease 也固定为
+  `prerelease=true/latest=false`，不会进入稳定 updater channel。
+- 本机 Linux arm64 已重建四个 production image，并通过 non-root、removed-runtime marker、nginx TLS health、PG16.15 与
+  真实 backup/restore smoke。Linux amd64、GitHub OIDC/cosign、Apple notarization、Windows Authenticode 和真实 release publish
+  仍属于 runner/credential gate，不能用本机源码测试冒充发布完成。
+- `legacy-fence-artifact` Cargo feature/cfg、双 App Server artifact builder/verifier 和 legacy-only 测试已经完整删除；
+  production 只保留当前 `LeaseAwareShared` generation coordination，不恢复 Rust Runtime/App Server compatibility。
 
 ## 2026-08-19 当前 HEAD 收口证据
 
@@ -20,9 +40,7 @@
 - PostgreSQL reconciliation receipt 现在只验证 deterministic WorkItem ID、exact payload 与前后 handoff
   authority，不再把 downstream WorkItem 的 `pending/leased/completed` 瞬时状态当成不可变 receipt。
   因此网络响应丢失后，即使 downstream reconciliation 已完成，原调度请求仍可 exact replay。
-- 当前 W01 Store 已在一次性 PostgreSQL 16 上完成完整串行 sweep：`606 total / 605 passed / 1 反向缺 URL skip /
-0 failed`。sibling、Gate、cancel、retrieved continuation、pending Tool adoption、operator-required、receipt replay 与迁移
-  用例均实际执行；唯一 skip 只验证未配置 URL 时的反向行为。
+- 当前 W01 Store 在 2026-08-20 的更新全量证据见上节；本节保留 2026-08-19 当时的阶段结果，不再作为最新计数。
 
 - Runtime/Control/Workspace/Workflow 的 production execution path 已按 breaking cutover 收敛到 TypeScript。当前 macOS
   `.app` 只包含 `crewon-ui`、官方 Node 24.18.1、`crewon-process-guardian` 与 Control API、Provider coordinator、Runtime
