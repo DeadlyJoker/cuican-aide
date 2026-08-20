@@ -57,6 +57,7 @@ export function controlAutomationLibraryItem(
       threadId: automation.threadId,
       controlAutomationId: automation.automationId,
       controlAutomationRevision: automation.revision,
+      controlSchedule: automation.schedule,
     },
   };
 }

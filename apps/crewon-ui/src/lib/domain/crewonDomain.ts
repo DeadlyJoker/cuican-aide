@@ -1,4 +1,5 @@
 import type { ExternalAgentConfigMigrationItem } from "@crewon-ui-model/v2/ExternalAgentConfigMigrationItem";
+import type { AutomationView } from "@crewon/contracts";
 
 export type LibraryKind =
   | "plugins"
@@ -780,6 +781,7 @@ export type LibraryItem = {
         configPath?: string;
         controlAutomationId?: string;
         controlAutomationRevision?: 1;
+        controlSchedule?: AutomationView["schedule"];
       }
     | {
         type: "external-agent-import";

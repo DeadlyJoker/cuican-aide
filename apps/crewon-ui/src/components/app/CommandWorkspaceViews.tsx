@@ -42,6 +42,7 @@ import type {
   AgentPlatformResourceStates,
   AgentPlatformSnapshot,
 } from "../../lib/agent-platform/agentPlatformClient";
+import type { AgentConfig } from "../../lib/domain/crewonDomain";
 import type { ControlWorkflowAdapter } from "../../lib/workflow/controlWorkflowAdapter";
 
 type FilterOption = {
@@ -68,7 +69,7 @@ type CatalogItem = {
   resource?: CatalogResourceSummary;
 };
 
-type TeamMode = "office" | "workflow";
+type TeamMode = "office" | "workflow" | "experts";
 
 const resourceCategoryLabels: Record<AgentPlatformResourceCategory, string> = {
   agents: "Agent",
@@ -1107,6 +1108,7 @@ function TeamCapabilityUnavailable({
 
 export function TeamView({
   active,
+  expertAgents = [],
   officeRuntime,
   officeRoomId,
   teamMode,
@@ -1117,6 +1119,7 @@ export function TeamView({
   onTeamModeChange,
 }: {
   active: boolean;
+  expertAgents?: readonly AgentConfig[];
   officeRuntime: Omit<CommandOfficeRoomProps, "isOpen"> | null;
   officeRoomId: string | null;
   teamMode: TeamMode;
@@ -1154,6 +1157,7 @@ export function TeamView({
             options={[
               { label: "办公室", value: "office" },
               { label: "协作流", value: "workflow" },
+              { label: "专家", value: "experts" },
             ]}
             onChange={(value) => {
               const nextMode = value as TeamMode;
@@ -1164,10 +1168,14 @@ export function TeamView({
             }}
           />
           <div className="catalog-header-actions">
-            {teamMode === "office" ? (
+            {teamMode === "office" || teamMode === "experts" ? (
               <CatalogSearch
-                label="搜索办公室"
-                placeholder="搜索办公室、目标或成员"
+                label={teamMode === "experts" ? "搜索专家" : "搜索办公室"}
+                placeholder={
+                  teamMode === "experts"
+                    ? "搜索专家、角色或模型"
+                    : "搜索办公室、目标或成员"
+                }
                 value={searchQuery}
                 onChange={setSearchQuery}
               />
@@ -1246,6 +1254,54 @@ export function TeamView({
               <p>CrewON Control 未提供 Workflow authority。</p>
             </section>
           )}
+        </section>
+
+        <section
+          className="team-experts-shell"
+          data-card-filter="experts"
+          hidden={teamMode !== "experts"}
+        >
+          <header className="team-experts-header">
+            <div>
+              <span>Agent roster</span>
+              <h2>团队专家</h2>
+              <p>来自真实 Agent 配置目录，可用于办公室成员和协作流执行。</p>
+            </div>
+            <strong>{expertAgents.length}</strong>
+          </header>
+          <div className="agent-grid team-expert-grid">
+            {expertAgents
+              .filter((agent) =>
+                [agent.name, agent.role, agent.model]
+                  .join(" ")
+                  .toLocaleLowerCase()
+                  .includes(searchQuery.trim().toLocaleLowerCase()),
+              )
+              .map((agent) => (
+                <article
+                  className="agent-card"
+                  key={agent.agentId ?? agent.name}
+                >
+                  <span className="agent-avatar" data-accent={agent.accent}>
+                    {agent.glyph}
+                  </span>
+                  <div>
+                    <strong>{agent.name}</strong>
+                    <p>{agent.role}</p>
+                    <small>
+                      {agent.model} · {agent.skills.length} Skills ·{" "}
+                      {agent.mcp.length} MCP
+                    </small>
+                  </div>
+                </article>
+              ))}
+          </div>
+          {expertAgents.length === 0 ? (
+            <section className="team-office-empty team-capability-live-empty">
+              <h2>暂无已发布专家</h2>
+              <p>先在智能体目录创建并发布 Agent，再把它加入办公室。</p>
+            </section>
+          ) : null}
         </section>
 
         <div id="team-log" className="sr-log" aria-live="polite" />
