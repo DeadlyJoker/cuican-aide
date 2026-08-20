@@ -826,7 +826,7 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain("data-scene-capabilities");
   });
 
-  it("renders only Control tasks and conversations in the sidebar", () => {
+  it("renders Control task navigation and conversations in the sidebar", () => {
     const markup = renderCommandWorkspace();
 
     expect(markup).toContain("新建会话");
@@ -836,7 +836,8 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain("current-workspace-thread-list");
     expect(markup).not.toContain("建议任务");
     expect(markup).not.toContain('data-od-id="workspace-node-product"');
-    expect(markup).not.toContain('data-nav-key="projects"');
+    expect(markup).toContain('data-nav-key="projects"');
+    expect(markup).toContain("看板 · 执行");
   });
 
   it("renders a path-free native Workspace selector for Control tasks", () => {

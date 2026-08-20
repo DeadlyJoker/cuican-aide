@@ -40,6 +40,7 @@ describe("CommandWorkspaceCapabilityDrawer", () => {
 
     expect(markup).toContain('aria-label="Open workspace tools"');
     expect(markup).toContain('class="command-workbench-trigger"');
+    expect(markup).toContain("Workbench");
     expect(markup).not.toContain('aria-label="Task board"');
     expect(markup).not.toContain('class="command-workbench-activity"');
     expect(markup).toMatchSnapshot();

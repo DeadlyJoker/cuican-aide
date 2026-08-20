@@ -10986,19 +10986,23 @@ body.modal-open {
 .command-shell-route .command-workbench-trigger {
   position: absolute;
   top: 10px;
-  right: 0;
+  right: 12px;
   z-index: 45;
-  display: grid;
-  width: 34px;
+  display: inline-flex;
+  width: auto;
   height: 32px;
-  place-items: center;
-  padding: 0;
-  border: 1px solid transparent;
-  border-radius: var(--radius-md);
-  background: transparent;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: 1px solid var(--n-250);
+  border-radius: var(--radius-pill);
+  background: color-mix(in oklch, var(--n-0) 88%, transparent);
   color: var(--n-700);
-  box-shadow: none;
+  box-shadow: var(--shadow-raised);
   cursor: pointer;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
 }
 
 .command-shell-route .command-workbench-trigger:hover,
@@ -11006,6 +11010,12 @@ body.modal-open {
   background: var(--n-150);
   color: var(--n-950);
   outline: 0;
+}
+
+.command-shell-route .command-workbench-trigger span {
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
+  line-height: 1;
 }
 
 /* Matches the sidebar collapse glyph, so the two rails read as a pair. */
@@ -11022,6 +11032,11 @@ body.modal-open {
 }
 
 @container command-workbench (max-width: 560px) {
+  .command-task-board-columns {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: repeat(3, minmax(128px, 1fr));
+  }
+
   .command-file-layout {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) minmax(170px, 38%);

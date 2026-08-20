@@ -22,6 +22,13 @@ export const shellNavItems: ShellNavItem[] = [
   { key: "command", label: "新建任务", en: "New task" },
   { key: "assist", label: "助理", en: "Assistant" },
   {
+    key: "projects",
+    label: "任务",
+    en: "Tasks",
+    subtitle: "看板 · 执行",
+    subtitleEn: "Board · Runs",
+  },
+  {
     key: "agents",
     label: "智能体",
     en: "Agents",

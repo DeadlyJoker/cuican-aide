@@ -2,7 +2,7 @@ import {
   BookOpen,
   Bot,
   CalendarDays,
-  FolderOpen,
+  ListTodo,
   PanelLeft,
   Plus,
   Search,
@@ -64,7 +64,7 @@ type SidebarSearchResult =
 const viewIcons: Record<CommandShellView, ReactNode> = {
   command: <Plus aria-hidden="true" />,
   assist: <Sparkles aria-hidden="true" />,
-  projects: <FolderOpen aria-hidden="true" />,
+  projects: <ListTodo aria-hidden="true" />,
   agents: <Bot aria-hidden="true" />,
   knowledge: <BookOpen aria-hidden="true" />,
   schedule: <CalendarDays aria-hidden="true" />,

@@ -41,7 +41,7 @@ const sidebarSlots: CommandHomeSlots = {
 };
 
 describe("CommandSidebar", () => {
-  it("keeps the reference navigation and omits the empty project route", () => {
+  it("keeps the reference navigation and exposes the Control-backed task board", () => {
     const markup = renderToStaticMarkup(
       <CommandSidebar
         activeView="command"
@@ -71,14 +71,14 @@ describe("CommandSidebar", () => {
     expect({
       hasAbsolutePath: markup.includes("/Users/private"),
       hasLegacyPathInput: markup.includes("command-workspace-path"),
-      hasProjects: markup.includes("Projects"),
+      hasTasks: markup.includes("Tasks"),
       hasSchedule: markup.includes("Schedule"),
       hasTasksTree: markup.includes('aria-label="Tasks and conversations"'),
       hasTask: markup.includes("Control task"),
     }).toEqual({
       hasAbsolutePath: false,
       hasLegacyPathInput: false,
-      hasProjects: false,
+      hasTasks: true,
       hasSchedule: true,
       hasTasksTree: true,
       hasTask: true,

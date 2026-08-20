@@ -40,13 +40,13 @@ type ControlToolId =
   | "web"
   | "apps";
 
-const DEFAULT_WORKBENCH_WIDTH = 640;
+const DEFAULT_WORKBENCH_WIDTH = 480;
 const MIN_WORKBENCH_WIDTH = 360;
 const MAX_WORKBENCH_WIDTH = 840;
 const COMMAND_SIDEBAR_WIDTH = 192;
 const MIN_COMMAND_AREA_WIDTH = 560;
 const WORKBENCH_KEYBOARD_STEP = 24;
-const WORKBENCH_WIDTH_STORAGE_KEY = "crewon:command-workbench-width";
+const WORKBENCH_WIDTH_STORAGE_KEY = "crewon:command-workbench-width-v2";
 
 function currentViewportWidth(): number {
   return typeof window === "undefined" ? 1440 : window.innerWidth;
@@ -307,6 +307,7 @@ export function CommandWorkspaceCapabilityDrawer({
         onClick={onOpen}
       >
         <PanelRight aria-hidden="true" />
+        <span>{locale === "zh" ? "工作台" : "Workbench"}</span>
       </button>
     );
   }
