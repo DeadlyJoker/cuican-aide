@@ -537,6 +537,7 @@ export class ResilientResponsesTransport implements ModelTransportPort {
             signal,
             error.code,
             emittedObservation,
+            options,
           );
           return;
         }

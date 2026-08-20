@@ -851,6 +851,104 @@ test("switches immediately and stays on HTTP when upgrade returns 426", async (c
   );
 });
 
+test("preserves the durable dispatch fence when a reconnect falls back after 426", async (context) => {
+  const order: string[] = [];
+  let httpRequests = 0;
+  const fixture = await reconnect426Fixture(context, (_request, response) => {
+    httpRequests += 1;
+    order.push("post");
+    sendHttpCompleted(response, "http-reconnect", "done");
+  });
+  const transport = new ResilientResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+  });
+  context.after(() => transport.close());
+
+  await transport.prewarm(signal());
+  await fixture.closePrewarmedSocket();
+  const request = manualRequest("hello");
+  const evidence = dispatchEvidence(request);
+  const events = await collect(
+    transport.stream(request, signal(), {
+      dispatchEvidence: evidence,
+      controlSink: {
+        providerTurnStateObserved: async () => undefined,
+        dispatchBoundaryCrossed: async (actual) => {
+          assert.deepEqual(actual, evidence);
+          order.push("fence");
+        },
+      },
+    }),
+  );
+
+  assert.deepEqual(
+    {
+      upgradeRequests: fixture.upgradeRequests,
+      websocketFrames: fixture.websocketFrames,
+      httpRequests,
+      order,
+    },
+    {
+      upgradeRequests: 2,
+      websocketFrames: 0,
+      httpRequests: 1,
+      order: ["fence", "post"],
+    },
+  );
+  assert.equal(events.at(-1)?.type, "completed");
+});
+
+test("sends nothing when the reconnect 426 fallback dispatch fence fails", async (context) => {
+  let httpRequests = 0;
+  let fenceCalls = 0;
+  const fixture = await reconnect426Fixture(context, (_request, response) => {
+    httpRequests += 1;
+    sendHttpCompleted(response, "unexpected-http", "unexpected");
+  });
+  const transport = new ResilientResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "provider-model",
+  });
+  context.after(() => transport.close());
+
+  await transport.prewarm(signal());
+  await fixture.closePrewarmedSocket();
+  const request = manualRequest("hello");
+  const fenceFailure = new Error("durable_fence_failed");
+
+  await assert.rejects(
+    collect(
+      transport.stream(request, signal(), {
+        dispatchEvidence: dispatchEvidence(request),
+        controlSink: {
+          providerTurnStateObserved: async () => undefined,
+          dispatchBoundaryCrossed: async () => {
+            fenceCalls += 1;
+            throw fenceFailure;
+          },
+        },
+      }),
+    ),
+    (error) => error === fenceFailure,
+  );
+
+  assert.deepEqual(
+    {
+      upgradeRequests: fixture.upgradeRequests,
+      websocketFrames: fixture.websocketFrames,
+      httpRequests,
+      fenceCalls,
+    },
+    {
+      upgradeRequests: 2,
+      websocketFrames: 0,
+      httpRequests: 0,
+      fenceCalls: 1,
+    },
+  );
+});
+
 test("reconnects on the provider WebSocket connection limit without falling back", async (context) => {
   const fixture = await websocketFixture(context);
   let connections = 0;
@@ -985,6 +1083,66 @@ async function websocketFixture(
     await closeServer(server);
   });
   return { endpoint, webSocketServer };
+}
+
+async function reconnect426Fixture(
+  context: TestContext,
+  handler: RequestListener,
+): Promise<{
+  endpoint: string;
+  readonly upgradeRequests: number;
+  readonly websocketFrames: number;
+  closePrewarmedSocket(): Promise<void>;
+}> {
+  const server = createServer(handler);
+  const webSocketServer = new WebSocketServer({ noServer: true });
+  let upgradeRequests = 0;
+  let websocketFrames = 0;
+  let prewarmedSocket: WebSocket | null = null;
+  server.on("upgrade", (request, socket, head) => {
+    upgradeRequests += 1;
+    if (upgradeRequests === 1) {
+      webSocketServer.handleUpgrade(request, socket, head, (webSocket) => {
+        webSocketServer.emit("connection", webSocket, request);
+      });
+      return;
+    }
+    socket.end(
+      "HTTP/1.1 426 Upgrade Required\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
+    );
+  });
+  webSocketServer.on("connection", (socket) => {
+    prewarmedSocket = socket;
+    socket.on("message", () => {
+      websocketFrames += 1;
+    });
+  });
+  const endpoint = await listen(server);
+  context.after(async () => {
+    for (const client of webSocketServer.clients) client.terminate();
+    await new Promise<void>((resolve) =>
+      webSocketServer.close(() => resolve()),
+    );
+    await closeServer(server);
+  });
+  return {
+    endpoint,
+    get upgradeRequests() {
+      return upgradeRequests;
+    },
+    get websocketFrames() {
+      return websocketFrames;
+    },
+    async closePrewarmedSocket() {
+      const socket = prewarmedSocket;
+      assert.ok(socket !== null);
+      const closed = new Promise<void>((resolve) =>
+        socket.once("close", resolve),
+      );
+      socket.close();
+      await closed;
+    },
+  };
 }
 
 function normalizedIncrementalFrame(
