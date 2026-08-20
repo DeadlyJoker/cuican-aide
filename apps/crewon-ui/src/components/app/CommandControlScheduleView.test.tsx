@@ -1,5 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
+// @ts-expect-error Vitest runs this check in Node, while the browser bundle omits Node types.
+import { readFileSync } from "node:fs";
 
 import {
   CommandControlScheduleView,
@@ -67,6 +69,20 @@ describe("CommandControlScheduleView", () => {
     expect(markup).toContain("个人日程");
     expect(markup).toContain("小队日程");
     expect(markup).toMatchSnapshot();
+  });
+
+  it("keeps the calendar and agenda in the migration-era grid", () => {
+    const styles = readFileSync(
+      new URL("../../styles/original-shell-overrides.css", import.meta.url),
+      "utf8",
+    );
+    expect(styles).toContain(`.schedule-calendar-shell {
+  display: grid;
+  grid-template-columns: minmax(420px, 1.35fr) minmax(280px, 0.85fr);`);
+    expect(styles).toContain(`.schedule-calendar-weekdays,
+.schedule-calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));`);
   });
 
   it("loads bounded real Control runs for the scheduled threads", async () => {

@@ -265,6 +265,32 @@ describe("Control Library interactions", () => {
     );
   });
 
+  it("reports a localized warning when Automation has no active task", async () => {
+    const setNotice = vi.fn();
+    const handler = createControlLibraryPanelActionHandler({
+      client: {
+        getActiveAgentVersionCatalog: vi.fn(async () => ({ data: [] })),
+        listThreads: vi.fn(async () => ({ data: [] })),
+      } as unknown as ControlApiClient,
+      libraryPanel: null,
+      locale: "zh",
+      openLibrary: vi.fn(async () => undefined),
+      selectedThreadId: null,
+      setLibraryPanel: vi.fn(),
+      setNotice,
+    });
+
+    await handler({
+      id: "prepare-control-automation",
+      label: "新建自动化",
+    });
+
+    expect(setNotice).toHaveBeenCalledWith({
+      text: "没有可用于创建自动化的 Control 任务。请先发起一个任务。",
+      tone: "warning",
+    });
+  });
+
   it("fails closed for a legacy Library action", async () => {
     const setNotice = vi.fn();
     const handler = createControlLibraryPanelActionHandler({

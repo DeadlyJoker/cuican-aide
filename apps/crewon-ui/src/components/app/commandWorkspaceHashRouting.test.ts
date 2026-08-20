@@ -46,11 +46,7 @@ describe("command Workspace hash routing", () => {
     expect(setActiveView).toHaveBeenLastCalledWith("agents");
     expect(onOpenLibrary).toHaveBeenCalledOnce();
     expect(onOpenLibrary).toHaveBeenCalledWith("agents");
-    expect(browser.replaceState).toHaveBeenCalledWith(
-      null,
-      "",
-      "/workspace?tenant=tenant-1#view-agents",
-    );
+    expect(browser.replaceState).not.toHaveBeenCalled();
     expect(browser.location.hash).toBe("#view-agents");
   });
 

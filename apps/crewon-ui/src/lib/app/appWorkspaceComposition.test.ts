@@ -280,9 +280,7 @@ describe("App Workspace Control composition", () => {
     expect(source).toContain("createControlLibraryPanelActionHandler");
     expect(source).toContain("openControlLibraryAction");
     expect(source).toContain("openControlLibraryItem");
-    expect(source).toContain(
-      "onOpenLibrary={(kind) => openCommandLibrary(kind)}",
-    );
+    expect(source).toContain("onOpenLibrary={openCommandLibrary}");
     expect(source).toContain(
       'onOpenApps: () => void openWorkbenchLibrary("plugins")',
     );
