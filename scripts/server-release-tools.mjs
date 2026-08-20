@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { readFileSync, writeFileSync } from "node:fs";
+import { spawnSync } from "node:child_process";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -130,6 +131,53 @@ export function parseServerReleaseManifest(value) {
   return rebuilt;
 }
 
+export function verifyServerDeployment({ images, manifest, repository }) {
+  const parsed = parseServerReleaseManifest(manifest);
+  if (parsed.repository !== repository)
+    throw new Error("server_release_repository_mismatch");
+  const entries = Object.entries(images ?? {}).sort(([left], [right]) =>
+    left.localeCompare(right),
+  );
+  const expectedComponents = [...COMPONENTS].sort();
+  if (
+    JSON.stringify(entries.map(([component]) => component)) !==
+    JSON.stringify(expectedComponents)
+  ) {
+    throw new Error("server_release_deployment_image_set_invalid");
+  }
+  for (const [component, reference] of entries) {
+    if (reference !== parsed.images[component].reference)
+      throw new Error(`server_release_deployment_image_mismatch:${component}`);
+  }
+  return {
+    certificateIdentity: `https://github.com/${repository}/.github/workflows/server-release.yml@refs/tags/${parsed.tag}`,
+    manifest: parsed,
+  };
+}
+
+function verifyServerReleaseSignature({
+  certificateIdentity,
+  manifestPath,
+  signaturePath,
+}) {
+  const verification = spawnSync(
+    "cosign",
+    [
+      "verify-blob",
+      "--bundle",
+      signaturePath,
+      "--certificate-identity",
+      certificateIdentity,
+      "--certificate-oidc-issuer",
+      "https://token.actions.githubusercontent.com",
+      manifestPath,
+    ],
+    { stdio: "inherit" },
+  );
+  if (verification.error !== undefined || verification.status !== 0)
+    throw new Error("server_release_signature_invalid");
+}
+
 function parseArguments(args) {
   const values = new Map();
   for (let index = 0; index < args.length; index += 2) {
@@ -183,6 +231,25 @@ function runCli(args) {
     parseServerReleaseManifest(
       JSON.parse(readFileSync(resolve(exactlyOne(values, "manifest")), "utf8")),
     );
+    return;
+  }
+  if (command === "deployment") {
+    const manifestPath = resolve(exactlyOne(values, "manifest"));
+    const deployment = verifyServerDeployment({
+      images: Object.fromEntries(
+        COMPONENTS.map((component) => [
+          component,
+          exactlyOne(values, `${component}-image`),
+        ]),
+      ),
+      manifest: JSON.parse(readFileSync(manifestPath, "utf8")),
+      repository: exactlyOne(values, "repository"),
+    });
+    verifyServerReleaseSignature({
+      certificateIdentity: deployment.certificateIdentity,
+      manifestPath,
+      signaturePath: resolve(exactlyOne(values, "signature")),
+    });
     return;
   }
   throw new Error("server_release_command_invalid");

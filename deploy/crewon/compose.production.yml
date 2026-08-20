@@ -22,10 +22,7 @@ services:
     <<: *node-service
     env_file:
       - ${CREWON_RUNTIME_ENV_FILE:-./runtime.production.env}
-    image: ${CREWON_RUNTIME_WORKER_IMAGE:-crewon-runtime-worker:local}
-    build:
-      context: ../..
-      dockerfile: deploy/crewon/runtime-worker.Dockerfile
+    image: ${CREWON_RUNTIME_WORKER_IMAGE:?set CREWON_RUNTIME_WORKER_IMAGE to an immutable name@sha256 digest}
     command: ["node", "/app/init/release-main.mjs"]
     restart: "no"
     volumes: *runtime-volumes
@@ -35,10 +32,7 @@ services:
     profiles: ["rollback"]
     env_file:
       - ${CREWON_RUNTIME_ENV_FILE:-./runtime.production.env}
-    image: ${CREWON_RUNTIME_WORKER_IMAGE:-crewon-runtime-worker:local}
-    build:
-      context: ../..
-      dockerfile: deploy/crewon/runtime-worker.Dockerfile
+    image: ${CREWON_RUNTIME_WORKER_IMAGE:?set CREWON_RUNTIME_WORKER_IMAGE to an immutable name@sha256 digest}
     command: ["node", "/app/init/release-rollback-main.mjs"]
     restart: "no"
     volumes: *runtime-volumes
@@ -48,10 +42,7 @@ services:
     profiles: ["backup"]
     env_file:
       - ${CREWON_BACKUP_ENV_FILE:-./backup.production.env}
-    image: ${CREWON_RUNTIME_WORKER_IMAGE:-crewon-runtime-worker:local}
-    build:
-      context: ../..
-      dockerfile: deploy/crewon/runtime-worker.Dockerfile
+    image: ${CREWON_RUNTIME_WORKER_IMAGE:?set CREWON_RUNTIME_WORKER_IMAGE to an immutable name@sha256 digest}
     entrypoint: ["node", "/app/ops/production-backup-main.mjs"]
     command: ["require-explicit-backup-or-restore"]
     restart: "no"
@@ -65,10 +56,7 @@ services:
     <<: *node-service
     env_file:
       - ${CREWON_RUNTIME_ENV_FILE:-./runtime.production.env}
-    image: ${CREWON_RUNTIME_WORKER_IMAGE:-crewon-runtime-worker:local}
-    build:
-      context: ../..
-      dockerfile: deploy/crewon/runtime-worker.Dockerfile
+    image: ${CREWON_RUNTIME_WORKER_IMAGE:?set CREWON_RUNTIME_WORKER_IMAGE to an immutable name@sha256 digest}
     depends_on:
       runtime-release:
         condition: service_completed_successfully
@@ -94,10 +82,7 @@ services:
     <<: *node-service
     env_file:
       - ${CREWON_CONTROL_ENV_FILE:-./control.production.env}
-    image: ${CREWON_CONTROL_API_IMAGE:-crewon-control-api:local}
-    build:
-      context: ../..
-      dockerfile: deploy/crewon/control-api.Dockerfile
+    image: ${CREWON_CONTROL_API_IMAGE:?set CREWON_CONTROL_API_IMAGE to an immutable name@sha256 digest}
     depends_on:
       runtime-worker:
         condition: service_healthy
@@ -122,10 +107,7 @@ services:
     stop_grace_period: 10s
     env_file:
       - ${CREWON_WEB_BFF_ENV_FILE:-./web-bff.production.env}
-    image: ${CREWON_WEB_BFF_IMAGE:-crewon-web-bff:local}
-    build:
-      context: ../..
-      dockerfile: deploy/crewon/web-bff.Dockerfile
+    image: ${CREWON_WEB_BFF_IMAGE:?set CREWON_WEB_BFF_IMAGE to an immutable name@sha256 digest}
     depends_on:
       control-api:
         condition: service_healthy
@@ -143,10 +125,7 @@ services:
       start_period: 5s
 
   web:
-    image: ${CREWON_WEB_IMAGE:-crewon-web:local}
-    build:
-      context: ../..
-      dockerfile: deploy/crewon/web.Dockerfile
+    image: ${CREWON_WEB_IMAGE:?set CREWON_WEB_IMAGE to an immutable name@sha256 digest}
     depends_on:
       web-bff:
         condition: service_healthy

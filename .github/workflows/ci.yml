@@ -230,10 +230,10 @@ jobs:
           CREWON_RUNTIME_ENV_FILE=runtime.production.env.example \
           CREWON_WEB_BFF_ENV_FILE=web-bff.production.env.example \
           CREWON_BACKUP_ENV_FILE=backup.production.env.example \
-          CREWON_CONTROL_API_IMAGE=crewon-control-api:ci \
-          CREWON_RUNTIME_WORKER_IMAGE=crewon-runtime-worker:ci \
-          CREWON_WEB_BFF_IMAGE=crewon-web-bff:ci \
-          CREWON_WEB_IMAGE=crewon-web:ci \
+          CREWON_CONTROL_API_IMAGE=ghcr.io/example/crewon-control-api@sha256:1111111111111111111111111111111111111111111111111111111111111111 \
+          CREWON_RUNTIME_WORKER_IMAGE=ghcr.io/example/crewon-runtime-worker@sha256:2222222222222222222222222222222222222222222222222222222222222222 \
+          CREWON_WEB_BFF_IMAGE=ghcr.io/example/crewon-web-bff@sha256:3333333333333333333333333333333333333333333333333333333333333333 \
+          CREWON_WEB_IMAGE=ghcr.io/example/crewon-web@sha256:4444444444444444444444444444444444444444444444444444444444444444 \
           docker compose --env-file deploy/crewon/compose.host.env.example \
             -f deploy/crewon/compose.production.yml config --quiet
 

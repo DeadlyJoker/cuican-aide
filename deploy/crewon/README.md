@@ -104,19 +104,35 @@ named volume from a directory owned by the non-root Node user (UID/GID `1000`). 
 must be readable by that UID. TLS material must be readable by the pinned Alpine nginx user (UID/GID `101`) without being
 world-readable. Do not grant container root or broadly weaken host permissions to work around an unreadable mount.
 
-Validate interpolation before touching processes, then start the release/Worker/Control/BFF/Web dependency chain:
+Verify the signed release manifest against the exact GitHub repository identity and require every Compose image to match its
+manifest digest before touching processes. Then validate interpolation and start the release/Worker/Control/BFF/Web dependency
+chain:
 
 ```bash
+export CREWON_RELEASE_REPOSITORY=your-github-owner/your-repository
+set -a
+. deploy/crewon/compose.host.env
+set +a
+node scripts/server-release-tools.mjs deployment \
+  --manifest "$CREWON_SERVER_RELEASE_MANIFEST_FILE" \
+  --signature "$CREWON_SERVER_RELEASE_SIGNATURE_FILE" \
+  --repository "$CREWON_RELEASE_REPOSITORY" \
+  --control-api-image "$CREWON_CONTROL_API_IMAGE" \
+  --runtime-worker-image "$CREWON_RUNTIME_WORKER_IMAGE" \
+  --web-bff-image "$CREWON_WEB_BFF_IMAGE" \
+  --web-image "$CREWON_WEB_IMAGE"
 docker compose --env-file deploy/crewon/compose.host.env \
   -f deploy/crewon/compose.production.yml config --quiet
 docker compose --env-file deploy/crewon/compose.host.env \
-  -f deploy/crewon/compose.production.yml up -d --build
+  -f deploy/crewon/compose.production.yml up -d
 ```
 
-The release job has `restart: "no"`; Worker starts only after it exits successfully. The Worker publishes its readiness marker
-only after composition, Provider prewarm and private listeners succeed. Control starts after that marker, BFF only after Control
-Store readiness, and nginx only after BFF confirms Control readiness. A production secret manager or orchestrator may project the same contract,
-but must preserve the process-specific secret scopes, loopback topology and release completion fence.
+The preflight uses `cosign verify-blob` with the exact release workflow/tag certificate identity; a repository mismatch,
+signature failure or one digest mismatch stops deployment. The release job has `restart: "no"`; Worker starts only after it
+exits successfully. The Worker publishes its readiness marker only after composition, Provider prewarm and private listeners
+succeed. Control starts after that marker, BFF only after Control Store readiness, and nginx only after BFF confirms Control
+readiness. A production secret manager or orchestrator may project the same contract, but must preserve the process-specific
+secret scopes, loopback topology and release completion fence.
 
 Runtime operations bind only `127.0.0.1:3223`. `GET /health/live` is process liveness, `GET /health/ready` is the same startup
 fence used by Compose, and `GET /metrics` exposes Prometheus counters/gauges for readiness, uptime and durable Worker outcomes.

@@ -1,16 +1,18 @@
 import { readFile } from "node:fs/promises";
 
 const root = new URL("../../", import.meta.url);
-const [compose, control, runtime, bff, backup, host] = await Promise.all(
-  [
-    "deploy/crewon/compose.production.yml",
-    "deploy/crewon/control.production.env.example",
-    "deploy/crewon/runtime.production.env.example",
-    "deploy/crewon/web-bff.production.env.example",
-    "deploy/crewon/backup.production.env.example",
-    "deploy/crewon/compose.host.env.example",
-  ].map((path) => readFile(new URL(path, root), "utf8")),
-);
+const [compose, control, runtime, bff, backup, host, readme] =
+  await Promise.all(
+    [
+      "deploy/crewon/compose.production.yml",
+      "deploy/crewon/control.production.env.example",
+      "deploy/crewon/runtime.production.env.example",
+      "deploy/crewon/web-bff.production.env.example",
+      "deploy/crewon/backup.production.env.example",
+      "deploy/crewon/compose.host.env.example",
+      "deploy/crewon/README.md",
+    ].map((path) => readFile(new URL(path, root), "utf8")),
+  );
 
 const failures = [];
 const requireText = (source, text, code) => {
@@ -18,6 +20,9 @@ const requireText = (source, text, code) => {
 };
 const forbidText = (source, text, code) => {
   if (source.includes(text)) failures.push(code);
+};
+const requireOccurrences = (source, text, count, code) => {
+  if (source.split(text).length - 1 !== count) failures.push(code);
 };
 
 for (const service of [
@@ -33,6 +38,32 @@ for (const service of [
 }
 requireText(compose, "network_mode: host", "host_network_missing");
 forbidText(compose, "ports:", "published_port_forbidden");
+forbidText(compose, "build:", "production_build_forbidden");
+forbidText(compose, ":local", "mutable_local_image_forbidden");
+requireOccurrences(
+  compose,
+  "${CREWON_RUNTIME_WORKER_IMAGE:?set CREWON_RUNTIME_WORKER_IMAGE to an immutable name@sha256 digest}",
+  4,
+  "runtime_image_authority_invalid",
+);
+for (const name of [
+  "CREWON_CONTROL_API_IMAGE",
+  "CREWON_WEB_BFF_IMAGE",
+  "CREWON_WEB_IMAGE",
+]) {
+  requireOccurrences(
+    compose,
+    `\${${name}:?set ${name} to an immutable name@sha256 digest}`,
+    1,
+    `image_authority_invalid:${name}`,
+  );
+}
+requireText(
+  readme,
+  "server-release-tools.mjs deployment",
+  "signed_deployment_preflight_missing",
+);
+forbidText(readme, "up -d --build", "production_build_command_forbidden");
 requireText(
   compose,
   'command: ["node", "/app/init/release-main.mjs"]',
@@ -166,6 +197,22 @@ for (const name of [
   "CREWON_TLS_KEY_FILE",
 ]) {
   requireText(host, `${name}=`, `host_binding_missing:${name}`);
+}
+
+for (const name of [
+  "CREWON_CONTROL_API_IMAGE",
+  "CREWON_RUNTIME_WORKER_IMAGE",
+  "CREWON_WEB_BFF_IMAGE",
+  "CREWON_WEB_IMAGE",
+]) {
+  if (
+    !new RegExp(
+      `^${name}=ghcr\\.io/[a-z0-9._-]+/[a-z0-9._/-]+@sha256:[a-f0-9]{64}$`,
+      "mu",
+    ).test(host)
+  ) {
+    failures.push(`host_image_digest_invalid:${name}`);
+  }
 }
 
 for (const marker of [
