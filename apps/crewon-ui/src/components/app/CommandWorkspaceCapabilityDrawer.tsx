@@ -26,7 +26,7 @@ import { AppWorkspaceLibraryContent } from "./AppWorkspaceLibraryContent";
 import { CommandWorkbenchBrowser } from "./CommandWorkbenchBrowser";
 import {
   CommandWorkspaceGitStatus,
-  CommandWorkspaceSearch,
+  CommandWorkspaceFilesAndSearch,
 } from "./CommandWorkspaceReadonly";
 import type { Locale } from "../../lib/i18n";
 import type { LibraryItem, LibraryPanel } from "../../lib/domain/crewonDomain";
@@ -445,7 +445,7 @@ export function CommandWorkspaceCapabilityDrawer({
             onSelectThread={onSelectThread}
           />
         ) : activeToolId === "search" ? (
-          <CommandWorkspaceSearch
+          <CommandWorkspaceFilesAndSearch
             client={readonlyClient}
             locale={locale}
             threadId={readonlyThreadId}

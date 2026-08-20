@@ -141,8 +141,49 @@
 }
 
 .command-git-entry {
+  width: 100%;
   grid-template-columns: 28px minmax(0, 1fr) auto;
   align-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.command-git-review {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(220px, 0.45fr) minmax(0, 1fr);
+}
+
+.command-git-review > .command-readonly-results {
+  border-right: 1px solid var(--workbench-border);
+}
+
+.command-git-diff-preview {
+  display: grid;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: auto;
+}
+
+.command-git-diff-preview > header {
+  padding: 9px 11px;
+  border-bottom: 1px solid var(--workbench-border);
+  color: var(--workbench-text);
+  font-size: calc(11px + var(--user-ui-font-delta));
+}
+
+.command-git-diff-preview > pre {
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  color: var(--workbench-text);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  line-height: 1.55;
+  white-space: pre;
 }
 
 .command-git-entry > code {
@@ -167,4 +208,198 @@
   gap: 5px;
   color: var(--workbench-syntax-orange);
   font-weight: 500;
+}
+
+.command-files-search-tool,
+.command-file-browser {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--workbench-bg);
+}
+
+.command-files-search-tabs {
+  display: flex;
+  gap: 2px;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--workbench-border);
+  background: var(--workbench-surface);
+}
+
+.command-files-search-tabs button,
+.command-file-breadcrumbs button,
+.command-file-preview header button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--workbench-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(11px + var(--user-ui-font-delta));
+}
+
+.command-files-search-tabs button.active,
+.command-files-search-tabs button:hover,
+.command-file-breadcrumbs button:hover,
+.command-file-preview header button:hover {
+  background: var(--workbench-active);
+  color: var(--workbench-text);
+}
+
+.command-files-search-tabs svg,
+.command-file-breadcrumbs svg,
+.command-file-entry svg,
+.command-file-preview header svg,
+.command-file-truncated svg {
+  width: 14px;
+  height: 14px;
+}
+
+.command-file-breadcrumbs {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 1px;
+  overflow: auto hidden;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--workbench-border);
+  background: var(--workbench-surface);
+}
+
+.command-file-breadcrumbs > span {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+}
+
+.command-file-breadcrumbs > button:last-child {
+  margin-left: auto;
+}
+
+.command-file-browser-body {
+  display: grid;
+  min-height: 0;
+  grid-template-columns: minmax(180px, 0.42fr) minmax(0, 1fr);
+}
+
+.command-file-list,
+.command-file-preview {
+  min-height: 0;
+  overflow: auto;
+}
+
+.command-file-list {
+  padding: 6px;
+  border-right: 1px solid var(--workbench-border);
+}
+
+.command-file-entry {
+  display: grid;
+  width: 100%;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--workbench-text);
+  cursor: pointer;
+  font: inherit;
+  font-size: calc(12px + var(--user-ui-font-delta));
+  text-align: left;
+}
+
+.command-file-entry:hover {
+  background: var(--workbench-hover);
+}
+
+.command-file-entry span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-file-entry svg:first-child {
+  color: var(--workbench-syntax-blue);
+}
+
+.command-file-entry svg:last-child {
+  color: var(--workbench-muted);
+}
+
+.command-file-preview {
+  display: grid;
+  align-content: stretch;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+}
+
+.command-file-preview > header,
+.command-file-preview > footer {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--workbench-border);
+  color: var(--workbench-muted);
+  font-size: calc(11px + var(--user-ui-font-delta));
+}
+
+.command-file-preview > header strong {
+  overflow: hidden;
+  color: var(--workbench-text);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-file-preview > pre {
+  min-height: 0;
+  margin: 0;
+  overflow: auto;
+  padding: 12px;
+  color: var(--workbench-text);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  line-height: 1.55;
+  white-space: pre;
+}
+
+.command-file-preview > footer {
+  border-top: 1px solid var(--workbench-border);
+  border-bottom: 0;
+}
+
+.command-file-truncated {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 8px;
+  color: var(--workbench-syntax-orange);
+  font-size: calc(11px + var(--user-ui-font-delta));
+}
+
+@media (max-width: 720px) {
+  .command-file-browser-body {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(150px, 0.4fr) minmax(220px, 1fr);
+  }
+
+  .command-file-list {
+    border-right: 0;
+    border-bottom: 1px solid var(--workbench-border);
+  }
+
+  .command-git-review {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(150px, 0.4fr) minmax(220px, 1fr);
+  }
 }
