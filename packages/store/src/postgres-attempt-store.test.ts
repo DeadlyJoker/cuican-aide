@@ -129,7 +129,7 @@ test(
       await store.simulateExecutionV1();
       await store.migrate();
       assert.deepEqual(await store.executionSchemaState(), {
-        version: 5,
+        version: 6,
         tables: [
           "thread_continuations",
           "thread_model_states",
@@ -149,13 +149,13 @@ test(
   async () => {
     const store = await createTestStore(requiredUrl());
     try {
-      await store.simulateExecutionSchema(6);
+      await store.simulateExecutionSchema(7);
       await assert.rejects(
         store.migrate(),
         hasStoreCode("postgres_schema_too_new"),
       );
       assert.deepEqual(await store.executionSchemaState(), {
-        version: 6,
+        version: 7,
         tables: [],
       });
     } finally {
@@ -449,6 +449,12 @@ test(
     const store = await createTestStore(requiredUrl());
     try {
       const freshCatalog = await store.executionIdentityCatalog();
+      assert.equal(
+        freshCatalog.indexes.some(
+          ({ name }) => name === "run_attempts_step_idx",
+        ),
+        false,
+      );
       await store.simulateExecutionV5GlobalStepAuthority();
       await store.migrate();
       assert.deepEqual(await store.executionIdentityCatalog(), freshCatalog);

@@ -171,33 +171,46 @@ export function postgresExecutionSchemaSql(schema: string): string {
         SELECT 1 FROM ${schema}.schema_migrations
         WHERE component = 'execution_authority' AND version BETWEEN 1 AND 5
       ) THEN
-        IF to_regclass('${schema}.workflow_gate_requests') IS NOT NULL THEN
-          ALTER TABLE ${schema}.workflow_gate_requests DROP CONSTRAINT
-            IF EXISTS workflow_gate_requests_tenant_id_run_id_step_id_fkey;
-        END IF;
-        ALTER TABLE ${schema}.run_attempts DROP CONSTRAINT
-          run_attempts_tenant_id_run_id_step_id_fkey;
-        ALTER TABLE ${schema}.run_steps DROP CONSTRAINT run_steps_pkey;
-        ALTER TABLE ${schema}.run_steps ADD CONSTRAINT run_steps_pkey
-          PRIMARY KEY (tenant_id, run_id, step_id);
-        ALTER TABLE ${schema}.run_steps DROP CONSTRAINT
-          run_steps_tenant_id_run_id_step_id_key;
-        ALTER TABLE ${schema}.run_attempts ADD CONSTRAINT
-          run_attempts_tenant_id_run_id_step_id_fkey
-          FOREIGN KEY (tenant_id, run_id, step_id)
-          REFERENCES ${schema}.run_steps(tenant_id, run_id, step_id)
-          ON DELETE CASCADE;
-        IF to_regclass('${schema}.workflow_gate_requests') IS NOT NULL THEN
-          ALTER TABLE ${schema}.workflow_gate_requests ADD CONSTRAINT
-            workflow_gate_requests_tenant_id_run_id_step_id_fkey
+        IF EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conrelid='${schema}.run_steps'::regclass
+            AND conname='run_steps_pkey'
+            AND pg_get_constraintdef(oid)='PRIMARY KEY (step_id)'
+        ) THEN
+          IF to_regclass('${schema}.workflow_gate_requests') IS NOT NULL THEN
+            ALTER TABLE ${schema}.workflow_gate_requests DROP CONSTRAINT
+              IF EXISTS workflow_gate_requests_tenant_id_run_id_step_id_fkey;
+          END IF;
+          ALTER TABLE ${schema}.run_attempts DROP CONSTRAINT
+            IF EXISTS run_attempts_tenant_id_run_id_step_id_fkey;
+          ALTER TABLE ${schema}.run_steps DROP CONSTRAINT run_steps_pkey;
+          ALTER TABLE ${schema}.run_steps ADD CONSTRAINT run_steps_pkey
+            PRIMARY KEY (tenant_id, run_id, step_id);
+          ALTER TABLE ${schema}.run_steps DROP CONSTRAINT IF EXISTS
+            run_steps_tenant_id_run_id_step_id_key;
+          ALTER TABLE ${schema}.run_attempts ADD CONSTRAINT
+            run_attempts_tenant_id_run_id_step_id_fkey
             FOREIGN KEY (tenant_id, run_id, step_id)
-            REFERENCES ${schema}.run_steps(tenant_id, run_id, step_id);
+            REFERENCES ${schema}.run_steps(tenant_id, run_id, step_id)
+            ON DELETE CASCADE;
+          IF to_regclass('${schema}.workflow_gate_requests') IS NOT NULL THEN
+            ALTER TABLE ${schema}.workflow_gate_requests ADD CONSTRAINT
+              workflow_gate_requests_tenant_id_run_id_step_id_fkey
+              FOREIGN KEY (tenant_id, run_id, step_id)
+              REFERENCES ${schema}.run_steps(tenant_id, run_id, step_id);
+          END IF;
         END IF;
         ALTER TABLE ${schema}.run_attempts
           DROP CONSTRAINT IF EXISTS run_attempts_tenant_id_step_id_attempt_number_key;
-        ALTER TABLE ${schema}.run_attempts
-          ADD CONSTRAINT run_attempts_run_step_number_key
-          UNIQUE (tenant_id, run_id, step_id, attempt_number);
+        IF NOT EXISTS (
+          SELECT 1 FROM pg_constraint
+          WHERE conrelid='${schema}.run_attempts'::regclass
+            AND conname='run_attempts_run_step_number_key'
+        ) THEN
+          ALTER TABLE ${schema}.run_attempts
+            ADD CONSTRAINT run_attempts_run_step_number_key
+            UNIQUE (tenant_id, run_id, step_id, attempt_number);
+        END IF;
       END IF;
     END $migration$;
 
