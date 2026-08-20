@@ -7046,7 +7046,45 @@ body.modal-open {
  * instead of occupying layout.
  */
 .command-shell-route[data-capability-sidebar-open="false"] {
-  grid-template-columns: minmax(0, 1fr) 0;
+  grid-template-columns: minmax(0, 1fr) 46px;
+}
+
+.command-workbench-activity {
+  z-index: 30;
+  display: flex;
+  width: 46px;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+  padding: 12px 5px;
+  border-left: 1px solid var(--n-250);
+  background: var(--n-50);
+}
+
+.command-workbench-activity button {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--n-650);
+  cursor: pointer;
+}
+
+.command-workbench-activity button:hover,
+.command-workbench-activity button:focus-visible {
+  background: var(--n-150);
+  color: var(--n-950);
+  outline: 0;
+}
+
+.command-workbench-activity svg {
+  width: 18px;
+  height: 18px;
+  stroke-width: 1.75;
 }
 
 .command-capability-sidebar .capability-dock {
@@ -8824,7 +8862,7 @@ body.modal-open {
   position: relative;
   z-index: 30;
   display: grid;
-  width: 640px;
+  width: clamp(420px, 36vw, 520px);
   min-width: 0;
   height: 100%;
   grid-template-rows: 42px minmax(0, 1fr);
@@ -8834,6 +8872,165 @@ body.modal-open {
   color: var(--workbench-text);
   container-name: command-workbench;
   container-type: inline-size;
+}
+
+.command-task-board {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--workbench-bg);
+}
+
+.command-workbench-tab {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.command-task-board-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.command-task-board-header strong {
+  color: var(--workbench-text);
+  font-size: calc(15px + var(--user-ui-font-delta));
+  font-weight: 600;
+}
+
+.command-task-board-header p {
+  margin: 4px 0 0;
+  color: var(--workbench-muted);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  line-height: 1.5;
+}
+
+.command-task-board-header > span {
+  min-width: 26px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--workbench-hover);
+  color: var(--workbench-muted);
+  font-size: 11px;
+  text-align: center;
+}
+
+.command-task-board-columns {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-columns: repeat(3, minmax(132px, 1fr));
+  gap: 10px;
+  overflow: auto;
+  padding: 12px;
+}
+
+.command-task-column {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--workbench-border);
+  border-radius: 12px;
+  background: var(--workbench-surface);
+}
+
+.command-task-column > header {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--workbench-border);
+}
+
+.command-task-column > header span {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+
+.command-task-column > header svg {
+  width: 15px;
+  height: 15px;
+  color: var(--workbench-muted);
+}
+
+.command-task-column > header strong {
+  overflow: hidden;
+  color: var(--workbench-text);
+  font-size: 12px;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-task-column > header em {
+  color: var(--workbench-faint);
+  font-size: 11px;
+  font-style: normal;
+}
+
+.command-task-column-list {
+  display: flex;
+  min-height: 0;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+  padding: 8px;
+}
+
+.command-task-card {
+  display: grid;
+  width: 100%;
+  gap: 5px;
+  padding: 10px;
+  border: 1px solid var(--workbench-border);
+  border-radius: 9px;
+  background: var(--workbench-raised);
+  color: var(--workbench-text);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.command-task-card:hover,
+.command-task-card:focus-visible,
+.command-task-card[aria-current="true"] {
+  border-color: color-mix(in oklch, var(--accent), var(--workbench-border) 55%);
+  background: var(--workbench-hover);
+  outline: 0;
+}
+
+.command-task-card strong,
+.command-task-card span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-task-card strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.command-task-card span,
+.command-task-card small,
+.command-task-column-empty {
+  color: var(--workbench-muted);
+  font-size: 10px;
+}
+
+.command-task-column-empty {
+  margin: auto;
+  text-align: center;
 }
 
 .command-workbench[hidden] {

@@ -23,7 +23,12 @@ export function AppCommandShellRoute({
       data-capability-sidebar-open={capabilityDrawer.open ? "true" : "false"}
     >
       <CommandWorkspace {...commandWorkspaceProps} />
-      <CommandWorkspaceCapabilityDrawer {...capabilityDrawer} />
+      <CommandWorkspaceCapabilityDrawer
+        {...capabilityDrawer}
+        onSelectThread={commandWorkspaceProps.onSelectLinkedThread}
+        selectedThreadId={commandWorkspaceProps.selectedThreadId}
+        taskThreads={commandWorkspaceProps.linkedThreads}
+      />
       <AppConfirmDialog {...confirmDialog} />
     </div>
   );
