@@ -28,6 +28,7 @@ import {
 import type { LeaseClock } from "./lease-clock.ts";
 import {
   createRunningCommitFixture,
+  createScopedRunningCommitFixture,
   ManualLeaseClock,
 } from "./run-store-conformance.test-support.ts";
 import { seedThread } from "./thread-store-conformance.test-support.ts";
@@ -46,6 +47,84 @@ export function registerRunExecutionStoreConformance(
   options: ExecutionConformanceOptions = {},
 ): void {
   describe(name, () => {
+    test("isolates same-named Steps and Tool receipts across Runs", async (context) => {
+      const fixture = await executionFixture(context, createStore);
+      await fixture.store.commitRun(
+        createScopedRunningCommitFixture("run-store-2", "second"),
+      );
+      const firstClaim = await claimWork(
+        fixture.store,
+        "scoped-worker-1",
+        "scoped-lease-1",
+      );
+      const secondClaim = await claimWork(
+        fixture.store,
+        "scoped-worker-2",
+        "scoped-lease-2",
+      );
+      const attempts = await Promise.all([
+        fixture.store.beginRunAttempt({
+          ...beginInput(firstClaim, "scoped-attempt-1", "2026-08-08T00:01:01Z"),
+          stepId: "shared-tool-step",
+          kind: "tool",
+        }),
+        fixture.store.beginRunAttempt({
+          ...beginInput(
+            secondClaim,
+            "scoped-attempt-2",
+            "2026-08-08T00:01:02Z",
+          ),
+          stepId: "shared-tool-step",
+          kind: "tool",
+        }),
+      ]);
+      const receipts = [
+        scopedToolReceipt(firstClaim, attempts[0]!.attempt.attemptId, "one"),
+        scopedToolReceipt(secondClaim, attempts[1]!.attempt.attemptId, "two"),
+      ] as const;
+      const prepared = await Promise.all([
+        fixture.store.prepareToolExecution({
+          lease: leaseFor(firstClaim),
+          receipt: receipts[0],
+        }),
+        fixture.store.prepareToolExecution({
+          lease: leaseFor(secondClaim),
+          receipt: receipts[1],
+        }),
+      ]);
+
+      const loaded = await Promise.all(
+        prepared.map((receipt) =>
+          fixture.store.loadToolExecutionReceipt({
+            tenantId: receipt.tenantId,
+            runId: receipt.runId,
+            receiptId: receipt.receiptId,
+          }),
+        ),
+      );
+      assert.deepEqual(loaded, prepared);
+      assert.deepEqual(
+        await Promise.all(
+          prepared.map((receipt) =>
+            fixture.store.loadToolExecutionReceipt({
+              tenantId: receipt.tenantId,
+              runId: receipt.runId,
+              receiptId: receipt.receiptId,
+            }),
+          ),
+        ),
+        loaded,
+      );
+      assert.equal(
+        await fixture.store.loadToolExecutionReceipt({
+          tenantId: "tenant-1",
+          runId: "run-store-2",
+          receiptId: receipts[0].receiptId,
+        }),
+        null,
+      );
+    });
+
     test("persists the first model Attempt independently from queue claim counts", async (context) => {
       const fixture = await executionFixture(context, createStore);
       const claim = await claimWork(fixture.store, "worker-1", "lease-1");
@@ -3770,6 +3849,36 @@ export function toolReceipt(claim: WorkItemClaim) {
     effect: "mutation",
     recovery: "reconcilable",
     preparedAt: "2026-08-08T00:01:01Z",
+  });
+}
+
+function scopedToolReceipt(
+  claim: WorkItemClaim,
+  attemptId: string,
+  suffix: "one" | "two",
+) {
+  const current = toolReceipt(claim);
+  const discriminator = suffix === "one" ? "d" : "e";
+  return prepareToolExecutionReceipt({
+    ...current,
+    receiptId: `scoped-receipt-${suffix}`,
+    stepId: "shared-tool-step",
+    attemptId,
+    executionId: `scoped-execution-${suffix}`,
+    actionDigest: `sha256:${discriminator.repeat(64)}`,
+    actionIntent: {
+      ...current.actionIntent!,
+      callId: `scoped-call-${suffix}`,
+      tool: {
+        ...current.actionIntent!.tool,
+        inputDigest: `sha256:${discriminator.repeat(64)}`,
+      },
+    },
+    call: {
+      ...current.call,
+      callId: `scoped-call-${suffix}`,
+      inputDigest: `sha256:${discriminator.repeat(64)}`,
+    },
   });
 }
 

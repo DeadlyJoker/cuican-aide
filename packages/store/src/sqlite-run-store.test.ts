@@ -860,6 +860,18 @@ test("migrates global Step authority and isolates the same Step across Runs", as
       { name: "step_id", pk: 3 },
     ],
   );
+  assert.deepEqual(
+    inspected
+      .prepare(
+        `SELECT tbl_name tableName,name FROM sqlite_schema
+      WHERE type='index' AND tbl_name IN ('run_steps','run_attempts')
+        AND name NOT LIKE 'sqlite_autoindex_%'
+      ORDER BY tbl_name,name`,
+      )
+      .all()
+      .map(plainRow),
+    [{ tableName: "run_steps", name: "run_steps_run_idx" }],
+  );
 });
 
 test("migrates a v9 Tool receipt to an explicit legacy ActionIntent", async (context) => {

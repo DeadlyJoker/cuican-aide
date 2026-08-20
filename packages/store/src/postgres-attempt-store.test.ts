@@ -448,18 +448,10 @@ test(
   async () => {
     const store = await createTestStore(requiredUrl());
     try {
+      const freshCatalog = await store.executionIdentityCatalog();
       await store.simulateExecutionV5GlobalStepAuthority();
       await store.migrate();
-      assert.deepEqual(await store.executionIdentityConstraints(), [
-        {
-          name: "run_attempts_run_step_number_key",
-          definition: "UNIQUE (tenant_id, run_id, step_id, attempt_number)",
-        },
-        {
-          name: "run_steps_pkey",
-          definition: "PRIMARY KEY (tenant_id, run_id, step_id)",
-        },
-      ]);
+      assert.deepEqual(await store.executionIdentityCatalog(), freshCatalog);
     } finally {
       await store.close();
     }
@@ -1288,11 +1280,27 @@ class TestPostgresAttemptStore extends PostgresDomainStore {
 
   async simulateExecutionV5GlobalStepAuthority(): Promise<void> {
     await this.#admin.query(`
+      ALTER TABLE ${this.#schemaSql}.workflow_gate_requests DROP CONSTRAINT
+        workflow_gate_requests_tenant_id_run_id_step_id_fkey;
+      ALTER TABLE ${this.#schemaSql}.run_attempts DROP CONSTRAINT
+        run_attempts_tenant_id_run_id_step_id_fkey;
       ALTER TABLE ${this.#schemaSql}.run_steps DROP CONSTRAINT run_steps_pkey;
       ALTER TABLE ${this.#schemaSql}.run_steps ADD CONSTRAINT run_steps_pkey
         PRIMARY KEY (step_id);
+      ALTER TABLE ${this.#schemaSql}.run_steps ADD CONSTRAINT
+        run_steps_tenant_id_run_id_step_id_key
+        UNIQUE (tenant_id, run_id, step_id);
+      ALTER TABLE ${this.#schemaSql}.run_attempts ADD CONSTRAINT
+        run_attempts_tenant_id_run_id_step_id_fkey
+        FOREIGN KEY (tenant_id, run_id, step_id)
+        REFERENCES ${this.#schemaSql}.run_steps(tenant_id, run_id, step_id)
+        ON DELETE CASCADE;
+      ALTER TABLE ${this.#schemaSql}.workflow_gate_requests ADD CONSTRAINT
+        workflow_gate_requests_tenant_id_run_id_step_id_fkey
+        FOREIGN KEY (tenant_id, run_id, step_id)
+        REFERENCES ${this.#schemaSql}.run_steps(tenant_id, run_id, step_id);
       ALTER TABLE ${this.#schemaSql}.run_attempts DROP CONSTRAINT
-        run_attempts_tenant_id_run_id_step_id_attempt_number_key;
+        run_attempts_run_step_number_key;
       ALTER TABLE ${this.#schemaSql}.run_attempts ADD CONSTRAINT
         run_attempts_tenant_id_step_id_attempt_number_key
         UNIQUE (tenant_id, step_id, attempt_number);
@@ -1301,18 +1309,35 @@ class TestPostgresAttemptStore extends PostgresDomainStore {
     `);
   }
 
-  async executionIdentityConstraints() {
-    const result = await this.#admin.query<{
+  async executionIdentityCatalog() {
+    const constraints = await this.#admin.query<{
+      table_name: string;
       name: string;
       definition: string;
     }>(`
-      SELECT conname AS name, pg_get_constraintdef(oid) AS definition
-      FROM pg_constraint
-      WHERE connamespace='${this.#schemaSql.slice(1, -1)}'::regnamespace
-        AND conname IN ('run_steps_pkey','run_attempts_run_step_number_key')
-      ORDER BY conname
+      SELECT relation.relname AS table_name, constraint_row.conname AS name,
+        pg_get_constraintdef(constraint_row.oid) AS definition
+      FROM pg_constraint AS constraint_row
+      JOIN pg_class AS relation ON relation.oid=constraint_row.conrelid
+      WHERE constraint_row.connamespace=
+        '${this.#schemaSql.slice(1, -1)}'::regnamespace
+        AND relation.relname IN ('run_steps','run_attempts')
+      ORDER BY relation.relname,constraint_row.conname
     `);
-    return result.rows;
+    const indexes = await this.#admin.query<{
+      table_name: string;
+      name: string;
+      definition: string;
+    }>(
+      `
+      SELECT tablename AS table_name, indexname AS name, indexdef AS definition
+      FROM pg_indexes
+      WHERE schemaname=$1 AND tablename IN ('run_steps','run_attempts')
+      ORDER BY tablename,indexname
+    `,
+      [this.#schemaSql.slice(1, -1)],
+    );
+    return { constraints: constraints.rows, indexes: indexes.rows };
   }
 
   async simulateExecutionSchema(version: number): Promise<void> {
