@@ -33,11 +33,9 @@
     "path-to-regexp": "8.4.0",
     "picomatch@2.3.1": "2.3.2",
     "picomatch@4.0.3": "4.0.4",
+    "punycode": "^2.3.1",
     "rollup": "4.59.0",
     "semver": "^7.7.1"
-  },
-  "overrides": {
-    "punycode": "^2.3.1"
   },
   "engines": {
     "node": ">=24 <25",
