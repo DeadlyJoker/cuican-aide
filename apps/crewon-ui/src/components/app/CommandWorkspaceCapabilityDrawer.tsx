@@ -1,7 +1,19 @@
 import type { Thread } from "@crewon-ui-model/v2/Thread";
-import { GitBranch, ListTodo, PanelRight, SearchCode } from "lucide-react";
+import {
+  Blocks,
+  GitBranch,
+  ListTodo,
+  PanelRight,
+  SearchCode,
+} from "lucide-react";
 import type { ControlApiClient } from "@crewon/control-client";
-import { useState } from "react";
+import {
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { CommandTaskBoard } from "./CommandTaskBoard";
 import {
@@ -11,6 +23,64 @@ import {
 import type { Locale } from "../../lib/i18n";
 
 type ControlToolId = "tasks" | "search" | "git-status";
+
+const DEFAULT_WORKBENCH_WIDTH = 640;
+const MIN_WORKBENCH_WIDTH = 360;
+const MAX_WORKBENCH_WIDTH = 840;
+const COMMAND_SIDEBAR_WIDTH = 232;
+const MIN_COMMAND_AREA_WIDTH = 560;
+const WORKBENCH_KEYBOARD_STEP = 24;
+const WORKBENCH_WIDTH_STORAGE_KEY = "crewon:command-workbench-width";
+
+function currentViewportWidth(): number {
+  return typeof window === "undefined" ? 1440 : window.innerWidth;
+}
+
+function maximumWorkbenchWidth(viewportWidth: number): number {
+  return Math.max(
+    MIN_WORKBENCH_WIDTH,
+    Math.min(
+      MAX_WORKBENCH_WIDTH,
+      viewportWidth - COMMAND_SIDEBAR_WIDTH - MIN_COMMAND_AREA_WIDTH,
+    ),
+  );
+}
+
+function clampWorkbenchWidth(width: number, viewportWidth: number): number {
+  return Math.round(
+    Math.min(
+      Math.max(width, MIN_WORKBENCH_WIDTH),
+      maximumWorkbenchWidth(viewportWidth),
+    ),
+  );
+}
+
+function initialWorkbenchWidth(): number {
+  if (typeof window === "undefined") return DEFAULT_WORKBENCH_WIDTH;
+  let storedWidth = Number.NaN;
+  try {
+    storedWidth = Number(
+      window.localStorage.getItem(WORKBENCH_WIDTH_STORAGE_KEY),
+    );
+  } catch {
+    // Storage may be unavailable in a privacy-restricted desktop webview.
+  }
+  return clampWorkbenchWidth(
+    Number.isFinite(storedWidth) && storedWidth > 0
+      ? storedWidth
+      : window.innerWidth * 0.44,
+    window.innerWidth,
+  );
+}
+
+function persistWorkbenchWidth(width: number) {
+  if (typeof window === "undefined") return;
+  try {
+    window.localStorage.setItem(WORKBENCH_WIDTH_STORAGE_KEY, String(width));
+  } catch {
+    // Resizing remains usable even when persistence is unavailable.
+  }
+}
 
 export type CommandWorkspaceCapabilityDrawerProps = {
   locale: Locale;
@@ -22,6 +92,7 @@ export type CommandWorkspaceCapabilityDrawerProps = {
   onSelectThread?: (threadId: string) => void;
   onClose: () => void;
   onOpen: () => void;
+  onOpenApps?: () => void;
 };
 
 function toolLabel(toolId: ControlToolId, locale: Locale): string {
@@ -55,9 +126,97 @@ export function CommandWorkspaceCapabilityDrawer({
   onSelectThread,
   onClose,
   onOpen,
+  onOpenApps,
 }: CommandWorkspaceCapabilityDrawerProps) {
   const [activeToolId, setActiveToolId] = useState<ControlToolId>("tasks");
+  const [resizing, setResizing] = useState(false);
+  const [workbenchWidth, setWorkbenchWidth] = useState(initialWorkbenchWidth);
+  const resizePointerIdRef = useRef<number | null>(null);
+  const workbenchWidthRef = useRef(workbenchWidth);
   const tools: ControlToolId[] = ["tasks", "search", "git-status"];
+  workbenchWidthRef.current = workbenchWidth;
+
+  useEffect(() => {
+    const handleWindowResize = () => {
+      setWorkbenchWidth((currentWidth) => {
+        const nextWidth = clampWorkbenchWidth(
+          currentWidth,
+          currentViewportWidth(),
+        );
+        workbenchWidthRef.current = nextWidth;
+        return nextWidth;
+      });
+    };
+    window.addEventListener("resize", handleWindowResize);
+    return () => window.removeEventListener("resize", handleWindowResize);
+  }, []);
+
+  useEffect(() => {
+    if (!resizing) return;
+    const previousCursor = document.documentElement.style.cursor;
+    const previousUserSelect = document.documentElement.style.userSelect;
+    document.documentElement.style.cursor = "col-resize";
+    document.documentElement.style.userSelect = "none";
+    return () => {
+      document.documentElement.style.cursor = previousCursor;
+      document.documentElement.style.userSelect = previousUserSelect;
+    };
+  }, [resizing]);
+
+  function updateWorkbenchWidth(nextWidth: number) {
+    const clampedWidth = clampWorkbenchWidth(nextWidth, currentViewportWidth());
+    workbenchWidthRef.current = clampedWidth;
+    setWorkbenchWidth(clampedWidth);
+  }
+
+  function handleResizePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    resizePointerIdRef.current = event.pointerId;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Synthetic pointer events and already-released pointers may not capture.
+    }
+    setResizing(true);
+  }
+
+  function handleResizePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (resizePointerIdRef.current === event.pointerId) {
+      updateWorkbenchWidth(currentViewportWidth() - event.clientX);
+    }
+  }
+
+  function finishResize(event: ReactPointerEvent<HTMLDivElement>) {
+    if (resizePointerIdRef.current !== event.pointerId) return;
+    resizePointerIdRef.current = null;
+    try {
+      if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+      }
+    } catch {
+      // Pointer capture was already released.
+    }
+    setResizing(false);
+    persistWorkbenchWidth(workbenchWidthRef.current);
+  }
+
+  function handleResizeKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    const nextWidth =
+      event.key === "ArrowLeft"
+        ? workbenchWidth + WORKBENCH_KEYBOARD_STEP
+        : event.key === "ArrowRight"
+          ? workbenchWidth - WORKBENCH_KEYBOARD_STEP
+          : event.key === "Home"
+            ? MIN_WORKBENCH_WIDTH
+            : event.key === "End"
+              ? maximumWorkbenchWidth(currentViewportWidth())
+              : null;
+    if (nextWidth === null) return;
+    event.preventDefault();
+    updateWorkbenchWidth(nextWidth);
+    persistWorkbenchWidth(workbenchWidthRef.current);
+  }
 
   if (!open) {
     return (
@@ -79,6 +238,16 @@ export function CommandWorkspaceCapabilityDrawer({
             {toolIcon(toolId)}
           </button>
         ))}
+        {onOpenApps ? (
+          <button
+            aria-label={locale === "zh" ? "应用与插件" : "Apps and plugins"}
+            title={locale === "zh" ? "应用与插件" : "Apps and plugins"}
+            type="button"
+            onClick={onOpenApps}
+          >
+            <Blocks aria-hidden="true" />
+          </button>
+        ) : null}
       </nav>
     );
   }
@@ -87,7 +256,25 @@ export function CommandWorkspaceCapabilityDrawer({
     <aside
       aria-label={locale === "zh" ? "工作区工具" : "Workspace tools"}
       className="command-workbench"
+      data-resizing={resizing ? "true" : undefined}
+      style={{ width: workbenchWidth }}
     >
+      <div
+        aria-label={locale === "zh" ? "调整工作台宽度" : "Resize workbench"}
+        aria-orientation="vertical"
+        aria-valuemax={maximumWorkbenchWidth(currentViewportWidth())}
+        aria-valuemin={MIN_WORKBENCH_WIDTH}
+        aria-valuenow={workbenchWidth}
+        className="command-workbench-resize-handle"
+        role="separator"
+        tabIndex={0}
+        onKeyDown={handleResizeKeyDown}
+        onLostPointerCapture={finishResize}
+        onPointerCancel={finishResize}
+        onPointerDown={handleResizePointerDown}
+        onPointerMove={handleResizePointerMove}
+        onPointerUp={finishResize}
+      />
       <header className="command-workbench-tabbar">
         <div className="command-workbench-tabs" role="tablist">
           {tools.map((toolId) => (
@@ -104,6 +291,19 @@ export function CommandWorkspaceCapabilityDrawer({
               </button>
             </div>
           ))}
+          {onOpenApps ? (
+            <button
+              aria-label={
+                locale === "zh" ? "打开应用与插件" : "Open apps and plugins"
+              }
+              className="command-workbench-library-button"
+              title={locale === "zh" ? "应用与插件" : "Apps and plugins"}
+              type="button"
+              onClick={onOpenApps}
+            >
+              <Blocks aria-hidden="true" />
+            </button>
+          ) : null}
         </div>
         <div className="command-workbench-window-actions">
           <button

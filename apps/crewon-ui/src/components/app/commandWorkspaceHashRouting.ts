@@ -3,12 +3,14 @@ import type { CommandShellView } from "./commandWorkspaceState";
 const shellViewIds: readonly CommandShellView[] = [
   "command",
   "assist",
+  "projects",
   "agents",
   "knowledge",
+  "schedule",
   "team",
 ];
 
-type LibraryHashKind = "agents" | "knowledge";
+type LibraryHashKind = "agents" | "automation" | "knowledge";
 type LibraryOpenHandler = (kind: LibraryHashKind) => void | Promise<void>;
 type RouteWindow = Pick<
   Window,
@@ -25,6 +27,7 @@ function requestedShellView(hash: string): CommandShellView {
 export function commandLibraryKindForView(
   view: CommandShellView,
 ): LibraryHashKind | null {
+  if (view === "schedule") return "automation";
   return view === "agents" || view === "knowledge" ? view : null;
 }
 

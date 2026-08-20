@@ -33,7 +33,8 @@ import {
   commandSceneMayWrite,
   type CommandHomeResource,
 } from "./CommandHomeCapabilityStrip";
-import { ProjectsView, TeamView } from "./CommandWorkspaceViews";
+import { TeamView } from "./CommandWorkspaceViews";
+import { CommandProjectBoardView } from "./CommandTaskBoard";
 import {
   commandLibraryKindForView,
   commandShellViewFromHash,
@@ -202,7 +203,9 @@ type CommandWorkspaceProps = {
   onClearAssistantThread?: () => void | Promise<void>;
   onModeChange: (mode: WorkMode) => void;
   onKnowledgeSelect?: (selection: ControlKnowledgeSelection) => void;
-  onOpenLibrary?: (kind: "agents" | "knowledge") => void | Promise<void>;
+  onOpenLibrary?: (
+    kind: "agents" | "automation" | "knowledge",
+  ) => void | Promise<void>;
   onOpenSettings?: () => void;
   onSaveCapability?: import("../../lib/capability/capabilityCatalog").CapabilityEditorSaveHandler;
   onRetryConnection: () => void;
@@ -2214,8 +2217,17 @@ export function CommandWorkspace({
             onModeChange={onModeChange}
             onStop={onStop}
           />
-          <ProjectsView
+          <CommandProjectBoardView
             active={activeView === "projects"}
+            locale={locale}
+            selectedThreadId={selectedThreadId}
+            threads={linkedThreads}
+            onSelectThread={(threadId) => {
+              setActiveLinkedThreadId(threadId);
+              setNewTaskDraft(false);
+              switchView("command");
+              onSelectLinkedThread?.(threadId);
+            }}
             onNewTask={() => {
               setActiveLinkedThreadId(null);
               setNewTaskDraft(true);

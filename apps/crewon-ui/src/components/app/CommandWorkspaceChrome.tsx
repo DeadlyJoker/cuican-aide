@@ -1,6 +1,7 @@
 import {
   BookOpen,
   Bot,
+  CalendarDays,
   FolderOpen,
   PanelLeft,
   Plus,
@@ -61,6 +62,7 @@ const viewIcons: Record<CommandShellView, ReactNode> = {
   projects: <FolderOpen aria-hidden="true" />,
   agents: <Bot aria-hidden="true" />,
   knowledge: <BookOpen aria-hidden="true" />,
+  schedule: <CalendarDays aria-hidden="true" />,
   team: <Users aria-hidden="true" />,
 };
 

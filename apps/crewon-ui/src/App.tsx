@@ -635,6 +635,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           open: capabilityDockOpen,
           onClose: () => setCapabilityDockOpen(false),
           onOpen: () => setCapabilityDockOpen(true),
+          onOpenApps: () => void openLibrary("plugins"),
           readonlyClient: controlRuntimeConnected ? controlClient : null,
           readonlyThreadId: commandShellRuntime.selectedThreadId,
         }}

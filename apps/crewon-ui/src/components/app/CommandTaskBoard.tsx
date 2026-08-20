@@ -140,3 +140,55 @@ export function CommandTaskBoard({
     </section>
   );
 }
+
+export function CommandProjectBoardView({
+  active,
+  locale,
+  selectedThreadId,
+  threads,
+  onNewTask,
+  onSelectThread,
+}: {
+  active: boolean;
+  locale: Locale;
+  selectedThreadId: string | null;
+  threads: readonly Thread[];
+  onNewTask: () => void;
+  onSelectThread: (threadId: string) => void;
+}) {
+  return (
+    <section
+      className={
+        active
+          ? "shell-view shell-page-view active"
+          : "shell-view shell-page-view"
+      }
+      data-od-id="shell-view-projects"
+      data-shell-view="projects"
+      hidden={!active}
+    >
+      <div className="page-stack command-project-board-page">
+        <header className="command-project-board-toolbar">
+          <div>
+            <span>{locale === "zh" ? "项目与执行" : "Projects and runs"}</span>
+            <h2>{locale === "zh" ? "任务" : "Tasks"}</h2>
+            <p>
+              {locale === "zh"
+                ? "按真实会话和运行状态组织；打开任务即可继续工作。"
+                : "Organized by live conversation and run state; open a task to continue."}
+            </p>
+          </div>
+          <button className="button primary" type="button" onClick={onNewTask}>
+            {locale === "zh" ? "发起任务" : "Start task"}
+          </button>
+        </header>
+        <CommandTaskBoard
+          locale={locale}
+          selectedThreadId={selectedThreadId}
+          threads={threads}
+          onSelectThread={onSelectThread}
+        />
+      </div>
+    </section>
+  );
+}
