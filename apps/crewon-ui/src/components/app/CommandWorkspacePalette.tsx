@@ -2,11 +2,9 @@ import {
   BookOpen,
   Cloud,
   FolderOpen,
-  ListChecks,
   Paperclip,
   Plug,
   Sparkles,
-  Target,
   Wrench,
 } from "lucide-react";
 import type { PaletteItemWithCommand } from "./CommandWorkspaceChrome";
@@ -41,10 +39,7 @@ export function Palette({
             id: "add",
             label: null,
             items: items.filter(
-              (item) =>
-                item.kind === "intent" ||
-                item.kind === "file" ||
-                item.kind === "folder",
+              (item) => item.kind === "file" || item.kind === "folder",
             ),
           },
           {
@@ -66,12 +61,6 @@ export function Palette({
       : [];
 
   function addItemIcon(item: PaletteItemWithCommand) {
-    if (item.action === "toggle-goal") {
-      return <Target aria-hidden="true" />;
-    }
-    if (item.action === "toggle-plan") {
-      return <ListChecks aria-hidden="true" />;
-    }
     if (item.action === "attach-files") {
       return <Paperclip aria-hidden="true" />;
     }
@@ -95,15 +84,11 @@ export function Palette({
 
   function renderItem(item: PaletteItemWithCommand) {
     if (kind === "add") {
-      const isIntent =
-        item.action === "toggle-goal" || item.action === "toggle-plan";
       return (
         <button
-          aria-pressed={isIntent ? item.selected : undefined}
           className="add-palette-item"
           data-kind={item.kind}
           data-label={item.title}
-          data-selected={item.selected ? "true" : undefined}
           key={`${item.kind}-${item.title}-${item.token ?? ""}`}
           type="button"
           onClick={() => onSelect(item)}

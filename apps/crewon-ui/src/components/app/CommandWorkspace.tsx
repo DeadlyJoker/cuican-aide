@@ -28,6 +28,11 @@ import {
   type CommandWorkspaceOperationsPanelProps,
 } from "./CommandWorkspaceOperationsPanel";
 import { CommandSceneHeader, CommandSceneQuickRow } from "./CommandSceneHeader";
+import {
+  CommandHomeCapabilityStrip,
+  commandSceneMayWrite,
+  type CommandHomeResource,
+} from "./CommandHomeCapabilityStrip";
 import { ProjectsView, TeamView } from "./CommandWorkspaceViews";
 import {
   commandLibraryKindForView,
@@ -756,28 +761,6 @@ export function CommandWorkspace({
   const addPaletteItems = useMemo<PaletteItemWithCommand[]>(
     () => [
       {
-        action: "toggle-goal",
-        detail:
-          executionIntent === "goal"
-            ? "已选择；再次点击取消目标模式"
-            : "设置要持续追求的任务目标",
-        kind: "intent",
-        label: "目标",
-        selected: executionIntent === "goal",
-        title: "目标",
-      },
-      {
-        action: "toggle-plan",
-        detail:
-          executionIntent === "plan"
-            ? "已选择；再次点击取消计划模式"
-            : "先制定计划，不直接执行",
-        kind: "intent",
-        label: "计划",
-        selected: executionIntent === "plan",
-        title: "计划模式",
-      },
-      {
         action: "attach-files",
         detail: "从本地电脑选择一个或多个文件",
         kind: "file",
@@ -808,12 +791,7 @@ export function CommandWorkspace({
           item.kind === "skill" || item.kind === "mcp" || item.kind === "tool",
       ),
     ],
-    [
-      contextPaletteItems,
-      executionIntent,
-      providerResourceAvailable,
-      slashPaletteItems,
-    ],
+    [contextPaletteItems, providerResourceAvailable, slashPaletteItems],
   );
   const providerComposerTag =
     providerResourceAvailable && providerResource?.selectedResource
@@ -899,6 +877,23 @@ export function CommandWorkspace({
   ]);
   const localizedScenePresets = locale === "zh" ? scenePresets : scenePresetsEn;
   const scenePreset = localizedScenePresets[scene];
+  const homeResourceEntries = [
+    ...contextPaletteItems.filter((item) => item.kind === "knowledge"),
+    ...slashPaletteItems.filter(
+      (item) =>
+        item.kind === "skill" || item.kind === "mcp" || item.kind === "tool",
+    ),
+  ]
+    .slice(0, 4)
+    .map((item, index) => ({
+      item,
+      resource: {
+        id: `${item.kind}:${"token" in item ? (item.token ?? item.title) : item.title}:${index}`,
+        kind: item.kind as CommandHomeResource["kind"],
+        label: item.label,
+        title: item.title,
+      } satisfies CommandHomeResource,
+    }));
   const workspaceOptions = useMemo<CommandComposerSelectOption[]>(() => {
     const displayName = workspaceOperations?.nativeWorkspaceDisplayName;
     return [
@@ -1288,18 +1283,6 @@ export function CommandWorkspace({
   }
 
   function insertAddItem(item: PaletteItemWithCommand) {
-    if (item.action === "toggle-goal") {
-      setExecutionIntent((current) => nextExecutionIntent(current, "goal"));
-      closeComposerPalette();
-      focusActiveComposer();
-      return;
-    }
-    if (item.action === "toggle-plan") {
-      setExecutionIntent((current) => nextExecutionIntent(current, "plan"));
-      closeComposerPalette();
-      focusActiveComposer();
-      return;
-    }
     if (item.action === "attach-files") {
       closeComposerPalette();
       fileInputRef.current?.click();
@@ -1694,6 +1677,31 @@ export function CommandWorkspace({
                     }
                     onSceneChange={switchScene}
                   />
+                  <CommandHomeCapabilityStrip
+                    intent={executionIntent}
+                    locale={locale}
+                    preset={scenePreset}
+                    resources={homeResourceEntries.map(
+                      (entry) => entry.resource,
+                    )}
+                    risky={commandSceneMayWrite(scene, sceneMode)}
+                    onIntentChange={(nextIntent) =>
+                      setExecutionIntent((current) =>
+                        nextExecutionIntent(current, nextIntent),
+                      )
+                    }
+                    onResourceSelect={(resource) => {
+                      const entry = homeResourceEntries.find(
+                        (candidate) => candidate.resource.id === resource.id,
+                      );
+                      if (!entry) return;
+                      if (entry.item.kind === "knowledge") {
+                        insertContextItem(entry.item);
+                      } else {
+                        insertSlashItem(entry.item);
+                      }
+                    }}
+                  />
                 </>
               )}
 
@@ -1813,11 +1821,13 @@ export function CommandWorkspace({
                     >
                       <Plus aria-hidden="true" />
                     </button>
-                    <SelectedExecutionIntent
-                      intent={executionIntent}
-                      locale={locale}
-                      onClear={() => setExecutionIntent("none")}
-                    />
+                    {showCommandThread ? (
+                      <SelectedExecutionIntent
+                        intent={executionIntent}
+                        locale={locale}
+                        onClear={() => setExecutionIntent("none")}
+                      />
+                    ) : null}
                   </>
                 }
                 dataOdId="ai-composer"

@@ -22,12 +22,7 @@ import type { Locale } from "../../lib/i18n";
 import { detectRuntimeSurface } from "../../lib/platform";
 
 export type PaletteItemWithCommand = CommandPaletteItem & {
-  action?:
-    | "attach-files"
-    | "attach-folder"
-    | "provider-resources"
-    | "toggle-goal"
-    | "toggle-plan";
+  action?: "attach-files" | "attach-folder" | "provider-resources";
   command?: ComposerSlashCommand;
   selected?: boolean;
 };
@@ -339,7 +334,6 @@ export function CommandSidebar({
         onNewThread={onNewThread}
         onOpenLinkedThread={onOpenLinkedThread}
       />
-
     </aside>
   );
 }

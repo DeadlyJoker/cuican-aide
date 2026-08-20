@@ -10,6 +10,7 @@ import { loadControlApiClient } from "./lib/control-runtime/controlRuntimeBootst
 import "./styles/neutral-scale.css";
 import "./styles/app.css";
 import "./styles/original-shell-overrides.css";
+import "./styles/command-home-capabilities.css";
 import "./styles/workspace-readonly.css";
 // Loaded last: settles the shared control surface and user appearance vars.
 import "./styles/appearance.css";
