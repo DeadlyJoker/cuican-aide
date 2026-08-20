@@ -680,7 +680,7 @@ export type KnowledgeSource = {
   name: string;
   glyph: string;
   accent: LibraryAccent;
-  status: "indexed" | "indexing" | "needs-auth";
+  status: "stored" | "indexed" | "indexing" | "needs-auth";
   meta: string;
   path?: string;
   isDirectory?: boolean;

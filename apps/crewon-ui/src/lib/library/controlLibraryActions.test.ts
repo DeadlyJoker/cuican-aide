@@ -316,6 +316,7 @@ describe("openControlLibraryAction", () => {
     expect(listKnowledge).toHaveBeenCalledWith({ limit: 100 });
     expect(panel).toMatchObject({
       kind: "knowledge",
+      catalogMode: "controlKnowledge",
       items: [],
       knowledge: {
         memories: [
@@ -326,7 +327,7 @@ describe("openControlLibraryAction", () => {
           },
         ],
         sources: [
-          { name: "Handbook", meta: "source:handbook", status: "indexed" },
+          { name: "Handbook", meta: "source:handbook", status: "stored" },
         ],
       },
     });

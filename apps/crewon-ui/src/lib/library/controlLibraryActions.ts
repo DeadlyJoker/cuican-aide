@@ -128,6 +128,7 @@ async function openControlKnowledge(params: {
     const sources = response.data.filter(({ kind }) => kind === "source");
     params.setLibraryPanel({
       kind: "knowledge",
+      catalogMode: "controlKnowledge",
       title: libraryTitle("knowledge", params.locale),
       subtitle:
         params.locale === "zh"
@@ -165,7 +166,7 @@ function controlKnowledgeSource(item: KnowledgeView, index: number) {
     name: item.title,
     glyph: ["▦", "▤", "◍", "◎"][index % 4],
     accent: (["green", "amber", "cyan", "slate"] as const)[index % 4],
-    status: "indexed" as const,
+    status: "stored" as const,
     meta: item.sourceId,
     isDirectory: false,
   };

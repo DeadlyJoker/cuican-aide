@@ -76,13 +76,9 @@ export function normalizeKnowledgeData(data: unknown): KnowledgeData {
   };
 }
 
-function normalizeLibraryAccent(
-  accent: unknown,
-  index: number,
-): LibraryAccent {
+function normalizeLibraryAccent(accent: unknown, index: number): LibraryAccent {
   const accents = capabilityAccents();
-  return typeof accent === "string" &&
-    accents.includes(accent as LibraryAccent)
+  return typeof accent === "string" && accents.includes(accent as LibraryAccent)
     ? (accent as LibraryAccent)
     : accents[index % accents.length];
 }
@@ -90,5 +86,7 @@ function normalizeLibraryAccent(
 function normalizeKnowledgeSourceStatus(
   status: unknown,
 ): KnowledgeSource["status"] {
-  return status === "indexing" || status === "needs-auth" ? status : "indexed";
+  return status === "stored" || status === "indexing" || status === "needs-auth"
+    ? status
+    : "indexed";
 }
