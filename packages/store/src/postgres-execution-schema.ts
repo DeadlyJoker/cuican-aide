@@ -3,7 +3,7 @@ export const POSTGRES_EXECUTION_SCHEMA_VERSION = 6;
 export function postgresExecutionSchemaSql(schema: string): string {
   return `
     INSERT INTO ${schema}.schema_migrations(component, version)
-      VALUES ('execution_authority', 1)
+      VALUES ('execution_authority', ${POSTGRES_EXECUTION_SCHEMA_VERSION})
       ON CONFLICT (component) DO NOTHING;
 
     CREATE TABLE IF NOT EXISTS ${schema}.run_steps (
