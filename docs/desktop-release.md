@@ -42,11 +42,16 @@ integration and must not bypass the Authenticode verification gate.
 Set and commit the version, then push the annotated tag:
 
 ```bash
-pnpm release:desktop 0.2.0
-git push origin HEAD desktop-v0.2.0
+pnpm release:desktop 0.2.0 --remote <github-remote-name>
+# Run the exact `git push <verified-remote> HEAD desktop-v0.2.0` command printed by the helper.
 ```
 
 The tag must be exactly `desktop-v<apps/crewon-ui/package.json version>`.
+The helper validates the selected push remote against the exact GitHub
+repository embedded in the Tauri updater endpoint. If `--remote` is omitted,
+exactly one matching GitHub remote must exist; a Codeup/GitLab remote, a
+different GitHub repository, or an ambiguous mirror set fails before files,
+commits, or tags are changed.
 `workflow_dispatch` accepts an existing tag for retrying a failed draft. It
 does not create or retarget tags.
 
@@ -124,6 +129,7 @@ runners and secrets. The deterministic release helpers can be tested locally:
 
 ```bash
 node --test \
+  scripts/release-desktop.test.mjs \
   scripts/desktop-release-tools.test.mjs \
   scripts/stage-desktop-runtime.test.mjs
 ```
