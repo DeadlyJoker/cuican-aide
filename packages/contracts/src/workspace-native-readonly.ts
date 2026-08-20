@@ -9,6 +9,9 @@ export const WORKSPACE_NATIVE_READONLY_LIMITS = {
   maxScannedBytes: 64 * 1024 * 1024,
   maxFileBytes: 2 * 1024 * 1024,
   maxStatusEntries: 2_000,
+  maxDirectoryEntries: 500,
+  maxReadTextBytes: 32 * 1024,
+  maxGitDiffBytes: 32 * 1024,
 } as const;
 type Scope = Readonly<{
   tenantId: string;
@@ -29,9 +32,30 @@ export type WorkspaceGitStatusRequest = Scope &
     schemaVersion: "crewon.workspace-native-readonly-request.v0";
     operation: "gitStatus";
   }>;
+export type WorkspaceListDirectoryRequest = Scope &
+  Readonly<{
+    schemaVersion: "crewon.workspace-native-readonly-request.v0";
+    operation: "listDirectory";
+    pathSegments: readonly string[];
+  }>;
+export type WorkspaceReadTextFileRequest = Scope &
+  Readonly<{
+    schemaVersion: "crewon.workspace-native-readonly-request.v0";
+    operation: "readTextFile";
+    pathSegments: readonly string[];
+  }>;
+export type WorkspaceGitDiffRequest = Scope &
+  Readonly<{
+    schemaVersion: "crewon.workspace-native-readonly-request.v0";
+    operation: "gitDiff";
+    pathSegments: readonly string[];
+  }>;
 export type WorkspaceNativeReadonlyRequest =
   | WorkspaceContentSearchRequest
-  | WorkspaceGitStatusRequest;
+  | WorkspaceGitStatusRequest
+  | WorkspaceListDirectoryRequest
+  | WorkspaceReadTextFileRequest
+  | WorkspaceGitDiffRequest;
 
 export type WorkspaceNativeReadonlyControlRequest =
   | Omit<
@@ -40,6 +64,18 @@ export type WorkspaceNativeReadonlyControlRequest =
     >
   | Omit<
       WorkspaceGitStatusRequest,
+      "tenantId" | "spaceId" | "workspaceBindingId"
+    >
+  | Omit<
+      WorkspaceListDirectoryRequest,
+      "tenantId" | "spaceId" | "workspaceBindingId"
+    >
+  | Omit<
+      WorkspaceReadTextFileRequest,
+      "tenantId" | "spaceId" | "workspaceBindingId"
+    >
+  | Omit<
+      WorkspaceGitDiffRequest,
       "tenantId" | "spaceId" | "workspaceBindingId"
     >;
 
@@ -69,6 +105,34 @@ export type WorkspaceNativeReadonlyResponse =
         worktree: string;
       }>[];
       truncated: boolean;
+    }>
+  | Readonly<{
+      schemaVersion: "crewon.workspace-native-readonly-response.v0";
+      operation: "listDirectory";
+      workspaceBindingId: string;
+      path: string;
+      entries: readonly Readonly<{
+        name: string;
+        kind: "file" | "directory";
+      }>[];
+      truncated: boolean;
+    }>
+  | Readonly<{
+      schemaVersion: "crewon.workspace-native-readonly-response.v0";
+      operation: "readTextFile";
+      workspaceBindingId: string;
+      path: string;
+      content: string;
+      size: number;
+      truncated: boolean;
+    }>
+  | Readonly<{
+      schemaVersion: "crewon.workspace-native-readonly-response.v0";
+      operation: "gitDiff";
+      workspaceBindingId: string;
+      path: string;
+      patch: string;
+      truncated: boolean;
     }>;
 
 export type WorkspaceNativeReadonlyControlResponse =
@@ -78,6 +142,18 @@ export type WorkspaceNativeReadonlyControlResponse =
     >
   | Omit<
       Extract<WorkspaceNativeReadonlyResponse, { operation: "gitStatus" }>,
+      "workspaceBindingId"
+    >
+  | Omit<
+      Extract<WorkspaceNativeReadonlyResponse, { operation: "listDirectory" }>,
+      "workspaceBindingId"
+    >
+  | Omit<
+      Extract<WorkspaceNativeReadonlyResponse, { operation: "readTextFile" }>,
+      "workspaceBindingId"
+    >
+  | Omit<
+      Extract<WorkspaceNativeReadonlyResponse, { operation: "gitDiff" }>,
       "workspaceBindingId"
     >;
 
@@ -106,6 +182,26 @@ export function parseWorkspaceNativeReadonlyRequest(
       operation: "gitStatus",
     };
   }
+  if (
+    value.operation === "listDirectory" ||
+    value.operation === "readTextFile" ||
+    value.operation === "gitDiff"
+  ) {
+    exact(value, [
+      "operation",
+      "pathSegments",
+      "schemaVersion",
+      "spaceId",
+      "tenantId",
+      "workspaceBindingId",
+    ]);
+    return {
+      ...scope,
+      schemaVersion: value.schemaVersion,
+      operation: value.operation,
+      pathSegments: pathSegments(value.pathSegments),
+    };
+  }
   if (value.operation !== "contentSearch") throw invalid();
   exact(value, [
     "maxMatches",
@@ -128,13 +224,13 @@ export function parseWorkspaceNativeReadonlyRequest(
     value.pathSegments.length > 32
   )
     throw invalid();
-  const pathSegments = value.pathSegments.map(segment);
+  const parsedPathSegments = pathSegments(value.pathSegments);
   return {
     ...scope,
     schemaVersion: value.schemaVersion,
     operation: "contentSearch",
     query: value.query,
-    pathSegments,
+    pathSegments: parsedPathSegments,
     maxMatches: Number(value.maxMatches),
   };
 }
@@ -147,7 +243,11 @@ export function parseWorkspaceNativeReadonlyControlRequest(
     value,
     value.operation === "contentSearch"
       ? ["maxMatches", "operation", "pathSegments", "query", "schemaVersion"]
-      : ["operation", "schemaVersion"],
+      : value.operation === "listDirectory" ||
+          value.operation === "readTextFile" ||
+          value.operation === "gitDiff"
+        ? ["operation", "pathSegments", "schemaVersion"]
+        : ["operation", "schemaVersion"],
   );
   return stripScope(
     parseWorkspaceNativeReadonlyRequest({
@@ -196,14 +296,27 @@ export function parseWorkspaceNativeReadonlyControlResponse(
           "schemaVersion",
           "truncated",
         ]
-      : [
-          "branch",
-          "entries",
-          "head",
-          "operation",
-          "schemaVersion",
-          "truncated",
-        ],
+      : expected.operation === "gitStatus"
+        ? [
+            "branch",
+            "entries",
+            "head",
+            "operation",
+            "schemaVersion",
+            "truncated",
+          ]
+        : expected.operation === "listDirectory"
+          ? ["entries", "operation", "path", "schemaVersion", "truncated"]
+          : expected.operation === "readTextFile"
+            ? [
+                "content",
+                "operation",
+                "path",
+                "schemaVersion",
+                "size",
+                "truncated",
+              ]
+            : ["operation", "patch", "path", "schemaVersion", "truncated"],
   );
   return projectWorkspaceNativeReadonlyControlResponse(
     { ...value, workspaceBindingId: "control-binding" },
@@ -228,6 +341,77 @@ export function parseWorkspaceNativeReadonlyResponse(
     typeof value.truncated !== "boolean"
   )
     throw invalid();
+  if (value.operation === "listDirectory") {
+    if (expected.operation !== "listDirectory") throw invalid();
+    const expectedPath = expected.pathSegments.join("/");
+    if (
+      !Array.isArray(value.entries) ||
+      value.entries.length >
+        WORKSPACE_NATIVE_READONLY_LIMITS.maxDirectoryEntries ||
+      value.path !== expectedPath
+    )
+      throw invalid();
+    const entries = value.entries.map((item) => {
+      const entry = object(item);
+      exact(entry, ["kind", "name"]);
+      if (
+        typeof entry.name !== "string" ||
+        (entry.kind !== "file" && entry.kind !== "directory")
+      )
+        throw invalid();
+      return {
+        name: segment(entry.name),
+        kind: entry.kind as "file" | "directory",
+      };
+    });
+    return {
+      schemaVersion: value.schemaVersion,
+      operation: "listDirectory",
+      workspaceBindingId: value.workspaceBindingId,
+      path: expectedPath === "" ? "" : resultPath(expectedPath),
+      entries,
+      truncated: value.truncated,
+    };
+  }
+  if (value.operation === "readTextFile") {
+    if (expected.operation !== "readTextFile") throw invalid();
+    const expectedPath = expected.pathSegments.join("/");
+    if (
+      value.path !== expectedPath ||
+      typeof value.content !== "string" ||
+      utf8Bytes(value.content) >
+        WORKSPACE_NATIVE_READONLY_LIMITS.maxReadTextBytes ||
+      !safeCount(value.size)
+    )
+      throw invalid();
+    return {
+      schemaVersion: value.schemaVersion,
+      operation: "readTextFile",
+      workspaceBindingId: value.workspaceBindingId,
+      path: resultPath(expectedPath),
+      content: value.content,
+      size: Number(value.size),
+      truncated: value.truncated,
+    };
+  }
+  if (value.operation === "gitDiff") {
+    if (expected.operation !== "gitDiff") throw invalid();
+    const expectedPath = expected.pathSegments.join("/");
+    if (
+      value.path !== expectedPath ||
+      typeof value.patch !== "string" ||
+      utf8Bytes(value.patch) > WORKSPACE_NATIVE_READONLY_LIMITS.maxGitDiffBytes
+    )
+      throw invalid();
+    return {
+      schemaVersion: value.schemaVersion,
+      operation: "gitDiff",
+      workspaceBindingId: value.workspaceBindingId,
+      path: resultPath(expectedPath),
+      patch: value.patch,
+      truncated: value.truncated,
+    };
+  }
   if (value.operation === "contentSearch") {
     if (
       expected.operation !== "contentSearch" ||
@@ -333,10 +517,14 @@ function segment(value: unknown): string {
     value.length > 255 ||
     value === "." ||
     value === ".." ||
-    /[\\/\p{Cc}\p{Cf}]/u.test(value)
+    /[\\/\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/u.test(value)
   )
     throw invalid();
   return value;
+}
+function pathSegments(value: unknown): string[] {
+  if (!Array.isArray(value) || value.length > 32) throw invalid();
+  return value.map(segment);
 }
 function resultPath(value: string): string {
   if (

@@ -33,9 +33,18 @@ export class RuntimeNativeReadonlyService {
     const request = parseWorkspaceNativeReadonlyRequest(input);
     this.#authorize(request);
     active(signal);
-    return request.operation === "contentSearch"
-      ? this.#search(request, signal)
-      : this.#gitStatus(signal);
+    switch (request.operation) {
+      case "contentSearch":
+        return this.#search(request, signal);
+      case "gitStatus":
+        return this.#gitStatus(signal);
+      case "listDirectory":
+        return this.#listDirectory(request.pathSegments, signal);
+      case "readTextFile":
+        return this.#readTextFile(request.pathSegments, signal);
+      case "gitDiff":
+        return this.#gitDiff(request.pathSegments, signal);
+    }
   }
 
   #authorize(request: WorkspaceNativeReadonlyRequest): void {
@@ -200,6 +209,164 @@ export class RuntimeNativeReadonlyService {
         : failure("workspace_native_git_unavailable", error);
     }
   }
+
+  async #listDirectory(
+    pathSegments: readonly string[],
+    signal: AbortSignal,
+  ): Promise<WorkspaceNativeReadonlyResponse> {
+    const { root, path } = await this.#boundedPath(pathSegments, "directory");
+    active(signal);
+    const listed = await readdir(path, { withFileTypes: true });
+    const entries = listed
+      .filter(
+        (entry) =>
+          !entry.isSymbolicLink() && (entry.isDirectory() || entry.isFile()),
+      )
+      .sort((left, right) =>
+        Buffer.from(left.name).compare(Buffer.from(right.name)),
+      );
+    return {
+      schemaVersion: "crewon.workspace-native-readonly-response.v0",
+      operation: "listDirectory",
+      workspaceBindingId: this.#authority.workspaceBindingId,
+      path: relative(root, path).split("\\").join("/"),
+      entries: entries.slice(0, LIMITS.maxDirectoryEntries).map((entry) => ({
+        name: entry.name,
+        kind: entry.isDirectory() ? ("directory" as const) : ("file" as const),
+      })),
+      truncated: entries.length > LIMITS.maxDirectoryEntries,
+    };
+  }
+
+  async #readTextFile(
+    pathSegments: readonly string[],
+    signal: AbortSignal,
+  ): Promise<WorkspaceNativeReadonlyResponse> {
+    const { root, path } = await this.#boundedPath(pathSegments, "file");
+    active(signal);
+    const handle = await open(
+      path,
+      constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0),
+    );
+    try {
+      const stats = await handle.stat();
+      if (!stats.isFile() || !Number.isSafeInteger(stats.size))
+        throw failure("workspace_native_read_file_invalid");
+      const buffer = Buffer.alloc(LIMITS.maxReadTextBytes + 1);
+      let offset = 0;
+      while (offset < buffer.byteLength) {
+        active(signal);
+        const result = await handle.read(
+          buffer,
+          offset,
+          buffer.byteLength - offset,
+          offset,
+        );
+        if (result.bytesRead === 0) break;
+        offset += result.bytesRead;
+      }
+      const truncated = offset > LIMITS.maxReadTextBytes;
+      let end = Math.min(offset, LIMITS.maxReadTextBytes);
+      let content: string | null = null;
+      for (let backoff = 0; backoff < 4 && end >= 0; backoff += 1) {
+        try {
+          content = new TextDecoder("utf-8", { fatal: true }).decode(
+            buffer.subarray(0, end),
+          );
+          break;
+        } catch {
+          if (!truncated) break;
+          end -= 1;
+        }
+      }
+      if (content === null)
+        throw failure("workspace_native_read_file_not_text");
+      return {
+        schemaVersion: "crewon.workspace-native-readonly-response.v0",
+        operation: "readTextFile",
+        workspaceBindingId: this.#authority.workspaceBindingId,
+        path: relative(root, path).split("\\").join("/"),
+        content,
+        size: stats.size,
+        truncated,
+      };
+    } finally {
+      await handle.close();
+    }
+  }
+
+  async #gitDiff(
+    pathSegments: readonly string[],
+    signal: AbortSignal,
+  ): Promise<WorkspaceNativeReadonlyResponse> {
+    const { root, path } = await this.#boundedPath(pathSegments, "file");
+    active(signal);
+    try {
+      const result = await execFileAsync(
+        "git",
+        [
+          "-c",
+          "core.fsmonitor=false",
+          "diff",
+          "--no-ext-diff",
+          "--no-color",
+          "--unified=3",
+          "HEAD",
+          "--",
+          relative(root, path),
+        ],
+        {
+          cwd: root,
+          encoding: "buffer",
+          maxBuffer: LIMITS.maxFileBytes,
+          signal,
+          timeout: 10_000,
+          windowsHide: true,
+          env: { ...process.env, GIT_OPTIONAL_LOCKS: "0" },
+        },
+      );
+      const bytes =
+        typeof result.stdout === "string"
+          ? Buffer.from(result.stdout)
+          : result.stdout;
+      return {
+        schemaVersion: "crewon.workspace-native-readonly-response.v0",
+        operation: "gitDiff",
+        workspaceBindingId: this.#authority.workspaceBindingId,
+        path: relative(root, path).split("\\").join("/"),
+        patch: decodeUtf8Prefix(bytes, LIMITS.maxGitDiffBytes),
+        truncated: bytes.byteLength > LIMITS.maxGitDiffBytes,
+      };
+    } catch (error) {
+      if (signal.aborted) throw signal.reason;
+      throw error instanceof RuntimeWorkspaceError
+        ? error
+        : failure("workspace_native_git_diff_unavailable", error);
+    }
+  }
+
+  async #boundedPath(
+    pathSegments: readonly string[],
+    kind: "directory" | "file",
+  ): Promise<{ root: string; path: string }> {
+    const root = await realpath(this.#root);
+    const candidate = resolve(root, ...pathSegments);
+    within(root, candidate);
+    const path = await realpath(candidate);
+    within(root, path);
+    if (path !== candidate) throw failure("workspace_native_link_unsupported");
+    const stats = await lstat(path);
+    if (
+      stats.isSymbolicLink() ||
+      (kind === "directory" ? !stats.isDirectory() : !stats.isFile())
+    )
+      throw failure(
+        kind === "directory"
+          ? "workspace_native_list_directory_invalid"
+          : "workspace_native_read_file_invalid",
+      );
+    return { root, path };
+  }
 }
 
 export function decodeGitOutput(value: string | Buffer): string {
@@ -209,6 +376,21 @@ export function decodeGitOutput(value: string | Buffer): string {
   } catch (error) {
     throw failure("workspace_native_git_output_invalid", error);
   }
+}
+
+function decodeUtf8Prefix(bytes: Buffer, maximum: number): string {
+  let end = Math.min(bytes.byteLength, maximum);
+  for (let backoff = 0; backoff < 4 && end >= 0; backoff += 1) {
+    try {
+      return new TextDecoder("utf-8", { fatal: true }).decode(
+        bytes.subarray(0, end),
+      );
+    } catch {
+      if (bytes.byteLength <= maximum) break;
+      end -= 1;
+    }
+  }
+  throw failure("workspace_native_git_output_invalid");
 }
 
 function within(root: string, candidate: string): void {
