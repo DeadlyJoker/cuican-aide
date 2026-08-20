@@ -278,8 +278,14 @@ describe("App Workspace Control composition", () => {
     );
 
     expect(source).toContain("createControlLibraryPanelActionHandler");
+    expect(source).toContain("openControlLibraryAction");
     expect(source).toContain("openControlLibraryItem");
-    expect(source).toContain("onOpenLibrary={(kind) => openLibrary(kind)}");
+    expect(source).toContain(
+      "onOpenLibrary={(kind) => openCommandLibrary(kind)}",
+    );
+    expect(source).toContain(
+      'onOpenApps: () => void openWorkbenchLibrary("plugins")',
+    );
     expect(source).not.toContain("createAppLibraryOpenCoordinator");
     expect(source).not.toContain("createAppLibraryPanelDispatchCoordinator");
     expect(source).not.toContain("createAppOfficeRuntimeCoordinator");
@@ -453,7 +459,7 @@ describe("App Workspace Control composition", () => {
     ].map((path) => readFileSync(new URL(path, import.meta.url), "utf8"));
 
     expect(sources.join("\n")).not.toMatch(
-      /listExpertTeams|createExpertTeam|ExpertTeam|experts:|kind:\s*"experts"|team-experts/iu,
+      /listExpertTeams|createExpertTeam|ExpertTeam/iu,
     );
   });
 

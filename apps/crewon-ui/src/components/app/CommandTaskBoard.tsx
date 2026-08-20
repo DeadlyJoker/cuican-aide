@@ -1,5 +1,6 @@
 import type { Thread } from "@crewon-ui-model/v2/Thread";
-import { AlertCircle, CheckCircle2, LoaderCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, LoaderCircle, Search } from "lucide-react";
+import { useMemo, useState } from "react";
 
 import type { Locale } from "../../lib/i18n";
 import { formatRelativeTime } from "../../lib/shared/text";
@@ -52,15 +53,32 @@ export function CommandTaskBoard({
   selectedThreadId,
   threads,
   onSelectThread,
+  stages,
+  query = "",
 }: {
   locale: Locale;
   selectedThreadId: string | null;
   threads: readonly Thread[];
   onSelectThread?: (threadId: string) => void;
+  stages?: readonly CommandTaskStage[];
+  query?: string;
 }) {
-  const visibleThreads = [...threads]
-    .sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0))
-    .slice(0, MAX_VISIBLE_TASKS);
+  const visibleThreads = useMemo(() => {
+    const normalizedQuery = query.trim().toLocaleLowerCase();
+    return [...threads]
+      .filter((thread) => {
+        const stage = commandTaskStage(thread);
+        if (stages && !stages.includes(stage)) return false;
+        if (!normalizedQuery) return true;
+        return [thread.name, thread.preview, thread.cwd]
+          .filter(Boolean)
+          .join(" ")
+          .toLocaleLowerCase()
+          .includes(normalizedQuery);
+      })
+      .sort((left, right) => (right.updatedAt ?? 0) - (left.updatedAt ?? 0))
+      .slice(0, MAX_VISIBLE_TASKS);
+  }, [query, stages, threads]);
 
   return (
     <section
@@ -156,6 +174,14 @@ export function CommandProjectBoardView({
   onNewTask: () => void;
   onSelectThread: (threadId: string) => void;
 }) {
+  const [mode, setMode] = useState<"current" | "gates" | "delivery">("current");
+  const [query, setQuery] = useState("");
+  const visibleStages =
+    mode === "gates"
+      ? (["attention"] as const)
+      : mode === "delivery"
+        ? (["ready"] as const)
+        : undefined;
   return (
     <section
       className={
@@ -182,9 +208,57 @@ export function CommandProjectBoardView({
             {locale === "zh" ? "发起任务" : "Start task"}
           </button>
         </header>
+        <div className="command-project-board-controls">
+          <div
+            className="segmented-tabs"
+            role="tablist"
+            aria-label={locale === "zh" ? "项目视图" : "Project view"}
+          >
+            {(["current", "gates", "delivery"] as const).map((tab) => (
+              <button
+                aria-selected={mode === tab}
+                className={mode === tab ? "active" : undefined}
+                key={tab}
+                role="tab"
+                type="button"
+                onClick={() => setMode(tab)}
+              >
+                {tab === "current"
+                  ? locale === "zh"
+                    ? "当前任务"
+                    : "Current"
+                  : tab === "gates"
+                    ? locale === "zh"
+                      ? "待处理"
+                      : "Needs attention"
+                    : locale === "zh"
+                      ? "可交付"
+                      : "Ready to deliver"}
+              </button>
+            ))}
+          </div>
+          <label
+            className="catalog-search"
+            aria-label={locale === "zh" ? "搜索任务" : "Search tasks"}
+          >
+            <Search aria-hidden="true" />
+            <input
+              placeholder={
+                locale === "zh"
+                  ? "搜索任务、目录或内容"
+                  : "Search task, folder, or content"
+              }
+              type="search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+            />
+          </label>
+        </div>
         <CommandTaskBoard
           locale={locale}
+          query={query}
           selectedThreadId={selectedThreadId}
+          stages={visibleStages}
           threads={threads}
           onSelectThread={onSelectThread}
         />

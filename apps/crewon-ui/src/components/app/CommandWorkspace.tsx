@@ -23,6 +23,7 @@ import {
 } from "./CommandWorkspaceChrome";
 import { CommandWorkspaceAssistant } from "./CommandWorkspaceAssistant";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
+import { AppWorkspaceLibraryContent } from "./AppWorkspaceLibraryContent";
 import {
   CommandWorkspaceOperationsPanel,
   type CommandWorkspaceOperationsPanelProps,
@@ -35,6 +36,7 @@ import {
 } from "./CommandHomeCapabilityStrip";
 import { TeamView } from "./CommandWorkspaceViews";
 import { CommandProjectBoardView } from "./CommandTaskBoard";
+import { CommandControlScheduleView } from "./CommandControlScheduleView";
 import {
   commandLibraryKindForView,
   commandShellViewFromHash,
@@ -134,6 +136,12 @@ import {
   providerAgentResourceForTarget,
 } from "../../lib/provider-resource/providerAgentExecutionTargets";
 import type { ResourceRef } from "@crewon-platform-model/v2/ResourceRef";
+import type {
+  LibraryItem,
+  LibraryKind,
+  LibraryPanel,
+} from "../../lib/domain/crewonDomain";
+import type { LibraryPanelActionCallback } from "../library/LibraryPrimitives";
 
 export {
   activateDesignPanelTab,
@@ -173,6 +181,7 @@ type CommandWorkspaceProps = {
   isSending: boolean;
   linkedThreads?: Thread[];
   knowledgeSelections?: readonly ControlKnowledgeSelection[];
+  libraryPanel?: LibraryPanel | null;
   locale?: Locale;
   modelOptions?: CommandModelOption[];
   officeRoomAdapter?: CommandOfficeRoomAdapter | null;
@@ -203,9 +212,10 @@ type CommandWorkspaceProps = {
   onClearAssistantThread?: () => void | Promise<void>;
   onModeChange: (mode: WorkMode) => void;
   onKnowledgeSelect?: (selection: ControlKnowledgeSelection) => void;
-  onOpenLibrary?: (
-    kind: "agents" | "automation" | "knowledge",
-  ) => void | Promise<void>;
+  onLibraryItemAction?: (item: LibraryItem) => void;
+  onLibraryPanelAction?: LibraryPanelActionCallback;
+  onLibraryPanelFieldChange?: (fieldId: string, value: string) => void;
+  onOpenLibrary?: (kind: LibraryKind) => void | Promise<void>;
   onOpenSettings?: () => void;
   onSaveCapability?: import("../../lib/capability/capabilityCatalog").CapabilityEditorSaveHandler;
   onRetryConnection: () => void;
@@ -346,7 +356,7 @@ export type CommandOfficeRoomAdapter = {
   ) => ReactNode;
 };
 
-type TeamMode = "office" | "workflow";
+type TeamMode = "office" | "workflow" | "experts";
 type CommandDomainCatalog = {
   agents: Array<{ config: AgentConfig; filePath: string }>;
   officeStatus: "loading" | "ready" | "unavailable";
@@ -459,6 +469,7 @@ export function CommandWorkspace({
   workspaceOperations = null,
   isSending,
   knowledgeSelections = [],
+  libraryPanel = null,
   linkedThreads = [],
   locale = "zh",
   modelOptions = fallbackCommandModelOptions,
@@ -478,6 +489,9 @@ export function CommandWorkspace({
   onClearAssistantThread,
   onModeChange,
   onKnowledgeSelect,
+  onLibraryItemAction,
+  onLibraryPanelAction,
+  onLibraryPanelFieldChange,
   onOpenLibrary,
   onOpenSettings,
   onRemoveComposerMention,
@@ -984,6 +998,7 @@ export function CommandWorkspace({
   const commandLinkedThreads: CommandLinkedThread[] = useMemo(
     () =>
       linkedThreads.map((thread) => ({
+        cwd: thread.cwd,
         id: thread.id,
         preview: thread.preview,
         title: sidebarThreadTitle(
@@ -1016,6 +1031,105 @@ export function CommandWorkspace({
         `${window.location.pathname}${window.location.search}#view-${view}`,
       );
     }
+  }
+
+  function renderControlLibraryView(
+    view: Extract<CommandShellView, "agents" | "knowledge" | "schedule">,
+  ) {
+    const expectedKind = commandLibraryKindForView(view);
+    const panelReady =
+      expectedKind !== null &&
+      (libraryPanel?.kind === expectedKind ||
+        (view === "agents" && libraryPanel?.kind === "tools"));
+    const isAutomationCatalog =
+      view === "schedule" &&
+      libraryPanel?.kind === "automation" &&
+      !libraryPanel.fields &&
+      libraryPanel.actions?.some(
+        (action) => action.id === "prepare-control-automation",
+      );
+    return (
+      <section
+        className={classNames(
+          "shell-view shell-page-view command-library-shell-view",
+          activeView === view && "active",
+        )}
+        data-shell-view={view}
+        hidden={activeView !== view}
+      >
+        {panelReady && libraryPanel ? (
+          <>
+            {view === "agents" ? (
+              <div
+                className="command-library-mode-switch"
+                role="tablist"
+                aria-label={
+                  locale === "zh"
+                    ? "智能体能力目录"
+                    : "Agent capability catalog"
+                }
+              >
+                <button
+                  aria-selected={libraryPanel.kind === "agents"}
+                  className={
+                    libraryPanel.kind === "agents" ? "active" : undefined
+                  }
+                  role="tab"
+                  type="button"
+                  onClick={() => void onOpenLibrary?.("agents")}
+                >
+                  {locale === "zh" ? "智能体" : "Agents"}
+                </button>
+                <button
+                  aria-selected={libraryPanel.kind === "tools"}
+                  className={
+                    libraryPanel.kind === "tools" ? "active" : undefined
+                  }
+                  role="tab"
+                  type="button"
+                  onClick={() => void onOpenLibrary?.("tools")}
+                >
+                  {locale === "zh" ? "技能 · 连接器" : "Skills · Connectors"}
+                </button>
+              </div>
+            ) : null}
+            {isAutomationCatalog ? (
+              <CommandControlScheduleView
+                locale={locale}
+                panel={libraryPanel}
+                onItemAction={onLibraryItemAction ?? (() => undefined)}
+                onPanelAction={onLibraryPanelAction ?? (() => undefined)}
+                onRefresh={() => void onOpenLibrary?.("automation")}
+              />
+            ) : (
+              <AppWorkspaceLibraryContent
+                libraryPanel={libraryPanel}
+                locale={locale}
+                onBackLibrary={() => switchView("command")}
+                onItemAction={onLibraryItemAction ?? (() => undefined)}
+                onLibraryPanelAction={onLibraryPanelAction ?? (() => undefined)}
+                onPanelFieldChange={
+                  onLibraryPanelFieldChange ?? (() => undefined)
+                }
+              />
+            )}
+          </>
+        ) : (
+          <div className="route-loading-state" role="status" aria-live="polite">
+            <strong>
+              {locale === "zh"
+                ? "正在读取 Control 数据…"
+                : "Loading Control data…"}
+            </strong>
+            <small>
+              {locale === "zh"
+                ? "页面会保留在当前工作台中"
+                : "The page stays inside the current workspace"}
+            </small>
+          </div>
+        )}
+      </section>
+    );
   }
 
   function focusActiveComposer() {
@@ -1573,12 +1687,16 @@ export function CommandWorkspace({
           linkedThreads={commandLinkedThreads}
           locale={locale}
           query={sidebarSearchQuery}
+          selectedWorkspaceName={
+            workspaceOperations?.nativeWorkspaceDisplayName ?? null
+          }
           selectedLinkedThreadId={activeLinkedThreadId}
           slots={slots}
           onCloseSearch={() => {
             setSidebarSearchOpen(false);
             setSidebarSearchQuery("");
           }}
+          onClearWorkspace={workspaceOperations?.onClearNativeWorkspace}
           onNewThread={() => {
             setActiveLinkedThreadId(null);
             setNewTaskDraft(true);
@@ -1593,6 +1711,7 @@ export function CommandWorkspace({
             onSelectLinkedThread?.(threadId);
           }}
           onOpenSettings={onOpenSettings}
+          onSelectWorkspace={workspaceOperations?.onSelectNativeWorkspace}
           onQueryChange={setSidebarSearchQuery}
           onSwitchView={switchView}
           onToggleCollapse={() =>
@@ -2236,8 +2355,12 @@ export function CommandWorkspace({
               textareaRef.current?.focus();
             }}
           />
+          {renderControlLibraryView("agents")}
+          {renderControlLibraryView("schedule")}
+          {renderControlLibraryView("knowledge")}
           <TeamView
             active={activeView === "team"}
+            expertAgents={teamCatalog.agents.map(({ config }) => config)}
             officeRuntime={officeRuntime}
             officeRoomId={officeRoomId}
             teamMode={teamMode}

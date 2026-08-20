@@ -69,6 +69,7 @@ const viewIcons: Record<CommandShellView, ReactNode> = {
 import { CommandSidebarSearchView } from "./CommandSidebarSearchView";
 import { CommandSidebarWorkspaceTree } from "./CommandSidebarWorkspaceTree";
 import { SidebarAccount } from "./CommandWorkspaceSidebarAccount";
+import { useAgentPlatformAccount } from "../auth/AgentPlatformAuthGate";
 export { SidebarAccount } from "./CommandWorkspaceSidebarAccount";
 
 export function CommandSidebar({
@@ -78,9 +79,13 @@ export function CommandSidebar({
   locale = "zh",
   query,
   selectedLinkedThreadId,
+  selectedWorkspaceName,
   slots,
+  onClearWorkspace,
   onNewThread,
   onOpenLinkedThread,
+  onOpenSettings,
+  onSelectWorkspace,
   onCloseSearch,
   onQueryChange,
   onSwitchView,
@@ -93,16 +98,20 @@ export function CommandSidebar({
   locale?: Locale;
   query: string;
   selectedLinkedThreadId: string | null;
+  selectedWorkspaceName?: string | null;
   slots: CommandHomeSlots;
   onCloseSearch: () => void;
+  onClearWorkspace?: () => void;
   onNewThread: () => void;
   onOpenLinkedThread: (threadId: string) => void;
   onOpenSettings?: () => void;
+  onSelectWorkspace?: () => void;
   onQueryChange: (query: string) => void;
   onSwitchView: (view: CommandShellView) => void;
   onToggleCollapse: () => void;
   onToggleSearch: () => void;
 }) {
+  const account = useAgentPlatformAccount();
   /*
    * This drives layout only: the drag region and the brand offset that clears
    * the floating window controls. It has to match whatever the window frame
@@ -311,7 +320,12 @@ export function CommandSidebar({
             <span className="nav-glyph" aria-hidden="true">
               {viewIcons[item.key]}
             </span>
-            <strong>{locale === "zh" ? item.label : item.en}</strong>
+            <span className="sidebar-nav-copy">
+              <strong>{locale === "zh" ? item.label : item.en}</strong>
+              {item.subtitle ? (
+                <em>{locale === "zh" ? item.subtitle : item.subtitleEn}</em>
+              ) : null}
+            </span>
           </button>
         ))}
         <button
@@ -332,10 +346,38 @@ export function CommandSidebar({
       <CommandSidebarWorkspaceTree
         copy={copy}
         linkedThreads={linkedThreads}
+        selectedWorkspaceName={selectedWorkspaceName}
         selectedLinkedThreadId={selectedLinkedThreadId}
+        onClearWorkspace={onClearWorkspace}
         onNewThread={onNewThread}
         onOpenLinkedThread={onOpenLinkedThread}
+        onSelectWorkspace={onSelectWorkspace}
       />
+      {account ? (
+        <SidebarAccount
+          account={account}
+          locale={locale}
+          onSettings={onOpenSettings}
+        />
+      ) : (
+        <footer
+          aria-label={locale === "zh" ? "本地运行时" : "Local runtime"}
+          className="sidebar-account sidebar-runtime-account"
+          data-od-id="desktop-account-entry"
+        >
+          <button type="button" onClick={onOpenSettings}>
+            <span className="account-mark" aria-hidden="true">
+              C
+            </span>
+            <span className="sidebar-account-copy">
+              <strong>
+                {locale === "zh" ? "本地工作台" : "Local workspace"}
+              </strong>
+              <small>Standalone Control</small>
+            </span>
+          </button>
+        </footer>
+      )}
     </aside>
   );
 }

@@ -32,10 +32,7 @@ export function commandLibraryKindForView(
 }
 
 export function commandShellViewFromHash(hash: string): CommandShellView {
-  const requestedView = requestedShellView(hash);
-  return commandLibraryKindForView(requestedView) === null
-    ? requestedView
-    : "command";
+  return requestedShellView(hash);
 }
 
 export function openControlLibraryFromCommandShell(
@@ -44,19 +41,20 @@ export function openControlLibraryFromCommandShell(
   libraryKind: LibraryHashKind,
   onOpenLibrary?: LibraryOpenHandler,
 ): void {
-  setActiveView("command");
+  const shellView = libraryKind === "automation" ? "schedule" : libraryKind;
+  setActiveView(shellView);
   routeWindow.history.replaceState(
     null,
     "",
-    `${routeWindow.location.pathname}${routeWindow.location.search}#view-command`,
+    `${routeWindow.location.pathname}${routeWindow.location.search}#view-${shellView}`,
   );
   void onOpenLibrary?.(libraryKind);
 }
 
 /**
- * Redirects legacy command-shell catalog hashes into the real Control Library.
- * The hash is replaced before opening so returning from the Library cannot
- * remount the removed placeholder route and reopen it in a loop.
+ * Keeps catalog destinations inside the command shell while loading their
+ * authoritative Control Library panels. This preserves the persistent task
+ * navigation and workbench that existed before the runtime migration.
  */
 export function installCommandShellHashRouting(
   routeWindow: RouteWindow,

@@ -58,7 +58,7 @@ describe("AppWorkspaceContent", () => {
     expect(markup).toContain(
       "Conversations will appear here after you start a task.",
     );
-    expect(markup).not.toContain("Workspaces");
+    expect(markup).toContain("Workspaces");
     expect(markup).not.toContain("frontend");
     expect(markup).not.toContain("建议任务");
     expect(markup).not.toContain("agents0");

@@ -14,6 +14,7 @@ function thread(
   turnStatus: "completed" | "failed" | "inProgress" = "completed",
 ): Thread {
   return {
+    cwd: "/workspace/demo",
     id,
     name: `${id} title`,
     preview: `${id} preview`,
@@ -73,5 +74,25 @@ describe("CommandTaskBoard", () => {
     expect(markup).toContain('data-thread-id="active"');
     expect(markup).not.toMatch(/running 56%|待批准|GitHub MCP 授权/);
     expect(markup).toMatchSnapshot();
+  });
+
+  it("filters project tabs and search without inventing run state", () => {
+    const markup = renderToStaticMarkup(
+      <CommandTaskBoard
+        locale="zh"
+        query="failed"
+        selectedThreadId={null}
+        stages={["attention"]}
+        threads={[
+          thread("active", { type: "active", activeFlags: [] }),
+          thread("failed", { type: "idle" }, "failed"),
+          thread("ready", { type: "idle" }),
+        ]}
+      />,
+    );
+
+    expect(markup).toContain('data-thread-id="failed"');
+    expect(markup).not.toContain('data-thread-id="active"');
+    expect(markup).not.toContain('data-thread-id="ready"');
   });
 });

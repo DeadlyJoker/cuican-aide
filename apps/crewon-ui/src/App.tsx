@@ -13,6 +13,7 @@ import {
   createControlLibraryPanelActionHandler,
   openControlLibraryItem,
 } from "./lib/library/controlLibraryInteraction";
+import { useCommandLibraryPanelState } from "./lib/library/useCommandLibraryPanelState";
 import { CommandSettingsLazyRoute } from "./components/app/CommandSettingsLazyRoute";
 import {
   isMissingThreadError,
@@ -74,6 +75,11 @@ import { importControlKnowledgeFiles } from "./lib/knowledge/controlKnowledgeFil
 import type { LocalResourceSelectionKind } from "./lib/shared/localResourceAttachments";
 
 export function App({ controlClient }: { controlClient: ControlApiClient }) {
+  const {
+    loadRequestRef: commandLibraryLoadRequestRef,
+    panel: commandLibraryPanel,
+    setPanel: setCommandLibraryPanel,
+  } = useCommandLibraryPanelState();
   const { platform, runtimeSurface } = useAppEnvironment();
   const { libraryLoadRequestRef, openLibraryRef, refreshSettingsSectionRef } =
     useAppCoordinatorRefs();
@@ -281,10 +287,15 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   });
 
   const resolveBackendCwd = async () => cwd;
-  const openLibrary = async (kind: LibraryKind) => {
+  const loadLibrary = async (
+    kind: LibraryKind,
+    openStandaloneRoute: boolean,
+  ) => {
     const requestId = libraryLoadRequestRef.current + 1;
     libraryLoadRequestRef.current = requestId;
-    setAppView("library");
+    if (openStandaloneRoute) {
+      setAppView("library");
+    }
     setCapabilityDockOpen(false);
     await openControlLibraryAction({
       client: controlClient,
@@ -293,6 +304,31 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       selectedThreadId,
       setLibraryPanel,
       isCurrent: () => libraryLoadRequestRef.current === requestId,
+    });
+  };
+  const openLibrary = async (kind: LibraryKind) => loadLibrary(kind, true);
+  const openWorkbenchLibrary = async (kind: LibraryKind) => {
+    const requestId = libraryLoadRequestRef.current + 1;
+    libraryLoadRequestRef.current = requestId;
+    await openControlLibraryAction({
+      client: controlClient,
+      kind,
+      locale,
+      selectedThreadId,
+      setLibraryPanel,
+      isCurrent: () => libraryLoadRequestRef.current === requestId,
+    });
+  };
+  const openCommandLibrary = async (kind: LibraryKind) => {
+    const requestId = commandLibraryLoadRequestRef.current + 1;
+    commandLibraryLoadRequestRef.current = requestId;
+    await openControlLibraryAction({
+      client: controlClient,
+      kind,
+      locale,
+      selectedThreadId,
+      setLibraryPanel: setCommandLibraryPanel,
+      isCurrent: () => commandLibraryLoadRequestRef.current === requestId,
     });
   };
   const openLibraryItem = async (
@@ -318,6 +354,42 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     setLibraryPanel,
     setNotice,
   });
+  const openCommandLibraryItem = async (
+    item: Parameters<typeof openControlLibraryItem>[0]["item"],
+  ) => {
+    const requestId = commandLibraryLoadRequestRef.current + 1;
+    commandLibraryLoadRequestRef.current = requestId;
+    await openControlLibraryItem({
+      client: controlClient,
+      item,
+      isCurrent: () => commandLibraryLoadRequestRef.current === requestId,
+      locale,
+      setLibraryPanel: setCommandLibraryPanel,
+      setNotice,
+    });
+  };
+  const handleCommandLibraryPanelAction =
+    createControlLibraryPanelActionHandler({
+      client: controlClient,
+      libraryPanel: commandLibraryPanel,
+      locale,
+      openLibrary: openCommandLibrary,
+      selectedThreadId,
+      setLibraryPanel: setCommandLibraryPanel,
+      setNotice,
+    });
+  const handleCommandLibraryFieldChange = (fieldId: string, value: string) => {
+    setCommandLibraryPanel((current) =>
+      current?.fields
+        ? {
+            ...current,
+            fields: current.fields.map((field) =>
+              field.id === fieldId ? { ...field, value } : field,
+            ),
+          }
+        : current,
+    );
+  };
 
   useAppChromeEffects({
     ...chromeState,
@@ -608,6 +680,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           }
         }
         controlWorkflowAdapter={controlWorkflowAdapter}
+        libraryPanel={commandLibraryPanel}
         workspaceOperations={{
           state: controlWorkspace.state,
           mutationAuthority: controlWorkspace.mutationAuthority,
@@ -635,7 +708,11 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           open: capabilityDockOpen,
           onClose: () => setCapabilityDockOpen(false),
           onOpen: () => setCapabilityDockOpen(true),
-          onOpenApps: () => void openLibrary("plugins"),
+          libraryPanel,
+          onLibraryItemAction: openLibraryItem,
+          onLibraryPanelAction: handleLibraryPanelAction,
+          onLibraryPanelFieldChange: handleCapabilityPanelFieldChange,
+          onOpenApps: () => void openWorkbenchLibrary("plugins"),
           readonlyClient: controlRuntimeConnected ? controlClient : null,
           readonlyThreadId: commandShellRuntime.selectedThreadId,
         }}
@@ -660,7 +737,10 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
             withKnowledgeReferenceMention(mentions, selection),
           );
         }}
-        onOpenLibrary={(kind) => openLibrary(kind)}
+        onLibraryItemAction={openCommandLibraryItem}
+        onLibraryPanelAction={handleCommandLibraryPanelAction}
+        onLibraryPanelFieldChange={handleCommandLibraryFieldChange}
+        onOpenLibrary={(kind) => openCommandLibrary(kind)}
         onOpenSettings={openSettings}
         onRemoveComposerMention={(path) => {
           setPendingComposerMentions((mentions) =>

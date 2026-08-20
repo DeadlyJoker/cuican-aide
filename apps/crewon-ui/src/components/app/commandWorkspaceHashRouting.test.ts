@@ -36,22 +36,22 @@ function routeWindow(hash: string) {
 }
 
 describe("command Workspace hash routing", () => {
-  it("opens a direct Agent hash in the Control Library and keeps command active", () => {
+  it("opens a direct Agent hash in the Control Library inside the command shell", () => {
     const browser = routeWindow("#view-agents");
     const onOpenLibrary = vi.fn();
     const setActiveView = vi.fn();
 
     installCommandShellHashRouting(browser.value, setActiveView, onOpenLibrary);
 
-    expect(setActiveView).toHaveBeenLastCalledWith("command");
+    expect(setActiveView).toHaveBeenLastCalledWith("agents");
     expect(onOpenLibrary).toHaveBeenCalledOnce();
     expect(onOpenLibrary).toHaveBeenCalledWith("agents");
     expect(browser.replaceState).toHaveBeenCalledWith(
       null,
       "",
-      "/workspace?tenant=tenant-1#view-command",
+      "/workspace?tenant=tenant-1#view-agents",
     );
-    expect(browser.location.hash).toBe("#view-command");
+    expect(browser.location.hash).toBe("#view-agents");
   });
 
   it("routes Knowledge hashchange, Agent popstate, and Schedule through Control", () => {
@@ -74,8 +74,8 @@ describe("command Workspace hash routing", () => {
     browser.events.dispatchEvent(new Event("hashchange"));
 
     expect(opened).toEqual(["knowledge", "agents", "automation"]);
-    expect(activeViews).toEqual(["command", "command", "command", "command"]);
-    expect(browser.location.hash).toBe("#view-command");
+    expect(activeViews).toEqual(["command", "knowledge", "agents", "schedule"]);
+    expect(browser.location.hash).toBe("#view-schedule");
 
     cleanup();
     browser.location.hash = "#view-knowledge";
@@ -83,7 +83,7 @@ describe("command Workspace hash routing", () => {
     expect(opened).toEqual(["knowledge", "agents", "automation"]);
   });
 
-  it("keeps ordinary shell hashes local and canonicalizes catalog views", () => {
+  it("keeps every persistent shell destination addressable", () => {
     expect({
       agents: commandShellViewFromHash("#view-agents"),
       assist: commandShellViewFromHash("#view-assist"),
@@ -94,18 +94,18 @@ describe("command Workspace hash routing", () => {
       unknown: commandShellViewFromHash("#view-unknown"),
     }).toMatchInlineSnapshot(`
       {
-        "agents": "command",
+        "agents": "agents",
         "assist": "assist",
-        "knowledge": "command",
+        "knowledge": "knowledge",
         "projects": "projects",
-        "schedule": "command",
+        "schedule": "schedule",
         "team": "team",
         "unknown": "command",
       }
     `);
   });
 
-  it("canonicalizes an in-app catalog selection before opening Control", () => {
+  it("keeps an in-app catalog selection inside its shell destination", () => {
     const browser = routeWindow("#view-assist");
     const onOpenLibrary = vi.fn();
     const setActiveView = vi.fn();
@@ -117,8 +117,8 @@ describe("command Workspace hash routing", () => {
       onOpenLibrary,
     );
 
-    expect(setActiveView).toHaveBeenCalledWith("command");
-    expect(browser.location.hash).toBe("#view-command");
+    expect(setActiveView).toHaveBeenCalledWith("knowledge");
+    expect(browser.location.hash).toBe("#view-knowledge");
     expect(onOpenLibrary).toHaveBeenCalledWith("knowledge");
   });
 });
