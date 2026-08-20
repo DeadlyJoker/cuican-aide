@@ -1,6 +1,6 @@
 import { ControlApiClient } from "@crewon/control-client";
 
-import { hasDesktopBridge } from "../platform";
+import { hasDesktopBridge, hasDevServerProxy } from "../platform";
 
 const WEB_SESSION_PATH = "/control-api/session";
 const MAX_SESSION_SECRET_BYTES = 8 * 1024;
@@ -41,9 +41,15 @@ export async function loadControlApiClient(
       const session = parseDesktopSession(
         await (dependencies.readDesktopSession ?? readDesktopSession)(),
       );
+      const pageOrigin =
+        dependencies.pageOrigin ?? globalThis.location?.origin ?? null;
+      const baseUrl =
+        hasDevServerProxy() && pageOrigin !== null
+          ? webOrigin(pageOrigin)
+          : session.baseUrl;
       return new ControlApiClient({
         accessToken: session.sessionToken,
-        baseUrl: session.baseUrl,
+        baseUrl,
         csrfToken: session.csrfToken,
         origin: session.origin,
       });

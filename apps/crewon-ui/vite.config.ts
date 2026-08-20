@@ -40,6 +40,7 @@ type HttpProxy = {
 };
 
 function controlSessionPlugin(config: {
+  desktopDev?: boolean;
   csrfToken?: string;
   sessionToken?: string;
 }): Plugin {
@@ -67,7 +68,7 @@ function controlSessionPlugin(config: {
           JSON.stringify({ baseUrl: "/", csrfToken: config.csrfToken }),
         );
       });
-      if (!configured) {
+      if (!configured && !config.desktopDev) {
         server.middlewares.use("/api/v1", (_request, response) => {
           response.statusCode = 503;
           response.end();
@@ -112,11 +113,13 @@ export default defineConfig(({ mode }) => {
   const controlTarget = env.CREWON_CONTROL_TARGET ?? "http://127.0.0.1:3210";
   const controlSessionToken = env.CREWON_CONTROL_SESSION_TOKEN;
   const controlCsrfToken = env.CREWON_CONTROL_CSRF_TOKEN;
+  const desktopDev = env.CREWON_DESKTOP_DEV === "1";
 
   return {
     plugins: [
       controlSessionPlugin({
         csrfToken: controlCsrfToken,
+        desktopDev,
         sessionToken: controlSessionToken,
       }),
       react(),
@@ -130,6 +133,9 @@ export default defineConfig(({ mode }) => {
           changeOrigin: false,
           configure(proxy) {
             (proxy as unknown as HttpProxy).on("proxyReq", (proxyReq) => {
+              if (desktopDev) {
+                proxyReq.setHeader("origin", "http://tauri.localhost");
+              }
               if (controlSessionToken) {
                 proxyReq.setHeader(
                   "authorization",

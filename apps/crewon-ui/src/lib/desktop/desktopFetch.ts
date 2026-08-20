@@ -1,11 +1,11 @@
 /**
- * Routes authenticated loopback calls through Tauri on desktop.
+ * Routes network calls through Tauri in a packaged build.
  *
  * The webview enforces CORS, while packaged Control is an authenticated
  * loopback service on a different origin and deliberately does not expose a
- * browser CORS surface. Both packaged desktop and `tauri dev` receive their
- * Control session over IPC, so absolute Control requests use Tauri's HTTP
- * plugin in either form.
+ * browser CORS surface. In dev, the Vite BFF keeps Control requests
+ * same-origin; a packaged build must route absolute Control requests through
+ * Tauri's HTTP plugin.
  *
  * Requests issued from Rust are not subject to the webview's origin rules, so
  * the fix is to send them there. Installing it as `globalThis.fetch` rather than
@@ -13,7 +13,7 @@
  * client captures the correct transport when it is constructed.
  */
 
-import { hasDesktopBridge } from "../platform";
+import { hasDesktopBridge, hasDevServerProxy } from "../platform";
 
 /** Marks the patched function so installing twice is a no-op. */
 const INSTALLED = Symbol.for("crewon.desktopFetch");
@@ -32,10 +32,11 @@ type MaybePatched = typeof fetch & { [INSTALLED]?: true };
 const REQUEST_TIMEOUT_MS = 15_000;
 
 /**
- * Replaces `globalThis.fetch` with Tauri's when running on desktop.
+ * Replaces `globalThis.fetch` with Tauri's when running packaged.
  *
- * A no-op on web. Relative dev-server routes remain on the webview fetch;
- * absolute authenticated Control routes go through Rust.
+ * A no-op on web and under `tauri dev`, where the dev-server proxy already makes
+ * backend calls same-origin and the platform's own fetch is what tests and
+ * tooling expect.
  *
  * Awaited by the caller before rendering: a component that fetches on mount
  * would otherwise race the patch and use the blocked implementation.
@@ -48,6 +49,19 @@ export async function installDesktopFetch(): Promise<void> {
    * the plugin rather than falling back to the platform's fetch.
    */
   if (!hasDesktopBridge()) {
+    return;
+  }
+  /*
+   * `tauri dev` loads the page from the Vite dev server, so every backend call
+   * already goes through its proxy and is same-origin. Swapping fetch there buys
+   * nothing and costs the platform behaviour the dev flow is tested against:
+   * the login request went through the plugin path and never settled, leaving
+   * the button spinning with no error to show.
+   *
+   * Only a packaged build, served from `tauri://localhost` with no proxy behind
+   * it, needs Rust to issue the request.
+   */
+  if (hasDevServerProxy()) {
     return;
   }
   if ((globalThis.fetch as MaybePatched)[INSTALLED]) {

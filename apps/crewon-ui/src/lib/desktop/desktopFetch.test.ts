@@ -22,9 +22,9 @@ vi.mock("@tauri-apps/plugin-http", () => ({
 }));
 
 /*
- * A packaged build is served from the synthetic `tauri.localhost` host. Tauri
- * dev uses a Vite page, but its authenticated desktop Control session still
- * points at an absolute loopback origin and needs the same transport.
+ * A packaged build is served from the synthetic `tauri.localhost` host, which has
+ * no dev server behind it. That is the only case where requests need Rust: under
+ * `tauri dev` the Vite proxy already makes them same-origin.
  */
 const packagedLocation = {
   hostname: "tauri.localhost",
@@ -60,19 +60,20 @@ describe("installDesktopFetch", () => {
     expect(globalThis.fetch).toBe(original);
   });
 
-  it("routes authenticated loopback requests through Tauri under tauri dev", async () => {
-    vi.stubGlobal("fetch", vi.fn());
+  it("leaves fetch alone under tauri dev, where the proxy already applies", async () => {
+    // The window loads from the Vite dev server, so backend calls are already
+    // same-origin. Routing them through the plugin anyway is what left the login
+    // button spinning: the request went to Rust and never settled.
+    const original = vi.fn();
+    vi.stubGlobal("fetch", original);
     vi.stubGlobal("window", {
       location: { hostname: "127.0.0.1", protocol: "http:", search: "" },
     });
     vi.stubGlobal("__TAURI_INTERNALS__", {});
 
     await installDesktopFetch();
-    await globalThis.fetch("http://127.0.0.1:3210/api/v1/account-snapshot");
 
-    expect(
-      requestTo("http://127.0.0.1:3210/api/v1/account-snapshot"),
-    ).toBeDefined();
+    expect(globalThis.fetch).toBe(original);
   });
 
   it("routes through Tauri in a desktop build", async () => {

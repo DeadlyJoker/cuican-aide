@@ -104,6 +104,7 @@ export function main() {
   const runtimeEnvironment = {
     ...environment,
     CREWON_ALLOW_HOST_NODE_SIDECAR: "1",
+    CREWON_DESKTOP_DEV: "1",
     CREWON_GUARDIAN_BINARY: guardian,
     CREWON_NODE_BINARY: nodeBinary,
   };

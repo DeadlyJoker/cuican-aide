@@ -36,6 +36,7 @@ describe("Control runtime bootstrap", () => {
 
     const client = await loadControlApiClient({
       fetch: webFetch,
+      pageOrigin: "http://127.0.0.1:5175",
       readDesktopSession,
     });
 
