@@ -1568,9 +1568,7 @@ function queueIndexesSql(): string {
 function executionAuthorityIndexesSql(): string {
   return `
     CREATE INDEX run_steps_run_idx
-      ON run_steps(tenant_id, run_id, status, step_id);
-    CREATE INDEX run_attempts_step_idx
-      ON run_attempts(tenant_id, run_id, step_id, attempt_number);`;
+      ON run_steps(tenant_id, run_id, status, step_id);`;
 }
 
 function toolExecutionReceiptsIndexesSql(): string {

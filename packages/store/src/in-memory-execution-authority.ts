@@ -21,10 +21,8 @@ export class InMemoryExecutionAuthority {
   readonly #attempts = new Map<string, RunAttemptState>();
 
   loadStep(locator: RunStepLocator): RunStepState | null {
-    const step = this.#steps.get(locator.stepId) ?? null;
-    return step?.tenantId === locator.tenantId && step.runId === locator.runId
-      ? clone(step)
-      : null;
+    const step = this.#steps.get(stepKey(locator)) ?? null;
+    return step === null ? null : clone(step);
   }
 
   loadAttempt(locator: RunAttemptLocator): RunAttemptState | null {
@@ -80,7 +78,7 @@ export class InMemoryExecutionAuthority {
     if (this.#attempts.has(input.attemptId)) {
       throw new RunStoreError("attempt_id_conflict");
     }
-    const currentStep = this.#steps.get(input.stepId) ?? null;
+    const currentStep = this.#steps.get(stepKey(input)) ?? null;
     const currentAttempt =
       currentStep?.currentAttemptId === null || currentStep === null
         ? null
@@ -109,7 +107,7 @@ export class InMemoryExecutionAuthority {
         clone(started.abandonedAttempt),
       );
     }
-    this.#steps.set(started.step.stepId, clone(started.step));
+    this.#steps.set(stepKey(started.step), clone(started.step));
     this.#attempts.set(started.attempt.attemptId, clone(started.attempt));
     return clone(started);
   }
@@ -121,7 +119,9 @@ export class InMemoryExecutionAuthority {
     leaseEpoch: number,
     mutation: RunAttemptTerminalMutation,
   ): RunAttemptTransitionResult {
-    const step = this.#steps.get(mutation.stepId) ?? null;
+    const step =
+      this.#steps.get(stepKey({ tenantId, runId, stepId: mutation.stepId })) ??
+      null;
     const attempt = this.#attempts.get(mutation.attemptId) ?? null;
     if (
       step?.tenantId !== tenantId ||
@@ -161,7 +161,9 @@ export class InMemoryExecutionAuthority {
     mutation: RunAttemptTerminalMutation,
     checkpoint: RunAttemptState["providerCheckpoint"],
   ): RunAttemptTransitionResult {
-    const step = this.#steps.get(mutation.stepId) ?? null;
+    const step =
+      this.#steps.get(stepKey({ tenantId, runId, stepId: mutation.stepId })) ??
+      null;
     const attempt = this.#attempts.get(mutation.attemptId) ?? null;
     if (
       step?.tenantId !== tenantId ||
@@ -201,7 +203,7 @@ export class InMemoryExecutionAuthority {
   }
 
   apply(result: RunAttemptTransitionResult): void {
-    this.#steps.set(result.step.stepId, clone(result.step));
+    this.#steps.set(stepKey(result.step), clone(result.step));
     this.#attempts.set(result.attempt.attemptId, clone(result.attempt));
   }
 
@@ -281,6 +283,10 @@ export class InMemoryExecutionAuthority {
     this.#attempts.set(next.attemptId, clone(next));
     return clone(next);
   }
+}
+
+function stepKey(locator: RunStepLocator): string {
+  return JSON.stringify([locator.tenantId, locator.runId, locator.stepId]);
 }
 
 function terminalInput(
