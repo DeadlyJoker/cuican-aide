@@ -2,6 +2,7 @@ import type { ControlApiClient } from "@crewon/control-client";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  controlOfficeRecord,
   createControlOffice,
   listControlOfficeCatalog,
   startControlOfficeDelegation,
@@ -56,17 +57,18 @@ describe("Control Office runtime", () => {
       }),
     } as unknown as ControlApiClient);
 
-    expect(catalog).toMatchObject({
-      agents: [{ config: { agentId: "agent-version-1", model: "gpt-5" } }],
-      offices: [
-        {
-          config: {
-            title: "Release office",
-            workspace: { recordId: "office-version-1" },
-          },
-        },
-      ],
-    });
+    expect(catalog.offices).toEqual([controlOfficeRecord(office)]);
+    expect(catalog.agents).toEqual([
+      expect.objectContaining({
+        config: expect.objectContaining({
+          agentId: "agent-version-1",
+          model: "gpt-5",
+        }),
+      }),
+    ]);
+    expect(JSON.stringify(catalog.offices)).not.toMatch(
+      /backendStatus|messages|tasks|threadId/u,
+    );
   });
 
   it("creates an Office with real member and execution-target identities", async () => {
@@ -114,7 +116,7 @@ describe("Control Office runtime", () => {
       },
       expect.any(String),
     );
-    expect(record.config.workspace.recordId).toBe("office-version-1");
+    expect(record).toEqual(controlOfficeRecord(office));
   });
 
   it("starts an explicit Workflow delegation on the active thread", async () => {

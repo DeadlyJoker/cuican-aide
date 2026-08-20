@@ -1,8 +1,9 @@
-import { BrainCircuit, ListChecks, MessageSquareText } from "lucide-react";
+import { GitBranch, ShieldCheck, Users } from "lucide-react";
 import { useId, type ReactNode } from "react";
 
 import { latestOfficeTaskRun } from "../../lib/office/latestOfficeTaskRun";
 import {
+  isControlOfficeDefinitionRecord,
   officeRecordKey,
   type OfficeConfigRecordReference,
 } from "../../lib/office/officePanelFromRecord";
@@ -25,6 +26,9 @@ export type CommandOfficeRoomProps = {
 };
 
 function officeStatus(record: OfficeConfigRecordReference) {
+  if (isControlOfficeDefinitionRecord(record)) {
+    return { label: "已发布", tone: undefined };
+  }
   const run = latestOfficeTaskRun(record.config.workspace.activity?.runs);
   if (run) {
     switch (run.status) {
@@ -58,6 +62,13 @@ function officeStatus(record: OfficeConfigRecordReference) {
 export function commandOfficeCardPresentation(
   record: OfficeConfigRecordReference,
 ) {
+  if (isControlOfficeDefinitionRecord(record)) {
+    return {
+      current: "通过 Workflow 显式委派",
+      status: officeStatus(record),
+      subtitle: `Control 定义 · ${record.definition.members.length} 名成员`,
+    };
+  }
   const { workspace } = record.config;
   const run = latestOfficeTaskRun(workspace.activity?.runs);
   const manager = officeManagerPresentation(workspace, "zh");
@@ -76,23 +87,23 @@ function officeCatalogPresentation(status: OfficeCatalogStatus) {
   switch (status) {
     case "loading":
       return {
-        description: "正在从当前工作空间读取真实办公室、成员和运行状态。",
-        stateLabel: "正在同步真实办公室",
-        title: "正在载入办公室",
+        description: "正在从 Control 读取已发布的 Office 定义与成员边界。",
+        stateLabel: "正在同步 Office 定义",
+        title: "正在载入 Office 定义",
       };
     case "unavailable":
       return {
         description:
-          "当前工作空间的办公室数据暂时无法读取，系统会自动重试；不会使用演示数据替代。",
+          "Control Office 定义暂时无法读取，系统会自动重试；不会使用演示数据替代。",
         stateLabel: "等待自动重试",
-        title: "办公室运行态正在恢复",
+        title: "Office 定义暂不可用",
       };
     case "ready":
       return {
         description:
-          "把组长、员工、群聊协作和长期上下文放进同一个可持续协作空间。",
-        stateLabel: "当前工作空间还没有办公室",
-        title: "创建你的第一个办公室",
+          "发布成员与 AgentVersion 的固定边界，再通过显式 Workflow 委派启动 canonical Run。",
+        stateLabel: "当前空间还没有 Office 定义",
+        title: "创建第一个 Office 定义",
       };
   }
 }
@@ -122,40 +133,45 @@ function OfficeCatalogLanding({
       data-office-empty-state={status}
     >
       <header className="team-office-empty-head">
-        <span className="team-office-empty-kicker">OFFICE RUNTIME</span>
+        <span className="team-office-empty-kicker">CONTROL OFFICE</span>
         <h3 id={titleId}>{presentation.title}</h3>
         <p>{presentation.description}</p>
       </header>
 
-      <div aria-label="办公室能力" className="team-office-capability-grid">
-        <article className="team-office-capability">
-          <span aria-hidden="true">
-            <MessageSquareText />
-          </span>
-          <div>
-            <strong>群聊</strong>
-            <p>向组长或指定员工发送消息，持续保留同一条协作主线。</p>
-          </div>
-        </article>
-        <article className="team-office-capability">
-          <span aria-hidden="true">
-            <ListChecks />
-          </span>
-          <div>
-            <strong>任务协作</strong>
-            <p>通过群聊 @ 组长或员工派发、跟进和确认任务，保持结果可追踪。</p>
-          </div>
-        </article>
-        <article className="team-office-capability">
-          <span aria-hidden="true">
-            <BrainCircuit />
-          </span>
-          <div>
-            <strong>记忆与上下文</strong>
-            <p>沉淀办公室范围内的事实、偏好和决策，并控制可见边界。</p>
-          </div>
-        </article>
-      </div>
+      {status === "ready" ? (
+        <div
+          aria-label="Office 定义边界"
+          className="team-office-capability-grid"
+        >
+          <article className="team-office-capability">
+            <span aria-hidden="true">
+              <Users />
+            </span>
+            <div>
+              <strong>成员边界</strong>
+              <p>固定成员身份与显示名称，不推断在线或运行状态。</p>
+            </div>
+          </article>
+          <article className="team-office-capability">
+            <span aria-hidden="true">
+              <ShieldCheck />
+            </span>
+            <div>
+              <strong>AgentVersion 绑定</strong>
+              <p>成员绑定已发布 AgentVersion，Control 保留版本与权限边界。</p>
+            </div>
+          </article>
+          <article className="team-office-capability">
+            <span aria-hidden="true">
+              <GitBranch />
+            </span>
+            <div>
+              <strong>Workflow 委派</strong>
+              <p>查看定义后显式选择 WorkflowVersion，启动 canonical Run。</p>
+            </div>
+          </article>
+        </div>
+      ) : null}
 
       <footer className="team-office-empty-footer">
         <span
@@ -200,11 +216,18 @@ export function CommandOfficeRoom({
     const searchableText = [
       record.config.title,
       record.config.subtitle,
-      record.config.workspace.goal,
-      ...record.config.workspace.members.flatMap((member) => [
-        member.name,
-        member.role,
-      ]),
+      ...(isControlOfficeDefinitionRecord(record)
+        ? record.definition.members.flatMap((member) => [
+            member.displayName,
+            member.agentVersionId,
+          ])
+        : [
+            record.config.workspace.goal,
+            ...record.config.workspace.members.flatMap((member) => [
+              member.name,
+              member.role,
+            ]),
+          ]),
     ]
       .filter(Boolean)
       .join(" ")
@@ -259,7 +282,11 @@ export function CommandOfficeRoom({
                   <span title={presentation.current}>
                     {presentation.current}
                   </span>
-                  <em>进入群聊</em>
+                  <em>
+                    {isControlOfficeDefinitionRecord(record)
+                      ? "查看与委派"
+                      : "进入群聊"}
+                  </em>
                 </span>
               </button>
             );
@@ -285,7 +312,7 @@ export function CommandOfficeRoom({
       >
         {room ?? (
           <div className="team-office-room-loading" role="status">
-            正在连接办公室运行态…
+            正在读取 Office 定义…
           </div>
         )}
       </section>

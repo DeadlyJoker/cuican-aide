@@ -1,7 +1,8 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
-import type { OfficeConfigRecordReference } from "../../lib/office/officePanelFromRecord";
+import type { OfficeRuntimeRecordReference } from "../../lib/office/officePanelFromRecord";
+import { controlOfficeRecord } from "../../lib/office/controlOfficeRuntime";
 import {
   CommandOfficeRoom,
   commandOfficeCardPresentation,
@@ -11,7 +12,7 @@ import { TeamView } from "./CommandWorkspaceViews";
 function record(
   filePath: string,
   status: "running" | "completed",
-): OfficeConfigRecordReference {
+): OfficeRuntimeRecordReference {
   return {
     filePath,
     config: {
@@ -45,6 +46,28 @@ function record(
     },
   };
 }
+
+const publishedOffice = {
+  schemaVersion: "crewon.office-definition.v0" as const,
+  tenantId: "tenant-1",
+  spaceId: "space-1",
+  officeId: "office-1",
+  officeVersionId: "office-version-1",
+  revision: 3,
+  title: "发布办公室",
+  members: [
+    {
+      memberId: "member-1",
+      displayName: "发布员工",
+      agentVersionId: "agent-version-1",
+    },
+  ],
+  executionTargets: [
+    { targetId: "target-1", agentVersionId: "agent-version-1" },
+  ],
+  createdByActorId: "actor-1",
+  createdAt: "2026-08-20T00:00:00.000Z",
+};
 
 describe("CommandOfficeRoom", () => {
   it("derives card status and current work from the canonical Office run", () => {
@@ -83,6 +106,29 @@ describe("CommandOfficeRoom", () => {
     });
   });
 
+  it("presents a Control Office as a published definition without runtime claims", () => {
+    const controlRecord = controlOfficeRecord(publishedOffice);
+    const markup = renderToStaticMarkup(
+      <CommandOfficeRoom
+        isOpen={false}
+        records={[controlRecord]}
+        room={null}
+        selectedRecordKey={null}
+        status="ready"
+        onOpen={vi.fn()}
+      />,
+    );
+
+    expect(commandOfficeCardPresentation(controlRecord)).toEqual({
+      current: "通过 Workflow 显式委派",
+      status: { label: "已发布", tone: undefined },
+      subtitle: "Control 定义 · 1 名成员",
+    });
+    expect(markup).toContain("查看与委派");
+    expect(markup).not.toMatch(/待命|进入群聊|办公室主控/u);
+    expect(markup).toMatchSnapshot();
+  });
+
   it("snapshots the real-office list and mounted shared-composer room", () => {
     const records = [
       record("/repo/a.json", "running"),
@@ -111,7 +157,7 @@ describe("CommandOfficeRoom", () => {
     expect(markup).not.toContain("告诉组长目标、背景或下一步");
   });
 
-  it("snapshots a prominent empty landing without inventing office data", () => {
+  it("snapshots a published-definition landing without inventing runtime capabilities", () => {
     const markup = renderToStaticMarkup(
       <CommandOfficeRoom
         isOpen={false}
@@ -125,11 +171,11 @@ describe("CommandOfficeRoom", () => {
     );
 
     expect(markup).toMatchSnapshot();
-    expect(markup).toContain("创建你的第一个办公室");
-    expect(markup).toContain("群聊");
-    expect(markup).toContain("任务协作");
-    expect(markup).not.toContain("执行台");
-    expect(markup).toContain("记忆与上下文");
+    expect(markup).toContain("创建第一个 Office 定义");
+    expect(markup).toContain("成员边界");
+    expect(markup).toContain("AgentVersion 绑定");
+    expect(markup).toContain("Workflow 委派");
+    expect(markup).not.toMatch(/群聊|任务协作|记忆与上下文|OFFICE RUNTIME/u);
     expect(markup).not.toContain("设计交付办公室");
   });
 
@@ -157,6 +203,7 @@ describe("CommandOfficeRoom", () => {
     expect(markup).toContain('data-office-empty-state="unavailable"');
     expect(markup).toContain("等待自动重试");
     expect(markup).toContain("立即重试");
+    expect(markup).not.toContain("Office 定义边界");
     expect(markup).not.toContain("<option");
     expect(markup).not.toContain("team-workspace-scope");
     expect(markup).not.toContain("设计交付办公室");
@@ -195,6 +242,6 @@ describe("CommandOfficeRoom", () => {
     );
 
     expect(markup).toContain("没有匹配“不存在”");
-    expect(markup).not.toContain("创建你的第一个办公室");
+    expect(markup).not.toContain("创建第一个 Office 定义");
   });
 });

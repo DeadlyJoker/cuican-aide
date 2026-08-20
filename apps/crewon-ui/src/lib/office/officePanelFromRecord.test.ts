@@ -2,13 +2,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   officeRecordKey,
-  type OfficeConfigRecordReference,
+  type OfficeRuntimeRecordReference,
 } from "./officePanelFromRecord";
 
 function record(
   filePath: string,
-  overrides: Partial<OfficeConfigRecordReference["config"]["workspace"]> = {},
-): OfficeConfigRecordReference {
+  overrides: Partial<OfficeRuntimeRecordReference["config"]["workspace"]> = {},
+): OfficeRuntimeRecordReference {
   return {
     filePath,
     config: {

@@ -73,8 +73,10 @@ import {
 } from "../../lib/scene/sceneCatalog";
 import type { AgentConfig } from "../../lib/domain/domainTypes";
 import {
+  isControlOfficeDefinitionRecord,
   officeRecordKey,
   type OfficeConfigRecordReference,
+  type OfficeRuntimeRecordReference,
 } from "../../lib/office/officePanelFromRecord";
 import {
   commandComposerRuntimeSettings,
@@ -877,6 +879,10 @@ export function CommandWorkspace({
     const domainTargets = executionTargetOptionsFromDomain({
       ...executionTargetCatalog,
       locale,
+      offices: executionTargetCatalog.offices.filter(
+        (record): record is OfficeRuntimeRecordReference =>
+          !isControlOfficeDefinitionRecord(record),
+      ),
     });
     const providerTargets = providerExecutionTargetsAvailable
       ? providerAgentExecutionTargetOptions(

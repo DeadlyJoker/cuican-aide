@@ -7,7 +7,10 @@ import type { ControlApiClient } from "@crewon/control-client";
 
 import type { AgentConfig } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";
-import type { OfficeConfigRecordReference } from "./officePanelFromRecord";
+import {
+  isControlOfficeDefinitionRecord,
+  type OfficeConfigRecordReference,
+} from "./officePanelFromRecord";
 
 export type ControlOfficeCatalog = Readonly<{
   agents: Array<{ config: AgentConfig; filePath: string }>;
@@ -18,33 +21,25 @@ export function controlOfficeRecord(
   office: OfficeContract,
 ): OfficeConfigRecordReference {
   return {
+    authority: "controlDefinition",
     filePath: `control:office:${office.officeVersionId}`,
     savedAt: office.createdAt,
     config: {
       title: office.title,
       subtitle: `Control · r${office.revision}`,
-      workspace: {
-        backendStatus: "connected",
-        goal: "",
-        members: office.members.map((member, index) => ({
-          memberId: member.memberId,
-          agentId: member.agentVersionId,
-          name: member.displayName,
-          role: member.agentVersionId,
-          glyph: member.displayName.trim().charAt(0) || "员",
-          accent: index % 2 === 0 ? "cyan" : "violet",
-          status: "Control AgentVersion",
-        })),
-        messages: [],
-        recordId: office.officeVersionId,
-        recordRevision: String(office.revision),
-        tasks: [],
-      },
+    },
+    definition: {
+      officeVersionId: office.officeVersionId,
+      revision: office.revision,
+      members: office.members.map((member) => ({ ...member })),
     },
   };
 }
 
 export function controlOfficeVersionId(record: OfficeConfigRecordReference) {
+  if (isControlOfficeDefinitionRecord(record)) {
+    return record.definition.officeVersionId;
+  }
   return record.config.workspace.recordId?.trim() || null;
 }
 
