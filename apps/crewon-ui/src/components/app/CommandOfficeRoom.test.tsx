@@ -228,6 +228,23 @@ describe("CommandOfficeRoom", () => {
     expect(markup).toMatchSnapshot();
   });
 
+  it("restores expert-team creation through the real Control Office flow", () => {
+    const markup = renderToStaticMarkup(
+      <TeamView
+        active
+        officeRuntime={null}
+        officeRoomId={null}
+        teamMode="experts"
+        onCreateExpertGroup={vi.fn()}
+        onTeamModeChange={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("组建专家团队");
+    expect(markup).toContain("创建真实 Control Office 团队");
+    expect(markup).not.toMatch(/演示团队|模拟专家/u);
+  });
+
   it("filters real Office records without turning a search miss into a fake empty catalog", () => {
     const markup = renderToStaticMarkup(
       <CommandOfficeRoom

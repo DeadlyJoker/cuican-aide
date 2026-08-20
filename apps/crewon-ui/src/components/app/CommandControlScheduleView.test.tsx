@@ -1,7 +1,11 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { CommandControlScheduleView } from "./CommandControlScheduleView";
+import {
+  CommandControlScheduleView,
+  loadScheduledRunHistory,
+  type ScheduledItem,
+} from "./CommandControlScheduleView";
 import type { LibraryPanel } from "../../lib/domain/crewonDomain";
 
 function schedulePanel(): LibraryPanel {
@@ -59,7 +63,53 @@ describe("CommandControlScheduleView", () => {
     expect(markup).toContain("日程日历");
     expect(markup).toContain("每日进展汇总");
     expect(markup).toContain("新建安排");
-    expect(markup).toContain("全部安排");
+    expect(markup).toContain("执行记录");
+    expect(markup).toContain("个人日程");
+    expect(markup).toContain("小队日程");
     expect(markup).toMatchSnapshot();
+  });
+
+  it("loads bounded real Control runs for the scheduled threads", async () => {
+    const panel = schedulePanel();
+    const item = panel.items[1]!;
+    const action = item.action;
+    if (action?.type !== "automation-detail" || !action.controlSchedule) {
+      throw new Error("automation fixture invalid");
+    }
+    const scheduled: ScheduledItem = {
+      item,
+      schedule: action.controlSchedule,
+    };
+    const run = {
+      runId: "run-1",
+      threadId: "thread-1",
+      status: "completed" as const,
+      revision: 2,
+      lastSequence: 4,
+      cancelRequested: false,
+      waitingApproval: null,
+      collaborationMode: "default" as const,
+      purpose: "turn" as const,
+      workflowVersionBinding: null,
+      goalBinding: null,
+      outputRef: "output-1",
+      failure: null,
+      createdAt: "2026-08-21T08:00:00.000Z",
+      updatedAt: "2026-08-21T08:01:00.000Z",
+      terminalAt: "2026-08-21T08:01:00.000Z",
+    };
+    const listThreadRuns = vi.fn(async () => ({
+      data: [run],
+      nextCursor: null,
+    }));
+
+    await expect(
+      loadScheduledRunHistory({ listThreadRuns }, [scheduled]),
+    ).resolves.toEqual([{ run, schedules: [scheduled] }]);
+    expect(listThreadRuns).toHaveBeenCalledWith(
+      "thread-1",
+      { limit: 100 },
+      { signal: undefined },
+    );
   });
 });
