@@ -1,20 +1,28 @@
 import {
+  Activity,
   CalendarClock,
+  CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  CircleAlert,
   ExternalLink,
+  History,
   List,
+  LoaderCircle,
   Plus,
   RefreshCw,
   Search,
+  Users,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import type { ControlApiClient } from "@crewon/control-client";
+import type { RunView } from "@crewon/contracts";
+import { useEffect, useMemo, useState } from "react";
 
 import type { LibraryItem, LibraryPanel } from "../../lib/domain/crewonDomain";
 import type { Locale } from "../../lib/i18n";
 import type { LibraryPanelActionCallback } from "../library/LibraryPrimitives";
 
-type ScheduledItem = Readonly<{
+export type ScheduledItem = Readonly<{
   item: LibraryItem;
   schedule: NonNullable<
     Extract<
@@ -23,6 +31,56 @@ type ScheduledItem = Readonly<{
     >["controlSchedule"]
   >;
 }>;
+
+type AutomationHistoryClient = Pick<ControlApiClient, "listThreadRuns">;
+
+type ScheduledRun = Readonly<{
+  run: RunView;
+  schedules: readonly ScheduledItem[];
+}>;
+
+type HistoryState =
+  | Readonly<{ status: "idle" | "loading" }>
+  | Readonly<{ status: "ready"; runs: readonly ScheduledRun[] }>
+  | Readonly<{ status: "error" }>;
+
+const MAX_HISTORY_THREADS = 16;
+const RUNS_PER_THREAD = 100;
+
+export async function loadScheduledRunHistory(
+  client: AutomationHistoryClient,
+  items: readonly ScheduledItem[],
+  signal?: AbortSignal,
+): Promise<readonly ScheduledRun[]> {
+  const byThread = new Map<string, ScheduledItem[]>();
+  for (const item of items) {
+    const action = item.item.action;
+    if (action?.type !== "automation-detail" || !action.threadId) continue;
+    const threadId = action.threadId;
+    const current = byThread.get(threadId) ?? [];
+    current.push(item);
+    byThread.set(threadId, current);
+  }
+  const entries = [...byThread.entries()].slice(0, MAX_HISTORY_THREADS);
+  const pages = await Promise.all(
+    entries.map(async ([threadId, schedules]) => ({
+      schedules,
+      response: await client.listThreadRuns(
+        threadId,
+        { limit: RUNS_PER_THREAD },
+        { signal },
+      ),
+    })),
+  );
+  return pages
+    .flatMap(({ response, schedules }) =>
+      response.data.map((run) => ({ run, schedules })),
+    )
+    .sort(
+      (left, right) =>
+        Date.parse(right.run.createdAt) - Date.parse(left.run.createdAt),
+    );
+}
 
 function dateKey(date: Date): string {
   return [
@@ -65,20 +123,26 @@ function scheduleTime(item: ScheduledItem): string {
 }
 
 export function CommandControlScheduleView({
+  client,
   locale,
   panel,
   onItemAction,
   onPanelAction,
   onRefresh,
 }: {
+  client?: AutomationHistoryClient | null;
   locale: Locale;
   panel: LibraryPanel;
   onItemAction: (item: LibraryItem) => void;
   onPanelAction: LibraryPanelActionCallback;
   onRefresh: () => void;
 }) {
+  const [section, setSection] = useState<"schedule" | "history">("schedule");
   const [mode, setMode] = useState<"calendar" | "list">("calendar");
+  const [scope, setScope] = useState<"personal" | "team">("personal");
   const [query, setQuery] = useState("");
+  const [historyNonce, setHistoryNonce] = useState(0);
+  const [history, setHistory] = useState<HistoryState>({ status: "idle" });
   const [selectedDate, setSelectedDate] = useState(() => new Date());
   const [viewMonth, setViewMonth] = useState(
     () => new Date(new Date().getFullYear(), new Date().getMonth(), 1),
@@ -130,6 +194,40 @@ export function CommandControlScheduleView({
   const createAction = panel.actions?.find(
     (action) => action.id === "prepare-control-automation",
   );
+  const visibleScheduledItems = scope === "personal" ? scheduledItems : [];
+  const runningCount =
+    history.status === "ready"
+      ? history.runs.filter(({ run }) =>
+          [
+            "queued",
+            "running",
+            "waitingApproval",
+            "suspended",
+            "reconciling",
+          ].includes(run.status),
+        ).length
+      : 0;
+  const failedCount =
+    history.status === "ready"
+      ? history.runs.filter(({ run }) => run.status === "failed").length
+      : 0;
+  const historyRuns = history.status === "ready" ? history.runs : [];
+
+  useEffect(() => {
+    if (section !== "history" || scope !== "personal" || !client) return;
+    const controller = new AbortController();
+    setHistory({ status: "loading" });
+    void loadScheduledRunHistory(
+      client,
+      scheduledItems,
+      controller.signal,
+    ).then(
+      (runs) =>
+        !controller.signal.aborted && setHistory({ status: "ready", runs }),
+      () => !controller.signal.aborted && setHistory({ status: "error" }),
+    );
+    return () => controller.abort();
+  }, [client, historyNonce, scheduledItems, scope, section]);
 
   return (
     <div className="page-stack command-control-schedule-page">
@@ -150,7 +248,14 @@ export function CommandControlScheduleView({
               onChange={(event) => setQuery(event.target.value)}
             />
           </label>
-          <button className="button compact" type="button" onClick={onRefresh}>
+          <button
+            className="button compact"
+            type="button"
+            onClick={() => {
+              onRefresh();
+              setHistoryNonce((current) => current + 1);
+            }}
+          >
             <RefreshCw aria-hidden="true" />
             {locale === "zh" ? "同步" : "Refresh"}
           </button>
@@ -166,37 +271,172 @@ export function CommandControlScheduleView({
           ) : null}
         </div>
       </header>
-      <div className="catalog-mode-tabs" role="tablist">
+      <div className="schedule-section-tabs" role="tablist">
         <button
-          aria-selected={mode === "calendar"}
-          className={
-            mode === "calendar"
-              ? "filter-chip mode-tab active"
-              : "filter-chip mode-tab"
-          }
+          aria-selected={section === "schedule"}
+          className={section === "schedule" ? "active" : undefined}
           role="tab"
           type="button"
-          onClick={() => setMode("calendar")}
+          onClick={() => setSection("schedule")}
         >
           <CalendarClock aria-hidden="true" />
-          <span>{locale === "zh" ? "日历" : "Calendar"}</span>
+          <span>{locale === "zh" ? "日程" : "Schedule"}</span>
         </button>
         <button
-          aria-selected={mode === "list"}
-          className={
-            mode === "list"
-              ? "filter-chip mode-tab active"
-              : "filter-chip mode-tab"
-          }
+          aria-selected={section === "history"}
+          className={section === "history" ? "active" : undefined}
           role="tab"
           type="button"
-          onClick={() => setMode("list")}
+          onClick={() => setSection("history")}
         >
-          <List aria-hidden="true" />
-          <span>{locale === "zh" ? "全部安排" : "All schedules"}</span>
+          <History aria-hidden="true" />
+          <span>{locale === "zh" ? "执行记录" : "Run history"}</span>
         </button>
       </div>
-      {mode === "calendar" ? (
+      <div className="schedule-scope-row">
+        <div
+          className="catalog-mode-tabs"
+          role="group"
+          aria-label={locale === "zh" ? "日程范围" : "Schedule scope"}
+        >
+          <button
+            aria-pressed={scope === "personal"}
+            className={
+              scope === "personal"
+                ? "filter-chip mode-tab active"
+                : "filter-chip mode-tab"
+            }
+            type="button"
+            onClick={() => setScope("personal")}
+          >
+            {locale === "zh" ? "个人日程" : "Personal"}
+          </button>
+          <button
+            aria-pressed={scope === "team"}
+            className={
+              scope === "team"
+                ? "filter-chip mode-tab active"
+                : "filter-chip mode-tab"
+            }
+            type="button"
+            onClick={() => setScope("team")}
+          >
+            <Users aria-hidden="true" />
+            {locale === "zh" ? "小队日程" : "Team"}
+          </button>
+        </div>
+        {section === "schedule" && scope === "personal" ? (
+          <div
+            className="schedule-view-switch"
+            role="group"
+            aria-label={locale === "zh" ? "日程布局" : "Schedule layout"}
+          >
+            <button
+              aria-pressed={mode === "calendar"}
+              type="button"
+              onClick={() => setMode("calendar")}
+            >
+              <CalendarClock /> {locale === "zh" ? "日历" : "Calendar"}
+            </button>
+            <button
+              aria-pressed={mode === "list"}
+              type="button"
+              onClick={() => setMode("list")}
+            >
+              <List /> {locale === "zh" ? "安排" : "List"}
+            </button>
+          </div>
+        ) : null}
+      </div>
+      {scope === "team" ? (
+        <section className="schedule-team-empty" role="status">
+          <Users aria-hidden="true" />
+          <div>
+            <strong>
+              {locale === "zh"
+                ? "小队日程尚未发布"
+                : "Team schedules are not published yet"}
+            </strong>
+            <p>
+              {locale === "zh"
+                ? "当前 Control Automation 只提供个人定义；这里不会用个人安排伪装团队数据。"
+                : "Control Automation currently exposes personal definitions only; personal schedules are never presented as team data."}
+            </p>
+          </div>
+        </section>
+      ) : section === "history" ? (
+        <section
+          className="schedule-history-shell"
+          aria-label={locale === "zh" ? "执行记录" : "Run history"}
+        >
+          <div className="schedule-summary-grid">
+            <article>
+              <CalendarClock />
+              <span>{locale === "zh" ? "已发布安排" : "Published"}</span>
+              <strong>{visibleScheduledItems.length}</strong>
+            </article>
+            <article>
+              <Activity />
+              <span>{locale === "zh" ? "执行中" : "Running"}</span>
+              <strong>{runningCount}</strong>
+            </article>
+            <article>
+              <CircleAlert />
+              <span>{locale === "zh" ? "需要关注" : "Needs attention"}</span>
+              <strong>{failedCount}</strong>
+            </article>
+          </div>
+          {history.status === "loading" || history.status === "idle" ? (
+            <div className="schedule-history-state" role="status">
+              <LoaderCircle className="spin" />
+              {locale === "zh"
+                ? "正在读取 Control 运行记录…"
+                : "Loading Control run history…"}
+            </div>
+          ) : history.status === "error" ? (
+            <div className="schedule-history-state is-error" role="alert">
+              <CircleAlert />
+              {locale === "zh"
+                ? "运行记录暂时无法读取"
+                : "Run history is unavailable"}
+            </div>
+          ) : historyRuns.length === 0 ? (
+            <div className="schedule-history-state" role="status">
+              <History />
+              {locale === "zh" ? "还没有真实运行记录" : "No real runs yet"}
+            </div>
+          ) : (
+            <div className="schedule-history-list">
+              {historyRuns.map(({ run, schedules }) => (
+                <article className="schedule-history-item" key={run.runId}>
+                  <span className={`schedule-run-status is-${run.status}`}>
+                    {run.status === "completed" ? (
+                      <CheckCircle2 />
+                    ) : run.status === "failed" ? (
+                      <CircleAlert />
+                    ) : (
+                      <Activity />
+                    )}
+                  </span>
+                  <div>
+                    <strong>
+                      {schedules.map(({ item }) => item.title).join(" · ")}
+                    </strong>
+                    <p>{run.runId}</p>
+                    <small>
+                      {new Intl.DateTimeFormat(
+                        locale === "zh" ? "zh-CN" : "en-US",
+                        { dateStyle: "medium", timeStyle: "short" },
+                      ).format(new Date(run.createdAt))}
+                    </small>
+                  </div>
+                  <em>{run.status}</em>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+      ) : mode === "calendar" ? (
         <section
           className="schedule-calendar-shell"
           aria-label={locale === "zh" ? "日程日历" : "Schedule calendar"}
@@ -268,7 +508,7 @@ export function CommandControlScheduleView({
                     "schedule-calendar-day",
                     date.getMonth() === viewMonth.getMonth() ? "" : "outside",
                     dateKey(date) === dateKey(selectedDate) ? "selected" : "",
-                    items.length ? "has-events" : "",
+                    items.length && scope === "personal" ? "has-events" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -277,7 +517,7 @@ export function CommandControlScheduleView({
                   onClick={() => setSelectedDate(date)}
                 >
                   <span>{date.getDate()}</span>
-                  {items.length ? (
+                  {items.length && scope === "personal" ? (
                     <i aria-hidden="true">
                       {items.slice(0, 3).map(({ item }) => (
                         <b key={item.title} />

@@ -1,4 +1,5 @@
 import { ListChecks, Plus, Target } from "lucide-react";
+import type { ControlApiClient } from "@crewon/control-client";
 import type { Thread } from "@crewon-ui-model/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
 import {
@@ -177,6 +178,7 @@ type CommandWorkspaceProps = {
     targets: ExecutionTargetOption[];
   }> | null;
   controlWorkflowAdapter?: ControlWorkflowAdapter | null;
+  automationClient?: Pick<ControlApiClient, "listThreadRuns"> | null;
   workspaceOperations?: CommandWorkspaceOperationsSlot | null;
   isSending: boolean;
   linkedThreads?: Thread[];
@@ -464,6 +466,7 @@ export function CommandWorkspace({
   assistantThread = null,
   composerValue,
   connectionState,
+  automationClient = null,
   controlExecutionCatalog,
   controlWorkflowAdapter = null,
   workspaceOperations = null,
@@ -1095,6 +1098,7 @@ export function CommandWorkspace({
             ) : null}
             {isAutomationCatalog ? (
               <CommandControlScheduleView
+                client={automationClient}
                 locale={locale}
                 panel={libraryPanel}
                 onItemAction={onLibraryItemAction ?? (() => undefined)}
@@ -2367,6 +2371,14 @@ export function CommandWorkspace({
             controlWorkflowAdapter={controlWorkflowAdapter}
             selectedThreadId={selectedThreadId}
             onCreateOffice={
+              canCreateOffice
+                ? () => {
+                    setOfficeCreateError(null);
+                    setOfficeCreateOpen(true);
+                  }
+                : undefined
+            }
+            onCreateExpertGroup={
               canCreateOffice
                 ? () => {
                     setOfficeCreateError(null);

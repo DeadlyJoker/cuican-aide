@@ -1115,6 +1115,7 @@ export function TeamView({
   controlWorkflowAdapter,
   selectedThreadId,
   onCreateOffice,
+  onCreateExpertGroup,
   onRefresh,
   onTeamModeChange,
 }: {
@@ -1126,6 +1127,7 @@ export function TeamView({
   controlWorkflowAdapter?: ControlWorkflowAdapter | null;
   selectedThreadId?: string | null;
   onCreateOffice?: () => void;
+  onCreateExpertGroup?: () => void;
   onRefresh?: () => void;
   onTeamModeChange: (mode: TeamMode) => void;
 }) {
@@ -1199,6 +1201,16 @@ export function TeamView({
             >
               创建办公室
             </button>
+            <button
+              className="button primary"
+              type="button"
+              data-team-action="experts"
+              disabled={!onCreateExpertGroup}
+              hidden={teamMode !== "experts"}
+              onClick={onCreateExpertGroup}
+            >
+              组建专家团队
+            </button>
           </div>
         </header>
 
@@ -1265,7 +1277,7 @@ export function TeamView({
             <div>
               <span>Agent roster</span>
               <h2>团队专家</h2>
-              <p>来自真实 Agent 配置目录，可用于办公室成员和协作流执行。</p>
+              <p>从已发布 Agent 选择成员，创建真实 Control Office 团队。</p>
             </div>
             <strong>{expertAgents.length}</strong>
           </header>

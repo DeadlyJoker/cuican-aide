@@ -652,6 +652,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   if (renderCommandShell)
     return (
       <AppCommandShellRoute
+        automationClient={controlRuntimeConnected ? controlClient : null}
         activeTurnId={commandShellRuntime.activeTurnId}
         assistantActiveTurnId={assistantRuntime.activeTurnId}
         assistantStreamingText={assistantRuntime.streamingText}
