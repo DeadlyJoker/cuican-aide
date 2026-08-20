@@ -1,4 +1,4 @@
-export const POSTGRES_EXECUTION_SCHEMA_VERSION = 5;
+export const POSTGRES_EXECUTION_SCHEMA_VERSION = 6;
 
 export function postgresExecutionSchemaSql(schema: string): string {
   return `
@@ -7,7 +7,7 @@ export function postgresExecutionSchemaSql(schema: string): string {
       ON CONFLICT (component) DO NOTHING;
 
     CREATE TABLE IF NOT EXISTS ${schema}.run_steps (
-      step_id text PRIMARY KEY,
+      step_id text NOT NULL,
       tenant_id text NOT NULL,
       run_id text NOT NULL,
       kind text NOT NULL CHECK (kind IN ('model','tool','agent','workflowNode','gate','verification')),
@@ -19,7 +19,7 @@ export function postgresExecutionSchemaSql(schema: string): string {
       created_at timestamptz NOT NULL,
       updated_at timestamptz NOT NULL,
       terminal_at timestamptz,
-      UNIQUE (tenant_id, run_id, step_id),
+      PRIMARY KEY (tenant_id, run_id, step_id),
       FOREIGN KEY (tenant_id, run_id)
         REFERENCES ${schema}.run_snapshots(tenant_id, run_id) ON DELETE CASCADE
     );
@@ -38,7 +38,7 @@ export function postgresExecutionSchemaSql(schema: string): string {
       started_at timestamptz NOT NULL,
       updated_at timestamptz NOT NULL,
       terminal_at timestamptz,
-      UNIQUE (tenant_id, step_id, attempt_number),
+      UNIQUE (tenant_id, run_id, step_id, attempt_number),
       UNIQUE (tenant_id, run_id, step_id, attempt_id),
       FOREIGN KEY (tenant_id, run_id, step_id)
         REFERENCES ${schema}.run_steps(tenant_id, run_id, step_id) ON DELETE CASCADE,
@@ -166,7 +166,24 @@ export function postgresExecutionSchemaSql(schema: string): string {
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $migration$;
 
+    DO $migration$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM ${schema}.schema_migrations
+        WHERE component = 'execution_authority' AND version BETWEEN 1 AND 5
+      ) THEN
+        ALTER TABLE ${schema}.run_steps DROP CONSTRAINT run_steps_pkey;
+        ALTER TABLE ${schema}.run_steps ADD CONSTRAINT run_steps_pkey
+          PRIMARY KEY (tenant_id, run_id, step_id);
+        ALTER TABLE ${schema}.run_attempts
+          DROP CONSTRAINT IF EXISTS run_attempts_tenant_id_step_id_attempt_number_key;
+        ALTER TABLE ${schema}.run_attempts
+          ADD CONSTRAINT run_attempts_run_step_number_key
+          UNIQUE (tenant_id, run_id, step_id, attempt_number);
+      END IF;
+    END $migration$;
+
     UPDATE ${schema}.schema_migrations
       SET version = ${POSTGRES_EXECUTION_SCHEMA_VERSION}
-      WHERE component = 'execution_authority' AND version BETWEEN 1 AND 4;`;
+      WHERE component = 'execution_authority' AND version BETWEEN 1 AND 5;`;
 }

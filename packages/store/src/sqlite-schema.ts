@@ -19,7 +19,7 @@ import {
   sqliteKnowledgeTablesSql,
 } from "./knowledge-schema.ts";
 
-export const SQLITE_SCHEMA_VERSION = 25;
+export const SQLITE_SCHEMA_VERSION = 26;
 
 type LegacyRunRow = Readonly<{
   tenant_id: string;
@@ -137,6 +137,8 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
       // Version 23 has delivery leases but predates model dispatch evidence.
     } else if (version === 24) {
       // Version 24 has model dispatch evidence but predates Knowledge authority.
+    } else if (version === 25) {
+      // Version 25 has Knowledge authority but global Run Step identities.
     } else {
       throw new RunStoreError("sqlite_schema_version_unsupported");
     }
@@ -186,6 +188,7 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
       migrateSqliteModelDispatchEvidence(database);
     }
     if (version !== 0 && version <= 24) migrateSqliteKnowledge(database);
+    if (version !== 0 && version <= 25) migrateVersionTwentyFive(database);
     database.exec(`PRAGMA user_version = ${SQLITE_SCHEMA_VERSION}`);
     database.exec("COMMIT");
   } catch (error) {
@@ -1123,6 +1126,69 @@ function migrateVersionTwentyTwo(database: DatabaseSync): void {
   migrateSqliteWorkspaceOperationAuthority(database);
 }
 
+function migrateVersionTwentyFive(database: DatabaseSync): void {
+  database.exec(`
+    CREATE TABLE run_steps_v26 (
+      tenant_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      step_id TEXT NOT NULL,
+      kind TEXT NOT NULL
+        CHECK (kind IN ('model', 'tool', 'agent', 'workflowNode', 'gate', 'verification')),
+      status TEXT NOT NULL
+        CHECK (status IN ('pending', 'ready', 'running', 'waitingApproval', 'completed', 'failed', 'skipped', 'canceled')),
+      revision INTEGER NOT NULL CHECK (revision >= 1),
+      current_attempt_id TEXT,
+      attempt_count INTEGER NOT NULL CHECK (attempt_count >= 0),
+      state_json TEXT NOT NULL CHECK (json_valid(state_json)),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      terminal_at TEXT,
+      PRIMARY KEY (tenant_id, run_id, step_id),
+      FOREIGN KEY (tenant_id, run_id)
+        REFERENCES run_snapshots(tenant_id, run_id) ON DELETE CASCADE,
+      FOREIGN KEY (tenant_id, run_id, step_id, current_attempt_id)
+        REFERENCES run_attempts_v26(tenant_id, run_id, step_id, attempt_id)
+        DEFERRABLE INITIALLY DEFERRED
+    ) STRICT;
+
+    CREATE TABLE run_attempts_v26 (
+      attempt_id TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      run_id TEXT NOT NULL,
+      step_id TEXT NOT NULL,
+      work_item_id TEXT NOT NULL,
+      attempt_number INTEGER NOT NULL CHECK (attempt_number >= 1),
+      retry_of_attempt_id TEXT,
+      lease_epoch INTEGER NOT NULL CHECK (lease_epoch >= 1),
+      status TEXT NOT NULL
+        CHECK (status IN ('running', 'completed', 'failed', 'canceled', 'abandoned')),
+      state_json TEXT NOT NULL CHECK (json_valid(state_json)),
+      started_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      terminal_at TEXT,
+      UNIQUE (tenant_id, run_id, step_id, attempt_number),
+      UNIQUE (tenant_id, run_id, step_id, attempt_id),
+      FOREIGN KEY (tenant_id, run_id, step_id)
+        REFERENCES run_steps_v26(tenant_id, run_id, step_id) ON DELETE CASCADE,
+      FOREIGN KEY (work_item_id)
+        REFERENCES work_items(work_item_id) ON DELETE CASCADE,
+      FOREIGN KEY (retry_of_attempt_id)
+        REFERENCES run_attempts_v26(attempt_id) ON DELETE RESTRICT
+    ) STRICT;
+
+    INSERT INTO run_steps_v26 SELECT * FROM run_steps;
+    INSERT INTO run_attempts_v26 SELECT * FROM run_attempts;
+    DROP TABLE run_attempts;
+    DROP TABLE run_steps;
+    ALTER TABLE run_steps_v26 RENAME TO run_steps;
+    ALTER TABLE run_attempts_v26 RENAME TO run_attempts;
+    ${executionAuthorityIndexesSql()}
+  `);
+  if (database.prepare("PRAGMA foreign_key_check").get() !== undefined) {
+    throw new RunStoreError("sqlite_foreign_key_migration_invalid");
+  }
+}
+
 function modelProviderSettingsTablesSql(): string {
   return `
     CREATE TABLE IF NOT EXISTS model_provider_settings (
@@ -1389,7 +1455,7 @@ function executionAuthorityTablesSql(): string {
     CREATE TABLE run_steps (
       tenant_id TEXT NOT NULL,
       run_id TEXT NOT NULL,
-      step_id TEXT PRIMARY KEY,
+      step_id TEXT NOT NULL,
       kind TEXT NOT NULL
         CHECK (kind IN ('model', 'tool', 'agent', 'workflowNode', 'gate', 'verification')),
       status TEXT NOT NULL
@@ -1401,7 +1467,7 @@ function executionAuthorityTablesSql(): string {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       terminal_at TEXT,
-      UNIQUE (tenant_id, run_id, step_id),
+      PRIMARY KEY (tenant_id, run_id, step_id),
       FOREIGN KEY (tenant_id, run_id)
         REFERENCES run_snapshots(tenant_id, run_id) ON DELETE CASCADE,
       FOREIGN KEY (tenant_id, run_id, step_id, current_attempt_id)
@@ -1424,7 +1490,7 @@ function executionAuthorityTablesSql(): string {
       started_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       terminal_at TEXT,
-      UNIQUE (tenant_id, step_id, attempt_number),
+      UNIQUE (tenant_id, run_id, step_id, attempt_number),
       UNIQUE (tenant_id, run_id, step_id, attempt_id),
       FOREIGN KEY (tenant_id, run_id, step_id)
         REFERENCES run_steps(tenant_id, run_id, step_id) ON DELETE CASCADE,
