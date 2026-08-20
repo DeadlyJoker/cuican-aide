@@ -1,5 +1,4 @@
-ARG NODE_IMAGE=node:24.18.1-alpine
-FROM ${NODE_IMAGE} AS builder
+FROM node:24.18.1-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS builder
 
 WORKDIR /workspace
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
@@ -41,7 +40,7 @@ RUN pnpm --filter @crewon/runtime-worker exec esbuild src/main.ts \
       /out/release-rollback-main.mjs \
       /out/production-backup-main.mjs
 
-FROM ${NODE_IMAGE}
+FROM node:24.18.1-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3
 
 LABEL org.opencontainers.image.title="CrewON Runtime Worker" \
       com.crewon.component="runtime-worker" \
@@ -56,7 +55,7 @@ COPY --from=builder --chown=node:node /out/runtime-worker.mjs ./runtime-worker.m
 COPY --from=builder --chown=node:node /out/release-main.mjs ./init/release-main.mjs
 COPY --from=builder --chown=node:node /out/release-rollback-main.mjs ./init/release-rollback-main.mjs
 COPY --from=builder --chown=node:node /out/production-backup-main.mjs ./ops/production-backup-main.mjs
-RUN apk add --no-cache postgresql16-client && \
+RUN apk add --no-cache postgresql16-client=16.15-r0 && \
     mkdir -p /var/lib/crewon/artifacts && \
     chown node:node /var/lib/crewon/artifacts
 

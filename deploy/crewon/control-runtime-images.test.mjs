@@ -10,6 +10,10 @@ const workspace = resolve(import.meta.dirname, "../..");
 const execFileAsync = promisify(execFile);
 const forbiddenCompatibility =
   /deterministic[ _-]?fake|device[ _-]?gateway|app[ _-]?server|6176/iu;
+const nodeImage =
+  "node:24.18.1-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3";
+const nginxImage =
+  "nginx:1.27.5-alpine@sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10";
 
 test("production Dockerfiles pin a reproducible non-root TypeScript runtime", async () => {
   const fixtures = [
@@ -37,7 +41,10 @@ test("production Dockerfiles pin a reproducible non-root TypeScript runtime", as
       join(import.meta.dirname, fixture.file),
       "utf8",
     );
-    assert.match(content, /^ARG NODE_IMAGE=node:24\.18\.1-alpine$/mu);
+    assert.deepEqual(content.match(/^FROM .+$/gmu), [
+      `FROM ${nodeImage} AS builder`,
+      `FROM ${nodeImage}`,
+    ]);
     assert.match(content, /pnpm install --frozen-lockfile/u);
     assert.match(content, /--bundle/u);
     assert.match(content, /--platform=node/u);
@@ -79,7 +86,7 @@ test("production Dockerfiles pin a reproducible non-root TypeScript runtime", as
     /\/out\/release-rollback-main\.mjs \.\/init\/release-rollback-main\.mjs/u,
   );
   assert.match(worker, /production-backup-main\.mjs/u);
-  assert.match(worker, /apk add --no-cache postgresql16-client/u);
+  assert.match(worker, /apk add --no-cache postgresql16-client=16\.15-r0/u);
 });
 
 test("static Web edge runs non-root with a no-eval browser policy", async () => {
@@ -89,6 +96,10 @@ test("static Web edge runs non-root with a no-eval browser policy", async () => 
     readFile(join(import.meta.dirname, "compose.production.yml"), "utf8"),
   ]);
 
+  assert.deepEqual(dockerfile.match(/^FROM .+$/gmu), [
+    `FROM ${nodeImage} AS build`,
+    `FROM ${nginxImage}`,
+  ]);
   assert.match(dockerfile, /^USER nginx$/mu);
   assert.match(dockerfile, /\/tmp\/nginx\.pid/u);
   assert.match(nginx, /client_body_temp_path \/tmp\/client-body;/u);

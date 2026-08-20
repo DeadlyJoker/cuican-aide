@@ -1,5 +1,4 @@
-ARG NODE_IMAGE=node:24.18.1-alpine
-FROM ${NODE_IMAGE} AS builder
+FROM node:24.18.1-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS builder
 
 WORKDIR /workspace
 RUN corepack enable && corepack prepare pnpm@10.33.0 --activate
@@ -17,7 +16,7 @@ RUN pnpm --filter @crewon/web-bff exec esbuild src/main.ts \
     --outfile=/out/web-bff.mjs && \
     ! grep -aEi "deterministic[ _-]?fake|device[ _-]?gateway|app[ _-]?server|6176" /out/web-bff.mjs
 
-FROM ${NODE_IMAGE}
+FROM node:24.18.1-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3
 
 ENV NODE_ENV=production
 WORKDIR /app
