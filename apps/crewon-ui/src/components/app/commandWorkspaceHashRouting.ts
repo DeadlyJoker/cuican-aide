@@ -43,11 +43,14 @@ export function openControlLibraryFromCommandShell(
 ): void {
   const shellView = libraryKind === "automation" ? "schedule" : libraryKind;
   setActiveView(shellView);
-  routeWindow.history.replaceState(
-    null,
-    "",
-    `${routeWindow.location.pathname}${routeWindow.location.search}#view-${shellView}`,
-  );
+  const canonicalHash = `#view-${shellView}`;
+  if (routeWindow.location.hash !== canonicalHash) {
+    routeWindow.history.replaceState(
+      null,
+      "",
+      `${routeWindow.location.pathname}${routeWindow.location.search}${canonicalHash}`,
+    );
+  }
   void onOpenLibrary?.(libraryKind);
 }
 

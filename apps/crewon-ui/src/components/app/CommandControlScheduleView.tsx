@@ -593,6 +593,14 @@ export function CommandControlScheduleView({
               </span>
             </button>
           ))}
+          {scheduledItems.length === 0 ? (
+            <div className="schedule-history-state" role="status">
+              <CalendarClock aria-hidden="true" />
+              {locale === "zh"
+                ? "还没有已发布安排"
+                : "No published schedules yet"}
+            </div>
+          ) : null}
         </section>
       )}
     </div>

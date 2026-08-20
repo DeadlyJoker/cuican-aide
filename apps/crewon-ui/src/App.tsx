@@ -75,11 +75,6 @@ import { importControlKnowledgeFiles } from "./lib/knowledge/controlKnowledgeFil
 import type { LocalResourceSelectionKind } from "./lib/shared/localResourceAttachments";
 
 export function App({ controlClient }: { controlClient: ControlApiClient }) {
-  const {
-    loadRequestRef: commandLibraryLoadRequestRef,
-    panel: commandLibraryPanel,
-    setPanel: setCommandLibraryPanel,
-  } = useCommandLibraryPanelState();
   const { platform, runtimeSurface } = useAppEnvironment();
   const { libraryLoadRequestRef, openLibraryRef, refreshSettingsSectionRef } =
     useAppCoordinatorRefs();
@@ -125,6 +120,16 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     threads,
     threadsRef,
   } = threadState;
+  const {
+    loadRequestRef: commandLibraryLoadRequestRef,
+    openPanel: openCommandLibrary,
+    panel: commandLibraryPanel,
+    setPanel: setCommandLibraryPanel,
+  } = useCommandLibraryPanelState({
+    client: controlClient,
+    locale,
+    selectedThreadId,
+  });
   const workspaceStatus = useAppWorkspaceStatusState();
   const { busyToolId, threadGoal, threadGoalBusy } = workspaceStatus;
   const {
@@ -317,18 +322,6 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
       selectedThreadId,
       setLibraryPanel,
       isCurrent: () => libraryLoadRequestRef.current === requestId,
-    });
-  };
-  const openCommandLibrary = async (kind: LibraryKind) => {
-    const requestId = commandLibraryLoadRequestRef.current + 1;
-    commandLibraryLoadRequestRef.current = requestId;
-    await openControlLibraryAction({
-      client: controlClient,
-      kind,
-      locale,
-      selectedThreadId,
-      setLibraryPanel: setCommandLibraryPanel,
-      isCurrent: () => commandLibraryLoadRequestRef.current === requestId,
     });
   };
   const openLibraryItem = async (
@@ -725,6 +718,8 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
           onCancel: () => resolveConfirm(false),
           onConfirm: () => resolveConfirm(true),
         }}
+        notice={notice}
+        onDismissNotice={() => setNotice(null)}
         onAddLocalResources={addControlKnowledgeFiles}
         onChangeComposerValue={setComposerValue}
         onClearAssistantThread={() => {
@@ -741,7 +736,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
         onLibraryItemAction={openCommandLibraryItem}
         onLibraryPanelAction={handleCommandLibraryPanelAction}
         onLibraryPanelFieldChange={handleCommandLibraryFieldChange}
-        onOpenLibrary={(kind) => openCommandLibrary(kind)}
+        onOpenLibrary={openCommandLibrary}
         onOpenSettings={openSettings}
         onRemoveComposerMention={(path) => {
           setPendingComposerMentions((mentions) =>

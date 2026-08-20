@@ -137,7 +137,13 @@ async function prepareAutomation(params: ControlLibraryInteraction) {
       (thread) => thread.status === "active",
     );
     const firstThread = activeThreads[0];
-    if (!firstThread) throw new Error("No active Control thread is available.");
+    if (!firstThread) {
+      throw new Error(
+        params.locale === "zh"
+          ? "没有可用于创建自动化的 Control 任务。请先发起一个任务。"
+          : "No active Control task is available. Start a task first.",
+      );
+    }
     params.setLibraryPanel({
       actions: [
         {
@@ -204,7 +210,13 @@ async function prepareAutomation(params: ControlLibraryInteraction) {
       title: params.locale === "zh" ? "新建自动化" : "New automation",
     });
   } catch (error) {
-    warning(params, error, "Unable to prepare automation creation.");
+    warning(
+      params,
+      error,
+      params.locale === "zh"
+        ? "无法准备自动化创建。"
+        : "Unable to prepare automation creation.",
+    );
   }
 }
 
