@@ -253,11 +253,6 @@ fn thread_store_io_error(err: std::io::Error) -> ThreadStoreError {
 }
 
 pub(super) fn map_recorder_error(err: std::io::Error) -> ThreadStoreError {
-    if crewon_rollout::is_legacy_fence_violation(&err) {
-        return ThreadStoreError::Conflict {
-            message: err.to_string(),
-        };
-    }
     match err.kind() {
         std::io::ErrorKind::WouldBlock => ThreadStoreError::Conflict {
             message: "thread already has an active rollout writer".to_string(),

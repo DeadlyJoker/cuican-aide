@@ -26,11 +26,7 @@ pub(crate) fn acquire_for_app_server(
 }
 
 const fn configured_mode() -> RolloutWriterGenerationMode {
-    if cfg!(feature = "legacy-fence-artifact") {
-        RolloutWriterGenerationMode::LegacyFenceExclusive
-    } else {
-        RolloutWriterGenerationMode::LeaseAwareShared
-    }
+    RolloutWriterGenerationMode::LeaseAwareShared
 }
 
 #[cfg(test)]

@@ -31,9 +31,6 @@ use tracing::warn;
 use super::ARCHIVED_SESSIONS_SUBDIR;
 use super::SESSIONS_SUBDIR;
 use super::compression;
-use super::legacy_fence;
-use super::legacy_fence::RolloutMutation;
-use super::legacy_fence::strip_legacy_ghost_snapshot_rollout_line;
 use super::list::Cursor;
 use super::list::SortDirection;
 use super::list::ThreadItem;
@@ -803,12 +800,7 @@ impl RolloutRecorder {
                     Some(thread_id) => thread_id,
                     None => thread_id_for_existing_rollout(path.as_path()).await?,
                 };
-                let writer_lock = RolloutWriterLease::acquire_for_existing_mutation(
-                    config.codex_home(),
-                    path.as_path(),
-                    thread_id,
-                    RolloutMutation::Resume,
-                )?;
+                let writer_lock = RolloutWriterLease::acquire(config.codex_home(), thread_id)?;
                 validate_existing_rollout_thread_id(path.as_path(), thread_id).await?;
                 let path = compression::materialize_rollout_for_append(path.as_path()).await?;
                 (
@@ -879,7 +871,6 @@ impl RolloutRecorder {
         if items.is_empty() {
             return Ok(());
         }
-        legacy_fence::ensure_rollout_items_allowed(items, RolloutMutation::Append)?;
         self.tx
             .send(RolloutCmd::AddItems(items.to_vec()))
             .await
@@ -1781,7 +1772,7 @@ pub async fn append_rollout_item_to_path(
     item: &RolloutItem,
 ) -> std::io::Result<()> {
     let thread_id = thread_id_for_existing_rollout(rollout_path).await?;
-    let writer_lease = RolloutWriterLease::acquire_for_existing(rollout_path, thread_id)?;
+    let writer_lease = RolloutWriterLease::acquire_for_existing_path(rollout_path, thread_id)?;
     append_rollout_item_to_path_with_lease(&writer_lease, rollout_path, thread_id, item).await
 }
 
@@ -1792,15 +1783,7 @@ pub async fn append_rollout_item_to_path_with_lease(
     thread_id: ThreadId,
     item: &RolloutItem,
 ) -> std::io::Result<()> {
-    writer_lease.ensure_existing_mutation_allowed(
-        rollout_path,
-        thread_id,
-        RolloutMutation::Append,
-    )?;
-    legacy_fence::ensure_rollout_items_allowed(
-        std::slice::from_ref(item),
-        RolloutMutation::Append,
-    )?;
+    writer_lease.ensure_thread_id(thread_id)?;
     validate_existing_rollout_thread_id(rollout_path, thread_id).await?;
     let rollout_path = compression::materialize_rollout_for_append(rollout_path).await?;
     let file = tokio::fs::OpenOptions::new()
@@ -1809,6 +1792,29 @@ pub async fn append_rollout_item_to_path_with_lease(
         .await?;
     let mut writer = JsonlWriter { file };
     writer.write_rollout_item(item).await
+}
+
+fn strip_legacy_ghost_snapshot_rollout_line(value: &mut Value) -> bool {
+    match value.get("type").and_then(Value::as_str) {
+        Some("response_item") => value
+            .get("payload")
+            .is_some_and(is_legacy_ghost_snapshot_response_item),
+        Some("compacted") => {
+            if let Some(replacement_history) = value
+                .get_mut("payload")
+                .and_then(|payload| payload.get_mut("replacement_history"))
+                .and_then(Value::as_array_mut)
+            {
+                replacement_history.retain(|item| !is_legacy_ghost_snapshot_response_item(item));
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+fn is_legacy_ghost_snapshot_response_item(value: &Value) -> bool {
+    value.get("type").and_then(Value::as_str) == Some("ghost_snapshot")
 }
 
 struct JsonlWriter {

@@ -8,7 +8,6 @@ use std::io::ErrorKind;
 use std::path::Path;
 
 use crewon_rollout::ARCHIVED_SESSIONS_SUBDIR;
-use crewon_rollout::RolloutMutation;
 use crewon_rollout::RolloutWriterLease;
 use crewon_rollout::SESSIONS_SUBDIR;
 use crewon_rollout::find_archived_thread_path_by_id_str;
@@ -75,25 +74,8 @@ pub(super) async fn delete_thread(
         .into_iter()
         .map(|path| canonical_delete_rollout_path(store, path.as_path(), thread_id))
         .collect::<ThreadStoreResult<Vec<_>>>()?;
-    let Some((first_rollout_path, remaining_rollout_paths)) = rollout_paths.split_first() else {
-        unreachable!("non-empty rollout candidates must have a first path");
-    };
-    let writer_lease = RolloutWriterLease::acquire_for_existing_mutation(
-        store.config.codex_home.as_path(),
-        first_rollout_path.as_path(),
-        thread_id,
-        RolloutMutation::Delete,
-    )
-    .map_err(live_writer::map_recorder_error)?;
-    for rollout_path in remaining_rollout_paths {
-        writer_lease
-            .ensure_existing_mutation_allowed(
-                rollout_path.as_path(),
-                thread_id,
-                RolloutMutation::Delete,
-            )
-            .map_err(live_writer::map_recorder_error)?;
-    }
+    let _writer_lease = RolloutWriterLease::acquire(store.config.codex_home.as_path(), thread_id)
+        .map_err(live_writer::map_recorder_error)?;
 
     for rollout_path in &rollout_paths {
         delete_rollout_file(store, rollout_path.as_path(), thread_id)?;

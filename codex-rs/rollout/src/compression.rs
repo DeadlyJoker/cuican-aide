@@ -247,10 +247,8 @@ mod worker {
     use crewon_protocol::protocol::RolloutLine;
 
     use crate::ARCHIVED_SESSIONS_SUBDIR;
-    use crate::RolloutMutation;
     use crate::RolloutWriterLease;
     use crate::SESSIONS_SUBDIR;
-    use crate::is_legacy_fence_violation;
 
     use super::RolloutFile;
     use super::metrics;
@@ -502,7 +500,6 @@ mod worker {
     enum CompressionOutcome {
         Compressed,
         SkippedActiveWriter,
-        SkippedLegacyFence,
         SkippedNotCold,
         SkippedChanged,
         SkippedAlreadyCompressed,
@@ -513,7 +510,6 @@ mod worker {
             match self {
                 CompressionOutcome::Compressed => "compressed",
                 CompressionOutcome::SkippedActiveWriter => "skipped_active_writer",
-                CompressionOutcome::SkippedLegacyFence => "skipped_legacy_fence",
                 CompressionOutcome::SkippedNotCold => "skipped_not_cold",
                 CompressionOutcome::SkippedChanged => "skipped_changed",
                 CompressionOutcome::SkippedAlreadyCompressed => "skipped_already_compressed",
@@ -571,7 +567,6 @@ mod worker {
                     }
                     CompressionOutcome::SkippedNotCold
                     | CompressionOutcome::SkippedActiveWriter
-                    | CompressionOutcome::SkippedLegacyFence
                     | CompressionOutcome::SkippedChanged
                     | CompressionOutcome::SkippedAlreadyCompressed => {
                         stats.skipped = stats.skipped.saturating_add(1);
@@ -608,23 +603,11 @@ mod worker {
         path: &Path,
     ) -> io::Result<CompressionMeasurement> {
         let thread_id = thread_id_for_rollout(path)?;
-        let _writer_lease = match RolloutWriterLease::acquire_for_existing_mutation(
-            codex_home,
-            path,
-            thread_id,
-            RolloutMutation::Compact,
-        ) {
+        let _writer_lease = match RolloutWriterLease::acquire(codex_home, thread_id) {
             Ok(writer_lease) => writer_lease,
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
                 return Ok(CompressionMeasurement::new(
                     CompressionOutcome::SkippedActiveWriter,
-                    /*source_bytes*/ None,
-                    /*compressed_bytes*/ None,
-                ));
-            }
-            Err(err) if is_legacy_fence_violation(&err) => {
-                return Ok(CompressionMeasurement::new(
-                    CompressionOutcome::SkippedLegacyFence,
                     /*source_bytes*/ None,
                     /*compressed_bytes*/ None,
                 ));

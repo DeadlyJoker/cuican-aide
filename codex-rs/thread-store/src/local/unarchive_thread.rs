@@ -1,4 +1,3 @@
-use crewon_rollout::RolloutMutation;
 use crewon_rollout::RolloutWriterLease;
 use crewon_rollout::find_archived_thread_path_by_id_str;
 use crewon_rollout::read_thread_item_from_rollout;
@@ -55,13 +54,8 @@ pub(super) async fn unarchive_thread(
             ),
         });
     };
-    let _writer_lease = RolloutWriterLease::acquire_for_existing_mutation(
-        store.config.codex_home.as_path(),
-        canonical_archived_path.as_path(),
-        thread_id,
-        RolloutMutation::Unarchive,
-    )
-    .map_err(live_writer::map_recorder_error)?;
+    let _writer_lease = RolloutWriterLease::acquire(store.config.codex_home.as_path(), thread_id)
+        .map_err(live_writer::map_recorder_error)?;
 
     let dest_dir = store
         .config

@@ -20,13 +20,6 @@ doctest = false
 [lints]
 workspace = true
 
-[features]
-default = []
-legacy-fence-artifact = [
-    "crewon-features/legacy-fence-artifact",
-    "crewon-rollout/legacy-fence-artifact",
-]
-
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }

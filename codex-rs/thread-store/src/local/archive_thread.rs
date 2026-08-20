@@ -1,5 +1,4 @@
 use chrono::Utc;
-use crewon_rollout::RolloutMutation;
 use crewon_rollout::RolloutWriterLease;
 use crewon_rollout::find_thread_path_by_id_str;
 
@@ -43,13 +42,8 @@ pub(super) async fn archive_thread(
         thread_id,
         rollout_path.as_path(),
     )?;
-    let _writer_lease = RolloutWriterLease::acquire_for_existing_mutation(
-        store.config.codex_home.as_path(),
-        canonical_rollout_path.as_path(),
-        thread_id,
-        RolloutMutation::Archive,
-    )
-    .map_err(live_writer::map_recorder_error)?;
+    let _writer_lease = RolloutWriterLease::acquire(store.config.codex_home.as_path(), thread_id)
+        .map_err(live_writer::map_recorder_error)?;
 
     let archive_folder = store
         .config

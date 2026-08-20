@@ -11,8 +11,6 @@ use crate::ARCHIVED_SESSIONS_SUBDIR;
 use crate::SESSIONS_SUBDIR;
 use crate::WRITER_LOCKS_DIR;
 use crate::compression;
-use crate::legacy_fence;
-use crate::legacy_fence::RolloutMutation;
 
 /// Owns the operating-system lock that grants exclusive write access to a rollout.
 ///
@@ -31,35 +29,6 @@ impl RolloutWriterLease {
         Self::acquire_for_create(codex_home, thread_id)
     }
 
-    /// Acquire writer ownership and admit a mutation against an existing rollout.
-    ///
-    /// Legacy Fence artifacts inspect the exact rollout while this lease is held, so a marker
-    /// cannot appear between admission and mutation by another cooperating writer.
-    pub fn acquire_for_existing_mutation(
-        codex_home: &Path,
-        rollout_path: &Path,
-        thread_id: ThreadId,
-        mutation: RolloutMutation,
-    ) -> io::Result<Self> {
-        let lease = Self::acquire_for_create(codex_home, thread_id)?;
-        lease.ensure_existing_mutation_allowed(rollout_path, thread_id, mutation)?;
-        Ok(lease)
-    }
-
-    /// Admit another existing-rollout mutation while retaining this thread lease.
-    ///
-    /// This supports atomic multi-path operations such as deleting active and archived aliases:
-    /// callers acquire once, admit every candidate, and mutate only after all candidates pass.
-    pub fn ensure_existing_mutation_allowed(
-        &self,
-        rollout_path: &Path,
-        thread_id: ThreadId,
-        mutation: RolloutMutation,
-    ) -> io::Result<()> {
-        self.ensure_thread_id(thread_id)?;
-        legacy_fence::ensure_existing_rollout_mutation_allowed(rollout_path, thread_id, mutation)
-    }
-
     pub(crate) fn acquire_for_create(codex_home: &Path, thread_id: ThreadId) -> io::Result<Self> {
         std::fs::create_dir_all(codex_home)?;
         let canonical_home = std::fs::canonicalize(codex_home)?;
@@ -69,16 +38,14 @@ impl RolloutWriterLease {
         )
     }
 
-    pub(crate) fn acquire_for_existing(
+    pub(crate) fn acquire_for_existing_path(
         rollout_path: &Path,
         thread_id: ThreadId,
     ) -> io::Result<Self> {
-        let lease = Self::acquire_path(
+        Self::acquire_path(
             lock_path_for_existing_rollout(rollout_path, thread_id)?,
             thread_id,
-        )?;
-        lease.ensure_existing_mutation_allowed(rollout_path, thread_id, RolloutMutation::Append)?;
-        Ok(lease)
+        )
     }
 
     pub(crate) fn ensure_thread_id(&self, expected_thread_id: ThreadId) -> io::Result<()> {

@@ -7,7 +7,6 @@ use crewon_protocol::protocol::GitInfo;
 use crewon_protocol::protocol::RolloutItem;
 use crewon_protocol::protocol::SessionSource;
 use crewon_protocol::protocol::ThreadMemoryMode;
-use crewon_rollout::RolloutMutation;
 use crewon_rollout::RolloutRecorder;
 use crewon_rollout::RolloutWriterLease;
 use crewon_rollout::append_rollout_item_to_path_with_lease;
@@ -59,9 +58,8 @@ pub(super) async fn update_thread_metadata(
     let needs_rollout_compat = needs_rollout_compatibility_update(&patch);
     let live_recorder = store.live_recorder(thread_id).await.ok();
     if live_recorder.is_some() {
-        // A live recorder already owns this thread lease. It only exists after marker-free resume
-        // admission (or a new create), and its append path rejects durable fence markers. Reacquiring
-        // here would self-conflict, so keep all live metadata writes ordered through that recorder.
+        // A live recorder already owns this thread lease. Reacquiring here would self-conflict, so
+        // keep all live metadata writes ordered through that recorder.
         live_writer::persist_thread(store, thread_id).await?;
     }
     let mut resolved_rollout_path = resolve_metadata_rollout_path(
@@ -73,12 +71,7 @@ pub(super) async fn update_thread_metadata(
     .await?;
     let cold_writer_lease = if live_recorder.is_none() {
         Some(
-            RolloutWriterLease::acquire_for_existing_mutation(
-                store.config.codex_home.as_path(),
-                resolved_rollout_path.path.as_path(),
-                thread_id,
-                RolloutMutation::Metadata,
-            )
+            RolloutWriterLease::acquire(store.config.codex_home.as_path(), thread_id)
             .map_err(live_writer::map_recorder_error)?,
         )
     } else {

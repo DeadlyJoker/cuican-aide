@@ -22,10 +22,6 @@ mod live_metadata_writer_tests;
 #[path = "metadata_rollout_scope_tests.rs"]
 mod metadata_rollout_scope_tests;
 
-#[cfg(all(test, feature = "legacy-fence-artifact"))]
-#[path = "legacy_fence_mutation_tests.rs"]
-mod legacy_fence_mutation_tests;
-
 #[cfg(test)]
 mod test_support;
 

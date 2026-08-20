@@ -12,10 +12,6 @@ path = "src/lib.rs"
 [lints]
 workspace = true
 
-[features]
-default = []
-legacy-fence-artifact = []
-
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
