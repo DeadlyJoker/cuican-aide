@@ -251,6 +251,53 @@ describe("CommandWorkspace", () => {
     return renderToStaticMarkup(commandWorkspaceElement());
   }
 
+  it("snapshots pending and unavailable Control connection affordances", () => {
+    const renderConnection = (connectionState: "connecting" | "disconnected") =>
+      renderToStaticMarkup(
+        <CommandWorkspace
+          composerValue=""
+          connectionState={connectionState}
+          isSending={false}
+          workMode="code"
+          onAttachContext={() => undefined}
+          onChangeComposerValue={() => undefined}
+          onModeChange={() => undefined}
+          onRetryConnection={() => undefined}
+          onSend={() => undefined}
+        />,
+      );
+    const connecting = renderConnection("connecting");
+    const unavailable = renderConnection("disconnected");
+
+    expect({
+      connecting: {
+        connectionState: connecting.includes('data-state="connecting"'),
+        retry: connecting.includes("重试 Control"),
+        status: connecting.includes("正在连接 CrewON Control"),
+      },
+      unavailable: {
+        officeState: unavailable.includes(
+          'data-office-empty-state="unavailable"',
+        ),
+        retry: unavailable.includes("重试 Control"),
+        status: unavailable.includes("CrewON Control 已断开"),
+      },
+    }).toMatchInlineSnapshot(`
+      {
+        "connecting": {
+          "connectionState": true,
+          "retry": false,
+          "status": true,
+        },
+        "unavailable": {
+          "officeState": true,
+          "retry": true,
+          "status": true,
+        },
+      }
+    `);
+  });
+
   function workspaceOperationsSlot(
     threadStatus: CommandWorkspaceOperationsSlot["state"]["threadStatus"],
   ): CommandWorkspaceOperationsSlot {

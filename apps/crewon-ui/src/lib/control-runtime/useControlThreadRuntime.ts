@@ -18,6 +18,33 @@ import { ControlThreadRuntime } from "./controlThreadRuntime";
 
 type ThreadSetter = (updater: (current: Thread[]) => Thread[]) => void;
 
+export type ControlThreadConnectionStatus =
+  | "connecting"
+  | "connected"
+  | "unavailable";
+
+type ControlThreadConnectionPort = Pick<
+  ControlThreadRuntime,
+  "connect" | "listThreads"
+>;
+
+export async function establishControlThreadConnection(params: {
+  runtime: ControlThreadConnectionPort;
+  showArchived: boolean;
+  onStatus: (status: ControlThreadConnectionStatus) => void;
+}): Promise<Thread[] | null> {
+  params.onStatus("connecting");
+  try {
+    await params.runtime.connect();
+    const threads = await params.runtime.listThreads(params.showArchived);
+    params.onStatus("connected");
+    return threads;
+  } catch {
+    params.onStatus("unavailable");
+    return null;
+  }
+}
+
 export function useControlThreadRuntime(params: {
   appendStreamingTextDelta: (threadId: string, delta: string) => void;
   client: ControlApiClient | null;
@@ -34,10 +61,12 @@ export function useControlThreadRuntime(params: {
   setThreads: ThreadSetter;
   showArchivedThreadsRef: MutableRefObject<boolean>;
 }): Readonly<{
-  connected: boolean;
+  connectionStatus: ControlThreadConnectionStatus;
   rehydrateThreadAuthority: (threadId: string) => Promise<void>;
+  retryConnection: () => void;
   runtime: ControlThreadRuntime | null;
 }> {
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
   const runtime = useMemo(() => {
     if (params.client === null) {
       return null;
@@ -102,8 +131,11 @@ export function useControlThreadRuntime(params: {
       },
     );
     return control;
-  }, [params.client]);
-  const [connected, setConnected] = useState(false);
+  }, [connectionAttempt, params.client]);
+  const [connectionStatus, setConnectionStatus] =
+    useState<ControlThreadConnectionStatus>(
+      params.client === null ? "unavailable" : "connecting",
+    );
   const rehydrateThreadAuthority = useCallback(
     async (threadId: string) => {
       if (runtime === null) {
@@ -121,31 +153,22 @@ export function useControlThreadRuntime(params: {
 
   useEffect(() => {
     if (runtime === null) {
-      setConnected(false);
+      setConnectionStatus("unavailable");
       return undefined;
     }
     let current = true;
-    void runtime
-      .connect()
-      .then(() => runtime.listThreads(params.showArchivedThreadsRef.current))
-      .then(
-        (threads) => {
-          if (!current) {
-            return;
-          }
-          const selected = threads.find(
-            (thread) => thread.id === params.selectedThreadIdRef.current,
-          );
-          params.setThreads(() => threads);
-          params.setSelectedThreadId(selected?.id ?? threads[0]?.id ?? null);
-          setConnected(true);
-        },
-        () => {
-          if (current) {
-            setConnected(false);
-          }
-        },
+    void establishControlThreadConnection({
+      runtime,
+      showArchived: params.showArchivedThreadsRef.current,
+      onStatus: (status) => current && setConnectionStatus(status),
+    }).then((threads) => {
+      if (!current || threads === null) return;
+      const selected = threads.find(
+        (thread) => thread.id === params.selectedThreadIdRef.current,
       );
+      params.setThreads(() => threads);
+      params.setSelectedThreadId(selected?.id ?? threads[0]?.id ?? null);
+    });
     return () => {
       current = false;
       runtime.close();
@@ -153,7 +176,7 @@ export function useControlThreadRuntime(params: {
   }, [runtime]);
 
   useEffect(() => {
-    if (!connected || runtime === null) {
+    if (connectionStatus !== "connected" || runtime === null) {
       params.setThreadGoal(null);
       return undefined;
     }
@@ -174,11 +197,12 @@ export function useControlThreadRuntime(params: {
       current = false;
       void runtime.selectThreadGoal(null);
     };
-  }, [connected, params.selectedThreadId, runtime]);
+  }, [connectionStatus, params.selectedThreadId, runtime]);
 
   return {
-    connected,
+    connectionStatus,
     rehydrateThreadAuthority,
+    retryConnection: () => setConnectionAttempt((current) => current + 1),
     runtime,
   };
 }

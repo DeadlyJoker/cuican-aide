@@ -122,8 +122,9 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
   const workspaceStatus = useAppWorkspaceStatusState();
   const { busyToolId, threadGoal, threadGoalBusy } = workspaceStatus;
   const {
-    connected: controlRuntimeConnected,
+    connectionStatus: controlThreadConnectionStatus,
     rehydrateThreadAuthority: rehydrateControlThreadAuthority,
+    retryConnection: retryControlThreadConnection,
     runtime: controlThreadRuntime,
   } = useControlThreadRuntime({
     appendStreamingTextDelta: threadState.appendStreamingTextDelta,
@@ -137,6 +138,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     setThreads: threadState.setThreads,
     showArchivedThreadsRef,
   });
+  const controlRuntimeConnected = controlThreadConnectionStatus === "connected";
   const controlCommandCatalog = useControlCommandCatalog({
     client: controlClient,
     connected: controlRuntimeConnected,
@@ -177,9 +179,10 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     ? controlThreadRuntime
     : null;
   const threadRuntimeConnected = controlRuntimeConnected;
-  const threadConnectionState = controlRuntimeConnected
-    ? ("connected" as const)
-    : ("connecting" as const);
+  const threadConnectionState =
+    controlThreadConnectionStatus === "unavailable"
+      ? ("disconnected" as const)
+      : controlThreadConnectionStatus;
 
   const { activeTurnId, cwd, isConnected, selectedThread, titlebarTitle } =
     useAppThreadSelection({
@@ -240,7 +243,7 @@ export function App({ controlClient }: { controlClient: ControlApiClient }) {
     [threads, threadsRef],
   ]);
 
-  const retryConnection = () => globalThis.location.reload();
+  const retryConnection = retryControlThreadConnection;
   useAppThreadListEffects({
     client: threadRuntimeClient,
     emptySelectionBehavior:

@@ -125,6 +125,24 @@ describe("App Workspace Control composition", () => {
     );
   });
 
+  it("projects a terminal Control connection failure to the existing retry UI", () => {
+    const source = readFileSync(
+      new URL("../../App.tsx", import.meta.url),
+      "utf8",
+    );
+
+    expect(source).toContain('controlThreadConnectionStatus === "unavailable"');
+    expect(source).toMatch(
+      /controlThreadConnectionStatus === "unavailable"[\s\S]*\? \("disconnected" as const\)/u,
+    );
+    expect(source).toContain(
+      "const retryConnection = retryControlThreadConnection",
+    );
+    expect(source).not.toContain(
+      "const retryConnection = () => globalThis.location.reload()",
+    );
+  });
+
   it("has no development recovery route that restarts App Server", () => {
     const viteConfig = readFileSync(
       new URL("../../../vite.config.ts", import.meta.url),
