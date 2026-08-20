@@ -8,10 +8,10 @@ jobs:
   postgres-production-workflow:
     name: PostgreSQL production Workflow recovery
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 30
     services:
       postgres:
-        image: postgres:15
+        image: postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685
         env:
           POSTGRES_DB: crewon_test
           POSTGRES_PASSWORD: crewon_test
@@ -41,6 +41,8 @@ jobs:
           node-version-file: .node-version
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+      - name: Exercise the complete serialized PostgreSQL Store contract
+        run: node scripts/postgres-store-contract-gate.mjs
       - name: Exercise production PostgreSQL Workflow recovery
         run: pnpm production:postgres-smoke
 
@@ -100,7 +102,7 @@ jobs:
         run: pnpm --filter @crewon/runtime-worker test
 
       - name: Test desktop sidecar staging contract
-        run: node --test scripts/desktop-release-tools.test.mjs scripts/desktop-release-workflow.test.mjs scripts/stage-desktop-runtime.test.mjs scripts/server-release-tools.test.mjs scripts/server-release-workflow.test.mjs
+        run: node --test scripts/desktop-release-tools.test.mjs scripts/desktop-release-workflow.test.mjs scripts/postgres-store-contract-gate.test.mjs scripts/stage-desktop-runtime.test.mjs scripts/server-release-tools.test.mjs scripts/server-release-workflow.test.mjs
 
       - name: Ensure root README.md contains only ASCII and certain Unicode code points
         run: ./scripts/asciicheck.py README.md
