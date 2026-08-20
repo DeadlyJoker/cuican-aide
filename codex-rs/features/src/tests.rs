@@ -27,44 +27,6 @@ fn under_development_features_are_disabled_by_default() {
     }
 }
 
-#[cfg(feature = "legacy-fence-artifact")]
-#[test]
-fn legacy_fence_artifact_forces_durable_writer_features_off() {
-    let configured = toml::from_str::<FeaturesToml>(
-        r#"
-user_input_once = true
-office_auto_delegation_durable_admission = true
-"#,
-    )
-    .expect("legacy fence feature config should parse");
-    let features = Features::from_sources(
-        FeatureConfigSource {
-            features: Some(&configured),
-            ..Default::default()
-        },
-        FeatureConfigSource::default(),
-        FeatureOverrides::default(),
-    );
-
-    assert_eq!(features.enabled(Feature::UserInputOnce), false);
-    assert_eq!(
-        features.enabled(Feature::OfficeAutoDelegationDurableAdmission),
-        false
-    );
-    assert_eq!(
-        features
-            .enabled_features()
-            .contains(&Feature::UserInputOnce),
-        false
-    );
-    assert_eq!(
-        features
-            .enabled_features()
-            .contains(&Feature::OfficeAutoDelegationDurableAdmission),
-        false
-    );
-}
-
 #[test]
 fn default_enabled_features_are_stable() {
     for spec in crate::FEATURES {

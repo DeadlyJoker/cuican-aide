@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use anyhow::Context;
 use anyhow::Result;
-#[cfg(not(feature = "legacy-fence-artifact"))]
 use app_test_support::TestAppServer;
 use crewon_rollout::RolloutWriterGenerationMode;
 use crewon_rollout::acquire_rollout_writer_generation;
@@ -15,7 +14,6 @@ use tokio::time::timeout;
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(10);
 const INCOMPATIBLE_GENERATION_ERROR: &str = "CREWON_HOME is owned by an incompatible rollout writer generation; stop all CrewON processes using this home before starting this binary";
 
-#[cfg(not(feature = "legacy-fence-artifact"))]
 #[tokio::test]
 async fn lease_aware_app_servers_share_one_home_through_initialize() -> Result<()> {
     let home = TempDir::new()?;
@@ -38,13 +36,10 @@ async fn lease_aware_app_servers_share_one_home_through_initialize() -> Result<(
 #[tokio::test]
 async fn incompatible_generation_fails_before_state_or_listener_startup() -> Result<()> {
     let home = TempDir::new()?;
-    let incompatible_mode = if cfg!(feature = "legacy-fence-artifact") {
-        RolloutWriterGenerationMode::LeaseAwareShared
-    } else {
-        RolloutWriterGenerationMode::LegacyFenceExclusive
-    };
-    let _incompatible_generation =
-        acquire_rollout_writer_generation(home.path(), incompatible_mode)?;
+    let _incompatible_generation = acquire_rollout_writer_generation(
+        home.path(),
+        RolloutWriterGenerationMode::LegacyFenceExclusive,
+    )?;
     let socket_path = home.path().join("app-server.sock");
     let listen_url = format!("unix://{}", socket_path.display());
 

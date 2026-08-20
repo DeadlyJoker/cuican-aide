@@ -233,11 +233,7 @@ async fn resume_rejects_malformed_rollout_and_releases_writer_lock() {
         ))
         .await
         .expect_err("parse errors must fail closed even when parsed items match");
-    if cfg!(feature = "legacy-fence-artifact") {
-        assert!(matches!(error, ThreadStoreError::Conflict { .. }));
-    } else {
-        assert!(matches!(error, ThreadStoreError::InvalidRequest { .. }));
-    }
+    assert!(matches!(error, ThreadStoreError::InvalidRequest { .. }));
 
     tokio::fs::write(rollout_path.as_path(), original_contents)
         .await
