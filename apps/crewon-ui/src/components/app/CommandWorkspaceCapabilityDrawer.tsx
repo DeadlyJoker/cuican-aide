@@ -2,9 +2,15 @@ import type { Thread } from "@crewon-ui-model/v2/Thread";
 import {
   Blocks,
   GitBranch,
+  Globe2,
   ListTodo,
+  Maximize2,
+  Minimize2,
   PanelRight,
+  Plus,
   SearchCode,
+  Terminal,
+  X,
 } from "lucide-react";
 import type { ControlApiClient } from "@crewon/control-client";
 import {
@@ -16,13 +22,23 @@ import {
 } from "react";
 
 import { CommandTaskBoard } from "./CommandTaskBoard";
+import { AppWorkspaceLibraryContent } from "./AppWorkspaceLibraryContent";
+import { CommandWorkbenchBrowser } from "./CommandWorkbenchBrowser";
 import {
   CommandWorkspaceGitStatus,
   CommandWorkspaceSearch,
 } from "./CommandWorkspaceReadonly";
 import type { Locale } from "../../lib/i18n";
+import type { LibraryItem, LibraryPanel } from "../../lib/domain/crewonDomain";
+import type { LibraryPanelActionCallback } from "../library/LibraryPrimitives";
 
-type ControlToolId = "tasks" | "search" | "git-status";
+type ControlToolId =
+  | "tasks"
+  | "search"
+  | "git-status"
+  | "terminal"
+  | "web"
+  | "apps";
 
 const DEFAULT_WORKBENCH_WIDTH = 640;
 const MIN_WORKBENCH_WIDTH = 360;
@@ -88,11 +104,15 @@ export type CommandWorkspaceCapabilityDrawerProps = {
   readonlyClient?: Pick<ControlApiClient, "executeWorkspaceReadonly"> | null;
   readonlyThreadId?: string | null;
   taskThreads?: readonly Thread[];
+  libraryPanel?: LibraryPanel | null;
   selectedThreadId?: string | null;
   onSelectThread?: (threadId: string) => void;
   onClose: () => void;
   onOpen: () => void;
   onOpenApps?: () => void;
+  onLibraryItemAction?: (item: LibraryItem) => void;
+  onLibraryPanelAction?: LibraryPanelActionCallback;
+  onLibraryPanelFieldChange?: (fieldId: string, value: string) => void;
 };
 
 function toolLabel(toolId: ControlToolId, locale: Locale): string {
@@ -100,14 +120,32 @@ function toolLabel(toolId: ControlToolId, locale: Locale): string {
     return locale === "zh" ? "任务看板" : "Task board";
   }
   if (toolId === "search") {
-    return locale === "zh" ? "工作区搜索" : "Workspace search";
+    return locale === "zh" ? "文件与搜索" : "Files and search";
   }
-  return locale === "zh" ? "Git 状态" : "Git status";
+  if (toolId === "git-status") {
+    return locale === "zh" ? "审阅" : "Review";
+  }
+  if (toolId === "terminal") {
+    return locale === "zh" ? "终端" : "Terminal";
+  }
+  if (toolId === "web") {
+    return locale === "zh" ? "浏览器" : "Browser";
+  }
+  return locale === "zh" ? "应用与插件" : "Apps and plugins";
 }
 
 function toolIcon(toolId: ControlToolId) {
   if (toolId === "tasks") {
     return <ListTodo aria-hidden="true" />;
+  }
+  if (toolId === "apps") {
+    return <Blocks aria-hidden="true" />;
+  }
+  if (toolId === "web") {
+    return <Globe2 aria-hidden="true" />;
+  }
+  if (toolId === "terminal") {
+    return <Terminal aria-hidden="true" />;
   }
   return toolId === "search" ? (
     <SearchCode aria-hidden="true" />
@@ -122,18 +160,36 @@ export function CommandWorkspaceCapabilityDrawer({
   readonlyClient = null,
   readonlyThreadId = null,
   taskThreads = [],
+  libraryPanel = null,
   selectedThreadId = null,
   onSelectThread,
   onClose,
   onOpen,
   onOpenApps,
+  onLibraryItemAction,
+  onLibraryPanelAction,
+  onLibraryPanelFieldChange,
 }: CommandWorkspaceCapabilityDrawerProps) {
   const [activeToolId, setActiveToolId] = useState<ControlToolId>("tasks");
+  const [openToolIds, setOpenToolIds] = useState<ControlToolId[]>(["tasks"]);
+  const [launcherOpen, setLauncherOpen] = useState(false);
+  const [maximized, setMaximized] = useState(false);
+  const [browserInstance, setBrowserInstance] = useState(1);
+  const [browserTitle, setBrowserTitle] = useState(
+    locale === "zh" ? "新标签页" : "New tab",
+  );
   const [resizing, setResizing] = useState(false);
   const [workbenchWidth, setWorkbenchWidth] = useState(initialWorkbenchWidth);
   const resizePointerIdRef = useRef<number | null>(null);
   const workbenchWidthRef = useRef(workbenchWidth);
-  const tools: ControlToolId[] = ["tasks", "search", "git-status"];
+  const tools: ControlToolId[] = [
+    "tasks",
+    "search",
+    "git-status",
+    "terminal",
+    "web",
+    "apps",
+  ];
   workbenchWidthRef.current = workbenchWidth;
 
   useEffect(() => {
@@ -218,6 +274,29 @@ export function CommandWorkspaceCapabilityDrawer({
     persistWorkbenchWidth(workbenchWidthRef.current);
   }
 
+  function activateTool(toolId: ControlToolId) {
+    setOpenToolIds((current) =>
+      current.includes(toolId) ? current : [...current, toolId],
+    );
+    setActiveToolId(toolId);
+    setLauncherOpen(false);
+    if (toolId === "apps") onOpenApps?.();
+    onOpen();
+  }
+
+  function closeTool(toolId: ControlToolId) {
+    setOpenToolIds((current) => {
+      const index = current.indexOf(toolId);
+      const next = current.filter((item) => item !== toolId);
+      if (toolId === activeToolId) {
+        const replacement = next[Math.min(index, next.length - 1)];
+        if (replacement) setActiveToolId(replacement);
+        else onClose();
+      }
+      return next;
+    });
+  }
+
   if (!open) {
     return (
       <nav
@@ -231,23 +310,12 @@ export function CommandWorkspaceCapabilityDrawer({
             title={toolLabel(toolId, locale)}
             type="button"
             onClick={() => {
-              setActiveToolId(toolId);
-              onOpen();
+              activateTool(toolId);
             }}
           >
             {toolIcon(toolId)}
           </button>
         ))}
-        {onOpenApps ? (
-          <button
-            aria-label={locale === "zh" ? "应用与插件" : "Apps and plugins"}
-            title={locale === "zh" ? "应用与插件" : "Apps and plugins"}
-            type="button"
-            onClick={onOpenApps}
-          >
-            <Blocks aria-hidden="true" />
-          </button>
-        ) : null}
       </nav>
     );
   }
@@ -256,8 +324,13 @@ export function CommandWorkspaceCapabilityDrawer({
     <aside
       aria-label={locale === "zh" ? "工作区工具" : "Workspace tools"}
       className="command-workbench"
+      data-maximized={maximized ? "true" : undefined}
       data-resizing={resizing ? "true" : undefined}
-      style={{ width: workbenchWidth }}
+      style={{
+        width: maximized
+          ? maximumWorkbenchWidth(currentViewportWidth())
+          : workbenchWidth,
+      }}
     >
       <div
         aria-label={locale === "zh" ? "调整工作台宽度" : "Resize workbench"}
@@ -277,7 +350,7 @@ export function CommandWorkspaceCapabilityDrawer({
       />
       <header className="command-workbench-tabbar">
         <div className="command-workbench-tabs" role="tablist">
-          {tools.map((toolId) => (
+          {openToolIds.map((toolId) => (
             <div
               aria-selected={activeToolId === toolId}
               className="command-workbench-tab"
@@ -285,27 +358,72 @@ export function CommandWorkspaceCapabilityDrawer({
               key={toolId}
               role="tab"
             >
-              <button type="button" onClick={() => setActiveToolId(toolId)}>
+              <button type="button" onClick={() => activateTool(toolId)}>
                 {toolIcon(toolId)}
-                <span>{toolLabel(toolId, locale)}</span>
+                <span>
+                  {toolId === "web" ? browserTitle : toolLabel(toolId, locale)}
+                </span>
+              </button>
+              <button
+                aria-label={`${locale === "zh" ? "关闭" : "Close"} ${toolLabel(toolId, locale)}`}
+                className="command-workbench-tab-close"
+                type="button"
+                onClick={() => closeTool(toolId)}
+              >
+                <X aria-hidden="true" />
               </button>
             </div>
           ))}
-          {onOpenApps ? (
+          <div className="command-workbench-launcher-anchor">
             <button
+              aria-expanded={launcherOpen}
               aria-label={
-                locale === "zh" ? "打开应用与插件" : "Open apps and plugins"
+                locale === "zh" ? "打开工作台工具" : "Open workbench tool"
               }
-              className="command-workbench-library-button"
-              title={locale === "zh" ? "应用与插件" : "Apps and plugins"}
+              className="command-workbench-add"
               type="button"
-              onClick={onOpenApps}
+              onClick={() => setLauncherOpen((current) => !current)}
             >
-              <Blocks aria-hidden="true" />
+              <Plus aria-hidden="true" />
             </button>
-          ) : null}
+            {launcherOpen ? (
+              <div className="command-workbench-launcher-menu" role="menu">
+                {tools.map((toolId) => (
+                  <button
+                    key={toolId}
+                    role="menuitem"
+                    type="button"
+                    onClick={() => activateTool(toolId)}
+                  >
+                    {toolIcon(toolId)}
+                    <span>{toolLabel(toolId, locale)}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
         <div className="command-workbench-window-actions">
+          <button
+            aria-label={
+              maximized
+                ? locale === "zh"
+                  ? "还原工作台"
+                  : "Restore workbench"
+                : locale === "zh"
+                  ? "最大化工作台"
+                  : "Maximize workbench"
+            }
+            className="command-workbench-maximize"
+            type="button"
+            onClick={() => setMaximized((current) => !current)}
+          >
+            {maximized ? (
+              <Minimize2 aria-hidden="true" />
+            ) : (
+              <Maximize2 aria-hidden="true" />
+            )}
+          </button>
           <button
             aria-label={
               locale === "zh" ? "关闭工作区工具" : "Close workspace tools"
@@ -338,6 +456,60 @@ export function CommandWorkspaceCapabilityDrawer({
             locale={locale}
             threadId={readonlyThreadId}
           />
+        ) : activeToolId === "web" ? (
+          <CommandWorkbenchBrowser
+            active
+            instanceId={`control-${browserInstance}`}
+            locale={locale}
+            onNewTab={() => {
+              setBrowserInstance((current) => current + 1);
+              setBrowserTitle(locale === "zh" ? "新标签页" : "New tab");
+            }}
+            onTitleChange={setBrowserTitle}
+          />
+        ) : activeToolId === "terminal" ? (
+          <section className="command-workbench-tool-empty command-terminal-plugin-state">
+            <Terminal aria-hidden="true" />
+            <strong>
+              {locale === "zh"
+                ? "终端需要受信任的运行时插件"
+                : "Terminal requires a trusted runtime plugin"}
+            </strong>
+            <p>
+              {locale === "zh"
+                ? "当前 Control 只提供只读文件搜索与 Git 状态；安装具有 Shell authority 的插件后可在此打开终端。"
+                : "Control currently exposes read-only search and Git status. Install a plugin with Shell authority to open a terminal here."}
+            </p>
+            {onOpenApps ? (
+              <button
+                className="button primary"
+                type="button"
+                onClick={() => activateTool("apps")}
+              >
+                <Blocks aria-hidden="true" />
+                {locale === "zh" ? "打开应用与插件" : "Open apps and plugins"}
+              </button>
+            ) : null}
+          </section>
+        ) : activeToolId === "apps" &&
+          libraryPanel &&
+          (libraryPanel.kind === "plugins" || libraryPanel.kind === "tools") ? (
+          <AppWorkspaceLibraryContent
+            libraryPanel={libraryPanel}
+            locale={locale}
+            onBackLibrary={onClose}
+            onItemAction={onLibraryItemAction ?? (() => undefined)}
+            onLibraryPanelAction={onLibraryPanelAction ?? (() => undefined)}
+            onPanelFieldChange={onLibraryPanelFieldChange ?? (() => undefined)}
+          />
+        ) : activeToolId === "apps" ? (
+          <div className="command-workbench-tool-empty" role="status">
+            <strong>
+              {locale === "zh"
+                ? "正在读取应用与插件…"
+                : "Loading apps and plugins…"}
+            </strong>
+          </div>
         ) : null}
       </div>
     </aside>

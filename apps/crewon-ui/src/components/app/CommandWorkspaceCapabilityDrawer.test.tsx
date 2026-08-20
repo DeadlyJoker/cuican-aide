@@ -18,13 +18,12 @@ describe("CommandWorkspaceCapabilityDrawer", () => {
     );
 
     expect(markup).toContain("任务看板");
-    expect(markup).toContain("工作区搜索");
-    expect(markup).toContain("Git 状态");
-    expect(markup).toContain("打开应用与插件");
+    expect(markup).toContain("打开工作台工具");
     expect(markup).toContain('role="separator"');
     expect(markup).toContain('aria-valuemin="360"');
     expect(markup).toContain('aria-valuemax="648"');
-    expect(markup).not.toMatch(/终端|浏览器|文件|审阅/);
+    expect(markup).toContain("最大化工作台");
+    expect(markup).toContain("关闭 任务看板");
     expect(markup).toMatchSnapshot();
   });
 
@@ -41,9 +40,10 @@ describe("CommandWorkspaceCapabilityDrawer", () => {
 
     expect(markup).toContain('aria-label="Workbench apps"');
     expect(markup).toContain('aria-label="Task board"');
-    expect(markup).toContain('aria-label="Workspace search"');
-    expect(markup).toContain('aria-label="Git status"');
+    expect(markup).toContain('aria-label="Files and search"');
+    expect(markup).toContain('aria-label="Review"');
+    expect(markup).toContain('aria-label="Terminal"');
+    expect(markup).toContain('aria-label="Browser"');
     expect(markup).toContain('aria-label="Apps and plugins"');
-    expect(markup).not.toContain("Terminal");
   });
 });
