@@ -53,7 +53,7 @@ export function createModelTransport(
       process.env.CREWON_RESPONSES_SEQUENCE_POLICY ?? "required",
     ),
   };
-  validateResponsesEndpointSecurity(config.endpoint, native.securityMode);
+  validateResponsesTransportSecurity(config, native.securityMode);
   if (
     parseBoolean(
       process.env.CREWON_RESPONSES_WEBSOCKET_ENABLED ?? "false",
@@ -75,12 +75,17 @@ export function createModelTransport(
   return new DirectResponsesTransport(config);
 }
 
-export function validateResponsesEndpointSecurity(
-  endpoint: string,
+export function validateResponsesTransportSecurity(
+  config: Pick<DirectResponsesTransportConfig, "endpoint" | "storeResponses">,
   securityMode: "production" | "standalone" | undefined,
 ): void {
-  if (securityMode === "production" && new URL(endpoint).protocol !== "https:")
+  if (securityMode !== "production") return;
+  if (new URL(config.endpoint).protocol !== "https:") {
     throw new Error("production_responses_https_required");
+  }
+  if (!config.storeResponses) {
+    throw new Error("production_response_retrieval_required");
+  }
 }
 
 export async function createConfiguredToolRuntime(): Promise<
