@@ -4,7 +4,7 @@ import { getInitialSidebarOpen } from "./appUiState";
 
 export function useAppChromeState() {
   const [sidebarOpen, setSidebarOpen] = useState(getInitialSidebarOpen);
-  const [capabilityDockOpen, setCapabilityDockOpen] = useState(true);
+  const [capabilityDockOpen, setCapabilityDockOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(true);
 
   return {

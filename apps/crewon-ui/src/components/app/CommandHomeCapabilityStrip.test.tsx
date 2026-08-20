@@ -13,6 +13,7 @@ describe("CommandHomeCapabilityStrip", () => {
       <CommandHomeCapabilityStrip
         intent="none"
         locale="zh"
+        mode="implement"
         preset={scenePresets.code}
         resources={[
           {

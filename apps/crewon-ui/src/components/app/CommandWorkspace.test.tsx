@@ -769,10 +769,10 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain("本地自动");
     expect(markup).toContain('aria-label="执行主体"');
     expect(markup).not.toContain("执行主体：");
-    expect(markup).not.toContain('data-od-id="workspace-pill"');
-    expect(markup).not.toContain('aria-label="任务类型"');
-    expect(markup).not.toContain("核心上下文");
-    expect(markup).not.toContain("默认交付");
+    expect(markup).toContain('data-od-id="workspace-pill"');
+    expect(markup).toContain('aria-label="任务类型"');
+    expect(markup).toContain("核心上下文");
+    expect(markup).toContain("默认交付");
     expect(markup).toContain("暂无可选智能体或小队");
     expect(markup).not.toContain("创建可编排的 Agent 小队");
     expect(markup).not.toContain("资源入口已就绪");
@@ -806,11 +806,11 @@ describe("CommandWorkspace", () => {
   });
 
   /*
-   * Order is the point of the layout: the composer is what someone came to use,
-   * and the starter cards are the fallback underneath it. A snapshot alone would
-   * let a refactor quietly swap them, so the positions are compared directly.
+   * The migration-era home presents the recommended task shortcuts before the
+   * composer. A snapshot alone would let a refactor quietly swap them, so the
+   * positions are compared directly.
    */
-  it("puts the starter cards after the composer, not above it", () => {
+  it("puts the starter cards before the composer", () => {
     const markup = renderCommandWorkspace();
     const commandHomeMarkup = markup.slice(
       markup.indexOf('data-shell-view="command"'),
@@ -821,7 +821,7 @@ describe("CommandWorkspace", () => {
     const cardsAt = commandHomeMarkup.indexOf('data-od-id="quick-scenarios"');
 
     expect(composerAt).toBeGreaterThan(-1);
-    expect(cardsAt).toBeGreaterThan(composerAt);
+    expect(cardsAt).toBeLessThan(composerAt);
   });
 
   it("drops the recommended-capability line from the home scene", () => {
@@ -1113,7 +1113,7 @@ describe("CommandWorkspace", () => {
     expect(commandHomeMarkup).toContain("gpt-5.6-sol");
     expect(commandHomeMarkup).toContain("gpt-5.5");
     expect(commandHomeMarkup).toContain('data-value="gpt-5.6-sol"');
-    expect(commandHomeMarkup).not.toContain('aria-label="任务类型"');
+    expect(commandHomeMarkup).toContain('aria-label="任务类型"');
     expect(commandHomeMarkup).not.toContain('aria-label="优化提示词"');
     expect(commandHomeMarkup).not.toContain('aria-label="搜索资源"');
     expect(commandHomeMarkup).not.toContain('aria-label="语音输入"');

@@ -36,6 +36,7 @@ function resourceIcon(kind: CommandHomeResource["kind"]) {
 export function CommandHomeCapabilityStrip({
   intent,
   locale,
+  mode,
   preset,
   resources,
   risky,
@@ -44,6 +45,7 @@ export function CommandHomeCapabilityStrip({
 }: {
   intent: CommandExecutionIntent;
   locale: Locale;
+  mode: string;
   preset: ScenePreset;
   resources: readonly CommandHomeResource[];
   risky: boolean;
@@ -53,15 +55,21 @@ export function CommandHomeCapabilityStrip({
   const copy =
     locale === "zh"
       ? {
-          capabilities: "能力",
+          capabilities: "推荐能力",
+          context: "核心上下文",
+          deliverable: "默认交付",
           goal: "目标",
+          mode: "任务方式",
           plan: "计划",
           risk: "外部写入保持草稿，提交前需要确认",
           safe: "只使用已授权能力，执行状态会持续回传",
         }
       : {
-          capabilities: "Capabilities",
+          capabilities: "Recommended",
+          context: "Core context",
+          deliverable: "Default output",
           goal: "Goal",
+          mode: "Task mode",
           plan: "Plan",
           risk: "External writes remain drafts until confirmed",
           safe: "Only authorized capabilities are used; run state stays visible",
@@ -71,12 +79,25 @@ export function CommandHomeCapabilityStrip({
     <section className="command-home-capability-strip">
       <div className="command-home-summary">
         <span>
-          <strong>{copy.capabilities}</strong>
-          {preset.capabilitySummary}
+          <small>{copy.mode}</small>
+          <strong>
+            {preset.modes.find((option) => option.value === mode)?.label ??
+              preset.modes[0]?.label}
+          </strong>
         </span>
-        <span>{preset.contextSummary}</span>
-        <span>{preset.deliverableSummary}</span>
+        <span>
+          <small>{copy.context}</small>
+          <strong>{preset.contextSummary}</strong>
+        </span>
+        <span>
+          <small>{copy.deliverable}</small>
+          <strong>{preset.deliverableSummary}</strong>
+        </span>
       </div>
+      <p className="command-home-recommendation">
+        <strong>{copy.capabilities}</strong>
+        {preset.capabilitySummary}
+      </p>
       <div
         aria-label={locale === "zh" ? "任务意图" : "Task intent"}
         className="execution-intent-switch"

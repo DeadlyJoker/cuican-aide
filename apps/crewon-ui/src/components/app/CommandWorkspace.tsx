@@ -1622,6 +1622,28 @@ export function CommandWorkspace({
     effortOptions: reasoningEffortOptions,
     modelOptions: effectiveModelOptions,
   });
+  const displayedModelOptions =
+    modelEffortOptions.length > 0
+      ? modelEffortOptions
+      : [
+          {
+            detail:
+              locale === "zh"
+                ? "先在智能体目录发布可执行模型"
+                : "Publish an executable model from the Agent catalog first",
+            disabled: true,
+            label: locale === "zh" ? "暂无可用模型" : "No model available",
+            value: "__no_model__",
+          },
+        ];
+  const displayedModelValue =
+    modelEffortOptions.length > 0 ? model : "__no_model__";
+  const displayedModelLabel =
+    modelEffortOptions.length > 0
+      ? modelTriggerLabel
+      : locale === "zh"
+        ? "暂无可用模型"
+        : "No model available";
 
   function selectModelOrEffort(nextValue: string) {
     const nextEffort = effortFromOptionValue(nextValue);
@@ -1740,6 +1762,35 @@ export function CommandWorkspace({
             data-has-thread={showCommandThread ? "true" : "false"}
             hidden={activeView !== "command"}
           >
+            {!showCommandThread ? (
+              <button
+                className="workspace-pill"
+                data-od-id="workspace-pill"
+                type="button"
+                onClick={() =>
+                  void Promise.resolve(
+                    workspaceOperations?.onSelectNativeWorkspace?.(),
+                  ).catch(() => undefined)
+                }
+              >
+                <span aria-hidden="true" />
+                <strong>
+                  {workspaceOperations?.nativeWorkspaceDisplayName ??
+                    (locale === "zh" ? "CrewON Control" : "CrewON Control")}
+                  {connectionState === "connected"
+                    ? locale === "zh"
+                      ? " · 已连接"
+                      : " · connected"
+                    : connectionState === "connecting"
+                      ? locale === "zh"
+                        ? " · 连接中"
+                        : " · connecting"
+                      : locale === "zh"
+                        ? " · 未连接"
+                        : " · disconnected"}
+                </strong>
+              </button>
+            ) : null}
             {/*
              * The task bar is a sibling of the centered work column, not a child
              * of it, so it can span the canvas and start flush left instead of
@@ -1806,6 +1857,7 @@ export function CommandWorkspace({
                   <CommandHomeCapabilityStrip
                     intent={executionIntent}
                     locale={locale}
+                    mode={sceneMode}
                     preset={scenePreset}
                     resources={homeResourceEntries.map(
                       (entry) => entry.resource,
@@ -1827,6 +1879,13 @@ export function CommandWorkspace({
                         insertSlashItem(entry.item);
                       }
                     }}
+                  />
+                  <CommandSceneQuickRow
+                    locale={locale}
+                    scene={scene}
+                    onQuickAction={(action) =>
+                      prefillScenario(action.prompt, scene, action.mode)
+                    }
                   />
                 </>
               )}
@@ -1854,9 +1913,9 @@ export function CommandWorkspace({
                       }
                       className="model-dropdown"
                       groups={modelEffortGroups(locale)}
-                      options={modelEffortOptions}
-                      triggerLabel={modelTriggerLabel}
-                      value={model}
+                      options={displayedModelOptions}
+                      triggerLabel={displayedModelLabel}
+                      value={displayedModelValue}
                       onChange={selectModelOrEffort}
                     />
                   </>
@@ -1947,6 +2006,40 @@ export function CommandWorkspace({
                     >
                       <Plus aria-hidden="true" />
                     </button>
+                    {!showCommandThread ? (
+                      <>
+                        <CommandComposerSelect
+                          ariaLabel={locale === "zh" ? "任务类型" : "Task mode"}
+                          className="mode-dropdown"
+                          options={scenePreset.modes}
+                          value={sceneMode}
+                          onChange={setSceneMode}
+                        />
+                        <CommandComposerSelect
+                          ariaLabel={
+                            locale === "zh" ? "工作空间选择" : "Workspace"
+                          }
+                          className="workspace-dropdown"
+                          options={workspaceOptions}
+                          value={
+                            workspaceOperations?.nativeWorkspaceDisplayName
+                              ? "__native_workspace__"
+                              : noWorkspaceValue
+                          }
+                          onChange={(nextWorkspace) => {
+                            const action =
+                              nextWorkspace === noWorkspaceValue
+                                ? workspaceOperations?.onClearNativeWorkspace
+                                : workspaceOperations?.onSelectNativeWorkspace;
+                            if (action) {
+                              void Promise.resolve(action()).catch(
+                                () => undefined,
+                              );
+                            }
+                          }}
+                        />
+                      </>
+                    ) : null}
                     {showCommandThread ? (
                       <SelectedExecutionIntent
                         intent={executionIntent}
@@ -2044,31 +2137,7 @@ export function CommandWorkspace({
                         {workspaceOperations?.nativeWorkspaceDisplayName ??
                           (locale === "zh" ? "无工作空间" : "No workspace")}
                       </span>
-                    ) : (
-                      <CommandComposerSelect
-                        ariaLabel={
-                          locale === "zh" ? "工作空间选择" : "Workspace"
-                        }
-                        className="workspace-dropdown"
-                        options={workspaceOptions}
-                        value={
-                          workspaceOperations?.nativeWorkspaceDisplayName
-                            ? "__native_workspace__"
-                            : noWorkspaceValue
-                        }
-                        onChange={(nextWorkspace) => {
-                          const action =
-                            nextWorkspace === noWorkspaceValue
-                              ? workspaceOperations?.onClearNativeWorkspace
-                              : workspaceOperations?.onSelectNativeWorkspace;
-                          if (action) {
-                            void Promise.resolve(action()).catch(
-                              () => undefined,
-                            );
-                          }
-                        }}
-                      />
-                    )}
+                    ) : null}
                     {composerActivityLabel ? (
                       <span className="composer-state">
                         {composerActivityLabel}
@@ -2083,13 +2152,15 @@ export function CommandWorkspace({
                         {locale === "zh" ? "重试 Control" : "Retry Control"}
                       </button>
                     ) : null}
-                    <span
-                      aria-label={connectionStatusLabel}
-                      className="connection-indicator"
-                      data-state={connectionState}
-                      role="status"
-                      title={connectionStatusLabel}
-                    />
+                    {showCommandThread ? (
+                      <span
+                        aria-label={connectionStatusLabel}
+                        className="connection-indicator"
+                        data-state={connectionState}
+                        role="status"
+                        title={connectionStatusLabel}
+                      />
+                    ) : null}
                   </>
                 }
                 running={commandThreadRunning}
@@ -2112,16 +2183,6 @@ export function CommandWorkspace({
                   {cloudAgentTargetError}
                 </div>
               ) : null}
-
-              {showCommandThread ? null : (
-                <CommandSceneQuickRow
-                  locale={locale}
-                  scene={scene}
-                  onQuickAction={(action) =>
-                    prefillScenario(action.prompt, scene, action.mode)
-                  }
-                />
-              )}
             </section>
           </section>
 
@@ -2143,9 +2204,9 @@ export function CommandWorkspace({
                     }
                     className="model-dropdown"
                     groups={modelEffortGroups(locale)}
-                    options={modelEffortOptions}
-                    triggerLabel={modelTriggerLabel}
-                    value={model}
+                    options={displayedModelOptions}
+                    triggerLabel={displayedModelLabel}
+                    value={displayedModelValue}
                     onChange={selectModelOrEffort}
                   />
                 }

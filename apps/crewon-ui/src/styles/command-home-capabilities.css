@@ -1,36 +1,57 @@
 .command-home-capability-strip {
   display: grid;
-  width: min(760px, 100%);
-  gap: 10px;
-  margin: -4px auto 4px;
+  width: min(720px, 100%);
+  gap: 8px;
+  margin: 0 auto;
 }
 
 .command-home-summary {
-  display: flex;
+  display: grid;
   min-width: 0;
-  align-items: center;
-  justify-content: center;
-  gap: 8px 16px;
-  color: var(--n-650);
-  font-size: calc(11px + var(--user-ui-font-delta));
-  line-height: 1.4;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  overflow: hidden;
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-lg);
+  background: var(--n-0);
 }
 
 .command-home-summary span {
-  display: inline-flex;
+  display: grid;
   min-width: 0;
-  align-items: center;
-  gap: 5px;
-  white-space: nowrap;
+  gap: 3px;
+  padding: 9px 12px;
 }
 
-.command-home-summary span + span::before {
-  color: var(--n-350);
-  content: "·";
+.command-home-summary span + span {
+  border-left: 1px solid var(--n-250);
+}
+
+.command-home-summary small {
+  color: var(--n-600);
+  font-size: calc(10px + var(--user-ui-font-delta));
 }
 
 .command-home-summary strong {
+  overflow: hidden;
   color: var(--n-850);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-home-recommendation {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin: 0;
+  color: var(--n-650);
+  font-size: calc(11px + var(--user-ui-font-delta));
+}
+
+.command-home-recommendation strong {
+  color: var(--n-800);
   font-weight: 600;
 }
 
@@ -150,6 +171,10 @@
   height: 13px;
 }
 
+.command-home-view:not(.has-command-thread) .composer-state-row:empty {
+  display: none;
+}
+
 /* Keep the command canvas balanced while the real task workbench is open. */
 .command-shell-route[data-capability-sidebar-open="true"]
   .command-home-view:not(.has-command-thread)
@@ -173,10 +198,10 @@
 
 @media (max-width: 760px) {
   .command-home-summary {
-    flex-wrap: wrap;
+    grid-template-columns: 1fr;
   }
-
-  .command-home-summary span:last-child {
-    display: none;
+  .command-home-summary span + span {
+    border-top: 1px solid var(--n-250);
+    border-left: 0;
   }
 }
