@@ -72,7 +72,7 @@ pub(super) async fn update_thread_metadata(
     let cold_writer_lease = if live_recorder.is_none() {
         Some(
             RolloutWriterLease::acquire(store.config.codex_home.as_path(), thread_id)
-            .map_err(live_writer::map_recorder_error)?,
+                .map_err(live_writer::map_recorder_error)?,
         )
     } else {
         None
