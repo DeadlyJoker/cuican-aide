@@ -86,7 +86,10 @@ test("production Dockerfiles pin a reproducible non-root TypeScript runtime", as
     /\/out\/release-rollback-main\.mjs \.\/init\/release-rollback-main\.mjs/u,
   );
   assert.match(worker, /production-backup-main\.mjs/u);
-  assert.match(worker, /apk add --no-cache postgresql16-client=16\.15-r0/u);
+  assert.match(
+    worker,
+    /apk add --no-cache cosign=3\.0\.6-r1 postgresql16-client=16\.15-r0/u,
+  );
 });
 
 test("static Web edge runs non-root with a no-eval browser policy", async () => {

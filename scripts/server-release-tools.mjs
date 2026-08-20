@@ -155,11 +155,17 @@ export function verifyServerDeployment({ images, manifest, repository }) {
   };
 }
 
-function verifyServerReleaseSignature({
-  certificateIdentity,
+export function verifyServerReleaseEvidence({
   manifestPath,
+  repository,
   signaturePath,
 }) {
+  const manifest = parseServerReleaseManifest(
+    JSON.parse(readFileSync(resolve(manifestPath), "utf8")),
+  );
+  if (manifest.repository !== repository)
+    throw new Error("server_release_repository_mismatch");
+  const certificateIdentity = `https://github.com/${repository}/.github/workflows/server-release.yml@refs/tags/${manifest.tag}`;
   const verification = spawnSync(
     "cosign",
     [
@@ -170,12 +176,13 @@ function verifyServerReleaseSignature({
       certificateIdentity,
       "--certificate-oidc-issuer",
       "https://token.actions.githubusercontent.com",
-      manifestPath,
+      resolve(manifestPath),
     ],
     { stdio: "inherit" },
   );
   if (verification.error !== undefined || verification.status !== 0)
     throw new Error("server_release_signature_invalid");
+  return { certificateIdentity, manifest };
 }
 
 function parseArguments(args) {
@@ -245,11 +252,13 @@ function runCli(args) {
       manifest: JSON.parse(readFileSync(manifestPath, "utf8")),
       repository: exactlyOne(values, "repository"),
     });
-    verifyServerReleaseSignature({
-      certificateIdentity: deployment.certificateIdentity,
+    const evidence = verifyServerReleaseEvidence({
       manifestPath,
+      repository: exactlyOne(values, "repository"),
       signaturePath: resolve(exactlyOne(values, "signature")),
     });
+    if (evidence.certificateIdentity !== deployment.certificateIdentity)
+      throw new Error("server_release_identity_mismatch");
     return;
   }
   throw new Error("server_release_command_invalid");

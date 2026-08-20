@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -7,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, delimiter, dirname, join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
@@ -94,11 +97,13 @@ test("restores only verified evidence into a new Artifact authority", async () =
       databaseSchema: fixture.config.databaseSchema,
       expectedServerReleaseManifestPath:
         fixture.config.serverReleaseManifestPath,
+      expectedServerReleaseRepository: fixture.config.serverReleaseRepository,
       expectedServerReleaseSignaturePath:
         fixture.config.serverReleaseSignaturePath,
       runProgram: async (program, args, environment) => {
         calls.push({ program, args, environment });
       },
+      verifyRelease: fixture.config.verifyRelease,
     });
     assert.deepEqual(calls, [
       {
@@ -156,9 +161,11 @@ test("restore rejects a wrong key, release, schema, tamper and existing target b
       databaseSchema: fixture.config.databaseSchema,
       expectedServerReleaseManifestPath:
         fixture.config.serverReleaseManifestPath,
+      expectedServerReleaseRepository: fixture.config.serverReleaseRepository,
       expectedServerReleaseSignaturePath:
         fixture.config.serverReleaseSignaturePath,
       runProgram: async () => assert.fail("PostgreSQL must not run"),
+      verifyRelease: fixture.config.verifyRelease,
     };
     await assert.rejects(
       restoreProductionBackup({ ...baseRestore, artifactKeyId: "wrong-key" }),
@@ -213,6 +220,91 @@ test("restore rejects a wrong key, release, schema, tamper and existing target b
   }
 });
 
+test("backup CLI fails closed when exact release evidence does not verify", () => {
+  const fixture = backupFixture();
+  const cosign = join(fixture.base, "cosign");
+  const cosignArguments = join(fixture.base, "cosign-arguments");
+  try {
+    writeFileSync(
+      cosign,
+      '#!/bin/sh\nprintf \'%s\\n\' "$@" > "$COSIGN_ARGUMENTS_FILE"\nexit 1\n',
+    );
+    chmodSync(cosign, 0o700);
+    const result = spawnSync(
+      process.execPath,
+      [
+        join(import.meta.dirname, "production-backup-main.mjs"),
+        "backup",
+        "--artifact-database",
+        fixture.config.artifactDatabasePath,
+        "--artifact-key-id",
+        fixture.config.artifactKeyId,
+        "--artifact-root",
+        fixture.config.artifactRootDirectory,
+        "--output",
+        fixture.config.outputDirectory,
+        "--server-release-manifest",
+        fixture.config.serverReleaseManifestPath,
+        "--server-release-repository",
+        fixture.config.serverReleaseRepository,
+        "--server-release-signature",
+        fixture.config.serverReleaseSignaturePath,
+      ],
+      {
+        encoding: "utf8",
+        env: {
+          ...process.env,
+          CREWON_CONTROL_DATABASE_SCHEMA: fixture.config.databaseSchema,
+          CREWON_CONTROL_DATABASE_URL: fixture.config.connectionString,
+          COSIGN_ARGUMENTS_FILE: cosignArguments,
+          PATH: `${fixture.base}${delimiter}${process.env.PATH}`,
+        },
+      },
+    );
+    assert.deepEqual(
+      { status: result.status, stderr: result.stderr },
+      { status: 1, stderr: "server_release_signature_invalid\n" },
+    );
+    const verification = readFileSync(cosignArguments, "utf8").split("\n");
+    assert.deepEqual(verification.slice(0, 2), ["verify-blob", "--bundle"]);
+    assert.equal(
+      basename(verification[2]),
+      "server-release-manifest.sigstore.json",
+    );
+    assert.deepEqual(verification.slice(3, 7), [
+      "--certificate-identity",
+      "https://github.com/crewon/cuican-aide/.github/workflows/server-release.yml@refs/tags/server-v1.2.3",
+      "--certificate-oidc-issuer",
+      "https://token.actions.githubusercontent.com",
+    ]);
+    assert.equal(basename(verification[7]), "server-release-manifest.json");
+    assert.equal(dirname(verification[2]), dirname(verification[7]));
+    assert.match(
+      dirname(verification[7]),
+      new RegExp(
+        `^${escapeRegExp(fixture.config.outputDirectory)}\\.tmp-\\d+$`,
+        "u",
+      ),
+    );
+    assert.equal(verification[8], "");
+    assert.equal(existsSync(fixture.config.outputDirectory), false);
+  } finally {
+    rmSync(fixture.base, { recursive: true, force: true });
+  }
+});
+
+test("operator instructions delegate exact release identity verification to the tool", () => {
+  const documentation = readFileSync(
+    new URL("../deploy/crewon/README.md", import.meta.url),
+    "utf8",
+  );
+  assert.doesNotMatch(documentation, /certificate-identity-regexp/u);
+  assert.match(
+    documentation,
+    /--server-release-repository "\$CREWON_RELEASE_REPOSITORY"/u,
+  );
+});
+
 function backupFixture() {
   const base = mkdtempSync(join(tmpdir(), "crewon-production-backup-"));
   const artifactRootDirectory = join(base, "artifact-files");
@@ -252,7 +344,9 @@ function backupFixture() {
       databaseSchema: "crewon",
       outputDirectory: join(base, "backup"),
       serverReleaseManifestPath,
+      serverReleaseRepository: "crewon/cuican-aide",
       serverReleaseSignaturePath,
+      verifyRelease: () => {},
     },
   };
 }
@@ -271,4 +365,8 @@ function releaseManifest(digestCharacter) {
     repository: "crewon/cuican-aide",
     tag: "server-v1.2.3",
   });
+}
+
+function escapeRegExp(value) {
+  return value.replaceAll(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }

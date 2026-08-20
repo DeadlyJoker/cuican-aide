@@ -26,6 +26,7 @@ import {
   snapshotServerRelease,
   verifyBackupFiles,
 } from "./production-backup-tools.mjs";
+import { verifyServerReleaseEvidence } from "./server-release-tools.mjs";
 
 const MANIFEST_FILE = "backup-manifest.json";
 const MAX_MANIFEST_BYTES = 32 * 1024 * 1024;
@@ -41,7 +42,9 @@ export async function createProductionBackup({
   outputDirectory,
   runProgram = runProgramSafely,
   serverReleaseManifestPath,
+  serverReleaseRepository,
   serverReleaseSignaturePath,
+  verifyRelease = verifyServerReleaseEvidence,
 }) {
   requirePostgresConnection(connectionString);
   requireSchema(databaseSchema);
@@ -50,6 +53,17 @@ export async function createProductionBackup({
   if (existsSync(staging)) throw new Error("backup_staging_exists");
   mkdirSync(staging, { recursive: false, mode: 0o700 });
   try {
+    const releaseManifestPath = join(staging, "server-release-manifest.json");
+    const serverRelease = snapshotServerRelease({
+      destinationPath: releaseManifestPath,
+      manifestPath: serverReleaseManifestPath,
+      signatureBundlePath: serverReleaseSignaturePath,
+    });
+    verifyRelease({
+      manifestPath: releaseManifestPath,
+      repository: serverReleaseRepository,
+      signaturePath: join(staging, "server-release-manifest.sigstore.json"),
+    });
     const dumpPath = join(staging, "postgres.dump");
     await runProgram(
       "pg_dump",
@@ -69,11 +83,6 @@ export async function createProductionBackup({
       databasePath: artifactDatabasePath,
       destinationDirectory: join(staging, "artifacts"),
       rootDirectory: artifactRootDirectory,
-    });
-    const serverRelease = snapshotServerRelease({
-      destinationPath: join(staging, "server-release-manifest.json"),
-      manifestPath: serverReleaseManifestPath,
-      signatureBundlePath: serverReleaseSignaturePath,
     });
     const manifest = buildProductionBackupManifest({
       artifactKeyId,
@@ -102,8 +111,10 @@ export async function restoreProductionBackup({
   connectionString,
   databaseSchema,
   expectedServerReleaseManifestPath,
+  expectedServerReleaseRepository,
   expectedServerReleaseSignaturePath,
   runProgram = runProgramSafely,
+  verifyRelease = verifyServerReleaseEvidence,
 }) {
   requirePostgresConnection(connectionString);
   requireSchema(databaseSchema);
@@ -126,6 +137,11 @@ export async function restoreProductionBackup({
     throw new Error("restore_database_schema_mismatch");
   if (manifest.artifacts.keyId !== artifactKeyId)
     throw new Error("restore_artifact_key_mismatch");
+  verifyRelease({
+    manifestPath: join(backup, manifest.serverRelease.manifest.path),
+    repository: expectedServerReleaseRepository,
+    signaturePath: join(backup, manifest.serverRelease.signatureBundle.path),
+  });
   verifyExpectedServerRelease(
     expectedServerReleaseManifestPath,
     expectedServerReleaseSignaturePath,
@@ -450,6 +466,7 @@ async function runCli(values) {
       "artifact-root",
       "output",
       "server-release-manifest",
+      "server-release-repository",
       "server-release-signature",
     ]);
     await createProductionBackup({
@@ -460,6 +477,10 @@ async function runCli(values) {
       serverReleaseManifestPath: requiredArgument(
         args,
         "server-release-manifest",
+      ),
+      serverReleaseRepository: requiredArgument(
+        args,
+        "server-release-repository",
       ),
       serverReleaseSignaturePath: requiredArgument(
         args,
@@ -474,6 +495,7 @@ async function runCli(values) {
       "artifact-key-id",
       "backup",
       "server-release-manifest",
+      "server-release-repository",
       "server-release-signature",
     ]);
     await restoreProductionBackup({
@@ -486,6 +508,10 @@ async function runCli(values) {
       expectedServerReleaseManifestPath: requiredArgument(
         args,
         "server-release-manifest",
+      ),
+      expectedServerReleaseRepository: requiredArgument(
+        args,
+        "server-release-repository",
       ),
       expectedServerReleaseSignaturePath: requiredArgument(
         args,

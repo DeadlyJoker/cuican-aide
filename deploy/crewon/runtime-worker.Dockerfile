@@ -55,7 +55,7 @@ COPY --from=builder --chown=node:node /out/runtime-worker.mjs ./runtime-worker.m
 COPY --from=builder --chown=node:node /out/release-main.mjs ./init/release-main.mjs
 COPY --from=builder --chown=node:node /out/release-rollback-main.mjs ./init/release-rollback-main.mjs
 COPY --from=builder --chown=node:node /out/production-backup-main.mjs ./ops/production-backup-main.mjs
-RUN apk add --no-cache postgresql16-client=16.15-r0 && \
+RUN apk add --no-cache cosign=3.0.6-r1 postgresql16-client=16.15-r0 && \
     mkdir -p /var/lib/crewon/artifacts && \
     chown node:node /var/lib/crewon/artifacts
 

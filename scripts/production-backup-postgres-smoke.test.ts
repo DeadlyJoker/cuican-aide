@@ -53,7 +53,7 @@ test(
           "POSTGRES_PASSWORD",
           "--env",
           `POSTGRES_DB=${sourceDatabase}`,
-          "postgres:16-alpine",
+          "postgres:16-alpine@sha256:cf78e76683b9ca8c5733cbbdce6c9262b45b6767934dd0a95e671f9a0fc20685",
         ],
         { POSTGRES_PASSWORD: password },
       );
@@ -78,6 +78,7 @@ test(
       const artifact = await createEncryptedArtifact(fixture, key, keyId);
       const release = createReleaseEvidence(fixture);
       makeWorldWritable(fixture);
+      createCosignVerifier(fixture);
 
       const sourceUrl = postgresUrl(postgres, password, sourceDatabase);
       runBackupContainer({
@@ -96,6 +97,8 @@ test(
           "/fixture/backups/backup-v1",
           "--server-release-manifest",
           "/fixture/server-release-manifest.json",
+          "--server-release-repository",
+          "crewon/cuican-aide",
           "--server-release-signature",
           "/fixture/server-release-manifest.sigstore.json",
         ],
@@ -115,6 +118,8 @@ test(
           "/fixture/backups/backup-v1",
           "--server-release-manifest",
           "/fixture/server-release-manifest.json",
+          "--server-release-repository",
+          "crewon/cuican-aide",
           "--server-release-signature",
           "/fixture/server-release-manifest.sigstore.json",
         ],
@@ -174,6 +179,12 @@ test(
           ),
         ).serverReleaseCommit,
         release.commit,
+      );
+      assert.equal(
+        readFileSync(join(fixture, "cosign-arguments"), "utf8").split(
+          "verify-blob",
+        ).length,
+        3,
       );
     } finally {
       bestEffortDocker(["rm", "--force", postgres]);
@@ -242,6 +253,33 @@ async function createEncryptedArtifact(
   };
 }
 
+function createCosignVerifier(fixture: string) {
+  const verifier = join(fixture, "cosign");
+  writeFileSync(
+    verifier,
+    `#!/bin/sh
+set -eu
+test "$1" = verify-blob
+test "$2" = --bundle
+case "$3" in
+  /fixture/backups/backup-v1.tmp-*/server-release-manifest.sigstore.json|/fixture/backups/backup-v1/server-release-manifest.sigstore.json) ;;
+  *) exit 1 ;;
+esac
+test "$4" = --certificate-identity
+test "$5" = https://github.com/crewon/cuican-aide/.github/workflows/server-release.yml@refs/tags/server-v1.0.0
+test "$6" = --certificate-oidc-issuer
+test "$7" = https://token.actions.githubusercontent.com
+case "$8" in
+  /fixture/backups/backup-v1.tmp-*/server-release-manifest.json|/fixture/backups/backup-v1/server-release-manifest.json) ;;
+  *) exit 1 ;;
+esac
+test "$#" = 8
+printf "%s\\n" "$*" >> /fixture/cosign-arguments
+`,
+  );
+  chmodSync(verifier, 0o755);
+}
+
 function createReleaseEvidence(fixture: string) {
   const manifest = buildServerReleaseManifest({
     commit: "a".repeat(40),
@@ -281,6 +319,8 @@ function runBackupContainer(input: {
       input.network,
       "--volume",
       `${input.fixture}:/fixture`,
+      "--volume",
+      `${join(input.fixture, "cosign")}:/usr/local/bin/cosign:ro`,
       "--env",
       "CREWON_CONTROL_DATABASE_URL",
       "--env",

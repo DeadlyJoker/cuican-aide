@@ -175,10 +175,11 @@ After rollback, restart the long-lived Worker and verify Control readiness befor
 
 ## Backup and restore drill
 
-The Runtime image contains one finite pure-TypeScript backup authority plus PostgreSQL 16 client tools. A backup binds the
+The Runtime image contains one finite pure-TypeScript backup authority plus PostgreSQL 16 client tools and a pinned cosign
+verifier. A backup binds the
 selected PostgreSQL schema, the encrypted Artifact metadata and ciphertext set, the Artifact key ID, and the signed immutable
-server release manifest. It never copies the encryption key. Verify the release signature before mounting the evidence into the
-backup container; the backup command then records and hashes that exact manifest and Sigstore bundle.
+server release manifest. It never copies the encryption key. The backup and restore commands verify the mounted manifest and
+Sigstore bundle cryptographically against the exact repository, release workflow and manifest tag before touching PostgreSQL.
 
 Stop every writer before taking a backup so PostgreSQL and the local Artifact authority describe the same product state:
 
@@ -186,12 +187,6 @@ Stop every writer before taking a backup so PostgreSQL and the local Artifact au
 docker compose --env-file deploy/crewon/compose.host.env \
   -f deploy/crewon/compose.production.yml \
   stop web web-bff control-api runtime-worker
-
-cosign verify-blob \
-  --bundle /etc/crewon/server-release-manifest.sigstore.json \
-  --certificate-oidc-issuer https://token.actions.githubusercontent.com \
-  --certificate-identity-regexp '^https://github.com/[^/]+/[^/]+/.github/workflows/server-release[.]yml@refs/tags/server-v[0-9]+[.][0-9]+[.][0-9]+.*$' \
-  /etc/crewon/server-release-manifest.json
 
 docker compose --env-file deploy/crewon/compose.host.env \
   -f deploy/crewon/compose.production.yml \
@@ -201,6 +196,7 @@ docker compose --env-file deploy/crewon/compose.host.env \
   --artifact-key-id <current-artifact-key-id> \
   --output /var/lib/crewon/backups/<new-backup-id> \
   --server-release-manifest /run/config/server-release-manifest.json \
+  --server-release-repository "$CREWON_RELEASE_REPOSITORY" \
   --server-release-signature /run/config/server-release-manifest.sigstore.json
 
 docker compose --env-file deploy/crewon/compose.host.env \
@@ -223,6 +219,7 @@ docker compose --env-file deploy/crewon/compose.host.env \
   --artifact-key-id <current-artifact-key-id> \
   --backup /var/lib/crewon/backups/<backup-id> \
   --server-release-manifest /run/config/server-release-manifest.json \
+  --server-release-repository "$CREWON_RELEASE_REPOSITORY" \
   --server-release-signature /run/config/server-release-manifest.sigstore.json
 ```
 
