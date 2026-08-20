@@ -223,14 +223,14 @@ export function controlAutomationCollectionContent(params: {
   return {
     subtitle:
       locale === "zh"
-        ? `${items.length} 条手动自动化`
+        ? `${items.length} 条 Control 自动化`
         : items.length === 1
-          ? "1 manual automation"
-          : `${items.length} manual automations`,
+          ? "1 Control automation"
+          : `${items.length} Control automations`,
     body:
       locale === "zh"
-        ? "自动化由 Control API 管理，仅支持手动立即运行；这里不提供定时、启停或编辑伪兼容。"
-        : "Automations are managed by Control API and run manually. Scheduling, toggles, and compatibility edits are not offered here.",
+        ? "自动化由 Control 持久调度；当前创建表单支持每日计划，也可手动立即运行。这里不提供启停或原地编辑。"
+        : "Automations are durably scheduled by Control. The current form creates daily schedules, which can also run immediately. Toggles and in-place edits are not offered here.",
     actions: [
       {
         id: "prepare-control-automation",
@@ -250,8 +250,8 @@ export function controlAutomationCollectionContent(params: {
                     : `${items.length} immutable definitions`,
               description:
                 locale === "zh"
-                  ? "打开后可通过 Control authority 立即运行。"
-                  : "Open an automation to run it through Control authority.",
+                  ? "打开后可查看持久化定时定义，并通过 Control authority 立即运行。"
+                  : "Open an automation to inspect its durable schedule or run it through Control authority.",
               section: true,
             },
             ...items,
@@ -259,12 +259,14 @@ export function controlAutomationCollectionContent(params: {
         : [
             {
               title:
-                locale === "zh" ? "暂无手动自动化" : "No manual automations",
+                locale === "zh"
+                  ? "暂无 Control 自动化"
+                  : "No Control automations",
               meta: "Control API",
               description:
                 locale === "zh"
-                  ? "当前 Control authority 中没有可运行的自动化。"
-                  : "The current Control authority has no runnable automations.",
+                  ? "当前 Control authority 中没有持久化的定时自动化。"
+                  : "The current Control authority has no durable scheduled automations.",
               glyph: "◷",
               accent: "slate",
             },

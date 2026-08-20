@@ -226,7 +226,13 @@ describe("library collection panel helpers", () => {
   it("snapshots the Control scheduled Automation collection", () => {
     expect(
       controlAutomationCollectionContent({
-        items: [item("Manual audit")],
+        items: [
+          {
+            title: "Daily audit",
+            meta: "Scheduled automation · daily 09:00 · Asia/Shanghai",
+            description: "Review the daily queue",
+          },
+        ],
         locale: "en",
       }),
     ).toMatchInlineSnapshot(`
@@ -237,21 +243,21 @@ describe("library collection panel helpers", () => {
             "label": "New automation",
           },
         ],
-        "body": "Automations are managed by Control API and run manually. Scheduling, toggles, and compatibility edits are not offered here.",
+        "body": "Automations are durably scheduled by Control. The current form creates daily schedules, which can also run immediately. Toggles and in-place edits are not offered here.",
         "items": [
           {
-            "description": "Open an automation to run it through Control authority.",
+            "description": "Open an automation to inspect its durable schedule or run it through Control authority.",
             "meta": "1 immutable definition",
             "section": true,
             "title": "Control automations",
           },
           {
-            "description": "Saved record",
-            "meta": "record",
-            "title": "Manual audit",
+            "description": "Review the daily queue",
+            "meta": "Scheduled automation · daily 09:00 · Asia/Shanghai",
+            "title": "Daily audit",
           },
         ],
-        "subtitle": "1 manual automation",
+        "subtitle": "1 Control automation",
       }
     `);
   });
