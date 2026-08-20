@@ -41,7 +41,7 @@ const sidebarSlots: CommandHomeSlots = {
 };
 
 describe("CommandSidebar", () => {
-  it("restores project and schedule navigation over Control-backed surfaces", () => {
+  it("keeps the reference navigation and omits the empty project route", () => {
     const markup = renderToStaticMarkup(
       <CommandSidebar
         activeView="command"
@@ -78,7 +78,7 @@ describe("CommandSidebar", () => {
     }).toEqual({
       hasAbsolutePath: false,
       hasLegacyPathInput: false,
-      hasProjects: true,
+      hasProjects: false,
       hasSchedule: true,
       hasTasksTree: true,
       hasTask: true,

@@ -805,12 +805,8 @@ describe("CommandWorkspace", () => {
     }).toMatchSnapshot();
   });
 
-  /*
-   * The migration-era home presents the recommended task shortcuts before the
-   * composer. A snapshot alone would let a refactor quietly swap them, so the
-   * positions are compared directly.
-   */
-  it("puts the starter cards before the composer", () => {
+  /* The PDF reference puts starter cards immediately below the composer. */
+  it("puts the starter cards after the composer", () => {
     const markup = renderCommandWorkspace();
     const commandHomeMarkup = markup.slice(
       markup.indexOf('data-shell-view="command"'),
@@ -821,7 +817,7 @@ describe("CommandWorkspace", () => {
     const cardsAt = commandHomeMarkup.indexOf('data-od-id="quick-scenarios"');
 
     expect(composerAt).toBeGreaterThan(-1);
-    expect(cardsAt).toBeLessThan(composerAt);
+    expect(cardsAt).toBeGreaterThan(composerAt);
   });
 
   it("drops the recommended-capability line from the home scene", () => {
@@ -840,6 +836,7 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain("current-workspace-thread-list");
     expect(markup).not.toContain("建议任务");
     expect(markup).not.toContain('data-od-id="workspace-node-product"');
+    expect(markup).not.toContain('data-nav-key="projects"');
   });
 
   it("renders a path-free native Workspace selector for Control tasks", () => {

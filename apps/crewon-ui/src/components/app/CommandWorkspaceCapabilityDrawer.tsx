@@ -43,7 +43,7 @@ type ControlToolId =
 const DEFAULT_WORKBENCH_WIDTH = 640;
 const MIN_WORKBENCH_WIDTH = 360;
 const MAX_WORKBENCH_WIDTH = 840;
-const COMMAND_SIDEBAR_WIDTH = 232;
+const COMMAND_SIDEBAR_WIDTH = 192;
 const MIN_COMMAND_AREA_WIDTH = 560;
 const WORKBENCH_KEYBOARD_STEP = 24;
 const WORKBENCH_WIDTH_STORAGE_KEY = "crewon:command-workbench-width";
@@ -299,24 +299,15 @@ export function CommandWorkspaceCapabilityDrawer({
 
   if (!open) {
     return (
-      <nav
-        aria-label={locale === "zh" ? "工作台应用" : "Workbench apps"}
-        className="command-workbench-activity"
+      <button
+        aria-label={locale === "zh" ? "打开工作区工具" : "Open workspace tools"}
+        className="command-workbench-trigger"
+        title={locale === "zh" ? "打开工作区工具" : "Open workspace tools"}
+        type="button"
+        onClick={onOpen}
       >
-        {tools.map((toolId) => (
-          <button
-            aria-label={toolLabel(toolId, locale)}
-            key={toolId}
-            title={toolLabel(toolId, locale)}
-            type="button"
-            onClick={() => {
-              activateTool(toolId);
-            }}
-          >
-            {toolIcon(toolId)}
-          </button>
-        ))}
-      </nav>
+        <PanelRight aria-hidden="true" />
+      </button>
     );
   }
 

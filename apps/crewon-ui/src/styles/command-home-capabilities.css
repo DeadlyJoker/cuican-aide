@@ -1,8 +1,5 @@
 .command-home-capability-strip {
-  display: grid;
-  width: min(720px, 100%);
-  gap: 8px;
-  margin: 0 auto;
+  display: none;
 }
 
 .command-home-summary {
@@ -60,20 +57,18 @@
 }
 
 .screen-shell.command-screen .command-window:not(.sidebar-collapsed) {
-  grid-template-columns: 264px minmax(0, 1fr);
+  grid-template-columns: 192px minmax(0, 1fr);
 }
 
 .screen-shell.command-screen
   .command-home-view:not(.has-command-thread)
   > .workspace-pill {
-  right: 18px;
-  left: auto;
-  max-width: min(360px, calc(100% - 36px));
-  transform: none;
+  display: none !important;
 }
 
 .screen-shell.command-screen .command-home-view:not(.has-command-thread) {
-  justify-content: flex-start;
+  justify-content: center;
+  padding: 24px 32px;
 }
 
 .screen-shell.command-screen
@@ -82,74 +77,165 @@
   position: relative;
   top: auto;
   left: auto;
-  width: min(780px, calc(100% - 80px));
-  margin: 36px auto 0;
-  transform: none;
-  gap: 10px;
+  width: min(598px, calc(100% - 64px));
+  margin: 0 auto;
+  padding: 0;
+  transform: translateY(-4px);
+  gap: 8px;
 }
 
 .screen-shell.command-screen
   .command-home-view:not(.has-command-thread)
   .home-eyebrow {
-  display: inline-flex;
-  margin-bottom: 7px;
-  color: var(--accent);
-  font-size: calc(10px + var(--user-ui-font-delta));
-  font-weight: 700;
-  letter-spacing: 0.14em;
+  display: none;
 }
 
 .screen-shell.command-screen
   .command-home-view:not(.has-command-thread)
   .home-title
   h1 {
-  font-size: calc(34px + var(--user-ui-font-delta));
+  font-size: calc(30px + var(--user-ui-font-delta));
+  line-height: 1.25;
 }
 
 .screen-shell.command-screen
   .command-home-view:not(.has-command-thread)
   .home-title {
-  margin-bottom: -10px;
+  margin-bottom: 4px;
+  transform: translateY(10px);
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .scene-subtitle {
+  margin-top: 8px;
+  font-size: calc(13px + var(--user-ui-font-delta));
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .scene-pills {
+  gap: 6px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  transform: translateY(3px);
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .scene-pill-thumb {
+  top: 0;
+  left: 0;
+  width: calc(
+    (100% - (var(--scene-count, 3) - 1) * 6px) / var(--scene-count, 3)
+  );
+  height: 100%;
+  border-radius: 7px;
+  background: #7187a6;
+  transform: translateX(calc(var(--scene-index, 0) * (100% + 6px)));
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .scene-pills
+  button {
+  min-height: 28px;
+  padding: 0 13px;
+  font-size: calc(12px + var(--user-ui-font-delta));
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .command-input {
+  margin-top: 6px;
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .command-input
+  textarea {
+  min-height: 48px;
+  padding: 12px 14px 4px;
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .command-input
+  .input-tools {
+  height: 39px;
+  min-height: 38px;
+  padding-right: 10px;
+  padding-left: 10px;
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .command-input
+  .composer-state-row {
+  height: 25px;
+  min-height: 25px;
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .command-input
+  .workspace-dropdown,
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .command-input
+  .workspace-dropdown
+  .select-trigger {
+  min-height: 24px;
 }
 
 .screen-shell.command-screen
   .command-home-view:not(.has-command-thread)
   .quick-row {
-  display: flex;
+  display: grid;
   width: 100%;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 8px;
-  margin-top: 0;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 6px;
+  margin-top: 6px;
 }
 
 .screen-shell.command-screen
   .command-home-view:not(.has-command-thread)
   .quick-row
   .quick-card {
-  display: inline-flex;
-  min-height: 32px;
-  align-items: center;
-  padding: 0 14px;
-  border-color: var(--n-300);
-  border-radius: var(--radius-md);
-  background: var(--n-0);
-}
-
-.screen-shell.command-screen
-  .command-home-view:not(.has-command-thread)
-  .quick-card-icon,
-.screen-shell.command-screen
-  .command-home-view:not(.has-command-thread)
-  .quick-card-hint {
-  display: none;
+  display: grid;
+  min-height: 62px;
+  align-content: start;
+  gap: 3px;
+  padding: 7px 10px;
+  border-color: var(--n-250);
+  border-radius: 6px;
+  background: transparent;
 }
 
 .screen-shell.command-screen
   .command-home-view:not(.has-command-thread)
   .quick-card-label {
   font-size: calc(12px + var(--user-ui-font-delta));
-  font-weight: 550;
+  font-weight: 600;
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .quick-card-icon
+  svg {
+  width: 13px;
+  height: 13px;
+}
+
+.screen-shell.command-screen
+  .command-home-view:not(.has-command-thread)
+  .quick-card-hint {
+  overflow: hidden;
+  font-size: calc(10px + var(--user-ui-font-delta));
+  line-height: 1.35;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Keep the command canvas balanced while the real task workbench is open. */

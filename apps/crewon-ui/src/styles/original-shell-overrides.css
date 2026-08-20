@@ -7046,45 +7046,7 @@ body.modal-open {
  * instead of occupying layout.
  */
 .command-shell-route[data-capability-sidebar-open="false"] {
-  grid-template-columns: minmax(0, 1fr) 46px;
-}
-
-.command-workbench-activity {
-  z-index: 30;
-  display: flex;
-  width: 46px;
-  height: 100%;
-  flex-direction: column;
-  align-items: center;
-  gap: 5px;
-  padding: 12px 5px;
-  border-left: 1px solid var(--n-250);
-  background: var(--n-50);
-}
-
-.command-workbench-activity button {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  place-items: center;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--n-650);
-  cursor: pointer;
-}
-
-.command-workbench-activity button:hover,
-.command-workbench-activity button:focus-visible {
-  background: var(--n-150);
-  color: var(--n-950);
-  outline: 0;
-}
-
-.command-workbench-activity svg {
-  width: 18px;
-  height: 18px;
-  stroke-width: 1.75;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .command-capability-sidebar .capability-dock {
@@ -9146,9 +9108,7 @@ body.modal-open {
 }
 
 .command-control-schedule-page .catalog-market-header p {
-  margin: 7px 0 0;
-  color: var(--n-650);
-  font-size: calc(12px + var(--user-ui-font-delta));
+  display: none;
 }
 
 .command-control-schedule-page .catalog-header-actions {
@@ -11026,7 +10986,7 @@ body.modal-open {
 .command-shell-route .command-workbench-trigger {
   position: absolute;
   top: 10px;
-  right: 10px;
+  right: 0;
   z-index: 45;
   display: grid;
   width: 34px;

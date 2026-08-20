@@ -21,7 +21,6 @@ export type ResourceCard = {
 export const shellNavItems: ShellNavItem[] = [
   { key: "command", label: "新建任务", en: "New task" },
   { key: "assist", label: "助理", en: "Assistant" },
-  { key: "projects", label: "项目", en: "Projects" },
   {
     key: "agents",
     label: "智能体",

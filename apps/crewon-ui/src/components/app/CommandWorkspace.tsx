@@ -1858,13 +1858,6 @@ export function CommandWorkspace({
                     mode={sceneMode}
                     preset={scenePreset}
                   />
-                  <CommandSceneQuickRow
-                    locale={locale}
-                    scene={scene}
-                    onQuickAction={(action) =>
-                      prefillScenario(action.prompt, scene, action.mode)
-                    }
-                  />
                 </>
               )}
 
@@ -2188,6 +2181,15 @@ export function CommandWorkspace({
                 onStop={onStop}
                 onSubmit={sendComposerValue}
               />
+              {!showCommandThread && !commandThreadRoom ? (
+                <CommandSceneQuickRow
+                  locale={locale}
+                  scene={scene}
+                  onQuickAction={(action) =>
+                    prefillScenario(action.prompt, scene, action.mode)
+                  }
+                />
+              ) : null}
               {cloudAgentTargetError ? (
                 <div className="composer-inline-error" role="alert">
                   {cloudAgentTargetError}
