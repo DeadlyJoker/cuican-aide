@@ -2240,10 +2240,6 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   background: var(--workbench-bg);
 }
 
-.command-workbench-tab {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .command-task-board-header {
   display: flex;
   align-items: flex-start;
@@ -2390,6 +2386,77 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   text-align: center;
 }
 
+.command-project-board-page {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 18px;
+  padding: 28px 32px 32px;
+}
+
+.command-project-board-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.command-project-board-toolbar span {
+  color: var(--n-600);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.command-project-board-toolbar h2 {
+  margin: 5px 0 3px;
+  color: var(--n-950);
+  font-size: calc(28px + var(--user-ui-font-delta));
+  line-height: 1.1;
+}
+
+.command-project-board-toolbar p {
+  margin: 0;
+  color: var(--n-650);
+  font-size: calc(12px + var(--user-ui-font-delta));
+}
+
+.command-project-board-page > .command-task-board {
+  border: 1px solid var(--n-250);
+  border-radius: 14px;
+  background: var(--n-25);
+}
+
+.command-project-board-page .command-task-board-columns {
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+}
+
+:root[data-theme="light"]
+  .command-project-board-page
+  > .command-task-board {
+  --workbench-bg: #fff;
+  --workbench-surface: #fff;
+  --workbench-raised: #f6f6f6;
+  --workbench-hover: #eee;
+  --workbench-border: #e5e5e5;
+  --workbench-text: #202020;
+  --workbench-muted: #737373;
+  --workbench-faint: #a4a4a4;
+}
+
+@media (max-width: 760px) {
+  .command-project-board-page {
+    gap: 12px;
+    padding: 18px;
+  }
+
+  .command-project-board-toolbar {
+    align-items: flex-start;
+  }
+}
+
 .command-workbench[hidden] {
   display: none !important;
 }
@@ -2509,11 +2576,10 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 
 .command-workbench-tab {
   display: grid;
-  /* Second column holds the 28px close button; a narrower track clipped it. */
-  grid-template-columns: minmax(0, 1fr) 30px;
+  grid-template-columns: minmax(0, 1fr);
   /*
    * Shrinks under pressure rather than forcing the strip wider than the
-   * workbench. The label ellipsizes; the close button keeps its full track.
+   * workbench. The label ellipsizes while the library action remains visible.
    */
   flex: 0 1 auto;
   min-width: 92px;
@@ -2560,6 +2626,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
  * tools at 15px so no icon on that line reads as larger than its neighbours.
  */
 .command-workbench-tab svg,
+.command-workbench-library-button svg,
 .command-workbench-add svg,
 .command-workbench-close svg,
 .command-workbench-maximize svg {
@@ -2570,6 +2637,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 }
 
 .command-workbench-tab-close,
+.command-workbench-library-button,
 .command-workbench-add,
 .command-workbench-close,
 .command-workbench-maximize {
@@ -2596,11 +2664,19 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 }
 
 .command-workbench-tab-close:hover,
+.command-workbench-library-button:hover,
+.command-workbench-library-button:focus-visible,
 .command-workbench-add:hover,
 .command-workbench-close:hover,
 .command-workbench-maximize:hover {
   background: var(--workbench-hover);
   color: var(--workbench-text);
+}
+
+.command-workbench-library-button {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 auto;
 }
 
 .command-workbench-launcher-anchor {
@@ -4073,10 +4149,6 @@ exports[`command workspace conversation style > snapshots the resizable workbenc
   background: var(--workbench-bg);
 }
 
-.command-workbench-tab {
-  grid-template-columns: minmax(0, 1fr);
-}
-
 .command-task-board-header {
   display: flex;
   align-items: flex-start;
@@ -4221,6 +4293,77 @@ exports[`command workspace conversation style > snapshots the resizable workbenc
 .command-task-column-empty {
   margin: auto;
   text-align: center;
+}
+
+.command-project-board-page {
+  display: grid;
+  height: 100%;
+  min-height: 0;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 18px;
+  padding: 28px 32px 32px;
+}
+
+.command-project-board-toolbar {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+.command-project-board-toolbar span {
+  color: var(--n-600);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.command-project-board-toolbar h2 {
+  margin: 5px 0 3px;
+  color: var(--n-950);
+  font-size: calc(28px + var(--user-ui-font-delta));
+  line-height: 1.1;
+}
+
+.command-project-board-toolbar p {
+  margin: 0;
+  color: var(--n-650);
+  font-size: calc(12px + var(--user-ui-font-delta));
+}
+
+.command-project-board-page > .command-task-board {
+  border: 1px solid var(--n-250);
+  border-radius: 14px;
+  background: var(--n-25);
+}
+
+.command-project-board-page .command-task-board-columns {
+  grid-template-columns: repeat(3, minmax(120px, 1fr));
+}
+
+:root[data-theme="light"]
+  .command-project-board-page
+  > .command-task-board {
+  --workbench-bg: #fff;
+  --workbench-surface: #fff;
+  --workbench-raised: #f6f6f6;
+  --workbench-hover: #eee;
+  --workbench-border: #e5e5e5;
+  --workbench-text: #202020;
+  --workbench-muted: #737373;
+  --workbench-faint: #a4a4a4;
+}
+
+@media (max-width: 760px) {
+  .command-project-board-page {
+    gap: 12px;
+    padding: 18px;
+  }
+
+  .command-project-board-toolbar {
+    align-items: flex-start;
+  }
 }
 
 

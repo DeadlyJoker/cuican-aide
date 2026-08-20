@@ -2,7 +2,11 @@ import type { Thread } from "@crewon-ui-model/v2/Thread";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
-import { CommandTaskBoard, commandTaskStage } from "./CommandTaskBoard";
+import {
+  CommandProjectBoardView,
+  CommandTaskBoard,
+  commandTaskStage,
+} from "./CommandTaskBoard";
 
 function thread(
   id: string,
@@ -49,6 +53,25 @@ describe("CommandTaskBoard", () => {
     expect(markup).toContain('data-task-stage="attention"');
     expect(markup).toContain('data-task-stage="ready"');
     expect(markup).toContain('aria-current="true"');
+    expect(markup).toMatchSnapshot();
+  });
+
+  it("renders the migration-era project destination with live tasks", () => {
+    const markup = renderToStaticMarkup(
+      <CommandProjectBoardView
+        active
+        locale="zh"
+        selectedThreadId="active"
+        threads={[thread("active", { type: "active", activeFlags: [] })]}
+        onNewTask={() => undefined}
+        onSelectThread={() => undefined}
+      />,
+    );
+
+    expect(markup).toContain("项目与执行");
+    expect(markup).toContain("按真实会话和运行状态组织");
+    expect(markup).toContain('data-thread-id="active"');
+    expect(markup).not.toMatch(/running 56%|待批准|GitHub MCP 授权/);
     expect(markup).toMatchSnapshot();
   });
 });

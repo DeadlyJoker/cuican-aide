@@ -54,7 +54,7 @@ describe("command Workspace hash routing", () => {
     expect(browser.location.hash).toBe("#view-command");
   });
 
-  it("routes Knowledge hashchange and Agent popstate through Control", () => {
+  it("routes Knowledge hashchange, Agent popstate, and Schedule through Control", () => {
     const browser = routeWindow("#view-command");
     const opened: string[] = [];
     const activeViews: string[] = [];
@@ -70,15 +70,17 @@ describe("command Workspace hash routing", () => {
     browser.events.dispatchEvent(new Event("hashchange"));
     browser.location.hash = "#view-agents";
     browser.events.dispatchEvent(new Event("popstate"));
+    browser.location.hash = "#view-schedule";
+    browser.events.dispatchEvent(new Event("hashchange"));
 
-    expect(opened).toEqual(["knowledge", "agents"]);
-    expect(activeViews).toEqual(["command", "command", "command"]);
+    expect(opened).toEqual(["knowledge", "agents", "automation"]);
+    expect(activeViews).toEqual(["command", "command", "command", "command"]);
     expect(browser.location.hash).toBe("#view-command");
 
     cleanup();
     browser.location.hash = "#view-knowledge";
     browser.events.dispatchEvent(new Event("hashchange"));
-    expect(opened).toEqual(["knowledge", "agents"]);
+    expect(opened).toEqual(["knowledge", "agents", "automation"]);
   });
 
   it("keeps ordinary shell hashes local and canonicalizes catalog views", () => {
@@ -87,6 +89,7 @@ describe("command Workspace hash routing", () => {
       assist: commandShellViewFromHash("#view-assist"),
       knowledge: commandShellViewFromHash("#view-knowledge"),
       projects: commandShellViewFromHash("#view-projects"),
+      schedule: commandShellViewFromHash("#view-schedule"),
       team: commandShellViewFromHash("#view-team"),
       unknown: commandShellViewFromHash("#view-unknown"),
     }).toMatchInlineSnapshot(`
@@ -94,7 +97,8 @@ describe("command Workspace hash routing", () => {
         "agents": "command",
         "assist": "assist",
         "knowledge": "command",
-        "projects": "command",
+        "projects": "projects",
+        "schedule": "command",
         "team": "team",
         "unknown": "command",
       }

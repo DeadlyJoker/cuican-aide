@@ -41,7 +41,7 @@ const sidebarSlots: CommandHomeSlots = {
 };
 
 describe("CommandSidebar", () => {
-  it("renders the Control task tree without cwd or Schedule compatibility", () => {
+  it("restores project and schedule navigation over Control-backed surfaces", () => {
     const markup = renderToStaticMarkup(
       <CommandSidebar
         activeView="command"
@@ -71,13 +71,15 @@ describe("CommandSidebar", () => {
     expect({
       hasAbsolutePath: markup.includes("/Users/private"),
       hasLegacyPathInput: markup.includes("command-workspace-path"),
+      hasProjects: markup.includes("Projects"),
       hasSchedule: markup.includes("Schedule"),
       hasTasksTree: markup.includes('aria-label="Tasks and conversations"'),
       hasTask: markup.includes("Control task"),
     }).toEqual({
       hasAbsolutePath: false,
       hasLegacyPathInput: false,
-      hasSchedule: false,
+      hasProjects: true,
+      hasSchedule: true,
       hasTasksTree: true,
       hasTask: true,
     });

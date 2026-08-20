@@ -666,15 +666,22 @@ describe("CommandWorkspace", () => {
     ).toBe(false);
   });
 
-  it("routes Agent and Knowledge navigation to the Control resource library", () => {
+  it("routes Agent, Knowledge, and Schedule navigation to the Control resource library", () => {
     expect(
-      ["command", "assist", "projects", "agents", "knowledge", "team"].map(
-        (view) =>
-          commandLibraryKindForView(
-            view as Parameters<typeof commandLibraryKindForView>[0],
-          ),
+      [
+        "command",
+        "assist",
+        "projects",
+        "agents",
+        "knowledge",
+        "schedule",
+        "team",
+      ].map((view) =>
+        commandLibraryKindForView(
+          view as Parameters<typeof commandLibraryKindForView>[0],
+        ),
       ),
-    ).toEqual([null, null, null, "agents", "knowledge", null]);
+    ).toEqual([null, null, null, "agents", "knowledge", "automation", null]);
   });
 
   it("inserts slash command tokens without losing mention syntax", () => {
@@ -885,7 +892,7 @@ describe("CommandWorkspace", () => {
       hasNoWorkspace: true,
       hasSafeDisplayName: true,
       hasNativeSelectIntent: true,
-      hasScheduleNav: false,
+      hasScheduleNav: true,
       hasScheduleView: false,
       hasTasksTree: true,
       hasTask: true,
@@ -1275,9 +1282,12 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain(
       "\u4e0a\u4e0b\u6587\u63a5\u8fd1\u4e0a\u9650\u65f6\u81ea\u52a8\u538b\u7f29",
     );
-    expect(markup).toContain("\u5f53\u524d\u4efb\u52a1");
-    expect(markup).toContain("Workflow \u6267\u884c\u961f\u5217");
-    expect(markup).toContain("\u6267\u884c\u72b6\u6001\u673a");
+    expect(markup).toContain("\u9879\u76ee\u4e0e\u6267\u884c");
+    expect(markup).toContain("\u4efb\u52a1\u770b\u677f");
+    expect(markup).toContain(
+      "\u6309\u771f\u5b9e\u4f1a\u8bdd\u548c\u8fd0\u884c\u72b6\u6001\u7ec4\u7ec7",
+    );
+    expect(markup).not.toMatch(/running 56%|GitHub MCP \u6388\u6743/u);
     expect(markup).toContain("\u667a\u80fd\u4f53");
     expect(markup).not.toContain("\u65e5\u7a0b\u5b89\u6392");
     expect(markup).toContain("\u529e\u516c\u5ba4");
