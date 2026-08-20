@@ -599,6 +599,32 @@ export function createRunningCommitFixture(
   };
 }
 
+export function createScopedRunningCommitFixture(
+  runId: string,
+  suffix: string,
+): CommitRunInput {
+  const base = createRunningCommitFixture();
+  return {
+    ...base,
+    idempotency: idempotency(`create-running-run:${suffix}`),
+    events: base.events.map((event) => ({
+      ...event,
+      identity: { runId },
+      eventId: `${event.eventId}:${suffix}`,
+    })),
+    outbox: base.outbox.map((message) => ({
+      ...message,
+      messageId: `${message.messageId}:${suffix}`,
+      runId,
+    })),
+    workItems: base.workItems.map((item) => ({
+      ...item,
+      workItemId: `${item.workItemId}:${suffix}`,
+      runId,
+    })),
+  };
+}
+
 function runListCommit(
   runId: string,
   threadId: string,

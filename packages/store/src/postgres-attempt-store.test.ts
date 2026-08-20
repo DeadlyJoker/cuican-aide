@@ -7,7 +7,10 @@ import { createToolApproval, type ToolApprovalState } from "@crewon/domain";
 import { Pool } from "pg";
 
 import { PostgresDomainStore } from "./postgres-domain-store.ts";
-import { createRunningCommitFixture } from "./run-store-conformance.test-support.ts";
+import {
+  createRunningCommitFixture,
+  createScopedRunningCommitFixture,
+} from "./run-store-conformance.test-support.ts";
 import {
   atomicToolCompletionInput,
   atomicToolUnknownOutcomeInput,
@@ -371,6 +374,92 @@ test(
         ),
         [completed.attempt],
       );
+    } finally {
+      await store.close();
+    }
+  },
+);
+
+test(
+  "isolates the same Step and Attempt number across PostgreSQL Runs",
+  { skip: connectionString === undefined },
+  async () => {
+    const store = await createTestStore(requiredUrl());
+    try {
+      await seedThread(store);
+      await store.commitRun(
+        createScopedRunningCommitFixture("run-scoped-1", "one"),
+      );
+      await store.commitRun(
+        createScopedRunningCommitFixture("run-scoped-2", "two"),
+      );
+      const first = await store.claimNextWorkItem({
+        ownerId: "worker-one",
+        leaseId: "lease-one",
+        leaseDurationMs: 30_000,
+      });
+      const second = await store.claimNextWorkItem({
+        ownerId: "worker-two",
+        leaseId: "lease-two",
+        leaseDurationMs: 30_000,
+      });
+      assert.ok(first !== null && second !== null);
+      const attempts = await Promise.all([
+        store.beginRunAttempt({
+          ...beginInput(first, "shared-node", "attempt-one", "model"),
+          runId: "run-scoped-1",
+        }),
+        store.beginRunAttempt({
+          ...beginInput(second, "shared-node", "attempt-two", "model"),
+          runId: "run-scoped-2",
+        }),
+      ]);
+      assert.deepEqual(
+        attempts.map(({ step, attempt }) => ({
+          runId: step.runId,
+          stepId: step.stepId,
+          attemptNumber: attempt.attemptNumber,
+          attemptId: attempt.attemptId,
+        })),
+        [
+          {
+            runId: "run-scoped-1",
+            stepId: "shared-node",
+            attemptNumber: 1,
+            attemptId: "attempt-one",
+          },
+          {
+            runId: "run-scoped-2",
+            stepId: "shared-node",
+            attemptNumber: 1,
+            attemptId: "attempt-two",
+          },
+        ],
+      );
+    } finally {
+      await store.close();
+    }
+  },
+);
+
+test(
+  "migrates PostgreSQL v5 global Step authority with current Attempt FKs",
+  { skip: connectionString === undefined },
+  async () => {
+    const store = await createTestStore(requiredUrl());
+    try {
+      await store.simulateExecutionV5GlobalStepAuthority();
+      await store.migrate();
+      assert.deepEqual(await store.executionIdentityConstraints(), [
+        {
+          name: "run_attempts_run_step_number_key",
+          definition: "UNIQUE (tenant_id, run_id, step_id, attempt_number)",
+        },
+        {
+          name: "run_steps_pkey",
+          definition: "PRIMARY KEY (tenant_id, run_id, step_id)",
+        },
+      ]);
     } finally {
       await store.close();
     }
@@ -1195,6 +1284,35 @@ class TestPostgresAttemptStore extends PostgresDomainStore {
 
   async simulateExecutionV1(): Promise<void> {
     await this.simulateExecutionSchema(1);
+  }
+
+  async simulateExecutionV5GlobalStepAuthority(): Promise<void> {
+    await this.#admin.query(`
+      ALTER TABLE ${this.#schemaSql}.run_steps DROP CONSTRAINT run_steps_pkey;
+      ALTER TABLE ${this.#schemaSql}.run_steps ADD CONSTRAINT run_steps_pkey
+        PRIMARY KEY (step_id);
+      ALTER TABLE ${this.#schemaSql}.run_attempts DROP CONSTRAINT
+        run_attempts_tenant_id_run_id_step_id_attempt_number_key;
+      ALTER TABLE ${this.#schemaSql}.run_attempts ADD CONSTRAINT
+        run_attempts_tenant_id_step_id_attempt_number_key
+        UNIQUE (tenant_id, step_id, attempt_number);
+      UPDATE ${this.#schemaSql}.schema_migrations SET version=5
+        WHERE component='execution_authority';
+    `);
+  }
+
+  async executionIdentityConstraints() {
+    const result = await this.#admin.query<{
+      name: string;
+      definition: string;
+    }>(`
+      SELECT conname AS name, pg_get_constraintdef(oid) AS definition
+      FROM pg_constraint
+      WHERE connamespace='${this.#schemaSql.slice(1, -1)}'::regnamespace
+        AND conname IN ('run_steps_pkey','run_attempts_run_step_number_key')
+      ORDER BY conname
+    `);
+    return result.rows;
   }
 
   async simulateExecutionSchema(version: number): Promise<void> {

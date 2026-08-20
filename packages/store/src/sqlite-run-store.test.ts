@@ -30,6 +30,7 @@ import {
 
 import {
   createRunningCommitFixture,
+  createScopedRunningCommitFixture,
   ManualLeaseClock,
   registerRunStoreConformance,
   runningStateFixture,
@@ -755,6 +756,108 @@ test("persists Attempt history and links recovery across a SQLite restart", asyn
         retryOfAttemptId: "attempt-before-restart",
         status: "running",
       },
+    ],
+  );
+});
+
+test("migrates global Step authority and isolates the same Step across Runs", async (context) => {
+  const path = temporaryDatabasePath(context);
+  const first = new SqliteRunStore(path);
+  await seedThread(first);
+  await first.commitRun(
+    createScopedRunningCommitFixture("run-scoped-1", "one"),
+  );
+  const firstClaim = await first.claimNextWorkItem({
+    ownerId: "worker-one",
+    leaseId: "lease-one",
+    leaseDurationMs: 30_000,
+  });
+  assert.ok(firstClaim !== null);
+  const firstAttempt = await first.beginRunAttempt({
+    tenantId: "tenant-1",
+    runId: "run-scoped-1",
+    stepId: "shared-node",
+    kind: "workflowNode",
+    attemptId: "attempt-one",
+    lease: {
+      workItemId: firstClaim.workItem.workItemId,
+      ownerId: firstClaim.lease.ownerId,
+      leaseId: firstClaim.lease.leaseId,
+      leaseEpoch: firstClaim.lease.epoch,
+    },
+    startedAt: "2026-08-20T00:00:01.000Z",
+  });
+  await first.close();
+
+  const legacy = new DatabaseSync(path);
+  legacy.exec(`
+    CREATE UNIQUE INDEX legacy_run_steps_global_id ON run_steps(step_id);
+    CREATE UNIQUE INDEX legacy_run_attempt_number
+      ON run_attempts(tenant_id, step_id, attempt_number);
+    PRAGMA user_version = 25;
+  `);
+  legacy.close();
+
+  const migrated = new SqliteRunStore(path);
+  context.after(() => migrated.close());
+  await migrated.commitRun(
+    createScopedRunningCommitFixture("run-scoped-2", "two"),
+  );
+  const secondClaim = await migrated.claimNextWorkItem({
+    ownerId: "worker-two",
+    leaseId: "lease-two",
+    leaseDurationMs: 30_000,
+  });
+  assert.ok(secondClaim !== null);
+  const secondAttempt = await migrated.beginRunAttempt({
+    tenantId: "tenant-1",
+    runId: "run-scoped-2",
+    stepId: "shared-node",
+    kind: "workflowNode",
+    attemptId: "attempt-two",
+    lease: {
+      workItemId: secondClaim.workItem.workItemId,
+      ownerId: secondClaim.lease.ownerId,
+      leaseId: secondClaim.lease.leaseId,
+      leaseEpoch: secondClaim.lease.epoch,
+    },
+    startedAt: "2026-08-20T00:00:02.000Z",
+  });
+
+  assert.deepEqual(
+    [firstAttempt, secondAttempt].map(({ step, attempt }) => ({
+      runId: step.runId,
+      stepId: step.stepId,
+      attemptNumber: attempt.attemptNumber,
+      attemptId: attempt.attemptId,
+    })),
+    [
+      {
+        runId: "run-scoped-1",
+        stepId: "shared-node",
+        attemptNumber: 1,
+        attemptId: "attempt-one",
+      },
+      {
+        runId: "run-scoped-2",
+        stepId: "shared-node",
+        attemptNumber: 1,
+        attemptId: "attempt-two",
+      },
+    ],
+  );
+  const inspected = new DatabaseSync(path);
+  context.after(() => inspected.close());
+  assert.deepEqual(
+    inspected
+      .prepare("PRAGMA table_info(run_steps)")
+      .all()
+      .filter((column) => Number(column.pk) > 0)
+      .map((column) => ({ name: column.name, pk: column.pk })),
+    [
+      { name: "tenant_id", pk: 1 },
+      { name: "run_id", pk: 2 },
+      { name: "step_id", pk: 3 },
     ],
   );
 });
