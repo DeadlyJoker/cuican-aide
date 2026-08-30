@@ -1,0 +1,108 @@
+{
+  "schemaVersion": "crewon.responses-reasoning.v0",
+  "caseId": "AR-042-responses-reasoning",
+  "events": [
+    {
+      "type": "response.created",
+      "sequence_number": 0,
+      "response": { "id": "resp-ar-042" }
+    },
+    {
+      "type": "response.reasoning_summary_part.added",
+      "sequence_number": 1,
+      "summary_index": 0
+    },
+    {
+      "type": "response.reasoning_summary_text.delta",
+      "sequence_number": 2,
+      "summary_index": 0,
+      "delta": "Inspect "
+    },
+    {
+      "type": "response.reasoning_text.delta",
+      "sequence_number": 3,
+      "content_index": 0,
+      "delta": "provider-private"
+    },
+    {
+      "type": "response.reasoning_summary_text.delta",
+      "sequence_number": 4,
+      "summary_index": 0,
+      "delta": "state."
+    },
+    {
+      "type": "response.reasoning_summary_part.added",
+      "sequence_number": 5,
+      "summary_index": 1
+    },
+    {
+      "type": "response.reasoning_summary_text.delta",
+      "sequence_number": 6,
+      "summary_index": 1,
+      "delta": "Answer."
+    },
+    {
+      "type": "response.output_text.delta",
+      "sequence_number": 7,
+      "delta": "done"
+    },
+    {
+      "type": "response.completed",
+      "sequence_number": 8,
+      "response": {
+        "id": "resp-ar-042",
+        "status": "completed",
+        "usage": { "input_tokens": 4, "output_tokens": 2, "total_tokens": 6 }
+      }
+    }
+  ],
+  "expected": {
+    "transportEvents": [
+      { "type": "reasoning.part.added", "channel": "summary", "index": 0 },
+      {
+        "type": "reasoning.delta",
+        "channel": "summary",
+        "index": 0,
+        "delta": "Inspect "
+      },
+      {
+        "type": "reasoning.delta",
+        "channel": "content",
+        "index": 0,
+        "delta": "provider-private"
+      },
+      {
+        "type": "reasoning.delta",
+        "channel": "summary",
+        "index": 0,
+        "delta": "state."
+      },
+      { "type": "reasoning.part.added", "channel": "summary", "index": 1 },
+      {
+        "type": "reasoning.delta",
+        "channel": "summary",
+        "index": 1,
+        "delta": "Answer."
+      },
+      { "type": "output.delta", "delta": "done" },
+      {
+        "type": "usage",
+        "inputTokens": 4,
+        "cachedInputTokens": 0,
+        "outputTokens": 2,
+        "totalTokens": 6
+      },
+      { "type": "completed", "checkpoint": null }
+    ],
+    "canonicalReasoning": [
+      { "kind": "partAdded", "summaryIndex": 0 },
+      { "kind": "delta", "summaryIndex": 0, "delta": "Inspect " },
+      { "kind": "delta", "summaryIndex": 0, "delta": "state." },
+      { "kind": "partAdded", "summaryIndex": 1 },
+      { "kind": "delta", "summaryIndex": 1, "delta": "Answer." }
+    ],
+    "completedHistory": [
+      { "type": "message", "role": "assistant", "content": "done" }
+    ]
+  }
+}

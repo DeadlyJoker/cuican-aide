@@ -4,11 +4,11 @@ use std::fmt;
 use std::io;
 use std::sync::Arc;
 
-use codex_exec_server::ExecutorFileSystem;
-use codex_exec_server::LOCAL_FS;
-use codex_protocol::protocol::Product;
-use codex_protocol::protocol::SkillScope;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_exec_server::ExecutorFileSystem;
+use crewon_exec_server::LOCAL_FS;
+use crewon_protocol::protocol::Product;
+use crewon_protocol::protocol::SkillScope;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct SkillMetadata {
@@ -51,7 +51,7 @@ impl SkillMetadata {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct SkillPolicy {
     pub allow_implicit_invocation: Option<bool>,
-    // TODO: Enforce product gating in Codex skill selection/injection instead of only parsing and
+    // TODO: Enforce product gating in Crewon skill selection/injection instead of only parsing and
     // storing this metadata.
     pub products: Vec<Product>,
 }

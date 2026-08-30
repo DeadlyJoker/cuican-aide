@@ -1,5 +1,5 @@
 [package]
-name = "codex-async-utils"
+name = "crewon-async-utils"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -16,4 +16,5 @@ tokio-util.workspace = true
 pretty_assertions.workspace = true
 
 [lib]
+name = "crewon_async_utils"
 doctest = false

@@ -1,0 +1,622 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ApprovalRef": {
+      "properties": {
+        "actionDigest": {
+          "type": "string"
+        },
+        "approvalId": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "status": {
+          "$ref": "#/definitions/ApprovalStatus"
+        }
+      },
+      "required": [
+        "actionDigest",
+        "approvalId",
+        "status"
+      ],
+      "type": "object"
+    },
+    "ApprovalStatus": {
+      "enum": [
+        "pending",
+        "approved",
+        "denied",
+        "expired",
+        "consumed"
+      ],
+      "type": "string"
+    },
+    "ArtifactKind": {
+      "enum": [
+        "file",
+        "image",
+        "report",
+        "evidence",
+        "toolResult"
+      ],
+      "type": "string"
+    },
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/definitions/ArtifactKind"
+        },
+        "retention": {
+          "$ref": "#/definitions/RetentionClass"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "taskId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactId",
+        "createdAt",
+        "kind",
+        "retention",
+        "revision",
+        "taskId"
+      ],
+      "type": "object"
+    },
+    "AutomationRef": {
+      "properties": {
+        "automationId": {
+          "type": "string"
+        },
+        "nextRunAt": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "scheduleRevision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "automationId",
+        "scheduleRevision"
+      ],
+      "type": "object"
+    },
+    "CredentialRef": {
+      "properties": {
+        "credentialId": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "format": "int64",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "scope": {
+          "$ref": "#/definitions/CredentialScope"
+        },
+        "status": {
+          "$ref": "#/definitions/CredentialStatus"
+        }
+      },
+      "required": [
+        "credentialId",
+        "providerId",
+        "revision",
+        "scope",
+        "status"
+      ],
+      "type": "object"
+    },
+    "CredentialScope": {
+      "enum": [
+        "user",
+        "space",
+        "service"
+      ],
+      "type": "string"
+    },
+    "CredentialStatus": {
+      "enum": [
+        "available",
+        "expired",
+        "revoked",
+        "unavailable"
+      ],
+      "type": "string"
+    },
+    "ExecutionLocation": {
+      "enum": [
+        "localNode",
+        "provider"
+      ],
+      "type": "string"
+    },
+    "PlatformErrorCode": {
+      "enum": [
+        "invalidRequest",
+        "unauthorized",
+        "forbidden",
+        "notFound",
+        "conflict",
+        "capabilityUnsupported",
+        "providerUnavailable",
+        "timeout",
+        "unknownOutcome",
+        "internal"
+      ],
+      "type": "string"
+    },
+    "PlatformErrorRef": {
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/PlatformErrorCode"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "traceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "retryable",
+        "traceId"
+      ],
+      "type": "object"
+    },
+    "ProviderCapabilityKind": {
+      "enum": [
+        "durableRun",
+        "resumableEvents",
+        "persistentConversation",
+        "remoteAgent",
+        "remoteTool",
+        "remoteKnowledge",
+        "remoteWorkflow",
+        "approval",
+        "toolResult"
+      ],
+      "type": "string"
+    },
+    "ProviderConnectionStatus": {
+      "enum": [
+        "connected",
+        "disconnected",
+        "degraded"
+      ],
+      "type": "string"
+    },
+    "ProviderKind": {
+      "enum": [
+        "local",
+        "agentPlatform"
+      ],
+      "type": "string"
+    },
+    "ProviderRef": {
+      "properties": {
+        "capabilities": {
+          "items": {
+            "$ref": "#/definitions/ProviderCapabilityKind"
+          },
+          "type": "array"
+        },
+        "kind": {
+          "$ref": "#/definitions/ProviderKind"
+        },
+        "providerId": {
+          "type": "string"
+        },
+        "status": {
+          "$ref": "#/definitions/ProviderConnectionStatus"
+        }
+      },
+      "required": [
+        "capabilities",
+        "kind",
+        "providerId",
+        "status"
+      ],
+      "type": "object"
+    },
+    "RequestIdentityRef": {
+      "properties": {
+        "actorId": {
+          "type": "string"
+        },
+        "sessionId": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tenantId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "traceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "actorId",
+        "sessionId",
+        "traceId"
+      ],
+      "type": "object"
+    },
+    "ResourceBindingMode": {
+      "enum": [
+        "remoteReference",
+        "localSnapshot",
+        "localFork",
+        "providerManaged"
+      ],
+      "type": "string"
+    },
+    "ResourceBindingRef": {
+      "properties": {
+        "bindingId": {
+          "type": "string"
+        },
+        "executionLocation": {
+          "$ref": "#/definitions/ExecutionLocation"
+        },
+        "mode": {
+          "$ref": "#/definitions/ResourceBindingMode"
+        },
+        "resource": {
+          "$ref": "#/definitions/ResourceRef"
+        },
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bindingId",
+        "executionLocation",
+        "mode",
+        "resource",
+        "workspaceKey"
+      ],
+      "type": "object"
+    },
+    "ResourceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "providerId": {
+          "type": "string"
+        },
+        "resourceId": {
+          "type": "string"
+        },
+        "resourceType": {
+          "$ref": "#/definitions/ResourceType"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId",
+        "resourceId",
+        "resourceType",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "ResourceType": {
+      "enum": [
+        "agent",
+        "skill",
+        "mcpServer",
+        "mcpTool",
+        "knowledgeBase",
+        "workflow"
+      ],
+      "type": "string"
+    },
+    "RetentionClass": {
+      "enum": [
+        "session",
+        "task",
+        "userManaged",
+        "compliance"
+      ],
+      "type": "string"
+    },
+    "TaskAuthorityKind": {
+      "enum": [
+        "localAppServer",
+        "cloudTaskControl"
+      ],
+      "type": "string"
+    },
+    "TaskEventRef": {
+      "properties": {
+        "attemptId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "eventId": {
+          "type": "string"
+        },
+        "eventType": {
+          "$ref": "#/definitions/TaskEventType"
+        },
+        "streamOffset": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "workerSequence": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "createdAt",
+        "eventId",
+        "eventType",
+        "streamOffset",
+        "taskId"
+      ],
+      "type": "object"
+    },
+    "TaskEventType": {
+      "enum": [
+        "accepted",
+        "started",
+        "progressed",
+        "suspended",
+        "resumed",
+        "completed",
+        "failed",
+        "cancelled",
+        "reconcileRequired"
+      ],
+      "type": "string"
+    },
+    "TaskRef": {
+      "properties": {
+        "authority": {
+          "$ref": "#/definitions/TaskAuthorityKind"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/definitions/TaskStatus"
+        },
+        "strategy": {
+          "$ref": "#/definitions/TaskStrategyKind"
+        },
+        "streamOffset": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "taskId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "authority",
+        "revision",
+        "status",
+        "strategy",
+        "streamOffset",
+        "taskId"
+      ],
+      "type": "object"
+    },
+    "TaskStatus": {
+      "enum": [
+        "created",
+        "queued",
+        "running",
+        "suspended",
+        "completed",
+        "failed",
+        "cancelled",
+        "unknown"
+      ],
+      "type": "string"
+    },
+    "TaskStrategyKind": {
+      "enum": [
+        "single",
+        "office",
+        "workflow",
+        "experts",
+        "automation"
+      ],
+      "type": "string"
+    },
+    "TeamRef": {
+      "properties": {
+        "leaderAgentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "strategy": {
+          "$ref": "#/definitions/TaskStrategyKind"
+        },
+        "teamId": {
+          "type": "string"
+        },
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "revision",
+        "strategy",
+        "teamId",
+        "workspaceKey"
+      ],
+      "type": "object"
+    },
+    "WorkspaceRef": {
+      "properties": {
+        "bindingId": {
+          "type": "string"
+        },
+        "environmentId": {
+          "type": "string"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/definitions/WorkspaceScope"
+        },
+        "scopeId": {
+          "type": "string"
+        },
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bindingId",
+        "environmentId",
+        "nodeId",
+        "scope",
+        "scopeId",
+        "workspaceKey"
+      ],
+      "type": "object"
+    },
+    "WorkspaceScope": {
+      "enum": [
+        "conversation",
+        "office",
+        "workflow",
+        "automation"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "approval": {
+      "$ref": "#/definitions/ApprovalRef"
+    },
+    "artifact": {
+      "$ref": "#/definitions/ArtifactRef"
+    },
+    "automation": {
+      "$ref": "#/definitions/AutomationRef"
+    },
+    "credential": {
+      "$ref": "#/definitions/CredentialRef"
+    },
+    "error": {
+      "$ref": "#/definitions/PlatformErrorRef"
+    },
+    "event": {
+      "$ref": "#/definitions/TaskEventRef"
+    },
+    "identity": {
+      "$ref": "#/definitions/RequestIdentityRef"
+    },
+    "provider": {
+      "$ref": "#/definitions/ProviderRef"
+    },
+    "resourceBinding": {
+      "$ref": "#/definitions/ResourceBindingRef"
+    },
+    "schemaVersion": {
+      "type": "string"
+    },
+    "task": {
+      "$ref": "#/definitions/TaskRef"
+    },
+    "team": {
+      "$ref": "#/definitions/TeamRef"
+    },
+    "workspace": {
+      "$ref": "#/definitions/WorkspaceRef"
+    }
+  },
+  "required": [
+    "approval",
+    "artifact",
+    "automation",
+    "credential",
+    "error",
+    "event",
+    "identity",
+    "provider",
+    "resourceBinding",
+    "schemaVersion",
+    "task",
+    "team",
+    "workspace"
+  ],
+  "title": "PlatformContract",
+  "type": "object"
+}

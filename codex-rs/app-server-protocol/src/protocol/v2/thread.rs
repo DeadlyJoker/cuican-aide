@@ -10,18 +10,18 @@ use super::Turn;
 use super::TurnEnvironmentParams;
 use super::TurnItemsView;
 use super::shared::v2_enum_from_core;
-use codex_experimental_api_macros::ExperimentalApi;
-pub use codex_protocol::capabilities::CapabilityRootLocation;
-pub use codex_protocol::capabilities::SelectedCapabilityRoot;
-use codex_protocol::config_types::CollaborationMode;
-use codex_protocol::config_types::Personality;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::ThreadGoalStatus as CoreThreadGoalStatus;
-use codex_protocol::protocol::TokenUsage as CoreTokenUsage;
-use codex_protocol::protocol::TokenUsageInfo as CoreTokenUsageInfo;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_experimental_api_macros::ExperimentalApi;
+pub use crewon_protocol::capabilities::CapabilityRootLocation;
+pub use crewon_protocol::capabilities::SelectedCapabilityRoot;
+use crewon_protocol::config_types::CollaborationMode;
+use crewon_protocol::config_types::Personality;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::protocol::ThreadGoalStatus as CoreThreadGoalStatus;
+use crewon_protocol::protocol::TokenUsage as CoreTokenUsage;
+use crewon_protocol::protocol::TokenUsageInfo as CoreTokenUsageInfo;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -95,6 +95,10 @@ impl<'de> Deserialize<'de> for DynamicToolSpec {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct ThreadStartParams {
+    /// Establish the first server-owned Provider resource authority for this new thread.
+    #[experimental("thread/start.executionContext")]
+    #[ts(optional = nullable)]
+    pub execution_context: Option<super::ThreadExecutionContextCreateParams>,
     #[ts(optional = nullable)]
     pub model: Option<String>,
     #[ts(optional = nullable)]
@@ -159,13 +163,17 @@ pub struct ThreadStartParams {
     #[experimental("thread/start.selectedCapabilityRoots")]
     #[ts(optional = nullable)]
     pub selected_capability_roots: Option<Vec<SelectedCapabilityRoot>>,
+    /// Server-resolved scene and execution target for the new thread.
+    #[experimental("thread/start.scene")]
+    #[ts(optional = nullable)]
+    pub scene: Option<super::ThreadSceneSelectionParams>,
     /// Test-only experimental field used to validate experimental gating and
     /// schema filtering behavior in a stable way.
     #[experimental("thread/start.mockExperimentalField")]
     #[ts(optional = nullable)]
     pub mock_experimental_field: Option<String>,
     /// If true, opt into emitting raw Responses API items on the event stream.
-    /// This is for internal use only (e.g. Codex Cloud).
+    /// This is for internal use only (e.g. Crewon Cloud).
     #[experimental("thread/start.experimentalRawEvents")]
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub experimental_raw_events: bool,
@@ -193,6 +201,10 @@ pub struct MockExperimentalMethodResponse {
 #[ts(export_to = "v2/")]
 pub struct ThreadStartResponse {
     pub thread: Thread,
+    /// Server-owned Provider resource authority established for this thread.
+    #[experimental("thread/start.executionContext")]
+    #[serde(default)]
+    pub execution_context: Option<super::ThreadExecutionContext>,
     pub model: String,
     pub model_provider: String,
     pub service_tier: Option<String>,
@@ -218,6 +230,10 @@ pub struct ThreadStartResponse {
     #[serde(default)]
     pub active_permission_profile: Option<ActivePermissionProfile>,
     pub reasoning_effort: Option<ReasoningEffort>,
+    /// Server-resolved scene identity persisted with this thread.
+    #[experimental("thread/start.sceneRuntime")]
+    #[serde(default)]
+    pub scene_runtime: Option<super::ThreadSceneRuntime>,
 }
 
 #[derive(
@@ -407,6 +423,10 @@ pub struct ThreadResumeParams {
 #[ts(export_to = "v2/")]
 pub struct ThreadResumeResponse {
     pub thread: Thread,
+    /// Existing server-owned Provider resource authority restored for this thread.
+    #[experimental("thread/resume.executionContext")]
+    #[serde(default)]
+    pub execution_context: Option<super::ThreadExecutionContext>,
     pub model: String,
     pub model_provider: String,
     pub service_tier: Option<String>,
@@ -432,6 +452,10 @@ pub struct ThreadResumeResponse {
     #[serde(default)]
     pub active_permission_profile: Option<ActivePermissionProfile>,
     pub reasoning_effort: Option<ReasoningEffort>,
+    /// Server-resolved scene identity restored with this thread.
+    #[experimental("thread/resume.sceneRuntime")]
+    #[serde(default)]
+    pub scene_runtime: Option<super::ThreadSceneRuntime>,
     /// `thread/turns/list` page returned when requested by `initialTurnsPage`.
     #[experimental("thread/resume.initialTurnsPage")]
     #[serde(default)]
@@ -487,6 +511,11 @@ impl From<ThreadTurnsListResponse> for TurnsPage {
 /// Prefer using thread_id whenever possible.
 pub struct ThreadForkParams {
     pub thread_id: String,
+
+    /// Establish a new server-owned Provider resource authority for the fork.
+    #[experimental("thread/fork.executionContext")]
+    #[ts(optional = nullable)]
+    pub execution_context: Option<super::ThreadExecutionContextCreateParams>,
 
     /// [UNSTABLE] Specify the rollout path to fork from.
     /// If specified, the thread_id param will be ignored.
@@ -555,6 +584,10 @@ pub struct ThreadForkParams {
 #[ts(export_to = "v2/")]
 pub struct ThreadForkResponse {
     pub thread: Thread,
+    /// Server-owned Provider resource authority established for the fork.
+    #[experimental("thread/fork.executionContext")]
+    #[serde(default)]
+    pub execution_context: Option<super::ThreadExecutionContext>,
     pub model: String,
     pub model_provider: String,
     pub service_tier: Option<String>,
@@ -580,6 +613,10 @@ pub struct ThreadForkResponse {
     #[serde(default)]
     pub active_permission_profile: Option<ActivePermissionProfile>,
     pub reasoning_effort: Option<ReasoningEffort>,
+    /// Server-resolved scene identity inherited by the fork.
+    #[experimental("thread/fork.sceneRuntime")]
+    #[serde(default)]
+    pub scene_runtime: Option<super::ThreadSceneRuntime>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -719,8 +756,8 @@ pub struct ThreadGoal {
     pub updated_at: i64,
 }
 
-impl From<codex_protocol::protocol::ThreadGoal> for ThreadGoal {
-    fn from(value: codex_protocol::protocol::ThreadGoal) -> Self {
+impl From<crewon_protocol::protocol::ThreadGoal> for ThreadGoal {
+    fn from(value: crewon_protocol::protocol::ThreadGoal) -> Self {
         Self {
             thread_id: value.thread_id.to_string(),
             objective: value.objective,
@@ -859,10 +896,10 @@ impl ThreadMemoryMode {
         }
     }
 
-    pub fn to_core(self) -> codex_protocol::protocol::ThreadMemoryMode {
+    pub fn to_core(self) -> crewon_protocol::protocol::ThreadMemoryMode {
         match self {
-            Self::Enabled => codex_protocol::protocol::ThreadMemoryMode::Enabled,
-            Self::Disabled => codex_protocol::protocol::ThreadMemoryMode::Disabled,
+            Self::Enabled => crewon_protocol::protocol::ThreadMemoryMode::Enabled,
+            Self::Disabled => crewon_protocol::protocol::ThreadMemoryMode::Disabled,
         }
     }
 }
@@ -926,7 +963,7 @@ pub struct ThreadShellCommandResponse {}
 #[ts(export_to = "v2/")]
 pub struct ThreadApproveGuardianDeniedActionParams {
     pub thread_id: String,
-    /// Serialized `codex_protocol::protocol::GuardianAssessmentEvent`.
+    /// Serialized `crewon_protocol::protocol::GuardianAssessmentEvent`.
     pub event: JsonValue,
 }
 
@@ -1016,9 +1053,9 @@ pub struct ThreadRollbackParams {
 pub struct ThreadRollbackResponse {
     /// The updated thread after applying the rollback, with `turns` populated.
     ///
-    /// The ThreadItems stored in each Turn are lossy since we explicitly do not
-    /// persist all agent interactions, such as command executions. This is the same
-    /// behavior as `thread/resume`.
+    /// The ThreadItems stored in each Turn are lossy for some interaction kinds.
+    /// Agent command executions are retained (with truncated output); user-shell
+    /// bang commands are still omitted. This matches `thread/resume`.
     pub thread: Thread,
 }
 
@@ -1043,7 +1080,7 @@ pub struct ThreadListParams {
     #[ts(optional = nullable)]
     pub model_providers: Option<Vec<String>>,
     /// Optional source filter; when set, only sessions from these source kinds
-    /// are returned. When omitted or empty, defaults to interactive sources.
+    /// are returned. When omitted or empty, defaults to client sessions.
     #[ts(optional = nullable)]
     pub source_kinds: Option<Vec<ThreadSourceKind>>,
     /// Optional archived filter; when set to true, only archived threads are returned.
@@ -1081,7 +1118,7 @@ pub struct ThreadSearchParams {
     #[ts(optional = nullable)]
     pub sort_direction: Option<SortDirection>,
     /// Optional source filter; when set, only sessions from these source kinds
-    /// are returned. When omitted or empty, defaults to interactive sources.
+    /// are returned. When omitted or empty, defaults to client sessions.
     #[ts(optional = nullable)]
     pub source_kinds: Option<Vec<ThreadSourceKind>>,
     /// Optional archived filter; when set to true, only archived threads are returned.
@@ -1103,7 +1140,10 @@ pub enum ThreadListCwdFilter {
 #[serde(rename_all = "camelCase")]
 #[ts(rename_all = "camelCase", export_to = "v2/")]
 pub enum ThreadSourceKind {
-    Cli,
+    /// Legacy source value for threads created before terminal CLI removal.
+    #[serde(rename = "cli")]
+    #[ts(rename = "cli")]
+    LegacyCli,
     #[serde(rename = "vscode")]
     #[ts(rename = "vscode")]
     VsCode,

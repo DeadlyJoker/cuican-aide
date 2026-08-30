@@ -1,0 +1,39 @@
+# W2-02 Tasks
+
+- [x] A1 审计 AgentRuntime/Workflow 当前执行、异常、取消、幂等和恢复能力。
+- [x] A2 冻结 at-most-once admission、unknown outcome、事件连续性和分阶段边界。
+- [x] B1 添加 lifecycle schema 与数据库约束。
+- [x] B2 建立 fake executor 和 outbox processor Harness。
+- [x] B3 覆盖 duplicate claim/event、restart/crash、cursor/gap、cancel/terminal race。
+- [x] B4 覆盖 suspend/resume approval/tool-result digest/idempotency。
+- [x] C1 实现 transaction-internal owned-run authorizer。
+- [x] C2 实现 event append/list、state transition 和 terminal CAS。
+- [x] C3 实现 outbox claim/execute/recovery，保证非 queued Attempt 永不重启。
+- [x] C4 实现 capability fail-closed。
+- [x] D1 运行目标 pytest 与 W0/W2 contract regressions。
+- [x] D2 运行 ruff、mypy、schema/secret/call-site/static checks。
+- [x] E1 W2-02B 实现 RS256 service credential + signed delegation verifier/dependency。
+- [x] E1.1 W2-02B 实现 exact ProviderExecutionMaterialization 与 Catalog/Permission resolver。
+- [x] E1.2 W2-02B 升级 Provider Contract v3：signed taskId + strict ArtifactRef contextRefs。
+- [x] E1.3 W2-02B 实现 bounded Provider Artifact import/read/storage Harness。
+- [x] E2.1 W2-02B 实现未注册 strict Provider v3 HTTP sub-app、bounded parser、canonical error boundary 与 raw Artifact HTTP Harness。
+- [x] E2.2 W2-02B 实现 atomic application port：start 同事务锁定 exact revision 并 admission，修复 SQLite savepoint 提前提交风险。
+- [x] E2.3 W2-02B 实现 worker supervisor 与 stale recovery / bounded shutdown Harness。
+- [x] E2.4 W2-02B 实现 worker context Artifact digest/size/UTF-8 二次校验读取。
+- [x] E2.5 W2-02B 实现显式 Permission Service URL/secret、禁重定向和 bounded response 的专用 HTTP adapter。
+- [x] E2.6 W2-02B 实现 output Artifact 内部 owner 提交与 ProviderAgentExecutor 闭环；completed 只能引用已激活 Artifact。
+- [x] E2.7 W2-02B materialize exact personal/NewAPI model route；secret 只在执行时按 route id 解密，允许 secret rotation、拒绝 identity/config drift。
+- [x] E2.8 W2-02B 实现 immutable AgentRuntime runner；只使用 persisted Agent spec、verified context 和 exact model credential，不回读 mutable Agent 配置。
+- [x] E2.9 W2-02B 实现同 worker affinity 的并发 cancellation loop、单次 runtime 子任务取消和取消后继续 dispatch Harness。
+- [x] E2.10 W2-02B existing Run/Artifact 授权脱离 hard-deleted Catalog，改用 persisted materialization + current space:read。
+- [x] E2 W2-02B 以默认关闭 feature gate 条件式注册 Provider API、worker 和真实 Agent 窄 adapter；配置缺失 fail-fast。
+- [x] E2.11 W2-02C 增加独立 signed discovery delegation，不能用 exact Run delegation、通配 Resource 或旧用户 access token 代替。
+- [x] E2.12 W2-02C 增加 authenticated Provider descriptor/capability 与 exact AgentVersion resource list/read；分页、权限调用、payload 和 manifest digest 必须有硬上限。
+- [x] E2.13 W2-02C 增加 discovery HTTP/application/catalog Harness；证明旧 `/api/v1/open` 与 mutable CrewON catalog 不被调用，未知资源类型/capability/cursor fail-closed。
+- [x] E2.14 P2a 在 CrewON 实现未注册 RS256 service/delegation/discovery 发行器与跨服务 verifier 兼容 Harness。
+- [x] E2.15a P2b-1 建立 authenticated principal 到 canonical Agent Platform `user:<positive integer>`、tenant/space 的 durable server-owned mapping kernel、CAS/revoke/reopen/concurrency Harness；保持未接线。
+- [x] E2.15b1 P2b-2a 实现 authenticated principal + exact CredentialOwner + active mapping internal resolver，并构造 P2a identity；保持未接线。
+- [x] E2.15b2 P2b-2b 接入 Agent Platform authoritative exact resolve/read、terminal revoke 与 freshness Gate；session/JTI revoke 由 P1c 负责。
+- [x] E3a W2-02B 隔离 live smoke 与清理：descriptor/list/read、start/read/events、真实 HTTP 模型调用、MinIO output 与鉴权下载。
+- [x] E3b1 隔离 production composition 的运行中 cancel、同 worker 后续执行、worker crash/restart、unknownOutcome 与 idempotent replay 故障演练。
+- [ ] E3b2 生产候选 keyset 供应/轮换、完整服务配置与真实云模型调用验收。

@@ -1,40 +1,4 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
-use codex_api::WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY;
-use codex_api::WS_REQUEST_HEADER_TRACESTATE_CLIENT_METADATA_KEY;
-use codex_core::ModelClient;
-use codex_core::ModelClientSession;
-use codex_core::Prompt;
-use codex_core::ResponseEvent;
-use codex_core::X_RESPONSESAPI_INCLUDE_TIMING_METRICS_HEADER;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::WireApi;
-use codex_otel::MetricsClient;
-use codex_otel::MetricsConfig;
-use codex_otel::SessionTelemetry;
-use codex_otel::TelemetryAuthMode;
-use codex_otel::current_span_w3c_trace_context;
-use codex_protocol::SessionId;
-use codex_protocol::ThreadId;
-use codex_protocol::account::PlanType;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::config_types::ServiceTier;
-use codex_protocol::models::BaseInstructions;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::W3cTraceContext;
-use codex_protocol::user_input::UserInput;
-use codex_rollout_trace::ConversationPart;
-use codex_rollout_trace::InferenceTraceContext;
-use codex_rollout_trace::RawTraceEventPayload;
-use codex_rollout_trace::TraceWriter;
-use codex_rollout_trace::replay_bundle;
 use core_test_support::load_default_config_for_test;
 use core_test_support::responses::WebSocketConnectionConfig;
 use core_test_support::responses::WebSocketTestServer;
@@ -44,12 +8,49 @@ use core_test_support::responses::ev_response_created;
 use core_test_support::responses::start_websocket_server;
 use core_test_support::responses::start_websocket_server_with_headers;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::tracing::install_test_tracing;
 use core_test_support::wait_for_event;
+use crewon_api::WS_REQUEST_HEADER_TRACEPARENT_CLIENT_METADATA_KEY;
+use crewon_api::WS_REQUEST_HEADER_TRACESTATE_CLIENT_METADATA_KEY;
+use crewon_core::ModelClient;
+use crewon_core::ModelClientSession;
+use crewon_core::Prompt;
+use crewon_core::ResponseEvent;
+use crewon_core::X_RESPONSESAPI_INCLUDE_TIMING_METRICS_HEADER;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::WireApi;
+use crewon_otel::MetricsClient;
+use crewon_otel::MetricsConfig;
+use crewon_otel::SessionTelemetry;
+use crewon_otel::TelemetryAuthMode;
+use crewon_otel::current_span_w3c_trace_context;
+use crewon_protocol::SessionId;
+use crewon_protocol::ThreadId;
+use crewon_protocol::account::PlanType;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::config_types::ServiceTier;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::W3cTraceContext;
+use crewon_protocol::user_input::UserInput;
+use crewon_rollout_trace::ConversationPart;
+use crewon_rollout_trace::InferenceTraceContext;
+use crewon_rollout_trace::RawTraceEventPayload;
+use crewon_rollout_trace::TraceWriter;
+use crewon_rollout_trace::replay_bundle;
 use futures::StreamExt;
 use opentelemetry_sdk::metrics::InMemoryMetricExporter;
 use pretty_assertions::assert_eq;
+use serde_json::Value;
 use serde_json::json;
 use std::sync::Arc;
 use std::time::Duration;
@@ -149,7 +150,7 @@ async fn responses_websocket_streams_request() {
     );
     assert_eq!(
         handshake.header(USER_AGENT_HEADER),
-        Some(codex_login::default_client::get_codex_user_agent())
+        Some(crewon_login::default_client::get_crewon_user_agent())
     );
     assert_eq!(
         body["client_metadata"]["x-codex-installation-id"].as_str(),
@@ -231,7 +232,7 @@ async fn responses_websocket_reuses_connection_with_per_turn_trace_payloads() {
     assert_eq!(server.handshakes().len(), 1);
     assert_eq!(
         server.single_handshake().header(USER_AGENT_HEADER),
-        Some(codex_login::default_client::get_codex_user_agent())
+        Some(crewon_login::default_client::get_crewon_user_agent())
     );
     let connection = server.single_connection();
     assert_eq!(connection.len(), 2);
@@ -320,7 +321,7 @@ async fn responses_websocket_preconnect_reuses_connection() {
     assert_eq!(server.handshakes().len(), 1);
     assert_eq!(
         server.single_handshake().header(USER_AGENT_HEADER),
-        Some(codex_login::default_client::get_codex_user_agent())
+        Some(crewon_login::default_client::get_crewon_user_agent())
     );
     assert_eq!(server.single_handshake().header("x-codex-window-id"), None);
     let connection = server.single_connection();
@@ -360,7 +361,7 @@ async fn responses_websocket_request_prewarm_reuses_connection() {
     assert_eq!(server.handshakes().len(), 1);
     assert_eq!(
         server.single_handshake().header(USER_AGENT_HEADER),
-        Some(codex_login::default_client::get_codex_user_agent())
+        Some(crewon_login::default_client::get_crewon_user_agent())
     );
     let connection = server.single_connection();
     assert_eq!(connection.len(), 2);
@@ -625,7 +626,7 @@ async fn responses_websocket_preconnect_is_reused_even_with_header_changes() {
             harness.summary,
             /*service_tier*/ None,
             /*turn_metadata_header*/ None,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("websocket stream failed");
@@ -678,7 +679,7 @@ async fn responses_websocket_request_prewarm_is_reused_even_with_header_changes(
             harness.summary,
             /*service_tier*/ None,
             /*turn_metadata_header*/ None,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("websocket stream failed");
@@ -859,6 +860,14 @@ async fn responses_websocket_v2_requests_use_v2_when_provider_supports_websocket
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn responses_websocket_v2_incremental_requests_are_reused_across_turns() {
     skip_if_no_network!();
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/websocket-transport.reference.json"
+    )
+    .expect("resolve AR-011 WebSocket fixture");
+    let reference: Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-011 WebSocket fixture"),
+    )
+    .expect("parse AR-011 WebSocket fixture");
 
     let server = start_websocket_server(vec![vec![
         vec![
@@ -886,9 +895,18 @@ async fn responses_websocket_v2_incremental_requests_are_reused_across_turns() {
     let mut client_session = harness.client.new_session();
     stream_until_complete(&mut client_session, &harness, &prompt_two).await;
 
-    assert_eq!(server.handshakes().len(), 1);
+    assert_eq!(
+        server.handshakes().len(),
+        reference["incremental"]["connectionCount"]
+            .as_u64()
+            .expect("AR-011 connection count") as usize
+    );
     let connection = server.single_connection();
     assert_eq!(connection.len(), 2);
+    let first = connection
+        .first()
+        .expect("missing first request")
+        .body_json();
     let second = connection.get(1).expect("missing request").body_json();
     assert_eq!(second["type"].as_str(), Some("response.create"));
     assert_eq!(second["previous_response_id"].as_str(), Some("resp-1"));
@@ -896,8 +914,45 @@ async fn responses_websocket_v2_incremental_requests_are_reused_across_turns() {
         second["input"],
         serde_json::to_value(&prompt_two.input[2..]).unwrap()
     );
+    let candidate = json!({
+        "caseId": reference["incremental"]["caseId"],
+        "connectionCount": server.handshakes().len(),
+        "firstRequest": normalized_incremental_request(&first),
+        "secondRequest": normalized_incremental_request(&second),
+    });
+    assert_eq!(candidate, reference["incremental"]);
 
     server.shutdown().await;
+}
+
+fn normalized_incremental_request(body: &Value) -> Value {
+    let input = body["input"]
+        .as_array()
+        .expect("WebSocket request input must be an array")
+        .iter()
+        .map(|item| {
+            let content = item["content"]
+                .as_str()
+                .or_else(|| {
+                    item["content"]
+                        .as_array()
+                        .and_then(|content| content.first())
+                        .and_then(|content| content["text"].as_str())
+                })
+                .expect("WebSocket message content must contain text");
+            json!({
+                "role": item["role"],
+                "content": content,
+            })
+        })
+        .collect::<Vec<_>>();
+    json!({
+        "previousResponseId": body
+            .get("previous_response_id")
+            .cloned()
+            .unwrap_or(Value::Null),
+        "input": input,
+    })
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1083,7 +1138,7 @@ async fn responses_websocket_emits_reasoning_included_event() {
             harness.summary,
             /*service_tier*/ None,
             /*turn_metadata_header*/ None,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("websocket stream failed");
@@ -1108,7 +1163,7 @@ async fn responses_websocket_emits_rate_limit_events() {
     skip_if_no_network!();
 
     let rate_limit_event = json!({
-        "type": "codex.rate_limits",
+        "type": "crewon.rate_limits",
         "plan_type": "plus",
         "rate_limits": {
             "allowed": true,
@@ -1158,7 +1213,7 @@ async fn responses_websocket_emits_rate_limit_events() {
             harness.summary,
             /*service_tier*/ None,
             /*turn_metadata_header*/ None,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("websocket stream failed");
@@ -1230,7 +1285,7 @@ async fn responses_websocket_usage_limit_error_emits_rate_limit_event() {
         vec![usage_limit_error],
     ]])
     .await;
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config.model_provider.request_max_retries = Some(0);
         config.model_provider.stream_max_retries = Some(0);
     });
@@ -1240,7 +1295,7 @@ async fn responses_websocket_usage_limit_error_emits_rate_limit_event() {
         .expect("build websocket codex");
 
     let submission_id = test
-        .codex
+        .crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "hello".into(),
@@ -1255,7 +1310,7 @@ async fn responses_websocket_usage_limit_error_emits_rate_limit_event() {
         .expect("submission should succeed while emitting usage limit error events");
 
     let token_event =
-        wait_for_event(&test.codex, |msg| matches!(msg, EventMsg::TokenCount(_))).await;
+        wait_for_event(&test.crewon, |msg| matches!(msg, EventMsg::TokenCount(_))).await;
     let EventMsg::TokenCount(event) = token_event else {
         unreachable!();
     };
@@ -1286,7 +1341,7 @@ async fn responses_websocket_usage_limit_error_emits_rate_limit_event() {
         })
     );
 
-    let error_event = wait_for_event(&test.codex, |msg| matches!(msg, EventMsg::Error(_))).await;
+    let error_event = wait_for_event(&test.crewon, |msg| matches!(msg, EventMsg::Error(_))).await;
     let EventMsg::Error(error_event) = error_event else {
         unreachable!();
     };
@@ -1320,7 +1375,7 @@ async fn responses_websocket_invalid_request_error_with_status_is_forwarded() {
         vec![invalid_request_error],
     ]])
     .await;
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config.model_provider.request_max_retries = Some(0);
         config.model_provider.stream_max_retries = Some(0);
     });
@@ -1330,7 +1385,7 @@ async fn responses_websocket_invalid_request_error_with_status_is_forwarded() {
         .expect("build websocket codex");
 
     let submission_id = test
-        .codex
+        .crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "hello".into(),
@@ -1344,7 +1399,7 @@ async fn responses_websocket_invalid_request_error_with_status_is_forwarded() {
         .await
         .expect("submission should succeed while emitting invalid request events");
 
-    let error_event = wait_for_event(&test.codex, |msg| matches!(msg, EventMsg::Error(_))).await;
+    let error_event = wait_for_event(&test.crewon, |msg| matches!(msg, EventMsg::Error(_))).await;
     let EventMsg::Error(error_event) = error_event else {
         unreachable!();
     };
@@ -1379,7 +1434,7 @@ async fn responses_websocket_connection_limit_error_reconnects_and_completes() {
         vec![vec![ev_response_created("resp-1"), ev_completed("resp-1")]],
     ])
     .await;
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config.model_provider.request_max_retries = Some(0);
         config.model_provider.stream_max_retries = Some(1);
     });
@@ -1402,8 +1457,8 @@ async fn responses_websocket_connection_limit_error_reconnects_and_completes() {
     assert_eq!(
         handshake_user_agents,
         vec![
-            Some(codex_login::default_client::get_codex_user_agent()),
-            Some(codex_login::default_client::get_codex_user_agent()),
+            Some(crewon_login::default_client::get_crewon_user_agent()),
+            Some(crewon_login::default_client::get_crewon_user_agent()),
         ]
     );
 
@@ -1813,7 +1868,7 @@ async fn responses_websocket_v2_after_error_uses_full_create_without_previous_re
             harness.summary,
             /*service_tier*/ None,
             /*turn_metadata_header*/ None,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("websocket stream failed");
@@ -1902,7 +1957,7 @@ async fn responses_websocket_v2_surfaces_terminal_error_without_close_handshake(
             harness.summary,
             /*service_tier*/ None,
             /*turn_metadata_header*/ None,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("websocket stream failed");
@@ -2053,14 +2108,14 @@ async fn websocket_harness_with_provider_options(
             .expect("test config should allow feature update");
     }
     let config = Arc::new(config);
-    let model_info = codex_core::test_support::construct_model_info_offline(MODEL, &config);
+    let model_info = crewon_core::test_support::construct_model_info_offline(MODEL, &config);
     let thread_id = ThreadId::new();
     let session_id = SessionId::new();
     let auth_manager =
-        codex_core::test_support::auth_manager_from_auth(CodexAuth::from_api_key("Test API Key"));
+        crewon_core::test_support::auth_manager_from_auth(CrewonAuth::from_api_key("Test API Key"));
     let exporter = InMemoryMetricExporter::default();
     let metrics = MetricsClient::new(
-        MetricsConfig::in_memory("test", "codex-core", env!("CARGO_PKG_VERSION"), exporter)
+        MetricsConfig::in_memory("test", "crewon-core", env!("CARGO_PKG_VERSION"), exporter)
             .with_runtime_reader(),
     )
     .expect("in-memory metrics client");
@@ -2137,7 +2192,7 @@ async fn stream_until_complete_with_model_info(
             harness.summary,
             /*service_tier*/ None,
             /*turn_metadata_header*/ None,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("websocket stream failed");
@@ -2205,7 +2260,7 @@ async fn stream_until_complete_with_request_metadata(
             harness.summary,
             service_tier.map(|service_tier| service_tier.request_value().to_string()),
             turn_metadata_header,
-            &codex_rollout_trace::InferenceTraceContext::disabled(),
+            &crewon_rollout_trace::InferenceTraceContext::disabled(),
         )
         .await
         .expect("websocket stream failed");

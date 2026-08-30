@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "crewon.agent-version-runtime-bindings.v0",
+  "bindings": [
+    {
+      "tenantId": "standalone-tenant",
+      "agentVersionId": "reviewed-agent-v1",
+      "contentDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+      "authorityId": "standalone-authority",
+      "workspaceBindingId": null,
+      "provider": {
+        "kind": "directResponses",
+        "endpoint": "https://api.openai.com/v1/responses",
+        "apiKeyEnvironment": "CREWON_REVIEWED_AGENT_API_KEY",
+        "storeResponses": false,
+        "requestProfile": "standard",
+        "idleTimeoutMs": 60000,
+        "sequencePolicy": "required"
+      },
+      "mcpStdioConfigPath": null,
+      "deviceToolConfigPath": null,
+      "remoteMcpConfigPath": null
+    }
+  ]
+}

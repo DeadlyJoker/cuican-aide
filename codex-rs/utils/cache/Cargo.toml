@@ -1,5 +1,5 @@
 [package]
-name = "codex-utils-cache"
+name = "crewon-utils-cache"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -16,4 +16,5 @@ tokio = { workspace = true, features = ["sync", "rt", "rt-multi-thread"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 
 [lib]
+name = "crewon_utils_cache"
 doctest = false

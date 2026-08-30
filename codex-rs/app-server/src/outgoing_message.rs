@@ -5,36 +5,37 @@ use std::sync::atomic::Ordering;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
-use codex_analytics::AnalyticsEventsClient;
-use codex_app_server_protocol::ClientResponsePayload;
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::Result;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::ServerRequestPayload;
-use codex_app_server_protocol::ServerResponse;
-use codex_otel::span_w3c_trace_context;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::W3cTraceContext;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
+use crewon_analytics::AnalyticsEventsClient;
+use crewon_app_server_protocol::ClientResponsePayload;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::Result;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::ServerRequestPayload;
+use crewon_app_server_protocol::ServerResponse;
+use crewon_otel::span_w3c_trace_context;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::W3cTraceContext;
+use crewon_protocol::request_permissions::RequestPermissionsResponse;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tracing::Instrument;
 use tracing::Span;
 use tracing::warn;
+use uuid::Uuid;
 
 use crate::error_code::internal_error;
 use crate::server_request_error::TURN_TRANSITION_PENDING_REQUEST_ERROR_REASON;
-pub(crate) use codex_app_server_transport::ConnectionId;
-pub(crate) use codex_app_server_transport::OutgoingError;
-pub(crate) use codex_app_server_transport::OutgoingMessage;
-pub(crate) use codex_app_server_transport::OutgoingResponse;
-pub(crate) use codex_app_server_transport::QueuedOutgoingMessage;
+pub(crate) use crewon_app_server_transport::ConnectionId;
+pub(crate) use crewon_app_server_transport::OutgoingError;
+pub(crate) use crewon_app_server_transport::OutgoingMessage;
+pub(crate) use crewon_app_server_transport::OutgoingResponse;
+pub(crate) use crewon_app_server_transport::QueuedOutgoingMessage;
 
 #[cfg(test)]
-use codex_protocol::account::PlanType;
+use crewon_protocol::account::PlanType;
 
 pub(crate) type ClientRequestResult = std::result::Result<Result, JSONRPCErrorError>;
 
@@ -73,6 +74,32 @@ impl RequestContext {
 
     pub(crate) fn span(&self) -> Span {
         self.span.clone()
+    }
+
+    pub(crate) fn trace_id(&self) -> String {
+        self.request_trace()
+            .and_then(|trace| trace.traceparent)
+            .and_then(|traceparent| {
+                let (version, rest) = traceparent.split_once('-')?;
+                let (trace_id, rest) = rest.split_once('-')?;
+                let (parent_id, trace_flags) = rest.split_once('-')?;
+                let is_lower_hex = |value: &str| {
+                    value
+                        .bytes()
+                        .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+                };
+                (version == "00"
+                    && trace_id.len() == 32
+                    && parent_id.len() == 16
+                    && trace_flags.len() == 2
+                    && is_lower_hex(trace_id)
+                    && is_lower_hex(parent_id)
+                    && is_lower_hex(trace_flags)
+                    && trace_id.bytes().any(|byte| byte != b'0')
+                    && parent_id.bytes().any(|byte| byte != b'0'))
+                .then(|| trace_id.to_string())
+            })
+            .unwrap_or_else(|| Uuid::now_v7().simple().to_string())
     }
 
     fn record_turn_id(&self, turn_id: &str) {
@@ -696,27 +723,27 @@ fn now_unix_timestamp_ms() -> u64 {
 mod tests {
     use std::time::Duration;
 
-    use codex_app_server_protocol::AccountLoginCompletedNotification;
-    use codex_app_server_protocol::AccountRateLimitsUpdatedNotification;
-    use codex_app_server_protocol::AccountUpdatedNotification;
-    use codex_app_server_protocol::ApplyPatchApprovalParams;
-    use codex_app_server_protocol::AuthMode;
-    use codex_app_server_protocol::CommandExecutionApprovalDecision;
-    use codex_app_server_protocol::CommandExecutionRequestApprovalParams;
-    use codex_app_server_protocol::ConfigWarningNotification;
-    use codex_app_server_protocol::DynamicToolCallParams;
-    use codex_app_server_protocol::FileChangeRequestApprovalParams;
-    use codex_app_server_protocol::GuardianWarningNotification;
-    use codex_app_server_protocol::ModelRerouteReason;
-    use codex_app_server_protocol::ModelReroutedNotification;
-    use codex_app_server_protocol::ModelVerification;
-    use codex_app_server_protocol::ModelVerificationNotification;
-    use codex_app_server_protocol::RateLimitSnapshot;
-    use codex_app_server_protocol::RateLimitWindow;
-    use codex_app_server_protocol::ServerResponse;
-    use codex_app_server_protocol::ToolRequestUserInputParams;
-    use codex_app_server_protocol::TurnModerationMetadataNotification;
-    use codex_protocol::ThreadId;
+    use crewon_app_server_protocol::AccountLoginCompletedNotification;
+    use crewon_app_server_protocol::AccountRateLimitsUpdatedNotification;
+    use crewon_app_server_protocol::AccountUpdatedNotification;
+    use crewon_app_server_protocol::ApplyPatchApprovalParams;
+    use crewon_app_server_protocol::AuthMode;
+    use crewon_app_server_protocol::CommandExecutionApprovalDecision;
+    use crewon_app_server_protocol::CommandExecutionRequestApprovalParams;
+    use crewon_app_server_protocol::ConfigWarningNotification;
+    use crewon_app_server_protocol::DynamicToolCallParams;
+    use crewon_app_server_protocol::FileChangeRequestApprovalParams;
+    use crewon_app_server_protocol::GuardianWarningNotification;
+    use crewon_app_server_protocol::ModelRerouteReason;
+    use crewon_app_server_protocol::ModelReroutedNotification;
+    use crewon_app_server_protocol::ModelVerification;
+    use crewon_app_server_protocol::ModelVerificationNotification;
+    use crewon_app_server_protocol::RateLimitSnapshot;
+    use crewon_app_server_protocol::RateLimitWindow;
+    use crewon_app_server_protocol::ServerResponse;
+    use crewon_app_server_protocol::ToolRequestUserInputParams;
+    use crewon_app_server_protocol::TurnModerationMetadataNotification;
+    use crewon_protocol::ThreadId;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use std::sync::Arc;
@@ -724,6 +751,46 @@ mod tests {
     use uuid::Uuid;
 
     use super::*;
+
+    #[test]
+    fn request_context_trace_id_uses_valid_traceparent_and_safe_fallback() {
+        let propagated_trace_id = "00000000000000000000000000000011";
+        let propagated = RequestContext::new(
+            ConnectionRequestId {
+                connection_id: ConnectionId(1),
+                request_id: RequestId::Integer(1),
+            },
+            Span::none(),
+            Some(W3cTraceContext {
+                traceparent: Some(format!("00-{propagated_trace_id}-0000000000000022-01")),
+                tracestate: None,
+            }),
+        );
+        let invalid = RequestContext::new(
+            ConnectionRequestId {
+                connection_id: ConnectionId(1),
+                request_id: RequestId::Integer(2),
+            },
+            Span::none(),
+            Some(W3cTraceContext {
+                traceparent: Some(
+                    "invalid-00000000000000000000000000000033-0000000000000044-01".to_string(),
+                ),
+                tracestate: None,
+            }),
+        );
+
+        assert_eq!(propagated.trace_id(), propagated_trace_id);
+        let fallback = invalid.trace_id();
+        assert_eq!(
+            (
+                fallback.len(),
+                fallback.bytes().all(|byte| byte.is_ascii_hexdigit()),
+                fallback.bytes().any(|byte| byte != b'0'),
+            ),
+            (32, true, true),
+        );
+    }
 
     #[test]
     fn verify_server_notification_serialization() {
@@ -1012,7 +1079,7 @@ mod tests {
     async fn send_response_routes_to_target_connection() {
         let (tx, mut rx) = mpsc::channel::<OutgoingEnvelope>(4);
         let outgoing =
-            OutgoingMessageSender::new(tx, codex_analytics::AnalyticsEventsClient::disabled());
+            OutgoingMessageSender::new(tx, crewon_analytics::AnalyticsEventsClient::disabled());
         let request_id = ConnectionRequestId {
             connection_id: ConnectionId(42),
             request_id: RequestId::Integer(7),
@@ -1022,7 +1089,7 @@ mod tests {
             .send_response(
                 request_id.clone(),
                 ClientResponsePayload::ThreadArchive(
-                    codex_app_server_protocol::ThreadArchiveResponse {},
+                    crewon_app_server_protocol::ThreadArchiveResponse {},
                 ),
             )
             .await;
@@ -1053,7 +1120,7 @@ mod tests {
     async fn send_response_clears_registered_request_context() {
         let (tx, _rx) = mpsc::channel::<OutgoingEnvelope>(4);
         let outgoing =
-            OutgoingMessageSender::new(tx, codex_analytics::AnalyticsEventsClient::disabled());
+            OutgoingMessageSender::new(tx, crewon_analytics::AnalyticsEventsClient::disabled());
         let request_id = ConnectionRequestId {
             connection_id: ConnectionId(42),
             request_id: RequestId::Integer(7),
@@ -1072,7 +1139,7 @@ mod tests {
             .send_response(
                 request_id,
                 ClientResponsePayload::ThreadArchive(
-                    codex_app_server_protocol::ThreadArchiveResponse {},
+                    crewon_app_server_protocol::ThreadArchiveResponse {},
                 ),
             )
             .await;
@@ -1084,7 +1151,7 @@ mod tests {
     async fn send_error_routes_to_target_connection() {
         let (tx, mut rx) = mpsc::channel::<OutgoingEnvelope>(4);
         let outgoing =
-            OutgoingMessageSender::new(tx, codex_analytics::AnalyticsEventsClient::disabled());
+            OutgoingMessageSender::new(tx, crewon_analytics::AnalyticsEventsClient::disabled());
         let request_id = ConnectionRequestId {
             connection_id: ConnectionId(9),
             request_id: RequestId::Integer(3),
@@ -1119,7 +1186,7 @@ mod tests {
     async fn send_server_notification_to_connection_and_wait_tracks_write_completion() {
         let (tx, mut rx) = mpsc::channel::<OutgoingEnvelope>(4);
         let outgoing =
-            OutgoingMessageSender::new(tx, codex_analytics::AnalyticsEventsClient::disabled());
+            OutgoingMessageSender::new(tx, crewon_analytics::AnalyticsEventsClient::disabled());
         let send_task = tokio::spawn(async move {
             outgoing
                 .send_server_notification_to_connection_and_wait(
@@ -1164,7 +1231,7 @@ mod tests {
     async fn connection_closed_clears_registered_request_contexts() {
         let (tx, _rx) = mpsc::channel::<OutgoingEnvelope>(4);
         let outgoing =
-            OutgoingMessageSender::new(tx, codex_analytics::AnalyticsEventsClient::disabled());
+            OutgoingMessageSender::new(tx, crewon_analytics::AnalyticsEventsClient::disabled());
         let closed_connection_request = ConnectionRequestId {
             connection_id: ConnectionId(9),
             request_id: RequestId::Integer(3),
@@ -1199,7 +1266,7 @@ mod tests {
     async fn notify_client_error_forwards_error_to_waiter() {
         let (tx, _rx) = mpsc::channel::<OutgoingEnvelope>(4);
         let outgoing =
-            OutgoingMessageSender::new(tx, codex_analytics::AnalyticsEventsClient::disabled());
+            OutgoingMessageSender::new(tx, crewon_analytics::AnalyticsEventsClient::disabled());
 
         let (request_id, wait_for_result) = outgoing
             .send_request(ServerRequestPayload::ApplyPatchApproval(
@@ -1231,7 +1298,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel::<OutgoingEnvelope>(8);
         let outgoing = Arc::new(OutgoingMessageSender::new(
             tx,
-            codex_analytics::AnalyticsEventsClient::disabled(),
+            crewon_analytics::AnalyticsEventsClient::disabled(),
         ));
         let thread_id = ThreadId::new();
         let thread_outgoing = ThreadScopedOutgoingMessageSender::new(
@@ -1293,7 +1360,7 @@ mod tests {
         let (tx, _rx) = mpsc::channel::<OutgoingEnvelope>(8);
         let outgoing = Arc::new(OutgoingMessageSender::new(
             tx,
-            codex_analytics::AnalyticsEventsClient::disabled(),
+            crewon_analytics::AnalyticsEventsClient::disabled(),
         ));
         let thread_id = ThreadId::new();
         let thread_outgoing = ThreadScopedOutgoingMessageSender::new(

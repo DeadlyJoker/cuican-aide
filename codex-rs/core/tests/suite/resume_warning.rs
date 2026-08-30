@@ -1,29 +1,27 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use codex_core::NewThread;
-use codex_login::CodexAuth;
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::ResumedHistory;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::TurnCompleteEvent;
-use codex_protocol::protocol::TurnContextItem;
-use codex_protocol::protocol::TurnStartedEvent;
-use codex_protocol::protocol::UserMessageEvent;
-use codex_protocol::protocol::WarningEvent;
 use core::time::Duration;
 use core_test_support::load_default_config_for_test;
 use core_test_support::wait_for_event;
+use crewon_core::NewThread;
+use crewon_core::RolloutRecorder;
+use crewon_core::RolloutRecorderParams;
+use crewon_login::CrewonAuth;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::TurnCompleteEvent;
+use crewon_protocol::protocol::TurnContextItem;
+use crewon_protocol::protocol::TurnStartedEvent;
+use crewon_protocol::protocol::UserMessageEvent;
+use crewon_protocol::protocol::WarningEvent;
 use tempfile::TempDir;
 
-fn resume_history(
-    config: &codex_core::config::Config,
-    previous_model: &str,
-    rollout_path: &std::path::Path,
-) -> InitialHistory {
+fn resume_items(config: &crewon_core::config::Config, previous_model: &str) -> Vec<RolloutItem> {
     let turn_id = "resume-warning-seed-turn".to_string();
     let turn_ctx = TurnContextItem {
         turn_id: Some(turn_id.clone()),
@@ -48,35 +46,31 @@ fn resume_history(
             .unwrap_or(ReasoningSummary::Auto),
     };
 
-    InitialHistory::Resumed(ResumedHistory {
-        conversation_id: ThreadId::default(),
-        history: vec![
-            RolloutItem::EventMsg(EventMsg::TurnStarted(TurnStartedEvent {
-                turn_id: turn_id.clone(),
-                trace_id: None,
-                started_at: None,
-                model_context_window: None,
-                collaboration_mode_kind: ModeKind::Default,
-            })),
-            RolloutItem::EventMsg(EventMsg::UserMessage(UserMessageEvent {
-                client_id: None,
-                message: "seed".to_string(),
-                images: None,
-                local_images: vec![],
-                text_elements: vec![],
-                ..Default::default()
-            })),
-            RolloutItem::TurnContext(turn_ctx),
-            RolloutItem::EventMsg(EventMsg::TurnComplete(TurnCompleteEvent {
-                turn_id,
-                last_agent_message: None,
-                completed_at: None,
-                duration_ms: None,
-                time_to_first_token_ms: None,
-            })),
-        ],
-        rollout_path: Some(rollout_path.to_path_buf()),
-    })
+    vec![
+        RolloutItem::EventMsg(EventMsg::TurnStarted(TurnStartedEvent {
+            turn_id: turn_id.clone(),
+            trace_id: None,
+            started_at: None,
+            model_context_window: None,
+            collaboration_mode_kind: ModeKind::Default,
+        })),
+        RolloutItem::EventMsg(EventMsg::UserMessage(UserMessageEvent {
+            client_id: None,
+            message: "seed".to_string(),
+            images: None,
+            local_images: vec![],
+            text_elements: vec![],
+            ..Default::default()
+        })),
+        RolloutItem::TurnContext(turn_ctx),
+        RolloutItem::EventMsg(EventMsg::TurnComplete(TurnCompleteEvent {
+            turn_id,
+            last_agent_message: None,
+            completed_at: None,
+            duration_ms: None,
+            time_to_first_token_ms: None,
+        })),
+    ]
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -88,17 +82,39 @@ async fn emits_warning_when_resumed_model_differs() {
     // Ensure cwd is absolute (the helper sets it to the temp dir already).
     assert!(config.cwd.is_absolute());
 
-    let rollout_path = home.path().join("rollout.jsonl");
-    std::fs::write(&rollout_path, "").expect("create rollout placeholder");
+    let conversation_id = ThreadId::new();
+    let resume_items = resume_items(&config, "previous-model");
+    let recorder = RolloutRecorder::new(
+        &config,
+        RolloutRecorderParams::new(
+            conversation_id,
+            /*forked_from_id*/ None,
+            /*parent_thread_id*/ None,
+            SessionSource::Exec,
+            /*thread_source*/ None,
+            BaseInstructions::default(),
+            Vec::new(),
+        ),
+    )
+    .await
+    .expect("create rollout fixture");
+    recorder
+        .record_canonical_items(resume_items.as_slice())
+        .await
+        .expect("record rollout fixture");
+    recorder.flush().await.expect("flush rollout fixture");
+    let rollout_path = recorder.rollout_path().to_path_buf();
+    recorder.shutdown().await.expect("close rollout fixture");
+    let initial_history = RolloutRecorder::get_rollout_history(&rollout_path)
+        .await
+        .expect("reload exact rollout fixture");
 
-    let initial_history = resume_history(&config, "previous-model", &rollout_path);
-
-    let thread_manager = codex_core::test_support::thread_manager_with_models_provider(
-        CodexAuth::from_api_key("test"),
+    let thread_manager = crewon_core::test_support::thread_manager_with_models_provider(
+        CrewonAuth::from_api_key("test"),
         config.model_provider.clone(),
     );
     let auth_manager =
-        codex_core::test_support::auth_manager_from_auth(CodexAuth::from_api_key("test"));
+        crewon_core::test_support::auth_manager_from_auth(CrewonAuth::from_api_key("test"));
 
     // Act: resume the conversation.
     let NewThread {

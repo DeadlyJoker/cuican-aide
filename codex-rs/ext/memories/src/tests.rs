@@ -1,21 +1,21 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use codex_extension_api::ContextContributor;
-use codex_extension_api::ExtensionData;
-use codex_extension_api::ExtensionRegistryBuilder;
-use codex_extension_api::NoopTurnItemEmitter;
-use codex_extension_api::PromptSlot;
-use codex_extension_api::ToolCall;
-use codex_extension_api::ToolContributor;
-use codex_extension_api::ToolExecutor;
-use codex_extension_api::ToolName;
-use codex_extension_api::ToolPayload;
-use codex_tools::ToolOutput;
-use codex_utils_absolute_path::test_support::PathBufExt;
-use codex_utils_absolute_path::test_support::PathExt;
-use codex_utils_absolute_path::test_support::test_path_buf;
-use codex_utils_output_truncation::TruncationPolicy;
+use crewon_extension_api::ContextContributor;
+use crewon_extension_api::ExtensionData;
+use crewon_extension_api::ExtensionRegistryBuilder;
+use crewon_extension_api::NoopTurnItemEmitter;
+use crewon_extension_api::PromptSlot;
+use crewon_extension_api::ToolCall;
+use crewon_extension_api::ToolContributor;
+use crewon_extension_api::ToolExecutor;
+use crewon_extension_api::ToolName;
+use crewon_extension_api::ToolPayload;
+use crewon_tools::ToolOutput;
+use crewon_utils_absolute_path::test_support::PathBufExt;
+use crewon_utils_absolute_path::test_support::PathExt;
+use crewon_utils_absolute_path::test_support::test_path_buf;
+use crewon_utils_output_truncation::TruncationPolicy;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 
@@ -54,7 +54,7 @@ fn tools_are_not_contributed_when_disabled() {
     thread_store.insert(MemoriesExtensionConfig {
         enabled: false,
         dedicated_tools: true,
-        codex_home: test_path_buf("/tmp/codex-home").abs(),
+        crewon_home: test_path_buf("/tmp/crewon-home").abs(),
     });
 
     assert!(
@@ -71,7 +71,7 @@ fn tools_are_not_contributed_when_dedicated_tools_disabled() {
     thread_store.insert(MemoriesExtensionConfig {
         enabled: true,
         dedicated_tools: false,
-        codex_home: test_path_buf("/tmp/codex-home").abs(),
+        crewon_home: test_path_buf("/tmp/crewon-home").abs(),
     });
 
     assert!(
@@ -88,7 +88,7 @@ fn tools_are_contributed_when_enabled_with_dedicated_tools() {
     thread_store.insert(MemoriesExtensionConfig {
         enabled: true,
         dedicated_tools: true,
-        codex_home: test_path_buf("/tmp/codex-home").abs(),
+        crewon_home: test_path_buf("/tmp/crewon-home").abs(),
     });
 
     let tool_names = extension
@@ -110,14 +110,14 @@ fn tools_are_contributed_when_enabled_with_dedicated_tools() {
 
 #[test]
 fn install_registers_dedicated_tool_contributor() {
-    let mut builder = ExtensionRegistryBuilder::<codex_core::config::Config>::new();
+    let mut builder = ExtensionRegistryBuilder::<crewon_core::config::Config>::new();
     crate::install(&mut builder, /*metrics_client*/ None);
     let registry = builder.build();
     let thread_store = ExtensionData::new("thread");
     thread_store.insert(MemoriesExtensionConfig {
         enabled: true,
         dedicated_tools: true,
-        codex_home: test_path_buf("/tmp/codex-home").abs(),
+        crewon_home: test_path_buf("/tmp/crewon-home").abs(),
     });
 
     let tool_names = registry
@@ -141,7 +141,7 @@ fn install_registers_dedicated_tool_contributor() {
 #[test]
 fn ad_hoc_tool_definition_includes_filename_contract() {
     let tool = memory_tool(
-        Path::new("/tmp/codex-home/memories"),
+        Path::new("/tmp/crewon-home/memories"),
         crate::ADD_AD_HOC_NOTE_TOOL_NAME,
     );
     let spec = serde_json::to_value(tool.spec()).expect("serialize tool spec");
@@ -177,7 +177,7 @@ async fn prompt_contribution_uses_memory_summary_when_enabled() {
     thread_store.insert(MemoriesExtensionConfig {
         enabled: true,
         dedicated_tools: false,
-        codex_home: tempdir.path().abs(),
+        crewon_home: tempdir.path().abs(),
     });
 
     let fragments = extension
@@ -194,7 +194,7 @@ async fn prompt_contribution_uses_memory_summary_when_enabled() {
 }
 
 #[tokio::test]
-async fn add_ad_hoc_note_tool_creates_note_file() {
+async fn ad_hoc_note_tool_is_visible_to_new_thread_before_consolidation() {
     let tempdir = tempfile::tempdir().expect("tempdir");
     let memory_root = tempdir.path().join("memories");
     let tool = memory_tool(&memory_root, crate::ADD_AD_HOC_NOTE_TOOL_NAME);
@@ -213,7 +213,7 @@ async fn add_ad_hoc_note_tool_creates_note_file() {
             tool_name: memory_tool_name(crate::ADD_AD_HOC_NOTE_TOOL_NAME),
             model: "gpt-test".to_string(),
             truncation_policy: TruncationPolicy::Bytes(1024),
-            conversation_history: codex_extension_api::ConversationHistory::default(),
+            conversation_history: crewon_extension_api::ConversationHistory::default(),
             turn_item_emitter: Arc::new(NoopTurnItemEmitter),
             payload: payload.clone(),
         })
@@ -233,6 +233,28 @@ async fn add_ad_hoc_note_tool_creates_note_file() {
         .await
         .expect("read ad-hoc note"),
         "Remember to keep PR review comments concise."
+    );
+
+    let extension = MemoriesExtension::default();
+    let new_thread_store = ExtensionData::new("new-thread");
+    new_thread_store.insert(MemoriesExtensionConfig {
+        enabled: true,
+        dedicated_tools: true,
+        crewon_home: tempdir.path().abs(),
+    });
+
+    let fragments = extension
+        .contribute(&ExtensionData::new("new-session"), &new_thread_store)
+        .await;
+
+    assert_eq!(fragments.len(), 1);
+    assert_eq!(fragments[0].slot(), PromptSlot::DeveloperPolicy);
+    assert!(fragments[0].text().contains("extensions/ad_hoc/notes/"));
+    assert!(fragments[0].text().contains("You MUST search memory"));
+    assert!(
+        !fragments[0]
+            .text()
+            .contains("Remember to keep PR review comments concise.")
     );
 }
 
@@ -256,7 +278,7 @@ async fn add_ad_hoc_note_tool_rejects_paths_as_filenames() {
             tool_name: memory_tool_name(crate::ADD_AD_HOC_NOTE_TOOL_NAME),
             model: "gpt-test".to_string(),
             truncation_policy: TruncationPolicy::Bytes(1024),
-            conversation_history: codex_extension_api::ConversationHistory::default(),
+            conversation_history: crewon_extension_api::ConversationHistory::default(),
             turn_item_emitter: Arc::new(NoopTurnItemEmitter),
             payload,
         })
@@ -300,7 +322,7 @@ async fn read_tool_reads_memory_file() {
             tool_name: memory_tool_name(crate::READ_TOOL_NAME),
             model: "gpt-test".to_string(),
             truncation_policy: TruncationPolicy::Bytes(1024),
-            conversation_history: codex_extension_api::ConversationHistory::default(),
+            conversation_history: crewon_extension_api::ConversationHistory::default(),
             turn_item_emitter: Arc::new(NoopTurnItemEmitter),
             payload: payload.clone(),
         })
@@ -347,7 +369,7 @@ async fn search_tool_accepts_multiple_queries() {
             tool_name: memory_tool_name(crate::SEARCH_TOOL_NAME),
             model: "gpt-test".to_string(),
             truncation_policy: TruncationPolicy::Bytes(1024),
-            conversation_history: codex_extension_api::ConversationHistory::default(),
+            conversation_history: crewon_extension_api::ConversationHistory::default(),
             turn_item_emitter: Arc::new(NoopTurnItemEmitter),
             payload: payload.clone(),
         })
@@ -420,7 +442,7 @@ async fn search_tool_accepts_windowed_all_match_mode() {
             tool_name: memory_tool_name(crate::SEARCH_TOOL_NAME),
             model: "gpt-test".to_string(),
             truncation_policy: TruncationPolicy::Bytes(1024),
-            conversation_history: codex_extension_api::ConversationHistory::default(),
+            conversation_history: crewon_extension_api::ConversationHistory::default(),
             turn_item_emitter: Arc::new(NoopTurnItemEmitter),
             payload: payload.clone(),
         })
@@ -473,7 +495,7 @@ async fn search_tool_rejects_legacy_single_query() {
             tool_name: memory_tool_name(crate::SEARCH_TOOL_NAME),
             model: "gpt-test".to_string(),
             truncation_policy: TruncationPolicy::Bytes(1024),
-            conversation_history: codex_extension_api::ConversationHistory::default(),
+            conversation_history: crewon_extension_api::ConversationHistory::default(),
             turn_item_emitter: Arc::new(NoopTurnItemEmitter),
             payload,
         })

@@ -1,5 +1,5 @@
 use super::*;
-use codex_config::config_toml::ConfigToml;
+use crewon_config::config_toml::ConfigToml;
 use futures::StreamExt;
 
 #[derive(Clone)]
@@ -16,19 +16,19 @@ pub(crate) struct CatalogRequestProcessor {
 const SKILLS_LIST_CWD_CONCURRENCY: usize = 5;
 
 fn skills_to_info(
-    skills: &[codex_core::skills::SkillMetadata],
+    skills: &[crewon_core::skills::SkillMetadata],
     disabled_paths: &HashSet<AbsolutePathBuf>,
-) -> Vec<codex_app_server_protocol::SkillMetadata> {
+) -> Vec<crewon_app_server_protocol::SkillMetadata> {
     skills
         .iter()
         .map(|skill| {
             let enabled = !disabled_paths.contains(&skill.path_to_skills_md);
-            codex_app_server_protocol::SkillMetadata {
+            crewon_app_server_protocol::SkillMetadata {
                 name: skill.name.clone(),
                 description: skill.description.clone(),
                 short_description: skill.short_description.clone(),
                 interface: skill.interface.clone().map(|interface| {
-                    codex_app_server_protocol::SkillInterface {
+                    crewon_app_server_protocol::SkillInterface {
                         display_name: interface.display_name,
                         short_description: interface.short_description,
                         icon_small: interface.icon_small,
@@ -38,11 +38,11 @@ fn skills_to_info(
                     }
                 }),
                 dependencies: skill.dependencies.clone().map(|dependencies| {
-                    codex_app_server_protocol::SkillDependencies {
+                    crewon_app_server_protocol::SkillDependencies {
                         tools: dependencies
                             .tools
                             .into_iter()
-                            .map(|tool| codex_app_server_protocol::SkillToolDependency {
+                            .map(|tool| crewon_app_server_protocol::SkillToolDependency {
                                 r#type: tool.r#type,
                                 value: tool.value,
                                 description: tool.description,
@@ -61,7 +61,7 @@ fn skills_to_info(
         .collect()
 }
 
-fn hooks_to_info(hooks: &[codex_hooks::HookListEntry]) -> Vec<HookMetadata> {
+fn hooks_to_info(hooks: &[crewon_hooks::HookListEntry]) -> Vec<HookMetadata> {
     hooks
         .iter()
         .map(|hook| HookMetadata {
@@ -85,11 +85,11 @@ fn hooks_to_info(hooks: &[codex_hooks::HookListEntry]) -> Vec<HookMetadata> {
 }
 
 fn errors_to_info(
-    errors: &[codex_core::skills::SkillError],
-) -> Vec<codex_app_server_protocol::SkillErrorInfo> {
+    errors: &[crewon_core::skills::SkillError],
+) -> Vec<crewon_app_server_protocol::SkillErrorInfo> {
     errors
         .iter()
-        .map(|err| codex_app_server_protocol::SkillErrorInfo {
+        .map(|err| crewon_app_server_protocol::SkillErrorInfo {
             path: err.path.to_path_buf(),
             message: err.message.clone(),
         })
@@ -122,6 +122,15 @@ impl CatalogRequestProcessor {
         params: SkillsListParams,
     ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
         self.skills_list_response(params)
+            .await
+            .map(|response| Some(response.into()))
+    }
+
+    pub(crate) async fn skills_create(
+        &self,
+        params: SkillsCreateParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        self.skills_create_response(params)
             .await
             .map(|response| Some(response.into()))
     }
@@ -189,6 +198,13 @@ impl CatalogRequestProcessor {
             .map(|response| Some(response.into()))
     }
 
+    pub(crate) async fn scene_list(
+        &self,
+        params: SceneListParams,
+    ) -> Result<Option<ClientResponsePayload>, JSONRPCErrorError> {
+        Self::list_scenes(params).map(|response| Some(response.into()))
+    }
+
     pub(crate) async fn mock_experimental_method(
         &self,
         params: MockExperimentalMethodParams,
@@ -223,12 +239,12 @@ impl CatalogRequestProcessor {
             .map_err(|err| internal_error(format!("failed to reload config: {err}")))
     }
 
-    async fn workspace_codex_plugins_enabled(
+    async fn workspace_crewon_plugins_enabled(
         &self,
         config: &Config,
-        auth: Option<&CodexAuth>,
+        auth: Option<&CrewonAuth>,
     ) -> bool {
-        match workspace_settings::codex_plugins_enabled_for_workspace(
+        match workspace_settings::crewon_plugins_enabled_for_workspace(
             config,
             auth,
             Some(&self.workspace_settings_cache),
@@ -238,7 +254,7 @@ impl CatalogRequestProcessor {
             Ok(enabled) => enabled,
             Err(err) => {
                 warn!(
-                    "failed to fetch workspace Codex plugins setting; allowing Codex plugins: {err:#}"
+                    "failed to fetch workspace Crewon plugins setting; allowing Crewon plugins: {err:#}"
                 );
                 true
             }
@@ -306,6 +322,28 @@ impl CatalogRequestProcessor {
         Ok(response)
     }
 
+    fn list_scenes(params: SceneListParams) -> Result<SceneListResponse, JSONRPCErrorError> {
+        let SceneListParams { cursor, limit } = params;
+        let presets = crewon_scene_runtime::all_scene_presets();
+        let total = presets.len();
+        let start = match cursor {
+            Some(cursor) => cursor
+                .parse::<usize>()
+                .map_err(|_| invalid_request(format!("invalid cursor: {cursor}")))?,
+            None => 0,
+        };
+        if start > total {
+            return Err(invalid_request(format!(
+                "cursor {start} exceeds total scenes {total}"
+            )));
+        }
+        let effective_limit = limit.unwrap_or(total as u32).max(1) as usize;
+        let end = start.saturating_add(effective_limit).min(total);
+        let data = presets[start..end].iter().map(Into::into).collect();
+        let next_cursor = (end < total).then(|| end.to_string());
+        Ok(SceneListResponse { data, next_cursor })
+    }
+
     async fn experimental_feature_list_response(
         &self,
         params: ExperimentalFeatureListParams,
@@ -333,8 +371,8 @@ impl CatalogRequestProcessor {
             None => self.load_latest_config(/*fallback_cwd*/ None).await?,
         };
         let auth = self.auth_manager.auth().await;
-        let workspace_codex_plugins_enabled = self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
+        let workspace_crewon_plugins_enabled = self
+            .workspace_crewon_plugins_enabled(&config, auth.as_ref())
             .await;
 
         let data = FEATURES
@@ -371,7 +409,7 @@ impl CatalogRequestProcessor {
                     description,
                     announcement,
                     enabled: config.features.enabled(spec.id)
-                        && (workspace_codex_plugins_enabled
+                        && (workspace_crewon_plugins_enabled
                             || !matches!(spec.id, Feature::Apps | Feature::Plugins)),
                     default_enabled: spec.default_enabled,
                 }
@@ -508,8 +546,8 @@ impl CatalogRequestProcessor {
 
         let config = self.load_latest_config(/*fallback_cwd*/ None).await?;
         let auth = self.auth_manager.auth().await;
-        let workspace_codex_plugins_enabled = self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
+        let workspace_crewon_plugins_enabled = self
+            .workspace_crewon_plugins_enabled(&config, auth.as_ref())
             .await;
         let skills_manager = self.thread_manager.skills_manager();
         let plugins_manager = self.thread_manager.plugins_manager();
@@ -531,10 +569,10 @@ impl CatalogRequestProcessor {
                             let error_path = cwd.clone();
                             return (
                                 index,
-                                codex_app_server_protocol::SkillsListEntry {
+                                crewon_app_server_protocol::SkillsListEntry {
                                     cwd,
                                     skills: Vec::new(),
-                                    errors: vec![codex_app_server_protocol::SkillErrorInfo {
+                                    errors: vec![crewon_app_server_protocol::SkillErrorInfo {
                                         path: error_path,
                                         message,
                                     }],
@@ -542,7 +580,7 @@ impl CatalogRequestProcessor {
                             );
                         }
                     };
-                    let effective_skill_roots = if workspace_codex_plugins_enabled {
+                    let effective_skill_roots = if workspace_crewon_plugins_enabled {
                         let plugins_input = config.plugins_config_input();
                         plugins_manager
                             .effective_skill_roots_for_layer_stack(
@@ -553,7 +591,7 @@ impl CatalogRequestProcessor {
                     } else {
                         Vec::new()
                     };
-                    let skills_input = codex_core::skills::SkillsLoadInput::new(
+                    let skills_input = crewon_core::skills::SkillsLoadInput::new(
                         cwd_abs.clone(),
                         effective_skill_roots,
                         config_layer_stack,
@@ -566,7 +604,7 @@ impl CatalogRequestProcessor {
                     let skills = skills_to_info(&outcome.skills, &outcome.disabled_paths);
                     (
                         index,
-                        codex_app_server_protocol::SkillsListEntry {
+                        crewon_app_server_protocol::SkillsListEntry {
                             cwd,
                             skills,
                             errors,
@@ -582,6 +620,72 @@ impl CatalogRequestProcessor {
         Ok(SkillsListResponse { data })
     }
 
+    async fn skills_create_response(
+        &self,
+        params: SkillsCreateParams,
+    ) -> Result<SkillsCreateResponse, JSONRPCErrorError> {
+        let SkillsCreateParams {
+            cwd,
+            name,
+            description,
+            body,
+        } = params;
+        let name = validate_skill_name(&name)?;
+        let description = validate_skill_description(&description)?;
+        if body.trim().is_empty() {
+            return Err(invalid_params("body must not be empty"));
+        }
+
+        let root = cwd.join(".crewon").join("skill");
+        let skill_dir = root.join(name);
+        let skill_path = skill_dir.join("SKILL.md");
+        if tokio::fs::try_exists(skill_path.as_path())
+            .await
+            .map_err(|err| internal_error(err.to_string()))?
+        {
+            return Err(invalid_params("skill already exists"));
+        }
+
+        tokio::fs::create_dir_all(skill_dir.as_path())
+            .await
+            .map_err(|err| internal_error(err.to_string()))?;
+        let contents = format!(
+            "---\nname: {}\ndescription: {}\n---\n\n{}",
+            serde_json::to_string(name)
+                .map_err(|err| invalid_params(format!("invalid skill name: {err}")))?,
+            serde_json::to_string(description)
+                .map_err(|err| invalid_params(format!("invalid skill description: {err}")))?,
+            body.trim_start()
+        );
+        tokio::fs::write(skill_path.as_path(), contents)
+            .await
+            .map_err(|err| internal_error(err.to_string()))?;
+        let skill_path = AbsolutePathBuf::from_absolute_path(
+            std::fs::canonicalize(skill_path.as_path())
+                .map_err(|err| internal_error(err.to_string()))?,
+        )
+        .map_err(|err| internal_error(err.to_string()))?;
+
+        self.outgoing
+            .send_server_notification(ServerNotification::SkillsChanged(
+                crewon_app_server_protocol::SkillsChangedNotification {},
+            ))
+            .await;
+        let list = self
+            .skills_list_response(SkillsListParams {
+                cwds: vec![cwd.to_path_buf()],
+                force_reload: true,
+            })
+            .await?;
+        let skill = list
+            .data
+            .into_iter()
+            .flat_map(|entry| entry.skills)
+            .find(|skill| skill.path == skill_path)
+            .ok_or_else(|| invalid_params("created skill was not found after reload"))?;
+        Ok(SkillsCreateResponse { root, skill })
+    }
+
     async fn skills_extra_roots_set_response(
         &self,
         params: SkillsExtraRootsSetParams,
@@ -594,7 +698,7 @@ impl CatalogRequestProcessor {
             .set_extra_roots(extra_roots);
         self.outgoing
             .send_server_notification(ServerNotification::SkillsChanged(
-                codex_app_server_protocol::SkillsChangedNotification {},
+                crewon_app_server_protocol::SkillsChangedNotification {},
             ))
             .await;
         Ok(SkillsExtraRootsSetResponse {})
@@ -628,11 +732,11 @@ impl CatalogRequestProcessor {
                 Ok(config) => config,
                 Err(err) => {
                     let error_path = cwd.clone();
-                    data.push(codex_app_server_protocol::HooksListEntry {
+                    data.push(crewon_app_server_protocol::HooksListEntry {
                         cwd,
                         hooks: Vec::new(),
                         warnings: Vec::new(),
-                        errors: vec![codex_app_server_protocol::HookErrorInfo {
+                        errors: vec![crewon_app_server_protocol::HookErrorInfo {
                             path: error_path,
                             message: err.to_string(),
                         }],
@@ -640,30 +744,30 @@ impl CatalogRequestProcessor {
                     continue;
                 }
             };
-            let workspace_codex_plugins_enabled = self
-                .workspace_codex_plugins_enabled(&config, auth.as_ref())
+            let workspace_crewon_plugins_enabled = self
+                .workspace_crewon_plugins_enabled(&config, auth.as_ref())
                 .await;
             let plugins_enabled =
-                config.features.enabled(Feature::Plugins) && workspace_codex_plugins_enabled;
+                config.features.enabled(Feature::Plugins) && workspace_crewon_plugins_enabled;
             let plugin_hooks = if plugins_enabled {
                 let plugins_input = config.plugins_config_input();
                 let plugin_outcome = plugins_manager.plugins_for_config(&plugins_input).await;
-                codex_core_plugins::PluginHookLoadOutcome {
+                crewon_core_plugins::PluginHookLoadOutcome {
                     hook_sources: plugin_outcome.effective_plugin_hook_sources(),
                     hook_load_warnings: plugin_outcome.effective_plugin_hook_warnings(),
                 }
             } else {
-                codex_core_plugins::PluginHookLoadOutcome::default()
+                crewon_core_plugins::PluginHookLoadOutcome::default()
             };
-            let hooks = codex_hooks::list_hooks(codex_hooks::HooksConfig {
-                feature_enabled: config.features.enabled(Feature::CodexHooks),
+            let hooks = crewon_hooks::list_hooks(crewon_hooks::HooksConfig {
+                feature_enabled: config.features.enabled(Feature::Hooks),
                 bypass_hook_trust: config.bypass_hook_trust,
                 config_layer_stack: Some(config.config_layer_stack),
                 plugin_hook_sources: plugin_hooks.hook_sources,
                 plugin_hook_load_warnings: plugin_hooks.hook_load_warnings,
                 ..Default::default()
             });
-            data.push(codex_app_server_protocol::HooksListEntry {
+            data.push(crewon_app_server_protocol::HooksListEntry {
                 cwd,
                 hooks: hooks_to_info(&hooks.hooks),
                 warnings: hooks.warnings,
@@ -710,4 +814,38 @@ impl CatalogRequestProcessor {
             })
             .map_err(|err| internal_error(format!("failed to update skill settings: {err}")))
     }
+}
+
+fn validate_skill_name(name: &str) -> Result<&str, JSONRPCErrorError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(invalid_params("name must not be empty"));
+    }
+    if name.len() > 64 {
+        return Err(invalid_params("name must be 64 characters or fewer"));
+    }
+    if !name
+        .bytes()
+        .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+        || name.starts_with('-')
+        || name.ends_with('-')
+    {
+        return Err(invalid_params(
+            "name must contain only lowercase letters, digits, and hyphens",
+        ));
+    }
+    Ok(name)
+}
+
+fn validate_skill_description(description: &str) -> Result<&str, JSONRPCErrorError> {
+    let description = description.trim();
+    if description.is_empty() {
+        return Err(invalid_params("description must not be empty"));
+    }
+    if description.len() > 1024 {
+        return Err(invalid_params(
+            "description must be 1024 characters or fewer",
+        ));
+    }
+    Ok(description)
 }

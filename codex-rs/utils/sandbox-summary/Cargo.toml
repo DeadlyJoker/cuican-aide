@@ -1,5 +1,5 @@
 [package]
-name = "codex-utils-sandbox-summary"
+name = "crewon-utils-sandbox-summary"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -8,14 +8,15 @@ license.workspace = true
 workspace = true
 
 [dependencies]
-codex-core = { workspace = true }
-codex-model-provider-info = { workspace = true }
-codex-protocol = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
+crewon-core = { workspace = true }
+crewon-model-provider-info = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
 
 [dev-dependencies]
-codex-utils-absolute-path = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
 pretty_assertions = { workspace = true }
 
 [lib]
+name = "crewon_utils_sandbox_summary"
 doctest = false

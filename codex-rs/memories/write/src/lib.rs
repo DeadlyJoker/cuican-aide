@@ -1,4 +1,4 @@
-//! Write-path implementation for Codex memories.
+//! Write-path implementation for Crewon memories.
 //!
 //! This crate owns the startup memory pipeline, file-backed memory artifact
 //! helpers, Phase 1 and Phase 2 prompt rendering, extension pruning, and
@@ -16,7 +16,7 @@ mod start;
 mod storage;
 pub mod workspace;
 
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::path::Path;
 use std::path::PathBuf;
 
@@ -76,8 +76,8 @@ signal to remove stale memories derived only from those resources.
 }
 
 mod stage_one {
-    pub(super) const REASONING_EFFORT: codex_protocol::openai_models::ReasoningEffort =
-        codex_protocol::openai_models::ReasoningEffort::Low;
+    pub(super) const REASONING_EFFORT: crewon_protocol::openai_models::ReasoningEffort =
+        crewon_protocol::openai_models::ReasoningEffort::Low;
     pub(super) const CONCURRENCY_LIMIT: usize = 8;
     pub(super) const JOB_LEASE_SECONDS: i64 = 3_600;
     pub(super) const JOB_RETRY_DELAY_SECONDS: i64 = 3_600;
@@ -100,8 +100,8 @@ mod stage_one {
 }
 
 mod stage_two {
-    pub(super) const REASONING_EFFORT: codex_protocol::openai_models::ReasoningEffort =
-        codex_protocol::openai_models::ReasoningEffort::Medium;
+    pub(super) const REASONING_EFFORT: crewon_protocol::openai_models::ReasoningEffort =
+        crewon_protocol::openai_models::ReasoningEffort::Medium;
     pub(super) const JOB_LEASE_SECONDS: i64 = 3_600;
     pub(super) const JOB_RETRY_DELAY_SECONDS: i64 = 3_600;
     pub(super) const JOB_HEARTBEAT_SECONDS: u64 = 90;
@@ -113,8 +113,8 @@ mod workspace_diff {
     pub(super) const MAX_BYTES: usize = 4 * 1024 * 1024;
 }
 
-pub fn memory_root(codex_home: &AbsolutePathBuf) -> AbsolutePathBuf {
-    codex_home.join("memories")
+pub fn memory_root(crewon_home: &AbsolutePathBuf) -> AbsolutePathBuf {
+    crewon_home.join("memories")
 }
 
 pub fn rollout_summaries_dir(root: &Path) -> PathBuf {

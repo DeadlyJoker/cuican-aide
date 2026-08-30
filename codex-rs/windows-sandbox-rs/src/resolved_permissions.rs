@@ -1,11 +1,11 @@
 use anyhow::Result;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxKind;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxKind;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::collections::HashMap;
 use std::path::Path;
 use std::path::PathBuf;
@@ -138,8 +138,8 @@ impl ResolvedWindowsSandboxPermissions {
                 !matches!(
                     path,
                     FileSystemPath::Special {
-                        value: codex_protocol::permissions::FileSystemSpecialPath::Tmpdir
-                            | codex_protocol::permissions::FileSystemSpecialPath::SlashTmp,
+                        value: crewon_protocol::permissions::FileSystemSpecialPath::Tmpdir
+                            | crewon_protocol::permissions::FileSystemSpecialPath::SlashTmp,
                     }
                 )
             });
@@ -177,7 +177,7 @@ impl ResolvedWindowsSandboxPermissions {
                 matches!(
                     path,
                     FileSystemPath::Special {
-                        value: codex_protocol::permissions::FileSystemSpecialPath::Tmpdir,
+                        value: crewon_protocol::permissions::FileSystemSpecialPath::Tmpdir,
                     }
                 ) && access.can_write()
             })
@@ -200,11 +200,11 @@ fn windows_temp_env_roots(env_map: &HashMap<String, String>) -> Vec<PathBuf> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_protocol::models::ManagedFileSystemPermissions;
-    use codex_protocol::permissions::FileSystemAccessMode;
-    use codex_protocol::permissions::FileSystemSandboxEntry;
-    use codex_protocol::permissions::FileSystemSpecialPath;
-    use codex_protocol::permissions::project_roots_glob_pattern;
+    use crewon_protocol::models::ManagedFileSystemPermissions;
+    use crewon_protocol::permissions::FileSystemAccessMode;
+    use crewon_protocol::permissions::FileSystemSandboxEntry;
+    use crewon_protocol::permissions::FileSystemSpecialPath;
+    use crewon_protocol::permissions::project_roots_glob_pattern;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
 

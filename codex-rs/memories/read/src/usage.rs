@@ -1,11 +1,12 @@
-use codex_protocol::parse_command::ParsedCommand;
-use codex_shell_command::is_safe_command::is_known_safe_command;
-use codex_shell_command::parse_command::parse_command;
+use crewon_protocol::parse_command::ParsedCommand;
+use crewon_shell_command::is_safe_command::is_known_safe_command;
+use crewon_shell_command::parse_command::parse_command;
 
 pub use crate::metrics::MEMORIES_USAGE_METRIC;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub enum MemoriesUsageKind {
+    AdHocNotes,
     MemoryMd,
     MemorySummary,
     RawMemories,
@@ -16,6 +17,7 @@ pub enum MemoriesUsageKind {
 impl MemoriesUsageKind {
     pub fn as_tag(self) -> &'static str {
         match self {
+            Self::AdHocNotes => "ad_hoc_notes",
             Self::MemoryMd => "memory_md",
             Self::MemorySummary => "memory_summary",
             Self::RawMemories => "raw_memories",
@@ -33,15 +35,20 @@ pub fn memories_usage_kinds_from_command(command: &[String]) -> Vec<MemoriesUsag
     parse_command(command)
         .into_iter()
         .filter_map(|command| match command {
-            ParsedCommand::Read { path, .. } => get_memory_kind(path.display().to_string()),
-            ParsedCommand::Search { path, .. } => path.and_then(get_memory_kind),
+            ParsedCommand::Read { path, .. } => get_memory_kind(&path.display().to_string()),
+            ParsedCommand::Search { cmd, path, .. } => path
+                .as_deref()
+                .and_then(get_memory_kind)
+                .or_else(|| get_memory_kind(&cmd)),
             ParsedCommand::ListFiles { .. } | ParsedCommand::Unknown { .. } => None,
         })
         .collect()
 }
 
-fn get_memory_kind(path: String) -> Option<MemoriesUsageKind> {
-    if path.contains("memories/MEMORY.md") {
+fn get_memory_kind(path: &str) -> Option<MemoriesUsageKind> {
+    if path.contains("memories/extensions/ad_hoc/notes") {
+        Some(MemoriesUsageKind::AdHocNotes)
+    } else if path.contains("memories/MEMORY.md") {
         Some(MemoriesUsageKind::MemoryMd)
     } else if path.contains("memories/memory_summary.md") {
         Some(MemoriesUsageKind::MemorySummary)
@@ -55,3 +62,7 @@ fn get_memory_kind(path: String) -> Option<MemoriesUsageKind> {
         None
     }
 }
+
+#[cfg(test)]
+#[path = "usage_tests.rs"]
+mod tests;

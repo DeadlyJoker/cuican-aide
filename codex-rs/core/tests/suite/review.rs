@@ -1,31 +1,31 @@
-use codex_core::CodexThread;
-use codex_core::REVIEW_PROMPT;
-use codex_core::config::Config;
-use codex_core::review_format::render_review_output_text;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::ENVIRONMENT_CONTEXT_OPEN_TAG;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ExitedReviewModeEvent;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::ReviewCodeLocation;
-use codex_protocol::protocol::ReviewFinding;
-use codex_protocol::protocol::ReviewLineRange;
-use codex_protocol::protocol::ReviewOutputEvent;
-use codex_protocol::protocol::ReviewRequest;
-use codex_protocol::protocol::ReviewTarget;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::user_input::UserInput;
 use core_test_support::PathBufExt;
 use core_test_support::responses;
 use core_test_support::responses::ResponseMock;
 use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_core::CrewonThread;
+use crewon_core::REVIEW_PROMPT;
+use crewon_core::config::Config;
+use crewon_core::review_format::render_review_output_text;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::ENVIRONMENT_CONTEXT_OPEN_TAG;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::ExitedReviewModeEvent;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::ReviewCodeLocation;
+use crewon_protocol::protocol::ReviewFinding;
+use crewon_protocol::protocol::ReviewLineRange;
+use crewon_protocol::protocol::ReviewOutputEvent;
+use crewon_protocol::protocol::ReviewRequest;
+use crewon_protocol::protocol::ReviewTarget;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 use std::sync::Arc;
@@ -39,7 +39,7 @@ use wiremock::MockServer;
 /// in that order when the model returns a structured review JSON payload.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn review_op_emits_lifecycle_and_review_output() {
-    // Skip under Codex sandbox network restrictions.
+    // Skip under Crewon sandbox network restrictions.
     skip_if_no_network!();
 
     // Start mock Responses API server. Return a single assistant message whose
@@ -524,10 +524,10 @@ async fn review_input_isolated_from_parent_history() {
             .unwrap();
 
         // Prior user message (enveloped response_item)
-        let user = codex_protocol::models::ResponseItem::Message {
+        let user = crewon_protocol::models::ResponseItem::Message {
             id: None,
             role: "user".to_string(),
-            content: vec![codex_protocol::models::ContentItem::InputText {
+            content: vec![crewon_protocol::models::ContentItem::InputText {
                 text: "parent: earlier user message".to_string(),
             }],
             phase: None,
@@ -543,10 +543,10 @@ async fn review_input_isolated_from_parent_history() {
             .unwrap();
 
         // Prior assistant message (enveloped response_item)
-        let assistant = codex_protocol::models::ResponseItem::Message {
+        let assistant = crewon_protocol::models::ResponseItem::Message {
             id: None,
             role: "assistant".to_string(),
-            content: vec![codex_protocol::models::ContentItem::OutputText {
+            content: vec![crewon_protocol::models::ContentItem::OutputText {
                 text: "parent: assistant reply".to_string(),
             }],
             phase: None,
@@ -625,9 +625,10 @@ async fn review_input_isolated_from_parent_history() {
         "user message should only contain the raw review prompt"
     );
 
-    // Ensure the REVIEW_PROMPT rubric is sent via instructions.
+    // Ensure the REVIEW_PROMPT rubric and runtime model identity are sent via instructions.
     let instructions = body["instructions"].as_str().expect("instructions string");
-    assert_eq!(instructions, REVIEW_PROMPT);
+    assert!(instructions.starts_with(REVIEW_PROMPT));
+    assert!(instructions.contains("<runtime_model_identity>"));
 
     // Also verify that a user interruption note was recorded in the rollout.
     let path = codex.rollout_path().expect("rollout path");
@@ -820,7 +821,7 @@ async fn review_uses_overridden_cwd_for_base_branch_merge_base() {
 
     core_test_support::submit_thread_settings(
         &codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             environments: Some(local_selections(repo_path.to_path_buf().abs())),
             ..Default::default()
         },
@@ -893,12 +894,12 @@ async fn new_conversation_for_server<F>(
     server: &MockServer,
     codex_home: Arc<TempDir>,
     mutator: F,
-) -> Arc<CodexThread>
+) -> Arc<CrewonThread>
 where
     F: FnOnce(&mut Config) + Send + 'static,
 {
     let base_url = format!("{}/v1", server.uri());
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(codex_home)
         .with_config(move |config| {
             config.model_provider.base_url = Some(base_url.clone());
@@ -908,7 +909,7 @@ where
         .build(server)
         .await
         .expect("create conversation")
-        .codex
+        .crewon
 }
 
 /// Create a conversation resuming from a rollout file, configured to talk to the provided mock server.
@@ -918,12 +919,12 @@ async fn resume_conversation_for_server<F>(
     codex_home: Arc<TempDir>,
     resume_path: std::path::PathBuf,
     mutator: F,
-) -> Arc<CodexThread>
+) -> Arc<CrewonThread>
 where
     F: FnOnce(&mut Config) + Send + 'static,
 {
     let base_url = format!("{}/v1", server.uri());
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(codex_home.clone())
         .with_config(move |config| {
             config.model_provider.base_url = Some(base_url.clone());
@@ -933,5 +934,5 @@ where
         .resume(server, codex_home, resume_path)
         .await
         .expect("resume conversation")
-        .codex
+        .crewon
 }

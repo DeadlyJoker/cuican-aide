@@ -1,0 +1,20 @@
+{
+  "schemaVersion": "crewon.tool-output-reference.v0",
+  "caseId": "AR-014-015-shell-tool-output",
+  "cases": [
+    {
+      "caseId": "AR-014-json-freeform",
+      "exitCode": 0,
+      "wallTimeSeconds": 0.25,
+      "output": "{\n    \"description\": \"This is an example JSON file.\",\n    \"foo\": \"bar\",\n    \"isTest\": true,\n    \"testNumber\": 123,\n    \"testArray\": [1, 2, 3],\n    \"testObject\": {\n        \"foo\": \"bar\"\n    }\n}\n",
+      "modelVisibleOutput": "Exit code: 0\nWall time: 0.25 seconds\nOutput:\n{\n    \"description\": \"This is an example JSON file.\",\n    \"foo\": \"bar\",\n    \"isTest\": true,\n    \"testNumber\": 123,\n    \"testArray\": [1, 2, 3],\n    \"testObject\": {\n        \"foo\": \"bar\"\n    }\n}\n"
+    },
+    {
+      "caseId": "AR-015-nonzero-freeform",
+      "exitCode": 42,
+      "wallTimeSeconds": 0.25,
+      "output": "",
+      "modelVisibleOutput": "Exit code: 42\nWall time: 0.25 seconds\nOutput:\n"
+    }
+  ]
+}

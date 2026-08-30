@@ -1,0 +1,1469 @@
+import assert from "node:assert/strict";
+import { spawn } from "node:child_process";
+import { createHash, randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { fileURLToPath } from "node:url";
+import { DatabaseSync } from "node:sqlite";
+import { test, type TestContext } from "node:test";
+
+import {
+  DeterministicFakeModelTransport,
+  type ModelTransportPort,
+} from "@crewon/agent-kernel";
+import { compileAgentVersion } from "@crewon/agent-version";
+import type {
+  AgentVersionDeploymentCandidate,
+  ArtifactStorePort,
+  RunRoute,
+} from "@crewon/application";
+import {
+  FilesystemArtifactStore,
+  InMemoryArtifactStore,
+} from "@crewon/artifacts";
+import { ControlApiClient } from "@crewon/control-client";
+import type {
+  AppendThreadMessageResponse,
+  ListThreadMessagesResponse,
+  RunEventView,
+  RunMutationResponse,
+  StartTurnResponse,
+  ThreadGoalEventView,
+  ThreadGoalMutationResponse,
+  ThreadMutationResponse,
+} from "@crewon/contracts";
+import type { FastifyInstance } from "fastify";
+import { Pool } from "pg";
+import {
+  activateStandaloneRuntimeAgentVersionRelease,
+  ConfiguredAgentVersionRuntimeFactory,
+  createStandaloneRuntimeWorker,
+} from "@crewon/runtime-worker";
+import { InMemoryToolBroker, type ToolRuntimePort } from "@crewon/tool-broker";
+
+import {
+  createStandaloneControlApi,
+  createPostgresControlApi,
+  type PostgresControlApiConfig,
+  type StandaloneControlApiConfig,
+} from "./standalone-composition.ts";
+
+const SESSION_TOKEN = "e2e-session-token-32-bytes-minimum-1";
+const CSRF_TOKEN = "e2e-csrf-token-32-bytes-minimum-val1";
+const ORIGIN = "http://127.0.0.1:5175";
+
+test("streams durable SQLite Run events over real loopback HTTP and resumes after restart", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  await activateSqliteReleaseProcess(databasePath);
+  const first = createStandaloneControlApi(config(databasePath));
+  context.after(() => closeIfListening(first.app));
+  await first.app.listen({ host: "127.0.0.1", port: 0 });
+  const firstBaseUrl = serverBaseUrl(first.app);
+
+  const threadResponse = await fetch(`${firstBaseUrl}/api/v1/threads`, {
+    method: "POST",
+    headers: mutationHeaders("e2e-thread-1"),
+    body: JSON.stringify({ title: "Durable E2E" }),
+  });
+  assert.equal(threadResponse.status, 201);
+  const thread = (await threadResponse.json()) as ThreadMutationResponse;
+  assert.match(thread.thread.threadId, UUID_V7_PATTERN);
+
+  const messageResponse = await fetch(
+    `${firstBaseUrl}/api/v1/threads/${thread.thread.threadId}/messages`,
+    {
+      method: "POST",
+      headers: mutationHeaders("e2e-message-1"),
+      body: JSON.stringify({
+        expectedRevision: 1,
+        content: "persist this message",
+      }),
+    },
+  );
+  assert.equal(messageResponse.status, 201);
+  const message = (await messageResponse.json()) as AppendThreadMessageResponse;
+  assert.equal(message.message.role, "user");
+  assert.equal(message.message.sequence, 1);
+
+  const createResponse = await fetch(`${firstBaseUrl}/api/v1/runs`, {
+    method: "POST",
+    headers: mutationHeaders("e2e-create-1"),
+    body: JSON.stringify({ threadId: thread.thread.threadId }),
+  });
+  assert.equal(createResponse.status, 201);
+  const created = (await createResponse.json()) as RunMutationResponse;
+  assert.match(created.run.runId, UUID_V7_PATTERN);
+
+  const firstStreamAbort = new AbortController();
+  const firstStream = await fetch(
+    `${firstBaseUrl}/api/v1/runs/${created.run.runId}/events`,
+    {
+      headers: readHeaders(),
+      signal: firstStreamAbort.signal,
+    },
+  );
+  assert.equal(firstStream.status, 200);
+  assert.match(
+    firstStream.headers.get("content-type") ?? "",
+    /^text\/event-stream/,
+  );
+  const firstReader = new SseReader(requiredBody(firstStream).getReader());
+  const createdFrame = await firstReader.nextFrame();
+  assert.equal(createdFrame.id, "1");
+  assert.equal(createdFrame.event, "run.created");
+  assert.match(createdFrame.data.eventId, UUID_V7_PATTERN);
+  assert.deepEqual(createdFrame.data.data, {
+    threadId: thread.thread.threadId,
+  });
+  assertPublicEvent(createdFrame.data);
+
+  const cancelResponse = await fetch(
+    `${firstBaseUrl}/api/v1/runs/${created.run.runId}:cancel`,
+    {
+      method: "POST",
+      headers: mutationHeaders("e2e-cancel-1"),
+      body: JSON.stringify({ expectedRevision: 1 }),
+    },
+  );
+  assert.equal(cancelResponse.status, 200);
+  const cancelRequested = (await cancelResponse.json()) as RunMutationResponse;
+  assert.equal(cancelRequested.run.cancelRequested, true);
+  assert.equal(cancelRequested.run.revision, 2);
+
+  const canceledFrame = await firstReader.nextFrame();
+  assert.equal(canceledFrame.id, "2");
+  assert.equal(canceledFrame.event, "run.cancel.requested");
+  assert.deepEqual(canceledFrame.data.data, {});
+  assertPublicEvent(canceledFrame.data);
+
+  await firstReader.cancel();
+  firstStreamAbort.abort();
+  await first.app.close();
+
+  const reopened = createStandaloneControlApi(config(databasePath));
+  context.after(() => closeIfListening(reopened.app));
+  await reopened.app.listen({ host: "127.0.0.1", port: 0 });
+  const reopenedBaseUrl = serverBaseUrl(reopened.app);
+  const readResponse = await fetch(
+    `${reopenedBaseUrl}/api/v1/runs/${created.run.runId}`,
+    { headers: readHeaders() },
+  );
+  assert.equal(readResponse.status, 200);
+  const readBody = (await readResponse.json()) as {
+    run: RunMutationResponse["run"];
+  };
+  assert.equal(readBody.run.revision, 2);
+  assert.equal(readBody.run.cancelRequested, true);
+
+  const messagesResponse = await fetch(
+    `${reopenedBaseUrl}/api/v1/threads/${thread.thread.threadId}/messages`,
+    { headers: readHeaders() },
+  );
+  assert.equal(messagesResponse.status, 200);
+  const messages =
+    (await messagesResponse.json()) as ListThreadMessagesResponse;
+  assert.deepEqual(messages, { data: [message.message], nextCursor: null });
+
+  const resumedAbort = new AbortController();
+  const resumedStream = await fetch(
+    `${reopenedBaseUrl}/api/v1/runs/${created.run.runId}/events`,
+    {
+      headers: { ...readHeaders(), "last-event-id": "1" },
+      signal: resumedAbort.signal,
+    },
+  );
+  const resumedReader = new SseReader(requiredBody(resumedStream).getReader());
+  const resumedFrame = await resumedReader.nextFrame();
+  assert.equal(resumedFrame.id, "2");
+  assert.equal(resumedFrame.event, "run.cancel.requested");
+  assert.equal(resumedFrame.data.sequence, 2);
+  await resumedReader.cancel();
+  resumedAbort.abort();
+});
+
+test("recovers a Run in an independent Worker process after a post-start crash", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  await activateSqliteReleaseProcess(databasePath);
+  const control = createStandaloneControlApi(config(databasePath));
+  context.after(() => closeIfListening(control.app));
+  await control.app.listen({ host: "127.0.0.1", port: 0 });
+  const baseUrl = serverBaseUrl(control.app);
+
+  const threadResponse = await fetch(`${baseUrl}/api/v1/threads`, {
+    method: "POST",
+    headers: mutationHeaders("process-thread-1"),
+    body: JSON.stringify({ title: "Process recovery" }),
+  });
+  assert.equal(threadResponse.status, 201);
+  const thread = (await threadResponse.json()) as ThreadMutationResponse;
+  const messageResponse = await fetch(
+    `${baseUrl}/api/v1/threads/${thread.thread.threadId}/messages`,
+    {
+      method: "POST",
+      headers: mutationHeaders("process-message-1"),
+      body: JSON.stringify({
+        expectedRevision: 1,
+        content: "run in a child process",
+      }),
+    },
+  );
+  assert.equal(messageResponse.status, 201);
+  const runResponse = await fetch(`${baseUrl}/api/v1/runs`, {
+    method: "POST",
+    headers: mutationHeaders("process-run-1"),
+    body: JSON.stringify({ threadId: thread.thread.threadId }),
+  });
+  assert.equal(runResponse.status, 201);
+  const run = (await runResponse.json()) as RunMutationResponse;
+
+  const liveAbort = new AbortController();
+  const liveStream = await fetch(
+    `${baseUrl}/api/v1/runs/${run.run.runId}/events`,
+    {
+      headers: { ...readHeaders(), "last-event-id": "1" },
+      signal: liveAbort.signal,
+    },
+  );
+  assert.equal(liveStream.status, 200);
+  const liveReader = new SseReader(requiredBody(liveStream).getReader());
+
+  const crashed = await runWorkerProcess(
+    fileURLToPath(
+      new URL(
+        "../../runtime-worker/test-fixtures/crash-after-start.ts",
+        import.meta.url,
+      ),
+    ),
+    workerEnvironment(databasePath),
+    "attempt-started-before-crash",
+  );
+  assert.equal(crashed.signal, "SIGKILL", crashed.stderr);
+  assert.match(crashed.stdout, /attempt-started-before-crash/);
+  await control.outboxDispatcher.wake();
+  const startedFrame = await liveReader.nextFrame();
+  assert.deepEqual([startedFrame.id, startedFrame.event], ["2", "run.started"]);
+
+  const runningResponse = await fetch(
+    `${baseUrl}/api/v1/runs/${run.run.runId}`,
+    { headers: readHeaders() },
+  );
+  assert.equal(runningResponse.status, 200);
+  assert.equal(
+    ((await runningResponse.json()) as { run: RunMutationResponse["run"] }).run
+      .status,
+    "running",
+  );
+
+  const database = new DatabaseSync(databasePath);
+  const expired = database
+    .prepare(
+      `UPDATE work_items
+       SET lease_expires_at_ms = 0
+       WHERE run_id = ? AND status = 'leased'`,
+    )
+    .run(run.run.runId);
+  database.close();
+  assert.equal(expired.changes, 1);
+
+  const recovered = await runWorkerProcess(
+    fileURLToPath(new URL("../../runtime-worker/src/main.ts", import.meta.url)),
+    workerEnvironment(databasePath),
+  );
+  assert.equal(recovered.exitCode, 0, recovered.stderr);
+  assert.deepEqual(JSON.parse(recovered.stdout.trim()), {
+    kind: "completed",
+    runId: run.run.runId,
+  });
+
+  const completedResponse = await fetch(
+    `${baseUrl}/api/v1/runs/${run.run.runId}`,
+    { headers: readHeaders() },
+  );
+  assert.equal(completedResponse.status, 200);
+  const completed = (await completedResponse.json()) as {
+    run: RunMutationResponse["run"];
+  };
+  assert.equal(completed.run.status, "completed");
+  assert.equal(completed.run.revision, 8);
+
+  const attemptDatabase = new DatabaseSync(databasePath);
+  const attemptRows = attemptDatabase
+    .prepare(
+      `SELECT attempt_id, attempt_number, retry_of_attempt_id, status
+       FROM run_attempts
+       WHERE tenant_id = ? AND run_id = ?
+       ORDER BY attempt_number`,
+    )
+    .all("tenant-e2e-1", run.run.runId) as unknown as Array<{
+    attempt_id: string;
+    attempt_number: number;
+    retry_of_attempt_id: string | null;
+    status: string;
+  }>;
+  attemptDatabase.close();
+  assert.equal(attemptRows.length, 2);
+  assert.deepEqual(
+    attemptRows.map((attempt, index) => ({
+      attemptNumber: attempt.attempt_number,
+      retryOfPrevious:
+        attempt.retry_of_attempt_id === null
+          ? null
+          : attempt.retry_of_attempt_id === attemptRows[index - 1]?.attempt_id,
+      status: attempt.status,
+    })),
+    [
+      {
+        attemptNumber: 1,
+        retryOfPrevious: null,
+        status: "abandoned",
+      },
+      {
+        attemptNumber: 2,
+        retryOfPrevious: true,
+        status: "completed",
+      },
+    ],
+  );
+
+  const messagesResponse = await fetch(
+    `${baseUrl}/api/v1/threads/${thread.thread.threadId}/messages`,
+    { headers: readHeaders() },
+  );
+  const messages =
+    (await messagesResponse.json()) as ListThreadMessagesResponse;
+  assert.deepEqual(
+    messages.data.map(({ role, content, sequence }) => ({
+      role,
+      content,
+      sequence,
+    })),
+    [
+      { role: "user", content: "run in a child process", sequence: 1 },
+      { role: "assistant", content: "child completed", sequence: 2 },
+    ],
+  );
+
+  await control.outboxDispatcher.wake();
+  const frames = [startedFrame];
+  for (let sequence = 3; sequence <= 8; sequence += 1) {
+    frames.push(await liveReader.nextFrame());
+  }
+  assert.deepEqual(
+    frames.map((frame) => [frame.id, frame.event]),
+    [
+      ["2", "run.started"],
+      ["3", "segment.started"],
+      ["4", "model.output.delta"],
+      ["5", "usage.recorded"],
+      ["6", "segment.completed"],
+      ["7", "message.completed"],
+      ["8", "run.completed"],
+    ],
+  );
+  const deltaEvent = frames[2]?.data;
+  assert.equal(deltaEvent?.type, "model.output.delta");
+  if (deltaEvent?.type !== "model.output.delta") {
+    throw new Error("model delta frame missing");
+  }
+  assert.equal(deltaEvent.data.delta, "child completed");
+  assert.equal(typeof deltaEvent.data.segmentId, "string");
+  assertPublicEvent(deltaEvent);
+  await liveReader.cancel();
+  liveAbort.abort();
+});
+
+test("executes an admitted published AgentVersion through the durable SQLite path", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const initialRelease = await activateSqliteReleaseProcess(databasePath);
+  const version = compileAgentVersion(selectedAgentVersionSource(), {
+    sha256: (value) =>
+      `sha256:${createHash("sha256").update(value).digest("hex")}`,
+  });
+  const control = createStandaloneControlApi(config(databasePath));
+  context.after(() => closeIfListening(control.app));
+  await control.app.listen({ host: "127.0.0.1", port: 0 });
+  const baseUrl = serverBaseUrl(control.app);
+  const client = new ControlApiClient({
+    baseUrl,
+    accessToken: SESSION_TOKEN,
+    csrfToken: CSRF_TOKEN,
+    origin: ORIGIN,
+  });
+  const published = await client.publishAgentVersion(
+    selectedAgentVersionSource(),
+  );
+  assert.equal(published.disposition, "registered");
+  const runtimeFactory = new ConfiguredAgentVersionRuntimeFactory([
+    {
+      tenantId: "tenant-e2e-1",
+      agentVersionId: version.agentVersionId,
+      contentDigest: version.contentDigest,
+      authorityId: "selected-authority-e2e-1",
+      workspaceBindingId: null,
+      materializationDigest: `sha256:${"d".repeat(64)}`,
+      createTransport: () =>
+        new DeterministicFakeModelTransport({
+          expectedLastUserMessage: "execute the selected version",
+          events: [
+            { type: "output.delta", delta: "selected version completed" },
+            {
+              type: "usage",
+              inputTokens: 4,
+              outputTokens: 3,
+              totalTokens: 7,
+            },
+            { type: "completed", checkpoint: null },
+          ],
+        }),
+      createToolRuntime: () => new InMemoryToolBroker(),
+    },
+  ]);
+  await activateStandaloneRelease({
+    databasePath,
+    route: config(databasePath).route,
+    transport: new DeterministicFakeModelTransport({
+      expectedLastUserMessage: "bootstrap is not selected",
+      events: [{ type: "completed", checkpoint: null }],
+    }),
+    agentVersionDeployments: runtimeFactory.deploymentBindings("tenant-e2e-1"),
+    activationId: "activation-selected-e2e",
+  });
+  const selectedCatalog = await client.getActiveAgentVersionCatalog();
+  assert.equal(
+    selectedCatalog.data.find(
+      (candidate) => candidate.agentVersionId === version.agentVersionId,
+    )?.model.modelId,
+    version.model.modelId,
+  );
+  const thread = await client.createThread(
+    { title: "selected-version" },
+    "selected-version-thread",
+  );
+  const created = await client.startTurn(
+    thread.thread.threadId,
+    {
+      expectedRevision: 1,
+      content: "execute the selected version",
+      agentVersionId: version.agentVersionId,
+      executionIntent: "none",
+    },
+    "selected-version-turn",
+  );
+  const workerConfig = {
+    databasePath,
+    runtimeTenantId: "tenant-e2e-1",
+    route: config(databasePath).route,
+    transport: new DeterministicFakeModelTransport({
+      expectedLastUserMessage: "bootstrap is not selected",
+      events: [{ type: "completed", checkpoint: null }],
+    }),
+    agentVersionRuntimeFactory: runtimeFactory,
+    agentVersionDeployments: runtimeFactory.deploymentBindings("tenant-e2e-1"),
+    scanIntervalMs: null,
+  };
+  const worker = await createStandaloneRuntimeWorker(workerConfig);
+  context.after(() => worker.close());
+
+  assert.deepEqual(await worker.worker.wake(), {
+    kind: "completed",
+    runId: created.run.runId,
+  });
+  const messages = await client.listThreadMessages(thread.thread.threadId);
+  assert.deepEqual(
+    messages.data.map(({ role, content }) => ({ role, content })),
+    [
+      { role: "user", content: "execute the selected version" },
+      { role: "assistant", content: "selected version completed" },
+    ],
+  );
+  const historicalThread = await client.createThread(
+    { title: "selected-version-before-rollback" },
+    "selected-version-historical-thread",
+  );
+  const historicalRun = await client.startTurn(
+    historicalThread.thread.threadId,
+    {
+      expectedRevision: 1,
+      content: "execute the selected version",
+      agentVersionId: version.agentVersionId,
+      executionIntent: "none",
+    },
+    "selected-version-historical-turn",
+  );
+  await worker.close();
+  const rollback = await runWorkerProcess(
+    fileURLToPath(
+      new URL(
+        "../../runtime-worker/src/release-rollback-main.ts",
+        import.meta.url,
+      ),
+    ),
+    {
+      ...process.env,
+      CREWON_CONTROL_DB_PATH: databasePath,
+      CREWON_TENANT_ID: "tenant-e2e-1",
+      CREWON_SPACE_ID: "space-e2e-1",
+      CREWON_RELEASE_PRINCIPAL_ID: "release-principal-e2e",
+      CREWON_RELEASE_ACTOR_ID: "release-actor-e2e",
+      CREWON_AGENT_VERSION_ROLLBACK_RELEASE_ID: initialRelease.releaseId,
+      CREWON_AGENT_VERSION_ACTIVATION_ID: "activation-selected-rollback-e2e",
+      CREWON_MODEL_ID: "",
+      CREWON_MODEL_API_KEY: "",
+    },
+  );
+  assert.equal(rollback.exitCode, 0, rollback.stderr);
+  assert.equal(JSON.parse(rollback.stdout).releaseId, initialRelease.releaseId);
+  const rolledBackCatalog = await client.getActiveAgentVersionCatalog();
+  assert.equal(rolledBackCatalog.releaseId, initialRelease.releaseId);
+  assert.equal(
+    rolledBackCatalog.data.some(
+      (candidate) => candidate.agentVersionId === version.agentVersionId,
+    ),
+    false,
+  );
+  assert.deepEqual(
+    await client.startTurn(
+      historicalThread.thread.threadId,
+      {
+        expectedRevision: 1,
+        content: "execute the selected version",
+        agentVersionId: version.agentVersionId,
+        executionIntent: "none",
+      },
+      "selected-version-historical-turn",
+    ),
+    { ...historicalRun, disposition: "replayed" },
+  );
+  const newThreadAfterRollback = await client.createThread(
+    { title: "selected-version-after-rollback" },
+    "selected-version-after-rollback-thread",
+  );
+  const deniedAfterRollback = await fetch(
+    `${baseUrl}/api/v1/threads/${newThreadAfterRollback.thread.threadId}/turns`,
+    {
+      method: "POST",
+      headers: mutationHeaders("selected-version-after-rollback"),
+      body: JSON.stringify({
+        expectedRevision: 1,
+        content: "must not start on an inactive version",
+        agentVersionId: version.agentVersionId,
+        executionIntent: "none",
+      }),
+    },
+  );
+  assert.equal(deniedAfterRollback.status, 409);
+  assert.equal(
+    ((await deniedAfterRollback.json()) as { error: { code: string } }).error
+      .code,
+    "agent_version_not_admitted",
+  );
+  const historicalWorker = await createStandaloneRuntimeWorker(workerConfig);
+  assert.deepEqual(await historicalWorker.worker.wake(), {
+    kind: "completed",
+    runId: historicalRun.run.runId,
+  });
+  await historicalWorker.close();
+  assert.deepEqual(
+    (
+      await client.listThreadMessages(historicalThread.thread.threadId)
+    ).data.map(({ role, content }) => ({ role, content })),
+    [
+      { role: "user", content: "execute the selected version" },
+      { role: "assistant", content: "selected version completed" },
+    ],
+  );
+});
+
+test("persists a complete Tool output through the encrypted Artifact authority and serves it over HTTP", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const artifactRoot = `${databasePath}.artifact-authority`;
+  const artifactDatabasePath = `${databasePath}.artifacts.sqlite`;
+  const artifactKey = Buffer.alloc(32, 0x35);
+  const artifactKeyId = "artifact-e2e-key";
+  const openArtifacts = () =>
+    new FilesystemArtifactStore({
+      rootDirectory: artifactRoot,
+      databasePath: artifactDatabasePath,
+      encryptionKey: artifactKey,
+      keyId: artifactKeyId,
+    });
+  const controlConfig = config(databasePath, openArtifacts());
+  const rawOutput = `HEAD:${"artifact secret ".repeat(3_000)}:TAIL`;
+  let requests = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "artifact-e2e-adapter",
+    adapterVersion: "1",
+    modelId: "artifact-e2e-model",
+    async *stream() {
+      requests += 1;
+      if (requests === 1) {
+        yield {
+          type: "tool.call",
+          kind: "function",
+          callId: "artifact-e2e-call",
+          name: "large_artifact_output",
+          input: "{}",
+        };
+        yield { type: "completed", checkpoint: null };
+        return;
+      }
+      yield { type: "output.delta", delta: "artifact captured" };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const toolRuntime = new InMemoryToolBroker(
+    [
+      {
+        schemaVersion: "crewon.tool-definition.v0",
+        kind: "function",
+        name: "large_artifact_output",
+        description: "Returns output larger than the model-visible boundary.",
+        execution: "serial",
+        inputSchema: { type: "object" },
+      },
+    ],
+    new Map([
+      ["function:large_artifact_output", async () => ({ output: rawOutput })],
+    ]),
+    new Map([
+      [
+        "function:large_artifact_output",
+        {
+          effect: "readOnly",
+          recovery: "replaySafe",
+          resourceBindingId: null,
+          credentialBindingId: null,
+          executionTarget: {
+            kind: "control",
+            bindingId: "artifact-e2e-tool",
+          },
+          capability: "artifact.test.read",
+          approvalRequirement: "none",
+          limits: {
+            timeoutMs: 30_000,
+            maxOutputBytes: 256 * 1024,
+            maxArtifactBytes: 1024 * 1024,
+          },
+        },
+      ],
+    ]),
+  );
+  await activateStandaloneRelease({
+    databasePath,
+    route: controlConfig.route,
+    transport,
+    toolRuntime,
+  });
+  const control = createStandaloneControlApi({
+    ...controlConfig,
+    artifactEncryptionKeyId: artifactKeyId,
+  });
+  context.after(() => closeIfListening(control.app));
+  await control.app.listen({ host: "127.0.0.1", port: 0 });
+  const baseUrl = serverBaseUrl(control.app);
+  const created = await createE2eRun(
+    baseUrl,
+    "artifact-authority",
+    "capture the complete Tool output",
+  );
+  const worker = await createStandaloneRuntimeWorker({
+    databasePath,
+    runtimeTenantId: "tenant-e2e-1",
+    route: controlConfig.route,
+    transport,
+    toolRuntime,
+    artifactStore: openArtifacts(),
+    artifactEncryptionKeyId: artifactKeyId,
+    scanIntervalMs: null,
+  });
+
+  assert.deepEqual(await worker.worker.wake(), {
+    kind: "completed",
+    runId: created.run.run.runId,
+  });
+  await worker.close();
+  const artifactDatabase = new DatabaseSync(artifactDatabasePath);
+  const row = artifactDatabase
+    .prepare("SELECT record_json FROM artifacts WHERE state = 'ready'")
+    .get() as { record_json: string } | undefined;
+  artifactDatabase.close();
+  assert.ok(row !== undefined);
+  const artifact = JSON.parse(row.record_json) as {
+    artifactId: string;
+    contentDigest: string;
+    byteLength: number;
+  };
+
+  const metadata = await fetch(
+    `${baseUrl}/api/v1/artifacts/${artifact.artifactId}`,
+    { headers: readHeaders() },
+  );
+  assert.equal(metadata.status, 200);
+  const metadataBody = (await metadata.json()) as {
+    artifact: { contentDigest: string; byteLength: number };
+  };
+  assert.equal(metadataBody.artifact.contentDigest, artifact.contentDigest);
+  assert.equal(metadataBody.artifact.byteLength, artifact.byteLength);
+  const content = await fetch(
+    `${baseUrl}/api/v1/artifacts/${artifact.artifactId}/content`,
+    { headers: readHeaders() },
+  );
+  assert.equal(content.status, 200);
+  assert.equal(await content.text(), rawOutput);
+
+  const encryptedFiles = listArtifactFiles(`${artifactRoot}/blobs`);
+  assert.equal(encryptedFiles.length, 1);
+  assert.equal(
+    readFileSync(encryptedFiles[0]!).includes(Buffer.from(rawOutput)),
+    false,
+  );
+});
+
+const postgresConnectionString = process.env.CREWON_TEST_POSTGRES_URL;
+
+test(
+  "allows exactly one of two PostgreSQL Worker processes to execute a Run",
+  { skip: postgresConnectionString === undefined },
+  async (context) => {
+    const connectionString = requiredPostgresUrl();
+    const schema = postgresSchema("competition");
+    const control = await createPostgresControlApi(
+      postgresConfig(connectionString, schema),
+    );
+    await activatePostgresReleaseProcess(connectionString, schema);
+    const admin = new Pool({ connectionString, max: 1 });
+    context.after(() => closePostgresFixture(control.app, admin, schema));
+    await control.app.listen({ host: "127.0.0.1", port: 0 });
+    const baseUrl = serverBaseUrl(control.app);
+    const created = await createE2eRun(
+      baseUrl,
+      "postgres-compete",
+      "run in PostgreSQL workers",
+    );
+
+    const workers = await Promise.all([
+      runWorkerProcess(
+        fileURLToPath(
+          new URL("../../runtime-worker/src/main.ts", import.meta.url),
+        ),
+        postgresWorkerEnvironment(
+          connectionString,
+          schema,
+          "postgres-worker-a",
+          "run in PostgreSQL workers",
+        ),
+      ),
+      runWorkerProcess(
+        fileURLToPath(
+          new URL("../../runtime-worker/src/main.ts", import.meta.url),
+        ),
+        postgresWorkerEnvironment(
+          connectionString,
+          schema,
+          "postgres-worker-b",
+          "run in PostgreSQL workers",
+        ),
+      ),
+    ]);
+
+    for (const worker of workers) {
+      assert.equal(worker.exitCode, 0, worker.stderr);
+    }
+    const outcomes = workers.map((worker) =>
+      JSON.parse(worker.stdout.trim()),
+    ) as Array<{ kind: string; runId?: string }>;
+    assert.deepEqual(outcomes.map((outcome) => outcome.kind).sort(), [
+      "completed",
+      "idle",
+    ]);
+    assert.equal(
+      outcomes.find((outcome) => outcome.kind === "completed")?.runId,
+      created.run.run.runId,
+    );
+    const messages = await readMessages(
+      baseUrl,
+      created.thread.thread.threadId,
+    );
+    assert.deepEqual(
+      messages.data.map(({ role, content }) => ({ role, content })),
+      [
+        { role: "user", content: "run in PostgreSQL workers" },
+        { role: "assistant", content: "child completed" },
+      ],
+    );
+    const attempts = await admin.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count FROM "${schema}".run_attempts
+       WHERE tenant_id=$1 AND run_id=$2`,
+      ["tenant-e2e-1", created.run.run.runId],
+    );
+    assert.equal(attempts.rows[0]?.count, "1");
+  },
+);
+
+test(
+  "recovers a PostgreSQL Run in another process after SIGKILL",
+  { skip: postgresConnectionString === undefined },
+  async (context) => {
+    const connectionString = requiredPostgresUrl();
+    const schema = postgresSchema("crash");
+    const control = await createPostgresControlApi(
+      postgresConfig(connectionString, schema),
+    );
+    await activatePostgresReleaseProcess(connectionString, schema);
+    const admin = new Pool({ connectionString, max: 1 });
+    context.after(() => closePostgresFixture(control.app, admin, schema));
+    await control.app.listen({ host: "127.0.0.1", port: 0 });
+    const baseUrl = serverBaseUrl(control.app);
+    const created = await createE2eRun(
+      baseUrl,
+      "postgres-crash",
+      "run after PostgreSQL crash",
+    );
+
+    const crashed = await runWorkerProcess(
+      fileURLToPath(
+        new URL(
+          "../../runtime-worker/test-fixtures/crash-after-start-postgres.ts",
+          import.meta.url,
+        ),
+      ),
+      postgresWorkerEnvironment(
+        connectionString,
+        schema,
+        "postgres-crashing-worker",
+        "run after PostgreSQL crash",
+      ),
+      "attempt-started-before-crash",
+    );
+    assert.equal(crashed.signal, "SIGKILL", crashed.stderr);
+    const expired = await admin.query(
+      `UPDATE "${schema}".work_items
+       SET lease_expires_at=clock_timestamp()-interval '1 millisecond'
+       WHERE tenant_id=$1 AND run_id=$2 AND status='leased'`,
+      ["tenant-e2e-1", created.run.run.runId],
+    );
+    assert.equal(expired.rowCount, 1);
+
+    const recovered = await runWorkerProcess(
+      fileURLToPath(
+        new URL("../../runtime-worker/src/main.ts", import.meta.url),
+      ),
+      postgresWorkerEnvironment(
+        connectionString,
+        schema,
+        "postgres-recovery-worker",
+        "run after PostgreSQL crash",
+      ),
+    );
+    assert.equal(recovered.exitCode, 0, recovered.stderr);
+    assert.deepEqual(JSON.parse(recovered.stdout.trim()), {
+      kind: "completed",
+      runId: created.run.run.runId,
+    });
+    const attempts = await admin.query<{
+      attempt_id: string;
+      attempt_number: string;
+      retry_of_attempt_id: string | null;
+      status: string;
+    }>(
+      `SELECT attempt_id, attempt_number, retry_of_attempt_id, status
+       FROM "${schema}".run_attempts
+       WHERE tenant_id=$1 AND run_id=$2 ORDER BY attempt_number`,
+      ["tenant-e2e-1", created.run.run.runId],
+    );
+    assert.deepEqual(
+      attempts.rows.map((attempt, index) => ({
+        attemptNumber: Number(attempt.attempt_number),
+        retryOfPrevious:
+          attempt.retry_of_attempt_id === null
+            ? null
+            : attempt.retry_of_attempt_id ===
+              attempts.rows[index - 1]?.attempt_id,
+        status: attempt.status,
+      })),
+      [
+        {
+          attemptNumber: 1,
+          retryOfPrevious: null,
+          status: "abandoned",
+        },
+        {
+          attemptNumber: 2,
+          retryOfPrevious: true,
+          status: "completed",
+        },
+      ],
+    );
+    const messages = await readMessages(
+      baseUrl,
+      created.thread.thread.threadId,
+    );
+    assert.deepEqual(
+      messages.data.map(({ role, content }) => ({ role, content })),
+      [
+        { role: "user", content: "run after PostgreSQL crash" },
+        { role: "assistant", content: "child completed" },
+      ],
+    );
+  },
+);
+
+test(
+  "streams PostgreSQL Goal events across clear and revision reset",
+  { skip: postgresConnectionString === undefined },
+  async (context) => {
+    const connectionString = requiredPostgresUrl();
+    const schema = postgresSchema("goal_events");
+    const control = await createPostgresControlApi(
+      postgresConfig(connectionString, schema),
+    );
+    const admin = new Pool({ connectionString, max: 1 });
+    context.after(() => closePostgresFixture(control.app, admin, schema));
+    await control.app.listen({ host: "127.0.0.1", port: 0 });
+    const baseUrl = serverBaseUrl(control.app);
+
+    const threadResponse = await fetch(`${baseUrl}/api/v1/threads`, {
+      method: "POST",
+      headers: mutationHeaders("postgres-goal-events-thread"),
+      body: JSON.stringify({ title: "PostgreSQL Goal events" }),
+    });
+    assert.equal(threadResponse.status, 201);
+    const thread = (await threadResponse.json()) as ThreadMutationResponse;
+    const threadId = thread.thread.threadId;
+
+    const firstResponse = await fetch(
+      `${baseUrl}/api/v1/threads/${threadId}/goal`,
+      {
+        method: "PUT",
+        headers: mutationHeaders("postgres-goal-events-set-1"),
+        body: JSON.stringify({
+          expectedRevision: null,
+          objective: "first paused goal",
+          status: "paused",
+          tokenBudget: { kind: "set", value: null },
+        }),
+      },
+    );
+    assert.equal(firstResponse.status, 201);
+    const first = (await firstResponse.json()) as ThreadGoalMutationResponse;
+    assert.equal(first.goal?.revision, 1);
+    assert.equal(first.goal?.tokenBudget, null);
+
+    const clearResponse = await fetch(
+      `${baseUrl}/api/v1/threads/${threadId}/goal`,
+      {
+        method: "DELETE",
+        headers: mutationHeaders("postgres-goal-events-clear"),
+        body: JSON.stringify({ expectedRevision: 1 }),
+      },
+    );
+    assert.equal(clearResponse.status, 200);
+
+    const recreatedResponse = await fetch(
+      `${baseUrl}/api/v1/threads/${threadId}/goal`,
+      {
+        method: "PUT",
+        headers: mutationHeaders("postgres-goal-events-set-2"),
+        body: JSON.stringify({
+          expectedRevision: null,
+          objective: "second paused goal",
+          status: "paused",
+          tokenBudget: { kind: "keep" },
+        }),
+      },
+    );
+    assert.equal(recreatedResponse.status, 201);
+    const recreated =
+      (await recreatedResponse.json()) as ThreadGoalMutationResponse;
+    assert.equal(recreated.goal?.revision, 1);
+
+    const stream = await fetch(
+      `${baseUrl}/api/v1/threads/${threadId}/goal/events`,
+      { headers: readHeaders() },
+    );
+    assert.equal(stream.status, 200);
+    const reader = new SseReader<ThreadGoalEventView>(
+      requiredBody(stream).getReader(),
+    );
+    const frames = [
+      await reader.nextFrame(),
+      await reader.nextFrame(),
+      await reader.nextFrame(),
+    ];
+    await reader.cancel();
+
+    assert.deepEqual(
+      frames.map(({ id, event, data }) => ({
+        id,
+        event,
+        sequence: data.sequence,
+        revision: data.type === "goal.updated" ? data.data.goal.revision : null,
+      })),
+      [
+        { id: "1", event: "goal.updated", sequence: 1, revision: 1 },
+        { id: "2", event: "goal.cleared", sequence: 2, revision: null },
+        { id: "3", event: "goal.updated", sequence: 3, revision: 1 },
+      ],
+    );
+    for (const { data } of frames) {
+      assert.equal("tenantId" in data, false);
+      if (data.type === "goal.updated") {
+        assert.equal("tenantId" in data.data.goal, false);
+      }
+    }
+
+    const resumed = await fetch(
+      `${baseUrl}/api/v1/threads/${threadId}/goal/events`,
+      { headers: { ...readHeaders(), "last-event-id": "2" } },
+    );
+    const resumedReader = new SseReader<ThreadGoalEventView>(
+      requiredBody(resumed).getReader(),
+    );
+    assert.equal((await resumedReader.nextFrame()).id, "3");
+    await resumedReader.cancel();
+  },
+);
+
+class SseReader<T = RunEventView> {
+  readonly #reader: ReadableStreamDefaultReader<Uint8Array>;
+  readonly #decoder = new TextDecoder();
+  #buffer = "";
+
+  constructor(reader: ReadableStreamDefaultReader<Uint8Array>) {
+    this.#reader = reader;
+  }
+
+  async nextFrame(): Promise<{
+    id: string;
+    event: string;
+    data: T;
+  }> {
+    while (true) {
+      const boundary = this.#buffer.indexOf("\n\n");
+      if (boundary !== -1) {
+        const raw = this.#buffer.slice(0, boundary);
+        this.#buffer = this.#buffer.slice(boundary + 2);
+        if (raw.startsWith(":")) {
+          continue;
+        }
+        return parseFrame<T>(raw);
+      }
+      const chunk = await this.#reader.read();
+      if (chunk.done) {
+        throw new Error("SSE stream ended before the next event");
+      }
+      this.#buffer += this.#decoder.decode(chunk.value, { stream: true });
+    }
+  }
+
+  async cancel(): Promise<void> {
+    await this.#reader.cancel();
+  }
+}
+
+function parseFrame<T = RunEventView>(
+  raw: string,
+): {
+  id: string;
+  event: string;
+  data: T;
+} {
+  const fields = new Map(
+    raw.split("\n").map((line) => {
+      const separator = line.indexOf(":");
+      assert.notEqual(separator, -1);
+      return [line.slice(0, separator), line.slice(separator + 1).trimStart()];
+    }),
+  );
+  const id = fields.get("id");
+  const event = fields.get("event");
+  const data = fields.get("data");
+  assert.notEqual(id, undefined);
+  assert.notEqual(event, undefined);
+  assert.notEqual(data, undefined);
+  return {
+    id: requiredField(id),
+    event: requiredField(event),
+    data: JSON.parse(requiredField(data)) as T,
+  };
+}
+
+function requiredField(value: string | undefined): string {
+  if (value === undefined) {
+    throw new Error("SSE field missing");
+  }
+  return value;
+}
+
+function requiredBody(response: Response): ReadableStream<Uint8Array> {
+  if (response.body === null) {
+    throw new Error("response body missing");
+  }
+  return response.body;
+}
+
+function config(
+  databasePath: string,
+  artifactStore: ArtifactStorePort = new InMemoryArtifactStore(),
+): StandaloneControlApiConfig & Readonly<{ route: RunRoute }> {
+  return {
+    databasePath,
+    artifactStore,
+    artifactEncryptionKeyId: "artifact-e2e-key",
+    actor: {
+      principalId: "principal-e2e-1",
+      actorId: "actor-e2e-1",
+      tenantId: "tenant-e2e-1",
+      spaceId: "space-e2e-1",
+    },
+    defaultAgentVersionId: "agent-version-e2e-1",
+    route: {
+      authorityId: "standalone-e2e-1",
+      runtimeGeneration: "ts-v0",
+      agentVersionId: "agent-version-e2e-1",
+      policySnapshotId: "policy-e2e-1",
+      workspaceBindingId: "workspace-e2e-1",
+    },
+    sessionToken: SESSION_TOKEN,
+    csrfToken: CSRF_TOKEN,
+    allowedOrigins: [ORIGIN],
+    heartbeatIntervalMs: null,
+    outboxScanIntervalMs: null,
+  };
+}
+
+async function activateStandaloneRelease(input: {
+  databasePath: string;
+  route: RunRoute;
+  transport: ModelTransportPort;
+  toolRuntime?: ToolRuntimePort;
+  agentVersionDeployments?: readonly AgentVersionDeploymentCandidate[];
+  activationId?: string;
+}): Promise<void> {
+  await activateStandaloneRuntimeAgentVersionRelease({
+    databasePath: input.databasePath,
+    runtimeTenantId: "tenant-e2e-1",
+    route: input.route,
+    transport: input.transport,
+    ...(input.toolRuntime === undefined
+      ? {}
+      : { toolRuntime: input.toolRuntime }),
+    ...(input.agentVersionDeployments === undefined
+      ? {}
+      : { agentVersionDeployments: input.agentVersionDeployments }),
+    actor: {
+      principalId: "release-principal-e2e",
+      actorId: "release-actor-e2e",
+      tenantId: "tenant-e2e-1",
+      spaceId: "space-e2e-1",
+    },
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    clock: { now: () => "2026-08-09T00:00:00Z" },
+    activationId: input.activationId ?? "activation-control-e2e",
+  });
+}
+
+async function activateSqliteReleaseProcess(
+  databasePath: string,
+): Promise<{ releaseId: string; activationId: string }> {
+  const release = await runWorkerProcess(
+    fileURLToPath(
+      new URL("../../runtime-worker/src/release-main.ts", import.meta.url),
+    ),
+    workerEnvironment(databasePath),
+  );
+  assert.equal(release.exitCode, 0, release.stderr);
+  const result = JSON.parse(release.stdout) as {
+    disposition: string;
+    releaseId: string;
+    activationId: string;
+  };
+  assert.equal(result.disposition, "activated");
+  return { releaseId: result.releaseId, activationId: result.activationId };
+}
+
+async function activatePostgresReleaseProcess(
+  connectionString: string,
+  schema: string,
+): Promise<void> {
+  const release = await runWorkerProcess(
+    fileURLToPath(
+      new URL("../../runtime-worker/src/release-main.ts", import.meta.url),
+    ),
+    postgresWorkerEnvironment(
+      connectionString,
+      schema,
+      "release-owner-unused",
+      "release-message-unused",
+    ),
+  );
+  assert.equal(release.exitCode, 0, release.stderr);
+  assert.equal(JSON.parse(release.stdout).disposition, "activated");
+}
+
+function postgresConfig(
+  connectionString: string,
+  schema: string,
+): PostgresControlApiConfig {
+  const standalone = config(":unused:");
+  const { databasePath: _, route: _route, ...common } = standalone;
+  return { ...common, connectionString, schema };
+}
+
+async function createE2eRun(
+  baseUrl: string,
+  suffix: string,
+  content: string,
+  agentVersionId: string | null = null,
+): Promise<
+  Readonly<{ thread: ThreadMutationResponse; run: RunMutationResponse }>
+> {
+  const threadResponse = await fetch(`${baseUrl}/api/v1/threads`, {
+    method: "POST",
+    headers: mutationHeaders(`${suffix}-thread`),
+    body: JSON.stringify({ title: suffix }),
+  });
+  assert.equal(threadResponse.status, 201);
+  const thread = (await threadResponse.json()) as ThreadMutationResponse;
+  const turnResponse = await fetch(
+    `${baseUrl}/api/v1/threads/${thread.thread.threadId}/turns`,
+    {
+      method: "POST",
+      headers: mutationHeaders(`${suffix}-turn`),
+      body: JSON.stringify({
+        expectedRevision: 1,
+        content,
+        agentVersionId,
+        executionIntent: "none",
+      }),
+    },
+  );
+  assert.equal(turnResponse.status, 201);
+  const turn = (await turnResponse.json()) as StartTurnResponse;
+  return {
+    thread,
+    run: { disposition: turn.disposition, run: turn.run },
+  };
+}
+
+function selectedAgentVersionSource() {
+  return {
+    schemaVersion: "crewon.agent-version-source.v0" as const,
+    agentVersionId: "agent-version-selected-e2e",
+    runtimeGeneration: "ts-v0",
+    policySnapshotId: "policy-selected-e2e",
+    instructions: "Execute the selected immutable AgentVersion.",
+    model: {
+      adapterName: "deterministic-fake",
+      adapterVersion: "1",
+      modelId: "fake-model",
+      contextWindowTokens: 128_000,
+      autoCompactAtTokens: 96_000,
+    },
+    execution: { streamMaxRetries: 2, maxToolRounds: 16 },
+    resources: {
+      workspaceRequired: false,
+      governedContextDigest: null,
+    },
+    tools: [],
+  };
+}
+
+async function readMessages(
+  baseUrl: string,
+  threadId: string,
+): Promise<ListThreadMessagesResponse> {
+  const response = await fetch(
+    `${baseUrl}/api/v1/threads/${threadId}/messages`,
+    { headers: readHeaders() },
+  );
+  assert.equal(response.status, 200);
+  return (await response.json()) as ListThreadMessagesResponse;
+}
+
+function postgresSchema(suffix: string): string {
+  return `crewon_e2e_${suffix}_${randomUUID().replaceAll("-", "_")}`;
+}
+
+function requiredPostgresUrl(): string {
+  assert.ok(postgresConnectionString !== undefined);
+  return postgresConnectionString;
+}
+
+async function closePostgresFixture(
+  app: FastifyInstance,
+  admin: Pool,
+  schema: string,
+): Promise<void> {
+  await closeIfListening(app);
+  try {
+    await admin.query(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
+  } finally {
+    await admin.end();
+  }
+}
+
+async function runWorkerProcess(
+  entrypoint: string,
+  environment: NodeJS.ProcessEnv,
+  killAfterOutput?: string,
+): Promise<{
+  exitCode: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
+  stderr: string;
+}> {
+  const child = spawn(
+    process.execPath,
+    ["--experimental-strip-types", entrypoint],
+    {
+      cwd: fileURLToPath(new URL("../../..", import.meta.url)),
+      env: environment,
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  );
+  let stdout = "";
+  let stderr = "";
+  let killed = false;
+  child.stdout.setEncoding("utf8");
+  child.stderr.setEncoding("utf8");
+  child.stdout.on("data", (chunk: string) => {
+    stdout += chunk;
+    if (
+      killAfterOutput !== undefined &&
+      !killed &&
+      stdout.includes(killAfterOutput)
+    ) {
+      killed = true;
+      child.kill("SIGKILL");
+    }
+  });
+  child.stderr.on("data", (chunk: string) => {
+    stderr += chunk;
+  });
+  const [exitCode, signal] = (await once(child, "exit")) as [
+    number | null,
+    NodeJS.Signals | null,
+  ];
+  return { exitCode, signal, stdout, stderr };
+}
+
+function workerEnvironment(databasePath: string): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    CREWON_CONTROL_DB_PATH: databasePath,
+    CREWON_MODEL_ADAPTER: "deterministic-fake",
+    CREWON_FAKE_EXPECTED_USER_MESSAGE: "run in a child process",
+    CREWON_FAKE_RESPONSE: "child completed",
+    CREWON_FAKE_INPUT_TOKENS: "5",
+    CREWON_FAKE_OUTPUT_TOKENS: "2",
+    CREWON_WORKER_ONCE: "1",
+    CREWON_WORKER_OWNER_ID: "recovery-worker",
+    CREWON_WORKER_LEASE_DURATION_MS: "30000",
+    CREWON_WORKER_RETRY_AFTER_MS: "0",
+    CREWON_TENANT_ID: "tenant-e2e-1",
+    CREWON_AUTHORITY_ID: "standalone-e2e-1",
+    CREWON_RUNTIME_GENERATION: "ts-v0",
+    CREWON_AGENT_VERSION_ID: "agent-version-e2e-1",
+    CREWON_POLICY_SNAPSHOT_ID: "policy-e2e-1",
+    CREWON_WORKSPACE_BINDING_ID: "workspace-e2e-1",
+  };
+}
+
+function postgresWorkerEnvironment(
+  connectionString: string,
+  schema: string,
+  ownerId: string,
+  expectedUserMessage: string,
+): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    CREWON_CONTROL_DATABASE_URL: connectionString,
+    CREWON_CONTROL_DATABASE_SCHEMA: schema,
+    CREWON_MODEL_ADAPTER: "deterministic-fake",
+    CREWON_FAKE_EXPECTED_USER_MESSAGE: expectedUserMessage,
+    CREWON_FAKE_RESPONSE: "child completed",
+    CREWON_FAKE_INPUT_TOKENS: "5",
+    CREWON_FAKE_OUTPUT_TOKENS: "2",
+    CREWON_WORKER_ONCE: "1",
+    CREWON_WORKER_OWNER_ID: ownerId,
+    CREWON_WORKER_LEASE_DURATION_MS: "30000",
+    CREWON_WORKER_RETRY_AFTER_MS: "0",
+    CREWON_TENANT_ID: "tenant-e2e-1",
+    CREWON_AUTHORITY_ID: "standalone-e2e-1",
+    CREWON_RUNTIME_GENERATION: "ts-v0",
+    CREWON_AGENT_VERSION_ID: "agent-version-e2e-1",
+    CREWON_POLICY_SNAPSHOT_ID: "policy-e2e-1",
+    CREWON_WORKSPACE_BINDING_ID: "workspace-e2e-1",
+  };
+}
+
+function readHeaders(): Record<string, string> {
+  return {
+    authorization: `Bearer ${SESSION_TOKEN}`,
+    origin: ORIGIN,
+  };
+}
+
+function mutationHeaders(idempotencyKey: string): Record<string, string> {
+  return {
+    ...readHeaders(),
+    "content-type": "application/json",
+    "idempotency-key": idempotencyKey,
+    "x-csrf-token": CSRF_TOKEN,
+  };
+}
+
+function serverBaseUrl(app: FastifyInstance): string {
+  const address = app.server.address();
+  if (address === null || typeof address === "string") {
+    throw new Error("control API address unavailable");
+  }
+  return `http://127.0.0.1:${address.port}`;
+}
+
+async function closeIfListening(app: FastifyInstance): Promise<void> {
+  if (app.server.listening) {
+    await app.close();
+  }
+}
+
+function temporaryDatabasePath(context: TestContext): string {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-control-api-"));
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  return join(directory, "control.sqlite3");
+}
+
+function listArtifactFiles(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const file = join(directory, entry.name);
+    return entry.isDirectory() ? listArtifactFiles(file) : [file];
+  });
+}
+
+function assertPublicEvent(event: RunEventView): void {
+  const serialized = JSON.stringify(event);
+  for (const forbidden of [
+    "tenant",
+    "space",
+    "actor",
+    "authority",
+    "runtimeGeneration",
+    "agentVersion",
+    "policySnapshot",
+    "workspaceBinding",
+    "actionDigest",
+    "checkpointDigest",
+    "opaquePayload",
+    "responseId",
+    SESSION_TOKEN,
+    CSRF_TOKEN,
+  ]) {
+    assert.equal(serialized.includes(forbidden), false);
+  }
+}
+
+const UUID_V7_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;

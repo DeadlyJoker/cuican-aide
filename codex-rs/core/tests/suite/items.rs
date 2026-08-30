@@ -1,22 +1,6 @@
 #![cfg(not(target_os = "windows"))]
 
 use anyhow::Ok;
-use codex_protocol::config_types::CollaborationMode;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::Settings;
-use codex_protocol::items::AgentMessageContent;
-use codex_protocol::items::TurnItem;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::models::WebSearchAction;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ItemCompletedEvent;
-use codex_protocol::protocol::ItemStartedEvent;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::ByteRange;
-use codex_protocol::user_input::TextElement;
-use codex_protocol::user_input::UserInput;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::PathBufExt;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -34,12 +18,28 @@ use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
+use crewon_protocol::config_types::CollaborationMode;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::Settings;
+use crewon_protocol::items::AgentMessageContent;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::models::WebSearchAction;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::ItemCompletedEvent;
+use crewon_protocol::protocol::ItemStartedEvent;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::ByteRange;
+use crewon_protocol::user_input::TextElement;
+use crewon_protocol::user_input::UserInput;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 use std::path::PathBuf;
@@ -60,7 +60,7 @@ fn disabled_plan_turn(
         final_output_json_schema: None,
         responsesapi_client_metadata: None,
         additional_context: Default::default(),
-        thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+        thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
             environments: Some(local_selections(cwd)),
             approval_policy: Some(AskForApproval::Never),
             sandbox_policy: Some(sandbox_policy),
@@ -101,7 +101,7 @@ async fn user_message_item_is_emitted() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let TestCodex { codex, .. } = test_codex().build(&server).await?;
+    let TestCrewon { crewon: codex, .. } = test_crewon().build(&server).await?;
 
     let first_response = sse(vec![ev_response_created("resp-1"), ev_completed("resp-1")]);
     mount_sse_once(&server, first_response).await;
@@ -162,7 +162,7 @@ async fn assistant_message_item_is_emitted() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let TestCodex { codex, .. } = test_codex().build(&server).await?;
+    let TestCrewon { crewon: codex, .. } = test_crewon().build(&server).await?;
 
     let first_response = sse(vec![
         ev_response_created("resp-1"),
@@ -202,7 +202,8 @@ async fn assistant_message_item_is_emitted() -> anyhow::Result<()> {
     .await;
 
     assert_eq!(started.id, completed.id);
-    let Some(codex_protocol::items::AgentMessageContent::Text { text }) = completed.content.first()
+    let Some(crewon_protocol::items::AgentMessageContent::Text { text }) =
+        completed.content.first()
     else {
         panic!("expected agent message text content");
     };
@@ -217,7 +218,7 @@ async fn reasoning_item_is_emitted() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let TestCodex { codex, .. } = test_codex().build(&server).await?;
+    let TestCrewon { crewon: codex, .. } = test_crewon().build(&server).await?;
 
     let reasoning_item = ev_reasoning_item(
         "reasoning-1",
@@ -281,7 +282,7 @@ async fn web_search_item_is_emitted() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let TestCodex { codex, .. } = test_codex().build(&server).await?;
+    let TestCrewon { crewon: codex, .. } = test_crewon().build(&server).await?;
 
     let web_search_added = ev_web_search_call_added_partial("web-search-1", "in_progress");
     let web_search_done = ev_web_search_call_done("web-search-1", "completed", "weather seattle");
@@ -353,12 +354,12 @@ async fn image_generation_call_event_is_emitted() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         config,
         session_configured,
         ..
-    } = test_codex().build(&server).await?;
+    } = test_crewon().build(&server).await?;
     let call_id = "ig_image_saved_to_temp_dir_default";
     let expected_saved_path = image_generation_artifact_path(
         config.codex_home.as_path(),
@@ -441,12 +442,12 @@ async fn image_generation_call_event_is_emitted_when_image_save_fails() -> anyho
 
     let server = start_mock_server().await;
 
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         config,
         session_configured,
         ..
-    } = test_codex().build(&server).await?;
+    } = test_crewon().build(&server).await?;
     let expected_saved_path = image_generation_artifact_path(
         config.codex_home.as_path(),
         &session_configured.thread_id.to_string(),
@@ -502,11 +503,11 @@ async fn agent_message_content_delta_has_item_metadata() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
-    } = test_codex().build(&server).await?;
+    } = test_crewon().build(&server).await?;
 
     let stream = sse(vec![
         ev_response_created("resp-1"),
@@ -570,11 +571,11 @@ async fn plan_mode_emits_plan_item_from_proposed_plan_block() -> anyhow::Result<
 
     let server = start_mock_server().await;
 
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
-    } = test_codex().build(&server).await?;
+    } = test_crewon().build(&server).await?;
 
     let plan_block = "<proposed_plan>\n- Step 1\n- Step 2\n</proposed_plan>\n";
     let full_message = format!("Intro\n{plan_block}Outro");
@@ -635,11 +636,11 @@ async fn plan_mode_strips_plan_from_agent_messages() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
-    } = test_codex().build(&server).await?;
+    } = test_crewon().build(&server).await?;
 
     let plan_block = "<proposed_plan>\n- Step 1\n- Step 2\n</proposed_plan>\n";
     let full_message = format!("Intro\n{plan_block}Outro");
@@ -723,11 +724,11 @@ async fn plan_mode_streaming_citations_are_stripped_across_added_deltas_and_done
 
     let server = start_mock_server().await;
 
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
-    } = test_codex().build(&server).await?;
+    } = test_crewon().build(&server).await?;
 
     let added_text = "Intro <oai-mem-";
     let deltas = [
@@ -903,11 +904,11 @@ async fn plan_mode_streaming_proposed_plan_tag_split_across_added_and_delta_is_p
 
     let server = start_mock_server().await;
 
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
-    } = test_codex().build(&server).await?;
+    } = test_crewon().build(&server).await?;
 
     let added_text = "Intro\n<proposed";
     let deltas = ["_plan>\n- Step 1\n</proposed_plan>\nOutro"];
@@ -1010,11 +1011,11 @@ async fn plan_mode_handles_missing_plan_close_tag() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
-    } = test_codex().build(&server).await?;
+    } = test_crewon().build(&server).await?;
 
     let full_message = "Intro\n<proposed_plan>\n- Step 1\n";
     let stream = sse(vec![
@@ -1090,7 +1091,7 @@ async fn reasoning_content_delta_has_item_metadata() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let TestCodex { codex, .. } = test_codex().build(&server).await?;
+    let TestCrewon { crewon: codex, .. } = test_crewon().build(&server).await?;
 
     let stream = sse(vec![
         ev_response_created("resp-1"),
@@ -1140,7 +1141,7 @@ async fn reasoning_raw_content_delta_respects_flag() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.show_raw_agent_reasoning = true;
         })

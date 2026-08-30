@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """List skills from a GitHub repo path."""
 
-from __future__ import annotations
-
 import argparse
 import json
 import os
@@ -28,15 +26,19 @@ class Args(argparse.Namespace):
 
 
 def _request(url: str) -> bytes:
-    return github_request(url, "codex-skill-list")
+    return github_request(url, "crewon-skill-list")
 
 
-def _codex_home() -> str:
-    return os.environ.get("CODEX_HOME", os.path.expanduser("~/.codex"))
+def _crewon_home() -> str:
+    return (
+        os.environ.get("CREWON_HOME")
+        or os.environ.get("CODEX_HOME")
+        or os.path.expanduser("~/.codex")
+    )
 
 
 def _installed_skills() -> set[str]:
-    root = os.path.join(_codex_home(), "skills")
+    root = os.path.join(_crewon_home(), "skills")
     if not os.path.isdir(root):
         return set()
     entries = set()

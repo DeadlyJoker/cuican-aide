@@ -2,23 +2,23 @@ use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use codex_api::Provider;
-use codex_api::SharedAuthProvider;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_models_manager::manager::OpenAiModelsManager;
-use codex_models_manager::manager::SharedModelsManager;
-use codex_models_manager::manager::StaticModelsManager;
-use codex_protocol::account::ProviderAccount;
-use codex_protocol::openai_models::ModelsResponse;
+use crewon_api::Provider;
+use crewon_api::SharedAuthProvider;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_models_manager::manager::OpenAiModelsManager;
+use crewon_models_manager::manager::SharedModelsManager;
+use crewon_models_manager::manager::StaticModelsManager;
+use crewon_protocol::account::ProviderAccount;
+use crewon_protocol::openai_models::ModelsResponse;
 
 use crate::amazon_bedrock::AmazonBedrockModelProvider;
 use crate::auth::auth_manager_for_provider;
 use crate::auth::resolve_provider_auth;
 use crate::models_endpoint::OpenAiModelsEndpoint;
 
-/// Optional provider-backed features that Codex may expose at runtime.
+/// Optional provider-backed features that Crewon may expose at runtime.
 ///
 /// These capabilities are a provider-owned upper bound. Callers can disable
 /// more functionality through normal config, but should not expose a feature
@@ -79,7 +79,7 @@ pub type ProviderAccountResult = std::result::Result<ProviderAccountState, Provi
 
 /// Default model used for automatic approval review when a provider does not
 /// require a backend-specific model ID.
-pub const DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL: &str = "codex-auto-review";
+pub const DEFAULT_APPROVAL_REVIEW_PREFERRED_MODEL: &str = "crewon-auto-review";
 
 /// Default model used for memory extraction when a provider does not require a
 /// backend-specific model ID.
@@ -93,7 +93,9 @@ pub const DEFAULT_MEMORY_CONSOLIDATION_PREFERRED_MODEL: &str = "gpt-5.4";
 ///
 /// Implementations own provider-specific behavior for a model backend. The
 /// `ModelProviderInfo` returned by `info` is the serialized/configured provider
-/// metadata used by the default OpenAI-compatible implementation.
+/// metadata used by the default Responses-compatible implementation. Native
+/// provider integrations can override trait methods for provider-specific
+/// account state, model catalogs, auth, and capability bounds.
 #[async_trait::async_trait]
 pub trait ModelProvider: fmt::Debug + Send + Sync {
     /// Returns the configured provider metadata.
@@ -134,30 +136,30 @@ pub trait ModelProvider: fmt::Debug + Send + Sync {
     ///
     /// TODO(celia-oai): Make auth manager access internal to this crate so callers
     /// resolve provider-specific auth only through `ModelProvider`. We first need
-    /// to think through whether Codex should have a unified provider-specific auth
+    /// to think through whether Crewon should have a unified provider-specific auth
     /// manager throughout the codebase; that is a larger refactor than this change.
     fn auth_manager(&self) -> Option<Arc<AuthManager>>;
 
     /// Returns the current provider-scoped auth value, if one is configured.
-    async fn auth(&self) -> Option<CodexAuth>;
+    async fn auth(&self) -> Option<CrewonAuth>;
 
     /// Returns the current app-visible account state for this provider.
     fn account_state(&self) -> ProviderAccountResult;
 
     /// Returns provider configuration adapted for the API client.
-    async fn api_provider(&self) -> codex_protocol::error::Result<Provider> {
+    async fn api_provider(&self) -> crewon_protocol::error::Result<Provider> {
         let auth = self.auth().await;
         self.info()
-            .to_api_provider(auth.as_ref().map(CodexAuth::auth_mode))
+            .to_api_provider(auth.as_ref().map(CrewonAuth::auth_mode))
     }
 
     /// Returns the provider base URL that will be used at request time.
-    async fn runtime_base_url(&self) -> codex_protocol::error::Result<Option<String>> {
+    async fn runtime_base_url(&self) -> crewon_protocol::error::Result<Option<String>> {
         Ok(self.info().base_url.clone())
     }
 
     /// Returns the auth provider used to attach request credentials.
-    async fn api_auth(&self) -> codex_protocol::error::Result<SharedAuthProvider> {
+    async fn api_auth(&self) -> crewon_protocol::error::Result<SharedAuthProvider> {
         let auth = self.auth().await;
         resolve_provider_auth(auth.as_ref(), self.info())
     }
@@ -165,7 +167,7 @@ pub trait ModelProvider: fmt::Debug + Send + Sync {
     /// Creates the model manager implementation appropriate for this provider.
     fn models_manager(
         &self,
-        codex_home: PathBuf,
+        crewon_home: PathBuf,
         config_model_catalog: Option<ModelsResponse>,
     ) -> SharedModelsManager;
 }
@@ -219,7 +221,7 @@ impl ModelProvider for ConfiguredModelProvider {
             .is_some_and(|auth| auth.is_chatgpt_auth())
     }
 
-    async fn auth(&self) -> Option<CodexAuth> {
+    async fn auth(&self) -> Option<CrewonAuth> {
         match self.auth_manager.as_ref() {
             Some(auth_manager) => auth_manager.auth().await,
             None => None,
@@ -238,14 +240,14 @@ impl ModelProvider for ConfiguredModelProvider {
                     Some(auth)
                 })
                 .map(|auth| match &auth {
-                    CodexAuth::ApiKey(_) => Ok(ProviderAccount::ApiKey),
-                    CodexAuth::BedrockApiKey(_) => {
+                    CrewonAuth::ApiKey(_) => Ok(ProviderAccount::ApiKey),
+                    CrewonAuth::BedrockApiKey(_) => {
                         Err(ProviderAccountError::UnsupportedBedrockApiKeyAuth)
                     }
-                    CodexAuth::Chatgpt(_)
-                    | CodexAuth::ChatgptAuthTokens(_)
-                    | CodexAuth::AgentIdentity(_)
-                    | CodexAuth::PersonalAccessToken(_) => {
+                    CrewonAuth::Chatgpt(_)
+                    | CrewonAuth::ChatgptAuthTokens(_)
+                    | CrewonAuth::AgentIdentity(_)
+                    | CrewonAuth::PersonalAccessToken(_) => {
                         let email = auth.get_account_email();
                         let plan_type = auth.account_plan_type();
 
@@ -270,7 +272,7 @@ impl ModelProvider for ConfiguredModelProvider {
 
     fn models_manager(
         &self,
-        codex_home: PathBuf,
+        crewon_home: PathBuf,
         config_model_catalog: Option<ModelsResponse>,
     ) -> SharedModelsManager {
         match config_model_catalog {
@@ -284,7 +286,7 @@ impl ModelProvider for ConfiguredModelProvider {
                     self.auth_manager.clone(),
                 ));
                 Arc::new(OpenAiModelsManager::new(
-                    codex_home,
+                    crewon_home,
                     endpoint,
                     self.auth_manager.clone(),
                 ))
@@ -297,13 +299,13 @@ impl ModelProvider for ConfiguredModelProvider {
 mod tests {
     use std::num::NonZeroU64;
 
-    use codex_login::auth::BedrockApiKeyAuth;
-    use codex_model_provider_info::ModelProviderAwsAuthInfo;
-    use codex_model_provider_info::WireApi;
-    use codex_models_manager::manager::RefreshStrategy;
-    use codex_protocol::config_types::ModelProviderAuthInfo;
-    use codex_protocol::openai_models::ModelInfo;
-    use codex_protocol::openai_models::ModelsResponse;
+    use crewon_login::auth::BedrockApiKeyAuth;
+    use crewon_model_provider_info::ModelProviderAwsAuthInfo;
+    use crewon_model_provider_info::WireApi;
+    use crewon_models_manager::manager::RefreshStrategy;
+    use crewon_protocol::config_types::ModelProviderAuthInfo;
+    use crewon_protocol::openai_models::ModelInfo;
+    use crewon_protocol::openai_models::ModelsResponse;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use wiremock::Mock;
@@ -332,8 +334,8 @@ mod tests {
         }
     }
 
-    fn test_codex_home() -> std::path::PathBuf {
-        std::env::temp_dir().join(format!("codex-model-provider-test-{}", std::process::id()))
+    fn test_crewon_home() -> std::path::PathBuf {
+        std::env::temp_dir().join(format!("crewon-model-provider-test-{}", std::process::id()))
     }
 
     fn provider_for(base_url: String) -> ModelProviderInfo {
@@ -385,8 +387,8 @@ mod tests {
         .expect("valid model")
     }
 
-    fn bedrock_api_key_auth() -> CodexAuth {
-        CodexAuth::BedrockApiKey(BedrockApiKeyAuth {
+    fn bedrock_api_key_auth() -> CrewonAuth {
+        CrewonAuth::BedrockApiKey(BedrockApiKeyAuth {
             api_key: "bedrock-api-key-test".to_string(),
             region: "us-east-1".to_string(),
         })
@@ -449,12 +451,12 @@ mod tests {
     fn create_model_provider_does_not_use_openai_auth_manager_for_amazon_bedrock_provider() {
         let provider = create_model_provider(
             ModelProviderInfo::create_amazon_bedrock_provider(Some(ModelProviderAwsAuthInfo {
-                profile: Some("codex-bedrock".to_string()),
+                profile: Some("crewon-bedrock".to_string()),
                 region: None,
             })),
-            Some(AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
-                "openai-api-key",
-            ))),
+            Some(AuthManager::from_auth_for_testing(
+                CrewonAuth::from_api_key("openai-api-key"),
+            )),
         );
 
         assert!(provider.auth_manager().is_none());
@@ -480,9 +482,9 @@ mod tests {
     fn openai_provider_returns_api_key_account_state() {
         let provider = create_model_provider(
             ModelProviderInfo::create_openai_provider(/*base_url*/ None),
-            Some(AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
-                "openai-api-key",
-            ))),
+            Some(AuthManager::from_auth_for_testing(
+                CrewonAuth::from_api_key("openai-api-key"),
+            )),
         );
 
         assert_eq!(
@@ -499,7 +501,7 @@ mod tests {
         let provider = create_model_provider(
             ModelProviderInfo::create_openai_provider(/*base_url*/ None),
             Some(AuthManager::from_auth_for_testing(
-                CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+                CrewonAuth::create_dummy_chatgpt_auth_for_testing(),
             )),
         );
 
@@ -567,7 +569,7 @@ mod tests {
             /*auth_manager*/ None,
         );
         let manager =
-            provider.models_manager(test_codex_home(), /*config_model_catalog*/ None);
+            provider.models_manager(test_crewon_home(), /*config_model_catalog*/ None);
 
         let catalog = manager.raw_model_catalog(RefreshStrategy::Online).await;
         let model_ids = catalog
@@ -590,7 +592,7 @@ mod tests {
 
     #[tokio::test]
     async fn configured_bedrock_catalog_only_allows_default_service_tier() {
-        let configured_model = codex_models_manager::bundled_models_response()
+        let configured_model = crewon_models_manager::bundled_models_response()
             .expect("bundled models should parse")
             .models
             .into_iter()
@@ -604,7 +606,7 @@ mod tests {
             /*auth_manager*/ None,
         );
         let manager = provider.models_manager(
-            test_codex_home(),
+            test_crewon_home(),
             Some(ModelsResponse {
                 models: vec![configured_model],
             }),
@@ -646,12 +648,12 @@ mod tests {
         let provider = create_model_provider(
             provider_info,
             Some(AuthManager::from_auth_for_testing(
-                CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+                CrewonAuth::create_dummy_chatgpt_auth_for_testing(),
             )),
         );
 
         let manager =
-            provider.models_manager(test_codex_home(), /*config_model_catalog*/ None);
+            provider.models_manager(test_crewon_home(), /*config_model_catalog*/ None);
         let catalog = manager.raw_model_catalog(RefreshStrategy::Online).await;
 
         assert!(

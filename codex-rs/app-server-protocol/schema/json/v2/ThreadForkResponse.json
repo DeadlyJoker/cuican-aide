@@ -107,7 +107,7 @@
       "type": "object"
     },
     "CodexErrorInfo": {
-      "description": "This translation layer make sure that we expose codex error code in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.",
+      "description": "This translation layer makes sure that we expose Crewon error codes in camel case.\n\nWhen an upstream HTTP status is available (for example, from the Responses API or a provider), it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.",
       "oneOf": [
         {
           "enum": [
@@ -470,6 +470,13 @@
       ],
       "type": "string"
     },
+    "ExternalActionPolicy": {
+      "enum": [
+        "draft-only",
+        "confirm-each"
+      ],
+      "type": "string"
+    },
     "FileUpdateChange": {
       "properties": {
         "diff": {
@@ -533,6 +540,13 @@
         "low",
         "high",
         "original"
+      ],
+      "type": "string"
+    },
+    "LocalWritePolicy": {
+      "enum": [
+        "read-only",
+        "workspace-write"
       ],
       "type": "string"
     },
@@ -821,15 +835,108 @@
         }
       ]
     },
+    "SceneDeliverable": {
+      "enum": [
+        "conversation",
+        "document",
+        "table",
+        "action-list",
+        "message-draft",
+        "knowledge-entry",
+        "implementation-plan",
+        "code-change",
+        "code-review",
+        "design-directions",
+        "design-artifact",
+        "design-review",
+        "handoff-spec"
+      ],
+      "type": "string"
+    },
+    "SceneExecutionStrategy": {
+      "enum": [
+        "single",
+        "team"
+      ],
+      "type": "string"
+    },
+    "SceneExecutionTargetKind": {
+      "enum": [
+        "crewon",
+        "agent",
+        "team",
+        "experts"
+      ],
+      "type": "string"
+    },
+    "SceneId": {
+      "enum": [
+        "office",
+        "code",
+        "design"
+      ],
+      "type": "string"
+    },
+    "SceneInteractionMode": {
+      "enum": [
+        "auto",
+        "organize",
+        "write",
+        "analyze",
+        "coordinate",
+        "ask",
+        "plan",
+        "implement",
+        "review",
+        "explore",
+        "refine",
+        "produce",
+        "inspect"
+      ],
+      "type": "string"
+    },
+    "SceneTaskContract": {
+      "properties": {
+        "deliverable": {
+          "$ref": "#/definitions/SceneDeliverable"
+        },
+        "externalActionPolicy": {
+          "$ref": "#/definitions/ExternalActionPolicy"
+        },
+        "localWritePolicy": {
+          "$ref": "#/definitions/LocalWritePolicy"
+        },
+        "mode": {
+          "$ref": "#/definitions/SceneInteractionMode"
+        },
+        "scene": {
+          "$ref": "#/definitions/SceneId"
+        }
+      },
+      "required": [
+        "deliverable",
+        "externalActionPolicy",
+        "localWritePolicy",
+        "mode",
+        "scene"
+      ],
+      "type": "object"
+    },
     "SessionSource": {
       "oneOf": [
         {
           "enum": [
-            "cli",
             "vscode",
             "exec",
             "appServer",
             "unknown"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "Legacy source value for threads created before terminal CLI removal.",
+          "enum": [
+            "cli"
           ],
           "type": "string"
         },
@@ -984,8 +1091,8 @@
             "null"
           ]
         },
-        "cliVersion": {
-          "description": "Version of the CLI that created the thread.",
+        "clientVersion": {
+          "description": "Version of the client/runtime that created the thread.",
           "type": "string"
         },
         "createdAt": {
@@ -1065,7 +1172,7 @@
               "$ref": "#/definitions/SessionSource"
             }
           ],
-          "description": "Origin of the thread (CLI, VSCode, codex exec, codex app-server, etc.)."
+          "description": "Origin of the thread (legacy CLI, VSCode, Crewon app-server, etc.)."
         },
         "status": {
           "allOf": [
@@ -1100,7 +1207,7 @@
         }
       },
       "required": [
-        "cliVersion",
+        "clientVersion",
         "createdAt",
         "cwd",
         "ephemeral",
@@ -1121,6 +1228,73 @@
         "waitingOnUserInput"
       ],
       "type": "string"
+    },
+    "ThreadExecutionContext": {
+      "description": "Path-free, secret-free projection of a thread's durable execution authority.",
+      "properties": {
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "executionBinding": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/ThreadExecutionContextBindingRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "resourceBindings": {
+          "items": {
+            "$ref": "#/definitions/ThreadExecutionContextBindingRef"
+          },
+          "type": "array"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "threadId": {
+          "type": "string"
+        },
+        "updatedAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "workspace": {
+          "$ref": "#/definitions/WorkspaceRef"
+        }
+      },
+      "required": [
+        "createdAt",
+        "resourceBindings",
+        "revision",
+        "threadId",
+        "updatedAt",
+        "workspace"
+      ],
+      "type": "object"
+    },
+    "ThreadExecutionContextBindingRef": {
+      "description": "Exact Provider resource binding revision attached to one thread.",
+      "properties": {
+        "bindingId": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bindingId",
+        "revision"
+      ],
+      "type": "object"
     },
     "ThreadId": {
       "type": "string"
@@ -1829,6 +2003,47 @@
         }
       ]
     },
+    "ThreadSceneRuntime": {
+      "properties": {
+        "contract": {
+          "$ref": "#/definitions/SceneTaskContract"
+        },
+        "executionStrategy": {
+          "$ref": "#/definitions/SceneExecutionStrategy"
+        },
+        "executionTargetKind": {
+          "$ref": "#/definitions/SceneExecutionTargetKind"
+        },
+        "executionTargetToken": {
+          "type": "string"
+        },
+        "instructionVersion": {
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "presetVersion": {
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "version": {
+          "format": "uint16",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "contract",
+        "executionStrategy",
+        "executionTargetKind",
+        "executionTargetToken",
+        "instructionVersion",
+        "presetVersion",
+        "version"
+      ],
+      "type": "object"
+    },
     "ThreadSource": {
       "type": "string"
     },
@@ -2278,6 +2493,46 @@
           "type": "object"
         }
       ]
+    },
+    "WorkspaceRef": {
+      "properties": {
+        "bindingId": {
+          "type": "string"
+        },
+        "environmentId": {
+          "type": "string"
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "scope": {
+          "$ref": "#/definitions/WorkspaceScope"
+        },
+        "scopeId": {
+          "type": "string"
+        },
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bindingId",
+        "environmentId",
+        "nodeId",
+        "scope",
+        "scopeId",
+        "workspaceKey"
+      ],
+      "type": "object"
+    },
+    "WorkspaceScope": {
+      "enum": [
+        "conversation",
+        "office",
+        "workflow",
+        "automation"
+      ],
+      "type": "string"
     }
   },
   "properties": {

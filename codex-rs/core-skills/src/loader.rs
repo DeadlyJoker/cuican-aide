@@ -7,20 +7,20 @@ use crate::model::SkillMetadata;
 use crate::model::SkillPolicy;
 use crate::model::SkillToolDependency;
 use crate::system::system_cache_root_dir;
-use codex_app_server_protocol::ConfigLayerSource;
-use codex_config::ConfigLayerStack;
-use codex_config::ConfigLayerStackOrdering;
-use codex_config::default_project_root_markers;
-use codex_config::merge_toml_values;
-use codex_config::project_root_markers_from_config;
-use codex_exec_server::ExecutorFileSystem;
-use codex_exec_server::LOCAL_FS;
-use codex_protocol::protocol::Product;
-use codex_protocol::protocol::SkillScope;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_absolute_path::AbsolutePathBufGuard;
-use codex_utils_plugins::PluginSkillRoot;
-use codex_utils_plugins::plugin_namespace_for_skill_path;
+use crewon_app_server_protocol::ConfigLayerSource;
+use crewon_config::ConfigLayerStack;
+use crewon_config::ConfigLayerStackOrdering;
+use crewon_config::default_project_root_markers;
+use crewon_config::merge_toml_values;
+use crewon_config::project_root_markers_from_config;
+use crewon_exec_server::ExecutorFileSystem;
+use crewon_exec_server::LOCAL_FS;
+use crewon_protocol::protocol::Product;
+use crewon_protocol::protocol::SkillScope;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::AbsolutePathBufGuard;
+use crewon_utils_plugins::PluginSkillRoot;
+use crewon_utils_plugins::plugin_namespace_for_skill_path;
 use dirs::home_dir;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -106,6 +106,8 @@ struct DependencyTool {
 
 const SKILLS_FILENAME: &str = "SKILL.md";
 const AGENTS_DIR_NAME: &str = ".agents";
+const CREWON_DIR_NAME: &str = ".crewon";
+const CREWON_SKILL_DIR_NAME: &str = "skill";
 const SKILLS_METADATA_DIR: &str = "agents";
 const SKILLS_METADATA_FILENAME: &str = "openai.yaml";
 const SKILLS_DIR_NAME: &str = "skills";
@@ -259,7 +261,7 @@ async fn skill_roots_with_home_dir(
     plugin_skill_roots: Vec<PluginSkillRoot>,
     extra_skill_roots: Vec<AbsolutePathBuf>,
 ) -> Vec<SkillRoot> {
-    let mut roots = skill_roots_from_layer_stack_inner(config_layer_stack, home_dir, fs.clone());
+    let mut roots = skill_roots_from_layer_stack_inner(config_layer_stack, home_dir);
     roots.extend(plugin_skill_roots.into_iter().map(|root| SkillRoot {
         path: root.path,
         scope: SkillScope::User,
@@ -282,7 +284,6 @@ async fn skill_roots_with_home_dir(
 fn skill_roots_from_layer_stack_inner(
     config_layer_stack: &ConfigLayerStack,
     home_dir: Option<&AbsolutePathBuf>,
-    repo_fs: Option<Arc<dyn ExecutorFileSystem>>,
 ) -> Vec<SkillRoot> {
     let mut roots = Vec::new();
 
@@ -295,17 +296,7 @@ fn skill_roots_from_layer_stack_inner(
         };
 
         match &layer.name {
-            ConfigLayerSource::Project { .. } => {
-                if let Some(repo_fs) = &repo_fs {
-                    roots.push(SkillRoot {
-                        path: config_folder.join(SKILLS_DIR_NAME),
-                        scope: SkillScope::Repo,
-                        file_system: Arc::clone(repo_fs),
-                        plugin_id: None,
-                        plugin_root: None,
-                    });
-                }
-            }
+            ConfigLayerSource::Project { .. } => {}
             ConfigLayerSource::User { .. } => {
                 // Deprecated user skills location (`$CODEX_HOME/skills`), kept for backward
                 // compatibility.
@@ -373,26 +364,44 @@ async fn repo_agents_skill_roots(
     let dirs = dirs_between_project_root_and_cwd(cwd, &project_root);
     let mut roots = Vec::new();
     for dir in dirs {
-        let agents_skills = dir.join(AGENTS_DIR_NAME).join(SKILLS_DIR_NAME);
-        match fs.get_metadata(&agents_skills, /*sandbox*/ None).await {
-            Ok(metadata) if metadata.is_directory => roots.push(SkillRoot {
-                path: agents_skills,
-                scope: SkillScope::Repo,
-                file_system: Arc::clone(&fs),
-                plugin_id: None,
-                plugin_root: None,
-            }),
-            Ok(_) => {}
-            Err(err) if err.kind() == io::ErrorKind::NotFound => {}
-            Err(err) => {
-                tracing::warn!(
-                    "failed to stat repo skills root {}: {err:#}",
-                    agents_skills.display()
-                );
-            }
-        }
+        maybe_push_repo_skill_root(
+            &mut roots,
+            Arc::clone(&fs),
+            dir.join(CREWON_DIR_NAME).join(CREWON_SKILL_DIR_NAME),
+        )
+        .await;
+        maybe_push_repo_skill_root(
+            &mut roots,
+            Arc::clone(&fs),
+            dir.join(AGENTS_DIR_NAME).join(SKILLS_DIR_NAME),
+        )
+        .await;
     }
     roots
+}
+
+async fn maybe_push_repo_skill_root(
+    roots: &mut Vec<SkillRoot>,
+    fs: Arc<dyn ExecutorFileSystem>,
+    path: AbsolutePathBuf,
+) {
+    match fs.get_metadata(&path, /*sandbox*/ None).await {
+        Ok(metadata) if metadata.is_directory => roots.push(SkillRoot {
+            path,
+            scope: SkillScope::Repo,
+            file_system: fs,
+            plugin_id: None,
+            plugin_root: None,
+        }),
+        Ok(_) => {}
+        Err(err) if err.kind() == io::ErrorKind::NotFound => {}
+        Err(err) => {
+            tracing::warn!(
+                "failed to stat repo skills root {}: {err:#}",
+                path.display()
+            );
+        }
+    }
 }
 
 fn project_root_markers_from_stack(config_layer_stack: &ConfigLayerStack) -> Vec<String> {
@@ -523,7 +532,7 @@ async fn discover_skills_under_root(
         }
     }
 
-    // Follow symlinked directories for user, admin, and repo skills. System skills are written by Codex itself.
+    // Follow symlinked directories for user, admin, and repo skills. System skills are written by Crewon itself.
     let follow_symlinks = matches!(
         scope,
         SkillScope::Repo | SkillScope::User | SkillScope::Admin

@@ -7,29 +7,29 @@ use app_test_support::TestAppServer;
 use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
 use axum::Router;
-use codex_app_server::in_process;
-use codex_app_server::in_process::InProcessStartArgs;
-use codex_app_server_protocol::ClientInfo;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::McpResourceContent;
-use codex_app_server_protocol::McpResourceReadParams;
-use codex_app_server_protocol::McpResourceReadResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::UserInput;
-use codex_arg0::Arg0DispatchPaths;
-use codex_config::CloudConfigBundleLoader;
-use codex_config::LoaderOverrides;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_core::config::ConfigBuilder;
-use codex_exec_server::EnvironmentManager;
-use codex_feedback::CodexFeedback;
-use codex_protocol::protocol::SessionSource;
 use core_test_support::responses;
+use crewon_app_server::in_process;
+use crewon_app_server::in_process::InProcessStartArgs;
+use crewon_app_server_protocol::ClientInfo;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::McpResourceContent;
+use crewon_app_server_protocol::McpResourceReadParams;
+use crewon_app_server_protocol::McpResourceReadResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::UserInput;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_config::CloudConfigBundleLoader;
+use crewon_config::LoaderOverrides;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_core::config::ConfigBuilder;
+use crewon_exec_server::EnvironmentManager;
+use crewon_feedback::CrewonFeedback;
+use crewon_protocol::protocol::SessionSource;
 use pretty_assertions::assert_eq;
 use rmcp::handler::server::ServerHandler;
 use rmcp::model::ListResourcesResult;
@@ -104,7 +104,7 @@ async fn mcp_resource_read_returns_resource_contents() -> Result<()> {
     let read_request_id = mcp
         .send_mcp_resource_read_request(McpResourceReadParams {
             thread_id: Some(thread.id),
-            server: "codex_apps".to_string(),
+            server: "crewon_apps".to_string(),
             uri: TEST_RESOURCE_URI.to_string(),
         })
         .await?;
@@ -262,7 +262,7 @@ async fn orchestrator_skill_can_read_referenced_resource_without_an_executor() -
                 "description": SKILL_DESCRIPTION,
                 "main_resource": SKILL_MAIN_PROMPT_URI,
             }],
-            "warnings": ["Orchestrator skill discovery stopped after 2 resource pages: failed to list orchestrator skill resources: resources/list failed for `codex_apps`: Mcp error: -32603: simulated later-page failure"],
+            "warnings": ["Orchestrator skill discovery stopped after 2 resource pages: failed to list orchestrator skill resources: resources/list failed for `crewon_apps`: Mcp error: -32603: simulated later-page failure"],
         })
     );
 
@@ -313,7 +313,7 @@ apps = true
     let read_request_id = mcp
         .send_mcp_resource_read_request(McpResourceReadParams {
             thread_id: None,
-            server: "codex_apps".to_string(),
+            server: "crewon_apps".to_string(),
             uri: TEST_RESOURCE_URI.to_string(),
         })
         .await?;
@@ -348,21 +348,21 @@ async fn mcp_resource_read_returns_error_for_unknown_thread() -> Result<()> {
     let client = in_process::start(InProcessStartArgs {
         arg0_paths: Arg0DispatchPaths::default(),
         config: Arc::new(config),
-        cli_overrides: Vec::new(),
+        config_overrides: Vec::new(),
         loader_overrides,
         strict_config: false,
         cloud_config_bundle: CloudConfigBundleLoader::default(),
-        thread_config_loader: Arc::new(codex_config::NoopThreadConfigLoader),
-        feedback: CodexFeedback::new(),
+        thread_config_loader: Arc::new(crewon_config::NoopThreadConfigLoader),
+        feedback: CrewonFeedback::new(),
         log_db: None,
         state_db: None,
         environment_manager: Arc::new(EnvironmentManager::default_for_tests()),
         config_warnings: Vec::new(),
-        session_source: SessionSource::Cli,
+        session_source: SessionSource::LegacyCli,
         enable_codex_api_key_env: false,
         initialize: InitializeParams {
             client_info: ClientInfo {
-                name: "codex-app-server-tests".to_string(),
+                name: "crewon-app-server-tests".to_string(),
                 title: None,
                 version: "0.1.0".to_string(),
             },
@@ -377,7 +377,7 @@ async fn mcp_resource_read_returns_error_for_unknown_thread() -> Result<()> {
             request_id: RequestId::Integer(1),
             params: McpResourceReadParams {
                 thread_id: Some("00000000-0000-4000-8000-000000000000".to_string()),
-                server: "codex_apps".to_string(),
+                server: "crewon_apps".to_string(),
                 uri: TEST_RESOURCE_URI.to_string(),
             },
         })

@@ -93,7 +93,7 @@
 - Path values should be relative and begin with `./`.
 - `skills`, `hooks`, and `mcpServers` are supplemented on top of default component discovery; they do not replace defaults.
 - Custom path values must follow the plugin root convention and naming/namespacing rules.
-- This repo’s scaffold writes `.codex-plugin/plugin.json`; treat that as the manifest location this skill generates.
+- This repo’s scaffold writes `.crewon-plugin/plugin.json`; treat that as the manifest location this skill generates.
 
 # Marketplace JSON sample spec
 
@@ -132,7 +132,7 @@ personal marketplace unless the caller explicitly requests a repo-local destinat
 
 - `name` (`string`): Marketplace identifier or catalog name.
 - `interface` (`object`, optional): Marketplace presentation metadata.
-- `plugins` (`array`): Ordered plugin entries. This order determines how Codex renders plugins.
+- `plugins` (`array`): Ordered plugin entries. This order determines how Crewon renders plugins.
 
 ### `interface` fields
 

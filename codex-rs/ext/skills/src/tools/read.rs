@@ -1,9 +1,9 @@
-use codex_extension_api::FunctionCallError;
-use codex_extension_api::ToolCall;
-use codex_extension_api::ToolExecutor;
-use codex_extension_api::ToolExecutorFuture;
-use codex_extension_api::ToolName;
-use codex_extension_api::ToolSpec;
+use crewon_extension_api::FunctionCallError;
+use crewon_extension_api::ToolCall;
+use crewon_extension_api::ToolExecutor;
+use crewon_extension_api::ToolExecutorFuture;
+use crewon_extension_api::ToolName;
+use crewon_extension_api::ToolSpec;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;

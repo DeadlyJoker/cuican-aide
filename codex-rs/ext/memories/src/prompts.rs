@@ -1,8 +1,8 @@
 use crate::MEMORY_TOOL_DEVELOPER_INSTRUCTIONS_SUMMARY_TOKEN_LIMIT;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_output_truncation::TruncationPolicy;
-use codex_utils_output_truncation::truncate_text;
-use codex_utils_template::Template;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_output_truncation::TruncationPolicy;
+use crewon_utils_output_truncation::truncate_text;
+use crewon_utils_template::Template;
 use std::sync::LazyLock;
 use tokio::fs;
 
@@ -12,6 +12,8 @@ static MEMORY_TOOL_DEVELOPER_INSTRUCTIONS_TEMPLATE: LazyLock<Template> = LazyLoc
         "memories/read_path.md",
     )
 });
+
+const PENDING_MEMORY_SUMMARY_PLACEHOLDER: &str = "No consolidated memory summary is available yet. Pending ad-hoc notes may still contain remembered facts; search them before concluding that memory is empty.";
 
 fn parse_embedded_template(source: &'static str, template_name: &str) -> Template {
     match Template::parse(source) {
@@ -25,22 +27,43 @@ fn parse_embedded_template(source: &'static str, template_name: &str) -> Templat
 /// Large `memory_summary.md` files are truncated at
 /// [MEMORY_TOOL_DEVELOPER_INSTRUCTIONS_SUMMARY_TOKEN_LIMIT].
 pub(crate) async fn build_memory_tool_developer_instructions(
-    codex_home: &AbsolutePathBuf,
+    crewon_home: &AbsolutePathBuf,
 ) -> Option<String> {
-    let base_path = codex_home.join("memories");
+    let base_path = crewon_home.join("memories");
     let memory_summary_path = base_path.join("memory_summary.md");
     let memory_summary = fs::read_to_string(&memory_summary_path)
         .await
-        .ok()?
-        .trim()
-        .to_string();
+        .ok()
+        .map(|summary| summary.trim().to_string())
+        .filter(|summary| !summary.is_empty());
+    if memory_summary.is_none() {
+        let notes_path = base_path.join("extensions").join("ad_hoc").join("notes");
+        let mut entries = fs::read_dir(notes_path).await.ok()?;
+        let mut has_ad_hoc_note = false;
+        while let Ok(Some(entry)) = entries.next_entry().await {
+            let file_name = entry.file_name();
+            if file_name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+            if entry
+                .file_type()
+                .await
+                .is_ok_and(|file_type| file_type.is_file())
+            {
+                has_ad_hoc_note = true;
+                break;
+            }
+        }
+        if !has_ad_hoc_note {
+            return None;
+        }
+    }
+    let memory_summary =
+        memory_summary.unwrap_or_else(|| PENDING_MEMORY_SUMMARY_PLACEHOLDER.to_string());
     let memory_summary = truncate_text(
         &memory_summary,
         TruncationPolicy::Tokens(MEMORY_TOOL_DEVELOPER_INSTRUCTIONS_SUMMARY_TOKEN_LIMIT),
     );
-    if memory_summary.is_empty() {
-        return None;
-    }
     let base_path = base_path.display().to_string();
     MEMORY_TOOL_DEVELOPER_INSTRUCTIONS_TEMPLATE
         .render([

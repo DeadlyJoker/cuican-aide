@@ -1,6 +1,6 @@
 use super::*;
 use crate::SortDirection;
-use codex_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SessionSource;
 use std::sync::atomic::Ordering;
 
 impl StateRuntime {
@@ -64,7 +64,12 @@ WHERE threads.id = ?
             r#"
 UPDATE threads
 SET preview = ?
-WHERE id = ? AND preview = ''
+WHERE id = ?
+  AND preview = ''
+  AND NOT EXISTS (
+      SELECT 1 FROM cloud_agent_thread_summaries summary
+      WHERE summary.thread_id = threads.id
+  )
             "#,
         )
         .bind(preview)
@@ -524,7 +529,7 @@ ON CONFLICT(id) DO NOTHING
             metadata
                 .thread_source
                 .as_ref()
-                .map(codex_protocol::protocol::ThreadSource::as_str),
+                .map(crewon_protocol::protocol::ThreadSource::as_str),
         )
         .bind(metadata.agent_nickname.as_deref())
         .bind(metadata.agent_role.as_deref())
@@ -590,13 +595,22 @@ ON CONFLICT(id) DO NOTHING
         updated_at: DateTime<Utc>,
     ) -> anyhow::Result<bool> {
         let updated_at = self.allocate_thread_updated_at(updated_at)?;
-        let result =
-            sqlx::query("UPDATE threads SET updated_at = ?, updated_at_ms = ? WHERE id = ?")
-                .bind(datetime_to_epoch_seconds(updated_at))
-                .bind(datetime_to_epoch_millis(updated_at))
-                .bind(thread_id.to_string())
-                .execute(self.pool.as_ref())
-                .await?;
+        let result = sqlx::query(
+            r#"
+UPDATE threads
+SET updated_at = ?, updated_at_ms = ?
+WHERE id = ?
+  AND NOT EXISTS (
+      SELECT 1 FROM cloud_agent_thread_summaries summary
+      WHERE summary.thread_id = threads.id
+  )
+            "#,
+        )
+        .bind(datetime_to_epoch_seconds(updated_at))
+        .bind(datetime_to_epoch_millis(updated_at))
+        .bind(thread_id.to_string())
+        .execute(self.pool.as_ref())
+        .await?;
         Ok(result.rows_affected() > 0)
     }
 
@@ -606,7 +620,7 @@ ON CONFLICT(id) DO NOTHING
     /// monotonic millisecond timestamps without querying SQLite on every update. Older
     /// backfill/repair timestamps are allowed through unchanged so historical ordering
     /// remains tied to the rollout file mtimes.
-    fn allocate_thread_updated_at(
+    pub(super) fn allocate_thread_updated_at(
         &self,
         updated_at: DateTime<Utc>,
     ) -> anyhow::Result<DateTime<Utc>> {
@@ -720,9 +734,21 @@ INSERT INTO threads (
 ON CONFLICT(id) DO UPDATE SET
     rollout_path = excluded.rollout_path,
     created_at = excluded.created_at,
-    updated_at = excluded.updated_at,
+    updated_at = CASE
+        WHEN EXISTS (
+            SELECT 1 FROM cloud_agent_thread_summaries summary
+            WHERE summary.thread_id = excluded.id
+        ) THEN threads.updated_at
+        ELSE excluded.updated_at
+    END,
     created_at_ms = excluded.created_at_ms,
-    updated_at_ms = excluded.updated_at_ms,
+    updated_at_ms = CASE
+        WHEN EXISTS (
+            SELECT 1 FROM cloud_agent_thread_summaries summary
+            WHERE summary.thread_id = excluded.id
+        ) THEN threads.updated_at_ms
+        ELSE excluded.updated_at_ms
+    END,
     source = excluded.source,
     thread_source = excluded.thread_source,
     agent_nickname = excluded.agent_nickname,
@@ -734,7 +760,13 @@ ON CONFLICT(id) DO UPDATE SET
     cwd = excluded.cwd,
     cli_version = excluded.cli_version,
     title = excluded.title,
-    preview = COALESCE(NULLIF(excluded.preview, ''), threads.preview),
+    preview = CASE
+        WHEN EXISTS (
+            SELECT 1 FROM cloud_agent_thread_summaries summary
+            WHERE summary.thread_id = excluded.id
+        ) THEN threads.preview
+        ELSE COALESCE(NULLIF(excluded.preview, ''), threads.preview)
+    END,
     sandbox_policy = excluded.sandbox_policy,
     approval_mode = excluded.approval_mode,
     tokens_used = excluded.tokens_used,
@@ -757,7 +789,7 @@ ON CONFLICT(id) DO UPDATE SET
             metadata
                 .thread_source
                 .as_ref()
-                .map(codex_protocol::protocol::ThreadSource::as_str),
+                .map(crewon_protocol::protocol::ThreadSource::as_str),
         )
         .bind(metadata.agent_nickname.as_deref())
         .bind(metadata.agent_role.as_deref())
@@ -942,6 +974,10 @@ WHERE status IN (?, ?)
                 .execute(&mut *tx)
                 .await?;
             }
+            sqlx::query("DELETE FROM thread_execution_contexts WHERE thread_id = ?")
+                .bind(thread_id_string)
+                .execute(&mut *tx)
+                .await?;
             sqlx::query("DELETE FROM thread_dynamic_tools WHERE thread_id = ?")
                 .bind(thread_id_string)
                 .execute(&mut *tx)
@@ -1080,7 +1116,8 @@ pub(super) fn extract_memory_mode(items: &[RolloutItem]) -> Option<String> {
         RolloutItem::ResponseItem(_)
         | RolloutItem::Compacted(_)
         | RolloutItem::TurnContext(_)
-        | RolloutItem::EventMsg(_) => None,
+        | RolloutItem::EventMsg(_)
+        | RolloutItem::UserInputOnceMarker(_) => None,
     })
 }
 
@@ -1237,11 +1274,11 @@ mod tests {
     use crate::runtime::test_support::test_thread_metadata;
     use crate::runtime::test_support::unique_temp_dir;
     use anyhow::Result;
-    use codex_protocol::protocol::EventMsg;
-    use codex_protocol::protocol::GitInfo;
-    use codex_protocol::protocol::SessionMeta;
-    use codex_protocol::protocol::SessionMetaLine;
-    use codex_protocol::protocol::SessionSource;
+    use crewon_protocol::protocol::EventMsg;
+    use crewon_protocol::protocol::GitInfo;
+    use crewon_protocol::protocol::SessionMeta;
+    use crewon_protocol::protocol::SessionMetaLine;
+    use crewon_protocol::protocol::SessionSource;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use std::path::PathBuf;
@@ -1747,7 +1784,7 @@ mod tests {
             thread_id,
             metadata.rollout_path.clone(),
             metadata.created_at,
-            SessionSource::Cli,
+            SessionSource::LegacyCli,
         );
         let items = vec![RolloutItem::SessionMeta(SessionMetaLine {
             meta: SessionMeta {
@@ -1757,8 +1794,8 @@ mod tests {
                 timestamp: metadata.created_at.to_rfc3339(),
                 cwd: PathBuf::new(),
                 originator: String::new(),
-                cli_version: String::new(),
-                source: SessionSource::Cli,
+                client_version: String::new(),
+                source: SessionSource::LegacyCli,
                 thread_source: None,
                 agent_path: None,
                 agent_nickname: None,
@@ -1770,6 +1807,7 @@ mod tests {
                 multi_agent_version: None,
             },
             git: None,
+            scene_runtime: None,
         })];
 
         runtime
@@ -1808,7 +1846,7 @@ mod tests {
             thread_id,
             metadata.rollout_path.clone(),
             metadata.created_at,
-            SessionSource::Cli,
+            SessionSource::LegacyCli,
         );
         let items = vec![RolloutItem::SessionMeta(SessionMetaLine {
             meta: SessionMeta {
@@ -1818,8 +1856,8 @@ mod tests {
                 timestamp: created_at,
                 cwd: PathBuf::new(),
                 originator: String::new(),
-                cli_version: String::new(),
-                source: SessionSource::Cli,
+                client_version: String::new(),
+                source: SessionSource::LegacyCli,
                 thread_source: None,
                 agent_path: None,
                 agent_nickname: None,
@@ -1831,10 +1869,11 @@ mod tests {
                 multi_agent_version: None,
             },
             git: Some(GitInfo {
-                commit_hash: Some(codex_git_utils::GitSha::new("rollout-sha")),
+                commit_hash: Some(crewon_git_utils::GitSha::new("rollout-sha")),
                 branch: Some("rollout-branch".to_string()),
                 repository_url: Some("git@example.com:openai/codex.git".to_string()),
             }),
+            scene_runtime: None,
         })];
 
         runtime
@@ -2273,19 +2312,19 @@ mod tests {
             thread_id,
             metadata.rollout_path.clone(),
             metadata.created_at,
-            SessionSource::Cli,
+            SessionSource::LegacyCli,
         );
         let items = vec![RolloutItem::EventMsg(EventMsg::TokenCount(
-            codex_protocol::protocol::TokenCountEvent {
-                info: Some(codex_protocol::protocol::TokenUsageInfo {
-                    total_token_usage: codex_protocol::protocol::TokenUsage {
+            crewon_protocol::protocol::TokenCountEvent {
+                info: Some(crewon_protocol::protocol::TokenUsageInfo {
+                    total_token_usage: crewon_protocol::protocol::TokenUsage {
                         input_tokens: 0,
                         cached_input_tokens: 0,
                         output_tokens: 0,
                         reasoning_output_tokens: 0,
                         total_tokens: 321,
                     },
-                    last_token_usage: codex_protocol::protocol::TokenUsage::default(),
+                    last_token_usage: crewon_protocol::protocol::TokenUsage::default(),
                     model_context_window: None,
                 }),
                 rate_limits: None,

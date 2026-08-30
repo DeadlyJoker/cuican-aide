@@ -1,0 +1,640 @@
+/*
+ * User-tunable appearance and the shared control surface.
+ *
+ * Loaded last so it can settle two things the older sheets disagree on:
+ *   1. Controls define their edge with a fill, not a permanent 1px outline.
+ *      A visible ring appears only on hover/focus, which is the Codex/Cursor
+ *      behavior and removes the boxed-in look.
+ *   2. Appearance preferences arrive as --user-* variables and data-* flags
+ *      written by lib/appearance/applyAppearance.ts.
+ */
+
+:root {
+  /* Control surfaces: a fill plus a hairline that is normally invisible. */
+  --control-surface: oklch(96.5% 0 0);
+  --control-surface-hover: oklch(94% 0 0);
+  --control-surface-active: oklch(91.5% 0 0);
+  --control-ring: oklch(80% 0 0);
+  --control-ring-strong: oklch(62% 0 0);
+  --control-fg: oklch(24% 0 0);
+  --control-fg-muted: oklch(48% 0 0);
+}
+
+:root[data-theme="dark"] {
+  --control-surface: oklch(28% 0 0);
+  --control-surface-hover: oklch(32% 0 0);
+  --control-surface-active: oklch(36% 0 0);
+  --control-ring: oklch(45% 0 0);
+  --control-ring-strong: oklch(62% 0 0);
+  --control-fg: oklch(93% 0 0);
+  --control-fg-muted: oklch(70% 0 0);
+}
+
+/* User font and size choices. Defaults keep the shipped look when unset. */
+:root {
+  --user-ui-font:
+    -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI",
+    system-ui, sans-serif;
+  --user-code-font:
+    ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace;
+  --user-ui-font-size: 12px;
+  --user-code-font-size: 12px;
+}
+
+/*
+ * The UI size is expressed as a delta added to every px font-size in the shell,
+ * not as a zoom. Zooming scaled the whole layout (window, sidebar, spacing),
+ * which is not what a font-size setting should do: only text may change.
+ */
+:root {
+  --user-ui-font-delta: 0px;
+}
+
+/*
+ * Contrast mixes each theme's own muted tones toward that theme's foreground,
+ * so raising contrast darkens secondary text on light and lightens it on dark.
+ * The base values mirror app.css so the default (45) reproduces the shipped look.
+ */
+:root {
+  --contrast-fg: var(--user-foreground, #18181b);
+  --contrast-faint: color-mix(
+    in srgb,
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    #8a8f98
+  );
+  --contrast-muted: color-mix(
+    in srgb,
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    #52525b
+  );
+}
+
+:root[data-theme="dark"] {
+  --contrast-fg: var(--user-foreground, #eeeeee);
+  --contrast-faint: color-mix(
+    in srgb,
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    #8a8a8f
+  );
+  --contrast-muted: color-mix(
+    in srgb,
+    var(--contrast-fg) calc(var(--user-contrast, 0.45) * 55%),
+    #cccccc
+  );
+}
+
+/*
+ * The shell resolves its text through --font-body / --font-mono, and those
+ * rules outrank a plain font-family here. Redefining the tokens in terms of the
+ * user's pick makes every existing consumer follow, the same approach used for
+ * the accent color.
+ */
+.screen-shell.command-screen,
+:root[data-theme="dark"] .screen-shell.command-screen,
+.settings-page,
+.crewon-auth-shell {
+  font-family: var(--user-ui-font);
+  --font-body: var(--user-ui-font);
+  --font-mono: var(--user-code-font);
+}
+
+code,
+pre,
+kbd,
+samp,
+.command-code,
+[class*="mono"] {
+  font-family: var(--user-code-font);
+  font-size: var(--user-code-font-size);
+}
+
+/*
+ * Prose code is sized in `em` relative to its paragraph (`.markdown-content code
+ * { font-size: 0.88em }`), which outranks the element selector above and left
+ * the code-size preference inert inside message bodies. These rules restate the
+ * original ratio against the user's size so inline code still reads slightly
+ * smaller than the prose around it.
+ */
+.markdown-content code,
+.markdown-content kbd,
+.markdown-content samp {
+  font-size: calc(var(--user-code-font-size) * 0.88);
+}
+
+/*
+ * Message bodies scope inline code more specifically still (0.92em), so the
+ * ratio is restated at matching specificity rather than raising this rule's
+ * weight and losing the distinction between inline and block code.
+ */
+.screen-shell.command-screen
+  .command-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :not(pre)
+  > code,
+.assistant-thread-room
+  .message[data-kind="agentMessage"]
+  .markdown-content
+  :not(pre)
+  > code {
+  font-size: calc(var(--user-code-font-size) * 0.92);
+}
+
+/*
+ * Code blocks pin 12px through `.markdown-code-block .markdown-code-pre`, which
+ * is more specific than a bare `pre`. Matching that shape lets block code track
+ * the preference too; the inner `code` inherits from the `pre`.
+ */
+.markdown-content pre,
+.markdown-content pre code,
+.markdown-content .markdown-code-block .markdown-code-pre,
+:root:not([data-theme="dark"])
+  .markdown-content
+  .markdown-code-block
+  .markdown-code-pre {
+  font-size: var(--user-code-font-size);
+}
+
+/*
+ * Text-entry and select surfaces: fill defines the edge, no resting outline.
+ * Selectors are scoped through .screen-shell.command-screen where the older
+ * sheets scope theirs, so these win without needing !important.
+ */
+.screen-shell.command-screen .settings-field-list input,
+.screen-shell.command-screen .settings-field-list select,
+.screen-shell.command-screen .settings-field-list textarea,
+.settings-field-list input,
+.settings-field-list select,
+.settings-field-list textarea,
+.library-fields input,
+.library-fields textarea,
+.agent-field select,
+.capability-field-list select,
+.capability-library-toolbar input,
+.context-palette input,
+.space-input,
+.settings-search {
+  border: 1px solid transparent;
+  background: var(--control-surface);
+  color: var(--control-fg);
+  box-shadow: none;
+}
+
+.screen-shell.command-screen .settings-field-list input:hover:not(:disabled),
+.screen-shell.command-screen .settings-field-list select:hover:not(:disabled),
+.screen-shell.command-screen .settings-field-list textarea:hover:not(:disabled),
+.settings-field-list input:hover:not(:disabled),
+.settings-field-list select:hover:not(:disabled),
+.settings-field-list textarea:hover:not(:disabled),
+.library-fields input:hover:not(:disabled),
+.library-fields textarea:hover:not(:disabled),
+.agent-field select:hover:not(:disabled),
+.capability-field-list select:hover:not(:disabled),
+.capability-library-toolbar input:hover:not(:disabled),
+.space-input:hover,
+.settings-search:hover {
+  border-color: var(--control-ring);
+  background: var(--control-surface-hover);
+}
+
+/* Focus is the one state that gets a deliberate ring. */
+.screen-shell.command-screen .settings-field-list input:focus-visible,
+.screen-shell.command-screen .settings-field-list select:focus-visible,
+.screen-shell.command-screen .settings-field-list textarea:focus-visible,
+.settings-field-list input:focus-visible,
+.settings-field-list select:focus-visible,
+.settings-field-list textarea:focus-visible,
+.library-fields input:focus-visible,
+.library-fields textarea:focus-visible,
+.agent-field select:focus-visible,
+.capability-field-list select:focus-visible,
+.capability-library-toolbar input:focus-visible,
+.context-palette input:focus-visible,
+.settings-search:focus-within {
+  border-color: var(--control-ring-strong);
+  background: var(--control-surface);
+  outline: 0;
+  box-shadow: none;
+}
+
+/* Secondary buttons and dropdown triggers follow the same contract. */
+.screen-shell.command-screen .settings-actions button,
+.screen-shell.command-screen .control-select .select-trigger,
+.screen-shell.command-screen .tab-button,
+.settings-actions button,
+.settings-back-button,
+.settings-nav-group button,
+.library-actions button,
+.library-heading button,
+.capability-result-actions button,
+.command-workbench-file-actions button,
+.control-select .select-trigger,
+.icon-action,
+.tab-button {
+  border: 1px solid transparent;
+  background: var(--control-surface);
+  color: var(--control-fg);
+  box-shadow: none;
+}
+
+/*
+ * Full access drops the sandbox and approvals, so its trigger keeps the warning
+ * colour instead of the neutral control foreground. The `:root` and
+ * `.command-shell-route` prefixes match the per-theme control-colour rules that
+ * would otherwise win on specificity and repaint the trigger neutral.
+ */
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .permission-dropdown[data-selected-tone="warning"]
+  .select-trigger,
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .permission-dropdown[data-selected-tone="warning"]
+  .select-trigger
+  svg {
+  color: var(--warning);
+}
+
+.screen-shell.command-screen .settings-actions button:hover:not(:disabled),
+.screen-shell.command-screen .control-select .select-trigger:hover,
+.screen-shell.command-screen .tab-button:hover:not(:disabled),
+.settings-actions button:hover:not(:disabled),
+.settings-back-button:hover,
+.library-actions button:hover:not(:disabled),
+.library-heading button:hover:not(:disabled),
+.capability-result-actions button:hover:not(:disabled),
+.command-workbench-file-actions button:hover:not(:disabled),
+.control-select .select-trigger:hover,
+.icon-action:hover:not(:disabled),
+.tab-button:hover:not(:disabled) {
+  border-color: var(--control-ring);
+  background: var(--control-surface-hover);
+}
+
+/* Nav rows and unselected tabs stay flat; only the active one gets a fill. */
+.settings-nav-group button,
+.tab-button:not([data-active="true"]) {
+  background: transparent;
+}
+
+.settings-nav-group button:hover {
+  border-color: transparent;
+  background: var(--control-surface-hover);
+}
+
+/*
+ * The accent is consumed as `--accent` in ~288 places across the older sheets.
+ * Rather than rewrite each call site, the shell's `--accent` is redefined in
+ * terms of the user's pick, so every existing consumer follows automatically.
+ * Same for the background and foreground tokens.
+ */
+.screen-shell.command-screen,
+.settings-page,
+.crewon-auth-shell {
+  --accent: var(--user-accent, oklch(24% 0 0));
+}
+
+/*
+ * Dark mode needs a light accent: the shipped near-black would be darker than
+ * the cards it sits on, making toggles and selected states vanish. The user's
+ * pick still wins when set, but the default flips per theme.
+ */
+:root[data-theme="dark"] .screen-shell.command-screen,
+:root[data-theme="dark"] .settings-page,
+:root[data-theme="dark"] .crewon-auth-shell {
+  --accent: var(--user-accent, oklch(92% 0 0));
+  --accent-ink: oklch(18% 0 0);
+}
+
+/*
+ * Background and foreground fall back per theme, so an untouched preference
+ * leaves dark mode alone. applyAppearance omits these variables entirely while
+ * they sit at their defaults, which is what makes the fallback reachable.
+ */
+:root {
+  --bg: var(--user-background, #f5f5f5);
+  --text: var(--user-foreground, #18181b);
+}
+
+:root[data-theme="dark"] {
+  --bg: var(--user-background, #171717);
+  --text: var(--user-foreground, #eeeeee);
+}
+
+/* Primary and selected states carry the accent; everything else stays neutral. */
+.screen-shell.command-screen .settings-actions button[data-tone="primary"],
+.settings-actions button[data-tone="primary"],
+.library-actions button[data-tone="primary"],
+.tab-button[data-active="true"] {
+  border-color: transparent;
+  background: var(--user-accent, var(--accent));
+  color: var(--accent-ink);
+}
+
+.settings-nav-group button[data-active="true"] {
+  border-color: transparent;
+  background: var(--control-surface-active);
+  color: var(--control-fg);
+}
+
+/* The composer is the primary surface; it keeps a hairline for separation. */
+.command-input {
+  border: 1px solid var(--control-ring);
+  box-shadow: none;
+}
+
+.command-input:focus-within {
+  border-color: var(--control-ring-strong);
+}
+
+/* Font smoothing is a macOS rendering path, so it is gated on the OS. */
+:root[data-os="mac"][data-font-smoothing="true"] {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+:root[data-font-smoothing="false"] {
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
+}
+
+/* Reduce motion: honored whether it came from the OS or the explicit toggle. */
+:root[data-reduce-motion="true"] *,
+:root[data-reduce-motion="true"] *::before,
+:root[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* Translucent sidebar: only meaningful where backdrop-filter is supported. */
+@supports (backdrop-filter: blur(1px)) {
+  :root[data-translucent-sidebar="true"] .command-sidebar,
+  :root[data-translucent-sidebar="true"] .settings-sidebar {
+    background: color-mix(
+      in srgb,
+      var(--command-sidebar-bg, var(--control-surface)) 72%,
+      transparent
+    );
+    backdrop-filter: blur(20px) saturate(180%);
+  }
+}
+
+:root[data-translucent-sidebar="false"] .command-sidebar,
+:root[data-translucent-sidebar="false"] .settings-sidebar {
+  backdrop-filter: none;
+}
+
+/* Diff markers: color-only, or color plus +/- signs for accessibility. */
+:root[data-diff-markers="sign"] .diff-added::before {
+  content: "+ ";
+}
+
+:root[data-diff-markers="sign"] .diff-removed::before {
+  content: "- ";
+}
+
+/*
+ * Switch (Radix): the ui kit paints the checked track with --color-primary,
+ * which captures :root's blue --accent and never re-resolves the command
+ * screen's neutral override. Settings is a neutral surface, so the checked
+ * track uses the control ink and the thumb is pinned per state: white on the
+ * unchecked grey, page-colored on the checked ink, in both themes.
+ */
+.settings-page [data-slot="switch"][data-state="checked"] {
+  background: var(--control-fg);
+}
+
+.settings-page [data-slot="switch"][data-state="checked"] [data-slot="switch-thumb"] {
+  background: var(--settings-bg);
+}
+
+.settings-page [data-slot="switch"][data-state="unchecked"] [data-slot="switch-thumb"] {
+  background: var(--n-0);
+}
+
+/* Segmented control: one tinted track, the active segment lifts out of it. */
+.settings-segmented {
+  display: inline-flex;
+  gap: 2px;
+  justify-self: end;
+  border-radius: var(--radius-md);
+  padding: 2px;
+  background: var(--control-surface);
+}
+
+.settings-segmented button {
+  min-height: 26px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 0 12px;
+  background: transparent;
+  color: var(--control-fg-muted);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.settings-segmented button[data-active="true"] {
+  background: oklch(100% 0 0);
+  color: var(--control-fg);
+  box-shadow: 0 1px 2px rgb(0 0 0 / 0.08);
+  font-weight: 500;
+}
+
+:root[data-theme="dark"] .settings-segmented button[data-active="true"] {
+  background: var(--control-surface-active);
+  box-shadow: none;
+}
+
+.settings-segmented button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+/* The swatch is the whole product-facing color control. */
+.settings-color-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  justify-self: end;
+}
+
+/* Scoped to beat the generic 250px width on .settings-field-list input. */
+.screen-shell.command-screen
+  .settings-field-list
+  .settings-color-field
+  input[type="color"],
+.settings-color-field input[type="color"] {
+  width: 44px;
+  height: 26px;
+  min-height: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 0;
+  background: transparent;
+  cursor: pointer;
+}
+
+.settings-color-field input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.settings-color-field input[type="color"]::-webkit-color-swatch {
+  border: 1px solid var(--control-ring);
+  border-radius: var(--radius-sm);
+}
+
+/* Number field: compact, with the unit as a suffix rather than in the label. */
+.settings-number-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-self: end;
+}
+
+.screen-shell.command-screen .settings-field-list .settings-number-field input,
+.settings-number-field input {
+  width: 62px;
+  height: 30px;
+  min-height: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  outline: 0;
+  padding: 0 8px;
+  background: var(--control-surface);
+  color: var(--control-fg);
+  font: inherit;
+  font-size: 12px;
+  text-align: right;
+}
+
+.settings-number-field input:hover:not(:disabled) {
+  border-color: var(--control-ring);
+}
+
+.settings-number-field input:focus-visible {
+  border-color: var(--control-ring-strong);
+}
+
+.settings-number-field small {
+  color: var(--control-fg-muted);
+  font-size: 11px;
+}
+
+/*
+ * Slider: the shared Radix primitive owns the structure and interaction; these
+ * rules only map its track/range/thumb slots onto the neutral control palette
+ * (the primitive's default theme would fill the range with the accent color).
+ */
+.settings-slider-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: end;
+}
+
+.settings-slider-field [data-slot="slider"] {
+  width: 140px;
+}
+
+.settings-slider-field [data-slot="slider-track"] {
+  background: var(--control-surface-active);
+}
+
+.settings-slider-field [data-slot="slider-range"] {
+  background: var(--control-fg);
+}
+
+.settings-slider-field [data-slot="slider-thumb"] {
+  width: 14px;
+  height: 14px;
+  border: 0;
+  background: var(--control-fg);
+  box-shadow: none;
+}
+
+/*
+ * The shared field-list rule clears the outline so text inputs can show focus
+ * on their border instead. A swatch has no border to carry that, so the ring
+ * is restored for it specifically. The slider thumb keeps the primitive's
+ * built-in ring (focus-visible on the thumb itself).
+ */
+.screen-shell.command-screen
+  .settings-field-list
+  .settings-color-field
+  input[type="color"]:focus-visible,
+.settings-color-field input[type="color"]:focus-visible {
+  outline: 2px solid var(--control-ring-strong);
+  outline-offset: 2px;
+}
+
+.settings-slider-field output {
+  min-width: 24px;
+  color: var(--control-fg-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/*
+ * Non-text controls size to their content instead of the 250px text-field
+ * width. The row's second column collapses to auto so the control sits flush
+ * right rather than stretching across a fixed track.
+ */
+.screen-shell.command-screen
+  .settings-field-list
+  label:is(
+    [data-control="color"],
+    [data-control="number"],
+    [data-control="segmented"],
+    [data-control="slider"],
+    [data-control="toggle"]
+  ) {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+/*
+ * Contrast pushes secondary text toward the foreground color. At 0 the muted
+ * tones stay as designed; at 100 they converge on full foreground.
+ */
+/*
+ * Contrast pulls secondary text toward the foreground. The shell resolves muted
+ * text through --text-faint / --text-muted / --settings-faint / --settings-muted,
+ * and those rules outrank a direct `color` here, so the tokens themselves are
+ * redefined. At 0 the muted tones stay as designed; at 100 they reach full
+ * foreground.
+ */
+.screen-shell.command-screen,
+:root[data-theme="dark"] .screen-shell.command-screen,
+.settings-page,
+.crewon-auth-shell {
+  --text-faint: var(--contrast-faint);
+  --text-muted: var(--contrast-muted);
+  --settings-faint: var(--contrast-faint);
+  --settings-muted: var(--contrast-muted);
+}
+
+/*
+ * The undecorated desktop window rounds its own corners, so every layer *behind*
+ * .command-window has to stay transparent or it paints over the corner the
+ * window just cut. The per-theme material rules in original-shell-overrides.css
+ * fill those layers with an opaque colour at a specificity app.css cannot reach,
+ * which is why this override lives in the last-loaded sheet and repeats the
+ * `.command-shell-route` and theme prefixes those rules use.
+ *
+ * .command-window itself keeps its fill: it is the surface inside the radius.
+ */
+:root[data-surface="desktop"] .command-shell-route,
+:root[data-surface="desktop"] .screen-shell.command-screen,
+:root[data-surface="desktop"][data-theme]
+  .command-shell-route
+  .screen-shell.command-screen,
+:root[data-surface="desktop"]:not([data-theme="light"])
+  .command-shell-route
+  .screen-shell.command-screen {
+  background: transparent;
+}

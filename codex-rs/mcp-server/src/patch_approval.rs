@@ -2,11 +2,11 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use codex_core::CodexThread;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::FileChange;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::ReviewDecision;
+use crewon_core::CrewonThread;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::FileChange;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::ReviewDecision;
 use rmcp::model::ErrorData;
 use rmcp::model::RequestId;
 use serde::Deserialize;
@@ -24,15 +24,15 @@ pub struct PatchApprovalElicitRequestParams {
     pub requested_schema: Value,
     #[serde(rename = "threadId")]
     pub thread_id: ThreadId,
-    pub codex_elicitation: String,
-    pub codex_mcp_tool_call_id: String,
-    pub codex_event_id: String,
-    pub codex_call_id: String,
+    pub crewon_elicitation: String,
+    pub crewon_mcp_tool_call_id: String,
+    pub crewon_event_id: String,
+    pub crewon_call_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub codex_reason: Option<String>,
+    pub crewon_reason: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub codex_grant_root: Option<PathBuf>,
-    pub codex_changes: HashMap<PathBuf, FileChange>,
+    pub crewon_grant_root: Option<PathBuf>,
+    pub crewon_changes: HashMap<PathBuf, FileChange>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
@@ -47,7 +47,7 @@ pub(crate) async fn handle_patch_approval_request(
     grant_root: Option<PathBuf>,
     changes: HashMap<PathBuf, FileChange>,
     outgoing: Arc<OutgoingMessageSender>,
-    codex: Arc<CodexThread>,
+    crewon_thread: Arc<CrewonThread>,
     request_id: RequestId,
     tool_call_id: String,
     event_id: String,
@@ -58,19 +58,19 @@ pub(crate) async fn handle_patch_approval_request(
     if let Some(r) = &reason {
         message_lines.push(r.clone());
     }
-    message_lines.push("Allow Codex to apply proposed code changes?".to_string());
+    message_lines.push("Allow Crewon to apply proposed code changes?".to_string());
 
     let params = PatchApprovalElicitRequestParams {
         message: message_lines.join("\n"),
         requested_schema: json!({"type":"object","properties":{}}),
         thread_id,
-        codex_elicitation: "patch-approval".to_string(),
-        codex_mcp_tool_call_id: tool_call_id.clone(),
-        codex_event_id: event_id.clone(),
-        codex_call_id: call_id,
-        codex_reason: reason,
-        codex_grant_root: grant_root,
-        codex_changes: changes,
+        crewon_elicitation: "patch-approval".to_string(),
+        crewon_mcp_tool_call_id: tool_call_id.clone(),
+        crewon_event_id: event_id.clone(),
+        crewon_call_id: call_id,
+        crewon_reason: reason,
+        crewon_grant_root: grant_root,
+        crewon_changes: changes,
     };
     let params_json = match serde_json::to_value(&params) {
         Ok(value) => value,
@@ -92,10 +92,10 @@ pub(crate) async fn handle_patch_approval_request(
 
     // Listen for the response on a separate task so we don't block the main agent loop.
     {
-        let codex = codex.clone();
+        let crewon_thread = crewon_thread.clone();
         let approval_id = approval_id.clone();
         tokio::spawn(async move {
-            on_patch_approval_response(approval_id, on_response, codex).await;
+            on_patch_approval_response(approval_id, on_response, crewon_thread).await;
         });
     }
 }
@@ -103,14 +103,14 @@ pub(crate) async fn handle_patch_approval_request(
 pub(crate) async fn on_patch_approval_response(
     approval_id: String,
     receiver: tokio::sync::oneshot::Receiver<serde_json::Value>,
-    codex: Arc<CodexThread>,
+    crewon_thread: Arc<CrewonThread>,
 ) {
     let response = receiver.await;
     let value = match response {
         Ok(value) => value,
         Err(err) => {
             error!("request failed: {err:?}");
-            if let Err(submit_err) = codex
+            if let Err(submit_err) = crewon_thread
                 .submit(Op::PatchApproval {
                     id: approval_id.clone(),
                     decision: ReviewDecision::Denied,
@@ -130,7 +130,7 @@ pub(crate) async fn on_patch_approval_response(
         }
     });
 
-    if let Err(err) = codex
+    if let Err(err) = crewon_thread
         .submit(Op::PatchApproval {
             id: approval_id,
             decision: response.decision,

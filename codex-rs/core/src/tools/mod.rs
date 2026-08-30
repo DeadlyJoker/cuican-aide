@@ -17,11 +17,11 @@ pub(crate) mod tool_dispatch_trace;
 
 use std::borrow::Cow;
 
-use codex_protocol::exec_output::ExecToolCallOutput;
-use codex_tools::ToolName;
-use codex_utils_output_truncation::TruncationPolicy;
-use codex_utils_output_truncation::formatted_truncate_text;
-use codex_utils_output_truncation::truncate_text;
+use crewon_protocol::exec_output::ExecToolCallOutput;
+use crewon_tools::ToolName;
+use crewon_utils_output_truncation::TruncationPolicy;
+use crewon_utils_output_truncation::formatted_truncate_text;
+use crewon_utils_output_truncation::truncate_text;
 pub use router::ToolRouter;
 
 // Telemetry preview limits: keep log events smaller than model budgets.
@@ -47,13 +47,13 @@ pub(crate) fn flat_tool_name(tool_name: &ToolName) -> Cow<'_, str> {
 
 pub(crate) fn tool_user_shell_type(
     user_shell: &crate::shell::Shell,
-) -> codex_tools::ToolUserShellType {
+) -> crewon_tools::ToolUserShellType {
     match user_shell.shell_type {
-        crate::shell::ShellType::Zsh => codex_tools::ToolUserShellType::Zsh,
-        crate::shell::ShellType::Bash => codex_tools::ToolUserShellType::Bash,
-        crate::shell::ShellType::PowerShell => codex_tools::ToolUserShellType::PowerShell,
-        crate::shell::ShellType::Sh => codex_tools::ToolUserShellType::Sh,
-        crate::shell::ShellType::Cmd => codex_tools::ToolUserShellType::Cmd,
+        crate::shell::ShellType::Zsh => crewon_tools::ToolUserShellType::Zsh,
+        crate::shell::ShellType::Bash => crewon_tools::ToolUserShellType::Bash,
+        crate::shell::ShellType::PowerShell => crewon_tools::ToolUserShellType::PowerShell,
+        crate::shell::ShellType::Sh => crewon_tools::ToolUserShellType::Sh,
+        crate::shell::ShellType::Cmd => crewon_tools::ToolUserShellType::Cmd,
     }
 }
 

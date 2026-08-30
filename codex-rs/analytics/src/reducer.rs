@@ -3,36 +3,36 @@ use crate::accepted_lines::accepted_line_fingerprint_event_requests;
 use crate::accepted_lines::accepted_line_fingerprints_from_unified_diff;
 use crate::accepted_lines::accepted_line_repo_hash_for_cwd;
 use crate::events::AppServerRpcTransport;
-use crate::events::CodexAppMentionedEventRequest;
-use crate::events::CodexAppServerClientMetadata;
-use crate::events::CodexAppUsedEventRequest;
-use crate::events::CodexCollabAgentToolCallEventParams;
-use crate::events::CodexCollabAgentToolCallEventRequest;
-use crate::events::CodexCommandExecutionEventParams;
-use crate::events::CodexCommandExecutionEventRequest;
-use crate::events::CodexCompactionEventRequest;
-use crate::events::CodexDynamicToolCallEventParams;
-use crate::events::CodexDynamicToolCallEventRequest;
-use crate::events::CodexFileChangeEventParams;
-use crate::events::CodexFileChangeEventRequest;
-use crate::events::CodexGoalEventRequest;
-use crate::events::CodexHookRunEventRequest;
-use crate::events::CodexImageGenerationEventParams;
-use crate::events::CodexImageGenerationEventRequest;
-use crate::events::CodexMcpToolCallEventParams;
-use crate::events::CodexMcpToolCallEventRequest;
-use crate::events::CodexPluginEventRequest;
-use crate::events::CodexPluginUsedEventRequest;
-use crate::events::CodexReviewEventParams;
-use crate::events::CodexReviewEventRequest;
-use crate::events::CodexRuntimeMetadata;
-use crate::events::CodexToolItemEventBase;
-use crate::events::CodexTurnEventParams;
-use crate::events::CodexTurnEventRequest;
-use crate::events::CodexTurnSteerEventParams;
-use crate::events::CodexTurnSteerEventRequest;
-use crate::events::CodexWebSearchEventParams;
-use crate::events::CodexWebSearchEventRequest;
+use crate::events::CrewonAppMentionedEventRequest;
+use crate::events::CrewonAppServerClientMetadata;
+use crate::events::CrewonAppUsedEventRequest;
+use crate::events::CrewonCollabAgentToolCallEventParams;
+use crate::events::CrewonCollabAgentToolCallEventRequest;
+use crate::events::CrewonCommandExecutionEventParams;
+use crate::events::CrewonCommandExecutionEventRequest;
+use crate::events::CrewonCompactionEventRequest;
+use crate::events::CrewonDynamicToolCallEventParams;
+use crate::events::CrewonDynamicToolCallEventRequest;
+use crate::events::CrewonFileChangeEventParams;
+use crate::events::CrewonFileChangeEventRequest;
+use crate::events::CrewonGoalEventRequest;
+use crate::events::CrewonHookRunEventRequest;
+use crate::events::CrewonImageGenerationEventParams;
+use crate::events::CrewonImageGenerationEventRequest;
+use crate::events::CrewonMcpToolCallEventParams;
+use crate::events::CrewonMcpToolCallEventRequest;
+use crate::events::CrewonPluginEventRequest;
+use crate::events::CrewonPluginUsedEventRequest;
+use crate::events::CrewonReviewEventParams;
+use crate::events::CrewonReviewEventRequest;
+use crate::events::CrewonRuntimeMetadata;
+use crate::events::CrewonToolItemEventBase;
+use crate::events::CrewonTurnEventParams;
+use crate::events::CrewonTurnEventRequest;
+use crate::events::CrewonTurnSteerEventParams;
+use crate::events::CrewonTurnSteerEventRequest;
+use crate::events::CrewonWebSearchEventParams;
+use crate::events::CrewonWebSearchEventRequest;
 use crate::events::FinalApprovalOutcome;
 use crate::events::GuardianReviewEventParams;
 use crate::events::GuardianReviewEventPayload;
@@ -50,12 +50,12 @@ use crate::events::ToolItemFailureKind;
 use crate::events::ToolItemTerminalStatus;
 use crate::events::TrackEventRequest;
 use crate::events::WebSearchActionKind;
-use crate::events::codex_app_metadata;
-use crate::events::codex_compaction_event_params;
-use crate::events::codex_goal_event_params;
-use crate::events::codex_hook_run_metadata;
-use crate::events::codex_plugin_metadata;
-use crate::events::codex_plugin_used_metadata;
+use crate::events::crewon_app_metadata;
+use crate::events::crewon_compaction_event_params;
+use crate::events::crewon_goal_event_params;
+use crate::events::crewon_hook_run_metadata;
+use crate::events::crewon_plugin_metadata;
+use crate::events::crewon_plugin_used_metadata;
 use crate::events::plugin_state_event_type;
 use crate::events::subagent_source_name;
 use crate::events::subagent_thread_started_event_request;
@@ -63,8 +63,8 @@ use crate::facts::AnalyticsFact;
 use crate::facts::AnalyticsJsonRpcError;
 use crate::facts::AppMentionedInput;
 use crate::facts::AppUsedInput;
-use crate::facts::CodexCompactionEvent;
-use crate::facts::CodexGoalEvent;
+use crate::facts::CrewonCompactionEvent;
+use crate::facts::CrewonGoalEvent;
 use crate::facts::CustomAnalyticsFact;
 use crate::facts::HookRunInput;
 use crate::facts::PluginState;
@@ -73,8 +73,8 @@ use crate::facts::PluginUsedInput;
 use crate::facts::SkillInvokedInput;
 use crate::facts::SubAgentThreadStartedInput;
 use crate::facts::ThreadInitializationMode;
-use crate::facts::TurnCodexError;
-use crate::facts::TurnCodexErrorFact;
+use crate::facts::TurnCrewonError;
+use crate::facts::TurnCrewonErrorFact;
 use crate::facts::TurnProfile;
 use crate::facts::TurnProfileFact;
 use crate::facts::TurnResolvedConfigFact;
@@ -86,48 +86,48 @@ use crate::now_unix_seconds;
 use crate::option_i64_to_u64;
 use crate::serialize_enum_as_string;
 use crate::usize_to_u64;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::ClientResponse;
-use codex_app_server_protocol::CodexErrorInfo;
-use codex_app_server_protocol::CollabAgentStatus;
-use codex_app_server_protocol::CollabAgentTool;
-use codex_app_server_protocol::CollabAgentToolCallStatus;
-use codex_app_server_protocol::CommandAction;
-use codex_app_server_protocol::CommandExecutionApprovalDecision;
-use codex_app_server_protocol::CommandExecutionSource;
-use codex_app_server_protocol::CommandExecutionStatus;
-use codex_app_server_protocol::DynamicToolCallOutputContentItem;
-use codex_app_server_protocol::DynamicToolCallStatus;
-use codex_app_server_protocol::FileChangeApprovalDecision;
-use codex_app_server_protocol::GuardianApprovalReviewAction;
-use codex_app_server_protocol::GuardianApprovalReviewStatus;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::McpToolCallStatus;
-use codex_app_server_protocol::NetworkPolicyRuleAction;
-use codex_app_server_protocol::PatchApplyStatus;
-use codex_app_server_protocol::PatchChangeKind;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::RequestPermissionProfile;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::ServerResponse;
-use codex_app_server_protocol::ThreadItem;
-use codex_app_server_protocol::TurnSteerResponse;
-use codex_app_server_protocol::UserInput;
-use codex_app_server_protocol::WebSearchAction;
-use codex_git_utils::collect_git_info;
-use codex_git_utils::get_git_repo_root;
-use codex_login::default_client::originator;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::Personality;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SkillScope;
-use codex_protocol::protocol::ThreadSource;
-use codex_protocol::protocol::TokenUsage;
-use codex_protocol::request_permissions::PermissionGrantScope as CorePermissionGrantScope;
-use codex_protocol::request_permissions::RequestPermissionsResponse as CoreRequestPermissionsResponse;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::ClientResponse;
+use crewon_app_server_protocol::CodexErrorInfo;
+use crewon_app_server_protocol::CollabAgentStatus;
+use crewon_app_server_protocol::CollabAgentTool;
+use crewon_app_server_protocol::CollabAgentToolCallStatus;
+use crewon_app_server_protocol::CommandAction;
+use crewon_app_server_protocol::CommandExecutionApprovalDecision;
+use crewon_app_server_protocol::CommandExecutionSource;
+use crewon_app_server_protocol::CommandExecutionStatus;
+use crewon_app_server_protocol::DynamicToolCallOutputContentItem;
+use crewon_app_server_protocol::DynamicToolCallStatus;
+use crewon_app_server_protocol::FileChangeApprovalDecision;
+use crewon_app_server_protocol::GuardianApprovalReviewAction;
+use crewon_app_server_protocol::GuardianApprovalReviewStatus;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::McpToolCallStatus;
+use crewon_app_server_protocol::NetworkPolicyRuleAction;
+use crewon_app_server_protocol::PatchApplyStatus;
+use crewon_app_server_protocol::PatchChangeKind;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::RequestPermissionProfile;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::ServerResponse;
+use crewon_app_server_protocol::ThreadItem;
+use crewon_app_server_protocol::TurnSteerResponse;
+use crewon_app_server_protocol::UserInput;
+use crewon_app_server_protocol::WebSearchAction;
+use crewon_git_utils::collect_git_info;
+use crewon_git_utils::get_git_repo_root;
+use crewon_login::default_client::originator;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::Personality;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SkillScope;
+use crewon_protocol::protocol::ThreadSource;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_protocol::request_permissions::PermissionGrantScope as CorePermissionGrantScope;
+use crewon_protocol::request_permissions::RequestPermissionsResponse as CoreRequestPermissionsResponse;
 use sha1::Digest;
 use std::collections::HashMap;
 use std::path::Path;
@@ -145,8 +145,8 @@ pub(crate) struct AnalyticsReducer {
 }
 
 struct ConnectionState {
-    app_server_client: CodexAppServerClientMetadata,
-    runtime: CodexRuntimeMetadata,
+    app_server_client: CrewonAppServerClientMetadata,
+    runtime: CrewonRuntimeMetadata,
 }
 
 #[derive(Default)]
@@ -185,7 +185,7 @@ impl<'a> AnalyticsDropSite<'a> {
         }
     }
 
-    fn compaction(input: &'a CodexCompactionEvent) -> Self {
+    fn compaction(input: &'a CrewonCompactionEvent) -> Self {
         Self {
             event_name: "compaction",
             thread_id: &input.thread_id,
@@ -195,7 +195,7 @@ impl<'a> AnalyticsDropSite<'a> {
         }
     }
 
-    fn goal(input: &'a CodexGoalEvent) -> Self {
+    fn goal(input: &'a CrewonGoalEvent) -> Self {
         Self {
             event_name: "goal",
             thread_id: &input.thread_id,
@@ -206,7 +206,7 @@ impl<'a> AnalyticsDropSite<'a> {
     }
 
     fn tool_item(
-        notification: &'a codex_app_server_protocol::ItemCompletedNotification,
+        notification: &'a crewon_app_server_protocol::ItemCompletedNotification,
         item_id: &'a str,
     ) -> Self {
         Self {
@@ -288,7 +288,7 @@ impl ThreadMetadataState {
     ) -> Self {
         let subagent_source = match session_source {
             SessionSource::SubAgent(subagent_source) => Some(subagent_source_name(subagent_source)),
-            SessionSource::Cli
+            SessionSource::LegacyCli
             | SessionSource::VSCode
             | SessionSource::Exec
             | SessionSource::Mcp
@@ -341,7 +341,7 @@ struct TurnState {
     token_usage: Option<TokenUsage>,
     profile: Option<TurnProfile>,
     completed: Option<CompletedTurnState>,
-    codex_error: Option<TurnCodexError>,
+    crewon_error: Option<TurnCrewonError>,
     latest_diff: Option<String>,
     steer_count: usize,
     tool_counts: TurnToolCounts,
@@ -489,8 +489,8 @@ impl AnalyticsReducer {
                 CustomAnalyticsFact::TurnProfile(input) => {
                     self.ingest_turn_profile(*input, out).await;
                 }
-                CustomAnalyticsFact::TurnCodexError(input) => {
-                    self.ingest_turn_codex_error(*input);
+                CustomAnalyticsFact::TurnCrewonError(input) => {
+                    self.ingest_turn_crewon_error(*input);
                 }
                 CustomAnalyticsFact::SkillInvoked(input) => {
                     self.ingest_skill_invoked(input, out).await;
@@ -519,13 +519,13 @@ impl AnalyticsReducer {
         connection_id: u64,
         params: InitializeParams,
         product_client_id: String,
-        runtime: CodexRuntimeMetadata,
+        runtime: CrewonRuntimeMetadata,
         rpc_transport: AppServerRpcTransport,
     ) {
         self.connections.insert(
             connection_id,
             ConnectionState {
-                app_server_client: CodexAppServerClientMetadata {
+                app_server_client: CrewonAppServerClientMetadata {
                     product_client_id,
                     client_name: Some(params.client_info.name),
                     client_version: Some(params.client_info.version),
@@ -579,7 +579,7 @@ impl AnalyticsReducer {
         };
         out.push(TrackEventRequest::GuardianReview(Box::new(
             GuardianReviewEventRequest {
-                event_type: "codex_guardian_review",
+                event_type: "crewon_guardian_review",
                 event_params: GuardianReviewEventPayload {
                     session_id: thread_metadata.session_id.clone(),
                     app_server_client: connection_state.app_server_client.clone(),
@@ -659,15 +659,15 @@ impl AnalyticsReducer {
         self.maybe_emit_turn_event(&turn_id, out).await;
     }
 
-    fn ingest_turn_codex_error(&mut self, input: TurnCodexErrorFact) {
-        let TurnCodexErrorFact {
+    fn ingest_turn_crewon_error(&mut self, input: TurnCrewonErrorFact) {
+        let TurnCrewonErrorFact {
             turn_id,
             thread_id,
             error,
         } = input;
         let turn_state = self.turns.entry(turn_id).or_default();
         turn_state.thread_id.get_or_insert(thread_id);
-        turn_state.codex_error = Some(error);
+        turn_state.crewon_error = Some(error);
     }
 
     async fn ingest_skill_invoked(
@@ -723,9 +723,9 @@ impl AnalyticsReducer {
     fn ingest_app_mentioned(&mut self, input: AppMentionedInput, out: &mut Vec<TrackEventRequest>) {
         let AppMentionedInput { tracking, mentions } = input;
         out.extend(mentions.into_iter().map(|mention| {
-            let event_params = codex_app_metadata(&tracking, mention);
-            TrackEventRequest::AppMentioned(CodexAppMentionedEventRequest {
-                event_type: "codex_app_mentioned",
+            let event_params = crewon_app_metadata(&tracking, mention);
+            TrackEventRequest::AppMentioned(CrewonAppMentionedEventRequest {
+                event_type: "crewon_app_mentioned",
                 event_params,
             })
         }));
@@ -733,27 +733,29 @@ impl AnalyticsReducer {
 
     fn ingest_app_used(&mut self, input: AppUsedInput, out: &mut Vec<TrackEventRequest>) {
         let AppUsedInput { tracking, app } = input;
-        let event_params = codex_app_metadata(&tracking, app);
-        out.push(TrackEventRequest::AppUsed(CodexAppUsedEventRequest {
-            event_type: "codex_app_used",
+        let event_params = crewon_app_metadata(&tracking, app);
+        out.push(TrackEventRequest::AppUsed(CrewonAppUsedEventRequest {
+            event_type: "crewon_app_used",
             event_params,
         }));
     }
 
     fn ingest_hook_run(&mut self, input: HookRunInput, out: &mut Vec<TrackEventRequest>) {
         let HookRunInput { tracking, hook } = input;
-        out.push(TrackEventRequest::HookRun(CodexHookRunEventRequest {
-            event_type: "codex_hook_run",
-            event_params: codex_hook_run_metadata(&tracking, hook),
+        out.push(TrackEventRequest::HookRun(CrewonHookRunEventRequest {
+            event_type: "crewon_hook_run",
+            event_params: crewon_hook_run_metadata(&tracking, hook),
         }));
     }
 
     fn ingest_plugin_used(&mut self, input: PluginUsedInput, out: &mut Vec<TrackEventRequest>) {
         let PluginUsedInput { tracking, plugin } = input;
-        out.push(TrackEventRequest::PluginUsed(CodexPluginUsedEventRequest {
-            event_type: "codex_plugin_used",
-            event_params: codex_plugin_used_metadata(&tracking, plugin),
-        }));
+        out.push(TrackEventRequest::PluginUsed(
+            CrewonPluginUsedEventRequest {
+                event_type: "crewon_plugin_used",
+                event_params: crewon_plugin_used_metadata(&tracking, plugin),
+            },
+        ));
     }
 
     fn ingest_plugin_state_changed(
@@ -762,9 +764,9 @@ impl AnalyticsReducer {
         out: &mut Vec<TrackEventRequest>,
     ) {
         let PluginStateChangedInput { plugin, state } = input;
-        let event = CodexPluginEventRequest {
+        let event = CrewonPluginEventRequest {
             event_type: plugin_state_event_type(state),
-            event_params: codex_plugin_metadata(plugin),
+            event_params: crewon_plugin_metadata(plugin),
         };
         out.push(match state {
             PluginState::Installed => TrackEventRequest::PluginInstalled(event),
@@ -1217,7 +1219,7 @@ impl AnalyticsReducer {
     fn emit_thread_initialized(
         &mut self,
         connection_id: u64,
-        thread: codex_app_server_protocol::Thread,
+        thread: crewon_app_server_protocol::Thread,
         model: String,
         initialization_mode: ThreadInitializationMode,
         out: &mut Vec<TrackEventRequest>,
@@ -1246,7 +1248,7 @@ impl AnalyticsReducer {
         );
         out.push(TrackEventRequest::ThreadInitialized(
             ThreadInitializedEvent {
-                event_type: "codex_thread_initialized",
+                event_type: "crewon_thread_initialized",
                 event_params: ThreadInitializedEventParams {
                     thread_id,
                     session_id,
@@ -1265,16 +1267,20 @@ impl AnalyticsReducer {
         ));
     }
 
-    fn ingest_compaction(&mut self, input: CodexCompactionEvent, out: &mut Vec<TrackEventRequest>) {
+    fn ingest_compaction(
+        &mut self,
+        input: CrewonCompactionEvent,
+        out: &mut Vec<TrackEventRequest>,
+    ) {
         let Some((connection_state, thread_metadata)) =
             self.thread_context_or_warn(AnalyticsDropSite::compaction(&input))
         else {
             return;
         };
         out.push(TrackEventRequest::Compaction(Box::new(
-            CodexCompactionEventRequest {
-                event_type: "codex_compaction_event",
-                event_params: codex_compaction_event_params(
+            CrewonCompactionEventRequest {
+                event_type: "crewon_compaction_event",
+                event_params: crewon_compaction_event_params(
                     input,
                     thread_metadata.session_id.clone(),
                     connection_state.app_server_client.clone(),
@@ -1287,15 +1293,15 @@ impl AnalyticsReducer {
         )));
     }
 
-    fn ingest_goal(&mut self, input: CodexGoalEvent, out: &mut Vec<TrackEventRequest>) {
+    fn ingest_goal(&mut self, input: CrewonGoalEvent, out: &mut Vec<TrackEventRequest>) {
         let Some((connection_state, thread_metadata)) =
             self.thread_context_or_warn(AnalyticsDropSite::goal(&input))
         else {
             return;
         };
-        out.push(TrackEventRequest::Goal(Box::new(CodexGoalEventRequest {
-            event_type: "codex_goal_event",
-            event_params: codex_goal_event_params(
+        out.push(TrackEventRequest::Goal(Box::new(CrewonGoalEventRequest {
+            event_type: "crewon_goal_event",
+            event_params: crewon_goal_event_params(
                 input,
                 thread_metadata.session_id.clone(),
                 connection_state.app_server_client.clone(),
@@ -1309,7 +1315,7 @@ impl AnalyticsReducer {
 
     fn ingest_guardian_review_completed(
         &mut self,
-        notification: codex_app_server_protocol::ItemGuardianApprovalReviewCompletedNotification,
+        notification: crewon_app_server_protocol::ItemGuardianApprovalReviewCompletedNotification,
         out: &mut Vec<TrackEventRequest>,
     ) {
         let Some((status, resolution)) = guardian_review_result(notification.review.status) else {
@@ -1395,9 +1401,9 @@ impl AnalyticsReducer {
             warn_missing_analytics_context(&drop_site, MissingAnalyticsContext::ThreadMetadata);
             return;
         };
-        out.push(TrackEventRequest::TurnSteer(CodexTurnSteerEventRequest {
-            event_type: "codex_turn_steer_event",
-            event_params: CodexTurnSteerEventParams {
+        out.push(TrackEventRequest::TurnSteer(CrewonTurnSteerEventRequest {
+            event_type: "crewon_turn_steer_event",
+            event_params: CrewonTurnSteerEventParams {
                 thread_id: pending_request.thread_id,
                 session_id: thread_metadata.session_id.clone(),
                 expected_turn_id: Some(pending_request.expected_turn_id),
@@ -1438,9 +1444,9 @@ impl AnalyticsReducer {
         else {
             return;
         };
-        out.push(TrackEventRequest::ReviewEvent(CodexReviewEventRequest {
-            event_type: "codex_review_event",
-            event_params: CodexReviewEventParams {
+        out.push(TrackEventRequest::ReviewEvent(CrewonReviewEventRequest {
+            event_type: "crewon_review_event",
+            event_params: CrewonReviewEventParams {
                 thread_id: pending_review.thread_id,
                 turn_id: pending_review.turn_id,
                 item_id: pending_review.item_id,
@@ -1522,9 +1528,9 @@ impl AnalyticsReducer {
             warn_missing_analytics_context(&drop_site, MissingAnalyticsContext::ThreadMetadata);
             return;
         };
-        let turn_event = TrackEventRequest::TurnEvent(Box::new(CodexTurnEventRequest {
-            event_type: "codex_turn_event",
-            event_params: codex_turn_event_params(
+        let turn_event = TrackEventRequest::TurnEvent(Box::new(CrewonTurnEventRequest {
+            event_type: "crewon_turn_event",
+            event_params: crewon_turn_event_params(
                 connection_state.app_server_client.clone(),
                 connection_state.runtime.clone(),
                 turn_id.to_string(),
@@ -1692,9 +1698,9 @@ fn tool_item_event(input: ToolItemEventInput<'_>) -> Option<TrackEventRequest> {
                 },
             );
             Some(TrackEventRequest::CommandExecution(
-                CodexCommandExecutionEventRequest {
-                    event_type: "codex_command_execution_event",
-                    event_params: CodexCommandExecutionEventParams {
+                CrewonCommandExecutionEventRequest {
+                    event_type: "crewon_command_execution_event",
+                    event_params: CrewonCommandExecutionEventParams {
                         base,
                         command_execution_source: *source,
                         exit_code: *exit_code,
@@ -1732,17 +1738,19 @@ fn tool_item_event(input: ToolItemEventInput<'_>) -> Option<TrackEventRequest> {
                     review_summary,
                 },
             );
-            Some(TrackEventRequest::FileChange(CodexFileChangeEventRequest {
-                event_type: "codex_file_change_event",
-                event_params: CodexFileChangeEventParams {
-                    base,
-                    file_change_count: usize_to_u64(changes.len()),
-                    file_add_count: counts.add,
-                    file_update_count: counts.update,
-                    file_delete_count: counts.delete,
-                    file_move_count: counts.move_,
+            Some(TrackEventRequest::FileChange(
+                CrewonFileChangeEventRequest {
+                    event_type: "crewon_file_change_event",
+                    event_params: CrewonFileChangeEventParams {
+                        base,
+                        file_change_count: usize_to_u64(changes.len()),
+                        file_add_count: counts.add,
+                        file_update_count: counts.update,
+                        file_delete_count: counts.delete,
+                        file_move_count: counts.move_,
+                    },
                 },
-            }))
+            ))
         }
         ThreadItem::McpToolCall {
             id,
@@ -1773,9 +1781,9 @@ fn tool_item_event(input: ToolItemEventInput<'_>) -> Option<TrackEventRequest> {
                 },
             );
             Some(TrackEventRequest::McpToolCall(
-                CodexMcpToolCallEventRequest {
-                    event_type: "codex_mcp_tool_call_event",
-                    event_params: CodexMcpToolCallEventParams {
+                CrewonMcpToolCallEventRequest {
+                    event_type: "crewon_mcp_tool_call_event",
+                    event_params: CrewonMcpToolCallEventParams {
                         base,
                         mcp_server_name: server.clone(),
                         mcp_tool_name: tool.clone(),
@@ -1816,9 +1824,9 @@ fn tool_item_event(input: ToolItemEventInput<'_>) -> Option<TrackEventRequest> {
                 },
             );
             Some(TrackEventRequest::DynamicToolCall(
-                CodexDynamicToolCallEventRequest {
-                    event_type: "codex_dynamic_tool_call_event",
-                    event_params: CodexDynamicToolCallEventParams {
+                CrewonDynamicToolCallEventRequest {
+                    event_type: "crewon_dynamic_tool_call_event",
+                    event_params: CrewonDynamicToolCallEventParams {
                         base,
                         dynamic_tool_name: tool.clone(),
                         success: *success,
@@ -1860,9 +1868,9 @@ fn tool_item_event(input: ToolItemEventInput<'_>) -> Option<TrackEventRequest> {
                 },
             );
             Some(TrackEventRequest::CollabAgentToolCall(
-                CodexCollabAgentToolCallEventRequest {
-                    event_type: "codex_collab_agent_tool_call_event",
-                    event_params: CodexCollabAgentToolCallEventParams {
+                CrewonCollabAgentToolCallEventRequest {
+                    event_type: "crewon_collab_agent_tool_call_event",
+                    event_params: CrewonCollabAgentToolCallEventParams {
                         base,
                         sender_thread_id: sender_thread_id.clone(),
                         receiver_thread_count: usize_to_u64(receiver_thread_ids.len()),
@@ -1914,9 +1922,9 @@ fn tool_item_event(input: ToolItemEventInput<'_>) -> Option<TrackEventRequest> {
                     review_summary,
                 },
             );
-            Some(TrackEventRequest::WebSearch(CodexWebSearchEventRequest {
-                event_type: "codex_web_search_event",
-                event_params: CodexWebSearchEventParams {
+            Some(TrackEventRequest::WebSearch(CrewonWebSearchEventRequest {
+                event_type: "crewon_web_search_event",
+                event_params: CrewonWebSearchEventParams {
                     base,
                     web_search_action: action.as_ref().map(web_search_action_kind),
                     query_present: !query.trim().is_empty(),
@@ -1951,9 +1959,9 @@ fn tool_item_event(input: ToolItemEventInput<'_>) -> Option<TrackEventRequest> {
                 },
             );
             Some(TrackEventRequest::ImageGeneration(
-                CodexImageGenerationEventRequest {
-                    event_type: "codex_image_generation_event",
-                    event_params: CodexImageGenerationEventParams {
+                CrewonImageGenerationEventRequest {
+                    event_type: "crewon_image_generation_event",
+                    event_params: CrewonImageGenerationEventParams {
                         base,
                         revised_prompt_present: revised_prompt.is_some(),
                         saved_path_present: saved_path.is_some(),
@@ -2012,10 +2020,10 @@ fn tool_item_base(
     tool_name: String,
     outcome: ToolItemOutcome,
     context: ToolItemContext<'_>,
-) -> CodexToolItemEventBase {
+) -> CrewonToolItemEventBase {
     let thread_metadata = context.thread_metadata;
     let review_summary = context.review_summary.cloned().unwrap_or_default();
-    CodexToolItemEventBase {
+    CrewonToolItemEventBase {
         thread_id: thread_id.to_string(),
         turn_id: turn_id.to_string(),
         item_id,
@@ -2348,7 +2356,9 @@ struct FileChangeCounts {
     move_: u64,
 }
 
-fn file_change_counts(changes: &[codex_app_server_protocol::FileUpdateChange]) -> FileChangeCounts {
+fn file_change_counts(
+    changes: &[crewon_app_server_protocol::FileUpdateChange],
+) -> FileChangeCounts {
     let mut counts = FileChangeCounts::default();
     for change in changes {
         match &change.kind {
@@ -2421,10 +2431,10 @@ fn accepted_line_event_input(
 
     Some((
         AcceptedLineFingerprintEventInput {
-            event_type: "codex.accepted_line_fingerprints",
+            event_type: "crewon.accepted_line_fingerprints",
             turn_id: turn_id.to_string(),
             thread_id,
-            product_surface: Some("codex".to_string()),
+            product_surface: Some("crewon".to_string()),
             model_slug: Some(resolved_config.model.clone()),
             completed_at: now_unix_seconds(),
             repo_hash: None,
@@ -2436,13 +2446,13 @@ fn accepted_line_event_input(
     ))
 }
 
-fn codex_turn_event_params(
-    app_server_client: CodexAppServerClientMetadata,
-    runtime: CodexRuntimeMetadata,
+fn crewon_turn_event_params(
+    app_server_client: CrewonAppServerClientMetadata,
+    runtime: CrewonRuntimeMetadata,
     turn_id: String,
     turn_state: &TurnState,
     thread_metadata: &ThreadMetadataState,
-) -> CodexTurnEventParams {
+) -> CrewonTurnEventParams {
     let (
         Some(thread_id),
         Some(num_input_images),
@@ -2492,8 +2502,8 @@ fn codex_turn_event_params(
         sampling_retry_count,
     } = profile;
     let token_usage = turn_state.token_usage.clone();
-    let codex_error = turn_state.codex_error.as_ref();
-    CodexTurnEventParams {
+    let crewon_error = turn_state.crewon_error.as_ref();
+    CrewonTurnEventParams {
         thread_id,
         session_id: thread_metadata.session_id.clone(),
         turn_id,
@@ -2526,8 +2536,8 @@ fn codex_turn_event_params(
         is_first_turn,
         status: completed.status,
         turn_error: completed.turn_error,
-        codex_error_kind: codex_error.map(|error| error.kind),
-        codex_error_http_status_code: codex_error.and_then(|error| error.http_status_code),
+        crewon_error_kind: crewon_error.map(|error| error.kind),
+        crewon_error_http_status_code: crewon_error.and_then(|error| error.http_status_code),
         steer_count: Some(turn_state.steer_count),
         total_tool_call_count: Some(turn_state.tool_counts.total),
         shell_command_count: Some(turn_state.tool_counts.shell_command),
@@ -2610,12 +2620,12 @@ fn personality_mode(personality: Option<Personality>) -> Option<String> {
     }
 }
 
-fn analytics_turn_status(status: codex_app_server_protocol::TurnStatus) -> Option<TurnStatus> {
+fn analytics_turn_status(status: crewon_app_server_protocol::TurnStatus) -> Option<TurnStatus> {
     match status {
-        codex_app_server_protocol::TurnStatus::Completed => Some(TurnStatus::Completed),
-        codex_app_server_protocol::TurnStatus::Failed => Some(TurnStatus::Failed),
-        codex_app_server_protocol::TurnStatus::Interrupted => Some(TurnStatus::Interrupted),
-        codex_app_server_protocol::TurnStatus::InProgress => None,
+        crewon_app_server_protocol::TurnStatus::Completed => Some(TurnStatus::Completed),
+        crewon_app_server_protocol::TurnStatus::Failed => Some(TurnStatus::Failed),
+        crewon_app_server_protocol::TurnStatus::Interrupted => Some(TurnStatus::Interrupted),
+        crewon_app_server_protocol::TurnStatus::InProgress => None,
     }
 }
 
@@ -2680,9 +2690,9 @@ pub(crate) fn normalize_path_for_skill_id(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_protocol::models::SandboxEnforcement;
-    use codex_protocol::permissions::FileSystemSandboxPolicy;
-    use codex_protocol::permissions::NetworkSandboxPolicy;
+    use crewon_protocol::models::SandboxEnforcement;
+    use crewon_protocol::permissions::FileSystemSandboxPolicy;
+    use crewon_protocol::permissions::NetworkSandboxPolicy;
 
     #[test]
     fn managed_full_disk_with_restricted_network_reports_external_sandbox() {

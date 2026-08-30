@@ -2,16 +2,22 @@ mod compact;
 mod lifecycle;
 mod regular;
 mod review;
+mod start_reservation;
 mod user_shell;
+
+#[cfg(test)]
+#[path = "start_reservation_tests.rs"]
+mod start_reservation_tests;
 
 use std::sync::Arc;
 use std::time::Duration;
 use std::time::Instant;
 
-use codex_extension_api::ExtensionData;
+use crewon_extension_api::ExtensionData;
 use futures::future::BoxFuture;
 use tokio::select;
 use tokio::sync::Notify;
+use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::AbortOnDropHandle;
 use tracing::Instrument;
@@ -21,9 +27,10 @@ use tracing::info_span;
 use tracing::trace;
 use tracing::warn;
 
-use crate::codex_thread::BackgroundTerminalInfo;
+use self::start_reservation::TaskStartReservation;
 use crate::config::Config;
 use crate::context::ContextualUserFragment;
+use crate::crewon_thread::BackgroundTerminalInfo;
 use crate::hook_runtime::inspect_pending_input;
 use crate::hook_runtime::record_additional_contexts;
 use crate::hook_runtime::record_pending_input;
@@ -33,28 +40,29 @@ use crate::session::turn_context::TurnContext;
 use crate::state::ActiveTurn;
 use crate::state::RunningTask;
 use crate::state::TaskKind;
-use codex_analytics::TurnProfileFact;
-use codex_analytics::TurnTokenUsageFact;
-use codex_login::AuthManager;
-use codex_models_manager::manager::SharedModelsManager;
-use codex_otel::SessionTelemetry;
-use codex_otel::TURN_E2E_DURATION_METRIC;
-use codex_otel::TURN_MEMORY_METRIC;
-use codex_otel::TURN_NETWORK_PROXY_METRIC;
-use codex_otel::TURN_TOKEN_USAGE_METRIC;
-use codex_otel::TURN_TOOL_CALL_METRIC;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::TokenUsage;
-use codex_protocol::protocol::TurnAbortReason;
-use codex_protocol::protocol::TurnAbortedEvent;
-use codex_protocol::protocol::TurnCompleteEvent;
-use codex_protocol::protocol::WarningEvent;
+use crate::state::TurnState;
+use crewon_analytics::TurnProfileFact;
+use crewon_analytics::TurnTokenUsageFact;
+use crewon_login::AuthManager;
+use crewon_models_manager::manager::SharedModelsManager;
+use crewon_otel::SessionTelemetry;
+use crewon_otel::TURN_E2E_DURATION_METRIC;
+use crewon_otel::TURN_MEMORY_METRIC;
+use crewon_otel::TURN_NETWORK_PROXY_METRIC;
+use crewon_otel::TURN_TOKEN_USAGE_METRIC;
+use crewon_otel::TURN_TOOL_CALL_METRIC;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_protocol::protocol::TurnAbortReason;
+use crewon_protocol::protocol::TurnAbortedEvent;
+use crewon_protocol::protocol::TurnCompleteEvent;
+use crewon_protocol::protocol::WarningEvent;
 
-use codex_features::Feature;
-use codex_protocol::models::ContentItem;
 pub(crate) use compact::CompactTask;
+use crewon_features::Feature;
+use crewon_protocol::models::ContentItem;
 pub(crate) use regular::RegularTask;
 pub(crate) use review::ReviewTask;
 pub(crate) use user_shell::UserShellCommandMode;
@@ -62,7 +70,7 @@ pub(crate) use user_shell::UserShellCommandTask;
 pub(crate) use user_shell::execute_user_shell_command;
 
 const GRACEFULL_INTERRUPTION_TIMEOUT_MS: u64 = 100;
-const TASK_COMPACT_METRIC: &str = "codex.task.compact";
+const TASK_COMPACT_METRIC: &str = "crewon.task.compact";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum InterruptedTurnHistoryMarker {
@@ -199,7 +207,7 @@ impl SessionTaskContext {
 
 /// Async task that drives a [`Session`] turn.
 ///
-/// Implementations encapsulate a specific Codex workflow (regular chat,
+/// Implementations encapsulate a specific Crewon workflow (regular chat,
 /// reviews, ghost snapshots, etc.). Each task instance is owned by a
 /// [`Session`] and executed on a background Tokio task. The trait is
 /// intentionally small: implementers identify themselves via
@@ -320,46 +328,88 @@ impl Session {
         input: Vec<TurnInput>,
         task: T,
     ) {
+        let _ = self
+            .start_task_inner(turn_context, input, task, TaskStartReservation::Unreserved)
+            .await;
+    }
+
+    pub(crate) async fn start_task_for_reservation<T: SessionTask>(
+        self: &Arc<Self>,
+        turn_context: Arc<TurnContext>,
+        input: Vec<TurnInput>,
+        task: T,
+        expected: Arc<tokio::sync::Mutex<TurnState>>,
+    ) -> bool {
+        self.start_task_inner(
+            turn_context,
+            input,
+            task,
+            TaskStartReservation::Exact(expected),
+        )
+        .await
+    }
+
+    async fn start_task_inner<T: SessionTask>(
+        self: &Arc<Self>,
+        turn_context: Arc<TurnContext>,
+        input: Vec<TurnInput>,
+        task: T,
+        reservation: TaskStartReservation,
+    ) -> bool {
         let task: Arc<dyn AnySessionTask> = Arc::new(task);
         let task_kind = task.kind();
         let span_name = task.span_name();
-        let started_at = Instant::now();
-        let turn_started_at_unix_ms = turn_context
-            .turn_timing_state
-            .mark_turn_started(started_at)
-            .await;
-        turn_context
-            .turn_metadata_state
-            .set_turn_started_at_unix_ms(turn_started_at_unix_ms);
-        let token_usage_at_turn_start = self.total_token_usage().await.unwrap_or_default();
+        let deferred_initialization = reservation.is_exact();
+        let token_usage_at_turn_start = if deferred_initialization {
+            None
+        } else {
+            let turn_started_at_unix_ms = turn_context
+                .turn_timing_state
+                .mark_turn_started(Instant::now())
+                .await;
+            turn_context
+                .turn_metadata_state
+                .set_turn_started_at_unix_ms(turn_started_at_unix_ms);
+            Some(self.total_token_usage().await.unwrap_or_default())
+        };
 
         let cancellation_token = CancellationToken::new();
         let done = Arc::new(Notify::new());
 
-        self.services
-            .guardian_rejection_circuit_breaker
-            .lock()
-            .await
-            .clear_turn(&turn_context.sub_id);
+        if !deferred_initialization {
+            self.services
+                .guardian_rejection_circuit_breaker
+                .lock()
+                .await
+                .clear_turn(&turn_context.sub_id);
+        }
 
-        let pending_items = self.input_queue.get_pending_input(&self.active_turn).await;
         let turn_state = {
             let mut active = self.active_turn.lock().await;
-            let turn = active.get_or_insert_with(ActiveTurn::default);
-            debug_assert!(turn.task.is_none());
+            let Some(turn) = reservation.resolve(&mut active) else {
+                return false;
+            };
             Arc::clone(&turn.turn_state)
         };
-        turn_state.lock().await.token_usage_at_turn_start = token_usage_at_turn_start.clone();
-        self.input_queue
-            .extend_pending_input_for_turn_state(turn_state.as_ref(), pending_items)
-            .await;
-        self.emit_turn_start_lifecycle(turn_context.as_ref(), &token_usage_at_turn_start)
-            .await;
+        if !reservation.is_exact() {
+            let pending_items = self.input_queue.get_pending_input(&self.active_turn).await;
+            let token_usage_at_turn_start = match token_usage_at_turn_start.as_ref() {
+                Some(token_usage) => token_usage,
+                None => unreachable!("unreserved task start must initialize token usage"),
+            };
+            turn_state.lock().await.token_usage_at_turn_start = token_usage_at_turn_start.clone();
+            self.input_queue
+                .extend_pending_input_for_turn_state(turn_state.as_ref(), pending_items)
+                .await;
+            self.emit_turn_start_lifecycle(turn_context.as_ref(), token_usage_at_turn_start)
+                .await;
+        }
 
         let turn_extension_data = Arc::clone(&turn_context.extension_data);
         let mut active = self.active_turn.lock().await;
-        let turn = active.get_or_insert_with(ActiveTurn::default);
-        debug_assert!(turn.task.is_none());
+        let Some(turn) = reservation.resolve(&mut active) else {
+            return false;
+        };
         let agent_execution_guard = self.services.agent_control.execution_guard(
             turn_context.multi_agent_version,
             &turn_context.session_source,
@@ -371,8 +421,10 @@ impl Session {
         ));
         let ctx = Arc::clone(&turn_context);
         let task_for_run = Arc::clone(&task);
-        let task_input = input;
+        let mut task_input = input;
+        let gated_turn_state = Arc::clone(&turn_state);
         let task_cancellation_token = cancellation_token.child_token();
+        let (start_gate_tx, start_gate_rx) = oneshot::channel();
         // Task-owned turn spans keep a core-owned span open for the
         // full task lifecycle after the submission dispatch span ends.
         let reasoning_effort = turn_context.effective_reasoning_effort_for_tracing();
@@ -382,16 +434,42 @@ impl Session {
             thread.id = %self.thread_id,
             turn.id = %turn_context.sub_id,
             model = %turn_context.model_info.slug,
-            codex.turn.reasoning_effort = %reasoning_effort,
-            codex.turn.token_usage.input_tokens = field::Empty,
-            codex.turn.token_usage.cached_input_tokens = field::Empty,
-            codex.turn.token_usage.non_cached_input_tokens = field::Empty,
-            codex.turn.token_usage.output_tokens = field::Empty,
-            codex.turn.token_usage.reasoning_output_tokens = field::Empty,
-            codex.turn.token_usage.total_tokens = field::Empty,
+            crewon.turn.reasoning_effort = %reasoning_effort,
+            crewon.turn.token_usage.input_tokens = field::Empty,
+            crewon.turn.token_usage.cached_input_tokens = field::Empty,
+            crewon.turn.token_usage.non_cached_input_tokens = field::Empty,
+            crewon.turn.token_usage.output_tokens = field::Empty,
+            crewon.turn.token_usage.reasoning_output_tokens = field::Empty,
+            crewon.turn.token_usage.total_tokens = field::Empty,
         );
         let handle = tokio::spawn(
             async move {
+                if start_gate_rx.await.is_err() || task_cancellation_token.is_cancelled() {
+                    done_clone.notify_waiters();
+                    return;
+                }
+                let sess = session_ctx.clone_session();
+                if deferred_initialization {
+                    let turn_started_at_unix_ms = ctx
+                        .turn_timing_state
+                        .mark_turn_started(Instant::now())
+                        .await;
+                    ctx.turn_metadata_state
+                        .set_turn_started_at_unix_ms(turn_started_at_unix_ms);
+                    let token_usage = sess.total_token_usage().await.unwrap_or_default();
+                    sess.services
+                        .guardian_rejection_circuit_breaker
+                        .lock()
+                        .await
+                        .clear_turn(&ctx.sub_id);
+                    gated_turn_state.lock().await.token_usage_at_turn_start = token_usage.clone();
+                    task_input.extend(
+                        sess.input_queue
+                            .take_pending_input_for_turn_state(gated_turn_state.as_ref())
+                            .await,
+                    );
+                    sess.emit_turn_start_lifecycle(ctx.as_ref(), &token_usage).await;
+                }
                 let ctx_for_finish = Arc::clone(&ctx);
                 let last_agent_message = task_for_run
                     .run(
@@ -401,14 +479,13 @@ impl Session {
                         task_cancellation_token.child_token(),
                     )
                     .await;
-                let sess = session_ctx.clone_session();
                 if let Err(err) = sess.flush_rollout().await {
                     warn!("failed to flush rollout before completing turn: {err}");
                     sess.send_event(
                         ctx_for_finish.as_ref(),
                         EventMsg::Warning(WarningEvent {
                             message: format!(
-                                "Failed to save the conversation transcript; Codex will continue retrying. Error: {err}"
+                                "Failed to save the conversation transcript; Crewon will continue retrying. Error: {err}"
                             ),
                         }),
                     )
@@ -439,6 +516,9 @@ impl Session {
             _timer: timer,
         };
         turn.task = Some(running_task);
+        drop(active);
+        let _ = start_gate_tx.send(());
+        true
     }
 
     /// Starts a regular turn when the session is idle and pending work is waiting.
@@ -484,7 +564,18 @@ impl Session {
         let mut aborted_turn = false;
         let mut active_turn_to_clear = None;
         let mut turn_context = None;
-        if let Some(mut active_turn) = self.take_active_turn().await {
+        let (active_turn, _runtime_turn_ownership) = {
+            let mut active = self.active_turn.lock().await;
+            let ownership = active
+                .as_ref()
+                .and_then(|active_turn| active_turn.task.as_ref())
+                .map(|task| {
+                    self.runtime_turn_ownership
+                        .retain(&task.turn_context.sub_id)
+                });
+            (active.take(), ownership)
+        };
+        if let Some(mut active_turn) = active_turn {
             let task = active_turn.task.take();
             aborted_turn = task.is_some();
             turn_context = task.as_ref().map(|task| Arc::clone(&task.turn_context));
@@ -515,16 +606,17 @@ impl Session {
         turn_id: &str,
         reason: TurnAbortReason,
     ) -> bool {
-        let active_turn = {
+        let (active_turn, _runtime_turn_ownership) = {
             let mut active = self.active_turn.lock().await;
             if active
                 .as_ref()
                 .and_then(|active_turn| active_turn.task.as_ref())
                 .is_some_and(|task| task.turn_context.sub_id == turn_id)
             {
-                active.take()
+                let ownership = self.runtime_turn_ownership.retain(turn_id);
+                (active.take(), Some(ownership))
             } else {
-                None
+                (None, None)
             }
         };
         let Some(mut active_turn) = active_turn else {
@@ -563,12 +655,14 @@ impl Session {
         let turn_state = {
             let mut active = self.active_turn.lock().await;
             active.as_mut().and_then(|active_turn| {
+                let turn_id = active_turn.task.as_ref()?.turn_context.sub_id.clone();
+                let runtime_turn_ownership = self.runtime_turn_ownership.retain(&turn_id);
                 let task = active_turn.task.take()?;
                 task.handle.detach();
-                Some(Arc::clone(&active_turn.turn_state))
+                Some((Arc::clone(&active_turn.turn_state), runtime_turn_ownership))
             })
         };
-        let Some(turn_state) = turn_state else {
+        let Some((turn_state, _runtime_turn_ownership)) = turn_state else {
             return;
         };
         let pending_input = self
@@ -661,27 +755,27 @@ impl Session {
             };
             let current_span = Span::current();
             current_span.record(
-                "codex.turn.token_usage.input_tokens",
+                "crewon.turn.token_usage.input_tokens",
                 turn_token_usage.input_tokens,
             );
             current_span.record(
-                "codex.turn.token_usage.cached_input_tokens",
+                "crewon.turn.token_usage.cached_input_tokens",
                 turn_token_usage.cached_input(),
             );
             current_span.record(
-                "codex.turn.token_usage.non_cached_input_tokens",
+                "crewon.turn.token_usage.non_cached_input_tokens",
                 turn_token_usage.non_cached_input(),
             );
             current_span.record(
-                "codex.turn.token_usage.output_tokens",
+                "crewon.turn.token_usage.output_tokens",
                 turn_token_usage.output_tokens,
             );
             current_span.record(
-                "codex.turn.token_usage.reasoning_output_tokens",
+                "crewon.turn.token_usage.reasoning_output_tokens",
                 turn_token_usage.reasoning_output_tokens,
             );
             current_span.record(
-                "codex.turn.token_usage.total_tokens",
+                "crewon.turn.token_usage.total_tokens",
                 turn_token_usage.total_tokens,
             );
             self.services
@@ -769,11 +863,6 @@ impl Session {
             return;
         }
         self.emit_thread_idle_lifecycle_if_idle().await;
-    }
-
-    async fn take_active_turn(&self) -> Option<ActiveTurn> {
-        let mut active = self.active_turn.lock().await;
-        active.take()
     }
 
     pub(crate) async fn close_unified_exec_processes(&self) {

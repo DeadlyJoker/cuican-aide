@@ -1,16 +1,16 @@
 #![recursion_limit = "256"]
 #![deny(clippy::print_stdout, clippy::print_stderr)]
 
-use codex_arg0::Arg0DispatchPaths;
-use codex_config::ConfigLayerStackOrdering;
-use codex_config::LoaderOverrides;
-use codex_config::NoopThreadConfigLoader;
-use codex_config::RemoteThreadConfigLoader;
-use codex_config::ThreadConfigLoader;
-use codex_core::config::Config;
-use codex_core::resolve_installation_id;
-use codex_login::AuthManager;
-use codex_utils_cli::CliConfigOverrides;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_config::ConfigLayerStackOrdering;
+use crewon_config::LoaderOverrides;
+use crewon_config::NoopThreadConfigLoader;
+use crewon_config::RemoteThreadConfigLoader;
+use crewon_config::ThreadConfigLoader;
+use crewon_core::config::Config;
+use crewon_core::resolve_installation_id;
+use crewon_login::AuthManager;
+use crewon_utils_options::ConfigOverrides;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::io::ErrorKind;
@@ -42,24 +42,25 @@ use crate::transport::start_control_socket_acceptor;
 use crate::transport::start_remote_control;
 use crate::transport::start_stdio_connection;
 use crate::transport::start_websocket_acceptor;
-use codex_analytics::AppServerRpcTransport;
-use codex_app_server_protocol::ConfigLayerSource;
-use codex_app_server_protocol::ConfigWarningNotification;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::TextPosition as AppTextPosition;
-use codex_app_server_protocol::TextRange as AppTextRange;
-use codex_config::ConfigLoadError;
-use codex_config::TextRange as CoreTextRange;
-use codex_core::ExecPolicyError;
-use codex_core::check_execpolicy_for_warnings;
-use codex_core::config::find_codex_home;
-use codex_exec_server::EnvironmentManager;
-use codex_exec_server::ExecServerRuntimePaths;
-use codex_feedback::CodexFeedback;
-use codex_protocol::protocol::SessionSource;
-use codex_rollout::state_db as rollout_state_db;
-use codex_state::log_db;
+use crate::transport::start_websocket_acceptor_with_principal_services;
+use crewon_analytics::AppServerRpcTransport;
+use crewon_app_server_protocol::ConfigLayerSource;
+use crewon_app_server_protocol::ConfigWarningNotification;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::TextPosition as AppTextPosition;
+use crewon_app_server_protocol::TextRange as AppTextRange;
+use crewon_config::ConfigLoadError;
+use crewon_config::TextRange as CoreTextRange;
+use crewon_core::ExecPolicyError;
+use crewon_core::check_execpolicy_for_warnings;
+use crewon_core::config::find_crewon_home;
+use crewon_exec_server::EnvironmentManager;
+use crewon_exec_server::ExecServerRuntimePaths;
+use crewon_feedback::CrewonFeedback;
+use crewon_protocol::protocol::SessionSource;
+use crewon_rollout::state_db as rollout_state_db;
+use crewon_state::log_db;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -75,11 +76,12 @@ use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::registry::Registry;
 use tracing_subscriber::util::SubscriberInitExt;
 
-const SQLITE_RECOVERY_CONFIG_WARNING_SUMMARY: &str = "Codex rebuilt its local database.";
+const SQLITE_RECOVERY_CONFIG_WARNING_SUMMARY: &str = "Crewon rebuilt its local database.";
 
 mod analytics_utils;
 mod app_server_tracing;
 mod attestation;
+mod automation_scheduler;
 mod bespoke_event_handling;
 mod command_exec;
 mod config;
@@ -97,11 +99,26 @@ pub mod in_process;
 mod mcp_refresh;
 mod message_processor;
 mod models;
+#[allow(
+    dead_code,
+    reason = "the shared Office source fence is staged while manager runtime creation lands"
+)]
+mod office_runtime_contract;
 mod outgoing_message;
+pub mod platform_control;
 mod request_processors;
 mod request_serialization;
+mod rollout_writer_generation;
 mod server_request_error;
 mod skills_watcher;
+#[cfg_attr(
+    not(test),
+    allow(
+        dead_code,
+        reason = "W1-06 persistence adapter is harnessed before Task Control composition"
+    )
+)]
+mod task_control;
 mod thread_state;
 mod thread_status;
 mod transport;
@@ -115,7 +132,7 @@ pub use crate::transport::auth::AppServerWebsocketAuthSettings;
 pub use crate::transport::auth::WebsocketAuthCliMode;
 
 const LOG_FORMAT_ENV_VAR: &str = "LOG_FORMAT";
-const OTEL_SERVICE_NAME: &str = "codex-app-server";
+const OTEL_SERVICE_NAME: &str = "crewon-app-server";
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum LogFormat {
@@ -379,14 +396,14 @@ fn log_format_from_env() -> LogFormat {
 
 pub async fn run_main(
     arg0_paths: Arg0DispatchPaths,
-    cli_config_overrides: CliConfigOverrides,
+    config_overrides: ConfigOverrides,
     loader_overrides: LoaderOverrides,
     strict_config: bool,
     default_analytics_enabled: bool,
 ) -> IoResult<()> {
     run_main_with_transport_options(
         arg0_paths,
-        cli_config_overrides,
+        config_overrides,
         loader_overrides,
         strict_config,
         default_analytics_enabled,
@@ -424,7 +441,7 @@ impl Default for AppServerRuntimeOptions {
 #[allow(clippy::too_many_arguments)]
 pub async fn run_main_with_transport_options(
     arg0_paths: Arg0DispatchPaths,
-    cli_config_overrides: CliConfigOverrides,
+    config_overrides: ConfigOverrides,
     loader_overrides: LoaderOverrides,
     strict_config: bool,
     default_analytics_enabled: bool,
@@ -439,18 +456,20 @@ pub async fn run_main_with_transport_options(
     let (outbound_control_tx, mut outbound_control_rx) =
         mpsc::channel::<OutboundControlEvent>(CHANNEL_CAPACITY);
 
-    // Parse CLI overrides once and derive the base Config eagerly so later
+    // Parse config overrides once and derive the base Config eagerly so later
     // components do not need to work with raw TOML values.
-    let cli_kv_overrides = cli_config_overrides.parse_overrides().map_err(|e| {
+    let config_kv_overrides = config_overrides.parse_overrides().map_err(|e| {
         std::io::Error::new(
             ErrorKind::InvalidInput,
             format!("error parsing -c overrides: {e}"),
         )
     })?;
-    let codex_home = find_codex_home()?;
+    let codex_home = find_crewon_home()?;
+    let _rollout_writer_generation_guard =
+        rollout_writer_generation::acquire_for_app_server(codex_home.as_path())?;
     let local_runtime_paths = ExecServerRuntimePaths::from_optional_paths(
         arg0_paths.codex_self_exe.clone(),
-        arg0_paths.codex_linux_sandbox_exe.clone(),
+        arg0_paths.crewon_linux_sandbox_exe.clone(),
     )?;
     let environment_manager = if loader_overrides.ignore_user_config {
         EnvironmentManager::from_env(Some(local_runtime_paths)).await
@@ -461,7 +480,7 @@ pub async fn run_main_with_transport_options(
     .map_err(std::io::Error::other)?;
     let config_manager = ConfigManager::new(
         codex_home.to_path_buf(),
-        cli_kv_overrides.clone(),
+        config_kv_overrides.clone(),
         loader_overrides,
         strict_config,
         Default::default(),
@@ -513,7 +532,7 @@ pub async fn run_main_with_transport_options(
         }
     };
 
-    let otel = codex_core::otel_init::build_provider(
+    let otel = crewon_core::otel_init::build_provider(
         &config,
         env!("CARGO_PKG_VERSION"),
         Some(OTEL_SERVICE_NAME),
@@ -525,8 +544,8 @@ pub async fn run_main_with_transport_options(
             format!("error loading otel config: {e}"),
         )
     })?;
-    codex_core::otel_init::record_process_start(otel.as_ref(), OTEL_SERVICE_NAME);
-    codex_core::otel_init::install_sqlite_telemetry(otel.as_ref(), OTEL_SERVICE_NAME);
+    crewon_core::otel_init::record_process_start(otel.as_ref(), OTEL_SERVICE_NAME);
+    crewon_core::otel_init::install_sqlite_telemetry(otel.as_ref(), OTEL_SERVICE_NAME);
     let unix_socket_startup_lock = match &transport {
         AppServerTransport::UnixSocket { socket_path } => {
             let startup_lock_path = app_server_startup_lock_path(&codex_home)?;
@@ -559,14 +578,14 @@ pub async fn run_main_with_transport_options(
         let effective_toml = config.config_layer_stack.effective_config();
         match effective_toml.try_into() {
             Ok(config_toml) => {
-                match codex_core::personality_migration::maybe_migrate_personality(
+                match crewon_core::personality_migration::maybe_migrate_personality(
                     &config.codex_home,
                     &config_toml,
                     state_db.clone(),
                 )
                 .await
                 {
-                    Ok(codex_core::personality_migration::PersonalityMigrationStatus::Applied) => {
+                    Ok(crewon_core::personality_migration::PersonalityMigrationStatus::Applied) => {
                         config = config_manager
                             .load_latest_config(/*fallback_cwd*/ None)
                             .await
@@ -580,9 +599,9 @@ pub async fn run_main_with_transport_options(
                             })?;
                     }
                     Ok(
-                        codex_core::personality_migration::PersonalityMigrationStatus::SkippedMarker
-                        | codex_core::personality_migration::PersonalityMigrationStatus::SkippedExplicitPersonality
-                        | codex_core::personality_migration::PersonalityMigrationStatus::SkippedNoSessions,
+                        crewon_core::personality_migration::PersonalityMigrationStatus::SkippedMarker
+                        | crewon_core::personality_migration::PersonalityMigrationStatus::SkippedExplicitPersonality
+                        | crewon_core::personality_migration::PersonalityMigrationStatus::SkippedNoSessions,
                     ) => {}
                     Err(err) => {
                         warn!(error = %err, "Failed to run personality migration");
@@ -618,7 +637,7 @@ pub async fn run_main_with_transport_options(
         });
     }
     if let Some(warning) =
-        codex_core::config::system_bwrap_warning(config.permissions.permission_profile())
+        crewon_core::config::system_bwrap_warning(config.permissions.permission_profile())
     {
         config_warnings.push(ConfigWarningNotification {
             summary: warning,
@@ -628,7 +647,7 @@ pub async fn run_main_with_transport_options(
         });
     }
 
-    let feedback = CodexFeedback::new();
+    let feedback = CrewonFeedback::new();
 
     // Install a simple subscriber so `tracing` output is visible. Users can
     // control the log level with `RUST_LOG` and switch to JSON logs with
@@ -673,6 +692,49 @@ pub async fn run_main_with_transport_options(
     let transport_shutdown_token = CancellationToken::new();
     let mut transport_accept_handles = Vec::<JoinHandle<()>>::new();
 
+    let principal_session_enabled =
+        platform_control::principal_session_production::PreparedPrincipalSessionProduction::is_enabled_in_process_environment()?;
+    if principal_session_enabled && !matches!(&transport, AppServerTransport::WebSocket { .. }) {
+        return Err(std::io::Error::new(
+            ErrorKind::InvalidInput,
+            "principal session production requires websocket transport",
+        ));
+    }
+    if principal_session_enabled && auth.config.is_some() {
+        return Err(std::io::Error::new(
+            ErrorKind::InvalidInput,
+            "principal session production cannot be combined with legacy websocket auth",
+        ));
+    }
+    let mut principal_session_production = if principal_session_enabled {
+        let state = state_db.clone().ok_or_else(|| {
+            std::io::Error::new(
+                ErrorKind::InvalidInput,
+                "principal session production requires sqlite state",
+            )
+        })?;
+        platform_control::principal_session_production::PreparedPrincipalSessionProduction::from_process_environment(state).await?
+    } else {
+        None
+    };
+    let provider_connection_runtime = platform_control::provider_connection_startup::PreparedProviderConnectionRuntime::from_process_environment(
+        state_db.clone(),
+        principal_session_production.as_ref().map(
+            platform_control::principal_session_production::PreparedPrincipalSessionProduction::identity_source_reader,
+        ),
+    )
+    .await?
+    .map(Arc::new);
+    let provider_control_runtime =
+        task_control::provider_control_production::PreparedProviderControlRuntime::from_process_environment(
+            state_db.clone(),
+            provider_connection_runtime.as_deref(),
+        )?;
+    let durable_cloud_agent_enabled =
+        task_control::provider_control_production::durable_cloud_agent_enabled_from_process_environment(
+            provider_control_runtime.is_some(),
+        )?;
+
     let single_client_mode = matches!(&transport, AppServerTransport::Stdio);
     let shutdown_when_no_connections = single_client_mode;
     let graceful_signal_restart_enabled =
@@ -700,14 +762,38 @@ pub async fn run_main_with_transport_options(
             transport_accept_handles.push(accept_handle);
         }
         AppServerTransport::WebSocket { bind_address } => {
-            let accept_handle = start_websocket_acceptor(
-                *bind_address,
-                transport_event_tx.clone(),
-                transport_shutdown_token.clone(),
-                policy_from_settings(&auth)?,
-            )
-            .await?;
-            transport_accept_handles.push(accept_handle);
+            if let Some(production) = principal_session_production.as_mut() {
+                let listener_handle =
+                    production.start_listener(transport_shutdown_token.clone())?;
+                let accept_result = start_websocket_acceptor_with_principal_services(
+                    *bind_address,
+                    transport_event_tx.clone(),
+                    transport_shutdown_token.clone(),
+                    production.auth_policy(),
+                    production.registry(),
+                    Some(production.exchange()),
+                )
+                .await;
+                let accept_handle = match accept_result {
+                    Ok(handle) => handle,
+                    Err(error) => {
+                        transport_shutdown_token.cancel();
+                        let _ = listener_handle.await;
+                        return Err(error);
+                    }
+                };
+                transport_accept_handles.push(listener_handle);
+                transport_accept_handles.push(accept_handle);
+            } else {
+                let accept_handle = start_websocket_acceptor(
+                    *bind_address,
+                    transport_event_tx.clone(),
+                    transport_shutdown_token.clone(),
+                    policy_from_settings(&auth)?,
+                )
+                .await?;
+                transport_accept_handles.push(accept_handle);
+            }
         }
         AppServerTransport::Off => {}
     }
@@ -746,6 +832,52 @@ pub async fn run_main_with_transport_options(
     )
     .await?;
     transport_accept_handles.push(remote_control_accept_handle);
+    let provider_control_handle =
+        provider_control_runtime.map(|runtime| runtime.start(transport_shutdown_token.clone()));
+    let (cloud_agent_notification_tx, mut cloud_agent_notification_rx) = mpsc::channel(64);
+    let cloud_agent_authority_handle = if durable_cloud_agent_enabled {
+        let state = state_db.clone().ok_or_else(|| {
+            std::io::Error::new(
+                ErrorKind::InvalidInput,
+                "durable Cloud Agent authority requires sqlite state",
+            )
+        })?;
+        Some(
+            task_control::cloud_agent_task_authority::start_cloud_agent_task_authority(
+                state,
+                transport_shutdown_token.clone(),
+            ),
+        )
+    } else {
+        None
+    };
+    let cloud_agent_projector_handle = if durable_cloud_agent_enabled {
+        let state = state_db.clone().ok_or_else(|| {
+            std::io::Error::new(
+                ErrorKind::InvalidInput,
+                "durable Cloud Agent projector requires sqlite state",
+            )
+        })?;
+        let factory = provider_connection_runtime
+            .as_ref()
+            .ok_or_else(|| {
+                std::io::Error::new(
+                    ErrorKind::InvalidInput,
+                    "durable Cloud Agent projector requires Provider connection runtime",
+                )
+            })?
+            .provider_client_factory();
+        Some(
+            task_control::cloud_agent_turn_projector::start_cloud_agent_turn_projector(
+                state,
+                factory,
+                cloud_agent_notification_tx,
+                transport_shutdown_token.clone(),
+            ),
+        )
+    } else {
+        None
+    };
 
     let outbound_handle = tokio::spawn(async move {
         let mut outbound_connections = HashMap::<ConnectionId, OutboundConnectionState>::new();
@@ -829,6 +961,8 @@ pub async fn run_main_with_transport_options(
             rpc_transport: analytics_rpc_transport(&transport),
             remote_control_handle: Some(remote_control_handle.clone()),
             plugin_startup_tasks: runtime_options.plugin_startup_tasks,
+            provider_connection_runtime,
+            durable_cloud_agent_enabled,
         }));
         let mut thread_created_rx = processor.thread_created_receiver();
         let mut running_turn_count_rx = processor.subscribe_running_assistant_turn_count();
@@ -836,6 +970,7 @@ pub async fn run_main_with_transport_options(
         let mut connection_cleanup_tasks = ConnectionCleanupTasks::new();
         let mut remote_control_status_rx = remote_control_handle.status_receiver();
         let mut remote_control_status = remote_control_status_rx.borrow().clone();
+        let mut listen_for_cloud_agent_notifications = durable_cloud_agent_enabled;
         let transport_shutdown_token = transport_shutdown_token.clone();
         async move {
             let mut listen_for_threads = true;
@@ -881,6 +1016,7 @@ pub async fn run_main_with_transport_options(
                             TransportEvent::ConnectionOpened {
                                 connection_id,
                                 origin,
+                                authentication,
                                 writer,
                                 disconnect_sender,
                             } => {
@@ -889,33 +1025,43 @@ pub async fn run_main_with_transport_options(
                                     Arc::new(AtomicBool::new(false));
                                 let outbound_opted_out_notification_methods =
                                     Arc::new(RwLock::new(HashSet::new()));
+                                let connection_state = match ConnectionState::new(
+                                    origin,
+                                    authentication,
+                                    Arc::clone(&outbound_initialized),
+                                    Arc::clone(&outbound_experimental_api_enabled),
+                                    Arc::clone(&outbound_opted_out_notification_methods),
+                                ) {
+                                    Ok(connection_state) => connection_state,
+                                    Err(err) => {
+                                        warn!(
+                                            ?connection_id,
+                                            %err,
+                                            "disconnecting connection with invalid verified transport principal"
+                                        );
+                                        if let Some(disconnect_sender) = disconnect_sender {
+                                            disconnect_sender.cancel();
+                                        }
+                                        continue;
+                                    }
+                                };
                                 if outbound_control_tx
                                     .send(OutboundControlEvent::Opened {
                                         connection_id,
                                         writer,
                                         disconnect_sender,
-                                        initialized: Arc::clone(&outbound_initialized),
-                                        experimental_api_enabled: Arc::clone(
-                                            &outbound_experimental_api_enabled,
-                                        ),
-                                        opted_out_notification_methods: Arc::clone(
-                                            &outbound_opted_out_notification_methods,
-                                        ),
+                                        initialized: outbound_initialized,
+                                        experimental_api_enabled:
+                                            outbound_experimental_api_enabled,
+                                        opted_out_notification_methods:
+                                            outbound_opted_out_notification_methods,
                                     })
                                     .await
                                     .is_err()
                                 {
                                     break;
                                 }
-                                connections.insert(
-                                    connection_id,
-                                    ConnectionState::new(
-                                        origin,
-                                        outbound_initialized,
-                                        outbound_experimental_api_enabled,
-                                        outbound_opted_out_notification_methods,
-                                    ),
-                                );
+                                connections.insert(connection_id, connection_state);
                             }
                             TransportEvent::ConnectionClosed { connection_id } => {
                                 let Some(connection_state) = connections.remove(&connection_id) else {
@@ -1046,6 +1192,27 @@ pub async fn run_main_with_transport_options(
                             .send_server_notification(notification)
                             .await;
                     }
+                    notice = cloud_agent_notification_rx.recv(), if listen_for_cloud_agent_notifications => {
+                        let Some(notice) = notice else {
+                            listen_for_cloud_agent_notifications = false;
+                            continue;
+                        };
+                        let recipients = connections
+                            .iter()
+                            .filter_map(|(connection_id, connection_state)| {
+                                connection_state
+                                    .session
+                                    .request_identity(format!(
+                                        "cloud-agent-terminal:{}:{}",
+                                        notice.turn_id, notice.revision
+                                    ))
+                                    .map(|identity| (*connection_id, identity))
+                            })
+                            .collect();
+                        processor
+                            .deliver_cloud_agent_terminal_notice(&notice, recipients)
+                            .await;
+                    }
                     created = thread_created_rx.recv(), if listen_for_threads => {
                         match created {
                             Ok(thread_id) => {
@@ -1100,6 +1267,15 @@ pub async fn run_main_with_transport_options(
     let _ = outbound_handle.await;
 
     transport_shutdown_token.cancel();
+    if let Some(handle) = provider_control_handle {
+        let _ = handle.await;
+    }
+    if let Some(handle) = cloud_agent_authority_handle {
+        let _ = handle.await;
+    }
+    if let Some(handle) = cloud_agent_projector_handle {
+        let _ = handle.await;
+    }
     for handle in transport_accept_handles {
         let _ = handle.await;
     }
@@ -1154,12 +1330,12 @@ async fn init_sqlite_state_db_with_fresh_start_on_corruption(
             }
             Err(err) => err,
         };
-        if !codex_state::is_sqlite_corruption_error(&err) {
+        if !crewon_state::is_sqlite_corruption_error(&err) {
             return Err(err);
         }
 
-        let database_path = codex_state::runtime_db_path_for_corruption_error(&err)
-            .unwrap_or_else(|| codex_state::state_db_path(config.sqlite_home.as_path()));
+        let database_path = crewon_state::runtime_db_path_for_corruption_error(&err)
+            .unwrap_or_else(|| crewon_state::state_db_path(config.sqlite_home.as_path()));
         if !attempted_backups.insert(database_path.clone()) {
             return Err(anyhow::anyhow!(
                 "failed to initialize sqlite state runtime after moving damaged database file into a backup folder: {err}"
@@ -1168,10 +1344,10 @@ async fn init_sqlite_state_db_with_fresh_start_on_corruption(
 
         let original_error = err.to_string();
         emit_state_db_backup_warning(&format!(
-            "Codex local database at {} appears damaged. Moving it into a backup folder so the app server can rebuild it from saved data.",
+            "Crewon local database at {} appears damaged. Moving it into a backup folder so the app server can rebuild it from saved data.",
             database_path.display()
         ));
-        let backups = codex_state::backup_runtime_db_for_fresh_start(database_path.as_path())
+        let backups = crewon_state::backup_runtime_db_for_fresh_start(database_path.as_path())
             .await
             .map_err(|backup_err| {
                 anyhow::anyhow!(
@@ -1180,7 +1356,7 @@ async fn init_sqlite_state_db_with_fresh_start_on_corruption(
             })?;
         for backup in &backups {
             emit_state_db_backup_warning(&format!(
-                "Moved damaged Codex local database file {} to {}",
+                "Moved damaged Crewon local database file {} to {}",
                 backup.original_path.display(),
                 backup.backup_path.display()
             ));

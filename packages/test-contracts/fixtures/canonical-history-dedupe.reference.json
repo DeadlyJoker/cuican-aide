@@ -1,0 +1,31 @@
+{
+  "schemaVersion": "crewon.model-history.v0",
+  "caseId": "AR-010-canonical-history-dedupe",
+  "items": [
+    {
+      "type": "message",
+      "role": "user",
+      "content": "hello"
+    },
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": "Hey there!\n"
+    },
+    {
+      "type": "message",
+      "role": "user",
+      "content": "second turn"
+    },
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": "Hey there!\n"
+    },
+    {
+      "type": "message",
+      "role": "user",
+      "content": "third turn"
+    }
+  ]
+}

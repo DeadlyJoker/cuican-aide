@@ -1,22 +1,5 @@
 #![allow(clippy::unwrap_used)]
 
-use codex_core::LoadedAgentsMd;
-use codex_core::shell::default_user_shell;
-use codex_features::Feature;
-use codex_prompts::APPLY_PATCH_TOOL_INSTRUCTIONS;
-use codex_protocol::config_types::CollaborationMode;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::config_types::Settings;
-use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::ENVIRONMENT_CONTEXT_OPEN_TAG;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::TempDirExt;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
@@ -24,11 +7,28 @@ use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
+use crewon_core::LoadedAgentsMd;
+use crewon_core::shell::default_user_shell;
+use crewon_features::Feature;
+use crewon_prompts::APPLY_PATCH_TOOL_INSTRUCTIONS;
+use crewon_protocol::config_types::CollaborationMode;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::config_types::Settings;
+use crewon_protocol::config_types::WebSearchMode;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::ENVIRONMENT_CONTEXT_OPEN_TAG;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
@@ -105,6 +105,16 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
     use pretty_assertions::assert_eq;
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/prompt-tool-stability.reference.json"
+    )
+    .expect("resolve AR-012 prompt and Tool stability fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path)
+            .expect("read AR-012 prompt and Tool stability fixture"),
+    )
+    .expect("parse AR-012 prompt and Tool stability fixture");
+
     let server = start_mock_server().await;
     let req1 = mount_sse_once(
         &server,
@@ -117,12 +127,12 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
     )
     .await;
 
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         config,
         thread_manager,
         ..
-    } = test_codex()
+    } = test_crewon()
         .with_config(|config| {
             config.user_instructions = Some(LoadedAgentsMd::from_text_for_testing(
                 "be consistent and helpful",
@@ -201,16 +211,40 @@ async fn prompt_tools_are_consistent_across_requests() -> anyhow::Result<()> {
         [base_instructions, APPLY_PATCH_TOOL_INSTRUCTIONS.to_string()].join("\n")
     };
 
-    assert_eq!(
-        body0["instructions"],
-        serde_json::json!(expected_instructions),
-    );
+    let instructions0 = body0["instructions"]
+        .as_str()
+        .expect("instructions should be text");
+    assert!(instructions0.starts_with(&expected_instructions));
+    assert!(instructions0.contains("<runtime_model_identity>"));
     assert_tool_names(&body0, &expected_tools_names);
 
     let body1 = req2.single_request().body_json();
+    assert_eq!(reference["expected"]["requestCount"], 2);
     assert_eq!(
-        body1["instructions"],
-        serde_json::json!(expected_instructions),
+        body1["instructions"] == body0["instructions"],
+        reference["expected"]["instructionsStable"]
+    );
+    assert_eq!(
+        body1["tools"] == body0["tools"],
+        reference["expected"]["toolDefinitionsStable"]
+    );
+    let tool_names = |body: &serde_json::Value| {
+        body["tools"]
+            .as_array()
+            .expect("tools should be an array")
+            .iter()
+            .map(|tool| {
+                tool.get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .or_else(|| tool.get("type").and_then(serde_json::Value::as_str))
+                    .expect("Tool should have a name or type")
+                    .to_string()
+            })
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        tool_names(&body1) == tool_names(&body0),
+        reference["expected"]["toolOrderStable"]
     );
     assert_tool_names(&body1, &expected_tools_names);
 
@@ -234,7 +268,7 @@ async fn gpt_5_tools_without_apply_patch_append_apply_patch_instructions() -> an
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.user_instructions = Some(LoadedAgentsMd::from_text_for_testing(
                 "be consistent and helpful",
@@ -316,7 +350,11 @@ async fn prefixes_context_and_instructions_once_and_consistently_across_requests
     )
     .await;
 
-    let TestCodex { codex, config, .. } = test_codex()
+    let TestCrewon {
+        crewon: codex,
+        config,
+        ..
+    } = test_crewon()
         .with_config(|config| {
             config.user_instructions = Some(LoadedAgentsMd::from_text_for_testing(
                 "be consistent and helpful",
@@ -414,7 +452,11 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
     )
     .await;
 
-    let TestCodex { codex, config, .. } = test_codex()
+    let TestCrewon {
+        crewon: codex,
+        config,
+        ..
+    } = test_crewon()
         .with_config(|config| {
             config.user_instructions = Some(LoadedAgentsMd::from_text_for_testing(
                 "be consistent and helpful",
@@ -454,7 +496,7 @@ async fn overrides_turn_context_but_keeps_cached_prefix_and_key_constant() -> an
         .expect("workspace profile should have legacy projection");
     core_test_support::submit_thread_settings(
         &codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             approval_policy: Some(AskForApproval::Never),
             sandbox_policy: Some(sandbox_policy),
             permission_profile: Some(permission_profile),
@@ -540,7 +582,7 @@ async fn override_before_first_turn_emits_environment_context() -> anyhow::Resul
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex().build(&server).await?;
+    let TestCrewon { crewon: codex, .. } = test_crewon().build(&server).await?;
 
     let collaboration_mode = CollaborationMode {
         mode: ModeKind::Default,
@@ -553,7 +595,7 @@ async fn override_before_first_turn_emits_environment_context() -> anyhow::Resul
 
     core_test_support::submit_thread_settings(
         &codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             approval_policy: Some(AskForApproval::Never),
             model: Some("gpt-5.4".to_string()),
             effort: Some(Some(ReasoningEffort::Low)),
@@ -705,7 +747,7 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
     )
     .await;
 
-    let TestCodex { codex, .. } = test_codex()
+    let TestCrewon { crewon: codex, .. } = test_crewon()
         .with_config(|config| {
             config.user_instructions = Some(LoadedAgentsMd::from_text_for_testing(
                 "be consistent and helpful",
@@ -753,7 +795,7 @@ async fn per_turn_overrides_keep_cached_prefix_and_key_constant() -> anyhow::Res
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(new_cwd.abs())),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
@@ -835,12 +877,12 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
     )
     .await;
 
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         config,
         session_configured,
         ..
-    } = test_codex()
+    } = test_crewon()
         .with_config(|config| {
             config.user_instructions = Some(LoadedAgentsMd::from_text_for_testing(
                 "be consistent and helpful",
@@ -869,14 +911,14 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(default_cwd.clone())),
                 approval_policy: Some(default_approval_policy),
                 sandbox_policy: Some(default_sandbox_policy.clone()),
                 summary: Some(default_summary.unwrap_or(ReasoningSummary::Auto)),
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: default_model.clone(),
                         reasoning_effort: default_effort.clone(),
                         developer_instructions: None,
@@ -897,14 +939,14 @@ async fn send_user_turn_with_no_changes_does_not_send_environment_context() -> a
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(default_cwd.clone())),
                 approval_policy: Some(default_approval_policy),
                 sandbox_policy: Some(default_sandbox_policy.clone()),
                 summary: Some(default_summary.unwrap_or(ReasoningSummary::Auto)),
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: default_model.clone(),
                         reasoning_effort: default_effort,
                         developer_instructions: None,
@@ -976,12 +1018,12 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
         sse(vec![ev_response_created("resp-2"), ev_completed("resp-2")]),
     )
     .await;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         config,
         session_configured,
         ..
-    } = test_codex()
+    } = test_crewon()
         .with_config(|config| {
             config.user_instructions = Some(LoadedAgentsMd::from_text_for_testing(
                 "be consistent and helpful",
@@ -1010,14 +1052,14 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(default_cwd.clone())),
                 approval_policy: Some(default_approval_policy),
                 sandbox_policy: Some(default_sandbox_policy.clone()),
                 summary: Some(default_summary.unwrap_or(ReasoningSummary::Auto)),
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: default_model,
                         reasoning_effort: default_effort,
                         developer_instructions: None,
@@ -1040,15 +1082,15 @@ async fn send_user_turn_with_changes_sends_environment_context() -> anyhow::Resu
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(default_cwd.clone())),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
                 summary: Some(ReasoningSummary::Detailed),
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: "o3".to_string(),
                         reasoning_effort: Some(ReasoningEffort::High),
                         developer_instructions: None,

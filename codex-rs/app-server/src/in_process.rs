@@ -3,7 +3,7 @@
 //! This module runs the existing [`MessageProcessor`] and outbound routing logic
 //! on Tokio tasks, but replaces socket/stdio transports with bounded in-memory
 //! channels. The intent is to preserve app-server semantics while avoiding a
-//! process boundary for CLI surfaces that run in the same process.
+//! process boundary for local clients that run in the same process.
 //!
 //! # Lifecycle
 //!
@@ -31,10 +31,10 @@
 //! `MessageProcessor` with overload or internal errors so approval flows do
 //! not hang indefinitely.
 //!
-//! # Relationship to `codex-app-server-client`
+//! # Relationship to `crewon-app-server-client`
 //!
 //! This module provides the low-level runtime handle ([`InProcessClientHandle`]).
-//! Higher-level callers (TUI, exec) should go through `codex-app-server-client`,
+//! Higher-level callers should go through `crewon-app-server-client`,
 //! which wraps this module behind a worker task with async request/response
 //! helpers, surface-specific startup policy, and bounded shutdown.
 
@@ -64,30 +64,31 @@ use crate::outgoing_message::OutgoingMessage;
 use crate::outgoing_message::OutgoingMessageSender;
 use crate::outgoing_message::QueuedOutgoingMessage;
 use crate::transport::CHANNEL_CAPACITY;
+use crate::transport::ConnectionOrigin;
 use crate::transport::OutboundConnectionState;
 use crate::transport::route_outgoing_envelope;
-use codex_analytics::AppServerRpcTransport;
-use codex_app_server_protocol::ClientNotification;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::ConfigWarningNotification;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::Result;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::ServerRequest;
-use codex_arg0::Arg0DispatchPaths;
-use codex_config::CloudConfigBundleLoader;
-use codex_config::LoaderOverrides;
-use codex_config::ThreadConfigLoader;
-use codex_core::config::Config;
-use codex_core::resolve_installation_id;
-use codex_exec_server::EnvironmentManager;
-use codex_feedback::CodexFeedback;
-use codex_login::AuthManager;
-use codex_protocol::protocol::SessionSource;
-pub use codex_rollout::StateDbHandle;
-pub use codex_state::log_db::LogDbLayer;
+use crewon_analytics::AppServerRpcTransport;
+use crewon_app_server_protocol::ClientNotification;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::ConfigWarningNotification;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::Result;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_config::CloudConfigBundleLoader;
+use crewon_config::LoaderOverrides;
+use crewon_config::ThreadConfigLoader;
+use crewon_core::config::Config;
+use crewon_core::resolve_installation_id;
+use crewon_exec_server::EnvironmentManager;
+use crewon_feedback::CrewonFeedback;
+use crewon_login::AuthManager;
+use crewon_protocol::protocol::SessionSource;
+pub use crewon_rollout::StateDbHandle;
+pub use crewon_state::log_db::LogDbLayer;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -120,8 +121,8 @@ pub struct InProcessStartArgs {
     pub arg0_paths: Arg0DispatchPaths,
     /// Shared base config used to initialize core components.
     pub config: Arc<Config>,
-    /// CLI config overrides that are already parsed into TOML values.
-    pub cli_overrides: Vec<(String, TomlValue)>,
+    /// config overrides that are already parsed into TOML values.
+    pub config_overrides: Vec<(String, TomlValue)>,
     /// Loader override knobs used by config API paths.
     pub loader_overrides: LoaderOverrides,
     /// Whether config API paths should reject unknown config fields.
@@ -131,10 +132,12 @@ pub struct InProcessStartArgs {
     /// Loader used to fetch typed thread config sources before a thread starts.
     pub thread_config_loader: Arc<dyn ThreadConfigLoader>,
     /// Feedback sink used by app-server/core telemetry and logs.
-    pub feedback: CodexFeedback,
+    pub feedback: CrewonFeedback,
     /// SQLite tracing layer used to flush recently emitted logs before feedback upload.
     pub log_db: Option<LogDbLayer>,
     /// Process-wide SQLite state handle shared with embedded app-server consumers.
+    ///
+    /// When omitted, [`start`] initializes the state runtime from [`Self::config`].
     pub state_db: Option<StateDbHandle>,
     /// Environment manager used by core execution and filesystem operations.
     pub environment_manager: Arc<EnvironmentManager>,
@@ -255,14 +258,14 @@ impl InProcessClientSender {
 /// Handle used by an in-process client to call app-server and consume events.
 ///
 /// This is the low-level runtime handle. Higher-level callers should usually go
-/// through `codex-app-server-client`, which adds worker-task buffering,
+/// through `crewon-app-server-client`, which adds worker-task buffering,
 /// request/response helpers, and surface-specific startup policy.
 pub struct InProcessClientHandle {
     client: InProcessClientSender,
     event_rx: mpsc::Receiver<InProcessServerEvent>,
     runtime_handle: tokio::task::JoinHandle<()>,
     #[cfg(test)]
-    _test_codex_home: Option<tempfile::TempDir>,
+    _test_crewon_home: Option<tempfile::TempDir>,
 }
 
 impl InProcessClientHandle {
@@ -371,13 +374,28 @@ pub async fn start(args: InProcessStartArgs) -> IoResult<InProcessClientHandle> 
     Ok(client)
 }
 
-async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClientHandle> {
+async fn start_uninitialized(mut args: InProcessStartArgs) -> IoResult<InProcessClientHandle> {
     let channel_capacity = args.channel_capacity.max(1);
+    let rollout_writer_generation_guard =
+        crate::rollout_writer_generation::acquire_for_app_server(&args.config.codex_home)?;
     let installation_id = resolve_installation_id(&args.config.codex_home).await?;
+    if args.state_db.is_none() {
+        args.state_db = Some(
+            crewon_rollout::state_db::try_init(args.config.as_ref())
+                .await
+                .map_err(|err| {
+                    IoError::other(format!(
+                        "failed to initialize in-process sqlite state under {}: {err:#}",
+                        args.config.sqlite_home.display()
+                    ))
+                })?,
+        );
+    }
     let (client_tx, mut client_rx) = mpsc::channel::<InProcessClientMessage>(channel_capacity);
     let (event_tx, event_rx) = mpsc::channel::<InProcessServerEvent>(channel_capacity);
 
     let runtime_handle = tokio::spawn(async move {
+        let _rollout_writer_generation_guard = rollout_writer_generation_guard;
         let (outgoing_tx, mut outgoing_rx) = mpsc::channel::<OutgoingEnvelope>(channel_capacity);
         let auth_manager =
             AuthManager::shared_from_config(args.config.as_ref(), args.enable_codex_api_key_env)
@@ -414,7 +432,7 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
         let processor_outgoing = Arc::clone(&outgoing_message_sender);
         let config_manager = ConfigManager::new(
             args.config.codex_home.to_path_buf(),
-            args.cli_overrides,
+            args.config_overrides,
             args.loader_overrides,
             args.strict_config,
             args.cloud_config_bundle,
@@ -440,9 +458,11 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
                 rpc_transport: AppServerRpcTransport::InProcess,
                 remote_control_handle: None,
                 plugin_startup_tasks: crate::PluginStartupTasks::Start,
+                provider_connection_runtime: None,
+                durable_cloud_agent_enabled: false,
             }));
             let mut thread_created_rx = processor.thread_created_receiver();
-            let session = Arc::new(ConnectionSessionState::new());
+            let session = Arc::new(ConnectionSessionState::new(ConnectionOrigin::InProcess));
             let mut listen_for_threads = true;
 
             loop {
@@ -722,25 +742,32 @@ async fn start_uninitialized(args: InProcessStartArgs) -> IoResult<InProcessClie
         event_rx,
         runtime_handle,
         #[cfg(test)]
-        _test_codex_home: None,
+        _test_crewon_home: None,
     })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_app_server_protocol::ClientInfo;
-    use codex_app_server_protocol::ConfigRequirementsReadResponse;
-    use codex_app_server_protocol::ExternalAgentConfigImportCompletedNotification;
-    use codex_app_server_protocol::SessionSource as ApiSessionSource;
-    use codex_app_server_protocol::ThreadStartParams;
-    use codex_app_server_protocol::ThreadStartResponse;
-    use codex_app_server_protocol::Turn;
-    use codex_app_server_protocol::TurnCompletedNotification;
-    use codex_app_server_protocol::TurnItemsView;
-    use codex_app_server_protocol::TurnStatus;
-    use codex_core::config::ConfigBuilder;
+    use crewon_app_server_protocol::ClientInfo;
+    use crewon_app_server_protocol::ConfigRequirementsReadResponse;
+    use crewon_app_server_protocol::ExternalAgentConfigImportCompletedNotification;
+    use crewon_app_server_protocol::OfficeCreateParams;
+    use crewon_app_server_protocol::OfficeCreateResponse;
+    use crewon_app_server_protocol::OfficeSaveParams;
+    use crewon_app_server_protocol::SessionSource as ApiSessionSource;
+    use crewon_app_server_protocol::ThreadStartParams;
+    use crewon_app_server_protocol::ThreadStartResponse;
+    use crewon_app_server_protocol::Turn;
+    use crewon_app_server_protocol::TurnCompletedNotification;
+    use crewon_app_server_protocol::TurnItemsView;
+    use crewon_app_server_protocol::TurnStatus;
+    use crewon_core::config::ConfigBuilder;
+    use crewon_state::DurableWorkspaceRootRecord;
+    use crewon_state::OfficeMigrationStart;
+    use crewon_state::OfficeMigrationStartOutcome;
     use pretty_assertions::assert_eq;
+    use serde_json::json;
     use std::path::Path;
     use tempfile::TempDir;
 
@@ -751,7 +778,7 @@ mod tests {
             .await
         {
             Ok(config) => config,
-            Err(_) => Config::load_default_with_cli_overrides_for_codex_home(
+            Err(_) => Config::load_default_with_config_overrides_for_codex_home(
                 codex_home.to_path_buf(),
                 Vec::new(),
             )
@@ -766,18 +793,18 @@ mod tests {
     ) -> InProcessClientHandle {
         let codex_home = TempDir::new().expect("temp dir");
         let config = Arc::new(build_test_config(codex_home.path()).await);
-        let state_db = codex_rollout::state_db::try_init(config.as_ref())
+        let state_db = crewon_rollout::state_db::try_init(config.as_ref())
             .await
             .expect("state db should initialize for in-process test");
         let args = InProcessStartArgs {
             arg0_paths: Arg0DispatchPaths::default(),
             config,
-            cli_overrides: Vec::new(),
+            config_overrides: Vec::new(),
             loader_overrides: LoaderOverrides::default(),
             strict_config: false,
             cloud_config_bundle: CloudConfigBundleLoader::default(),
-            thread_config_loader: Arc::new(codex_config::NoopThreadConfigLoader),
-            feedback: CodexFeedback::new(),
+            thread_config_loader: Arc::new(crewon_config::NoopThreadConfigLoader),
+            feedback: CrewonFeedback::new(),
             log_db: None,
             state_db: Some(state_db),
             environment_manager: Arc::new(EnvironmentManager::default_for_tests()),
@@ -786,7 +813,7 @@ mod tests {
             enable_codex_api_key_env: false,
             initialize: InitializeParams {
                 client_info: ClientInfo {
-                    name: "codex-in-process-test".to_string(),
+                    name: "crewon-in-process-test".to_string(),
                     title: None,
                     version: "0.0.0".to_string(),
                 },
@@ -795,7 +822,7 @@ mod tests {
             channel_capacity,
         };
         let mut client = start(args).await.expect("in-process runtime should start");
-        client._test_codex_home = Some(codex_home);
+        client._test_crewon_home = Some(codex_home);
         client
     }
 
@@ -805,7 +832,7 @@ mod tests {
 
     #[tokio::test]
     async fn in_process_start_initializes_and_handles_typed_v2_request() {
-        let client = start_test_client(SessionSource::Cli).await;
+        let client = start_test_client(SessionSource::LegacyCli).await;
         let response = client
             .request(ClientRequest::ConfigRequirementsRead {
                 request_id: RequestId::Integer(1),
@@ -825,9 +852,125 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn in_process_start_without_state_db_preserves_office_migration_fence() {
+        let codex_home = TempDir::new().expect("temp dir");
+        let workspace = TempDir::new().expect("workspace temp dir");
+        let config = Arc::new(build_test_config(codex_home.path()).await);
+        let client = start(InProcessStartArgs {
+            arg0_paths: Arg0DispatchPaths::default(),
+            config: Arc::clone(&config),
+            config_overrides: Vec::new(),
+            loader_overrides: LoaderOverrides::default(),
+            strict_config: false,
+            cloud_config_bundle: CloudConfigBundleLoader::default(),
+            thread_config_loader: Arc::new(crewon_config::NoopThreadConfigLoader),
+            feedback: CrewonFeedback::new(),
+            log_db: None,
+            state_db: None,
+            environment_manager: Arc::new(EnvironmentManager::default_for_tests()),
+            config_warnings: Vec::new(),
+            session_source: SessionSource::LegacyCli,
+            enable_codex_api_key_env: false,
+            initialize: InitializeParams {
+                client_info: ClientInfo {
+                    name: "crewon-in-process-state-test".to_string(),
+                    title: None,
+                    version: "0.0.0".to_string(),
+                },
+                capabilities: None,
+            },
+            channel_capacity: DEFAULT_IN_PROCESS_CHANNEL_CAPACITY,
+        })
+        .await
+        .expect("in-process runtime should initialize omitted state db");
+        let cwd = workspace.path().to_string_lossy().into_owned();
+        let created: OfficeCreateResponse = serde_json::from_value(
+            client
+                .request(ClientRequest::OfficeCreate {
+                    request_id: RequestId::Integer(10),
+                    params: OfficeCreateParams {
+                        cwd: cwd.clone(),
+                        title: "In-process State Office".to_string(),
+                        subtitle: None,
+                        thread_id: Some("thread-in-process-state".to_string()),
+                        goal: Some("Keep migration fencing enabled".to_string()),
+                    },
+                })
+                .await
+                .expect("office/create transport should work")
+                .expect("office/create should succeed without a supplied state db"),
+        )
+        .expect("office/create response should parse");
+
+        let state = crewon_rollout::state_db::try_init(config.as_ref())
+            .await
+            .expect("reopen initialized state db");
+        let workspace_key = "workspace:018f0d8e-7e6a-7cb2-8b34-7b2ca4d60029";
+        let mut root = DurableWorkspaceRootRecord {
+            workspace_key: workspace_key.to_string(),
+            node_id: "in-process-state-node".to_string(),
+            environment_id: "in-process-state-environment".to_string(),
+            root_fingerprint: format!("sha256:{}", "a".repeat(64)),
+            record_hash: String::new(),
+            created_at: 1,
+        };
+        root.record_hash = root.canonical_hash();
+        state
+            .resolve_durable_workspace_root_record(&root)
+            .await
+            .expect("seed durable workspace");
+        let record_id = created.config["workspace"]["recordId"]
+            .as_str()
+            .expect("created record id");
+        let source_revision = created.config["workspace"]["recordRevision"]
+            .as_str()
+            .expect("created record revision");
+        assert!(matches!(
+            state
+                .start_office_migration(&OfficeMigrationStart {
+                    record_id: record_id.to_string(),
+                    workspace_key: workspace_key.to_string(),
+                    source_revision: source_revision.to_string(),
+                    source_digest: format!("sha256:{}", "b".repeat(64)),
+                    source_bytes: 1,
+                    started_at: 2,
+                })
+                .await
+                .expect("start Office migration"),
+            OfficeMigrationStartOutcome::Started(_)
+        ));
+
+        let mut changed = created.config;
+        changed["title"] = json!("Forbidden update");
+        let error = client
+            .request(ClientRequest::OfficeSave {
+                request_id: RequestId::Integer(11),
+                params: OfficeSaveParams {
+                    cwd,
+                    config: changed,
+                },
+            })
+            .await
+            .expect("office/save transport should work")
+            .expect_err("auto-initialized state must still enforce the migration fence");
+        assert_eq!(
+            error.data,
+            Some(json!({
+                "type": "officeMigrationFenced",
+                "phase": "quiescing",
+                "journalRevision": 1,
+            }))
+        );
+        client
+            .shutdown()
+            .await
+            .expect("in-process runtime should shutdown cleanly");
+    }
+
+    #[tokio::test]
     async fn in_process_start_uses_requested_session_source_for_thread_start() {
         for (requested_source, expected_source) in [
-            (SessionSource::Cli, ApiSessionSource::Cli),
+            (SessionSource::LegacyCli, ApiSessionSource::LegacyCli),
             (SessionSource::Exec, ApiSessionSource::Exec),
         ] {
             let client = start_test_client(requested_source).await;
@@ -855,7 +998,7 @@ mod tests {
     #[tokio::test]
     async fn in_process_start_clamps_zero_channel_capacity() {
         let client =
-            start_test_client_with_capacity(SessionSource::Cli, /*channel_capacity*/ 0).await;
+            start_test_client_with_capacity(SessionSource::LegacyCli, /*channel_capacity*/ 0).await;
         let response = loop {
             match client
                 .request(ClientRequest::ConfigRequirementsRead {

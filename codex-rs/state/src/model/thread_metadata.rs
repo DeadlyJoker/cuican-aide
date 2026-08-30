@@ -1,12 +1,12 @@
 use anyhow::Result;
 use chrono::DateTime;
 use chrono::Utc;
-use codex_protocol::ThreadId;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::ThreadSource;
+use crewon_protocol::ThreadId;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::ThreadSource;
 use sqlx::Row;
 use sqlx::sqlite::SqliteRow;
 use std::path::PathBuf;
@@ -85,7 +85,7 @@ pub struct ThreadMetadata {
     pub reasoning_effort: Option<ReasoningEffort>,
     /// The working directory for the thread.
     pub cwd: PathBuf,
-    /// Version of the CLI that created the thread.
+    /// Version of the client that created the thread.
     pub cli_version: String,
     /// A best-effort thread title.
     pub title: String,
@@ -134,7 +134,7 @@ pub struct ThreadMetadataBuilder {
     pub model_provider: Option<String>,
     /// The working directory for the thread.
     pub cwd: PathBuf,
-    /// Version of the CLI that created the thread.
+    /// Version of the client that created the thread.
     pub cli_version: Option<String>,
     /// The sandbox policy.
     pub sandbox_policy: SandboxPolicy,
@@ -508,8 +508,8 @@ mod tests {
     use super::ThreadRow;
     use chrono::DateTime;
     use chrono::Utc;
-    use codex_protocol::ThreadId;
-    use codex_protocol::openai_models::ReasoningEffort;
+    use crewon_protocol::ThreadId;
+    use crewon_protocol::openai_models::ReasoningEffort;
     use pretty_assertions::assert_eq;
     use std::path::PathBuf;
 
@@ -519,7 +519,7 @@ mod tests {
             rollout_path: "/tmp/rollout-123.jsonl".to_string(),
             created_at: 1_700_000_000,
             updated_at: 1_700_000_100,
-            source: "cli".to_string(),
+            source: "app-server".to_string(),
             thread_source: None,
             agent_nickname: None,
             agent_role: None,
@@ -549,7 +549,7 @@ mod tests {
             rollout_path: PathBuf::from("/tmp/rollout-123.jsonl"),
             created_at: DateTime::<Utc>::from_timestamp(1_700_000_000, 0).expect("timestamp"),
             updated_at: DateTime::<Utc>::from_timestamp(1_700_000_100, 0).expect("timestamp"),
-            source: "cli".to_string(),
+            source: "app-server".to_string(),
             thread_source: None,
             agent_nickname: None,
             agent_role: None,

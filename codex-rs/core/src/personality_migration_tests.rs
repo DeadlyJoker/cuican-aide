@@ -1,14 +1,14 @@
 use super::*;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::UserMessageEvent;
-use codex_rollout::ARCHIVED_SESSIONS_SUBDIR;
-use codex_rollout::SESSIONS_SUBDIR;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::UserMessageEvent;
+use crewon_rollout::ARCHIVED_SESSIONS_SUBDIR;
+use crewon_rollout::SESSIONS_SUBDIR;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use tokio::io::AsyncWriteExt;
@@ -49,8 +49,8 @@ async fn write_rollout_with_user_event(dir: &Path, thread_id: ThreadId) -> io::R
             timestamp: TEST_TIMESTAMP.to_string(),
             cwd: std::path::PathBuf::from("."),
             originator: "test_originator".to_string(),
-            cli_version: "test_version".to_string(),
-            source: SessionSource::Cli,
+            client_version: "test_version".to_string(),
+            source: SessionSource::LegacyCli,
             thread_source: None,
             agent_path: None,
             agent_nickname: None,
@@ -62,6 +62,7 @@ async fn write_rollout_with_user_event(dir: &Path, thread_id: ThreadId) -> io::R
             multi_agent_version: None,
         },
         git: None,
+        scene_runtime: None,
     };
     let meta_line = RolloutLine {
         timestamp: TEST_TIMESTAMP.to_string(),

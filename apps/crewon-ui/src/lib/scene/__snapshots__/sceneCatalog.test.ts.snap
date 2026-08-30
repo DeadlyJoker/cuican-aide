@@ -1,0 +1,47 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`sceneCatalog > keeps inactive Control Office definitions visible but disabled 1`] = `
+[
+  {
+    "detail": "本地 Agent，独立完成任务",
+    "kind": "crewon",
+    "label": "CrewON",
+    "strategy": "single",
+    "value": "crewon",
+  },
+  {
+    "detail": "已配置 3 名成员 · 团队协作暂不可用",
+    "disabled": true,
+    "group": "experts",
+    "kind": "team",
+    "label": "内容运营办公室",
+    "strategy": "team",
+    "value": "team:unavailable:office-version-1",
+  },
+]
+`;
+
+exports[`sceneCatalog > labels mixed Office and Experts execution targets as Teams 1`] = `
+{
+  "en": [
+    {
+      "id": "single",
+      "label": "Single agent",
+    },
+    {
+      "id": "experts",
+      "label": "Teams",
+    },
+  ],
+  "zh": [
+    {
+      "id": "single",
+      "label": "单智能体",
+    },
+    {
+      "id": "experts",
+      "label": "团队",
+    },
+  ],
+}
+`;

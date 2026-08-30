@@ -1,0 +1,27 @@
+{
+  "schemaVersion": "1.0.0",
+  "authorityId": "agent-platform-identity",
+  "binding": {
+    "sourceBindingId": "019f6f00-0000-7000-8000-000000000001",
+    "sourceRevision": 1,
+    "status": "active",
+    "localOwner": {
+      "actorId": "principal:6f7900eaed3218b4c15249cad129ed96bf1bde4d0524fa4b6fad1ba325e8ef3f",
+      "tenantId": "7",
+      "spaceId": "11"
+    },
+    "providerIdentity": {
+      "providerId": "agent-platform",
+      "subject": "user:42",
+      "tenantId": "7",
+      "spaceId": "11"
+    },
+    "createdAt": 1785000000,
+    "updatedAt": 1785000000,
+    "bindingDigest": "sha256:279b9e4d74cb0b5261d739fce9b697e50291a8fdd11de29d78340f39e83d48df"
+  },
+  "freshness": {
+    "issuedAt": 1785000060,
+    "freshUntil": 1785000120
+  }
+}

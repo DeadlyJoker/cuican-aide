@@ -1,0 +1,55 @@
+services:
+  runtime-release:
+    image: node:24-bookworm-slim
+    network_mode: host
+    env_file:
+      - /etc/crewon/control-demo.env
+    volumes:
+      - /opt/crewon-demo/current/runtime:/opt/crewon/runtime:ro
+      - /var/lib/crewon-control-demo:/var/lib/crewon-control-demo
+    command: ["node", "/opt/crewon/runtime/runtime-release.mjs"]
+
+  control-api:
+    image: node:24-bookworm-slim
+    container_name: crewon-control-api-ts
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - /etc/crewon/control-demo.env
+    volumes:
+      - /opt/crewon-demo/current/runtime:/opt/crewon/runtime:ro
+      - /var/lib/crewon-control-demo:/var/lib/crewon-control-demo
+    command: ["node", "/opt/crewon/runtime/control-api.mjs"]
+
+  runtime-worker:
+    image: node:24-bookworm-slim
+    container_name: crewon-runtime-worker-ts
+    network_mode: host
+    restart: unless-stopped
+    env_file:
+      - /etc/crewon/control-demo.env
+    volumes:
+      - /opt/crewon-demo/current/runtime:/opt/crewon/runtime:ro
+      - /var/lib/crewon-control-demo:/var/lib/crewon-control-demo
+    command: ["node", "/opt/crewon/runtime/runtime-worker-web.mjs"]
+
+  web:
+    # Keep the known-good nginx build for this CentOS 7 / Linux 3.10 host.
+    # Current nginx:alpine uses pwrite(2) for its PID file and cannot start here.
+    image: crewon-web:20260804T1442CST-ecd552c59-local
+    container_name: crewon-web
+    network_mode: host
+    restart: unless-stopped
+    depends_on:
+      - control-api
+      - runtime-worker
+    env_file:
+      - /etc/crewon/control-demo.env
+    environment:
+      NGINX_ENVSUBST_FILTER: ^CREWON_CONTROL_
+    volumes:
+      - /opt/crewon-demo/current/web:/usr/share/nginx/html:ro
+      - /opt/crewon-demo/current/nginx.conf.template:/etc/nginx/templates/default.conf.template:ro
+      - /etc/crewon/htpasswd:/etc/crewon/htpasswd:ro
+      - /etc/crewon/control-session.json:/etc/crewon/control-session.json:ro
+      - /etc/crewon/tls:/etc/crewon/tls:ro

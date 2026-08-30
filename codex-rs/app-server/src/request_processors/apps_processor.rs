@@ -67,7 +67,7 @@ impl AppsRequestProcessor {
         let auth = self.auth_manager.auth().await;
         if !config
             .features
-            .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend))
+            .apps_enabled_for_auth(auth.as_ref().is_some_and(CrewonAuth::uses_crewon_backend))
         {
             return Ok(Some(AppsListResponse {
                 data: Vec::new(),
@@ -76,7 +76,7 @@ impl AppsRequestProcessor {
         }
 
         if !self
-            .workspace_codex_plugins_enabled(&config, auth.as_ref())
+            .workspace_crewon_plugins_enabled(&config, auth.as_ref())
             .await
         {
             return Ok(Some(AppsListResponse {
@@ -127,7 +127,7 @@ impl AppsRequestProcessor {
                 .await;
         let should_retry = result
             .as_ref()
-            .is_ok_and(|(_, codex_apps_ready)| !codex_apps_ready);
+            .is_ok_and(|(_, crewon_apps_ready)| !crewon_apps_ready);
         outgoing
             .send_result(request_id, result.map(|(response, _)| response))
             .await;
@@ -144,7 +144,7 @@ impl AppsRequestProcessor {
             )
             .await
             {
-                warn!("failed to refresh app list after codex-apps readiness retry: {err:?}");
+                warn!("failed to refresh app list after crewon-apps readiness retry: {err:?}");
             }
         }
     }
@@ -203,7 +203,7 @@ impl AppsRequestProcessor {
         let app_list_deadline = tokio::time::Instant::now() + APP_LIST_LOAD_TIMEOUT;
         let mut accessible_loaded = false;
         let mut all_loaded = false;
-        let mut codex_apps_ready = true;
+        let mut crewon_apps_ready = true;
         let mut last_notified_apps = None;
 
         if accessible_connectors.is_some() || all_connectors.is_some() {
@@ -239,7 +239,7 @@ impl AppsRequestProcessor {
                 AppListLoadResult::Accessible(Ok(status)) => {
                     accessible_connectors = Some(status.connectors);
                     accessible_loaded = true;
-                    codex_apps_ready = status.codex_apps_ready;
+                    crewon_apps_ready = status.crewon_apps_ready;
                 }
                 AppListLoadResult::Accessible(Err(err)) => {
                     return Err(internal_error(err));
@@ -282,7 +282,7 @@ impl AppsRequestProcessor {
 
             if accessible_loaded && all_loaded {
                 let response = paginate_apps(merged.as_slice(), start, limit)?;
-                return Ok((response, codex_apps_ready));
+                return Ok((response, crewon_apps_ready));
             }
         }
     }
@@ -290,7 +290,7 @@ impl AppsRequestProcessor {
     async fn load_thread(
         &self,
         thread_id: &str,
-    ) -> Result<(ThreadId, Arc<CodexThread>), JSONRPCErrorError> {
+    ) -> Result<(ThreadId, Arc<CrewonThread>), JSONRPCErrorError> {
         let thread_id = ThreadId::from_string(thread_id)
             .map_err(|err| invalid_request(format!("invalid thread id: {err}")))?;
 
@@ -313,12 +313,12 @@ impl AppsRequestProcessor {
             .map_err(|err| internal_error(format!("failed to reload config: {err}")))
     }
 
-    async fn workspace_codex_plugins_enabled(
+    async fn workspace_crewon_plugins_enabled(
         &self,
         config: &Config,
-        auth: Option<&CodexAuth>,
+        auth: Option<&CrewonAuth>,
     ) -> bool {
-        match workspace_settings::codex_plugins_enabled_for_workspace(
+        match workspace_settings::crewon_plugins_enabled_for_workspace(
             config,
             auth,
             Some(&self.workspace_settings_cache),
@@ -328,7 +328,7 @@ impl AppsRequestProcessor {
             Ok(enabled) => enabled,
             Err(err) => {
                 warn!(
-                    "failed to fetch workspace Codex plugins setting; allowing Codex plugins: {err:#}"
+                    "failed to fetch workspace Crewon plugins setting; allowing Crewon plugins: {err:#}"
                 );
                 true
             }

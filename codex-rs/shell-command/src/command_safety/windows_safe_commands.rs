@@ -370,10 +370,10 @@ mod tests {
     #[test]
     fn rejects_git_subcommand_options_with_side_effects() {
         let results: Vec<(&str, bool)> = [
-            "git diff --output codex_poc.txt",
+            "git diff --output crewon_poc.txt",
             "git diff --ext-diff HEAD",
             "git log --textconv -1",
-            "git show --output=codex_poc.txt HEAD",
+            "git show --output=crewon_poc.txt HEAD",
             "git cat-file --filters HEAD:a.txt",
         ]
         .into_iter()
@@ -392,10 +392,10 @@ mod tests {
 
         assert_eq!(
             vec![
-                ("git diff --output codex_poc.txt", false),
+                ("git diff --output crewon_poc.txt", false),
                 ("git diff --ext-diff HEAD", false),
                 ("git log --textconv -1", false),
-                ("git show --output=codex_poc.txt HEAD", false),
+                ("git show --output=crewon_poc.txt HEAD", false),
                 ("git cat-file --filters HEAD:a.txt", false),
             ],
             results
@@ -408,7 +408,7 @@ mod tests {
             "powershell.exe",
             "-NoProfile",
             "-Command",
-            "git log --% HEAD --output=codex_poc.txt",
+            "git log --% HEAD --output=crewon_poc.txt",
         ])));
     }
 

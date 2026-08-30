@@ -3,12 +3,12 @@ use super::HookEventName;
 use super::HookHandlerType;
 use super::HookSource;
 use super::HookTrustStatus;
-use codex_protocol::protocol::SkillDependencies as CoreSkillDependencies;
-use codex_protocol::protocol::SkillInterface as CoreSkillInterface;
-use codex_protocol::protocol::SkillMetadata as CoreSkillMetadata;
-use codex_protocol::protocol::SkillScope as CoreSkillScope;
-use codex_protocol::protocol::SkillToolDependency as CoreSkillToolDependency;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::protocol::SkillDependencies as CoreSkillDependencies;
+use crewon_protocol::protocol::SkillInterface as CoreSkillInterface;
+use crewon_protocol::protocol::SkillMetadata as CoreSkillMetadata;
+use crewon_protocol::protocol::SkillScope as CoreSkillScope;
+use crewon_protocol::protocol::SkillToolDependency as CoreSkillToolDependency;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -33,6 +33,24 @@ pub struct SkillsListParams {
 #[ts(export_to = "v2/")]
 pub struct SkillsListResponse {
     pub data: Vec<SkillsListEntry>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct SkillsCreateParams {
+    pub cwd: AbsolutePathBuf,
+    pub name: String,
+    pub description: String,
+    pub body: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
+#[serde(rename_all = "camelCase")]
+#[ts(export_to = "v2/")]
+pub struct SkillsCreateResponse {
+    pub root: AbsolutePathBuf,
+    pub skill: SkillMetadata,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
@@ -579,7 +597,7 @@ pub enum PluginAuthPolicy {
 #[ts(export_to = "v2/")]
 pub enum PluginAvailability {
     /// Plugin-service currently sends `"ENABLED"` for available remote plugins.
-    /// Codex app-server exposes `"AVAILABLE"` in its API; the alias keeps
+    /// Crewon app-server exposes `"AVAILABLE"` in its API; the alias keeps
     /// decoding compatible with that upstream response.
     #[serde(rename = "AVAILABLE", alias = "ENABLED")]
     #[ts(rename = "AVAILABLE")]

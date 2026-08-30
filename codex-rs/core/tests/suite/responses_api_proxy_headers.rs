@@ -3,12 +3,6 @@
 
 use anyhow::Result;
 use anyhow::anyhow;
-use codex_features::Feature;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ResponseMock;
 use core_test_support::responses::ResponsesRequest;
 use core_test_support::responses::ev_assistant_message;
@@ -19,10 +13,16 @@ use core_test_support::responses::mount_sse_once_match;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
+use crewon_features::Feature;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::time::Duration;
@@ -85,7 +85,7 @@ async fn responses_api_parent_and_subagent_requests_include_identity_headers() -
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config
             .features
             .disable(Feature::EnableRequestCompression)
@@ -140,12 +140,12 @@ async fn responses_api_parent_and_subagent_requests_include_identity_headers() -
     Ok(())
 }
 
-async fn submit_turn_with_timeout(test: &TestCodex, prompt: &str) -> Result<()> {
+async fn submit_turn_with_timeout(test: &TestCrewon, prompt: &str) -> Result<()> {
     let session_model = test.session_configured.model.clone();
     let cwd = test.config.cwd.clone();
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(PermissionProfile::workspace_write(), cwd.as_path());
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: prompt.into(),
@@ -154,14 +154,14 @@ async fn submit_turn_with_timeout(test: &TestCodex, prompt: &str) -> Result<()> 
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(cwd)),
                 approval_policy: Some(AskForApproval::OnRequest),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: session_model,
                         reasoning_effort: None,
                         developer_instructions: None,
@@ -213,7 +213,7 @@ where
 }
 
 async fn wait_for_event_result<F>(
-    test: &TestCodex,
+    test: &TestCrewon,
     stage: &str,
     mut predicate: F,
 ) -> Result<EventMsg>
@@ -223,7 +223,7 @@ where
     let mut seen_events = Vec::new();
     tokio::time::timeout(TURN_TIMEOUT, async {
         loop {
-            let event = test.codex.next_event().await?;
+            let event = test.crewon.next_event().await?;
             seen_events.push(event_summary(&event.msg));
             if predicate(&event.msg) {
                 return Ok::<EventMsg, anyhow::Error>(event.msg);

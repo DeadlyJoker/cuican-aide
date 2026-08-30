@@ -61,38 +61,12 @@
       },
       "type": "object"
     },
-    "AltScreenMode": {
-      "description": "Controls whether the TUI uses the terminal's alternate screen buffer.\n\n- `auto` (default): Use alternate screen mode. - `always`: Always use alternate screen mode. - `never`: Never use alternate screen mode. Runs in inline mode, preserving scrollback.\n\nThe CLI flag `--no-alt-screen` can override this setting at runtime.",
-      "oneOf": [
-        {
-          "description": "Use alternate screen mode.",
-          "enum": [
-            "auto"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "Always use alternate screen mode.",
-          "enum": [
-            "always"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "Never use alternate screen (inline mode only).",
-          "enum": [
-            "never"
-          ],
-          "type": "string"
-        }
-      ]
-    },
     "AnalyticsConfigToml": {
       "additionalProperties": false,
       "description": "Analytics settings loaded from config.toml. Fields are optional so we can apply defaults.",
       "properties": {
         "enabled": {
-          "description": "When `false`, disables analytics across Codex product surfaces in this profile.",
+          "description": "When `false`, disables analytics across Crewon product surfaces in this profile.",
           "type": "boolean"
         }
       },
@@ -128,7 +102,7 @@
         },
         "enabled": {
           "default": true,
-          "description": "When `false`, Codex does not surface this app.",
+          "description": "When `false`, Crewon does not surface this app.",
           "type": "boolean"
         },
         "open_world_enabled": {
@@ -227,7 +201,7 @@
       "type": "object"
     },
     "AskForApproval": {
-      "description": "Determines the conditions under which the user is consulted to approve running the command proposed by Codex.",
+      "description": "Determines the conditions under which the user is consulted to approve running the command proposed by Crewon.",
       "oneOf": [
         {
           "description": "Under this policy, only \"known safe\" commands—as determined by `is_safe_command()`—that **only read files** are auto‑approved. Everything else will ask the user to approve.",
@@ -273,10 +247,10 @@
       ]
     },
     "AuthCredentialsStoreMode": {
-      "description": "Determine where Codex should store CLI auth credentials.",
+      "description": "Determine where Crewon should store auth credentials.",
       "oneOf": [
         {
-          "description": "Persist credentials in CODEX_HOME/auth.json.",
+          "description": "Persist credentials in the legacy `CODEX_HOME/auth.json` file.",
           "enum": [
             "file"
           ],
@@ -290,7 +264,7 @@
           "type": "string"
         },
         {
-          "description": "Use keyring when available; otherwise, fall back to a file in CODEX_HOME.",
+          "description": "Use keyring when available; otherwise, fall back to the legacy CODEX_HOME file.",
           "enum": [
             "auto"
           ],
@@ -339,6 +313,56 @@
         "enabled": {
           "default": true,
           "type": "boolean"
+        }
+      },
+      "type": "object"
+    },
+    "Client": {
+      "additionalProperties": false,
+      "description": "Collection of settings that are specific to interactive clients.",
+      "properties": {
+        "model_availability_nux": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/ModelAvailabilityNuxConfig"
+            }
+          ],
+          "default": {},
+          "description": "Startup availability NUX state persisted by interactive clients."
+        },
+        "notification_condition": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/NotificationCondition"
+            }
+          ],
+          "default": "unfocused",
+          "description": "Controls whether client notifications are delivered only when the active surface is unfocused or regardless of focus. Defaults to `unfocused`."
+        },
+        "notification_method": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/NotificationMethod"
+            }
+          ],
+          "default": "auto",
+          "description": "Notification method to use for terminal notifications. Defaults to `auto`."
+        },
+        "notifications": {
+          "allOf": [
+            {
+              "$ref": "#/definitions/Notifications"
+            }
+          ],
+          "default": true,
+          "description": "Enable desktop notifications from interactive clients. Defaults to `true`."
+        },
+        "terminal_resize_reflow_max_rows": {
+          "default": null,
+          "description": "Trim terminal resize-reflow replay to the most recent rendered terminal rows when the transcript exceeds this cap. Omit to use Crewon's terminal-specific default. Set to `0` to keep all rendered rows.",
+          "format": "uint",
+          "minimum": 0.0,
+          "type": "integer"
         }
       },
       "type": "object"
@@ -429,6 +453,9 @@
             "chronicle": {
               "type": "boolean"
             },
+            "client_app_server": {
+              "type": "boolean"
+            },
             "code_mode": {
               "$ref": "#/definitions/FeatureToml_for_CodeModeConfigToml"
             },
@@ -484,6 +511,9 @@
               "type": "boolean"
             },
             "fast_mode": {
+              "type": "boolean"
+            },
+            "git_commit": {
               "type": "boolean"
             },
             "goals": {
@@ -639,9 +669,6 @@
             "tool_suggest": {
               "type": "boolean"
             },
-            "tui_app_server": {
-              "type": "boolean"
-            },
             "unavailable_dummy_tools": {
               "type": "boolean"
             },
@@ -741,15 +768,6 @@
         "tools": {
           "$ref": "#/definitions/ToolsToml"
         },
-        "tui": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/ProfileTui"
-            }
-          ],
-          "default": null,
-          "description": "TUI settings scoped to this profile."
-        },
         "web_search": {
           "$ref": "#/definitions/WebSearchMode"
         },
@@ -768,7 +786,7 @@
       "additionalProperties": false,
       "properties": {
         "allow_codex_version_mismatch": {
-          "description": "Allow replaying a lock generated by a different Codex version.",
+          "description": "Allow replaying a lock generated by a different Crewon version.",
           "type": "boolean"
         },
         "export_dir": {
@@ -777,7 +795,7 @@
               "$ref": "#/definitions/AbsolutePathBuf"
             }
           ],
-          "description": "Directory where Codex writes effective session config lock files."
+          "description": "Directory where Crewon writes effective session config lock files."
         },
         "load_path": {
           "allOf": [
@@ -815,7 +833,7 @@
     },
     "ExternalConfigMigrationPrompts": {
       "additionalProperties": false,
-      "description": "Settings for notices we display to users via the tui and app-server clients (primarily the Codex IDE extension). NOTE: these are different from notifications - notices are warnings, NUX screens, acknowledgements, etc.",
+      "description": "Settings for notices we display to users via interactive clients (primarily the Crewon IDE extension). NOTE: these are different from notifications - notices are warnings, NUX screens, acknowledgements, etc.",
       "properties": {
         "home": {
           "description": "Tracks whether home-level external config migration prompts are hidden.",
@@ -880,7 +898,7 @@
       "additionalProperties": false,
       "properties": {
         "enabled": {
-          "description": "When `false`, disables the feedback flow across Codex product surfaces.",
+          "description": "When `false`, disables the feedback flow across Crewon product surfaces.",
           "type": "boolean"
         }
       },
@@ -1004,7 +1022,7 @@
     },
     "History": {
       "additionalProperties": false,
-      "description": "Settings that govern if and what will be written to `~/.codex/history.jsonl`.",
+      "description": "Settings that govern if and what will be written to the legacy history file.",
       "properties": {
         "max_bytes": {
           "default": null,
@@ -1203,31 +1221,17 @@
       },
       "type": "object"
     },
-    "KeybindingsSpec": {
-      "anyOf": [
-        {
-          "type": "string"
-        },
-        {
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        }
-      ],
-      "description": "One action binding value in config.\n\nThis accepts either:\n\n1. A single key spec string (`\"ctrl-a\"`). 2. A list of key spec strings (`[\"ctrl-a\", \"alt-a\"]`).\n\nAn empty list explicitly unbinds the action in that scope. Because an explicit empty list is still a configured value, runtime resolution must not fall through to global or built-in defaults for that action."
-    },
     "MarketplaceConfig": {
       "additionalProperties": false,
       "properties": {
         "last_revision": {
           "default": null,
-          "description": "Git revision Codex last successfully activated for this marketplace.",
+          "description": "Git revision Crewon last successfully activated for this marketplace.",
           "type": "string"
         },
         "last_updated": {
           "default": null,
-          "description": "Last time Codex successfully added or refreshed this marketplace.",
+          "description": "Last time Crewon successfully added or refreshed this marketplace.",
           "type": "string"
         },
         "ref": {
@@ -1307,7 +1311,7 @@
     },
     "McpServerOAuthConfig": {
       "additionalProperties": false,
-      "description": "OAuth client settings used when Codex launches an MCP OAuth flow.",
+      "description": "OAuth client settings used when Crewon launches an MCP OAuth flow.",
       "properties": {
         "client_id": {
           "description": "Explicit OAuth client identifier to present during authorization and token exchange.",
@@ -1380,7 +1384,7 @@
           "type": "integer"
         },
         "min_rate_limit_remaining_percent": {
-          "description": "Minimum remaining percentage required in Codex rate-limit windows before memory startup runs.",
+          "description": "Minimum remaining percentage required in Crewon rate-limit windows before memory startup runs.",
           "format": "int64",
           "maximum": 100.0,
           "minimum": 0.0,
@@ -1486,7 +1490,7 @@
           "description": "AWS SigV4 auth configuration for this provider."
         },
         "base_url": {
-          "description": "Base URL for the provider's OpenAI-compatible API.",
+          "description": "Base URL for the provider's Responses-compatible API.",
           "type": "string"
         },
         "env_http_headers": {
@@ -1535,7 +1539,7 @@
         },
         "requires_openai_auth": {
           "default": false,
-          "description": "Does this provider require an OpenAI API Key or ChatGPT login token? If true, user is presented with login screen on first run, and login preference and token/key are stored in auth.json. If false (which is the default), login screen is skipped, and API key (if needed) comes from the \"env_key\" environment variable.",
+          "description": "Legacy compatibility flag for providers that use the built-in OpenAI API key or ChatGPT login flow. If true, the user is presented with the built-in login flow on first run, and login preference and token/key are stored in auth.json. If false (which is the default), that login flow is skipped, and API key material (if needed) comes from provider-specific auth such as \"env_key\", \"auth\", or \"aws\".",
           "type": "boolean"
         },
         "stream_idle_timeout_ms": {
@@ -1900,7 +1904,7 @@
           "description": "Tracks scopes where external config migration prompts should be suppressed."
         },
         "fast_default_opt_out": {
-          "description": "Tracks whether the user opted out of Codex-managed fast defaults.",
+          "description": "Tracks whether the user opted out of Crewon-managed fast defaults.",
           "type": "boolean"
         },
         "hide_full_access_warning": {
@@ -1937,14 +1941,14 @@
     "NotificationCondition": {
       "oneOf": [
         {
-          "description": "Emit TUI notifications only while the terminal is unfocused.",
+          "description": "Emit client notifications only while the active surface is unfocused.",
           "enum": [
             "unfocused"
           ],
           "type": "string"
         },
         {
-          "description": "Emit TUI notifications regardless of terminal focus.",
+          "description": "Emit client notifications regardless of focus.",
           "enum": [
             "always"
           ],
@@ -1974,17 +1978,17 @@
       ]
     },
     "OAuthCredentialsStoreMode": {
-      "description": "Determine where Codex should store and read MCP credentials.",
+      "description": "Determine where Crewon should store and read MCP credentials.",
       "oneOf": [
         {
-          "description": "`Keyring` when available; otherwise, `File`. Credentials stored in the keyring will only be readable by Codex unless the user explicitly grants access via OS-level keyring access.",
+          "description": "`Keyring` when available; otherwise, `File`. Credentials stored in the keyring will only be readable by Crewon unless the user explicitly grants access via OS-level keyring access.",
           "enum": [
             "auto"
           ],
           "type": "string"
         },
         {
-          "description": "CODEX_HOME/.credentials.json This file will be readable to Codex and other applications running as the same user.",
+          "description": "Legacy `CODEX_HOME/.credentials.json`. This file will be readable to Crewon and other applications running as the same user.",
           "enum": [
             "file"
           ],
@@ -2246,7 +2250,7 @@
         },
         "enabled": {
           "default": true,
-          "description": "When `false`, Codex skips initializing this plugin MCP server.",
+          "description": "When `false`, Crewon skips initializing this plugin MCP server.",
           "type": "boolean"
         },
         "enabled_tools": {
@@ -2262,22 +2266,6 @@
           },
           "description": "Per-tool approval settings keyed by tool name.",
           "type": "object"
-        }
-      },
-      "type": "object"
-    },
-    "ProfileTui": {
-      "additionalProperties": false,
-      "description": "TUI settings supported inside a named profile.",
-      "properties": {
-        "session_picker_view": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/SessionPickerViewMode"
-            }
-          ],
-          "default": null,
-          "description": "Preferred layout for resume/fork session picker results."
         }
       },
       "type": "object"
@@ -2563,14 +2551,6 @@
       },
       "type": "object"
     },
-    "SessionPickerViewMode": {
-      "description": "Preferred layout for the resume/fork session picker.",
-      "enum": [
-        "comfortable",
-        "dense"
-      ],
-      "type": "string"
-    },
     "ShellEnvironmentPolicyInherit": {
       "oneOf": [
         {
@@ -2777,1469 +2757,6 @@
       ],
       "type": "string"
     },
-    "Tui": {
-      "additionalProperties": false,
-      "description": "Collection of settings that are specific to the TUI.",
-      "properties": {
-        "alternate_screen": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/AltScreenMode"
-            }
-          ],
-          "default": "auto",
-          "description": "Controls whether the TUI uses the terminal's alternate screen buffer.\n\n- `auto` (default): Use alternate screen. - `always`: Always use alternate screen. - `never`: Never use alternate screen (inline mode only, preserves scrollback)."
-        },
-        "animations": {
-          "default": true,
-          "description": "Enable animations (welcome screen, shimmer effects, spinners). Defaults to `true`.",
-          "type": "boolean"
-        },
-        "keymap": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TuiKeymap"
-            }
-          ],
-          "default": {
-            "approval": {
-              "approve": null,
-              "approve_for_prefix": null,
-              "approve_for_session": null,
-              "cancel": null,
-              "decline": null,
-              "deny": null,
-              "open_fullscreen": null,
-              "open_thread": null
-            },
-            "chat": {
-              "decrease_reasoning_effort": null,
-              "edit_queued_message": null,
-              "increase_reasoning_effort": null,
-              "interrupt_turn": null
-            },
-            "composer": {
-              "history_search_next": null,
-              "history_search_previous": null,
-              "queue": null,
-              "submit": null,
-              "toggle_shortcuts": null
-            },
-            "editor": {
-              "delete_backward": null,
-              "delete_backward_word": null,
-              "delete_forward": null,
-              "delete_forward_word": null,
-              "insert_newline": null,
-              "kill_line_end": null,
-              "kill_line_start": null,
-              "kill_whole_line": null,
-              "move_down": null,
-              "move_left": null,
-              "move_line_end": null,
-              "move_line_start": null,
-              "move_right": null,
-              "move_up": null,
-              "move_word_left": null,
-              "move_word_right": null,
-              "yank": null
-            },
-            "global": {
-              "clear_terminal": null,
-              "copy": null,
-              "open_external_editor": null,
-              "open_transcript": null,
-              "queue": null,
-              "submit": null,
-              "toggle_fast_mode": null,
-              "toggle_raw_output": null,
-              "toggle_shortcuts": null,
-              "toggle_vim_mode": null
-            },
-            "list": {
-              "accept": null,
-              "cancel": null,
-              "jump_bottom": null,
-              "jump_top": null,
-              "move_down": null,
-              "move_left": null,
-              "move_right": null,
-              "move_up": null,
-              "page_down": null,
-              "page_up": null
-            },
-            "pager": {
-              "close": null,
-              "close_transcript": null,
-              "half_page_down": null,
-              "half_page_up": null,
-              "jump_bottom": null,
-              "jump_top": null,
-              "page_down": null,
-              "page_up": null,
-              "scroll_down": null,
-              "scroll_up": null
-            },
-            "vim_normal": {
-              "append_after_cursor": null,
-              "append_line_end": null,
-              "cancel_operator": null,
-              "change_to_line_end": null,
-              "delete_char": null,
-              "delete_to_line_end": null,
-              "enter_insert": null,
-              "insert_line_start": null,
-              "move_down": null,
-              "move_left": null,
-              "move_line_end": null,
-              "move_line_start": null,
-              "move_right": null,
-              "move_up": null,
-              "move_word_backward": null,
-              "move_word_end": null,
-              "move_word_forward": null,
-              "open_line_above": null,
-              "open_line_below": null,
-              "paste_after": null,
-              "start_change_operator": null,
-              "start_delete_operator": null,
-              "start_yank_operator": null,
-              "substitute_char": null,
-              "yank_line": null
-            },
-            "vim_operator": {
-              "cancel": null,
-              "delete_line": null,
-              "motion_down": null,
-              "motion_left": null,
-              "motion_line_end": null,
-              "motion_line_start": null,
-              "motion_right": null,
-              "motion_up": null,
-              "motion_word_backward": null,
-              "motion_word_end": null,
-              "motion_word_forward": null,
-              "select_around_text_object": null,
-              "select_inner_text_object": null,
-              "yank_line": null
-            },
-            "vim_text_object": {
-              "backtick": null,
-              "big_word": null,
-              "braces": null,
-              "brackets": null,
-              "cancel": null,
-              "double_quote": null,
-              "parentheses": null,
-              "single_quote": null,
-              "word": null
-            }
-          },
-          "description": "Keybinding overrides for the TUI.\n\nThis supports rebinding selected actions globally and by context. Context bindings take precedence over `global` bindings."
-        },
-        "model_availability_nux": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/ModelAvailabilityNuxConfig"
-            }
-          ],
-          "default": {},
-          "description": "Startup tooltip availability NUX state persisted by the TUI."
-        },
-        "notification_condition": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/NotificationCondition"
-            }
-          ],
-          "default": "unfocused",
-          "description": "Controls whether TUI notifications are delivered only when the terminal is unfocused or regardless of focus. Defaults to `unfocused`."
-        },
-        "notification_method": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/NotificationMethod"
-            }
-          ],
-          "default": "auto",
-          "description": "Notification method to use for terminal notifications. Defaults to `auto`."
-        },
-        "notifications": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/Notifications"
-            }
-          ],
-          "default": true,
-          "description": "Enable desktop notifications from the TUI. Defaults to `true`."
-        },
-        "pet": {
-          "default": null,
-          "description": "Pet id to preselect in the terminal pet picker.\n\nCustom pet ids resolve against CODEX_HOME/pets/<pet-id>/pet.json.",
-          "type": "string"
-        },
-        "pet_anchor": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TuiPetAnchor"
-            }
-          ],
-          "default": "composer",
-          "description": "Where the terminal pet should anchor vertically.\n\nDefaults to `composer`, which follows the current TUI composer viewport."
-        },
-        "raw_output_mode": {
-          "default": false,
-          "description": "Start the TUI in raw scrollback mode for copy-friendly transcript output. Defaults to `false`.",
-          "type": "boolean"
-        },
-        "session_picker_view": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/SessionPickerViewMode"
-            }
-          ],
-          "default": null,
-          "description": "Preferred layout for resume/fork session picker results."
-        },
-        "show_tooltips": {
-          "default": true,
-          "description": "Show startup tooltips in the TUI welcome screen. Defaults to `true`.",
-          "type": "boolean"
-        },
-        "status_line": {
-          "default": null,
-          "description": "Ordered list of status line item identifiers.\n\nWhen set, the TUI renders the selected items as the status line. When unset, the TUI defaults to: `model-with-reasoning` and `current-dir`.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "status_line_use_colors": {
-          "default": true,
-          "description": "Color status line items with colors derived from the active syntax theme. Defaults to `true`.",
-          "type": "boolean"
-        },
-        "terminal_resize_reflow_max_rows": {
-          "default": null,
-          "description": "Trim terminal resize-reflow replay to the most recent rendered terminal rows when the transcript exceeds this cap. Omit to use Codex's terminal-specific default. Set to `0` to keep all rendered rows.",
-          "format": "uint",
-          "minimum": 0.0,
-          "type": "integer"
-        },
-        "terminal_title": {
-          "default": null,
-          "description": "Ordered list of terminal title item identifiers.\n\nWhen set, the TUI renders the selected items into the terminal window/tab title. When unset, the TUI defaults to: `activity` and `project`. The `activity` item spins while working and shows an action-required message when blocked on the user.",
-          "items": {
-            "type": "string"
-          },
-          "type": "array"
-        },
-        "theme": {
-          "default": null,
-          "description": "Syntax highlighting theme name (kebab-case).\n\nWhen set, overrides automatic light/dark theme detection. Use `/theme` in the TUI or see `$CODEX_HOME/themes` for custom themes.",
-          "type": "string"
-        },
-        "vim_mode_default": {
-          "default": false,
-          "description": "Start the composer in Vim mode (`Normal`) by default. Defaults to `false`.",
-          "type": "boolean"
-        }
-      },
-      "type": "object"
-    },
-    "TuiApprovalKeymap": {
-      "additionalProperties": false,
-      "description": "Approval overlay keybindings.",
-      "properties": {
-        "approve": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Approve the primary option."
-        },
-        "approve_for_prefix": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Approve with exec-policy prefix when that option exists."
-        },
-        "approve_for_session": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Approve for session when that option exists."
-        },
-        "cancel": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Cancel an elicitation request."
-        },
-        "decline": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Decline and provide corrective guidance."
-        },
-        "deny": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Deny without providing follow-up guidance."
-        },
-        "open_fullscreen": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Open the full-screen approval details view."
-        },
-        "open_thread": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Open the thread that requested approval when shown from another thread."
-        }
-      },
-      "type": "object"
-    },
-    "TuiChatKeymap": {
-      "additionalProperties": false,
-      "description": "Chat context keybindings.",
-      "properties": {
-        "decrease_reasoning_effort": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Decrease the active reasoning effort."
-        },
-        "edit_queued_message": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Edit the most recently queued message."
-        },
-        "increase_reasoning_effort": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Increase the active reasoning effort."
-        },
-        "interrupt_turn": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Interrupt the active turn."
-        }
-      },
-      "type": "object"
-    },
-    "TuiComposerKeymap": {
-      "additionalProperties": false,
-      "description": "Composer context keybindings. These override corresponding `global` actions.",
-      "properties": {
-        "history_search_next": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move to the next match in reverse history search."
-        },
-        "history_search_previous": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Open reverse history search or move to the previous match."
-        },
-        "queue": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Queue the current composer draft while a task is running."
-        },
-        "submit": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Submit the current composer draft."
-        },
-        "toggle_shortcuts": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Toggle the composer shortcut overlay."
-        }
-      },
-      "type": "object"
-    },
-    "TuiEditorKeymap": {
-      "additionalProperties": false,
-      "description": "Editor context keybindings for text editing inside text areas.",
-      "properties": {
-        "delete_backward": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Delete one grapheme to the left."
-        },
-        "delete_backward_word": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Delete the previous word."
-        },
-        "delete_forward": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Delete one grapheme to the right."
-        },
-        "delete_forward_word": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Delete the next word."
-        },
-        "insert_newline": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Insert a newline in the editor."
-        },
-        "kill_line_end": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Kill text from cursor to line end."
-        },
-        "kill_line_start": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Kill text from cursor to line start."
-        },
-        "kill_whole_line": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Kill the current line."
-        },
-        "move_down": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor down one visual line."
-        },
-        "move_left": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor left by one grapheme."
-        },
-        "move_line_end": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor to end of line."
-        },
-        "move_line_start": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor to beginning of line."
-        },
-        "move_right": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor right by one grapheme."
-        },
-        "move_up": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor up one visual line."
-        },
-        "move_word_left": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor to beginning of previous word."
-        },
-        "move_word_right": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor to end of next word."
-        },
-        "yank": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Yank the kill buffer."
-        }
-      },
-      "type": "object"
-    },
-    "TuiGlobalKeymap": {
-      "additionalProperties": false,
-      "description": "Global keybindings. These are used when a context does not define an override.",
-      "properties": {
-        "clear_terminal": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Clear the terminal UI."
-        },
-        "copy": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Copy the last agent response to the clipboard."
-        },
-        "open_external_editor": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Open the external editor for the current draft."
-        },
-        "open_transcript": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Open the transcript overlay."
-        },
-        "queue": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Queue the current composer draft while a task is running."
-        },
-        "submit": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Submit the current composer draft."
-        },
-        "toggle_fast_mode": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Toggle Fast mode."
-        },
-        "toggle_raw_output": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Toggle raw scrollback mode for copy-friendly transcript selection."
-        },
-        "toggle_shortcuts": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Toggle the composer shortcut overlay."
-        },
-        "toggle_vim_mode": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Toggle Vim mode for the composer input."
-        }
-      },
-      "type": "object"
-    },
-    "TuiKeymap": {
-      "additionalProperties": false,
-      "description": "Raw keymap configuration from `[tui.keymap]`.\n\nEach context contains action-level overrides. Missing actions inherit from built-in defaults, and selected chat/composer actions can fall back through `global` during runtime resolution.\n\nThis type is intentionally a persistence shape, not the structure used by input handlers. Runtime consumers should resolve it into `RuntimeKeymap` first so precedence, empty-list unbinding, and duplicate-key validation are applied consistently.",
-      "properties": {
-        "approval": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TuiApprovalKeymap"
-            }
-          ],
-          "default": {
-            "approve": null,
-            "approve_for_prefix": null,
-            "approve_for_session": null,
-            "cancel": null,
-            "decline": null,
-            "deny": null,
-            "open_fullscreen": null,
-            "open_thread": null
-          }
-        },
-        "chat": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TuiChatKeymap"
-            }
-          ],
-          "default": {
-            "decrease_reasoning_effort": null,
-            "edit_queued_message": null,
-            "increase_reasoning_effort": null,
-            "interrupt_turn": null
-          }
-        },
-        "composer": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TuiComposerKeymap"
-            }
-          ],
-          "default": {
-            "history_search_next": null,
-            "history_search_previous": null,
-            "queue": null,
-            "submit": null,
-            "toggle_shortcuts": null
-          }
-        },
-        "editor": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TuiEditorKeymap"
-            }
-          ],
-          "default": {
-            "delete_backward": null,
-            "delete_backward_word": null,
-            "delete_forward": null,
-            "delete_forward_word": null,
-            "insert_newline": null,
-            "kill_line_end": null,
-            "kill_line_start": null,
-            "kill_whole_line": null,
-            "move_down": null,
-            "move_left": null,
-            "move_line_end": null,
-            "move_line_start": null,
-            "move_right": null,
-            "move_up": null,
-            "move_word_left": null,
-            "move_word_right": null,
-            "yank": null
-          }
-        },
-        "global": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TuiGlobalKeymap"
-            }
-          ],
-          "default": {
-            "clear_terminal": null,
-            "copy": null,
-            "open_external_editor": null,
-            "open_transcript": null,
-            "queue": null,
-            "submit": null,
-            "toggle_fast_mode": null,
-            "toggle_raw_output": null,
-            "toggle_shortcuts": null,
-            "toggle_vim_mode": null
-          }
-        },
-        "list": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TuiListKeymap"
-            }
-          ],
-          "default": {
-            "accept": null,
-            "cancel": null,
-            "jump_bottom": null,
-            "jump_top": null,
-            "move_down": null,
-            "move_left": null,
-            "move_right": null,
-            "move_up": null,
-            "page_down": null,
-            "page_up": null
-          }
-        },
-        "pager": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TuiPagerKeymap"
-            }
-          ],
-          "default": {
-            "close": null,
-            "close_transcript": null,
-            "half_page_down": null,
-            "half_page_up": null,
-            "jump_bottom": null,
-            "jump_top": null,
-            "page_down": null,
-            "page_up": null,
-            "scroll_down": null,
-            "scroll_up": null
-          }
-        },
-        "vim_normal": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TuiVimNormalKeymap"
-            }
-          ],
-          "default": {
-            "append_after_cursor": null,
-            "append_line_end": null,
-            "cancel_operator": null,
-            "change_to_line_end": null,
-            "delete_char": null,
-            "delete_to_line_end": null,
-            "enter_insert": null,
-            "insert_line_start": null,
-            "move_down": null,
-            "move_left": null,
-            "move_line_end": null,
-            "move_line_start": null,
-            "move_right": null,
-            "move_up": null,
-            "move_word_backward": null,
-            "move_word_end": null,
-            "move_word_forward": null,
-            "open_line_above": null,
-            "open_line_below": null,
-            "paste_after": null,
-            "start_change_operator": null,
-            "start_delete_operator": null,
-            "start_yank_operator": null,
-            "substitute_char": null,
-            "yank_line": null
-          }
-        },
-        "vim_operator": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TuiVimOperatorKeymap"
-            }
-          ],
-          "default": {
-            "cancel": null,
-            "delete_line": null,
-            "motion_down": null,
-            "motion_left": null,
-            "motion_line_end": null,
-            "motion_line_start": null,
-            "motion_right": null,
-            "motion_up": null,
-            "motion_word_backward": null,
-            "motion_word_end": null,
-            "motion_word_forward": null,
-            "select_around_text_object": null,
-            "select_inner_text_object": null,
-            "yank_line": null
-          }
-        },
-        "vim_text_object": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/TuiVimTextObjectKeymap"
-            }
-          ],
-          "default": {
-            "backtick": null,
-            "big_word": null,
-            "braces": null,
-            "brackets": null,
-            "cancel": null,
-            "double_quote": null,
-            "parentheses": null,
-            "single_quote": null,
-            "word": null
-          }
-        }
-      },
-      "type": "object"
-    },
-    "TuiListKeymap": {
-      "additionalProperties": false,
-      "description": "List selection context keybindings for popup-style selectable lists.",
-      "properties": {
-        "accept": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Accept current selection."
-        },
-        "cancel": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Cancel and close selection view."
-        },
-        "jump_bottom": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Jump to the last list item."
-        },
-        "jump_top": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Jump to the first list item."
-        },
-        "move_down": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move list selection down."
-        },
-        "move_left": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move horizontally left in list pickers that support horizontal actions."
-        },
-        "move_right": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move horizontally right in list pickers that support horizontal actions."
-        },
-        "move_up": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move list selection up."
-        },
-        "page_down": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move list selection down by one page."
-        },
-        "page_up": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move list selection up by one page."
-        }
-      },
-      "type": "object"
-    },
-    "TuiPagerKeymap": {
-      "additionalProperties": false,
-      "description": "Pager context keybindings for transcript and static overlays.",
-      "properties": {
-        "close": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Close the pager overlay."
-        },
-        "close_transcript": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Close the transcript overlay via its dedicated toggle key."
-        },
-        "half_page_down": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Scroll down by half a page."
-        },
-        "half_page_up": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Scroll up by half a page."
-        },
-        "jump_bottom": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Jump to the end."
-        },
-        "jump_top": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Jump to the beginning."
-        },
-        "page_down": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Scroll down by one page."
-        },
-        "page_up": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Scroll up by one page."
-        },
-        "scroll_down": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Scroll down by one row."
-        },
-        "scroll_up": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Scroll up by one row."
-        }
-      },
-      "type": "object"
-    },
-    "TuiPetAnchor": {
-      "oneOf": [
-        {
-          "description": "Anchor the pet to the bottom of the current TUI composer viewport.",
-          "enum": [
-            "composer"
-          ],
-          "type": "string"
-        },
-        {
-          "description": "Anchor the pet to the physical bottom of the terminal screen.",
-          "enum": [
-            "screen-bottom"
-          ],
-          "type": "string"
-        }
-      ]
-    },
-    "TuiVimNormalKeymap": {
-      "additionalProperties": false,
-      "description": "Vim normal-mode keybindings for modal editing inside text areas.\n\nActions that use uppercase letters (like `A` for append-line-end) should be specified as `shift-a` in config; the runtime matcher handles cross-terminal shift-reporting differences automatically.",
-      "properties": {
-        "append_after_cursor": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Enter insert mode after cursor (`a`)."
-        },
-        "append_line_end": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Enter insert mode at end of line (`A`)."
-        },
-        "cancel_operator": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Cancel a pending operator and return to normal mode."
-        },
-        "change_to_line_end": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Change from cursor to end of line and enter insert mode (`C`)."
-        },
-        "delete_char": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Delete character under cursor (`x`)."
-        },
-        "delete_to_line_end": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Delete from cursor to end of line (`D`)."
-        },
-        "enter_insert": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Enter insert mode at cursor (`i`)."
-        },
-        "insert_line_start": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Enter insert mode at first non-blank of line (`I`)."
-        },
-        "move_down": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor down (`j`), or recall newer composer history at history boundaries."
-        },
-        "move_left": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor left (`h`)."
-        },
-        "move_line_end": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor to end of line (`$`)."
-        },
-        "move_line_start": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor to start of line (`0`)."
-        },
-        "move_right": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor right (`l`)."
-        },
-        "move_up": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor up (`k`), or recall older composer history at history boundaries."
-        },
-        "move_word_backward": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor to start of previous word (`b`)."
-        },
-        "move_word_end": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor to end of current/next word (`e`)."
-        },
-        "move_word_forward": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Move cursor to start of next word (`w`)."
-        },
-        "open_line_above": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Open a new line above and enter insert mode (`O`)."
-        },
-        "open_line_below": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Open a new line below and enter insert mode (`o`)."
-        },
-        "paste_after": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Paste after cursor (`p`)."
-        },
-        "start_change_operator": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Begin change operator; next keys select a text object."
-        },
-        "start_delete_operator": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Begin delete operator; next key selects motion (`d`)."
-        },
-        "start_yank_operator": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Begin yank operator; next key selects motion (`y`)."
-        },
-        "substitute_char": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Delete character under cursor and enter insert mode (`s`)."
-        },
-        "yank_line": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Yank the entire line (`Y`)."
-        }
-      },
-      "type": "object"
-    },
-    "TuiVimOperatorKeymap": {
-      "additionalProperties": false,
-      "description": "Vim operator-pending keybindings for modal editing inside text areas.\n\nThis context is active only while waiting for a motion after `d` or `y`. Repeating the operator key (`dd`, `yy`) targets the entire line. Pressing `Esc` cancels the pending operator and returns to normal mode without modifying text.",
-      "properties": {
-        "cancel": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Cancel the pending operator and return to normal mode."
-        },
-        "delete_line": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Repeat delete operator to delete the whole line (`dd`)."
-        },
-        "motion_down": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Motion: down one line (`j`)."
-        },
-        "motion_left": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Motion: left (`h`)."
-        },
-        "motion_line_end": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Motion: to end of line (`$`)."
-        },
-        "motion_line_start": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Motion: to start of line (`0`)."
-        },
-        "motion_right": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Motion: right (`l`)."
-        },
-        "motion_up": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Motion: up one line (`k`)."
-        },
-        "motion_word_backward": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Motion: to start of previous word (`b`)."
-        },
-        "motion_word_end": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Motion: to end of current/next word (`e`)."
-        },
-        "motion_word_forward": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Motion: to start of next word (`w`)."
-        },
-        "select_around_text_object": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Select an around text object after an operator."
-        },
-        "select_inner_text_object": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Select an inner text object after an operator."
-        },
-        "yank_line": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Repeat yank operator to yank the whole line (`yy`)."
-        }
-      },
-      "type": "object"
-    },
-    "TuiVimTextObjectKeymap": {
-      "additionalProperties": false,
-      "description": "Vim text-object keybindings for modal editing inside text areas.",
-      "properties": {
-        "backtick": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Text object: backticks."
-        },
-        "big_word": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Text object: whitespace-delimited WORD."
-        },
-        "braces": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Text object: braces."
-        },
-        "brackets": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Text object: brackets."
-        },
-        "cancel": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Cancel the pending text-object command."
-        },
-        "double_quote": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Text object: double quotes."
-        },
-        "parentheses": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Text object: parentheses."
-        },
-        "single_quote": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Text object: single quotes."
-        },
-        "word": {
-          "allOf": [
-            {
-              "$ref": "#/definitions/KeybindingsSpec"
-            }
-          ],
-          "description": "Text object: word."
-        }
-      },
-      "type": "object"
-    },
     "UriBasedFileOpener": {
       "oneOf": [
         {
@@ -4345,7 +2862,7 @@
       "description": "Wire protocol that the provider speaks.",
       "oneOf": [
         {
-          "description": "The Responses API exposed by OpenAI at `/v1/responses`.",
+          "description": "Responses-compatible API exposed at `/v1/responses`.",
           "enum": [
             "responses"
           ],
@@ -4357,7 +2874,7 @@
       "type": "object"
     }
   },
-  "description": "Base config deserialized from ~/.codex/config.toml.",
+  "description": "Base config deserialized from the Crewon user config file.\n\nThe default storage path is `~/.crewon/config.toml`. Existing `~/.codex/config.toml` installations are still read through the home-directory compatibility fallback.",
   "properties": {
     "agents": {
       "allOf": [
@@ -4378,7 +2895,7 @@
           "$ref": "#/definitions/AnalyticsConfigToml"
         }
       ],
-      "description": "When `false`, disables analytics across Codex product surfaces in this machine. Defaults to `true`."
+      "description": "When `false`, disables analytics across Crewon product surfaces in this machine. Defaults to `true`."
     },
     "approval_policy": {
       "allOf": [
@@ -4406,7 +2923,7 @@
       "description": "Settings for app-specific controls."
     },
     "apps_mcp_product_sku": {
-      "description": "Optional product SKU forwarded on host-owned Codex Apps MCP requests.",
+      "description": "Optional product SKU forwarded on host-owned Crewon Apps MCP requests.",
       "type": "string"
     },
     "audio": {
@@ -4417,6 +2934,15 @@
       ],
       "default": null,
       "description": "Machine-local realtime audio device preferences used by realtime voice."
+    },
+    "auth_credentials_store": {
+      "allOf": [
+        {
+          "$ref": "#/definitions/AuthCredentialsStoreMode"
+        }
+      ],
+      "default": null,
+      "description": "Preferred backend for storing auth credentials. file (default): Use a file in the Crewon home directory. keyring: Use an OS-specific keyring service. auto: Use the keyring if available, otherwise use a file."
     },
     "auto_review": {
       "allOf": [
@@ -4438,17 +2964,16 @@
       "type": "string"
     },
     "check_for_update_on_startup": {
-      "description": "When `true`, checks for Codex updates on startup and surfaces update prompts. Set to `false` only if your Codex updates are centrally managed. Defaults to `true`.",
+      "description": "When `true`, checks for Crewon updates on startup and surfaces update prompts. Set to `false` only if your Crewon updates are centrally managed. Defaults to `true`.",
       "type": "boolean"
     },
-    "cli_auth_credentials_store": {
+    "client": {
       "allOf": [
         {
-          "$ref": "#/definitions/AuthCredentialsStoreMode"
+          "$ref": "#/definitions/Client"
         }
       ],
-      "default": null,
-      "description": "Preferred backend for storing CLI auth credentials. file (default): Use a file in the Codex home directory. keyring: Use an OS-specific keyring service. auto: Use the keyring if available, otherwise use a file."
+      "description": "Collection of settings that are specific to interactive clients."
     },
     "compact_prompt": {
       "description": "Compact prompt used for history compaction.",
@@ -4567,6 +3092,9 @@
         "chronicle": {
           "type": "boolean"
         },
+        "client_app_server": {
+          "type": "boolean"
+        },
         "code_mode": {
           "$ref": "#/definitions/FeatureToml_for_CodeModeConfigToml"
         },
@@ -4622,6 +3150,9 @@
           "type": "boolean"
         },
         "fast_mode": {
+          "type": "boolean"
+        },
+        "git_commit": {
           "type": "boolean"
         },
         "goals": {
@@ -4777,9 +3308,6 @@
         "tool_suggest": {
           "type": "boolean"
         },
-        "tui_app_server": {
-          "type": "boolean"
-        },
         "unavailable_dummy_tools": {
           "type": "boolean"
         },
@@ -4822,7 +3350,7 @@
           "$ref": "#/definitions/FeedbackConfigToml"
         }
       ],
-      "description": "When `false`, disables feedback collection across Codex product surfaces. Defaults to `true`."
+      "description": "When `false`, disables feedback collection across Crewon product surfaces. Defaults to `true`."
     },
     "file_opener": {
       "allOf": [
@@ -4874,7 +3402,7 @@
         "max_bytes": null,
         "persistence": "save-all"
       },
-      "description": "Settings that govern if and what will be written to `~/.codex/history.jsonl`."
+      "description": "Settings that govern if and what will be written to the legacy history file."
     },
     "hooks": {
       "allOf": [
@@ -4910,7 +3438,7 @@
           "$ref": "#/definitions/AbsolutePathBuf"
         }
       ],
-      "description": "Directory where Codex writes log files. Setting this value explicitly also enables the TUI text log in this directory. Defaults to `$CODEX_HOME/log`."
+      "description": "Directory where Crewon writes log files. Defaults to `log` under the resolved Crewon home."
     },
     "marketplaces": {
       "additionalProperties": {
@@ -4921,7 +3449,7 @@
       "type": "object"
     },
     "mcp_oauth_callback_port": {
-      "description": "Optional fixed port for the local HTTP callback server used during MCP OAuth login. When unset, Codex will bind to an ephemeral port chosen by the OS.",
+      "description": "Optional fixed port for the local HTTP callback server used during MCP OAuth login. When unset, Crewon will bind to an ephemeral port chosen by the OS.",
       "format": "uint16",
       "minimum": 0.0,
       "type": "integer"
@@ -4937,14 +3465,14 @@
         }
       ],
       "default": null,
-      "description": "Preferred backend for storing MCP OAuth credentials. keyring: Use an OS-specific keyring service. https://github.com/openai/codex/blob/main/codex-rs/rmcp-client/src/oauth.rs#L2 file: Use a file in the Codex home directory. auto (default): Use the OS-specific keyring service if available, otherwise use a file."
+      "description": "Preferred backend for storing MCP OAuth credentials. keyring: Use an OS-specific keyring service. file: Use a file in the Crewon home directory. auto (default): Use the OS-specific keyring service if available, otherwise use a file."
     },
     "mcp_servers": {
       "additionalProperties": {
         "$ref": "#/definitions/RawMcpServerConfig"
       },
       "default": {},
-      "description": "Definition for MCP servers that Codex can reach out to for tool calls.",
+      "description": "Definition for MCP servers that Crewon can reach out to for tool calls.",
       "type": "object"
     },
     "memories": {
@@ -4991,7 +3519,7 @@
           "$ref": "#/definitions/AbsolutePathBuf"
         }
       ],
-      "description": "Optional path to a file containing model instructions that will override the built-in instructions for the selected model. Users are STRONGLY DISCOURAGED from using this field, as deviating from the instructions sanctioned by Codex will likely degrade model performance."
+      "description": "Optional path to a file containing model instructions that will override the built-in instructions for the selected model. Users are STRONGLY DISCOURAGED from using this field, as deviating from the instructions sanctioned by Crewon will likely degrade model performance."
     },
     "model_provider": {
       "description": "Provider to use from the model_providers map.",
@@ -5190,7 +3718,7 @@
           "$ref": "#/definitions/AbsolutePathBuf"
         }
       ],
-      "description": "Directory where Codex stores the SQLite state DB. Defaults to `$CODEX_SQLITE_HOME` when set. Otherwise uses `$CODEX_HOME`."
+      "description": "Directory where Crewon stores the SQLite state DB. Defaults to `$CODEX_SQLITE_HOME` when set. Otherwise uses the resolved Crewon home (`CREWON_HOME`, or the legacy `CODEX_HOME` fallback)."
     },
     "suppress_unstable_features_warning": {
       "description": "Suppress warnings about unstable (under development) features.",
@@ -5217,14 +3745,6 @@
         }
       ],
       "description": "Nested tools section for feature toggles"
-    },
-    "tui": {
-      "allOf": [
-        {
-          "$ref": "#/definitions/Tui"
-        }
-      ],
-      "description": "Collection of settings that are specific to the TUI."
     },
     "web_search": {
       "allOf": [

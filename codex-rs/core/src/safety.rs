@@ -3,15 +3,15 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use crate::util::resolve_path;
-use codex_apply_patch::ApplyPatchAction;
-use codex_apply_patch::ApplyPatchFileChange;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
-use codex_sandboxing::SandboxType;
-use codex_sandboxing::get_platform_sandbox;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_apply_patch::ApplyPatchAction;
+use crewon_apply_patch::ApplyPatchFileChange;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_sandboxing::SandboxType;
+use crewon_sandboxing::get_platform_sandbox;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 
 const PATCH_REJECTED_OUTSIDE_PROJECT_REASON: &str =
     "writing outside of the project; rejected by user approval settings";
@@ -75,7 +75,7 @@ pub fn assess_patch_safety(
             PermissionProfile::Disabled | PermissionProfile::External { .. }
         ) {
             // Disabled and External profiles intentionally do not apply an
-            // outer Codex filesystem sandbox.
+            // outer Crewon filesystem sandbox.
             SafetyCheck::AutoApprove {
                 sandbox_type: SandboxType::None,
                 user_explicitly_approved: false,

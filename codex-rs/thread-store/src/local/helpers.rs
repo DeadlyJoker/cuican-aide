@@ -7,17 +7,17 @@ use std::time::SystemTime;
 
 use chrono::DateTime;
 use chrono::Utc;
-use codex_git_utils::GitSha;
-use codex_protocol::ThreadId;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::GitInfo;
-use codex_protocol::protocol::NetworkAccess;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_protocol::protocol::SessionSource;
-use codex_rollout::ARCHIVED_SESSIONS_SUBDIR;
-use codex_rollout::ThreadItem;
-use codex_state::ThreadMetadata;
+use crewon_git_utils::GitSha;
+use crewon_protocol::ThreadId;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::GitInfo;
+use crewon_protocol::protocol::NetworkAccess;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_protocol::protocol::SessionSource;
+use crewon_rollout::ARCHIVED_SESSIONS_SUBDIR;
+use crewon_rollout::ThreadItem;
+use crewon_state::ThreadMetadata;
 
 use crate::StoredThread;
 use crate::ThreadStoreError;
@@ -118,7 +118,7 @@ pub(super) fn stored_thread_from_rollout_item(
         .clone()
         .or_else(|| item.first_user_message.clone())
         .unwrap_or_default();
-    let rollout_path = codex_rollout::plain_rollout_path(item.path.as_path());
+    let rollout_path = crewon_rollout::plain_rollout_path(item.path.as_path());
 
     Some(StoredThread {
         thread_id,
@@ -140,7 +140,7 @@ pub(super) fn stored_thread_from_rollout_item(
         cwd: item.cwd.unwrap_or_default(),
         cli_version: item.cli_version.unwrap_or_default(),
         source,
-        thread_source: None,
+        thread_source: item.thread_source,
         agent_nickname: item.agent_nickname,
         agent_role: item.agent_role,
         agent_path: None,
@@ -241,7 +241,7 @@ fn thread_id_from_rollout_path(path: &Path) -> Option<ThreadId> {
 
 #[cfg(test)]
 mod tests {
-    use codex_rollout::ThreadItem;
+    use crewon_rollout::ThreadItem;
     use pretty_assertions::assert_eq;
     use uuid::Uuid;
 

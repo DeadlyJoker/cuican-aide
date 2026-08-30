@@ -3,15 +3,15 @@ use super::AskForApproval;
 use super::SandboxMode;
 use super::WindowsSandboxSetupMode;
 use super::shared::default_enabled;
-use codex_experimental_api_macros::ExperimentalApi;
-use codex_protocol::config_types::AutoCompactTokenLimitScope;
-use codex_protocol::config_types::ForcedLoginMethod;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::config_types::Verbosity;
-use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::config_types::WebSearchToolConfig;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_experimental_api_macros::ExperimentalApi;
+use crewon_protocol::config_types::AutoCompactTokenLimitScope;
+use crewon_protocol::config_types::ForcedLoginMethod;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::config_types::Verbosity;
+use crewon_protocol::config_types::WebSearchMode;
+use crewon_protocol::config_types::WebSearchToolConfig;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -56,7 +56,7 @@ pub enum ConfigLayerSource {
         name: String,
     },
 
-    /// User config layer from $CODEX_HOME/config.toml. This layer is special
+    /// User config layer from the Crewon home config.toml. This layer is special
     /// in that it is expected to be:
     /// - writable by the user
     /// - generally outside the workspace directory

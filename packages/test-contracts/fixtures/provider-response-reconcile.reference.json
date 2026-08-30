@@ -1,0 +1,39 @@
+{
+  "schemaVersion": "crewon.provider-response-reconcile-reference.v0",
+  "rustSourcePointers": [
+    "codex-rs/core/src/responses_retry.rs",
+    "codex-rs/core/src/session/turn.rs",
+    "codex-rs/core/tests/suite/stream_no_completed.rs"
+  ],
+  "note": "Rust pointers freeze retry and incomplete-stream safety; Rust does not currently provide durable cross-process response retrieval.",
+  "checkpoint": {
+    "schemaVersion": "crewon.provider-checkpoint.v0",
+    "adapterName": "direct-responses",
+    "adapterVersion": "1",
+    "modelId": "provider-model",
+    "opaquePayload": { "responseId": "resp-lost" }
+  },
+  "completed": {
+    "id": "resp-lost",
+    "status": "completed",
+    "output": [
+      {
+        "type": "message",
+        "role": "assistant",
+        "content": [{ "type": "output_text", "text": "checking" }]
+      },
+      {
+        "type": "function_call",
+        "call_id": "call-1",
+        "name": "lookup",
+        "arguments": "{\"q\":1}"
+      }
+    ],
+    "usage": {
+      "input_tokens": 5,
+      "input_tokens_details": { "cached_tokens": 1 },
+      "output_tokens": 3,
+      "total_tokens": 8
+    }
+  }
+}

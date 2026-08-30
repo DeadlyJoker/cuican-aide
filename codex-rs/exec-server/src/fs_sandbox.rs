@@ -1,26 +1,26 @@
 use std::collections::HashMap;
 
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::FileSystemSpecialPath;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_sandboxing::SandboxCommand;
-use codex_sandboxing::SandboxExecRequest;
-use codex_sandboxing::SandboxManager;
-use codex_sandboxing::SandboxTransformRequest;
-use codex_sandboxing::SandboxablePreference;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_absolute_path::canonicalize_preserving_symlinks;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::FileSystemSpecialPath;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_sandboxing::SandboxCommand;
+use crewon_sandboxing::SandboxExecRequest;
+use crewon_sandboxing::SandboxManager;
+use crewon_sandboxing::SandboxTransformRequest;
+use crewon_sandboxing::SandboxablePreference;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::canonicalize_preserving_symlinks;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 use crate::ExecServerRuntimePaths;
 use crate::FileSystemSandboxContext;
-use crate::fs_helper::CODEX_FS_HELPER_ARG1;
+use crate::fs_helper::CREWON_FS_HELPER_ARG1;
 use crate::fs_helper::FsHelperPayload;
 use crate::fs_helper::FsHelperRequest;
 use crate::fs_helper::FsHelperResponse;
@@ -84,7 +84,7 @@ impl FileSystemSandboxRunner {
         cwd: &AbsolutePathBuf,
         sandbox_context: &FileSystemSandboxContext,
     ) -> Result<SandboxExecRequest, JSONRPCErrorError> {
-        let helper = &self.runtime_paths.codex_self_exe;
+        let helper = &self.runtime_paths.crewon_self_exe;
         let sandbox_manager = SandboxManager::new();
         let (file_system_policy, network_policy) = permission_profile.to_runtime_permissions();
         let sandbox = sandbox_manager.select_initial(
@@ -96,7 +96,7 @@ impl FileSystemSandboxRunner {
         );
         let command = SandboxCommand {
             program: helper.as_path().as_os_str().to_owned(),
-            args: vec![CODEX_FS_HELPER_ARG1.to_string()],
+            args: vec![CREWON_FS_HELPER_ARG1.to_string()],
             cwd: cwd.clone(),
             env: self.helper_env.clone(),
             additional_permissions: None,
@@ -109,7 +109,7 @@ impl FileSystemSandboxRunner {
                 enforce_managed_network: false,
                 network: None,
                 sandbox_policy_cwd: cwd.as_path(),
-                codex_linux_sandbox_exe: self.runtime_paths.codex_linux_sandbox_exe.as_deref(),
+                crewon_linux_sandbox_exe: self.runtime_paths.crewon_linux_sandbox_exe.as_deref(),
                 use_legacy_landlock: sandbox_context.use_legacy_landlock,
                 windows_sandbox_level: sandbox_context.windows_sandbox_level,
                 windows_sandbox_private_desktop: sandbox_context.windows_sandbox_private_desktop,
@@ -136,8 +136,8 @@ fn sandbox_cwd(sandbox: &FileSystemSandboxContext) -> Result<AbsolutePathBuf, JS
 
 fn helper_read_roots(runtime_paths: &ExecServerRuntimePaths) -> Vec<AbsolutePathBuf> {
     let mut roots = Vec::new();
-    for path in std::iter::once(runtime_paths.codex_self_exe.as_path())
-        .chain(runtime_paths.codex_linux_sandbox_exe.as_deref())
+    for path in std::iter::once(runtime_paths.crewon_self_exe.as_path())
+        .chain(runtime_paths.crewon_linux_sandbox_exe.as_deref())
     {
         if let Some(parent) = path.parent()
             && let Ok(root) = AbsolutePathBuf::from_absolute_path(parent)
@@ -319,14 +319,14 @@ mod tests {
     use std::collections::HashMap;
     use std::ffi::OsString;
 
-    use codex_protocol::models::PermissionProfile;
-    use codex_protocol::permissions::FileSystemAccessMode;
-    use codex_protocol::permissions::FileSystemPath;
-    use codex_protocol::permissions::FileSystemSandboxEntry;
-    use codex_protocol::permissions::FileSystemSandboxPolicy;
-    use codex_protocol::permissions::FileSystemSpecialPath;
-    use codex_protocol::permissions::NetworkSandboxPolicy;
-    use codex_utils_absolute_path::AbsolutePathBuf;
+    use crewon_protocol::models::PermissionProfile;
+    use crewon_protocol::permissions::FileSystemAccessMode;
+    use crewon_protocol::permissions::FileSystemPath;
+    use crewon_protocol::permissions::FileSystemSandboxEntry;
+    use crewon_protocol::permissions::FileSystemSandboxPolicy;
+    use crewon_protocol::permissions::FileSystemSpecialPath;
+    use crewon_protocol::permissions::NetworkSandboxPolicy;
+    use crewon_utils_absolute_path::AbsolutePathBuf;
     use pretty_assertions::assert_eq;
 
     use crate::ExecServerRuntimePaths;
@@ -366,9 +366,9 @@ mod tests {
 
     #[test]
     fn helper_permissions_preserve_existing_writes() {
-        let codex_self_exe = std::env::current_exe().expect("current exe");
+        let crewon_self_exe = std::env::current_exe().expect("current exe");
         let runtime_paths =
-            ExecServerRuntimePaths::new(codex_self_exe, /*codex_linux_sandbox_exe*/ None)
+            ExecServerRuntimePaths::new(crewon_self_exe, /*crewon_linux_sandbox_exe*/ None)
                 .expect("runtime paths");
         let cwd = AbsolutePathBuf::from_absolute_path(std::env::temp_dir().as_path())
             .expect("absolute cwd");
@@ -379,7 +379,7 @@ mod tests {
         )]);
         let readable = AbsolutePathBuf::from_absolute_path(
             runtime_paths
-                .codex_self_exe
+                .crewon_self_exe
                 .parent()
                 .expect("current exe parent"),
         )
@@ -415,7 +415,7 @@ mod tests {
         let env = helper_env_from_vars(
             [
                 ("PATH", "/usr/bin:/bin"),
-                ("TMPDIR", "/tmp/codex"),
+                ("TMPDIR", "/tmp/crewon"),
                 ("TMP", "/tmp"),
                 ("TEMP", "/tmp"),
                 ("HOME", "/home/user"),
@@ -429,7 +429,7 @@ mod tests {
             env,
             HashMap::from([
                 ("PATH".to_string(), "/usr/bin:/bin".to_string()),
-                ("TMPDIR".to_string(), "/tmp/codex".to_string()),
+                ("TMPDIR".to_string(), "/tmp/crewon".to_string()),
                 ("TMP".to_string(), "/tmp".to_string()),
                 ("TEMP".to_string(), "/tmp".to_string()),
             ])
@@ -484,9 +484,9 @@ mod tests {
         };
         let path_key = path_key.to_string_lossy().into_owned();
         let path = path.to_string_lossy().into_owned();
-        let codex_self_exe = std::env::current_exe().expect("current exe");
+        let crewon_self_exe = std::env::current_exe().expect("current exe");
         let runtime_paths =
-            ExecServerRuntimePaths::new(codex_self_exe.clone(), Some(codex_self_exe))
+            ExecServerRuntimePaths::new(crewon_self_exe.clone(), Some(crewon_self_exe))
                 .expect("runtime paths");
         let runner = FileSystemSandboxRunner::new(runtime_paths);
         let cwd = AbsolutePathBuf::current_dir().expect("cwd");
@@ -539,16 +539,16 @@ mod tests {
 
     #[test]
     fn helper_permissions_include_helper_read_root_without_additional_permissions() {
-        let codex_self_exe = std::env::current_exe().expect("current exe");
+        let crewon_self_exe = std::env::current_exe().expect("current exe");
         let runtime_paths =
-            ExecServerRuntimePaths::new(codex_self_exe, /*codex_linux_sandbox_exe*/ None)
+            ExecServerRuntimePaths::new(crewon_self_exe, /*crewon_linux_sandbox_exe*/ None)
                 .expect("runtime paths");
         let cwd = AbsolutePathBuf::from_absolute_path(std::env::temp_dir().as_path())
             .expect("absolute cwd");
         let mut policy = restricted_policy(Vec::new());
         let readable = AbsolutePathBuf::from_absolute_path(
             runtime_paths
-                .codex_self_exe
+                .crewon_self_exe
                 .parent()
                 .expect("current exe parent"),
         )
@@ -566,16 +566,16 @@ mod tests {
     #[test]
     fn helper_permissions_include_linux_sandbox_alias_parent() {
         let root = tempfile::tempdir().expect("temp dir");
-        let codex_self_exe = root.path().join("bin").join("codex");
-        let codex_linux_sandbox_exe = root.path().join("aliases").join("codex-linux-sandbox");
+        let crewon_self_exe = root.path().join("bin").join("crewon");
+        let crewon_linux_sandbox_exe = root.path().join("aliases").join("crewon-linux-sandbox");
         let runtime_paths =
-            ExecServerRuntimePaths::new(codex_self_exe, Some(codex_linux_sandbox_exe))
+            ExecServerRuntimePaths::new(crewon_self_exe, Some(crewon_linux_sandbox_exe))
                 .expect("runtime paths");
         let cwd = AbsolutePathBuf::from_absolute_path(std::env::temp_dir().as_path())
             .expect("absolute cwd");
         let mut policy = restricted_policy(Vec::new());
-        let codex_parent = AbsolutePathBuf::from_absolute_path(root.path().join("bin"))
-            .expect("absolute codex parent");
+        let crewon_parent = AbsolutePathBuf::from_absolute_path(root.path().join("bin"))
+            .expect("absolute crewon parent");
         let alias_parent = AbsolutePathBuf::from_absolute_path(root.path().join("aliases"))
             .expect("absolute alias parent");
 
@@ -585,7 +585,7 @@ mod tests {
             cwd.as_path(),
         );
 
-        assert!(policy.can_read_path_with_cwd(codex_parent.as_path(), cwd.as_path()));
+        assert!(policy.can_read_path_with_cwd(crewon_parent.as_path(), cwd.as_path()));
         assert!(policy.can_read_path_with_cwd(alias_parent.as_path(), cwd.as_path()));
     }
 

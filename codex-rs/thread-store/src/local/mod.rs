@@ -4,18 +4,35 @@ mod delete_thread;
 mod helpers;
 mod list_threads;
 mod live_writer;
+mod metadata_rollout_path;
 mod read_thread;
 mod search_threads;
 mod unarchive_thread;
 mod update_thread_metadata;
 
 #[cfg(test)]
+#[path = "live_writer_handoff_tests.rs"]
+mod live_writer_handoff_tests;
+
+#[cfg(test)]
+#[path = "live_metadata_writer_tests.rs"]
+mod live_metadata_writer_tests;
+
+#[cfg(test)]
+#[path = "metadata_rollout_scope_tests.rs"]
+mod metadata_rollout_scope_tests;
+
+#[cfg(all(test, feature = "legacy-fence-artifact"))]
+#[path = "legacy_fence_mutation_tests.rs"]
+mod legacy_fence_mutation_tests;
+
+#[cfg(test)]
 mod test_support;
 
 use async_trait::async_trait;
-use codex_protocol::ThreadId;
-use codex_rollout::RolloutRecorder;
-use codex_rollout::StateDbHandle;
+use crewon_protocol::ThreadId;
+use crewon_rollout::RolloutRecorder;
+use crewon_rollout::StateDbHandle;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use std::path::PathBuf;
@@ -74,7 +91,7 @@ pub struct LocalThreadStoreConfig {
 }
 
 impl LocalThreadStoreConfig {
-    pub fn from_config(config: &impl codex_rollout::RolloutConfigView) -> Self {
+    pub fn from_config(config: &impl crewon_rollout::RolloutConfigView) -> Self {
         Self {
             codex_home: config.codex_home().to_path_buf(),
             sqlite_home: config.sqlite_home().to_path_buf(),
@@ -104,6 +121,34 @@ impl LocalThreadStore {
     /// Return the state DB handle used by local rollout writers.
     pub async fn state_db(&self) -> Option<StateDbHandle> {
         self.state_db.clone()
+    }
+
+    pub(super) async fn cloud_agent_thread_index_active(&self) -> ThreadStoreResult<bool> {
+        let Some(state_db) = self.state_db().await else {
+            return Ok(false);
+        };
+        let active = state_db
+            .has_cloud_agent_thread_summaries()
+            .await
+            .map_err(|_| ThreadStoreError::Internal {
+                message: "failed to resolve Cloud Agent Thread list authority".to_string(),
+            })?;
+        if !active {
+            return Ok(false);
+        }
+        let backfill =
+            state_db
+                .get_backfill_state()
+                .await
+                .map_err(|_| ThreadStoreError::Internal {
+                    message: "failed to verify Cloud Agent Thread index readiness".to_string(),
+                })?;
+        if backfill.status != crewon_state::BackfillStatus::Complete {
+            return Err(ThreadStoreError::Internal {
+                message: "Cloud Agent Thread index is not ready".to_string(),
+            });
+        }
+        Ok(true)
     }
 
     /// Read a local rollout-backed thread by path.
@@ -300,13 +345,13 @@ impl ThreadStore for LocalThreadStore {
 mod tests {
     use std::sync::Arc;
 
-    use codex_protocol::ThreadId;
-    use codex_protocol::models::BaseInstructions;
-    use codex_protocol::protocol::EventMsg;
-    use codex_protocol::protocol::RolloutItem;
-    use codex_protocol::protocol::SessionSource;
-    use codex_protocol::protocol::ThreadMemoryMode;
-    use codex_protocol::protocol::UserMessageEvent;
+    use crewon_protocol::ThreadId;
+    use crewon_protocol::models::BaseInstructions;
+    use crewon_protocol::protocol::EventMsg;
+    use crewon_protocol::protocol::RolloutItem;
+    use crewon_protocol::protocol::SessionSource;
+    use crewon_protocol::protocol::ThreadMemoryMode;
+    use crewon_protocol::protocol::UserMessageEvent;
     use tempfile::TempDir;
 
     use super::*;
@@ -371,7 +416,7 @@ mod tests {
         // metadata updates must use LiveThread or call update_thread_metadata explicitly.
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             config.sqlite_home.clone(),
             config.default_model_provider_id.clone(),
         )
@@ -406,7 +451,7 @@ mod tests {
     async fn live_thread_observes_appended_items_into_sqlite_metadata() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             config.sqlite_home.clone(),
             config.default_model_provider_id.clone(),
         )
@@ -441,7 +486,7 @@ mod tests {
     async fn live_thread_shutdown_does_not_materialize_empty_thread_metadata() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             config.sqlite_home.clone(),
             config.default_model_provider_id.clone(),
         )
@@ -477,7 +522,7 @@ mod tests {
     async fn live_thread_shutdown_with_buffered_items_materializes_before_metadata_read() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             config.sqlite_home.clone(),
             config.default_model_provider_id.clone(),
         )
@@ -495,7 +540,7 @@ mod tests {
 
         live_thread
             .append_items(&[RolloutItem::EventMsg(EventMsg::TokenCount(
-                codex_protocol::protocol::TokenCountEvent {
+                crewon_protocol::protocol::TokenCountEvent {
                     info: None,
                     rate_limits: None,
                 },
@@ -521,7 +566,7 @@ mod tests {
     async fn live_thread_resume_loads_history_before_observing_metadata() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             config.sqlite_home.clone(),
             config.default_model_provider_id.clone(),
         )
@@ -575,7 +620,7 @@ mod tests {
         let home = TempDir::new().expect("temp dir");
         let external_home = TempDir::new().expect("external temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             config.sqlite_home.clone(),
             config.default_model_provider_id.clone(),
         )

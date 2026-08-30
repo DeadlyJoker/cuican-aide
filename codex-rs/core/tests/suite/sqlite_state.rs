@@ -1,25 +1,4 @@
 use anyhow::Result;
-use codex_config::types::McpServerConfig;
-use codex_config::types::McpServerTransportConfig;
-use codex_core::config::Config;
-use codex_extension_api::ExtensionRegistryBuilder;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::dynamic_tools::DynamicToolSpec;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::UserMessageEvent;
-use codex_protocol::user_input::UserInput;
-use codex_web_search_extension::install as install_web_search_extension;
 use core_test_support::responses;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
@@ -30,12 +9,34 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::stdio_server_bin;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
 use core_test_support::wait_for_mcp_server;
+use crewon_config::types::McpServerConfig;
+use crewon_config::types::McpServerTransportConfig;
+use crewon_core::config::Config;
+use crewon_extension_api::ExtensionRegistryBuilder;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::WebSearchMode;
+use crewon_protocol::dynamic_tools::DynamicToolSpec;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::UserMessageEvent;
+use crewon_protocol::user_input::UserInput;
+use crewon_utils_path::normalize_for_path_comparison;
+use crewon_web_search_extension::install as install_web_search_extension;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::collections::HashMap;
@@ -52,7 +53,7 @@ use wiremock::matchers::path;
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn new_thread_is_recorded_in_state_db() -> Result<()> {
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::Sqlite)
@@ -61,8 +62,8 @@ async fn new_thread_is_recorded_in_state_db() -> Result<()> {
     let test = builder.build(&server).await?;
 
     let thread_id = test.session_configured.thread_id;
-    let rollout_path = test.codex.rollout_path().expect("rollout path");
-    let db_path = codex_state::state_db_path(test.config.sqlite_home.as_path());
+    let rollout_path = test.crewon.rollout_path().expect("rollout path");
+    let db_path = crewon_state::state_db_path(test.config.sqlite_home.as_path());
 
     for _ in 0..100 {
         if tokio::fs::try_exists(&db_path).await.unwrap_or(false) {
@@ -71,7 +72,7 @@ async fn new_thread_is_recorded_in_state_db() -> Result<()> {
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
-    let db = test.codex.state_db().expect("state db enabled");
+    let db = test.crewon.state_db().expect("state db enabled");
     assert!(
         !rollout_path.exists(),
         "fresh thread rollout should not be materialized before first user message"
@@ -129,7 +130,7 @@ async fn resume_restores_dynamic_tools_from_rollout_with_sqlite_enabled() -> Res
         }),
         defer_loading: false,
     };
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::Sqlite)
@@ -163,8 +164,9 @@ async fn resume_restores_dynamic_tools_from_rollout_with_sqlite_enabled() -> Res
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
+    started.thread.shutdown_and_wait().await?;
 
-    let mut resume_builder = test_codex().with_config(|config| {
+    let mut resume_builder = test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::Sqlite)
@@ -207,7 +209,7 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
     let rollout_rel_path = format!("sessions/2026/01/27/rollout-2026-01-27T12-00-00-{uuid}.jsonl");
     let rollout_rel_path_for_hook = rollout_rel_path.clone();
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(move |codex_home| {
             let rollout_path = codex_home.join(&rollout_rel_path_for_hook);
             let parent = rollout_path
@@ -222,7 +224,7 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
                     timestamp: "2026-01-27T12:00:00Z".to_string(),
                     cwd: codex_home.to_path_buf(),
                     originator: "test".to_string(),
-                    cli_version: "test".to_string(),
+                    client_version: "test".to_string(),
                     source: SessionSource::default(),
                     thread_source: None,
                     agent_path: None,
@@ -235,6 +237,7 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
                     multi_agent_version: None,
                 },
                 git: None,
+                scene_runtime: None,
             };
 
             let lines = [
@@ -271,7 +274,7 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
 
     let test = builder.build(&server).await?;
 
-    let db_path = codex_state::state_db_path(test.config.sqlite_home.as_path());
+    let db_path = crewon_state::state_db_path(test.config.sqlite_home.as_path());
     let rollout_path = test.config.codex_home.join(&rollout_rel_path);
     let default_provider = test.config.model_provider_id.clone();
 
@@ -282,7 +285,7 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
         tokio::time::sleep(Duration::from_millis(25)).await;
     }
 
-    let db = test.codex.state_db().expect("state db enabled");
+    let db = test.crewon.state_db().expect("state db enabled");
 
     let mut metadata = None;
     for _ in 0..40 {
@@ -295,7 +298,10 @@ async fn backfill_scans_existing_rollouts() -> Result<()> {
 
     let metadata = metadata.expect("backfilled thread should exist in state db");
     assert_eq!(metadata.id, thread_id);
-    assert_eq!(metadata.rollout_path, rollout_path.to_path_buf());
+    assert_eq!(
+        metadata.rollout_path,
+        normalize_for_path_comparison(&rollout_path).unwrap_or_else(|_| rollout_path.to_path_buf())
+    );
     assert_eq!(metadata.model_provider, default_provider);
     assert!(metadata.first_user_message.is_some());
 
@@ -314,7 +320,7 @@ async fn user_messages_persist_in_state_db() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::Sqlite)
@@ -322,7 +328,7 @@ async fn user_messages_persist_in_state_db() -> Result<()> {
     });
     let test = builder.build(&server).await?;
 
-    let db_path = codex_state::state_db_path(test.config.sqlite_home.as_path());
+    let db_path = crewon_state::state_db_path(test.config.sqlite_home.as_path());
     for _ in 0..100 {
         if tokio::fs::try_exists(&db_path).await.unwrap_or(false) {
             break;
@@ -333,7 +339,7 @@ async fn user_messages_persist_in_state_db() -> Result<()> {
     test.submit_turn("hello from sqlite").await?;
     test.submit_turn("another message").await?;
 
-    let db = test.codex.state_db().expect("state db enabled");
+    let db = test.crewon.state_db().expect("state db enabled");
     let thread_id = test.session_configured.thread_id;
 
     let mut metadata = None;
@@ -368,7 +374,7 @@ async fn web_search_marks_thread_memory_mode_polluted_when_configured() -> Resul
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::Sqlite)
@@ -376,7 +382,7 @@ async fn web_search_marks_thread_memory_mode_polluted_when_configured() -> Resul
         config.memories.disable_on_external_context = true;
     });
     let test = builder.build(&server).await?;
-    let db = test.codex.state_db().expect("state db enabled");
+    let db = test.crewon.state_db().expect("state db enabled");
     let thread_id = test.session_configured.thread_id;
 
     test.submit_turn("search the web").await?;
@@ -431,11 +437,11 @@ async fn standalone_web_search_marks_thread_memory_mode_polluted_when_configured
     )
     .await;
 
-    let auth = CodexAuth::from_api_key("dummy");
-    let auth_manager = codex_core::test_support::auth_manager_from_auth(auth.clone());
+    let auth = CrewonAuth::from_api_key("dummy");
+    let auth_manager = crewon_core::test_support::auth_manager_from_auth(auth.clone());
     let mut extension_builder = ExtensionRegistryBuilder::<Config>::new();
     install_web_search_extension(&mut extension_builder, auth_manager);
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_auth(auth)
         .with_extensions(Arc::new(extension_builder.build()))
         .with_config(|config| {
@@ -454,7 +460,7 @@ async fn standalone_web_search_marks_thread_memory_mode_polluted_when_configured
                 .expect("web search mode should be accepted");
         });
     let test = builder.build(&server).await?;
-    let db = test.codex.state_db().expect("state db enabled");
+    let db = test.crewon.state_db().expect("state db enabled");
     let thread_id = test.session_configured.thread_id;
 
     test.submit_turn("search the web").await?;
@@ -504,7 +510,7 @@ async fn mcp_call_marks_thread_memory_mode_polluted_when_configured() -> Result<
     .await;
 
     let rmcp_test_server_bin = stdio_server_bin()?;
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config
             .features
             .enable(Feature::Sqlite)
@@ -547,14 +553,14 @@ async fn mcp_call_marks_thread_memory_mode_polluted_when_configured() -> Result<
             .expect("test mcp servers should accept any configuration");
     });
     let test = builder.build(&server).await?;
-    wait_for_mcp_server(&test.codex, server_name).await?;
-    let db = test.codex.state_db().expect("state db enabled");
+    wait_for_mcp_server(&test.crewon, server_name).await?;
+    let db = test.crewon.state_db().expect("state db enabled");
     let thread_id = test.session_configured.thread_id;
     let cwd = test.config.cwd.clone();
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(PermissionProfile::read_only(), cwd.as_path());
 
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: "call the rmcp echo tool".to_string(),
@@ -563,14 +569,14 @@ async fn mcp_call_marks_thread_memory_mode_polluted_when_configured() -> Result<
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(cwd)),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: test.session_configured.model.clone(),
                         reasoning_effort: None,
                         developer_instructions: None,
@@ -580,11 +586,11 @@ async fn mcp_call_marks_thread_memory_mode_polluted_when_configured() -> Result<
             },
         })
         .await?;
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::McpToolCallEnd(_))
     })
     .await;
-    wait_for_event_match(&test.codex, |event| match event {
+    wait_for_event_match(&test.crewon, |event| match event {
         EventMsg::Error(err) => Some(Err(anyhow::anyhow!(err.message.clone()))),
         EventMsg::TurnComplete(_) => Some(Ok(())),
         _ => None,
@@ -627,19 +633,19 @@ async fn tool_call_logs_include_thread_id() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::Sqlite)
             .expect("test config should allow feature update");
     });
     let test = builder.build(&server).await?;
-    let db = test.codex.state_db().expect("state db enabled");
+    let db = test.crewon.state_db().expect("state db enabled");
     let expected_thread_id = test.session_configured.thread_id.to_string();
 
     test.submit_turn("run a shell command").await?;
 
-    let log_db_layer = codex_state::log_db::start(db.clone());
+    let log_db_layer = crewon_state::log_db::start(db.clone());
     let subscriber = tracing_subscriber::registry().with(log_db_layer.clone());
     let dispatch = tracing::Dispatch::new(subscriber);
     tracing::dispatcher::with_default(&dispatch, || {
@@ -651,7 +657,7 @@ async fn tool_call_logs_include_thread_id() -> Result<()> {
 
     let mut found = None;
     for _ in 0..80 {
-        let query = codex_state::LogQuery {
+        let query = crewon_state::LogQuery {
             descending: true,
             limit: Some(20),
             ..Default::default()

@@ -2,7 +2,7 @@ use crate::bash::extract_bash_command;
 use crate::bash::try_parse_shell;
 use crate::bash::try_parse_word_only_commands_sequence;
 use crate::powershell::extract_powershell_command;
-use codex_protocol::parse_command::ParsedCommand;
+use crewon_protocol::parse_command::ParsedCommand;
 use shlex::split as shlex_split;
 use shlex::try_join as shlex_try_join;
 use std::path::PathBuf;
@@ -19,7 +19,7 @@ pub fn extract_shell_command(command: &[String]) -> Option<(&str, &str)> {
 
 /// DO NOT REVIEW THIS CODE BY HAND
 /// This parsing code is quite complex and not easy to hand-modify.
-/// The easiest way to iterate is to add unit tests and have Codex fix the implementation.
+/// The easiest way to iterate is to add unit tests and use Crewon to fix the implementation.
 /// To encourage this, the tests have been put directly below this function rather than at the bottom of the
 ///
 /// Parses metadata out of an arbitrary command.
@@ -61,7 +61,7 @@ fn single_unknown_for_command(command: &[String]) -> ParsedCommand {
 
 #[cfg(test)]
 #[allow(clippy::items_after_test_module)]
-/// Tests are at the top to encourage using TDD + Codex to fix the implementation.
+/// Tests are at the top to encourage using TDD + Crewon to fix the implementation.
 mod tests {
     use super::*;
     use pretty_assertions::assert_eq;
@@ -505,13 +505,13 @@ mod tests {
 
     #[test]
     fn supports_cat_sed_n() {
-        let inner = "cat tui/Cargo.toml | sed -n '1,200p'";
+        let inner = "cat app-server/Cargo.toml | sed -n '1,200p'";
         assert_parsed(
             &vec_str(&["bash", "-lc", inner]),
             vec![ParsedCommand::Read {
                 cmd: inner.to_string(),
                 name: "Cargo.toml".to_string(),
-                path: PathBuf::from("tui/Cargo.toml"),
+                path: PathBuf::from("app-server/Cargo.toml"),
             }],
         );
     }
@@ -681,7 +681,7 @@ mod tests {
     #[test]
     fn supports_cd_and_rg_files() {
         assert_parsed(
-            &shlex_split_safe("cd codex-rs && rg --files"),
+            &shlex_split_safe("cd crewon-rs && rg --files"),
             vec![ParsedCommand::ListFiles {
                 cmd: "rg --files".to_string(),
                 path: None,
@@ -691,13 +691,14 @@ mod tests {
 
     #[test]
     fn supports_single_string_script_with_cd_and_pipe() {
-        let inner = r#"cd /Users/pakrym/code/codex && rg -n "codex_api" codex-rs -S | head -n 50"#;
+        let inner =
+            r#"cd /Users/pakrym/code/crewon && rg -n "crewon_api" crewon-rs -S | head -n 50"#;
         assert_parsed(
             &vec_str(&["bash", "-lc", inner]),
             vec![ParsedCommand::Search {
-                cmd: "rg -n codex_api codex-rs -S".to_string(),
-                query: Some("codex_api".to_string()),
-                path: Some("codex-rs".to_string()),
+                cmd: "rg -n crewon_api crewon-rs -S".to_string(),
+                query: Some("crewon_api".to_string()),
+                path: Some("crewon-rs".to_string()),
             }],
         );
     }
@@ -853,13 +854,13 @@ mod tests {
 
     #[test]
     fn supports_sed_n() {
-        let inner = "sed -n '2000,2200p' tui/src/history_cell.rs";
+        let inner = "sed -n '2000,2200p' app-server/src/lib.rs";
         assert_parsed(
             &vec_str(&["bash", "-lc", inner]),
             vec![ParsedCommand::Read {
                 cmd: inner.to_string(),
-                name: "history_cell.rs".to_string(),
-                path: PathBuf::from("tui/src/history_cell.rs"),
+                name: "lib.rs".to_string(),
+                path: PathBuf::from("app-server/src/lib.rs"),
             }],
         );
     }
@@ -880,13 +881,13 @@ mod tests {
     #[test]
     fn filters_out_printf() {
         let inner =
-            r#"printf "\n===== ansi-escape/Cargo.toml =====\n"; cat -- ansi-escape/Cargo.toml"#;
+            r#"printf "\n===== app-server/Cargo.toml =====\n"; cat -- app-server/Cargo.toml"#;
         assert_parsed(
             &vec_str(&["bash", "-lc", inner]),
             vec![ParsedCommand::Read {
-                cmd: "cat -- ansi-escape/Cargo.toml".to_string(),
+                cmd: "cat -- app-server/Cargo.toml".to_string(),
                 name: "Cargo.toml".to_string(),
-                path: PathBuf::from("ansi-escape/Cargo.toml"),
+                path: PathBuf::from("app-server/Cargo.toml"),
             }],
         );
     }

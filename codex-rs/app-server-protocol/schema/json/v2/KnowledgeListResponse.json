@@ -1,0 +1,110 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "KnowledgeData": {
+      "properties": {
+        "memories": {
+          "items": {
+            "$ref": "#/definitions/KnowledgeEntry"
+          },
+          "type": "array"
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/definitions/KnowledgeSource"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "memories",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "KnowledgeEntry": {
+      "properties": {
+        "accent": {
+          "type": "string"
+        },
+        "glyph": {
+          "type": "string"
+        },
+        "kind": {
+          "type": "string"
+        },
+        "meta": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "pinned": {
+          "type": "boolean"
+        },
+        "preview": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accent",
+        "glyph",
+        "kind",
+        "meta",
+        "path",
+        "pinned",
+        "preview",
+        "title"
+      ],
+      "type": "object"
+    },
+    "KnowledgeSource": {
+      "properties": {
+        "accent": {
+          "type": "string"
+        },
+        "glyph": {
+          "type": "string"
+        },
+        "isDirectory": {
+          "type": "boolean"
+        },
+        "meta": {
+          "type": "string"
+        },
+        "name": {
+          "type": "string"
+        },
+        "path": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "accent",
+        "glyph",
+        "isDirectory",
+        "meta",
+        "name",
+        "path",
+        "status"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "data": {
+      "$ref": "#/definitions/KnowledgeData"
+    }
+  },
+  "required": [
+    "data"
+  ],
+  "title": "KnowledgeListResponse",
+  "type": "object"
+}

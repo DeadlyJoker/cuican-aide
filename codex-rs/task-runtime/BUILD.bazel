@@ -1,0 +1,6 @@
+load("//:defs.bzl", "crewon_rust_crate")
+
+crewon_rust_crate(
+    name = "task-runtime",
+    crate_name = "crewon_task_runtime",
+)

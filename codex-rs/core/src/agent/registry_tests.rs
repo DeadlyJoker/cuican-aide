@@ -1,5 +1,5 @@
 use super::*;
-use codex_protocol::AgentPath;
+use crewon_protocol::AgentPath;
 use pretty_assertions::assert_eq;
 use std::collections::HashSet;
 
@@ -40,7 +40,7 @@ fn format_agent_nickname_adds_ordinals_after_reset() {
 
 #[test]
 fn session_depth_defaults_to_zero_for_root_sources() {
-    assert_eq!(session_depth(&SessionSource::Cli), 0);
+    assert_eq!(session_depth(&SessionSource::LegacyCli), 0);
 }
 
 #[test]

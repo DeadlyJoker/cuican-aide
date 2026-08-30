@@ -1,11 +1,11 @@
 use super::*;
 use crate::config::ConfigBuilder;
-use codex_exec_server::LOCAL_FS;
-use codex_features::Feature;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::PathBufExt;
 use core_test_support::TempDirExt;
 use core_test_support::create_directory_symlink;
+use crewon_exec_server::LOCAL_FS;
+use crewon_features::Feature;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::Path;
@@ -85,7 +85,7 @@ async fn make_config_with_project_root_markers(
     markers: &[&str],
 ) -> Config {
     let codex_home = TempDir::new().unwrap();
-    let cli_overrides = vec![(
+    let config_overrides = vec![(
         "project_root_markers".to_string(),
         TomlValue::Array(
             markers
@@ -96,7 +96,7 @@ async fn make_config_with_project_root_markers(
     )];
     let mut config = ConfigBuilder::default()
         .codex_home(codex_home.path().to_path_buf())
-        .cli_overrides(cli_overrides)
+        .config_overrides(config_overrides)
         .build()
         .await
         .expect("defaults for test should always succeed");

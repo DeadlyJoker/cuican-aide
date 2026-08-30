@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "McpServerConfigWriteResult": {
+      "properties": {
+        "filePath": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "filePath",
+        "status",
+        "version"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "reloadError": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "write": {
+      "$ref": "#/definitions/McpServerConfigWriteResult"
+    }
+  },
+  "required": [
+    "write"
+  ],
+  "title": "McpServerConfigSaveResponse",
+  "type": "object"
+}

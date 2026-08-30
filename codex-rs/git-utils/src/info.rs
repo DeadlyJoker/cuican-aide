@@ -4,8 +4,8 @@ use std::ffi::OsStr;
 use std::path::Path;
 use std::path::PathBuf;
 
-use codex_file_system::ExecutorFileSystem;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_file_system::ExecutorFileSystem;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use futures::future::join_all;
 use schemars::JsonSchema;
 use serde::Deserialize;
@@ -27,8 +27,8 @@ use crate::GitSha;
 ///
 /// Note that this does **not** detect *work‑trees* created with
 /// `git worktree add` where the checkout lives outside the main repository
-/// directory. If you need Codex to work from such a checkout simply pass the
-/// `--allow-no-git-exec` CLI flag that disables the repo requirement.
+/// directory. If you need Crewon to work from such a checkout simply pass the
+/// `--allow-no-git-exec` startup flag that disables the repo requirement.
 pub fn get_git_repo_root(base_dir: &Path) -> Option<PathBuf> {
     let base = if base_dir.is_dir() {
         base_dir
@@ -910,17 +910,17 @@ mod tests {
     #[test]
     fn canonicalize_git_remote_url_normalizes_github_variants() {
         for remote in [
-            "git@github.com:OpenAI/Codex.git",
-            "ssh://git@github.com/openai/codex.git",
-            "ssh://git@github.com:22/OpenAI/Codex.git",
-            "https://github.com/openai/codex.git",
-            "https://github.com:443/openai/codex.git",
-            "https://token@github.com/openai/codex/",
-            "github.com/OpenAI/Codex.git",
+            "git@github.com:Crewon/Crewon.git",
+            "ssh://git@github.com/crewon/crewon.git",
+            "ssh://git@github.com:22/Crewon/Crewon.git",
+            "https://github.com/crewon/crewon.git",
+            "https://github.com:443/crewon/crewon.git",
+            "https://token@github.com/crewon/crewon/",
+            "github.com/Crewon/Crewon.git",
         ] {
             assert_eq!(
                 canonicalize_git_remote_url(remote),
-                Some("github.com/openai/codex".to_string())
+                Some("github.com/crewon/crewon".to_string())
             );
         }
     }
@@ -939,7 +939,7 @@ mod tests {
 
     #[test]
     fn canonicalize_git_remote_url_rejects_non_repository_values() {
-        for remote in ["", "file:///tmp/repo", "github.com/openai", "/tmp/repo"] {
+        for remote in ["", "file:///tmp/repo", "github.com/crewon", "/tmp/repo"] {
             assert_eq!(canonicalize_git_remote_url(remote), None);
         }
     }

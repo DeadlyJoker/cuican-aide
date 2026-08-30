@@ -9,11 +9,11 @@ use super::protocol::RemoteControlTarget;
 use super::protocol::StartRemoteControlPairingRequest;
 use super::protocol::StartRemoteControlPairingResponse;
 use axum::http::HeaderMap;
-use codex_app_server_protocol::RemoteControlPairingStartResponse;
-use codex_app_server_protocol::RemoteControlPairingStatusResponse;
-use codex_login::default_client::build_reqwest_client;
-use codex_state::RemoteControlEnrollmentRecord;
-use codex_state::StateRuntime;
+use crewon_app_server_protocol::RemoteControlPairingStartResponse;
+use crewon_app_server_protocol::RemoteControlPairingStatusResponse;
+use crewon_login::default_client::build_reqwest_client;
+use crewon_state::RemoteControlEnrollmentRecord;
+use crewon_state::StateRuntime;
 use serde::Serialize;
 use serde::de::DeserializeOwned;
 use std::io;
@@ -557,7 +557,7 @@ fn update_remote_control_server_token(
 mod tests {
     use super::*;
     use crate::transport::remote_control::protocol::normalize_remote_control_url;
-    use codex_state::StateRuntime;
+    use crewon_state::StateRuntime;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use std::sync::Arc;
@@ -805,7 +805,7 @@ mod tests {
         let err = enroll_remote_control_server(
             &remote_control_target,
             &RemoteControlConnectionAuth {
-                auth_provider: codex_model_provider::unauthenticated_auth_provider(),
+                auth_provider: crewon_model_provider::unauthenticated_auth_provider(),
                 account_id: "account_id".to_string(),
             },
             "11111111-1111-4111-8111-111111111111",

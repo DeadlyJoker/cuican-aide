@@ -25,11 +25,11 @@ use crate::protocol::EnvironmentInfo;
 use crate::protocol::ShellInfo;
 use crate::remote_file_system::RemoteFileSystem;
 use crate::remote_process::RemoteProcess;
-use codex_shell_command::shell_detect::DetectedShell;
+use crewon_shell_command::shell_detect::DetectedShell;
 
 pub const CODEX_EXEC_SERVER_URL_ENV_VAR: &str = "CODEX_EXEC_SERVER_URL";
 
-/// Owns the execution/filesystem environments available to the Codex runtime.
+/// Owns the execution/filesystem environments available to the Crewon runtime.
 ///
 /// `EnvironmentManager` is a shared registry for concrete environments. Its
 /// default constructor preserves the legacy `CODEX_EXEC_SERVER_URL` behavior
@@ -472,7 +472,7 @@ impl Environment {
 impl EnvironmentInfo {
     pub(crate) fn local() -> Self {
         Self {
-            shell: codex_shell_command::shell_detect::default_user_shell().into(),
+            shell: crewon_shell_command::shell_detect::default_user_shell().into(),
         }
     }
 }
@@ -503,7 +503,7 @@ mod tests {
     fn test_runtime_paths() -> ExecServerRuntimePaths {
         ExecServerRuntimePaths::new(
             std::env::current_exe().expect("current exe"),
-            /*codex_linux_sandbox_exe*/ None,
+            /*crewon_linux_sandbox_exe*/ None,
         )
         .expect("runtime paths")
     }
@@ -878,14 +878,14 @@ mod tests {
     #[tokio::test]
     async fn test_environment_rejects_sandboxed_filesystem_without_runtime_paths() {
         let environment = Environment::default_for_tests();
-        let path = codex_utils_absolute_path::AbsolutePathBuf::from_absolute_path(
+        let path = crewon_utils_absolute_path::AbsolutePathBuf::from_absolute_path(
             std::env::current_exe().expect("current exe").as_path(),
         )
         .expect("absolute current exe");
         let sandbox = crate::FileSystemSandboxContext::from_permission_profile(
-            codex_protocol::models::PermissionProfile::from_runtime_permissions(
-                &codex_protocol::permissions::FileSystemSandboxPolicy::restricted(Vec::new()),
-                codex_protocol::permissions::NetworkSandboxPolicy::Restricted,
+            crewon_protocol::models::PermissionProfile::from_runtime_permissions(
+                &crewon_protocol::permissions::FileSystemSandboxPolicy::restricted(Vec::new()),
+                crewon_protocol::permissions::NetworkSandboxPolicy::Restricted,
             ),
         );
 

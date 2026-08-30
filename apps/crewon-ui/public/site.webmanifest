@@ -1,0 +1,17 @@
+{
+  "name": "CrewON",
+  "short_name": "CrewON",
+  "description": "Assistants, teams, schedules, knowledge, and workspaces in one place.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f4f5f7",
+  "theme_color": "#101214",
+  "icons": [
+    {
+      "src": "./crewon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

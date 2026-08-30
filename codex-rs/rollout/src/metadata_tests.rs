@@ -5,16 +5,16 @@ use chrono::DateTime;
 use chrono::NaiveDateTime;
 use chrono::Timelike;
 use chrono::Utc;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::CompactedItem;
-use codex_protocol::protocol::GitInfo;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_state::BackfillStatus;
-use codex_state::ThreadMetadataBuilder;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::CompactedItem;
+use crewon_protocol::protocol::GitInfo;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+use crewon_state::BackfillStatus;
+use crewon_state::ThreadMetadataBuilder;
 use pretty_assertions::assert_eq;
 use std::fs::File;
 use std::io::Write;
@@ -39,7 +39,7 @@ async fn extract_metadata_from_rollout_uses_session_meta() {
         timestamp: "2026-01-27T12:34:56Z".to_string(),
         cwd: dir.path().to_path_buf(),
         originator: "cli".to_string(),
-        cli_version: "0.0.0".to_string(),
+        client_version: "0.0.0".to_string(),
         source: SessionSource::default(),
         thread_source: None,
         agent_path: None,
@@ -54,6 +54,7 @@ async fn extract_metadata_from_rollout_uses_session_meta() {
     let session_meta_line = SessionMetaLine {
         meta: session_meta,
         git: None,
+        scene_runtime: None,
     };
     let rollout_line = RolloutLine {
         timestamp: "2026-01-27T12:34:56Z".to_string(),
@@ -93,7 +94,7 @@ async fn extract_metadata_from_rollout_returns_latest_memory_mode() {
         timestamp: "2026-01-27T12:34:56Z".to_string(),
         cwd: dir.path().to_path_buf(),
         originator: "cli".to_string(),
-        cli_version: "0.0.0".to_string(),
+        client_version: "0.0.0".to_string(),
         source: SessionSource::default(),
         thread_source: None,
         agent_path: None,
@@ -116,6 +117,7 @@ async fn extract_metadata_from_rollout_returns_latest_memory_mode() {
             item: RolloutItem::SessionMeta(SessionMetaLine {
                 meta: session_meta,
                 git: None,
+                scene_runtime: None,
             }),
         },
         RolloutLine {
@@ -123,6 +125,7 @@ async fn extract_metadata_from_rollout_returns_latest_memory_mode() {
             item: RolloutItem::SessionMeta(SessionMetaLine {
                 meta: polluted_meta,
                 git: None,
+                scene_runtime: None,
             }),
         },
     ];
@@ -193,7 +196,7 @@ async fn backfill_sessions_resumes_from_watermark_and_marks_complete() {
         /*git*/ None,
     );
 
-    let runtime = codex_state::StateRuntime::init(codex_home.clone(), "test-provider".to_string())
+    let runtime = crewon_state::StateRuntime::init(codex_home.clone(), "test-provider".to_string())
         .await
         .expect("initialize runtime");
     let first_watermark = backfill_watermark_for_path(codex_home.as_path(), first_path.as_path());
@@ -252,13 +255,13 @@ async fn backfill_sessions_preserves_existing_git_branch_and_fills_missing_git_f
         "2026-01-27T12:34:56Z",
         thread_uuid,
         Some(GitInfo {
-            commit_hash: Some(codex_git_utils::GitSha::new("rollout-sha")),
+            commit_hash: Some(crewon_git_utils::GitSha::new("rollout-sha")),
             branch: Some("rollout-branch".to_string()),
             repository_url: Some("git@example.com:openai/codex.git".to_string()),
         }),
     );
 
-    let runtime = codex_state::StateRuntime::init(codex_home.clone(), "test-provider".to_string())
+    let runtime = crewon_state::StateRuntime::init(codex_home.clone(), "test-provider".to_string())
         .await
         .expect("initialize runtime");
     let thread_id = ThreadId::from_string(&thread_uuid.to_string()).expect("thread id");
@@ -304,7 +307,7 @@ async fn backfill_sessions_normalizes_cwd_before_upsert() {
         /*git*/ None,
     );
 
-    let runtime = codex_state::StateRuntime::init(codex_home.clone(), "test-provider".to_string())
+    let runtime = crewon_state::StateRuntime::init(codex_home.clone(), "test-provider".to_string())
         .await
         .expect("initialize runtime");
 
@@ -357,7 +360,7 @@ fn write_rollout_in_sessions_with_cwd(
         timestamp: event_ts.to_string(),
         cwd,
         originator: "cli".to_string(),
-        cli_version: "0.0.0".to_string(),
+        client_version: "0.0.0".to_string(),
         source: SessionSource::default(),
         thread_source: None,
         agent_path: None,
@@ -372,6 +375,7 @@ fn write_rollout_in_sessions_with_cwd(
     let session_meta_line = SessionMetaLine {
         meta: session_meta,
         git,
+        scene_runtime: None,
     };
     let rollout_line = RolloutLine {
         timestamp: event_ts.to_string(),

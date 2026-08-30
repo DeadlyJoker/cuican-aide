@@ -3,4 +3,4 @@ config:
     line_length: 100
 
 globs:
-  - "docs/tui-chat-composer.md"
+  - "README.md"

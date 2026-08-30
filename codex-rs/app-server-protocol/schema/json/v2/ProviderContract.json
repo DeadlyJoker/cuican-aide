@@ -1,0 +1,980 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "ArtifactKind": {
+      "enum": [
+        "file",
+        "image",
+        "report",
+        "evidence",
+        "toolResult"
+      ],
+      "type": "string"
+    },
+    "ArtifactRef": {
+      "additionalProperties": false,
+      "properties": {
+        "artifactId": {
+          "type": "string"
+        },
+        "createdAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "kind": {
+          "$ref": "#/definitions/ArtifactKind"
+        },
+        "retention": {
+          "$ref": "#/definitions/RetentionClass"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "taskId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "artifactId",
+        "createdAt",
+        "kind",
+        "retention",
+        "revision",
+        "taskId"
+      ],
+      "type": "object"
+    },
+    "PlatformErrorCode": {
+      "enum": [
+        "invalidRequest",
+        "unauthorized",
+        "forbidden",
+        "notFound",
+        "conflict",
+        "capabilityUnsupported",
+        "providerUnavailable",
+        "timeout",
+        "unknownOutcome",
+        "internal"
+      ],
+      "type": "string"
+    },
+    "ProviderApprovalDecision": {
+      "enum": [
+        "approve",
+        "deny"
+      ],
+      "type": "string"
+    },
+    "ProviderApprovalRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "actionDigest": {
+          "type": "string"
+        },
+        "approvalId": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "format": "int64",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "actionDigest",
+        "approvalId",
+        "expiresAt"
+      ],
+      "type": "object"
+    },
+    "ProviderAuthorization": {
+      "additionalProperties": false,
+      "properties": {
+        "credential": {
+          "$ref": "#/definitions/ProviderCredentialAuthorization"
+        },
+        "delegation": {
+          "$ref": "#/definitions/ProviderDelegationAuthorization"
+        },
+        "purpose": {
+          "type": "string"
+        },
+        "scopes": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "serviceAudience": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": "string"
+        },
+        "subject": {
+          "type": "string"
+        },
+        "taskId": {
+          "type": "string"
+        },
+        "tenantId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "credential",
+        "delegation",
+        "purpose",
+        "scopes",
+        "serviceAudience",
+        "spaceId",
+        "subject",
+        "taskId",
+        "tenantId"
+      ],
+      "type": "object"
+    },
+    "ProviderCapabilityKind": {
+      "enum": [
+        "durableRun",
+        "resumableEvents",
+        "persistentConversation",
+        "remoteAgent",
+        "remoteTool",
+        "remoteKnowledge",
+        "remoteWorkflow",
+        "approval",
+        "toolResult"
+      ],
+      "type": "string"
+    },
+    "ProviderCommand": {
+      "oneOf": [
+        {
+          "properties": {
+            "commandId": {
+              "type": "string"
+            },
+            "idempotencyKey": {
+              "type": "string"
+            },
+            "input": {
+              "$ref": "#/definitions/ProviderRunInput"
+            },
+            "requestDigest": {
+              "type": "string"
+            },
+            "resource": {
+              "$ref": "#/definitions/ResourceRef"
+            },
+            "type": {
+              "enum": [
+                "start"
+              ],
+              "title": "StartProviderCommandType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "commandId",
+            "idempotencyKey",
+            "input",
+            "requestDigest",
+            "resource",
+            "type"
+          ],
+          "title": "StartProviderCommand",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "commandId": {
+              "type": "string"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "read"
+              ],
+              "title": "ReadProviderCommandType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "commandId",
+            "providerRunId",
+            "type"
+          ],
+          "title": "ReadProviderCommand",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "afterCursor": {
+              "$ref": "#/definitions/RequiredNullableString"
+            },
+            "commandId": {
+              "type": "string"
+            },
+            "limit": {
+              "format": "uint32",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "listEvents"
+              ],
+              "title": "ListEventsProviderCommandType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "afterCursor",
+            "commandId",
+            "limit",
+            "providerRunId",
+            "type"
+          ],
+          "title": "ListEventsProviderCommand",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "commandId": {
+              "type": "string"
+            },
+            "expectedRevision": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "cancel"
+              ],
+              "title": "CancelProviderCommandType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "commandId",
+            "expectedRevision",
+            "providerRunId",
+            "reason",
+            "type"
+          ],
+          "title": "CancelProviderCommand",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "actionDigest": {
+              "type": "string"
+            },
+            "approvalId": {
+              "type": "string"
+            },
+            "commandId": {
+              "type": "string"
+            },
+            "decision": {
+              "$ref": "#/definitions/ProviderApprovalDecision"
+            },
+            "idempotencyKey": {
+              "type": "string"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "decideApproval"
+              ],
+              "title": "DecideApprovalProviderCommandType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "actionDigest",
+            "approvalId",
+            "commandId",
+            "decision",
+            "idempotencyKey",
+            "providerRunId",
+            "type"
+          ],
+          "title": "DecideApprovalProviderCommand",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "artifact": {
+              "$ref": "#/definitions/ArtifactRef"
+            },
+            "commandId": {
+              "type": "string"
+            },
+            "idempotencyKey": {
+              "type": "string"
+            },
+            "intentDigest": {
+              "type": "string"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "resultDigest": {
+              "type": "string"
+            },
+            "toolCallId": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "submitToolResult"
+              ],
+              "title": "SubmitToolResultProviderCommandType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "artifact",
+            "commandId",
+            "idempotencyKey",
+            "intentDigest",
+            "providerRunId",
+            "resultDigest",
+            "toolCallId",
+            "type"
+          ],
+          "title": "SubmitToolResultProviderCommand",
+          "type": "object"
+        }
+      ]
+    },
+    "ProviderContractDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "items": {
+            "$ref": "#/definitions/ProviderCapabilityKind"
+          },
+          "type": "array"
+        },
+        "providerId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "capabilities",
+        "providerId"
+      ],
+      "type": "object"
+    },
+    "ProviderContractError": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "$ref": "#/definitions/PlatformErrorCode"
+        },
+        "providerRunId": {
+          "$ref": "#/definitions/RequiredNullableString"
+        },
+        "retryable": {
+          "type": "boolean"
+        },
+        "traceId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "providerRunId",
+        "retryable",
+        "traceId"
+      ],
+      "type": "object"
+    },
+    "ProviderCredentialAuthorization": {
+      "additionalProperties": false,
+      "properties": {
+        "credentialId": {
+          "type": "string"
+        },
+        "ownerSubject": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "credentialId",
+        "ownerSubject",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "ProviderDelegationAuthorization": {
+      "additionalProperties": false,
+      "properties": {
+        "audience": {
+          "type": "string"
+        },
+        "expiresAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "jti": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "audience",
+        "expiresAt",
+        "jti"
+      ],
+      "type": "object"
+    },
+    "ProviderRunEvent": {
+      "oneOf": [
+        {
+          "properties": {
+            "attemptId": {
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "revision": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "type": {
+              "enum": [
+                "runStarted"
+              ],
+              "title": "RunStartedProviderRunEventType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "attemptId",
+            "createdAt",
+            "cursor",
+            "eventId",
+            "providerRunId",
+            "revision",
+            "sequence",
+            "type"
+          ],
+          "title": "RunStartedProviderRunEvent",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "attemptId": {
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "summary": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "progress"
+              ],
+              "title": "ProgressProviderRunEventType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "attemptId",
+            "createdAt",
+            "cursor",
+            "eventId",
+            "providerRunId",
+            "sequence",
+            "summary",
+            "type"
+          ],
+          "title": "ProgressProviderRunEvent",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "approval": {
+              "$ref": "#/definitions/ProviderApprovalRequest"
+            },
+            "attemptId": {
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "type": {
+              "enum": [
+                "approvalRequired"
+              ],
+              "title": "ApprovalRequiredProviderRunEventType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "approval",
+            "attemptId",
+            "createdAt",
+            "cursor",
+            "eventId",
+            "providerRunId",
+            "sequence",
+            "type"
+          ],
+          "title": "ApprovalRequiredProviderRunEvent",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "argumentsDigest": {
+              "type": "string"
+            },
+            "attemptId": {
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "expiresAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "intentDigest": {
+              "type": "string"
+            },
+            "nonce": {
+              "type": "string"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "toolCallId": {
+              "type": "string"
+            },
+            "toolSchemaRevision": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "toolResultRequired"
+              ],
+              "title": "ToolResultRequiredProviderRunEventType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "argumentsDigest",
+            "attemptId",
+            "createdAt",
+            "cursor",
+            "eventId",
+            "expiresAt",
+            "intentDigest",
+            "nonce",
+            "providerRunId",
+            "sequence",
+            "toolCallId",
+            "toolSchemaRevision",
+            "type"
+          ],
+          "title": "ToolResultRequiredProviderRunEvent",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "attemptId": {
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "intentDigest": {
+              "type": "string"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "resultDigest": {
+              "type": "string"
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "toolCallId": {
+              "type": "string"
+            },
+            "type": {
+              "enum": [
+                "toolResultAccepted"
+              ],
+              "title": "ToolResultAcceptedProviderRunEventType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "attemptId",
+            "createdAt",
+            "cursor",
+            "eventId",
+            "intentDigest",
+            "providerRunId",
+            "resultDigest",
+            "sequence",
+            "toolCallId",
+            "type"
+          ],
+          "title": "ToolResultAcceptedProviderRunEvent",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "attemptId": {
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "outputArtifacts": {
+              "items": {
+                "$ref": "#/definitions/ArtifactRef"
+              },
+              "type": "array"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "type": {
+              "enum": [
+                "completed"
+              ],
+              "title": "CompletedProviderRunEventType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "attemptId",
+            "createdAt",
+            "cursor",
+            "eventId",
+            "outputArtifacts",
+            "providerRunId",
+            "sequence",
+            "type"
+          ],
+          "title": "CompletedProviderRunEvent",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "attemptId": {
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "error": {
+              "$ref": "#/definitions/ProviderContractError"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "type": {
+              "enum": [
+                "failed"
+              ],
+              "title": "FailedProviderRunEventType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "attemptId",
+            "createdAt",
+            "cursor",
+            "error",
+            "eventId",
+            "providerRunId",
+            "sequence",
+            "type"
+          ],
+          "title": "FailedProviderRunEvent",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "attemptId": {
+              "type": "string"
+            },
+            "createdAt": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "cursor": {
+              "type": "string"
+            },
+            "eventId": {
+              "type": "string"
+            },
+            "providerRunId": {
+              "type": "string"
+            },
+            "reason": {
+              "type": "string"
+            },
+            "sequence": {
+              "format": "uint64",
+              "minimum": 0.0,
+              "type": "integer"
+            },
+            "type": {
+              "enum": [
+                "cancelled"
+              ],
+              "title": "CancelledProviderRunEventType",
+              "type": "string"
+            }
+          },
+          "required": [
+            "attemptId",
+            "createdAt",
+            "cursor",
+            "eventId",
+            "providerRunId",
+            "reason",
+            "sequence",
+            "type"
+          ],
+          "title": "CancelledProviderRunEvent",
+          "type": "object"
+        }
+      ]
+    },
+    "ProviderRunInput": {
+      "additionalProperties": false,
+      "properties": {
+        "contextRefs": {
+          "items": {
+            "$ref": "#/definitions/ArtifactRef"
+          },
+          "type": "array"
+        },
+        "prompt": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "contextRefs",
+        "prompt"
+      ],
+      "type": "object"
+    },
+    "RequiredNullableString": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "ResourceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "providerId": {
+          "type": "string"
+        },
+        "resourceId": {
+          "type": "string"
+        },
+        "resourceType": {
+          "$ref": "#/definitions/ResourceType"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId",
+        "resourceId",
+        "resourceType",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "ResourceType": {
+      "enum": [
+        "agent",
+        "skill",
+        "mcpServer",
+        "mcpTool",
+        "knowledgeBase",
+        "workflow"
+      ],
+      "type": "string"
+    },
+    "RetentionClass": {
+      "enum": [
+        "session",
+        "task",
+        "userManaged",
+        "compliance"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "authorization": {
+      "$ref": "#/definitions/ProviderAuthorization"
+    },
+    "commands": {
+      "items": {
+        "$ref": "#/definitions/ProviderCommand"
+      },
+      "type": "array"
+    },
+    "error": {
+      "$ref": "#/definitions/ProviderContractError"
+    },
+    "events": {
+      "items": {
+        "$ref": "#/definitions/ProviderRunEvent"
+      },
+      "type": "array"
+    },
+    "provider": {
+      "$ref": "#/definitions/ProviderContractDescriptor"
+    },
+    "schemaVersion": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "authorization",
+    "commands",
+    "error",
+    "events",
+    "provider",
+    "schemaVersion"
+  ],
+  "title": "ProviderContract",
+  "type": "object"
+}

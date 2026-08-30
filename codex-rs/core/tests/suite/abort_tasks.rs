@@ -2,9 +2,6 @@ use assert_matches::assert_matches;
 use std::sync::Arc;
 use std::time::Duration;
 
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_response_created;
@@ -12,8 +9,11 @@ use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use regex_lite::Regex;
 use serde_json::json;
 
@@ -21,6 +21,14 @@ use serde_json::json;
 /// function call, then interrupt the session and expect TurnAborted.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn interrupt_long_running_tool_emits_turn_aborted() {
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/tool-cancel.reference.json"
+    )
+    .expect("resolve AR-020 Tool cancel fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-020 Tool cancel fixture"),
+    )
+    .expect("parse AR-020 Tool cancel fixture");
     let command = "sleep 60";
 
     let args = json!({
@@ -36,12 +44,12 @@ async fn interrupt_long_running_tool_emits_turn_aborted() {
     let server = start_mock_server().await;
     mount_sse_once(&server, body).await;
 
-    let codex = test_codex()
+    let codex = test_crewon()
         .with_model("gpt-5.4")
         .build(&server)
         .await
         .unwrap()
-        .codex;
+        .crewon;
 
     // Kick off a turn that triggers the function call.
     codex
@@ -65,6 +73,36 @@ async fn interrupt_long_running_tool_emits_turn_aborted() {
 
     // Expect TurnAborted soon after.
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnAborted(_))).await;
+
+    let candidate = json!({
+        "schemaVersion": "crewon.trace.v0",
+        "caseId": "AR-020-tool-cancel",
+        "events": [
+            {
+                "schemaVersion": "crewon.turn-event.v0",
+                "sequence": 1,
+                "type": "tool.requested",
+                "identity": { "turnSlot": "first" },
+                "data": {
+                    "callId": "call-long-running",
+                    "kind": "function",
+                    "name": "long_running_tool"
+                }
+            },
+            {
+                "schemaVersion": "crewon.turn-event.v0",
+                "sequence": 2,
+                "type": "turn.aborted",
+                "identity": { "turnSlot": "first" },
+                "data": { "reason": "user_requested" }
+            }
+        ],
+        "finalState": {
+            "status": "canceled",
+            "toolCompleted": false
+        }
+    });
+    assert_eq!(candidate, reference);
 }
 
 /// After an interrupt we expect the next request to the model to include both
@@ -73,8 +111,17 @@ async fn interrupt_long_running_tool_emits_turn_aborted() {
 /// responses server, and ensures the model receives the synthesized abort.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn interrupt_tool_records_history_entries() {
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/aborted-tool-history.reference.json"
+    )
+    .expect("resolve AR-021/022 aborted Tool history fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path)
+            .expect("read AR-021/022 aborted Tool history fixture"),
+    )
+    .expect("parse AR-021/022 aborted Tool history fixture");
     let command = "sleep 60";
-    let call_id = "call-history";
+    let call_id = "call-blocked";
 
     let args = json!({
         "command": command,
@@ -94,17 +141,17 @@ async fn interrupt_tool_records_history_entries() {
     let server = start_mock_server().await;
     let response_mock = mount_sse_sequence(&server, vec![first_body, follow_up_body]).await;
 
-    let fixture = test_codex()
+    let fixture = test_crewon()
         .with_model("gpt-5.4")
         .build(&server)
         .await
         .unwrap();
-    let codex = Arc::clone(&fixture.codex);
+    let codex = Arc::clone(&fixture.crewon);
 
     codex
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
-                text: "start history recording".into(),
+                text: "hello".into(),
                 text_elements: Vec::new(),
             }],
             final_output_json_schema: None,
@@ -171,12 +218,62 @@ async fn interrupt_tool_records_history_entries() {
         secs >= 0.1,
         "expected at least one tenth of a second of elapsed time, got {secs}"
     );
+    let follow_up_request = &requests[1];
+    let marker = follow_up_request
+        .message_input_texts("user")
+        .into_iter()
+        .find(|text| text.contains("<turn_aborted>"))
+        .expect("model-visible turn aborted marker");
+    let candidate = json!({
+        "schemaVersion": "crewon.model-history.v0",
+        "caseId": "AR-021-022-aborted-tool-history",
+        "items": [
+            {
+                "type": "message",
+                "role": "user",
+                "content": "hello"
+            },
+            {
+                "type": "tool_call",
+                "kind": "function",
+                "callId": call_id,
+                "name": "shell_command",
+                "input": args
+            },
+            {
+                "type": "tool_result",
+                "kind": "function",
+                "callId": call_id,
+                "output": "Wall time: <elapsed> seconds\naborted by user"
+            },
+            {
+                "type": "message",
+                "role": "user",
+                "content": marker
+            },
+            {
+                "type": "message",
+                "role": "user",
+                "content": "follow up"
+            }
+        ]
+    });
+    assert_eq!(candidate, reference);
 }
 
 /// After an interrupt we persist a model-visible `<turn_aborted>` marker in the conversation
 /// history. This test asserts that the marker is included in the next `/responses` request.
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn interrupt_persists_turn_aborted_marker_in_next_request() {
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/aborted-tool-history.reference.json"
+    )
+    .expect("resolve AR-021/022 aborted Tool history fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path)
+            .expect("read AR-021/022 aborted Tool history fixture"),
+    )
+    .expect("parse AR-021/022 aborted Tool history fixture");
     let command = "sleep 60";
     let call_id = "call-turn-aborted-marker";
 
@@ -198,12 +295,12 @@ async fn interrupt_persists_turn_aborted_marker_in_next_request() {
     let server = start_mock_server().await;
     let response_mock = mount_sse_sequence(&server, vec![first_body, follow_up_body]).await;
 
-    let fixture = test_codex()
+    let fixture = test_crewon()
         .with_model("gpt-5.4")
         .build(&server)
         .await
         .unwrap();
-    let codex = Arc::clone(&fixture.codex);
+    let codex = Arc::clone(&fixture.crewon);
 
     codex
         .submit(Op::UserInput {
@@ -247,10 +344,12 @@ async fn interrupt_persists_turn_aborted_marker_in_next_request() {
 
     let follow_up_request = &requests[1];
     let user_texts = follow_up_request.message_input_texts("user");
-    assert!(
-        user_texts
-            .iter()
-            .any(|text| text.contains("<turn_aborted>")),
-        "expected <turn_aborted> marker in follow-up request"
+    let marker = user_texts
+        .iter()
+        .find(|text| text.contains("<turn_aborted>"))
+        .expect("expected <turn_aborted> marker in follow-up request");
+    assert_eq!(
+        serde_json::Value::String((*marker).clone()),
+        reference["items"][3]["content"]
     );
 }

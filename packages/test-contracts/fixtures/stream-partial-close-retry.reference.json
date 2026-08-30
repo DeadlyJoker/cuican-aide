@@ -1,0 +1,77 @@
+{
+  "schemaVersion": "crewon.trace.v0",
+  "caseId": "AR-002-partial-stream-retry",
+  "events": [
+    {
+      "schemaVersion": "crewon.agent-event.v0",
+      "sequence": 1,
+      "type": "segment.started",
+      "identity": {
+        "runId": "run-partial-retry-1",
+        "segmentId": "segment-partial-retry-1"
+      },
+      "data": {
+        "attempt": 1,
+        "model": "partial-retry-model"
+      }
+    },
+    {
+      "schemaVersion": "crewon.agent-event.v0",
+      "sequence": 2,
+      "type": "model.output.delta",
+      "identity": {
+        "runId": "run-partial-retry-1",
+        "segmentId": "segment-partial-retry-1"
+      },
+      "data": {
+        "delta": "draft"
+      }
+    },
+    {
+      "schemaVersion": "crewon.agent-event.v0",
+      "sequence": 3,
+      "type": "model.sampling.retry",
+      "identity": {
+        "runId": "run-partial-retry-1",
+        "segmentId": "segment-partial-retry-1"
+      },
+      "data": {
+        "samplingAttempt": 1,
+        "maxRetries": 1,
+        "code": "model_stream_incomplete",
+        "discardedOutput": true
+      }
+    },
+    {
+      "schemaVersion": "crewon.agent-event.v0",
+      "sequence": 4,
+      "type": "model.output.delta",
+      "identity": {
+        "runId": "run-partial-retry-1",
+        "segmentId": "segment-partial-retry-1"
+      },
+      "data": {
+        "delta": "done"
+      }
+    },
+    {
+      "schemaVersion": "crewon.agent-event.v0",
+      "sequence": 5,
+      "type": "segment.completed",
+      "identity": {
+        "runId": "run-partial-retry-1",
+        "segmentId": "segment-partial-retry-1"
+      },
+      "data": {
+        "output": "done"
+      }
+    }
+  ],
+  "finalState": {
+    "status": "completed",
+    "lastSequence": 5,
+    "requestCount": 2,
+    "samplingRetries": 1,
+    "finalOutput": "done"
+  }
+}

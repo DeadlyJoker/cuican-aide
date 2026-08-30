@@ -1,0 +1,14 @@
+load("//:defs.bzl", "crewon_rust_crate")
+
+crewon_rust_crate(
+    name = "device-protocol",
+    crate_name = "crewon_device_protocol",
+    test_data_extra = [
+        "//:packages/test-contracts/fixtures/device-protocol.reference.json",
+    ],
+)
+
+alias(
+    name = "crewon-device-protocol",
+    actual = ":device-protocol",
+)

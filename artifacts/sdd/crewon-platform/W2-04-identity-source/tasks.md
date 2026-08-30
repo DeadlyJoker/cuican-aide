@@ -1,0 +1,32 @@
+# W2-04IS Tasks
+
+- [x] D1 审计 cuican-api 用户/会话能力，确认其不拥有 Agent Platform tenant/space authority。
+- [x] D2 审计 Agent Platform UserExternalIdentity、numeric User 与 Permission Service membership。
+- [x] D3 冻结 exact resolve/read + bounded freshness，移除不必要的全局 snapshot/feed 设计。
+- [x] C1 增加 canonical identity-source v1 fixture 与 provenance。
+- [x] C2 增加 Agent Platform strict Pydantic contract、digest 与 known-vector Harness。
+- [x] C3 增加 CrewON strict Rust parser、bounds/digest/freshness/redaction Harness。
+- [x] C4 修正 stable actor 长度前缀为固定 u64，并加入跨语言 known vector。
+- [x] B1 Agent Platform authority binding model/application Red Harness。
+- [x] B2 实现 active uniqueness、terminal revoke、rejoin/new binding 与 restart/concurrency Harness。
+- [x] B3 实现 Permission Service exact membership authorizer；依赖不可用 fail-closed。
+- [x] A1 实现独立 service credential + bootstrap principal assertion auth boundary。
+- [x] A2 实现 exact resolve/read API，不增加 list/global enumeration；仅由默认关闭的 composition 注册。
+- [x] R1 CrewON fresh snapshot CAS/revoke adapter、bounded source client 与 restart refresh supervisor。
+- [x] P1a Agent Platform principal session RS256 issuer 与 durable session registry kernel。
+- [x] P1b Agent Platform gap-free JTI revoke stream、bounded snapshot/read 与 compaction kernel。
+- [x] P1c-1 Agent Platform session-issue/revocation bounded HTTP contract 与独立 service scopes。
+- [x] P1c-2a CrewON pinned/strict session-issue 与 revocation snapshot/read client。
+- [x] P1c-2b1 CrewON RS256 verifier、server-owned binding metadata、启动 snapshot/catch-up、gap-free cursor poll、5 秒 source deadline 与 freshness loss fail-closed Harness。
+- [x] P1c-2b2a 注册两端默认关闭的受监督 production composition、bootstrap/exchange boundary 与 auth lifecycle revoke hook；默认 CLI/服务继续关闭。
+- [x] P1c-2b2b 前端 bootstrap/exchange/reconnect、浏览器 WebSocket subprotocol、Vite/nginx same-origin proxy 与 no-storage Harness。
+- [x] P1c-2b2b-1 principal exchange 在返回 session 前持久化 authoritative resolve 的 exact Provider identity mapping；owner drift/state conflict fail-closed。
+- [x] P1c-2b2c 增加 bounded durable auth-session family + monotonic epoch；logout 精确撤销当前 family，context switch 轮换当前 family，membership/binding removal 按 exact context 撤销；旧 access/refresh 与 logout 前 bootstrap 全部 fail-closed。
+- [x] P1c-2b2c-1 增加与 refresh 生命周期对齐的 server expiry、滑动续期、32-slot 过期回收，以及 bootstrap/principal-session 不得活过 family 的 expiry clamp Harness。
+- [x] P1c-2b2d-1 使用隔离服务、真实临时 RSA keypairs 完成跨服务 logout/context-switch/member-removal/restart Harness。
+- [ ] P1c-2b2d-2 完成生产 key 供应/轮换与完整服务配置验收。
+- [x] V1 双端 contract bytes/SHA、targeted/package tests、ruff/mypy 与 Rust package tests。
+- [x] V1b 完成本轮 Rust scoped fix/fmt 并记录最终结果。
+- [x] V2 隔离 Provider v3 live smoke；身份生命周期、restart、discovery、durable Run 与 output Artifact 子项已通过。
+- [x] V2b 隔离运行中 cancel、同 worker 后续执行、worker crash/restart、unknownOutcome 与 idempotent replay 故障演练。
+- [ ] G1 所有验证通过后才打开 production Gate。

@@ -1,18 +1,18 @@
-use codex_config::config_toml::ConfigToml;
-use codex_core::ARCHIVED_SESSIONS_SUBDIR;
-use codex_core::SESSIONS_SUBDIR;
-use codex_core::personality_migration::PERSONALITY_MIGRATION_FILENAME;
-use codex_core::personality_migration::PersonalityMigrationStatus;
-use codex_core::personality_migration::maybe_migrate_personality;
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::Personality;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::UserMessageEvent;
+use crewon_config::config_toml::ConfigToml;
+use crewon_core::ARCHIVED_SESSIONS_SUBDIR;
+use crewon_core::SESSIONS_SUBDIR;
+use crewon_core::personality_migration::PERSONALITY_MIGRATION_FILENAME;
+use crewon_core::personality_migration::PersonalityMigrationStatus;
+use crewon_core::personality_migration::maybe_migrate_personality;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::Personality;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::UserMessageEvent;
 use pretty_assertions::assert_eq;
 use std::io;
 use std::path::Path;
@@ -65,8 +65,8 @@ async fn write_rollout_with_user_event(dir: &Path, thread_id: ThreadId) -> io::R
             timestamp: TEST_TIMESTAMP.to_string(),
             cwd: std::path::PathBuf::from("."),
             originator: "test_originator".to_string(),
-            cli_version: "test_version".to_string(),
-            source: SessionSource::Cli,
+            client_version: "test_version".to_string(),
+            source: SessionSource::LegacyCli,
             thread_source: None,
             agent_path: None,
             agent_nickname: None,
@@ -78,6 +78,7 @@ async fn write_rollout_with_user_event(dir: &Path, thread_id: ThreadId) -> io::R
             multi_agent_version: None,
         },
         git: None,
+        scene_runtime: None,
     };
     let meta_line = RolloutLine {
         timestamp: TEST_TIMESTAMP.to_string(),
@@ -115,8 +116,8 @@ async fn write_rollout_with_meta_only(dir: &Path, thread_id: ThreadId) -> io::Re
             timestamp: TEST_TIMESTAMP.to_string(),
             cwd: std::path::PathBuf::from("."),
             originator: "test_originator".to_string(),
-            cli_version: "test_version".to_string(),
-            source: SessionSource::Cli,
+            client_version: "test_version".to_string(),
+            source: SessionSource::LegacyCli,
             thread_source: None,
             agent_path: None,
             agent_nickname: None,
@@ -128,6 +129,7 @@ async fn write_rollout_with_meta_only(dir: &Path, thread_id: ThreadId) -> io::Re
             multi_agent_version: None,
         },
         git: None,
+        scene_runtime: None,
     };
     let meta_line = RolloutLine {
         timestamp: TEST_TIMESTAMP.to_string(),

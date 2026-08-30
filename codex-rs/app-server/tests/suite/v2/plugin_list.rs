@@ -6,23 +6,23 @@ use app_test_support::ChatGptAuthFixture;
 use app_test_support::TestAppServer;
 use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::PluginAuthPolicy;
-use codex_app_server_protocol::PluginInstallPolicy;
-use codex_app_server_protocol::PluginInstalledParams;
-use codex_app_server_protocol::PluginInstalledResponse;
-use codex_app_server_protocol::PluginListMarketplaceKind;
-use codex_app_server_protocol::PluginListParams;
-use codex_app_server_protocol::PluginListResponse;
-use codex_app_server_protocol::PluginMarketplaceEntry;
-use codex_app_server_protocol::PluginShareDiscoverability;
-use codex_app_server_protocol::PluginSource;
-use codex_app_server_protocol::PluginSummary;
-use codex_app_server_protocol::RequestId;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_core::config::set_project_trust_level;
-use codex_protocol::config_types::TrustLevel;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::PluginAuthPolicy;
+use crewon_app_server_protocol::PluginInstallPolicy;
+use crewon_app_server_protocol::PluginInstalledParams;
+use crewon_app_server_protocol::PluginInstalledResponse;
+use crewon_app_server_protocol::PluginListMarketplaceKind;
+use crewon_app_server_protocol::PluginListParams;
+use crewon_app_server_protocol::PluginListResponse;
+use crewon_app_server_protocol::PluginMarketplaceEntry;
+use crewon_app_server_protocol::PluginShareDiscoverability;
+use crewon_app_server_protocol::PluginSource;
+use crewon_app_server_protocol::PluginSummary;
+use crewon_app_server_protocol::RequestId;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_core::config::set_project_trust_level;
+use crewon_protocol::config_types::TrustLevel;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use pretty_assertions::assert_eq;
@@ -353,7 +353,7 @@ async fn plugin_list_keeps_valid_marketplaces_when_another_marketplace_fails_to_
     std::fs::create_dir_all(
         valid_repo_root
             .path()
-            .join("plugins/valid-plugin/.codex-plugin"),
+            .join("plugins/valid-plugin/.crewon-plugin"),
     )?;
     std::fs::create_dir_all(invalid_repo_root.path().join(".git"))?;
     std::fs::create_dir_all(invalid_repo_root.path().join(".agents/plugins"))?;
@@ -390,7 +390,7 @@ async fn plugin_list_keeps_valid_marketplaces_when_another_marketplace_fails_to_
     std::fs::write(
         valid_repo_root
             .path()
-            .join("plugins/valid-plugin/.codex-plugin/plugin.json"),
+            .join("plugins/valid-plugin/.crewon-plugin/plugin.json"),
         r#"{"name":"valid-plugin","keywords":["api-key","developer tools"]}"#,
     )?;
     std::fs::write(invalid_marketplace_path.as_path(), "{not json")?;
@@ -442,7 +442,7 @@ async fn plugin_list_keeps_valid_marketplaces_when_another_marketplace_fails_to_
                 enabled: false,
                 install_policy: PluginInstallPolicy::Available,
                 auth_policy: PluginAuthPolicy::OnInstall,
-                availability: codex_app_server_protocol::PluginAvailability::Available,
+                availability: crewon_app_server_protocol::PluginAvailability::Available,
                 interface: None,
                 keywords: vec!["api-key".to_string(), "developer tools".to_string()],
             }],
@@ -465,7 +465,7 @@ async fn plugin_list_keeps_valid_marketplaces_when_another_marketplace_fails_to_
 }
 
 #[tokio::test]
-async fn plugin_list_returns_empty_when_workspace_codex_plugins_disabled() -> Result<()> {
+async fn plugin_list_returns_empty_when_workspace_crewon_plugins_disabled() -> Result<()> {
     let codex_home = TempDir::new()?;
     let repo_root = TempDir::new()?;
     let server = MockServer::start().await;
@@ -488,7 +488,7 @@ async fn plugin_list_returns_empty_when_workspace_codex_plugins_disabled() -> Re
     std::fs::write(
         repo_root.path().join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "demo-plugin",
@@ -549,13 +549,13 @@ async fn plugin_list_returns_empty_when_workspace_codex_plugins_disabled() -> Re
 }
 
 #[tokio::test]
-async fn plugin_list_reuses_cached_workspace_codex_plugins_setting() -> Result<()> {
+async fn plugin_list_reuses_cached_workspace_crewon_plugins_setting() -> Result<()> {
     let codex_home = TempDir::new()?;
     let repo_root = TempDir::new()?;
     let server = MockServer::start().await;
     std::fs::create_dir_all(repo_root.path().join(".git"))?;
     std::fs::create_dir_all(repo_root.path().join(".agents/plugins"))?;
-    std::fs::create_dir_all(repo_root.path().join("demo-plugin/.codex-plugin"))?;
+    std::fs::create_dir_all(repo_root.path().join("demo-plugin/.crewon-plugin"))?;
     write_plugins_enabled_config_with_base_url(
         codex_home.path(),
         &format!("{}/backend-api/", server.uri()),
@@ -588,7 +588,7 @@ async fn plugin_list_reuses_cached_workspace_codex_plugins_setting() -> Result<(
     std::fs::write(
         repo_root
             .path()
-            .join("demo-plugin/.codex-plugin/plugin.json"),
+            .join("demo-plugin/.crewon-plugin/plugin.json"),
         r#"{"name":"demo-plugin"}"#,
     )?;
 
@@ -733,8 +733,8 @@ async fn plugin_list_uses_alternate_discoverable_manifest_and_keeps_undiscoverab
                     enabled: false,
                     install_policy: PluginInstallPolicy::Available,
                     auth_policy: PluginAuthPolicy::OnInstall,
-                    availability: codex_app_server_protocol::PluginAvailability::Available,
-                    interface: Some(codex_app_server_protocol::PluginInterface {
+                    availability: crewon_app_server_protocol::PluginAvailability::Available,
+                    interface: Some(crewon_app_server_protocol::PluginInterface {
                         display_name: Some("Valid Plugin".to_string()),
                         short_description: None,
                         long_description: None,
@@ -770,7 +770,7 @@ async fn plugin_list_uses_alternate_discoverable_manifest_and_keeps_undiscoverab
                     enabled: false,
                     install_policy: PluginInstallPolicy::Available,
                     auth_policy: PluginAuthPolicy::OnInstall,
-                    availability: codex_app_server_protocol::PluginAvailability::Available,
+                    availability: crewon_app_server_protocol::PluginAvailability::Available,
                     interface: None,
                     keywords: Vec::new(),
                 },
@@ -789,7 +789,7 @@ async fn plugin_list_accepts_omitted_cwds() -> Result<()> {
     std::fs::write(
         codex_home.path().join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "home-plugin",
@@ -835,12 +835,12 @@ async fn plugin_list_returns_share_context_for_shared_local_plugin() -> Result<(
     let plugin_root = repo_root.path().join("plugins/demo-plugin");
     std::fs::create_dir_all(repo_root.path().join(".git"))?;
     std::fs::create_dir_all(repo_root.path().join(".agents/plugins"))?;
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     write_plugins_enabled_config(codex_home.path())?;
     std::fs::write(
         repo_root.path().join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "demo-plugin",
@@ -853,7 +853,7 @@ async fn plugin_list_returns_share_context_for_shared_local_plugin() -> Result<(
 }"#,
     )?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"demo-plugin","version":"1.2.3"}"#,
     )?;
     write_plugin_share_local_path_mapping(
@@ -907,12 +907,12 @@ async fn plugin_list_includes_install_and_enabled_state_from_config() -> Result<
     let repo_root = TempDir::new()?;
     std::fs::create_dir_all(repo_root.path().join(".git"))?;
     std::fs::create_dir_all(repo_root.path().join(".agents/plugins"))?;
-    write_installed_plugin(&codex_home, "codex-curated", "enabled-plugin")?;
-    write_installed_plugin(&codex_home, "codex-curated", "disabled-plugin")?;
+    write_installed_plugin(&codex_home, "crewon-curated", "enabled-plugin")?;
+    write_installed_plugin(&codex_home, "crewon-curated", "disabled-plugin")?;
     std::fs::write(
         repo_root.path().join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "interface": {
     "displayName": "ChatGPT Official"
   },
@@ -946,10 +946,10 @@ async fn plugin_list_includes_install_and_enabled_state_from_config() -> Result<
         r#"[features]
 plugins = true
 
-[plugins."enabled-plugin@codex-curated"]
+[plugins."enabled-plugin@crewon-curated"]
 enabled = true
 
-[plugins."disabled-plugin@codex-curated"]
+[plugins."disabled-plugin@crewon-curated"]
 enabled = false
 "#,
     )?;
@@ -985,7 +985,7 @@ enabled = false
         })
         .expect("expected repo marketplace entry");
 
-    assert_eq!(marketplace.name, "codex-curated");
+    assert_eq!(marketplace.name, "crewon-curated");
     assert_eq!(
         marketplace
             .interface
@@ -994,7 +994,7 @@ enabled = false
         Some("ChatGPT Official")
     );
     assert_eq!(marketplace.plugins.len(), 3);
-    assert_eq!(marketplace.plugins[0].id, "enabled-plugin@codex-curated");
+    assert_eq!(marketplace.plugins[0].id, "enabled-plugin@crewon-curated");
     assert_eq!(marketplace.plugins[0].name, "enabled-plugin");
     assert_eq!(marketplace.plugins[0].installed, true);
     assert_eq!(marketplace.plugins[0].enabled, true);
@@ -1006,7 +1006,7 @@ enabled = false
         marketplace.plugins[0].auth_policy,
         PluginAuthPolicy::OnInstall
     );
-    assert_eq!(marketplace.plugins[1].id, "disabled-plugin@codex-curated");
+    assert_eq!(marketplace.plugins[1].id, "disabled-plugin@crewon-curated");
     assert_eq!(marketplace.plugins[1].name, "disabled-plugin");
     assert_eq!(marketplace.plugins[1].installed, true);
     assert_eq!(marketplace.plugins[1].enabled, false);
@@ -1020,7 +1020,7 @@ enabled = false
     );
     assert_eq!(
         marketplace.plugins[2].id,
-        "uninstalled-plugin@codex-curated"
+        "uninstalled-plugin@crewon-curated"
     );
     assert_eq!(marketplace.plugins[2].name, "uninstalled-plugin");
     assert_eq!(marketplace.plugins[2].installed, false);
@@ -1040,11 +1040,11 @@ enabled = false
 async fn plugin_list_uses_home_config_for_enabled_state() -> Result<()> {
     let codex_home = TempDir::new()?;
     std::fs::create_dir_all(codex_home.path().join(".agents/plugins"))?;
-    write_installed_plugin(&codex_home, "codex-curated", "shared-plugin")?;
+    write_installed_plugin(&codex_home, "crewon-curated", "shared-plugin")?;
     std::fs::write(
         codex_home.path().join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "shared-plugin",
@@ -1061,7 +1061,7 @@ async fn plugin_list_uses_home_config_for_enabled_state() -> Result<()> {
         r#"[features]
 plugins = true
 
-[plugins."shared-plugin@codex-curated"]
+[plugins."shared-plugin@crewon-curated"]
 enabled = true
 "#,
     )?;
@@ -1074,7 +1074,7 @@ enabled = true
             .path()
             .join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "shared-plugin",
@@ -1089,7 +1089,7 @@ enabled = true
     std::fs::create_dir_all(workspace_enabled.path().join(".codex"))?;
     std::fs::write(
         workspace_enabled.path().join(".codex/config.toml"),
-        r#"[plugins."shared-plugin@codex-curated"]
+        r#"[plugins."shared-plugin@crewon-curated"]
 enabled = false
 "#,
     )?;
@@ -1134,7 +1134,7 @@ enabled = false
         .flat_map(|marketplace| marketplace.plugins.iter())
         .find(|plugin| plugin.name == "shared-plugin")
         .expect("expected shared-plugin entry");
-    assert_eq!(shared_plugin.id, "shared-plugin@codex-curated");
+    assert_eq!(shared_plugin.id, "shared-plugin@crewon-curated");
     assert_eq!(shared_plugin.installed, true);
     assert_eq!(shared_plugin.enabled, true);
     Ok(())
@@ -1147,12 +1147,12 @@ async fn plugin_list_returns_plugin_interface_with_absolute_asset_paths() -> Res
     let plugin_root = repo_root.path().join("plugins/demo-plugin");
     std::fs::create_dir_all(repo_root.path().join(".git"))?;
     std::fs::create_dir_all(repo_root.path().join(".agents/plugins"))?;
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     write_plugins_enabled_config(codex_home.path())?;
     std::fs::write(
         repo_root.path().join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "demo-plugin",
@@ -1170,7 +1170,7 @@ async fn plugin_list_returns_plugin_interface_with_absolute_asset_paths() -> Res
 }"#,
     )?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r##"{
   "name": "demo-plugin",
   "interface": {
@@ -1219,7 +1219,7 @@ async fn plugin_list_returns_plugin_interface_with_absolute_asset_paths() -> Res
         .find(|plugin| plugin.name == "demo-plugin")
         .expect("expected demo-plugin entry");
 
-    assert_eq!(plugin.id, "demo-plugin@codex-curated");
+    assert_eq!(plugin.id, "demo-plugin@crewon-curated");
     assert_eq!(plugin.installed, false);
     assert_eq!(plugin.enabled, false);
     assert_eq!(plugin.install_policy, PluginInstallPolicy::Available);
@@ -1281,12 +1281,12 @@ async fn plugin_list_accepts_legacy_string_default_prompt() -> Result<()> {
     let plugin_root = repo_root.path().join("plugins/demo-plugin");
     std::fs::create_dir_all(repo_root.path().join(".git"))?;
     std::fs::create_dir_all(repo_root.path().join(".agents/plugins"))?;
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     write_plugins_enabled_config(codex_home.path())?;
     std::fs::write(
         repo_root.path().join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "demo-plugin",
@@ -1299,7 +1299,7 @@ async fn plugin_list_accepts_legacy_string_default_prompt() -> Result<()> {
 }"#,
     )?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r##"{
   "name": "demo-plugin",
   "interface": {
@@ -1371,9 +1371,9 @@ async fn plugin_list_returns_installed_git_source_interface_from_cache() -> Resu
         ),
     )?;
     let cached_plugin_root = codex_home.path().join("plugins/cache/debug/toolkit/local");
-    std::fs::create_dir_all(cached_plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(cached_plugin_root.join(".crewon-plugin"))?;
     std::fs::write(
-        cached_plugin_root.join(".codex-plugin/plugin.json"),
+        cached_plugin_root.join(".crewon-plugin/plugin.json"),
         r##"{
   "name": "toolkit",
   "interface": {
@@ -1509,9 +1509,9 @@ async fn app_server_startup_sync_downloads_remote_installed_plugin_bundles() -> 
     .await?;
     timeout(DEFAULT_TIMEOUT, mcp.initialize()).await??;
 
-    wait_for_path_exists(&installed_path.join(".codex-plugin/plugin.json")).await?;
+    wait_for_path_exists(&installed_path.join(".crewon-plugin/plugin.json")).await?;
     let installed_plugin_manifest: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(installed_path.join(".codex-plugin/plugin.json"))?,
+        &std::fs::read_to_string(installed_path.join(".crewon-plugin/plugin.json"))?,
     )?;
     assert_eq!(
         installed_plugin_manifest["version"],
@@ -1613,9 +1613,9 @@ async fn plugin_list_sync_upgrades_and_removes_remote_installed_plugin_bundles()
         vec![("linear@openai-curated-remote".to_string(), true, true)]
     );
 
-    wait_for_path_exists(&new_path.join(".codex-plugin/plugin.json")).await?;
+    wait_for_path_exists(&new_path.join(".crewon-plugin/plugin.json")).await?;
     let installed_plugin_manifest: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(new_path.join(".codex-plugin/plugin.json"))?,
+        &std::fs::read_to_string(new_path.join(".crewon-plugin/plugin.json"))?,
     )?;
     assert_eq!(
         installed_plugin_manifest["version"],
@@ -1801,7 +1801,7 @@ async fn plugin_list_includes_remote_marketplaces_when_remote_plugin_enabled() -
     assert_eq!(remote_marketplace.plugins[0].enabled, true);
     assert_eq!(
         remote_marketplace.plugins[0].availability,
-        codex_app_server_protocol::PluginAvailability::Available
+        crewon_app_server_protocol::PluginAvailability::Available
     );
     assert_eq!(
         remote_marketplace.plugins[0]
@@ -2528,7 +2528,7 @@ plugin_sharing = false
     );
     let installed_path = codex_home
         .path()
-        .join("plugins/cache/openai-curated-remote/linear/1.2.3/.codex-plugin/plugin.json");
+        .join("plugins/cache/openai-curated-remote/linear/1.2.3/.crewon-plugin/plugin.json");
     wait_for_path_exists(&installed_path).await?;
     wait_for_remote_installed_scope_request(&server, "GLOBAL").await?;
     wait_for_remote_installed_scope_request(&server, "WORKSPACE").await?;
@@ -3007,7 +3007,7 @@ async fn plugin_list_marks_remote_plugin_disabled_by_admin() -> Result<()> {
     assert_eq!(plugin.enabled, true);
     assert_eq!(
         plugin.availability,
-        codex_app_server_protocol::PluginAvailability::DisabledByAdmin
+        crewon_app_server_protocol::PluginAvailability::DisabledByAdmin
     );
     Ok(())
 }
@@ -3069,7 +3069,7 @@ async fn plugin_list_fetches_featured_plugin_ids_without_chatgpt_auth() -> Resul
 
     Mock::given(method("GET"))
         .and(path("/backend-api/plugins/featured"))
-        .and(query_param("platform", "codex"))
+        .and(query_param("platform", "crewon"))
         .respond_with(ResponseTemplate::new(200).set_body_string(r#"["linear@openai-curated"]"#))
         .mount(&server)
         .await;
@@ -3107,7 +3107,7 @@ async fn plugin_list_uses_warmed_featured_plugin_ids_cache_on_first_request() ->
 
     Mock::given(method("GET"))
         .and(path("/backend-api/plugins/featured"))
-        .and(query_param("platform", "codex"))
+        .and(query_param("platform", "crewon"))
         .respond_with(ResponseTemplate::new(200).set_body_string(r#"["linear@openai-curated"]"#))
         .expect(1)
         .mount(&server)
@@ -3521,7 +3521,7 @@ fn remote_plugin_bundle_tar_gz_bytes(plugin_name: &str) -> Result<Vec<u8>> {
     let mut tar = tar::Builder::new(encoder);
     for (path, contents, mode) in [
         (
-            ".codex-plugin/plugin.json",
+            ".crewon-plugin/plugin.json",
             manifest.as_bytes(),
             /*mode*/ 0o644,
         ),
@@ -3560,7 +3560,7 @@ fn write_installed_plugin_with_version(
         .join(marketplace_name)
         .join(plugin_name)
         .join(plugin_version)
-        .join(".codex-plugin");
+        .join(".crewon-plugin");
     std::fs::create_dir_all(&plugin_root)?;
     std::fs::write(
         plugin_root.join("plugin.json"),
@@ -3645,7 +3645,7 @@ fn write_openai_curated_marketplace(
     )?;
 
     for plugin_name in plugin_names {
-        let plugin_root = curated_root.join(format!("plugins/{plugin_name}/.codex-plugin"));
+        let plugin_root = curated_root.join(format!("plugins/{plugin_name}/.crewon-plugin"));
         std::fs::create_dir_all(&plugin_root)?;
         std::fs::write(
             plugin_root.join("plugin.json"),

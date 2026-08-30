@@ -1,5 +1,5 @@
 use super::*;
-use codex_plugin::PluginId;
+use crewon_plugin::PluginId;
 use pretty_assertions::assert_eq;
 use tempfile::tempdir;
 
@@ -10,13 +10,13 @@ fn write_plugin_with_version(
     manifest_version: Option<&str>,
 ) {
     let plugin_root = root.join(dir_name);
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).unwrap();
     fs::create_dir_all(plugin_root.join("skills")).unwrap();
     let version = manifest_version
         .map(|manifest_version| format!(r#","version":"{manifest_version}""#))
         .unwrap_or_default();
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         format!(r#"{{"name":"{manifest_name}"{version}}}"#),
     )
     .unwrap();
@@ -36,7 +36,7 @@ fn write_plugin(root: &Path, dir_name: &str, manifest_name: &str) {
 #[test]
 fn try_new_rejects_relative_codex_home() {
     let err = PluginStore::try_new(PathBuf::from("relative"))
-        .expect_err("relative codex home should fail");
+        .expect_err("relative crewon home should fail");
     let err = err.to_string().replace('\\', "/");
 
     assert_eq!(
@@ -67,7 +67,7 @@ fn install_copies_plugin_into_default_marketplace() {
             installed_path: AbsolutePathBuf::try_from(installed_path.clone()).unwrap(),
         }
     );
-    assert!(installed_path.join(".codex-plugin/plugin.json").is_file());
+    assert!(installed_path.join(".crewon-plugin/plugin.json").is_file());
     assert!(installed_path.join("skills/SKILL.md").is_file());
 }
 
@@ -148,7 +148,7 @@ fn install_with_version_uses_requested_cache_version() {
             installed_path: AbsolutePathBuf::try_from(installed_path.clone()).unwrap(),
         }
     );
-    assert!(installed_path.join(".codex-plugin/plugin.json").is_file());
+    assert!(installed_path.join(".crewon-plugin/plugin.json").is_file());
 }
 
 #[test]
@@ -180,7 +180,7 @@ fn install_uses_manifest_version_when_present() {
             installed_path: AbsolutePathBuf::try_from(installed_path.clone()).unwrap(),
         }
     );
-    assert!(installed_path.join(".codex-plugin/plugin.json").is_file());
+    assert!(installed_path.join(".crewon-plugin/plugin.json").is_file());
 }
 
 #[test]

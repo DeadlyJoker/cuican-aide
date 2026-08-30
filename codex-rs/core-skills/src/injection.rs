@@ -5,15 +5,15 @@ use std::sync::Arc;
 use crate::SkillLoadOutcome;
 use crate::SkillMetadata;
 use crate::build_skill_name_counts;
-use codex_analytics::AnalyticsEventsClient;
-use codex_analytics::InvocationType;
-use codex_analytics::SkillInvocation;
-use codex_analytics::TrackEventsContext;
-use codex_exec_server::LOCAL_FS;
-use codex_otel::SessionTelemetry;
-use codex_protocol::user_input::UserInput;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_plugins::mention_syntax::TOOL_MENTION_SIGIL;
+use crewon_analytics::AnalyticsEventsClient;
+use crewon_analytics::InvocationType;
+use crewon_analytics::SkillInvocation;
+use crewon_analytics::TrackEventsContext;
+use crewon_exec_server::LOCAL_FS;
+use crewon_otel::SessionTelemetry;
+use crewon_protocol::user_input::UserInput;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_plugins::mention_syntax::TOOL_MENTION_SIGIL;
 
 #[derive(Debug, Default)]
 pub struct SkillInjections {
@@ -125,7 +125,7 @@ fn emit_skill_injected_metric(
     };
 
     otel.counter(
-        "codex.skill.injected",
+        "crewon.skill.injected",
         /*inc*/ 1,
         &[("status", status), ("skill", skill.name.as_str())],
     );

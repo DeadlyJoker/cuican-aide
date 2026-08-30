@@ -9,6 +9,7 @@ pub use export::GenerateTsOptions;
 pub use export::generate_internal_json_schema;
 pub use export::generate_json;
 pub use export::generate_json_with_experimental;
+pub use export::generate_platform_experimental_ts;
 pub use export::generate_ts;
 pub use export::generate_ts_with_options;
 pub use export::generate_types;

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "crewon.model-switch-compaction-parity.v0",
+  "caseId": "AR-024-pre-sampling-smaller-model-compaction",
+  "previous": {
+    "agentVersionId": "agent-version-large",
+    "modelId": "gpt-5.3-codex",
+    "contextWindowTokens": 273000,
+    "totalTokens": 120000
+  },
+  "next": {
+    "agentVersionId": "agent-version-small",
+    "modelId": "gpt-5.2",
+    "contextWindowTokens": 125000,
+    "autoCompactAtTokens": 112500
+  },
+  "expected": {
+    "requestModels": ["gpt-5.3-codex", "gpt-5.3-codex", "gpt-5.2"],
+    "compactionExcludesIncomingUser": true,
+    "followUpIncludesIncomingUser": true,
+    "terminalStatus": "completed"
+  }
+}

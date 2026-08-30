@@ -1,0 +1,24 @@
+{
+  "schemaVersion": "crewon.agent-retry-boundary.v0",
+  "caseId": "AR-002-completed-assistant-close-retry",
+  "completedItem": {
+    "type": "message",
+    "role": "assistant",
+    "content": "first"
+  },
+  "expectedSecondRequestItems": [
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": "first"
+    }
+  ],
+  "finalState": {
+    "requestCount": 2,
+    "samplingRetries": 1,
+    "finalOutput": "done",
+    "completedAssistantOutputs": ["first", "done"],
+    "duplicateFinalOutput": false
+  },
+  "rustSourcePointer": "codex-rs/core/tests/suite/stream_no_completed.rs#completed_assistant_item_is_preserved_in_retry_request"
+}

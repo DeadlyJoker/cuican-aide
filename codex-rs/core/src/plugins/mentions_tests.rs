@@ -1,9 +1,10 @@
 use std::collections::HashSet;
 
-use codex_protocol::user_input::UserInput;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 
 use super::collect_explicit_app_ids;
+use super::collect_explicit_mcp_server_names;
 use super::collect_explicit_plugin_mentions;
 use crate::plugins::PluginCapabilitySummary;
 
@@ -72,6 +73,30 @@ fn collect_explicit_app_ids_ignores_non_app_paths() {
     let app_ids = collect_explicit_app_ids(&input);
 
     assert_eq!(app_ids, HashSet::<String>::new());
+}
+
+#[test]
+fn collect_explicit_mcp_server_names_from_structured_and_linked_mentions() {
+    let server_names = collect_explicit_mcp_server_names(&[
+        text_input("use [$github](mcp://github) and [$linear](mcp://linear/tool/search)"),
+        UserInput::Mention {
+            name: "docs".to_string(),
+            path: "mcp://docs".to_string(),
+        },
+        UserInput::Mention {
+            name: "calendar".to_string(),
+            path: "app://calendar".to_string(),
+        },
+    ]);
+
+    assert_eq!(
+        server_names,
+        HashSet::from([
+            "docs".to_string(),
+            "github".to_string(),
+            "linear".to_string(),
+        ])
+    );
 }
 
 #[test]

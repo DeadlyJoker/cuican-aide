@@ -7,8 +7,8 @@ use crate::FeaturesToml;
 use crate::Stage;
 use crate::feature_for_key;
 use crate::unstable_features_warning_event;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::WarningEvent;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::WarningEvent;
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use toml::Table;
@@ -25,6 +25,44 @@ fn under_development_features_are_disabled_by_default() {
             );
         }
     }
+}
+
+#[cfg(feature = "legacy-fence-artifact")]
+#[test]
+fn legacy_fence_artifact_forces_durable_writer_features_off() {
+    let configured = toml::from_str::<FeaturesToml>(
+        r#"
+user_input_once = true
+office_auto_delegation_durable_admission = true
+"#,
+    )
+    .expect("legacy fence feature config should parse");
+    let features = Features::from_sources(
+        FeatureConfigSource {
+            features: Some(&configured),
+            ..Default::default()
+        },
+        FeatureConfigSource::default(),
+        FeatureOverrides::default(),
+    );
+
+    assert_eq!(features.enabled(Feature::UserInputOnce), false);
+    assert_eq!(
+        features.enabled(Feature::OfficeAutoDelegationDurableAdmission),
+        false
+    );
+    assert_eq!(
+        features
+            .enabled_features()
+            .contains(&Feature::UserInputOnce),
+        false
+    );
+    assert_eq!(
+        features
+            .enabled_features()
+            .contains(&Feature::OfficeAutoDelegationDurableAdmission),
+        false
+    );
 }
 
 #[test]
@@ -352,9 +390,18 @@ fn collab_is_legacy_alias_for_multi_agent() {
 }
 
 #[test]
-fn codex_hooks_is_legacy_alias_for_hooks() {
-    assert_eq!(feature_for_key("hooks"), Some(Feature::CodexHooks));
-    assert_eq!(feature_for_key("codex_hooks"), Some(Feature::CodexHooks));
+fn legacy_codex_hooks_is_alias_for_hooks() {
+    assert_eq!(feature_for_key("hooks"), Some(Feature::Hooks));
+    assert_eq!(feature_for_key("codex_hooks"), Some(Feature::Hooks));
+}
+
+#[test]
+fn legacy_codex_git_commit_is_alias_for_git_commit() {
+    assert_eq!(feature_for_key("git_commit"), Some(Feature::GitCommit));
+    assert_eq!(
+        feature_for_key("codex_git_commit"),
+        Some(Feature::GitCommit)
+    );
 }
 
 #[test]

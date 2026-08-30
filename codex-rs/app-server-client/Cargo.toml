@@ -1,11 +1,11 @@
 [package]
-name = "codex-app-server-client"
+name = "crewon-app-server-client"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "codex_app_server_client"
+name = "crewon_app_server_client"
 path = "src/lib.rs"
 doctest = false
 
@@ -13,17 +13,17 @@ doctest = false
 workspace = true
 
 [dependencies]
-codex-app-server = { workspace = true }
-codex-app-server-protocol = { workspace = true }
-codex-arg0 = { workspace = true }
-codex-config = { workspace = true }
-codex-core = { workspace = true }
-codex-exec-server = { workspace = true }
-codex-feedback = { workspace = true }
-codex-protocol = { workspace = true }
-codex-uds = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
-codex-utils-rustls-provider = { workspace = true }
+crewon-app-server = { workspace = true }
+crewon-app-server-protocol = { workspace = true }
+crewon-arg0 = { workspace = true }
+crewon-config = { workspace = true }
+crewon-core = { workspace = true }
+crewon-exec-server = { workspace = true }
+crewon-feedback = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-uds = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
+crewon-utils-rustls-provider = { workspace = true }
 futures = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }

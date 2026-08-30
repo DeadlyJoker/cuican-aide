@@ -68,9 +68,9 @@ fn get_user_shell_path() -> Option<PathBuf> {
     let mut passwd = MaybeUninit::<libc::passwd>::uninit();
 
     // We cannot use getpwuid here: it returns pointers into libc-managed
-    // storage, which is not safe to read concurrently on all targets (the musl
-    // static build used by the CLI can segfault when parallel callers race on
-    // that buffer). getpwuid_r keeps the passwd data in caller-owned memory.
+    // storage, which is not safe to read concurrently on all targets (musl
+    // static builds can segfault when parallel callers race on that buffer).
+    // getpwuid_r keeps the passwd data in caller-owned memory.
     let suggested_buffer_len = unsafe { libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) };
     let buffer_len = usize::try_from(suggested_buffer_len)
         .ok()

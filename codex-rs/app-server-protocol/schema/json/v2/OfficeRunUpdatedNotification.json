@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "config": true,
+    "cwd": {
+      "type": "string"
+    },
+    "filePath": {
+      "type": "string"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "sourceThreadId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "sourceTurnId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "config",
+    "cwd",
+    "filePath",
+    "reason"
+  ],
+  "title": "OfficeRunUpdatedNotification",
+  "type": "object"
+}

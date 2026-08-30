@@ -1,0 +1,200 @@
+import type { Model } from "@crewon/app-server-protocol/v2/Model";
+import { describe, expect, it } from "vitest";
+
+import {
+  commandComposerRuntimeSettings,
+  commandModelOptionsFromModels,
+  mergeCommandModelOptions,
+} from "./threadRuntimeSettings";
+
+function model(overrides: Partial<Model>): Model {
+  return {
+    additionalSpeedTiers: [],
+    availabilityNux: null,
+    defaultReasoningEffort: null,
+    defaultServiceTier: null,
+    description: "",
+    displayName: overrides.model ?? "model",
+    hidden: false,
+    id: overrides.model ?? "model",
+    inputModalities: [],
+    isDefault: false,
+    model: overrides.model ?? "model",
+    serviceTiers: [],
+    supportedReasoningEfforts: [],
+    supportsPersonality: false,
+    upgrade: null,
+    upgradeInfo: null,
+    ...overrides,
+  } as Model;
+}
+
+describe("thread runtime settings", () => {
+  it("builds concrete command model options from backend models", () => {
+    expect(
+      commandModelOptionsFromModels([
+        model({ model: "gpt-5.5", displayName: "GPT 5.5" }),
+        model({
+          model: "gpt-5.6-sol",
+          displayName: "GPT 5.6 Sol",
+          isDefault: true,
+        }),
+        model({ model: "gpt-5.5", displayName: "duplicate" }),
+        model({ model: "hidden-model", hidden: true }),
+      ]),
+    ).toEqual([
+      {
+        detail: "GPT 5.6 Sol",
+        isDefault: true,
+        label: "gpt-5.6-sol",
+        value: "gpt-5.6-sol",
+      },
+      {
+        detail: "GPT 5.5",
+        isDefault: false,
+        label: "gpt-5.5",
+        value: "gpt-5.5",
+      },
+    ]);
+  });
+
+  it("keeps backend models first and adds missing newer model ids", () => {
+    expect(
+      mergeCommandModelOptions(
+        [
+          {
+            isDefault: true,
+            label: "gpt-5.4-mini",
+            value: "gpt-5.4-mini",
+          },
+          { label: "gpt-5.4", value: "gpt-5.4" },
+        ],
+        [
+          { label: "gpt-5.6-sol", value: "gpt-5.6-sol" },
+          { label: "gpt-5.6", value: "gpt-5.6" },
+          { label: "gpt-5.4", value: "gpt-5.4" },
+        ],
+      ),
+    ).toEqual([
+      {
+        isDefault: true,
+        label: "gpt-5.4-mini",
+        value: "gpt-5.4-mini",
+      },
+      { label: "gpt-5.4", value: "gpt-5.4" },
+      { label: "gpt-5.6-sol", value: "gpt-5.6-sol" },
+      { label: "gpt-5.6", value: "gpt-5.6" },
+    ]);
+  });
+
+  it("maps command composer permission choices to thread runtime settings", () => {
+    expect(
+      commandComposerRuntimeSettings({
+        model: "gpt-5.6-sol",
+        permission: "approve-for-me",
+      }),
+    ).toEqual({
+      approvalPolicy: "on-failure",
+      executionIntent: "none",
+      model: "gpt-5.6-sol",
+      sandboxMode: "workspace-write",
+    });
+    expect(
+      commandComposerRuntimeSettings({
+        model: "gpt-5.5",
+        permission: "request-approval",
+      }),
+    ).toEqual({
+      approvalPolicy: "on-request",
+      executionIntent: "none",
+      model: "gpt-5.5",
+      sandboxMode: "workspace-write",
+    });
+    expect(
+      commandComposerRuntimeSettings({
+        model: "gpt-5",
+        permission: "full-access",
+      }),
+    ).toEqual({
+      approvalPolicy: "never",
+      executionIntent: "none",
+      model: "gpt-5",
+      sandboxMode: "danger-full-access",
+    });
+  });
+
+  it("includes the selected execution intent", () => {
+    expect(
+      commandComposerRuntimeSettings({
+        executionIntent: "plan",
+        model: "gpt-5.6-sol",
+        permission: "approve-for-me",
+      }),
+    ).toMatchObject({ executionIntent: "plan" });
+  });
+
+  it("omits a model override when Control owns the pinned Agent version", () => {
+    expect(
+      commandComposerRuntimeSettings({ permission: "approve-for-me" }),
+    ).toEqual({
+      approvalPolicy: "on-failure",
+      executionIntent: "none",
+      sandboxMode: "workspace-write",
+    });
+  });
+
+  it("adds scene identity and a target id without deriving the execution strategy", () => {
+    expect(
+      commandComposerRuntimeSettings({
+        executionTarget: "team:交付小队",
+        model: "gpt-5.6-sol",
+        permission: "approve-for-me",
+        scene: "design",
+        sceneMode: "produce",
+      }),
+    ).toMatchObject({
+      scene: {
+        sceneId: "design",
+        mode: "produce",
+        executionTarget: { kind: "team", id: "交付小队" },
+      },
+    });
+  });
+
+  it("keeps an Experts selection as a distinct single-chat execution target", () => {
+    expect(
+      commandComposerRuntimeSettings({
+        executionTarget: "experts:experts-code-review",
+        model: "gpt-5.6-sol",
+        permission: "approve-for-me",
+        scene: "code",
+        sceneMode: "review",
+      }),
+    ).toMatchObject({
+      scene: {
+        sceneId: "code",
+        mode: "review",
+        executionTarget: {
+          kind: "experts",
+          id: "experts-code-review",
+        },
+      },
+    });
+  });
+
+  it("keeps Provider Resource Agent authority outside ordinary thread settings", () => {
+    expect(
+      commandComposerRuntimeSettings({
+        executionTarget: "provider-agent:opaque-selection",
+        model: "gpt-5.6-sol",
+        permission: "approve-for-me",
+        scene: "office",
+        sceneMode: "auto",
+      }),
+    ).toMatchObject({
+      scene: {
+        executionTarget: { kind: "crewon" },
+      },
+    });
+  });
+});

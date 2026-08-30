@@ -1,13 +1,13 @@
 use std::time::Duration;
 
-use codex_api::SharedAuthProvider;
+use crewon_api::SharedAuthProvider;
 use reqwest::StatusCode;
 use serde::Deserialize;
 use tokio::time::sleep;
 use tokio_tungstenite::connect_async;
 use tracing::warn;
 
-use codex_utils_rustls_provider::ensure_rustls_crypto_provider;
+use crewon_utils_rustls_provider::ensure_rustls_crypto_provider;
 
 use crate::ExecServerError;
 use crate::ExecServerRuntimePaths;
@@ -117,7 +117,7 @@ impl RemoteEnvironmentConfig {
         Ok(Self {
             base_url,
             environment_id,
-            name: "codex-exec-server".to_string(),
+            name: "crewon-exec-server".to_string(),
             auth_provider,
         })
     }
@@ -138,7 +138,7 @@ pub async fn run_remote_environment(
     loop {
         let response = client.register_environment(&config.environment_id).await?;
         eprintln!(
-            "codex exec-server remote environment registered with environment_id {}",
+            "crewon-exec-server remote environment registered with environment_id {}",
             response.environment_id
         );
 
@@ -245,7 +245,7 @@ fn preview_error_body(body: &str) -> Option<String> {
 mod tests {
     use std::sync::Arc;
 
-    use codex_api::AuthProvider;
+    use crewon_api::AuthProvider;
     use http::HeaderMap;
     use http::HeaderValue;
     use pretty_assertions::assert_eq;

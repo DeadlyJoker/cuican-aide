@@ -42,17 +42,17 @@ use windows_sys::Win32::Storage::FileSystem::CREATE_NEW;
 use windows_sys::Win32::Storage::FileSystem::CreateFileW;
 use windows_sys::Win32::Storage::FileSystem::FILE_ATTRIBUTE_NORMAL;
 
-use codex_windows_sandbox::SETUP_VERSION;
-use codex_windows_sandbox::SetupErrorCode;
-use codex_windows_sandbox::SetupFailure;
-use codex_windows_sandbox::dpapi_protect;
-use codex_windows_sandbox::sandbox_dir;
-use codex_windows_sandbox::sandbox_secrets_dir;
-use codex_windows_sandbox::string_from_sid_bytes;
-use codex_windows_sandbox::to_wide;
+use crewon_windows_sandbox::SETUP_VERSION;
+use crewon_windows_sandbox::SetupErrorCode;
+use crewon_windows_sandbox::SetupFailure;
+use crewon_windows_sandbox::dpapi_protect;
+use crewon_windows_sandbox::sandbox_dir;
+use crewon_windows_sandbox::sandbox_secrets_dir;
+use crewon_windows_sandbox::string_from_sid_bytes;
+use crewon_windows_sandbox::to_wide;
 
-pub const SANDBOX_USERS_GROUP: &str = "CodexSandboxUsers";
-const SANDBOX_USERS_GROUP_COMMENT: &str = "Codex sandbox internal group (managed)";
+pub const SANDBOX_USERS_GROUP: &str = "CrewonSandboxUsers";
+const SANDBOX_USERS_GROUP_COMMENT: &str = "Crewon sandbox internal group (managed)";
 const SID_ADMINISTRATORS: &str = "S-1-5-32-544";
 const SID_USERS: &str = "S-1-5-32-545";
 const SID_AUTHENTICATED_USERS: &str = "S-1-5-11";

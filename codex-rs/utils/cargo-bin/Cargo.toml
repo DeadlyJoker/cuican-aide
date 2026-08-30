@@ -1,5 +1,5 @@
 [package]
-name = "codex-utils-cargo-bin"
+name = "crewon-utils-cargo-bin"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -13,5 +13,6 @@ runfiles = { workspace = true }
 thiserror = { workspace = true }
 
 [lib]
+name = "crewon_utils_cargo_bin"
 test = false
 doctest = false

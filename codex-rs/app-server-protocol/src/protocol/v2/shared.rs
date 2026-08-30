@@ -1,10 +1,10 @@
-use codex_experimental_api_macros::ExperimentalApi;
-use codex_protocol::config_types::ApprovalsReviewer as CoreApprovalsReviewer;
-use codex_protocol::config_types::SandboxMode as CoreSandboxMode;
-use codex_protocol::protocol::AskForApproval as CoreAskForApproval;
-use codex_protocol::protocol::CodexErrorInfo as CoreCodexErrorInfo;
-use codex_protocol::protocol::GranularApprovalConfig as CoreGranularApprovalConfig;
-use codex_protocol::protocol::NonSteerableTurnKind as CoreNonSteerableTurnKind;
+use crewon_experimental_api_macros::ExperimentalApi;
+use crewon_protocol::config_types::ApprovalsReviewer as CoreApprovalsReviewer;
+use crewon_protocol::config_types::SandboxMode as CoreSandboxMode;
+use crewon_protocol::protocol::AskForApproval as CoreAskForApproval;
+use crewon_protocol::protocol::CodexErrorInfo as CoreCodexErrorInfo;
+use crewon_protocol::protocol::GranularApprovalConfig as CoreGranularApprovalConfig;
+use crewon_protocol::protocol::NonSteerableTurnKind as CoreNonSteerableTurnKind;
 use schemars::JsonSchema;
 use schemars::r#gen::SchemaGenerator;
 use schemars::schema::InstanceType;
@@ -61,7 +61,7 @@ pub enum NonSteerableTurnKind {
     Compact,
 }
 
-/// This translation layer make sure that we expose codex error code in camel case.
+/// This translation layer makes sure that we expose Crewon error codes in camel case.
 ///
 /// When an upstream HTTP status is available (for example, from the Responses API or a provider),
 /// it is forwarded in `httpStatusCode` on the relevant `codexErrorInfo` variant.

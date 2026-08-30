@@ -1,0 +1,147 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ExecutionLocation": {
+      "enum": [
+        "localNode",
+        "provider"
+      ],
+      "type": "string"
+    },
+    "ResourceBindingMode": {
+      "enum": [
+        "remoteReference",
+        "localSnapshot",
+        "localFork",
+        "providerManaged"
+      ],
+      "type": "string"
+    },
+    "ResourceBindingProjection": {
+      "properties": {
+        "binding": {
+          "$ref": "#/definitions/ResourceBindingRef"
+        },
+        "connectionId": {
+          "type": "string"
+        },
+        "revision": {
+          "format": "uint64",
+          "minimum": 0.0,
+          "type": "integer"
+        },
+        "status": {
+          "$ref": "#/definitions/ResourceBindingStatus"
+        },
+        "updatedAt": {
+          "format": "int64",
+          "type": "integer"
+        },
+        "workspaceScope": {
+          "$ref": "#/definitions/WorkspaceScope"
+        },
+        "workspaceScopeId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "binding",
+        "connectionId",
+        "revision",
+        "status",
+        "updatedAt",
+        "workspaceScope",
+        "workspaceScopeId"
+      ],
+      "type": "object"
+    },
+    "ResourceBindingRef": {
+      "properties": {
+        "bindingId": {
+          "type": "string"
+        },
+        "executionLocation": {
+          "$ref": "#/definitions/ExecutionLocation"
+        },
+        "mode": {
+          "$ref": "#/definitions/ResourceBindingMode"
+        },
+        "resource": {
+          "$ref": "#/definitions/ResourceRef"
+        },
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "bindingId",
+        "executionLocation",
+        "mode",
+        "resource",
+        "workspaceKey"
+      ],
+      "type": "object"
+    },
+    "ResourceBindingStatus": {
+      "enum": [
+        "active",
+        "unbound"
+      ],
+      "type": "string"
+    },
+    "ResourceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "providerId": {
+          "type": "string"
+        },
+        "resourceId": {
+          "type": "string"
+        },
+        "resourceType": {
+          "$ref": "#/definitions/ResourceType"
+        },
+        "revision": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "providerId",
+        "resourceId",
+        "resourceType",
+        "revision"
+      ],
+      "type": "object"
+    },
+    "ResourceType": {
+      "enum": [
+        "agent",
+        "skill",
+        "mcpServer",
+        "mcpTool",
+        "knowledgeBase",
+        "workflow"
+      ],
+      "type": "string"
+    },
+    "WorkspaceScope": {
+      "enum": [
+        "conversation",
+        "office",
+        "workflow",
+        "automation"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "binding": {
+      "$ref": "#/definitions/ResourceBindingProjection"
+    }
+  },
+  "required": [
+    "binding"
+  ],
+  "title": "ResourceBindingUpdatedNotification",
+  "type": "object"
+}

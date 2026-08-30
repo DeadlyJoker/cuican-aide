@@ -3,7 +3,7 @@ use crate::config::ConfigBuilder;
 use std::fs;
 use std::path::Path;
 
-use codex_core_plugins::OPENAI_CURATED_MARKETPLACE_NAME;
+use crewon_core_plugins::OPENAI_CURATED_MARKETPLACE_NAME;
 
 pub(crate) const TEST_CURATED_PLUGIN_SHA: &str = "0123456789abcdef0123456789abcdef01234567";
 
@@ -15,7 +15,7 @@ pub(crate) fn write_file(path: &Path, contents: &str) {
 pub(crate) fn write_curated_plugin(root: &Path, plugin_name: &str) {
     let plugin_root = root.join("plugins").join(plugin_name);
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         &format!(
             r#"{{
   "name": "{plugin_name}",

@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "WorkflowGateDecision": {
+      "enum": [
+        "approve",
+        "reject"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "comment": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "cwd": {
+      "type": "string"
+    },
+    "decision": {
+      "$ref": "#/definitions/WorkflowGateDecision"
+    },
+    "executionId": {
+      "type": "string"
+    },
+    "nodeId": {
+      "type": "string"
+    },
+    "workflowId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "cwd",
+    "decision",
+    "executionId",
+    "nodeId",
+    "workflowId"
+  ],
+  "title": "WorkflowGateResolveParams",
+  "type": "object"
+}

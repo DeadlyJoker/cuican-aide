@@ -1,0 +1,68 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Office chat style > snapshots the quiet bubble and plain mention contract 1`] = `
+{
+  "chatHeader": ".control-office-chat-room .office-top {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 10px;
+  padding-block: 8px;
+}",
+  "chatMember": ".control-office-chat-members > span {
+  display: grid;
+  box-sizing: border-box;
+  width: 28px;
+  height: 28px;
+  margin-left: -8px;
+  place-items: center;
+  border: 2px solid var(--surface-raised);
+  border-radius: 50%;
+  background: var(--n-150);
+  color: var(--text);
+  font-size: calc(10px + var(--user-ui-font-delta));
+  font-weight: 600;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 80%, transparent);
+}",
+  "chatMemberStack": ".control-office-chat-members {
+  display: flex;
+  align-items: center;
+  min-height: var(--control-h-md);
+  padding: 2px 0;
+}",
+  "chatTitle": ".control-office-chat-room .office-top-title h1 {
+  font-size: calc(16px + var(--user-ui-font-delta));
+  line-height: 1.2;
+}",
+  "memberBubble": ".office-bubble-body {
+  display: grid;
+  gap: 5px;
+  flex: 1;
+  min-width: 0;
+  padding: 12px 16px;
+  border: 1px solid color-mix(in srgb, var(--border) 58%, transparent);
+  border-radius: var(--radius-lg);
+  background: var(--surface-raised);
+  box-shadow: none;
+}",
+  "mention": ".office-mention {
+  color: var(--accent);
+  font-weight: 500;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+}",
+  "selfBubble": ".office-bubble[data-self="true"] .office-bubble-body {
+  border-radius: var(--radius-xl);
+  border-color: transparent;
+  background: color-mix(in srgb, var(--accent) 5%, var(--surface));
+}",
+  "selfMention": ".office-bubble[data-self="true"] .office-mention {
+  background: transparent;
+}",
+  "settingsButton": ".office-top-actions .control-office-member-settings-button {
+  width: var(--control-h-md);
+  min-width: var(--control-h-md);
+  min-height: var(--control-h-md);
+  padding: 0;
+}",
+}
+`;

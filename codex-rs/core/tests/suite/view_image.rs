@@ -3,32 +3,6 @@
 use anyhow::Context;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use codex_exec_server::CreateDirectoryOptions;
-use codex_exec_server::LOCAL_ENVIRONMENT_ID;
-use codex_exec_server::REMOTE_ENVIRONMENT_ID;
-use codex_exec_server::RemoveOptions;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ConfigShellToolType;
-use codex_protocol::openai_models::InputModality;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelVisibility;
-use codex_protocol::openai_models::ModelsResponse;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::openai_models::ReasoningEffortPreset;
-use codex_protocol::openai_models::TruncationPolicyConfig;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::TurnEnvironmentSelection;
-use codex_protocol::user_input::UserInput;
 use core_test_support::PathBufExt;
 use core_test_support::PathExt;
 use core_test_support::get_remote_test_env;
@@ -42,12 +16,38 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event_with_timeout;
+use crewon_exec_server::CreateDirectoryOptions;
+use crewon_exec_server::LOCAL_ENVIRONMENT_ID;
+use crewon_exec_server::REMOTE_ENVIRONMENT_ID;
+use crewon_exec_server::RemoveOptions;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ConfigShellToolType;
+use crewon_protocol::openai_models::InputModality;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelVisibility;
+use crewon_protocol::openai_models::ModelsResponse;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::openai_models::ReasoningEffortPreset;
+use crewon_protocol::openai_models::TruncationPolicyConfig;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::TurnEnvironmentSelection;
+use crewon_protocol::user_input::UserInput;
 use image::DynamicImage;
 use image::GenericImageView;
 use image::ImageBuffer;
@@ -72,7 +72,7 @@ use wiremock::matchers::body_string_contains;
 
 const VIEW_IMAGE_TURN_COMPLETE_TIMEOUT: Duration = Duration::from_secs(30);
 
-fn disabled_user_turn(test: &TestCodex, items: Vec<UserInput>, model: String) -> Op {
+fn disabled_user_turn(test: &TestCrewon, items: Vec<UserInput>, model: String) -> Op {
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(PermissionProfile::Disabled, test.config.cwd.as_path());
     Op::UserInput {
@@ -80,14 +80,14 @@ fn disabled_user_turn(test: &TestCodex, items: Vec<UserInput>, model: String) ->
         final_output_json_schema: None,
         responsesapi_client_metadata: None,
         additional_context: Default::default(),
-        thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+        thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
             environments: Some(local_selections(test.config.cwd.clone())),
             approval_policy: Some(AskForApproval::Never),
             sandbox_policy: Some(sandbox_policy),
             permission_profile,
-            collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                mode: codex_protocol::config_types::ModeKind::Default,
-                settings: codex_protocol::config_types::Settings {
+            collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                mode: crewon_protocol::config_types::ModeKind::Default,
+                settings: crewon_protocol::config_types::Settings {
                     model,
                     reasoning_effort: None,
                     developer_instructions: None,
@@ -132,7 +132,7 @@ fn png_bytes(width: u32, height: u32, rgba: [u8; 4]) -> anyhow::Result<Vec<u8>> 
     Ok(cursor.into_inner())
 }
 
-async fn create_workspace_directory(test: &TestCodex, rel_path: &str) -> anyhow::Result<PathBuf> {
+async fn create_workspace_directory(test: &TestCrewon, rel_path: &str) -> anyhow::Result<PathBuf> {
     let abs_path = test.config.cwd.join(rel_path);
     test.fs()
         .create_directory(
@@ -145,7 +145,7 @@ async fn create_workspace_directory(test: &TestCodex, rel_path: &str) -> anyhow:
 }
 
 async fn write_workspace_file(
-    test: &TestCodex,
+    test: &TestCrewon,
     rel_path: &str,
     contents: Vec<u8>,
 ) -> anyhow::Result<PathBuf> {
@@ -166,7 +166,7 @@ async fn write_workspace_file(
 }
 
 async fn write_workspace_png(
-    test: &TestCodex,
+    test: &TestCrewon,
     rel_path: &str,
     width: u32,
     height: u32,
@@ -182,14 +182,14 @@ async fn assert_user_turn_local_image_resizes_to(
 ) -> anyhow::Result<()> {
     let server = start_mock_server().await;
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         if resize_policy == TestImageResizePolicy::AllImages {
             let _ = config.features.enable(Feature::ResizeAllImages);
         }
     });
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
     } = &test;
@@ -303,10 +303,10 @@ async fn view_image_tool_attaches_local_image() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         config,
         ..
@@ -362,13 +362,13 @@ async fn view_image_tool_attaches_local_image() -> anyhow::Result<()> {
         codex,
         |event| match event {
             EventMsg::ItemStarted(event) => {
-                if matches!(&event.item, codex_protocol::items::TurnItem::ImageView(_)) {
+                if matches!(&event.item, crewon_protocol::items::TurnItem::ImageView(_)) {
                     item_started = Some(event.item.clone());
                 }
                 false
             }
             EventMsg::ItemCompleted(event) => {
-                if matches!(&event.item, codex_protocol::items::TurnItem::ImageView(_)) {
+                if matches!(&event.item, crewon_protocol::items::TurnItem::ImageView(_)) {
                     item_completed = Some(event.item.clone());
                 }
                 false
@@ -387,14 +387,14 @@ async fn view_image_tool_attaches_local_image() -> anyhow::Result<()> {
     .await;
 
     match item_started.expect("view image item started event emitted") {
-        codex_protocol::items::TurnItem::ImageView(item) => {
+        crewon_protocol::items::TurnItem::ImageView(item) => {
             assert_eq!(item.id, call_id);
             assert_eq!(item.path, abs_path);
         }
         other => panic!("expected ImageView item, got {other:?}"),
     }
     match item_completed.expect("view image item completed event emitted") {
-        codex_protocol::items::TurnItem::ImageView(item) => {
+        crewon_protocol::items::TurnItem::ImageView(item) => {
             assert_eq!(item.id, call_id);
             assert_eq!(item.path, abs_path);
         }
@@ -451,7 +451,7 @@ async fn view_image_routes_to_selected_local_environment() -> anyhow::Result<()>
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let test = builder.build(&server).await?;
     write_workspace_file(
         &test,
@@ -517,7 +517,7 @@ async fn view_image_tool_applies_local_sandbox_read_denies() -> anyhow::Result<(
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let test = builder.build(&server).await?;
     let rel_path = "denied.png";
     let denied_path = test.config.cwd.join(rel_path);
@@ -596,7 +596,7 @@ async fn view_image_routes_to_selected_remote_environment() -> anyhow::Result<()
     };
 
     let server = start_mock_server().await;
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let test = builder.build_with_remote_and_local_env(&server).await?;
     let local_cwd = TempDir::new()?;
     fs::write(local_cwd.path().join("remote.png"), b"not a remote image")?;
@@ -693,10 +693,10 @@ async fn view_image_tool_can_preserve_original_resolution_when_requested_on_gpt5
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_model("gpt-5.3-codex");
+    let mut builder = test_crewon().with_model("gpt-5.3-codex");
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
     } = &test;
@@ -784,10 +784,10 @@ async fn view_image_tool_errors_clearly_for_unsupported_detail_values() -> anyho
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_model("gpt-5.3-codex");
+    let mut builder = test_crewon().with_model("gpt-5.3-codex");
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
     } = &test;
@@ -862,10 +862,10 @@ async fn view_image_tool_treats_null_detail_as_omitted() -> anyhow::Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_model("gpt-5.3-codex");
+    let mut builder = test_crewon().with_model("gpt-5.3-codex");
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
     } = &test;
@@ -952,10 +952,10 @@ async fn view_image_tool_resizes_when_model_lacks_original_detail_support() -> a
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_model("gpt-5.2");
+    let mut builder = test_crewon().with_model("gpt-5.2");
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
     } = &test;
@@ -1046,10 +1046,10 @@ async fn view_image_tool_does_not_force_original_resolution_with_capability_only
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_model("gpt-5.3-codex");
+    let mut builder = test_crewon().with_model("gpt-5.3-codex");
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
     } = &test;
@@ -1137,10 +1137,10 @@ async fn view_image_tool_errors_when_path_is_directory() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
     } = &test;
@@ -1207,10 +1207,10 @@ async fn view_image_tool_errors_for_non_image_files() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
     } = &test;
@@ -1283,12 +1283,12 @@ async fn resize_all_images_turns_invalid_view_image_into_placeholder() -> anyhow
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         let _ = config.features.enable(Feature::ResizeAllImages);
     });
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
     } = &test;
@@ -1350,10 +1350,10 @@ async fn view_image_tool_errors_when_file_missing() -> anyhow::Result<()> {
 
     let server = start_mock_server().await;
 
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         config,
         session_configured,
         ..
@@ -1482,13 +1482,13 @@ async fn view_image_tool_returns_unsupported_message_for_text_only_model() -> an
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             config.model = Some(model_slug.to_string());
         });
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex { codex, .. } = &test;
+    let TestCrewon { crewon: codex, .. } = &test;
 
     let rel_path = "assets/example.png";
     write_workspace_png(
@@ -1573,10 +1573,10 @@ async fn replaces_invalid_local_image_after_bad_request() -> anyhow::Result<()> 
 
     let completion_mock = responses::mount_sse_once(&server, success_response).await;
 
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let test = builder.build_with_remote_env(&server).await?;
-    let TestCodex {
-        codex,
+    let TestCrewon {
+        crewon: codex,
         session_configured,
         ..
     } = &test;

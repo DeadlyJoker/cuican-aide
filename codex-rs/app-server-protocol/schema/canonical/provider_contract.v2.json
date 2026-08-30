@@ -1,0 +1,191 @@
+{
+  "schemaVersion": "2.0.0",
+  "provider": {
+    "providerId": "agent-platform",
+    "capabilities": [
+      "durableRun",
+      "resumableEvents",
+      "persistentConversation",
+      "remoteAgent",
+      "approval",
+      "toolResult"
+    ]
+  },
+  "authorization": {
+    "serviceAudience": "crewon-task-control",
+    "tenantId": "tenant-demo",
+    "spaceId": "space-demo",
+    "subject": "user:demo",
+    "scopes": [
+      "providerRun:start",
+      "providerRun:read",
+      "providerRun:events",
+      "providerRun:cancel",
+      "providerRun:approval",
+      "providerRun:toolResult"
+    ],
+    "purpose": "executeTask",
+    "credential": {
+      "credentialId": "credential-demo",
+      "ownerSubject": "user:demo"
+    },
+    "delegation": {
+      "audience": "agent-platform-provider-run",
+      "jti": "delegation-demo-001",
+      "expiresAt": 1784509200
+    }
+  },
+  "commands": [
+    {
+      "type": "start",
+      "commandId": "command-start-001",
+      "idempotencyKey": "task-demo:start:1",
+      "requestDigest": "sha256:request-demo",
+      "resource": {
+        "providerId": "agent-platform",
+        "resourceId": "agent-demo",
+        "revision": "agent-revision-7",
+        "resourceType": "agent"
+      },
+      "input": {
+        "prompt": "Produce the requested result.",
+        "contextRefs": [
+          "artifact:context-demo"
+        ]
+      }
+    },
+    {
+      "type": "read",
+      "commandId": "command-read-001",
+      "providerRunId": "provider-run-demo"
+    },
+    {
+      "type": "listEvents",
+      "commandId": "command-events-001",
+      "providerRunId": "provider-run-demo",
+      "afterCursor": null,
+      "limit": 100
+    },
+    {
+      "type": "cancel",
+      "commandId": "command-cancel-001",
+      "providerRunId": "provider-run-demo",
+      "reason": "userRequested",
+      "expectedRevision": 4
+    },
+    {
+      "type": "decideApproval",
+      "commandId": "command-approval-001",
+      "providerRunId": "provider-run-demo",
+      "approvalId": "approval-demo",
+      "decision": "approve",
+      "actionDigest": "sha256:action-demo",
+      "idempotencyKey": "provider-run-demo:approval-demo:approve"
+    },
+    {
+      "type": "submitToolResult",
+      "commandId": "command-tool-result-001",
+      "providerRunId": "provider-run-demo",
+      "toolCallId": "tool-call-demo",
+      "intentDigest": "sha256:tool-intent-demo",
+      "resultDigest": "sha256:tool-result-demo",
+      "artifact": {
+        "artifactId": "artifact-tool-result-demo",
+        "taskId": "task-demo",
+        "kind": "toolResult",
+        "revision": 1,
+        "retention": "task",
+        "createdAt": 1784505604
+      },
+      "idempotencyKey": "provider-run-demo:tool-call-demo:result"
+    }
+  ],
+  "events": [
+    {
+      "type": "runStarted",
+      "eventId": "event-demo-001",
+      "providerRunId": "provider-run-demo",
+      "attemptId": "attempt-demo-001",
+      "sequence": 1,
+      "cursor": "event-0001",
+      "createdAt": 1784505600,
+      "revision": 1
+    },
+    {
+      "type": "progress",
+      "eventId": "event-demo-002",
+      "providerRunId": "provider-run-demo",
+      "attemptId": "attempt-demo-001",
+      "sequence": 2,
+      "cursor": "event-0002",
+      "createdAt": 1784505601,
+      "summary": "Provider accepted the bounded task."
+    },
+    {
+      "type": "approvalRequired",
+      "eventId": "event-demo-003",
+      "providerRunId": "provider-run-demo",
+      "attemptId": "attempt-demo-001",
+      "sequence": 3,
+      "cursor": "event-0003",
+      "createdAt": 1784505602,
+      "approval": {
+        "approvalId": "approval-demo",
+        "actionDigest": "sha256:action-demo",
+        "expiresAt": 1784507400
+      }
+    },
+    {
+      "type": "toolResultRequired",
+      "eventId": "event-demo-004",
+      "providerRunId": "provider-run-demo",
+      "attemptId": "attempt-demo-001",
+      "sequence": 4,
+      "cursor": "event-0004",
+      "createdAt": 1784505603,
+      "toolCallId": "tool-call-demo",
+      "toolSchemaRevision": "tool-revision-3",
+      "argumentsDigest": "sha256:arguments-demo",
+      "intentDigest": "sha256:tool-intent-demo",
+      "nonce": "nonce-demo",
+      "expiresAt": 1784507400
+    },
+    {
+      "type": "toolResultAccepted",
+      "eventId": "event-demo-005",
+      "providerRunId": "provider-run-demo",
+      "attemptId": "attempt-demo-001",
+      "sequence": 5,
+      "cursor": "event-0005",
+      "createdAt": 1784505604,
+      "toolCallId": "tool-call-demo",
+      "intentDigest": "sha256:tool-intent-demo",
+      "resultDigest": "sha256:tool-result-demo"
+    },
+    {
+      "type": "completed",
+      "eventId": "event-demo-006",
+      "providerRunId": "provider-run-demo",
+      "attemptId": "attempt-demo-001",
+      "sequence": 6,
+      "cursor": "event-0006",
+      "createdAt": 1784505605,
+      "outputArtifacts": [
+        {
+          "artifactId": "artifact-result-demo",
+          "taskId": "task-demo",
+          "kind": "report",
+          "revision": 1,
+          "retention": "task",
+          "createdAt": 1784505605
+        }
+      ]
+    }
+  ],
+  "error": {
+    "code": "capabilityUnsupported",
+    "retryable": false,
+    "providerRunId": null,
+    "traceId": "trace-demo"
+  }
+}

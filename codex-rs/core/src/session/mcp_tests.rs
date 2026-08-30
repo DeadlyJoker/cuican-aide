@@ -13,13 +13,13 @@ fn meta(value: Value) -> Option<Meta> {
 
 fn guardian_meta(tool_params: Option<Value>) -> Option<Meta> {
     let mut value = json!({
-        "codex_approval_kind": "mcp_tool_call",
-        "codex_request_type": "approval_request",
+        "crewon_approval_kind": "mcp_tool_call",
         "connector_id": "browser-use",
         "connector_name": "Browser Use",
         "tool_name": "access_browser_origin",
         "tool_title": "Access browser origin",
     });
+    value[MCP_ELICITATION_REQUEST_TYPE_KEY] = json!(MCP_ELICITATION_REQUEST_TYPE_APPROVAL_REQUEST);
     if let Some(tool_params) = tool_params {
         value["tool_params"] = tool_params;
     }
@@ -100,11 +100,11 @@ fn guardian_elicitation_review_request_defaults_missing_tool_params() {
 fn plugin_install_elicitation_telemetry_metadata_requires_install_tool_suggestion() {
     let event = EventMsg::ElicitationRequest(ElicitationRequestEvent {
         turn_id: Some("turn-1".to_string()),
-        server_name: "codex_apps".to_string(),
-        id: codex_protocol::mcp::RequestId::String("request-1".to_string()),
-        request: codex_protocol::approvals::ElicitationRequest::Form {
+        server_name: "crewon_apps".to_string(),
+        id: crewon_protocol::mcp::RequestId::String("request-1".to_string()),
+        request: crewon_protocol::approvals::ElicitationRequest::Form {
             meta: Some(json!({
-                "codex_approval_kind": "tool_suggestion",
+                "crewon_approval_kind": "tool_suggestion",
                 "suggest_type": "install",
                 "tool_type": "plugin",
                 "tool_id": "slack@openai-curated",
@@ -129,11 +129,11 @@ fn plugin_install_elicitation_telemetry_metadata_requires_install_tool_suggestio
 
     let enable_event = EventMsg::ElicitationRequest(ElicitationRequestEvent {
         turn_id: Some("turn-1".to_string()),
-        server_name: "codex_apps".to_string(),
-        id: codex_protocol::mcp::RequestId::String("request-2".to_string()),
-        request: codex_protocol::approvals::ElicitationRequest::Form {
+        server_name: "crewon_apps".to_string(),
+        id: crewon_protocol::mcp::RequestId::String("request-2".to_string()),
+        request: crewon_protocol::approvals::ElicitationRequest::Form {
             meta: Some(json!({
-                "codex_approval_kind": "tool_suggestion",
+                "crewon_approval_kind": "tool_suggestion",
                 "suggest_type": "enable",
                 "tool_type": "plugin",
                 "tool_id": "slack@openai-curated",
@@ -156,7 +156,7 @@ fn plugin_install_elicitation_telemetry_metadata_requires_install_tool_suggestio
 #[test]
 fn guardian_elicitation_review_request_requires_opt_in() {
     let request = form_request(meta(json!({
-        "codex_approval_kind": "mcp_tool_call",
+        "crewon_approval_kind": "mcp_tool_call",
         "tool_name": "access_browser_origin",
     })));
 
@@ -200,10 +200,12 @@ fn guardian_elicitation_review_request_declines_unsupported_opt_in_shapes() {
         GuardianElicitationReview::Decline(_)
     ));
 
-    let missing_tool_name_request = form_request(meta(json!({
-        "codex_approval_kind": "mcp_tool_call",
-        "codex_request_type": "approval_request",
-    })));
+    let mut missing_tool_name_meta = json!({
+        "crewon_approval_kind": "mcp_tool_call",
+    });
+    missing_tool_name_meta[MCP_ELICITATION_REQUEST_TYPE_KEY] =
+        json!(MCP_ELICITATION_REQUEST_TYPE_APPROVAL_REQUEST);
+    let missing_tool_name_request = form_request(meta(missing_tool_name_meta));
     assert!(matches!(
         guardian_elicitation_review_request(&missing_tool_name_request),
         GuardianElicitationReview::Decline(_)

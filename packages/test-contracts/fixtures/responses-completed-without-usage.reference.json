@@ -1,0 +1,48 @@
+{
+  "caseId": "AR-033-responses-completed-without-usage",
+  "invariant": "A completed response with absent or null usage remains a successful terminal response and does not synthesize a usage event.",
+  "cases": [
+    {
+      "name": "usage-absent",
+      "created": {
+        "type": "response.created",
+        "sequence_number": 0,
+        "response": { "id": "resp-without-usage" }
+      },
+      "terminal": {
+        "type": "response.completed",
+        "sequence_number": 1,
+        "response": {
+          "id": "resp-without-usage",
+          "status": "completed",
+          "output": []
+        }
+      }
+    },
+    {
+      "name": "usage-null",
+      "created": {
+        "type": "response.created",
+        "sequence_number": 0,
+        "response": { "id": "resp-null-usage" }
+      },
+      "terminal": {
+        "type": "response.completed",
+        "sequence_number": 1,
+        "response": {
+          "id": "resp-null-usage",
+          "status": "completed",
+          "output": [],
+          "usage": null
+        }
+      }
+    }
+  ],
+  "expected": {
+    "terminal": true,
+    "usageEvents": 0,
+    "completionEvents": 1,
+    "errorCategory": null,
+    "retryable": null
+  }
+}

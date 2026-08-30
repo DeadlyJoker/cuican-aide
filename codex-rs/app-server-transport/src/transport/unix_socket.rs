@@ -5,9 +5,9 @@ use std::path::Path;
 
 use super::TransportEvent;
 use crate::transport::websocket::run_websocket_connection;
-use codex_uds::UnixListener;
-use codex_uds::UnixStream;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_uds::UnixListener;
+use crewon_uds::UnixStream;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use futures::StreamExt;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
@@ -84,7 +84,14 @@ async fn run_control_socket_acceptor(
                 }
             };
             let (websocket_writer, websocket_reader) = websocket_stream.split();
-            run_websocket_connection(websocket_writer, websocket_reader, transport_event_tx).await;
+            run_websocket_connection(
+                websocket_writer,
+                websocket_reader,
+                transport_event_tx,
+                super::TransportAuthentication::ConnectionScoped,
+                super::principal_revocation::PrincipalRevocationGuard::NotApplicable,
+            )
+            .await;
         });
     }
     info!("control socket acceptor shutting down");
@@ -92,7 +99,7 @@ async fn run_control_socket_acceptor(
 
 pub async fn prepare_control_socket_path(socket_path: &Path) -> IoResult<()> {
     if let Some(parent) = socket_path.parent() {
-        codex_uds::prepare_private_socket_directory(parent).await?;
+        crewon_uds::prepare_private_socket_directory(parent).await?;
     }
 
     match UnixStream::connect(socket_path).await {
@@ -119,7 +126,7 @@ pub async fn prepare_control_socket_path(socket_path: &Path) -> IoResult<()> {
         return Ok(());
     }
 
-    if !codex_uds::is_stale_socket_path(socket_path).await? {
+    if !crewon_uds::is_stale_socket_path(socket_path).await? {
         return Err(std::io::Error::new(
             ErrorKind::AlreadyExists,
             format!(
@@ -139,7 +146,7 @@ pub async fn acquire_app_server_startup_lock(
     startup_lock_path: AbsolutePathBuf,
 ) -> IoResult<AppServerStartupLock> {
     if let Some(parent) = startup_lock_path.as_path().parent() {
-        codex_uds::prepare_private_socket_directory(parent).await?;
+        crewon_uds::prepare_private_socket_directory(parent).await?;
     }
     tokio::task::spawn_blocking(move || {
         let file = OpenOptions::new()

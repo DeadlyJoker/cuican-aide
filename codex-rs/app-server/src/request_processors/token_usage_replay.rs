@@ -11,17 +11,17 @@
 
 use std::sync::Arc;
 
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::Thread;
-use codex_app_server_protocol::ThreadHistoryBuilder;
-use codex_app_server_protocol::ThreadTokenUsage;
-use codex_app_server_protocol::ThreadTokenUsageUpdatedNotification;
-use codex_app_server_protocol::Turn;
-use codex_app_server_protocol::TurnStatus;
-use codex_core::CodexThread;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::RolloutItem;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::Thread;
+use crewon_app_server_protocol::ThreadHistoryBuilder;
+use crewon_app_server_protocol::ThreadTokenUsage;
+use crewon_app_server_protocol::ThreadTokenUsageUpdatedNotification;
+use crewon_app_server_protocol::Turn;
+use crewon_app_server_protocol::TurnStatus;
+use crewon_core::CrewonThread;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::RolloutItem;
 
 use crate::outgoing_message::ConnectionId;
 use crate::outgoing_message::OutgoingMessageSender;
@@ -38,7 +38,7 @@ pub(super) async fn send_thread_token_usage_update_to_connection(
     connection_id: ConnectionId,
     thread_id: ThreadId,
     thread: &Thread,
-    conversation: &CodexThread,
+    conversation: &CrewonThread,
     token_usage_turn_id: Option<String>,
 ) {
     let Some(info) = conversation.token_usage_info().await else {
@@ -116,10 +116,10 @@ fn latest_token_usage_turn_id(thread: &Thread) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_app_server_protocol::build_turns_from_rollout_items;
-    use codex_protocol::protocol::AgentMessageEvent;
-    use codex_protocol::protocol::TokenCountEvent;
-    use codex_protocol::protocol::UserMessageEvent;
+    use crewon_app_server_protocol::build_turns_from_rollout_items;
+    use crewon_protocol::protocol::AgentMessageEvent;
+    use crewon_protocol::protocol::TokenCountEvent;
+    use crewon_protocol::protocol::UserMessageEvent;
     use pretty_assertions::assert_eq;
 
     #[test]

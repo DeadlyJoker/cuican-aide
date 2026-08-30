@@ -1,4 +1,4 @@
-use codex_protocol::protocol::Event;
+use crewon_protocol::protocol::Event;
 
 /// Host-provided fire-and-forget sink for extension-generated events.
 ///

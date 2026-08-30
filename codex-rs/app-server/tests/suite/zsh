@@ -5,12 +5,11 @@
 // Fetching the prebuilt version via DotSlash makes it easier to write
 // integration tests that exercise the zsh fork behavior in app-server tests.
 //
-// This checked-in fixture is still pinned to the latest released bundle that
-// contains this binary. New releases publish standalone `codex-zsh-*.tar.gz`
-// assets plus a generated `codex-zsh` DotSlash release asset, so this file can
-// be retargeted when a newer fork build needs to be exercised in tests.
+// This checked-in fixture is still pinned to the latest upstream bundle that
+// contains this binary. The upstream release URL remains under openai/codex
+// until Crewon publishes an equivalent test artifact.
 {
-  "name": "codex-zsh",
+  "name": "crewon-zsh",
   "platforms": {
     // macOS 13 builds (and therefore x86_64) were dropped in
     // https://github.com/openai/codex/pull/7295, so we only provide an

@@ -3,11 +3,11 @@ use std::path::Path;
 
 use crate::OPENAI_CURATED_MARKETPLACE_NAME;
 use crate::PluginsConfigInput;
-use codex_config::LoaderOverrides;
-use codex_config::NoopThreadConfigLoader;
-use codex_config::loader::load_config_layers_state;
-use codex_exec_server::LOCAL_FS;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_config::LoaderOverrides;
+use crewon_config::NoopThreadConfigLoader;
+use crewon_config::loader::load_config_layers_state;
+use crewon_exec_server::LOCAL_FS;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use toml::Value;
 
 pub(crate) const TEST_CURATED_PLUGIN_SHA: &str = "0123456789abcdef0123456789abcdef01234567";
@@ -21,7 +21,7 @@ pub(crate) fn write_file(path: &Path, contents: &str) {
 pub(crate) fn write_curated_plugin(root: &Path, plugin_name: &str) {
     let plugin_root = root.join("plugins").join(plugin_name);
     write_file(
-        &plugin_root.join(".codex-plugin/plugin.json"),
+        &plugin_root.join(".crewon-plugin/plugin.json"),
         &format!(
             r#"{{
   "name": "{plugin_name}",
@@ -93,7 +93,7 @@ pub(crate) fn write_curated_plugin_sha_with(codex_home: &Path, sha: &str) {
 }
 
 pub(crate) async fn load_plugins_config(codex_home: &Path, cwd: &Path) -> PluginsConfigInput {
-    let codex_home = AbsolutePathBuf::try_from(codex_home).expect("codex home should be absolute");
+    let codex_home = AbsolutePathBuf::try_from(codex_home).expect("crewon home should be absolute");
     let cwd = AbsolutePathBuf::try_from(cwd).expect("cwd should be absolute");
     let config_layer_stack = load_config_layers_state(
         LOCAL_FS.as_ref(),

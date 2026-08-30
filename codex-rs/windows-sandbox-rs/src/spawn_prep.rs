@@ -31,8 +31,8 @@ use crate::workspace_acl::protect_workspace_agents_dir;
 use crate::workspace_acl::protect_workspace_codex_dir;
 use anyhow::Context;
 use anyhow::Result;
-use codex_protocol::models::PermissionProfile;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::models::PermissionProfile;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::collections::HashMap;
 use std::ffi::c_void;
 use std::path::Path;
@@ -452,9 +452,9 @@ mod tests {
     use crate::cap::load_or_create_cap_sids;
     use crate::cap::workspace_write_cap_sid_for_root;
     use crate::resolved_permissions::ResolvedWindowsSandboxPermissions;
-    use codex_protocol::models::PermissionProfile;
-    use codex_protocol::permissions::NetworkSandboxPolicy;
-    use codex_utils_absolute_path::AbsolutePathBuf;
+    use crewon_protocol::models::PermissionProfile;
+    use crewon_protocol::permissions::NetworkSandboxPolicy;
+    use crewon_utils_absolute_path::AbsolutePathBuf;
     use pretty_assertions::assert_eq;
     use std::collections::HashMap;
     use std::path::Path;
@@ -567,10 +567,10 @@ mod tests {
     #[test]
     fn legacy_session_capability_roots_use_runtime_workspace_roots_for_workspace_root() {
         let tmp = TempDir::new().expect("tempdir");
-        let codex_home = tmp.path().join("codex-home");
+        let codex_home = tmp.path().join("crewon-home");
         let workspace_root = tmp.path().join("workspace");
         let command_cwd = workspace_root.join("subdir");
-        std::fs::create_dir_all(&codex_home).expect("create codex home");
+        std::fs::create_dir_all(&codex_home).expect("create crewon home");
         std::fs::create_dir_all(&command_cwd).expect("create command cwd");
 
         let permission_profile = workspace_profile(
@@ -603,11 +603,11 @@ mod tests {
     #[test]
     fn root_capability_sids_only_include_active_roots() {
         let temp = TempDir::new().expect("tempdir");
-        let codex_home = temp.path().join("codex-home");
+        let codex_home = temp.path().join("crewon-home");
         let workspace = temp.path().join("workspace");
         let active_root = temp.path().join("active-root");
         let stale_root = temp.path().join("stale-root");
-        std::fs::create_dir_all(&codex_home).expect("create codex home");
+        std::fs::create_dir_all(&codex_home).expect("create crewon home");
         std::fs::create_dir_all(&workspace).expect("create workspace");
         std::fs::create_dir_all(&active_root).expect("create active root");
         std::fs::create_dir_all(&stale_root).expect("create stale root");
@@ -640,12 +640,12 @@ mod tests {
     #[test]
     fn legacy_deny_path_includes_nested_active_root_sid() {
         let temp = TempDir::new().expect("tempdir");
-        let codex_home = temp.path().join("codex-home");
+        let codex_home = temp.path().join("crewon-home");
         let workspace = temp.path().join("workspace");
         let protected_dir = workspace.join(".codex");
         let nested_root = protected_dir.join("nested-root");
         let unrelated_root = temp.path().join("unrelated-root");
-        std::fs::create_dir_all(&codex_home).expect("create codex home");
+        std::fs::create_dir_all(&codex_home).expect("create crewon home");
         std::fs::create_dir_all(&workspace).expect("create workspace");
         std::fs::create_dir_all(&nested_root).expect("create nested root");
         std::fs::create_dir_all(&unrelated_root).expect("create unrelated root");
@@ -676,18 +676,18 @@ mod tests {
     #[test]
     fn legacy_capability_roots_use_effective_write_roots() {
         let temp = TempDir::new().expect("tempdir");
-        let codex_home = temp.path().join("codex-home");
+        let codex_home = temp.path().join("crewon-home");
         let workspace = temp.path().join("workspace");
         let active_root = temp.path().join("active-root");
         let sandbox_root = codex_home.join(".sandbox");
-        std::fs::create_dir_all(&codex_home).expect("create codex home");
+        std::fs::create_dir_all(&codex_home).expect("create crewon home");
         std::fs::create_dir_all(&workspace).expect("create workspace");
         std::fs::create_dir_all(&active_root).expect("create active root");
         std::fs::create_dir_all(&sandbox_root).expect("create sandbox root");
 
         let writable_roots = vec![
             AbsolutePathBuf::try_from(active_root.as_path()).expect("active root"),
-            AbsolutePathBuf::try_from(codex_home.as_path()).expect("codex home"),
+            AbsolutePathBuf::try_from(codex_home.as_path()).expect("crewon home"),
             AbsolutePathBuf::try_from(sandbox_root.as_path()).expect("sandbox root"),
         ];
         let permission_profile = workspace_profile(
@@ -709,7 +709,7 @@ mod tests {
 
         assert!(roots.contains(&dunce::canonicalize(&workspace).expect("workspace")));
         assert!(roots.contains(&dunce::canonicalize(&active_root).expect("active root")));
-        assert!(!roots.contains(&dunce::canonicalize(&codex_home).expect("codex home")));
+        assert!(!roots.contains(&dunce::canonicalize(&codex_home).expect("crewon home")));
         assert!(!roots.contains(&dunce::canonicalize(&sandbox_root).expect("sandbox root")));
     }
 }

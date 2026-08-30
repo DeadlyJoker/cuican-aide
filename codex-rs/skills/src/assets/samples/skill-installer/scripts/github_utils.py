@@ -1,8 +1,6 @@
 #!/usr/bin/env python3
 """Shared GitHub helpers for skill install scripts."""
 
-from __future__ import annotations
-
 import os
 import urllib.request
 

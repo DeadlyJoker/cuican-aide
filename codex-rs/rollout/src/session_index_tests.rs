@@ -1,11 +1,11 @@
 #![allow(warnings, clippy::all)]
 
 use super::*;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::collections::HashSet;
@@ -31,8 +31,8 @@ fn write_rollout_with_metadata(path: &Path, thread_id: ThreadId) -> std::io::Res
                 timestamp,
                 cwd: ".".into(),
                 originator: "test_originator".into(),
-                cli_version: "test_version".into(),
-                source: SessionSource::Cli,
+                client_version: "test_version".into(),
+                source: SessionSource::LegacyCli,
                 thread_source: None,
                 agent_path: None,
                 agent_nickname: None,
@@ -44,6 +44,7 @@ fn write_rollout_with_metadata(path: &Path, thread_id: ThreadId) -> std::io::Res
                 multi_agent_version: None,
             },
             git: None,
+            scene_runtime: None,
         }),
     };
     let body = serde_json::to_string(&line).map_err(std::io::Error::other)?;

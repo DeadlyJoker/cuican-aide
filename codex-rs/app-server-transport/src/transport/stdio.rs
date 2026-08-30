@@ -1,13 +1,14 @@
 use super::CHANNEL_CAPACITY;
 use super::ConnectionOrigin;
+use super::TransportAuthentication;
 use super::TransportEvent;
 use super::forward_incoming_message;
 use super::next_connection_id;
 use super::serialize_outgoing_message;
 use crate::outgoing_message::QueuedOutgoingMessage;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::JSONRPCMessage;
-use codex_app_server_protocol::JSONRPCRequest;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::JSONRPCRequest;
 use std::io::ErrorKind;
 use std::io::Result as IoResult;
 use tokio::io;
@@ -33,6 +34,7 @@ pub async fn start_stdio_connection(
         .send(TransportEvent::ConnectionOpened {
             connection_id,
             origin: ConnectionOrigin::Stdio,
+            authentication: TransportAuthentication::ConnectionScoped,
             writer: writer_tx,
             disconnect_sender: None,
         })

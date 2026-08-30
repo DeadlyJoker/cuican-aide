@@ -28,9 +28,9 @@ impl HookToolName {
     /// Returns the hook identity for file edits performed through `apply_patch`.
     ///
     /// The serialized name remains `apply_patch` so logs and policies can key
-    /// off the actual Codex tool. `Write` and `Edit` are accepted as matcher
-    /// aliases for compatibility with hook configurations that describe edits
-    /// using Claude Code-style names.
+    /// off the actual tool. `Write` and `Edit` are accepted as matcher aliases
+    /// for compatibility with hook configurations that describe edit tools by
+    /// legacy names.
     pub(crate) fn apply_patch() -> Self {
         Self {
             name: "apply_patch".to_string(),
@@ -42,7 +42,7 @@ impl HookToolName {
     ///
     /// The serialized name remains `spawn_agent`, while `Agent` is accepted as
     /// a matcher alias for compatibility with hook configurations that describe
-    /// sub-agent creation using Claude Code-style names.
+    /// sub-agent creation by legacy names.
     pub(crate) fn spawn_agent() -> Self {
         Self {
             name: "spawn_agent".to_string(),

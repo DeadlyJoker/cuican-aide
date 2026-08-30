@@ -33,7 +33,7 @@
           "type": "boolean"
         },
         "name": {
-          "description": "Stable key used in config.toml and CLI flag toggles.",
+          "description": "Stable key used in config.toml and feature enablement requests.",
           "type": "string"
         },
         "stage": {

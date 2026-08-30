@@ -1,39 +1,39 @@
 use super::*;
-use codex_protocol::approvals::ElicitationRequest as CoreElicitationRequest;
-use codex_protocol::items::AgentMessageContent;
-use codex_protocol::items::AgentMessageItem;
-use codex_protocol::items::FileChangeItem;
-use codex_protocol::items::ImageViewItem;
-use codex_protocol::items::McpToolCallItem;
-use codex_protocol::items::McpToolCallStatus as CoreMcpToolCallStatus;
-use codex_protocol::items::ReasoningItem;
-use codex_protocol::items::TurnItem;
-use codex_protocol::items::UserMessageItem;
-use codex_protocol::items::WebSearchItem;
-use codex_protocol::mcp::CallToolResult;
-use codex_protocol::mcp::McpServerInfo;
-use codex_protocol::memory_citation::MemoryCitation as CoreMemoryCitation;
-use codex_protocol::memory_citation::MemoryCitationEntry as CoreMemoryCitationEntry;
-use codex_protocol::models::AdditionalPermissionProfile as CoreAdditionalPermissionProfile;
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
-use codex_protocol::models::FileSystemPermissions as CoreFileSystemPermissions;
-use codex_protocol::models::ImageDetail;
-use codex_protocol::models::MessagePhase;
-use codex_protocol::models::NetworkPermissions as CoreNetworkPermissions;
-use codex_protocol::models::WebSearchAction as CoreWebSearchAction;
-use codex_protocol::permissions::FileSystemAccessMode as CoreFileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath as CoreFileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry as CoreFileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSpecialPath as CoreFileSystemSpecialPath;
-use codex_protocol::protocol::AgentStatus as CoreAgentStatus;
-use codex_protocol::protocol::AskForApproval as CoreAskForApproval;
-use codex_protocol::protocol::GranularApprovalConfig as CoreGranularApprovalConfig;
-use codex_protocol::protocol::NetworkAccess as CoreNetworkAccess;
-use codex_protocol::request_permissions::RequestPermissionProfile as CoreRequestPermissionProfile;
-use codex_protocol::user_input::UserInput as CoreUserInput;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_absolute_path::test_support::PathBufExt;
-use codex_utils_absolute_path::test_support::test_path_buf;
+use crewon_protocol::approvals::ElicitationRequest as CoreElicitationRequest;
+use crewon_protocol::items::AgentMessageContent;
+use crewon_protocol::items::AgentMessageItem;
+use crewon_protocol::items::FileChangeItem;
+use crewon_protocol::items::ImageViewItem;
+use crewon_protocol::items::McpToolCallItem;
+use crewon_protocol::items::McpToolCallStatus as CoreMcpToolCallStatus;
+use crewon_protocol::items::ReasoningItem;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::items::UserMessageItem;
+use crewon_protocol::items::WebSearchItem;
+use crewon_protocol::mcp::CallToolResult;
+use crewon_protocol::mcp::McpServerInfo;
+use crewon_protocol::memory_citation::MemoryCitation as CoreMemoryCitation;
+use crewon_protocol::memory_citation::MemoryCitationEntry as CoreMemoryCitationEntry;
+use crewon_protocol::models::AdditionalPermissionProfile as CoreAdditionalPermissionProfile;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
+use crewon_protocol::models::FileSystemPermissions as CoreFileSystemPermissions;
+use crewon_protocol::models::ImageDetail;
+use crewon_protocol::models::MessagePhase;
+use crewon_protocol::models::NetworkPermissions as CoreNetworkPermissions;
+use crewon_protocol::models::WebSearchAction as CoreWebSearchAction;
+use crewon_protocol::permissions::FileSystemAccessMode as CoreFileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath as CoreFileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry as CoreFileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSpecialPath as CoreFileSystemSpecialPath;
+use crewon_protocol::protocol::AgentStatus as CoreAgentStatus;
+use crewon_protocol::protocol::AskForApproval as CoreAskForApproval;
+use crewon_protocol::protocol::GranularApprovalConfig as CoreGranularApprovalConfig;
+use crewon_protocol::protocol::NetworkAccess as CoreNetworkAccess;
+use crewon_protocol::request_permissions::RequestPermissionProfile as CoreRequestPermissionProfile;
+use crewon_protocol::user_input::UserInput as CoreUserInput;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::test_support::PathBufExt;
+use crewon_utils_absolute_path::test_support::test_path_buf;
 use pretty_assertions::assert_eq;
 use serde_json::Value as JsonValue;
 use serde_json::json;
@@ -76,7 +76,7 @@ fn thread_sources_round_trip_as_scalar_labels() {
             source
         );
 
-        let core_source: codex_protocol::protocol::ThreadSource = source.clone().into();
+        let core_source: crewon_protocol::protocol::ThreadSource = source.clone().into();
         assert_eq!(ThreadSource::from(core_source), source);
     }
 }
@@ -175,7 +175,7 @@ fn thread_resume_response_round_trips_initial_turns_page() {
             status: ThreadStatus::Idle,
             path: None,
             cwd: absolute_path("tmp"),
-            cli_version: "0.0.0".to_string(),
+            client_version: "0.0.0".to_string(),
             source: SessionSource::Exec,
             thread_source: None,
             agent_nickname: None,
@@ -184,6 +184,7 @@ fn thread_resume_response_round_trips_initial_turns_page() {
             name: None,
             turns: Vec::new(),
         },
+        execution_context: None,
         model: "gpt-5".to_string(),
         model_provider: "openai".to_string(),
         service_tier: None,
@@ -195,6 +196,7 @@ fn thread_resume_response_round_trips_initial_turns_page() {
         sandbox: SandboxPolicy::DangerFullAccess,
         active_permission_profile: None,
         reasoning_effort: None,
+        scene_runtime: None,
         initial_turns_page: Some(TurnsPage {
             data: Vec::new(),
             next_cursor: Some("cursor_next".to_string()),
@@ -214,6 +216,35 @@ fn thread_resume_response_round_trips_initial_turns_page() {
     let decoded = serde_json::from_value::<ThreadResumeResponse>(value)
         .expect("deserialize thread resume response");
     assert_eq!(decoded, response);
+}
+
+#[test]
+fn thread_deserializes_legacy_cli_version_alias() {
+    let thread: Thread = serde_json::from_value(json!({
+        "id": "thr_123",
+        "sessionId": "thr_123",
+        "forkedFromId": null,
+        "parentThreadId": null,
+        "preview": "",
+        "ephemeral": false,
+        "modelProvider": "openai",
+        "createdAt": 1,
+        "updatedAt": 1,
+        "status": { "type": "idle" },
+        "path": null,
+        "cwd": absolute_path_string("tmp"),
+        "cliVersion": "0.0.0",
+        "source": "exec",
+        "threadSource": null,
+        "agentNickname": null,
+        "agentRole": null,
+        "gitInfo": null,
+        "name": null,
+        "turns": []
+    }))
+    .expect("legacy cliVersion should deserialize");
+
+    assert_eq!(thread.client_version, "0.0.0");
 }
 
 #[test]
@@ -1518,7 +1549,7 @@ fn sandbox_policy_round_trips_external_sandbox_network_access() {
     let core_policy = v2_policy.to_core();
     assert_eq!(
         core_policy,
-        codex_protocol::protocol::SandboxPolicy::ExternalSandbox {
+        crewon_protocol::protocol::SandboxPolicy::ExternalSandbox {
             network_access: CoreNetworkAccess::Enabled,
         }
     );
@@ -1536,7 +1567,7 @@ fn sandbox_policy_round_trips_read_only_network_access() {
     let core_policy = v2_policy.to_core();
     assert_eq!(
         core_policy,
-        codex_protocol::protocol::SandboxPolicy::ReadOnly {
+        crewon_protocol::protocol::SandboxPolicy::ReadOnly {
             network_access: true,
         }
     );
@@ -2147,7 +2178,7 @@ fn sandbox_policy_round_trips_workspace_write_access() {
     let core_policy = v2_policy.to_core();
     assert_eq!(
         core_policy,
-        codex_protocol::protocol::SandboxPolicy::WorkspaceWrite {
+        crewon_protocol::protocol::SandboxPolicy::WorkspaceWrite {
             writable_roots: vec![],
             network_access: true,
             exclude_tmpdir_env_var: false,
@@ -2387,7 +2418,7 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
             },
             CoreUserInput::Skill {
                 name: "skill-creator".to_string(),
-                path: PathBuf::from("/repo/.codex/skills/skill-creator/SKILL.md"),
+                path: PathBuf::from("/repo/.crewon/skill/skill-creator/SKILL.md"),
             },
             CoreUserInput::Mention {
                 name: "Demo App".to_string(),
@@ -2416,7 +2447,7 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
                 },
                 UserInput::Skill {
                     name: "skill-creator".to_string(),
-                    path: PathBuf::from("/repo/.codex/skills/skill-creator/SKILL.md"),
+                    path: PathBuf::from("/repo/.crewon/skill/skill-creator/SKILL.md"),
                 },
                 UserInput::Mention {
                     name: "Demo App".to_string(),
@@ -2538,13 +2569,13 @@ fn core_turn_item_into_thread_item_converts_supported_variants() {
         id: "patch-1".to_string(),
         changes: [(
             PathBuf::from("README.md"),
-            codex_protocol::protocol::FileChange::Add {
+            crewon_protocol::protocol::FileChange::Add {
                 content: "hello\n".to_string(),
             },
         )]
         .into_iter()
         .collect(),
-        status: Some(codex_protocol::protocol::PatchApplyStatus::Completed),
+        status: Some(crewon_protocol::protocol::PatchApplyStatus::Completed),
         auto_approved: None,
         stdout: Some("Done!".to_string()),
         stderr: Some(String::new()),
@@ -3213,20 +3244,20 @@ fn plugin_share_params_and_response_serialization_use_camel_case_fields() {
     assert_eq!(
         serde_json::to_value(PluginShareCheckoutResponse {
             remote_plugin_id: "plugins~Plugin_00000000000000000000000000000000".to_string(),
-            plugin_id: "gmail@codex-curated".to_string(),
+            plugin_id: "gmail@crewon-curated".to_string(),
             plugin_name: "gmail".to_string(),
             plugin_path,
-            marketplace_name: "codex-curated".to_string(),
+            marketplace_name: "crewon-curated".to_string(),
             marketplace_path,
             remote_version: Some("1.2.3".to_string()),
         })
         .unwrap(),
         json!({
             "remotePluginId": "plugins~Plugin_00000000000000000000000000000000",
-            "pluginId": "gmail@codex-curated",
+            "pluginId": "gmail@crewon-curated",
             "pluginName": "gmail",
             "pluginPath": plugin_path_json,
-            "marketplaceName": "codex-curated",
+            "marketplaceName": "crewon-curated",
             "marketplacePath": marketplace_path_json,
             "remoteVersion": "1.2.3",
         }),
@@ -3611,7 +3642,7 @@ fn thread_lifecycle_responses_default_missing_optional_fields() {
             "status": { "type": "idle" },
             "path": null,
             "cwd": absolute_path_string("tmp"),
-            "cliVersion": "0.0.0",
+            "clientVersion": "0.0.0",
             "source": "exec",
             "agentNickname": null,
             "agentRole": null,
@@ -3742,9 +3773,9 @@ fn thread_settings_update_params_preserve_field_level_experimental_gates() {
 
     let collaboration_mode = ThreadSettingsUpdateParams {
         thread_id: "thread_123".to_string(),
-        collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-            mode: codex_protocol::config_types::ModeKind::Plan,
-            settings: codex_protocol::config_types::Settings {
+        collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+            mode: crewon_protocol::config_types::ModeKind::Plan,
+            settings: crewon_protocol::config_types::Settings {
                 model: "mock-model".to_string(),
                 reasoning_effort: None,
                 developer_instructions: None,

@@ -61,13 +61,24 @@ common:buildbuddy-generic-rbe --config=buildbuddy-generic
 common:buildbuddy-generic-rbe --config=remote
 common:buildbuddy-generic-rbe --remote_executor=grpcs://remote.buildbuddy.io
 
-# Use the OpenAI tenant for cache, BES, and downloads without remote execution.
+# Use the private tenant for cache, BES, and downloads without remote execution.
+common:buildbuddy-private --bes_backend=grpcs://openai.buildbuddy.io
+common:buildbuddy-private --bes_results_url=https://openai.buildbuddy.io/invocation/
+common:buildbuddy-private --remote_cache=grpcs://openai.buildbuddy.io
+common:buildbuddy-private --experimental_remote_downloader=grpcs://openai.buildbuddy.io
+
+# Legacy alias for the private tenant.
 common:buildbuddy-openai --bes_backend=grpcs://openai.buildbuddy.io
 common:buildbuddy-openai --bes_results_url=https://openai.buildbuddy.io/invocation/
 common:buildbuddy-openai --remote_cache=grpcs://openai.buildbuddy.io
 common:buildbuddy-openai --experimental_remote_downloader=grpcs://openai.buildbuddy.io
 
-# Add remote execution on the OpenAI tenant.
+# Add remote execution on the private tenant.
+common:buildbuddy-private-rbe --config=buildbuddy-private
+common:buildbuddy-private-rbe --config=remote
+common:buildbuddy-private-rbe --remote_executor=grpcs://openai.buildbuddy.io
+
+# Legacy alias for private tenant remote execution.
 common:buildbuddy-openai-rbe --config=buildbuddy-openai
 common:buildbuddy-openai-rbe --config=remote
 common:buildbuddy-openai-rbe --remote_executor=grpcs://openai.buildbuddy.io
@@ -91,7 +102,7 @@ common:remote --jobs=800
 common:ci --remote_download_minimal
 common:ci --keep_going
 common:ci --verbose_failures
-common:ci --build_metadata=REPO_URL=https://github.com/openai/codex.git
+common:ci --build_metadata=REPO_URL=https://github.com/crewon/crewon.git
 common:ci --build_metadata=ROLE=CI
 common:ci --build_metadata=VISIBILITY=PUBLIC
 # rules_rust derives debug level from Bazel toolchain/compilation-mode settings,
@@ -108,7 +119,7 @@ common:ci-bazel --build_metadata=TAG_workflow=bazel
 # Keep code-mode integration cases out of ordinary Bazel legs. The
 # Windows-cross config below re-enables them after generating its Windows V8
 # snapshot on the Windows runner.
-common:ci-bazel --test_env=CODEX_BAZEL_TEST_SKIP_FILTERS=suite::code_mode::
+common:ci-bazel --test_env=CREWON_BAZEL_TEST_SKIP_FILTERS=suite::code_mode::
 
 # Shared config for Bazel-backed Rust linting.
 build:clippy --aspects=@rules_rust//rust:defs.bzl%rust_clippy_aspect
@@ -195,7 +206,7 @@ common:ci-windows-cross --test_env=RUST_TEST_THREADS=1
 # binaries currently hang in PowerShell AST parser tests when those binaries are
 # run on the Windows runner. Keep V8-backed code-mode tests enabled except for
 # the hidden dynamic-tool callback test, which currently times out on Windows.
-common:ci-windows-cross --test_env=CODEX_BAZEL_TEST_SKIP_FILTERS=powershell,suite::code_mode::code_mode_can_call_hidden_dynamic_tools
+common:ci-windows-cross --test_env=CREWON_BAZEL_TEST_SKIP_FILTERS=powershell,suite::code_mode::code_mode_can_call_hidden_dynamic_tools
 common:ci-windows-cross --platforms=//:windows_x86_64_gnullvm
 common:ci-windows-cross --extra_execution_platforms=//:rbe,//:windows_x86_64_msvc
 common:ci-windows-cross --extra_toolchains=//:windows_gnullvm_tests_on_msvc_host_toolchain

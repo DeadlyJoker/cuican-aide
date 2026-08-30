@@ -1,0 +1,9 @@
+{
+  "schemaVersion": "crewon.responses-request-profile.v0",
+  "caseId": "AR-007-responses-lite-request",
+  "requestProfile": "responsesLite",
+  "expected": {
+    "reasoningContext": "all_turns",
+    "parallelToolCalls": false
+  }
+}

@@ -4,91 +4,88 @@ use crate::config::edit::ConfigEdit;
 use crate::config::edit::ConfigEditsBuilder;
 use crate::config::edit::apply_blocking;
 use assert_matches::assert_matches;
-use codex_config::CONFIG_TOML_FILE;
-use codex_config::ConfigLayerEntry;
-use codex_config::ProfileV2Name;
-use codex_config::RequirementSource;
-use codex_config::config_toml::AgentRoleToml;
-use codex_config::config_toml::AgentsToml;
-use codex_config::config_toml::AutoReviewToml;
-use codex_config::config_toml::ConfigToml;
-use codex_config::config_toml::ExperimentalRequestUserInput;
-use codex_config::config_toml::ProjectConfig;
-use codex_config::config_toml::RealtimeConfig;
-use codex_config::config_toml::RealtimeToml;
-use codex_config::config_toml::RealtimeTransport;
-use codex_config::config_toml::RealtimeWsMode;
-use codex_config::config_toml::RealtimeWsVersion;
-use codex_config::config_toml::ToolsToml;
-use codex_config::loader::project_trust_key;
-use codex_config::permissions_toml::FilesystemPermissionToml;
-use codex_config::permissions_toml::FilesystemPermissionsToml;
-use codex_config::permissions_toml::NetworkDomainPermissionToml;
-use codex_config::permissions_toml::NetworkDomainPermissionsToml;
-use codex_config::permissions_toml::NetworkMitmActionToml;
-use codex_config::permissions_toml::NetworkMitmHookToml;
-use codex_config::permissions_toml::NetworkMitmToml;
-use codex_config::permissions_toml::NetworkToml;
-use codex_config::permissions_toml::PermissionProfileToml;
-use codex_config::permissions_toml::PermissionsToml;
-use codex_config::permissions_toml::WorkspaceRootsToml;
-use codex_config::types::AppToolApproval;
-use codex_config::types::ApprovalsReviewer;
-use codex_config::types::BundledSkillsConfig;
-use codex_config::types::FeedbackConfigToml;
-use codex_config::types::HistoryPersistence;
-use codex_config::types::McpServerEnvVar;
-use codex_config::types::McpServerOAuthConfig;
-use codex_config::types::McpServerToolConfig;
-use codex_config::types::McpServerTransportConfig;
-use codex_config::types::MemoriesConfig;
-use codex_config::types::MemoriesToml;
-use codex_config::types::ModelAvailabilityNuxConfig;
-use codex_config::types::Notice;
-use codex_config::types::NotificationCondition;
-use codex_config::types::NotificationMethod;
-use codex_config::types::Notifications;
-use codex_config::types::OtelConfigToml;
-use codex_config::types::OtelExporterKind;
-use codex_config::types::SandboxWorkspaceWrite;
-use codex_config::types::SessionPickerViewMode;
-use codex_config::types::SkillsConfig;
-use codex_config::types::ToolSuggestDisabledTool;
-use codex_config::types::ToolSuggestDiscoverableType;
-use codex_config::types::Tui;
-use codex_config::types::TuiKeymap;
-use codex_config::types::TuiNotificationSettings;
-use codex_config::types::TuiPetAnchor;
-use codex_config::types::WindowsSandboxModeToml;
-use codex_config::types::WindowsToml;
-use codex_core_plugins::PluginsManager;
-use codex_exec_server::LOCAL_FS;
-use codex_features::Feature;
-use codex_features::FeaturesToml;
-use codex_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
-use codex_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
-use codex_model_provider_info::WireApi;
-use codex_models_manager::bundled_models_response;
-use codex_network_proxy::NetworkMode;
-use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
-use codex_protocol::config_types::ServiceTier;
-use codex_protocol::models::ActivePermissionProfile;
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY;
-use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
-use codex_protocol::models::ManagedFileSystemPermissions;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::models::SandboxEnforcement;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::FileSystemSpecialPath;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::NetworkAccess;
-use codex_protocol::protocol::RealtimeVoice;
-use codex_protocol::protocol::SandboxPolicy;
+use crewon_config::CONFIG_TOML_FILE;
+use crewon_config::ConfigLayerEntry;
+use crewon_config::ProfileV2Name;
+use crewon_config::RequirementSource;
+use crewon_config::config_toml::AgentRoleToml;
+use crewon_config::config_toml::AgentsToml;
+use crewon_config::config_toml::AutoReviewToml;
+use crewon_config::config_toml::ConfigToml;
+use crewon_config::config_toml::ExperimentalRequestUserInput;
+use crewon_config::config_toml::ProjectConfig;
+use crewon_config::config_toml::RealtimeConfig;
+use crewon_config::config_toml::RealtimeToml;
+use crewon_config::config_toml::RealtimeTransport;
+use crewon_config::config_toml::RealtimeWsMode;
+use crewon_config::config_toml::RealtimeWsVersion;
+use crewon_config::config_toml::ToolsToml;
+use crewon_config::loader::project_trust_key;
+use crewon_config::permissions_toml::FilesystemPermissionToml;
+use crewon_config::permissions_toml::FilesystemPermissionsToml;
+use crewon_config::permissions_toml::NetworkDomainPermissionToml;
+use crewon_config::permissions_toml::NetworkDomainPermissionsToml;
+use crewon_config::permissions_toml::NetworkMitmActionToml;
+use crewon_config::permissions_toml::NetworkMitmHookToml;
+use crewon_config::permissions_toml::NetworkMitmToml;
+use crewon_config::permissions_toml::NetworkToml;
+use crewon_config::permissions_toml::PermissionProfileToml;
+use crewon_config::permissions_toml::PermissionsToml;
+use crewon_config::permissions_toml::WorkspaceRootsToml;
+use crewon_config::types::AppToolApproval;
+use crewon_config::types::ApprovalsReviewer;
+use crewon_config::types::BundledSkillsConfig;
+use crewon_config::types::Client;
+use crewon_config::types::ClientNotificationSettings;
+use crewon_config::types::FeedbackConfigToml;
+use crewon_config::types::HistoryPersistence;
+use crewon_config::types::McpServerEnvVar;
+use crewon_config::types::McpServerOAuthConfig;
+use crewon_config::types::McpServerToolConfig;
+use crewon_config::types::McpServerTransportConfig;
+use crewon_config::types::MemoriesConfig;
+use crewon_config::types::MemoriesToml;
+use crewon_config::types::ModelAvailabilityNuxConfig;
+use crewon_config::types::Notice;
+use crewon_config::types::NotificationCondition;
+use crewon_config::types::NotificationMethod;
+use crewon_config::types::Notifications;
+use crewon_config::types::OtelConfigToml;
+use crewon_config::types::OtelExporterKind;
+use crewon_config::types::SandboxWorkspaceWrite;
+use crewon_config::types::SkillsConfig;
+use crewon_config::types::ToolSuggestDisabledTool;
+use crewon_config::types::ToolSuggestDiscoverableType;
+use crewon_config::types::WindowsSandboxModeToml;
+use crewon_config::types::WindowsToml;
+use crewon_core_plugins::PluginsManager;
+use crewon_exec_server::LOCAL_FS;
+use crewon_features::Feature;
+use crewon_features::FeaturesToml;
+use crewon_model_provider_info::LMSTUDIO_OSS_PROVIDER_ID;
+use crewon_model_provider_info::OLLAMA_OSS_PROVIDER_ID;
+use crewon_model_provider_info::WireApi;
+use crewon_models_manager::bundled_models_response;
+use crewon_network_proxy::NetworkMode;
+use crewon_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
+use crewon_protocol::config_types::ServiceTier;
+use crewon_protocol::models::ActivePermissionProfile;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_DANGER_FULL_ACCESS;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY;
+use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_WORKSPACE;
+use crewon_protocol::models::ManagedFileSystemPermissions;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::models::SandboxEnforcement;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::FileSystemSpecialPath;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::NetworkAccess;
+use crewon_protocol::protocol::RealtimeVoice;
+use crewon_protocol::protocol::SandboxPolicy;
 use serde::Deserialize;
 use tempfile::tempdir;
 
@@ -103,12 +100,42 @@ use rmcp::model::ElicitationCapability;
 use rmcp::model::FormElicitationCapability;
 use rmcp::model::UrlElicitationCapability;
 
-use codex_config::test_support::CloudConfigBundleFixture;
+use crewon_config::test_support::CloudConfigBundleFixture;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::ffi::OsString;
 use std::path::Path;
 use std::time::Duration;
 use tempfile::TempDir;
+
+struct EnvVarGuard {
+    key: &'static str,
+    previous: Option<OsString>,
+}
+
+impl EnvVarGuard {
+    fn remove(key: &'static str) -> Self {
+        let previous = std::env::var_os(key);
+        // SAFETY: this scoped guard restores the process environment before the test exits.
+        unsafe { std::env::remove_var(key) };
+        Self { key, previous }
+    }
+}
+
+impl Drop for EnvVarGuard {
+    fn drop(&mut self) {
+        match &self.previous {
+            Some(value) => {
+                // SAFETY: this scoped guard restores the process environment before the test exits.
+                unsafe { std::env::set_var(self.key, value) };
+            }
+            None => {
+                // SAFETY: this scoped guard restores the process environment before the test exits.
+                unsafe { std::env::remove_var(self.key) };
+            }
+        }
+    }
+}
 
 fn stdio_mcp(command: &str) -> McpServerConfig {
     McpServerConfig {
@@ -119,7 +146,7 @@ fn stdio_mcp(command: &str) -> McpServerConfig {
             env_vars: Vec::new(),
             cwd: None,
         },
-        environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+        environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
         enabled: true,
         required: false,
         supports_parallel_tool_calls: false,
@@ -144,7 +171,7 @@ fn http_mcp(url: &str) -> McpServerConfig {
             http_headers: None,
             env_http_headers: None,
         },
-        environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+        environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
         enabled: true,
         required: false,
         supports_parallel_tool_calls: false,
@@ -491,7 +518,7 @@ async fn load_config_resolves_code_mode_config() -> std::io::Result<()> {
         r#"
 [features.code_mode]
 enabled = true
-excluded_tool_namespaces = ["mcp__codex_apps", "multi_agent_v1"]
+excluded_tool_namespaces = ["mcp__crewon_apps", "multi_agent_v1"]
 "#,
     )
     .expect("TOML deserialization should succeed");
@@ -504,7 +531,7 @@ excluded_tool_namespaces = ["mcp__codex_apps", "multi_agent_v1"]
 
     assert_eq!(
         config.code_mode.excluded_tool_namespaces,
-        vec!["mcp__codex_apps".to_string(), "multi_agent_v1".to_string()]
+        vec!["mcp__crewon_apps".to_string(), "multi_agent_v1".to_string()]
     );
     assert!(config.features.enabled(Feature::CodeMode));
     Ok(())
@@ -653,30 +680,17 @@ region = "us-west-2"
 #[test]
 fn config_toml_deserializes_model_availability_nux() {
     let toml = r#"
-[tui.model_availability_nux]
+[client.model_availability_nux]
 "gpt-foo" = 2
 "gpt-bar" = 4
 "#;
     let cfg: ConfigToml =
-        toml::from_str(toml).expect("TOML deserialization should succeed for TUI NUX");
+        toml::from_str(toml).expect("TOML deserialization should succeed for client NUX");
 
     assert_eq!(
-        cfg.tui.expect("tui config should deserialize"),
-        Tui {
-            notification_settings: TuiNotificationSettings::default(),
-            animations: true,
-            show_tooltips: true,
-            vim_mode_default: false,
-            raw_output_mode: false,
-            alternate_screen: AltScreenMode::default(),
-            status_line: None,
-            status_line_use_colors: true,
-            terminal_title: None,
-            theme: None,
-            pet: None,
-            pet_anchor: TuiPetAnchor::Composer,
-            session_picker_view: None,
-            keymap: TuiKeymap::default(),
+        cfg.client.expect("client config should deserialize"),
+        Client {
+            notification_settings: ClientNotificationSettings::default(),
             model_availability_nux: ModelAvailabilityNuxConfig {
                 shown_count: HashMap::from([
                     ("gpt-bar".to_string(), 4),
@@ -689,48 +703,37 @@ fn config_toml_deserializes_model_availability_nux() {
 }
 
 #[test]
-fn config_toml_status_line_use_colors_defaults_to_enabled() {
+fn config_toml_deserializes_legacy_tui_alias_for_client_config() {
     let toml = r#"
-[tui]
+[tui.model_availability_nux]
+"gpt-foo" = 2
 "#;
-    let cfg: ConfigToml =
-        toml::from_str(toml).expect("TOML deserialization should succeed for TUI config");
+    let cfg: ConfigToml = toml::from_str(toml).expect("legacy TUI config alias should deserialize");
 
-    assert!(
-        cfg.tui
-            .expect("tui config should deserialize")
-            .status_line_use_colors
-    );
-}
-
-#[test]
-fn config_toml_deserializes_status_line_use_colors_disabled() {
-    let toml = r#"
-[tui]
-status_line_use_colors = false
-"#;
-    let cfg: ConfigToml =
-        toml::from_str(toml).expect("TOML deserialization should succeed for TUI config");
-
-    assert!(
-        !cfg.tui
-            .expect("tui config should deserialize")
-            .status_line_use_colors
+    assert_eq!(
+        cfg.client.expect("client config should deserialize"),
+        Client {
+            notification_settings: ClientNotificationSettings::default(),
+            model_availability_nux: ModelAvailabilityNuxConfig {
+                shown_count: HashMap::from([("gpt-foo".to_string(), 2)]),
+            },
+            terminal_resize_reflow_max_rows: None,
+        }
     );
 }
 
 #[test]
 fn config_toml_deserializes_terminal_resize_reflow_config() {
     let toml = r#"
-[tui]
+[client]
 terminal_resize_reflow_max_rows = 9000
 "#;
     let cfg: ConfigToml =
         toml::from_str(toml).expect("TOML deserialization should succeed for resize reflow config");
 
     assert_eq!(
-        cfg.tui
-            .expect("tui config should deserialize")
+        cfg.client
+            .expect("client config should deserialize")
             .terminal_resize_reflow_max_rows,
         Some(9000)
     );
@@ -750,82 +753,6 @@ async fn runtime_config_defaults_model_availability_nux() {
         cfg.model_availability_nux,
         ModelAvailabilityNuxConfig::default()
     );
-}
-
-#[test]
-fn test_tui_vim_mode_default_defaults_to_false() {
-    let toml = r#"
-        [tui]
-    "#;
-    let parsed: ConfigToml = toml::from_str(toml).expect("deserialize empty [tui] table");
-    assert!(
-        !parsed
-            .tui
-            .expect("config should include tui section")
-            .vim_mode_default
-    );
-}
-
-#[test]
-fn test_tui_vim_mode_default_true() {
-    let toml = r#"
-        [tui]
-        vim_mode_default = true
-    "#;
-    let parsed: ConfigToml = toml::from_str(toml).expect("deserialize vim_mode_default=true");
-    assert!(
-        parsed
-            .tui
-            .expect("config should include tui section")
-            .vim_mode_default
-    );
-}
-
-#[test]
-fn test_tui_raw_output_mode_defaults_to_false() {
-    let toml = r#"
-        [tui]
-    "#;
-    let parsed: ConfigToml = toml::from_str(toml).expect("deserialize empty [tui] table");
-    assert!(
-        !parsed
-            .tui
-            .expect("config should include tui section")
-            .raw_output_mode
-    );
-}
-
-#[test]
-fn test_tui_raw_output_mode_true() {
-    let toml = r#"
-        [tui]
-        raw_output_mode = true
-    "#;
-    let parsed: ConfigToml = toml::from_str(toml).expect("deserialize raw_output_mode=true");
-    assert!(
-        parsed
-            .tui
-            .expect("config should include tui section")
-            .raw_output_mode
-    );
-}
-
-#[tokio::test]
-async fn runtime_config_uses_tui_raw_output_mode() {
-    let toml = r#"
-        [tui]
-        raw_output_mode = true
-    "#;
-    let cfg_toml: ConfigToml = toml::from_str(toml).expect("deserialize raw_output_mode=true");
-    let cfg = Config::load_from_base_config_with_overrides(
-        cfg_toml,
-        ConfigOverrides::default(),
-        tempdir().expect("tempdir").abs(),
-    )
-    .await
-    .expect("load config");
-
-    assert!(cfg.tui_raw_output_mode);
 }
 
 #[test]
@@ -1367,7 +1294,7 @@ async fn network_proxy_feature_matrix_preserves_sandbox_network_semantics() -> s
 }
 
 #[tokio::test]
-async fn network_proxy_cli_overrides_merge_toggle_with_proxy_config() -> std::io::Result<()> {
+async fn network_proxy_config_overrides_merge_toggle_with_proxy_config() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cwd = TempDir::new()?;
     std::fs::write(
@@ -1384,7 +1311,7 @@ sandbox = "elevated"
     )?;
     let config = ConfigBuilder::without_managed_config_for_tests()
         .codex_home(codex_home.path().to_path_buf())
-        .cli_overrides(vec![
+        .config_overrides(vec![
             (
                 "features.network_proxy.enabled".to_string(),
                 toml::Value::Boolean(true),
@@ -1894,14 +1821,14 @@ async fn managed_unrestricted_permission_profile_still_enables_network_requireme
         .collect();
     let mut requirements = config.config_layer_stack.requirements().clone();
     requirements.network = Some(Sourced::new(
-        codex_config::NetworkConstraints {
+        crewon_config::NetworkConstraints {
             enabled: Some(true),
             ..Default::default()
         },
         RequirementSource::LegacyManagedConfigTomlFromMdm,
     ));
     let mut requirements_toml = config.config_layer_stack.requirements_toml().clone();
-    requirements_toml.network = Some(codex_config::NetworkRequirementsToml {
+    requirements_toml.network = Some(crewon_config::NetworkRequirementsToml {
         enabled: Some(true),
         ..Default::default()
     });
@@ -2235,7 +2162,7 @@ async fn default_permissions_read_only_keeps_add_dir_read_only() -> std::io::Res
 async fn workspace_profile_applies_rules_to_runtime_and_profile_workspace_roots()
 -> std::io::Result<()> {
     let temp_dir = TempDir::new()?;
-    let codex_home = temp_dir.path().join("codex-home");
+    let codex_home = temp_dir.path().join("crewon-home");
     let cwd = temp_dir.path().join("frontend");
     let runtime_root = temp_dir.path().join("backend");
     let profile_root = temp_dir.path().join("shared");
@@ -3084,7 +3011,7 @@ async fn permissions_profiles_allow_unknown_special_paths() -> std::io::Result<(
     );
     assert!(
         config.startup_warnings.iter().any(|warning| warning.contains(
-            "Configured filesystem path `:future_special_path` is not recognized by this version of Codex and will be ignored."
+            "Configured filesystem path `:future_special_path` is not recognized by this version of Crewon and will be ignored."
         )),
         "{:?}",
         config.startup_warnings
@@ -3124,7 +3051,7 @@ async fn permissions_profiles_allow_unknown_special_paths_with_nested_entries()
     );
     assert!(
         config.startup_warnings.iter().any(|warning| warning.contains(
-            "Configured filesystem path `:future_special_path` with nested entry `docs` is not recognized by this version of Codex and will be ignored."
+            "Configured filesystem path `:future_special_path` with nested entry `docs` is not recognized by this version of Crewon and will be ignored."
         )),
         "{:?}",
         config.startup_warnings
@@ -3155,7 +3082,7 @@ async fn permissions_profiles_allow_missing_filesystem_with_warning() -> std::io
     );
     assert!(
         config.startup_warnings.iter().any(|warning| warning.contains(
-            "Permissions profile `dev` does not define any recognized filesystem entries for this version of Codex."
+            "Permissions profile `dev` does not define any recognized filesystem entries for this version of Crewon."
         )),
         "{:?}",
         config.startup_warnings
@@ -3183,7 +3110,7 @@ async fn permissions_profiles_allow_empty_filesystem_with_warning() -> std::io::
     );
     assert!(
         config.startup_warnings.iter().any(|warning| warning.contains(
-            "Permissions profile `dev` does not define any recognized filesystem entries for this version of Codex."
+            "Permissions profile `dev` does not define any recognized filesystem entries for this version of Crewon."
         )),
         "{:?}",
         config.startup_warnings
@@ -3289,142 +3216,19 @@ async fn permissions_profiles_allow_network_enablement() -> std::io::Result<()> 
 }
 
 #[test]
-fn tui_theme_deserializes_from_toml() {
+fn client_config_missing_notifications_field_defaults_to_enabled() {
     let cfg = r#"
-[tui]
-theme = "dracula"
-"#;
-    let parsed = toml::from_str::<ConfigToml>(cfg).expect("TOML deserialization should succeed");
-    assert_eq!(
-        parsed.tui.as_ref().and_then(|t| t.theme.as_deref()),
-        Some("dracula"),
-    );
-}
-
-#[test]
-fn tui_theme_defaults_to_none() {
-    let cfg = r#"
-[tui]
-"#;
-    let parsed = toml::from_str::<ConfigToml>(cfg).expect("TOML deserialization should succeed");
-    assert_eq!(parsed.tui.as_ref().and_then(|t| t.theme.as_deref()), None);
-}
-
-#[test]
-fn tui_session_picker_view_deserializes_from_toml() {
-    let cfg = r#"
-[tui]
-session_picker_view = "dense"
-"#;
-    let parsed = toml::from_str::<ConfigToml>(cfg).expect("TOML deserialization should succeed");
-    assert_eq!(
-        parsed.tui.as_ref().and_then(|t| t.session_picker_view),
-        Some(SessionPickerViewMode::Dense),
-    );
-}
-
-#[test]
-fn tui_pet_deserializes_from_toml() {
-    let cfg = r#"
-[tui]
-pet = "chefito"
-"#;
-    let parsed = toml::from_str::<ConfigToml>(cfg).expect("TOML deserialization should succeed");
-    assert_eq!(
-        parsed.tui.as_ref().and_then(|t| t.pet.as_deref()),
-        Some("chefito"),
-    );
-}
-
-#[test]
-fn tui_session_picker_view_defaults_to_none() {
-    let cfg = r#"
-[tui]
-"#;
-    let parsed = toml::from_str::<ConfigToml>(cfg).expect("TOML deserialization should succeed");
-    assert_eq!(
-        parsed.tui.as_ref().and_then(|t| t.session_picker_view),
-        None,
-    );
-}
-
-#[test]
-fn tui_pet_defaults_to_none() {
-    let cfg = r#"
-[tui]
-"#;
-    let parsed = toml::from_str::<ConfigToml>(cfg).expect("TOML deserialization should succeed");
-    assert_eq!(parsed.tui.as_ref().and_then(|t| t.pet.as_deref()), None);
-}
-
-#[test]
-fn tui_pet_anchor_deserializes_from_toml() {
-    let cfg = r#"
-[tui]
-pet_anchor = "screen-bottom"
-"#;
-    let parsed = toml::from_str::<ConfigToml>(cfg).expect("TOML deserialization should succeed");
-    assert_eq!(
-        parsed.tui.as_ref().map(|t| t.pet_anchor),
-        Some(TuiPetAnchor::ScreenBottom),
-    );
-}
-
-#[test]
-fn tui_pet_anchor_defaults_to_composer() {
-    let cfg = r#"
-[tui]
-"#;
-    let parsed = toml::from_str::<ConfigToml>(cfg).expect("TOML deserialization should succeed");
-    assert_eq!(
-        parsed.tui.as_ref().map(|t| t.pet_anchor),
-        Some(TuiPetAnchor::Composer),
-    );
-}
-
-#[test]
-fn tui_pet_anchor_rejects_unknown_value() {
-    let cfg = r#"
-[tui]
-pet_anchor = "bottom"
-"#;
-    let err = toml::from_str::<ConfigToml>(cfg).expect_err("reject unknown pet anchor");
-    let err = err.to_string();
-    assert!(
-        err.contains("unknown variant `bottom`")
-            && err.contains("composer")
-            && err.contains("screen-bottom"),
-        "unexpected error: {err}"
-    );
-}
-
-#[test]
-fn tui_config_missing_notifications_field_defaults_to_enabled() {
-    let cfg = r#"
-[tui]
+[client]
 "#;
 
-    let parsed =
-        toml::from_str::<ConfigToml>(cfg).expect("TUI config without notifications should succeed");
-    let tui = parsed.tui.expect("config should include tui section");
+    let parsed = toml::from_str::<ConfigToml>(cfg)
+        .expect("client config without notifications should succeed");
+    let client = parsed.client.expect("config should include client section");
 
     assert_eq!(
-        tui,
-        Tui {
-            notification_settings: TuiNotificationSettings::default(),
-            animations: true,
-            show_tooltips: true,
-            vim_mode_default: false,
-            raw_output_mode: false,
-            alternate_screen: AltScreenMode::Auto,
-            status_line: None,
-            status_line_use_colors: true,
-            terminal_title: None,
-            theme: None,
-            pet: None,
-            pet_anchor: TuiPetAnchor::Composer,
-            session_picker_view: None,
-            keymap: TuiKeymap::default(),
+        client,
+        Client {
+            notification_settings: ClientNotificationSettings::default(),
             model_availability_nux: ModelAvailabilityNuxConfig::default(),
             terminal_resize_reflow_max_rows: None,
         }
@@ -3452,7 +3256,7 @@ async fn runtime_config_resolves_terminal_resize_reflow_defaults_and_overrides()
 
     let cfg = Config::load_from_base_config_with_overrides(
         ConfigToml {
-            tui: Some(Tui {
+            client: Some(Client {
                 terminal_resize_reflow_max_rows: Some(9000),
                 ..Default::default()
             }),
@@ -3471,7 +3275,7 @@ async fn runtime_config_resolves_terminal_resize_reflow_defaults_and_overrides()
 
     let cfg = Config::load_from_base_config_with_overrides(
         ConfigToml {
-            tui: Some(Tui {
+            client: Some(Client {
                 terminal_resize_reflow_max_rows: Some(0),
                 ..Default::default()
             }),
@@ -3557,53 +3361,6 @@ async fn legacy_remote_thread_store_endpoint_is_rejected() {
             .contains("experimental_thread_store_endpoint")
     );
     assert!(err.to_string().contains("no longer supported"));
-}
-
-#[test]
-fn profile_tui_rejects_unsupported_settings() {
-    let err = toml::from_str::<ConfigToml>(
-        r#"profile = "work"
-
-[profiles.work.tui]
-theme = "dark"
-"#,
-    )
-    .expect_err("profile TUI config should only accept supported fields");
-
-    assert!(err.to_string().contains("unknown field"));
-    assert!(err.to_string().contains("theme"));
-}
-
-#[tokio::test]
-async fn runtime_config_resolves_session_picker_view_default_and_override() {
-    let cfg = Config::load_from_base_config_with_overrides(
-        ConfigToml::default(),
-        ConfigOverrides::default(),
-        tempdir().expect("tempdir").abs(),
-    )
-    .await
-    .expect("load default config");
-
-    assert_eq!(cfg.tui_session_picker_view, SessionPickerViewMode::Dense);
-
-    let cfg = Config::load_from_base_config_with_overrides(
-        ConfigToml {
-            tui: Some(Tui {
-                session_picker_view: Some(SessionPickerViewMode::Comfortable),
-                ..Default::default()
-            }),
-            ..Default::default()
-        },
-        ConfigOverrides::default(),
-        tempdir().expect("tempdir").abs(),
-    )
-    .await
-    .expect("load root override config");
-
-    assert_eq!(
-        cfg.tui_session_picker_view,
-        SessionPickerViewMode::Comfortable
-    );
 }
 
 #[tokio::test]
@@ -4022,7 +3779,7 @@ fn filter_plugin_mcp_servers_by_allowlist_enforces_plugin_and_identity_rules() {
     let requirements = Sourced::new(
         BTreeMap::from([(
             "sample@test".to_string(),
-            codex_config::PluginRequirementsToml {
+            crewon_config::PluginRequirementsToml {
                 mcp_servers: Some(BTreeMap::from([
                     (
                         MATCHED_SERVER.to_string(),
@@ -4072,7 +3829,7 @@ fn filter_plugin_mcp_servers_by_allowlist_blocks_unlisted_plugin() {
     let requirements = Sourced::new(
         BTreeMap::from([(
             "other@test".to_string(),
-            codex_config::PluginRequirementsToml {
+            crewon_config::PluginRequirementsToml {
                 mcp_servers: Some(BTreeMap::from([(
                     "server-a".to_string(),
                     McpServerRequirement {
@@ -4146,18 +3903,18 @@ async fn rebuild_preserving_session_layers_refreshes_requirements() -> std::io::
             },
         ),
     ]);
-    let requirements_toml = codex_config::ConfigRequirementsToml {
+    let requirements_toml = crewon_config::ConfigRequirementsToml {
         mcp_servers: Some(mcp_requirements.clone()),
         ..Default::default()
     };
-    let requirements = codex_config::ConfigRequirements {
+    let requirements = crewon_config::ConfigRequirements {
         mcp_servers: Some(Sourced::new(mcp_requirements, RequirementSource::Unknown)),
         ..Default::default()
     };
     let refreshed_layer_stack = ConfigLayerStack::new(
         vec![
             ConfigLayerEntry::new(
-                codex_app_server_protocol::ConfigLayerSource::User {
+                crewon_app_server_protocol::ConfigLayerSource::User {
                     file: user_file.clone(),
                     profile: None,
                 },
@@ -4172,7 +3929,7 @@ async fn rebuild_preserving_session_layers_refreshes_requirements() -> std::io::
                 .into(),
             ),
             ConfigLayerEntry::new(
-                codex_app_server_protocol::ConfigLayerSource::Project {
+                crewon_app_server_protocol::ConfigLayerSource::Project {
                     dot_codex_folder: project_dot_codex.clone(),
                 },
                 toml::toml! {
@@ -4182,7 +3939,7 @@ async fn rebuild_preserving_session_layers_refreshes_requirements() -> std::io::
                 .into(),
             ),
             ConfigLayerEntry::new(
-                codex_app_server_protocol::ConfigLayerSource::LegacyManagedConfigTomlFromMdm,
+                crewon_app_server_protocol::ConfigLayerSource::LegacyManagedConfigTomlFromMdm,
                 toml::toml! {
                     [mcp_servers.managed_overrides_session]
                     command = "managed-command"
@@ -4212,7 +3969,7 @@ async fn rebuild_preserving_session_layers_refreshes_requirements() -> std::io::
     let thread_layer_stack = ConfigLayerStack::new(
         vec![
             ConfigLayerEntry::new(
-                codex_app_server_protocol::ConfigLayerSource::User {
+                crewon_app_server_protocol::ConfigLayerSource::User {
                     file: user_file.clone(),
                     profile: None,
                 },
@@ -4227,7 +3984,7 @@ async fn rebuild_preserving_session_layers_refreshes_requirements() -> std::io::
                 .into(),
             ),
             ConfigLayerEntry::new(
-                codex_app_server_protocol::ConfigLayerSource::Project {
+                crewon_app_server_protocol::ConfigLayerSource::Project {
                     dot_codex_folder: project_dot_codex,
                 },
                 toml::toml! {
@@ -4237,7 +3994,7 @@ async fn rebuild_preserving_session_layers_refreshes_requirements() -> std::io::
                 .into(),
             ),
             ConfigLayerEntry::new(
-                codex_app_server_protocol::ConfigLayerSource::SessionFlags,
+                crewon_app_server_protocol::ConfigLayerSource::SessionFlags,
                 toml::toml! {
                     [mcp_servers.session_overrides_user]
                     command = "session-command"
@@ -4249,7 +4006,7 @@ async fn rebuild_preserving_session_layers_refreshes_requirements() -> std::io::
                 .into(),
             ),
             ConfigLayerEntry::new(
-                codex_app_server_protocol::ConfigLayerSource::LegacyManagedConfigTomlFromMdm,
+                crewon_app_server_protocol::ConfigLayerSource::LegacyManagedConfigTomlFromMdm,
                 toml::toml! {
                     [mcp_servers.managed_overrides_session]
                     command = "old-managed-command"
@@ -4323,9 +4080,9 @@ async fn rebuild_preserving_session_layers_refreshes_plugin_derived_mcp_config()
         .path()
         .join("plugins/cache")
         .join("test/sample/local");
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     )?;
     std::fs::write(
@@ -4343,7 +4100,7 @@ async fn rebuild_preserving_session_layers_refreshes_plugin_derived_mcp_config()
     let user_file = AbsolutePathBuf::resolve_path_against_base(CONFIG_TOML_FILE, codex_home.path());
     let refreshed_layer_stack = ConfigLayerStack::new(
         vec![ConfigLayerEntry::new(
-            codex_app_server_protocol::ConfigLayerSource::User {
+            crewon_app_server_protocol::ConfigLayerSource::User {
                 file: user_file.clone(),
                 profile: None,
             },
@@ -4372,7 +4129,7 @@ async fn rebuild_preserving_session_layers_refreshes_plugin_derived_mcp_config()
     .await?;
     let thread_layer_stack = ConfigLayerStack::new(
         vec![ConfigLayerEntry::new(
-            codex_app_server_protocol::ConfigLayerSource::User {
+            crewon_app_server_protocol::ConfigLayerSource::User {
                 file: user_file,
                 profile: None,
             },
@@ -4424,9 +4181,9 @@ async fn to_mcp_config_omits_plugin_id_when_user_server_shadows_plugin_mcp() -> 
         .path()
         .join("plugins/cache")
         .join("test/sample/local");
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     )?;
     std::fs::write(
@@ -4477,9 +4234,9 @@ async fn to_mcp_config_applies_plugin_mcp_cloud_config_bundle() -> anyhow::Resul
         .path()
         .join("plugins/cache")
         .join("test/sample/local");
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     )?;
     std::fs::write(
@@ -4555,9 +4312,9 @@ async fn to_mcp_config_empty_mcp_requirements_disable_plugin_mcps() -> anyhow::R
         .path()
         .join("plugins/cache")
         .join("test/sample/local");
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     )?;
     std::fs::write(
@@ -4683,6 +4440,7 @@ async fn default_zsh_path_sets_runtime_zsh_path() -> std::io::Result<()> {
 
 #[tokio::test]
 async fn sqlite_home_defaults_to_codex_home_for_workspace_write() -> std::io::Result<()> {
+    let _sqlite_home_guard = EnvVarGuard::remove(crewon_state::SQLITE_HOME_ENV);
     let codex_home = TempDir::new()?;
     let config = Config::load_from_base_config_with_overrides(
         ConfigToml::default(),
@@ -4810,7 +4568,7 @@ async fn memory_tool_makes_memories_root_readable_without_creating_or_widening_w
 }
 
 #[tokio::test]
-async fn config_defaults_to_file_cli_auth_store_mode() -> std::io::Result<()> {
+async fn config_defaults_to_file_auth_credentials_store_mode() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml::default();
 
@@ -4822,7 +4580,7 @@ async fn config_defaults_to_file_cli_auth_store_mode() -> std::io::Result<()> {
     .await?;
 
     assert_eq!(
-        config.cli_auth_credentials_store_mode,
+        config.auth_credentials_store_mode,
         AuthCredentialsStoreMode::File,
     );
 
@@ -4833,7 +4591,7 @@ async fn config_defaults_to_file_cli_auth_store_mode() -> std::io::Result<()> {
 async fn config_resolves_explicit_keyring_auth_store_mode() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let cfg = ConfigToml {
-        cli_auth_credentials_store: Some(AuthCredentialsStoreMode::Keyring),
+        auth_credentials_store: Some(AuthCredentialsStoreMode::Keyring),
         ..Default::default()
     };
 
@@ -4845,8 +4603,8 @@ async fn config_resolves_explicit_keyring_auth_store_mode() -> std::io::Result<(
     .await?;
 
     assert_eq!(
-        config.cli_auth_credentials_store_mode,
-        resolve_cli_auth_credentials_store_mode(
+        config.auth_credentials_store_mode,
+        resolve_auth_credentials_store_mode(
             AuthCredentialsStoreMode::Keyring,
             env!("CARGO_PKG_VERSION"),
         ),
@@ -4879,30 +4637,30 @@ async fn config_resolves_default_oauth_store_mode() -> std::io::Result<()> {
 }
 
 #[test]
-fn local_dev_builds_force_file_cli_auth_store_modes() {
+fn local_dev_builds_force_file_auth_credentials_store_modes() {
     assert_eq!(
-        resolve_cli_auth_credentials_store_mode(
+        resolve_auth_credentials_store_mode(
             AuthCredentialsStoreMode::Keyring,
             LOCAL_DEV_BUILD_VERSION,
         ),
         AuthCredentialsStoreMode::File,
     );
     assert_eq!(
-        resolve_cli_auth_credentials_store_mode(
+        resolve_auth_credentials_store_mode(
             AuthCredentialsStoreMode::Auto,
             LOCAL_DEV_BUILD_VERSION,
         ),
         AuthCredentialsStoreMode::File,
     );
     assert_eq!(
-        resolve_cli_auth_credentials_store_mode(
+        resolve_auth_credentials_store_mode(
             AuthCredentialsStoreMode::Ephemeral,
             LOCAL_DEV_BUILD_VERSION,
         ),
         AuthCredentialsStoreMode::Ephemeral,
     );
     assert_eq!(
-        resolve_cli_auth_credentials_store_mode(AuthCredentialsStoreMode::Keyring, "1.2.3"),
+        resolve_auth_credentials_store_mode(AuthCredentialsStoreMode::Keyring, "1.2.3"),
         AuthCredentialsStoreMode::Keyring,
     );
 }
@@ -5193,7 +4951,7 @@ async fn managed_config_overrides_oauth_store_mode() -> anyhow::Result<()> {
         Some(cwd),
         &Vec::new(),
         overrides,
-        &codex_config::NoopThreadConfigLoader,
+        &crewon_config::NoopThreadConfigLoader,
     )
     .await?;
     let cfg =
@@ -5307,7 +5065,7 @@ async fn replace_mcp_servers_round_trips_entries() -> anyhow::Result<()> {
 }
 
 #[tokio::test]
-async fn managed_config_wins_over_cli_overrides() -> anyhow::Result<()> {
+async fn managed_config_wins_over_config_overrides() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
     let managed_path = codex_home.path().join("managed_config.toml");
 
@@ -5326,7 +5084,7 @@ async fn managed_config_wins_over_cli_overrides() -> anyhow::Result<()> {
         Some(cwd),
         &[("model".to_string(), TomlValue::String("cli".to_string()))],
         overrides,
-        &codex_config::NoopThreadConfigLoader,
+        &crewon_config::NoopThreadConfigLoader,
     )
     .await?;
 
@@ -5609,7 +5367,7 @@ async fn replace_mcp_servers_serializes_env_sorted() -> anyhow::Result<()> {
                 env_vars: Vec::new(),
                 cwd: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -5685,7 +5443,7 @@ async fn replace_mcp_servers_serializes_env_vars() -> anyhow::Result<()> {
                 env_vars: vec!["ALPHA".into(), "BETA".into()],
                 cwd: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -5746,7 +5504,7 @@ async fn replace_mcp_servers_serializes_sourced_env_vars() -> anyhow::Result<()>
                 ],
                 cwd: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -5786,7 +5544,7 @@ async fn replace_mcp_servers_serializes_sourced_env_vars() -> anyhow::Result<()>
 async fn replace_mcp_servers_serializes_cwd() -> anyhow::Result<()> {
     let codex_home = TempDir::new()?;
 
-    let cwd_path = PathBuf::from("/tmp/codex-mcp");
+    let cwd_path = PathBuf::from("/tmp/crewon-mcp");
     let servers = BTreeMap::from([(
         "docs".to_string(),
         McpServerConfig {
@@ -5797,7 +5555,7 @@ async fn replace_mcp_servers_serializes_cwd() -> anyhow::Result<()> {
                 env_vars: Vec::new(),
                 cwd: Some(cwd_path.clone()),
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -5822,7 +5580,7 @@ async fn replace_mcp_servers_serializes_cwd() -> anyhow::Result<()> {
     let config_path = codex_home.path().join(CONFIG_TOML_FILE);
     let serialized = std::fs::read_to_string(&config_path)?;
     assert!(
-        serialized.contains(r#"cwd = "/tmp/codex-mcp""#),
+        serialized.contains(r#"cwd = "/tmp/crewon-mcp""#),
         "serialized config missing cwd field:\n{serialized}"
     );
 
@@ -5830,7 +5588,7 @@ async fn replace_mcp_servers_serializes_cwd() -> anyhow::Result<()> {
     let docs = loaded.get("docs").expect("docs entry");
     match &docs.transport {
         McpServerTransportConfig::Stdio { cwd, .. } => {
-            assert_eq!(cwd.as_deref(), Some(Path::new("/tmp/codex-mcp")));
+            assert_eq!(cwd.as_deref(), Some(Path::new("/tmp/crewon-mcp")));
         }
         other => panic!("unexpected transport {other:?}"),
     }
@@ -5851,7 +5609,7 @@ async fn replace_mcp_servers_streamable_http_serializes_bearer_token() -> anyhow
                 http_headers: None,
                 env_http_headers: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -5921,7 +5679,7 @@ async fn replace_mcp_servers_streamable_http_serializes_custom_headers() -> anyh
                     "DOCS_AUTH".to_string(),
                 )])),
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -6003,7 +5761,7 @@ async fn replace_mcp_servers_streamable_http_removes_optional_sections() -> anyh
                     "DOCS_AUTH".to_string(),
                 )])),
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -6038,7 +5796,7 @@ async fn replace_mcp_servers_streamable_http_removes_optional_sections() -> anyh
                 http_headers: None,
                 env_http_headers: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -6108,7 +5866,7 @@ async fn replace_mcp_servers_streamable_http_isolates_headers_between_servers() 
                         "DOCS_AUTH".to_string(),
                     )])),
                 },
-                environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+                environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
                 enabled: true,
                 required: false,
                 supports_parallel_tool_calls: false,
@@ -6134,7 +5892,7 @@ async fn replace_mcp_servers_streamable_http_isolates_headers_between_servers() 
                     env_vars: Vec::new(),
                     cwd: None,
                 },
-                environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+                environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
                 enabled: true,
                 required: false,
                 supports_parallel_tool_calls: false,
@@ -6222,7 +5980,7 @@ async fn replace_mcp_servers_serializes_disabled_flag() -> anyhow::Result<()> {
                 env_vars: Vec::new(),
                 cwd: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: false,
             required: false,
             supports_parallel_tool_calls: false,
@@ -6272,7 +6030,7 @@ async fn replace_mcp_servers_serializes_required_flag() -> anyhow::Result<()> {
                 env_vars: Vec::new(),
                 cwd: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: true,
             supports_parallel_tool_calls: false,
@@ -6322,7 +6080,7 @@ async fn replace_mcp_servers_serializes_tool_filters() -> anyhow::Result<()> {
                 env_vars: Vec::new(),
                 cwd: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -6376,7 +6134,7 @@ async fn replace_mcp_servers_streamable_http_serializes_oauth_resource() -> anyh
                 http_headers: None,
                 env_http_headers: None,
             },
-            environment_id: codex_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
+            environment_id: crewon_config::DEFAULT_MCP_SERVER_ENVIRONMENT_ID.to_string(),
             enabled: true,
             required: false,
             supports_parallel_tool_calls: false,
@@ -6536,7 +6294,7 @@ impl PrecedenceTestFixture {
 }
 
 #[tokio::test]
-async fn cli_override_sets_compact_prompt() -> std::io::Result<()> {
+async fn config_override_sets_compact_prompt() -> std::io::Result<()> {
     let codex_home = TempDir::new()?;
     let overrides = ConfigOverrides {
         compact_prompt: Some("Use the compact override".to_string()),
@@ -6594,7 +6352,7 @@ async fn load_config_uses_requirements_guardian_policy_config() -> std::io::Resu
     let config_layer_stack = ConfigLayerStack::new(
         Vec::new(),
         Default::default(),
-        codex_config::ConfigRequirementsToml {
+        crewon_config::ConfigRequirementsToml {
             guardian_policy_config: Some(
                 "  Use the workspace-managed guardian policy.  ".to_string(),
             ),
@@ -6675,7 +6433,7 @@ async fn requirements_guardian_policy_beats_auto_review() -> std::io::Result<()>
     let config_layer_stack = ConfigLayerStack::new(
         Vec::new(),
         Default::default(),
-        codex_config::ConfigRequirementsToml {
+        crewon_config::ConfigRequirementsToml {
             guardian_policy_config: Some("Use the managed guardian policy.".to_string()),
             ..Default::default()
         },
@@ -6739,7 +6497,7 @@ async fn load_config_ignores_empty_requirements_guardian_policy_config() -> std:
     let config_layer_stack = ConfigLayerStack::new(
         Vec::new(),
         Default::default(),
-        codex_config::ConfigRequirementsToml {
+        crewon_config::ConfigRequirementsToml {
             guardian_policy_config: Some("   ".to_string()),
             ..Default::default()
         },
@@ -6871,16 +6629,16 @@ config_file = "./agents/researcher.toml"
 "#,
     )
     .expect("agent role layer config should parse");
-    let config_layer_stack = codex_config::ConfigLayerStack::new(
-        vec![codex_config::ConfigLayerEntry::new(
-            codex_app_server_protocol::ConfigLayerSource::User {
+    let config_layer_stack = crewon_config::ConfigLayerStack::new(
+        vec![crewon_config::ConfigLayerEntry::new(
+            crewon_app_server_protocol::ConfigLayerSource::User {
                 file: codex_home.path().join(CONFIG_TOML_FILE).abs(),
                 profile: None,
             },
             layer_config,
         )],
         Default::default(),
-        codex_config::ConfigRequirementsToml::default(),
+        crewon_config::ConfigRequirementsToml::default(),
     )
     .map_err(std::io::Error::other)?;
 
@@ -8036,7 +7794,7 @@ async fn trace_exporter_defaults_to_none_when_log_exporter_is_set() -> std::io::
         exporter: Some(OtelExporterKind::OtlpHttp {
             endpoint: "http://localhost:14318/v1/logs".to_string(),
             headers: HashMap::new(),
-            protocol: codex_config::types::OtelHttpProtocol::Binary,
+            protocol: crewon_config::types::OtelHttpProtocol::Binary,
             tls: None,
         }),
         metrics_exporter: Some(OtelExporterKind::None),
@@ -8342,14 +8100,14 @@ async fn test_requirements_web_search_mode_allowlist_does_not_warn_when_unset() 
 {
     let fixture = create_test_fixture()?;
 
-    let requirements_toml = codex_config::ConfigRequirementsToml {
+    let requirements_toml = crewon_config::ConfigRequirementsToml {
         allowed_approval_policies: None,
         allowed_approvals_reviewers: None,
         allowed_sandbox_modes: None,
         allowed_permission_profiles: None,
         default_permissions: None,
         remote_sandbox_config: None,
-        allowed_web_search_modes: Some(vec![codex_config::WebSearchModeRequirement::Cached]),
+        allowed_web_search_modes: Some(vec![crewon_config::WebSearchModeRequirement::Cached]),
         allow_managed_hooks_only: None,
         allow_appshots: None,
         computer_use: None,
@@ -8365,7 +8123,7 @@ async fn test_requirements_web_search_mode_allowlist_does_not_warn_when_unset() 
         permissions: None,
         guardian_policy_config: None,
     };
-    let requirement_source = codex_config::RequirementSource::Unknown;
+    let requirement_source = crewon_config::RequirementSource::Unknown;
     let requirement_source_for_error = requirement_source.clone();
     let allowed = vec![WebSearchMode::Disabled, WebSearchMode::Cached];
     let constrained = Constrained::new(WebSearchMode::Cached, move |candidate| {
@@ -8380,15 +8138,15 @@ async fn test_requirements_web_search_mode_allowlist_does_not_warn_when_unset() 
             })
         }
     })?;
-    let requirements = codex_config::ConfigRequirements {
-        web_search_mode: codex_config::ConstrainedWithSource::new(
+    let requirements = crewon_config::ConfigRequirements {
+        web_search_mode: crewon_config::ConstrainedWithSource::new(
             constrained,
             Some(requirement_source),
         ),
         ..Default::default()
     };
     let config_layer_stack =
-        codex_config::ConfigLayerStack::new(Vec::new(), requirements, requirements_toml)
+        crewon_config::ConfigLayerStack::new(Vec::new(), requirements, requirements_toml)
             .expect("config layer stack");
 
     let config = Config::load_config_with_layer_stack(
@@ -9027,7 +8785,7 @@ allowed_sandbox_implementations = ["elevated"]
 
     assert_eq!(
         config.permissions.windows_sandbox_mode,
-        Some(codex_config::types::WindowsSandboxModeToml::Elevated)
+        Some(crewon_config::types::WindowsSandboxModeToml::Elevated)
     );
     assert!(
         config.startup_warnings.iter().any(|warning| warning
@@ -9064,7 +8822,7 @@ sandbox_mode = "danger-full-access"
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
     assert_eq!(
         err.to_string(),
-        "`approval_policy = \"never\"` cannot be used because requirements do not allow `sandbox_mode = \"danger-full-access\"`; Codex would fall back to read-only permissions with approvals disabled. Choose an `approval_policy` based on what you need, such as `on-request`, or choose an allowed sandbox mode."
+        "`approval_policy = \"never\"` cannot be used because requirements do not allow `sandbox_mode = \"danger-full-access\"`; Crewon would fall back to read-only permissions with approvals disabled. Choose an `approval_policy` based on what you need, such as `on-request`, or choose an allowed sandbox mode."
     );
     Ok(())
 }
@@ -9098,7 +8856,7 @@ default_permissions = "dev"
     assert_eq!(err.kind(), std::io::ErrorKind::InvalidInput);
     assert_eq!(
         err.to_string(),
-        "`approval_policy = \"never\"` cannot be used because requirements do not allow `sandbox_mode = \"danger-full-access\"`; Codex would fall back to read-only permissions with approvals disabled. Choose an `approval_policy` based on what you need, such as `on-request`, or choose an allowed sandbox mode."
+        "`approval_policy = \"never\"` cannot be used because requirements do not allow `sandbox_mode = \"danger-full-access\"`; Crewon would fall back to read-only permissions with approvals disabled. Choose an `approval_policy` based on what you need, such as `on-request`, or choose an allowed sandbox mode."
     );
     Ok(())
 }
@@ -10758,84 +10516,84 @@ speaker = "Desk Speakers"
 }
 
 #[derive(Deserialize, Debug, PartialEq)]
-struct TuiTomlTest {
+struct ClientTomlTest {
     #[serde(default, flatten)]
-    notifications: TuiNotificationSettings,
+    notifications: ClientNotificationSettings,
 }
 
 #[derive(Deserialize, Debug, PartialEq)]
 struct RootTomlTest {
-    tui: TuiTomlTest,
+    client: ClientTomlTest,
 }
 
 #[test]
-fn test_tui_notifications_true() {
+fn test_client_notifications_true() {
     let toml = r#"
-            [tui]
+            [client]
             notifications = true
         "#;
     let parsed: RootTomlTest = toml::from_str(toml).expect("deserialize notifications=true");
     assert_matches!(
-        parsed.tui.notifications.notifications,
+        parsed.client.notifications.notifications,
         Notifications::Enabled(true)
     );
 }
 
 #[test]
-fn test_tui_notifications_custom_array() {
+fn test_client_notifications_custom_array() {
     let toml = r#"
-            [tui]
+            [client]
             notifications = ["foo"]
         "#;
     let parsed: RootTomlTest = toml::from_str(toml).expect("deserialize notifications=[\"foo\"]");
     assert_matches!(
-        parsed.tui.notifications.notifications,
+        parsed.client.notifications.notifications,
         Notifications::Custom(ref v) if v == &vec!["foo".to_string()]
     );
 }
 
 #[test]
-fn test_tui_notification_method() {
+fn test_client_notification_method() {
     let toml = r#"
-            [tui]
+            [client]
             notification_method = "bel"
         "#;
     let parsed: RootTomlTest =
         toml::from_str(toml).expect("deserialize notification_method=\"bel\"");
-    assert_eq!(parsed.tui.notifications.method, NotificationMethod::Bel);
+    assert_eq!(parsed.client.notifications.method, NotificationMethod::Bel);
 }
 
 #[test]
-fn test_tui_notification_condition_defaults_to_unfocused() {
+fn test_client_notification_condition_defaults_to_unfocused() {
     let toml = r#"
-            [tui]
+            [client]
         "#;
     let parsed: RootTomlTest =
         toml::from_str(toml).expect("deserialize default notification condition");
     assert_eq!(
-        parsed.tui.notifications.condition,
+        parsed.client.notifications.condition,
         NotificationCondition::Unfocused
     );
 }
 
 #[test]
-fn test_tui_notification_condition_always() {
+fn test_client_notification_condition_always() {
     let toml = r#"
-            [tui]
+            [client]
             notification_condition = "always"
         "#;
     let parsed: RootTomlTest =
         toml::from_str(toml).expect("deserialize notification_condition=\"always\"");
     assert_eq!(
-        parsed.tui.notifications.condition,
+        parsed.client.notifications.condition,
         NotificationCondition::Always
     );
 }
 
 #[test]
-fn test_tui_notification_condition_rejects_unknown_value() {
+fn test_client_notification_condition_rejects_unknown_value() {
     let toml = r#"
-            [tui]
+            [client]
             notification_condition = "background"
         "#;
     let err = toml::from_str::<RootTomlTest>(toml).expect_err("reject unknown condition");

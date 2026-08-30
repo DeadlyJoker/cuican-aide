@@ -1,18 +1,18 @@
 use std::collections::HashMap;
 use std::sync::Arc;
 
-use codex_arg0::Arg0DispatchPaths;
-use codex_core::StateDbHandle;
-use codex_core::ThreadManager;
-use codex_core::config::Config;
-use codex_exec_server::EnvironmentManager;
-use codex_extension_api::empty_extension_registry;
-use codex_login::AuthManager;
-use codex_login::default_client::USER_AGENT_SUFFIX;
-use codex_login::default_client::get_codex_user_agent;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::Submission;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_core::StateDbHandle;
+use crewon_core::ThreadManager;
+use crewon_core::config::Config;
+use crewon_exec_server::EnvironmentManager;
+use crewon_extension_api::empty_extension_registry;
+use crewon_login::AuthManager;
+use crewon_login::default_client::USER_AGENT_SUFFIX;
+use crewon_login::default_client::get_crewon_user_agent;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::Submission;
 use rmcp::model::CallToolRequestParams;
 use rmcp::model::CallToolResult;
 use rmcp::model::ClientNotification;
@@ -31,10 +31,14 @@ use serde_json::json;
 use tokio::sync::Mutex;
 use tokio::task;
 
-use crate::codex_tool_config::CodexToolCallParam;
-use crate::codex_tool_config::CodexToolCallReplyParam;
-use crate::codex_tool_config::create_tool_for_codex_tool_call_param;
-use crate::codex_tool_config::create_tool_for_codex_tool_call_reply_param;
+use crate::crewon_tool_config::CREWON_REPLY_TOOL_NAME;
+use crate::crewon_tool_config::CREWON_TOOL_NAME;
+use crate::crewon_tool_config::CrewonToolCallParam;
+use crate::crewon_tool_config::CrewonToolCallReplyParam;
+use crate::crewon_tool_config::LEGACY_CODEX_REPLY_TOOL_NAME;
+use crate::crewon_tool_config::LEGACY_CODEX_TOOL_NAME;
+use crate::crewon_tool_config::create_tool_for_crewon_tool_call_param;
+use crate::crewon_tool_config::create_tool_for_crewon_tool_call_reply_param;
 use crate::outgoing_message::OutgoingMessageSender;
 
 pub(crate) struct MessageProcessor {
@@ -42,7 +46,7 @@ pub(crate) struct MessageProcessor {
     initialized: bool,
     arg0_paths: Arg0DispatchPaths,
     thread_manager: Arc<ThreadManager>,
-    running_requests_id_to_codex_uuid: Arc<Mutex<HashMap<RequestId, ThreadId>>>,
+    running_requests_id_to_thread_id: Arc<Mutex<HashMap<RequestId, ThreadId>>>,
 }
 
 impl MessageProcessor {
@@ -69,7 +73,7 @@ impl MessageProcessor {
             environment_manager,
             empty_extension_registry(),
             /*analytics_events_client*/ None,
-            codex_core::thread_store_from_config(config.as_ref(), state_db.clone()),
+            crewon_core::thread_store_from_config(config.as_ref(), state_db.clone()),
             state_db.clone(),
             installation_id,
             /*attestation_provider*/ None,
@@ -79,7 +83,7 @@ impl MessageProcessor {
             initialized: false,
             arg0_paths,
             thread_manager,
-            running_requests_id_to_codex_uuid: Arc::new(Mutex::new(HashMap::new())),
+            running_requests_id_to_thread_id: Arc::new(Mutex::new(HashMap::new())),
         }
     }
 
@@ -217,10 +221,10 @@ impl MessageProcessor {
             *suffix = Some(user_agent_suffix);
         }
 
-        let server_info =
-            Implementation::new("codex-mcp-server", env!("CARGO_PKG_VERSION")).with_title("Codex");
+        let server_info = Implementation::new("crewon-mcp-server", env!("CARGO_PKG_VERSION"))
+            .with_title("Crewon");
 
-        // Preserve Codex's existing non-spec `serverInfo.user_agent` field.
+        // Preserve the existing non-spec `serverInfo.user_agent` field.
         let mut server_info_value = match serde_json::to_value(&server_info) {
             Ok(value) => value,
             Err(err) => {
@@ -237,7 +241,7 @@ impl MessageProcessor {
             }
         };
         if let serde_json::Value::Object(ref mut obj) = server_info_value {
-            obj.insert("user_agent".to_string(), json!(get_codex_user_agent()));
+            obj.insert("user_agent".to_string(), json!(get_crewon_user_agent()));
         }
 
         let capabilities = ServerCapabilities::builder()
@@ -313,8 +317,8 @@ impl MessageProcessor {
         let result = rmcp::model::ListToolsResult {
             meta: None,
             tools: vec![
-                create_tool_for_codex_tool_call_param(),
-                create_tool_for_codex_tool_call_reply_param(),
+                create_tool_for_crewon_tool_call_param(),
+                create_tool_for_crewon_tool_call_reply_param(),
             ],
             next_cursor: None,
         };
@@ -329,9 +333,11 @@ impl MessageProcessor {
         } = params;
 
         match name.as_ref() {
-            "codex" => self.handle_tool_call_codex(id, arguments).await,
-            "codex-reply" => {
-                self.handle_tool_call_codex_session_reply(id, arguments)
+            CREWON_TOOL_NAME | LEGACY_CODEX_TOOL_NAME => {
+                self.handle_tool_call_crewon(id, arguments).await
+            }
+            CREWON_REPLY_TOOL_NAME | LEGACY_CODEX_REPLY_TOOL_NAME => {
+                self.handle_tool_call_crewon_session_reply(id, arguments)
                     .await
             }
             _ => {
@@ -343,19 +349,19 @@ impl MessageProcessor {
         }
     }
 
-    async fn handle_tool_call_codex(
+    async fn handle_tool_call_crewon(
         &self,
         id: RequestId,
         arguments: Option<rmcp::model::JsonObject>,
     ) {
         let arguments = arguments.map(serde_json::Value::Object);
         let (initial_prompt, config): (String, Config) = match arguments {
-            Some(json_val) => match serde_json::from_value::<CodexToolCallParam>(json_val) {
+            Some(json_val) => match serde_json::from_value::<CrewonToolCallParam>(json_val) {
                 Ok(tool_cfg) => match tool_cfg.into_config(self.arg0_paths.clone()).await {
                     Ok(cfg) => cfg,
                     Err(e) => {
                         let result = CallToolResult::error(vec![rmcp::model::Content::text(
-                            format!("Failed to load Codex configuration from overrides: {e}"),
+                            format!("Failed to load Crewon configuration from overrides: {e}"),
                         )]);
                         self.outgoing.send_response(id, result).await;
                         return;
@@ -363,7 +369,7 @@ impl MessageProcessor {
                 },
                 Err(e) => {
                     let result = CallToolResult::error(vec![rmcp::model::Content::text(format!(
-                        "Failed to parse configuration for Codex tool: {e}"
+                        "Failed to parse configuration for Crewon tool: {e}"
                     ))]);
                     self.outgoing.send_response(id, result).await;
                     return;
@@ -371,7 +377,7 @@ impl MessageProcessor {
             },
             None => {
                 let result = CallToolResult::error(vec![rmcp::model::Content::text(
-                    "Missing arguments for codex tool-call; the `prompt` field is required.",
+                    "Missing arguments for crewon tool-call; the `prompt` field is required.",
                 )]);
                 self.outgoing.send_response(id, result).await;
                 return;
@@ -381,25 +387,25 @@ impl MessageProcessor {
         // Clone outgoing and server to move into async task.
         let outgoing = self.outgoing.clone();
         let thread_manager = self.thread_manager.clone();
-        let running_requests_id_to_codex_uuid = self.running_requests_id_to_codex_uuid.clone();
+        let running_requests_id_to_thread_id = self.running_requests_id_to_thread_id.clone();
 
-        // Spawn an async task to handle the Codex session so that we do not
+        // Spawn an async task to handle the Crewon session so that we do not
         // block the synchronous message-processing loop.
         task::spawn(async move {
-            // Run the Codex session and stream events back to the client.
-            crate::codex_tool_runner::run_codex_tool_session(
+            // Run the Crewon session and stream events back to the client.
+            crate::crewon_tool_runner::run_crewon_tool_session(
                 id,
                 initial_prompt,
                 config,
                 outgoing,
                 thread_manager,
-                running_requests_id_to_codex_uuid,
+                running_requests_id_to_thread_id,
             )
             .await;
         });
     }
 
-    async fn handle_tool_call_codex_session_reply(
+    async fn handle_tool_call_crewon_session_reply(
         &self,
         request_id: RequestId,
         arguments: Option<rmcp::model::JsonObject>,
@@ -408,13 +414,13 @@ impl MessageProcessor {
         tracing::info!("tools/call -> params: {:?}", arguments);
 
         // parse arguments
-        let codex_tool_call_reply_param: CodexToolCallReplyParam = match arguments {
-            Some(json_val) => match serde_json::from_value::<CodexToolCallReplyParam>(json_val) {
+        let crewon_tool_call_reply_param: CrewonToolCallReplyParam = match arguments {
+            Some(json_val) => match serde_json::from_value::<CrewonToolCallReplyParam>(json_val) {
                 Ok(params) => params,
                 Err(e) => {
-                    tracing::error!("Failed to parse Codex tool call reply parameters: {e}");
+                    tracing::error!("Failed to parse Crewon tool call reply parameters: {e}");
                     let result = CallToolResult::error(vec![rmcp::model::Content::text(format!(
-                        "Failed to parse configuration for Codex tool: {e}"
+                        "Failed to parse configuration for Crewon tool: {e}"
                     ))]);
                     self.outgoing.send_response(request_id, result).await;
                     return;
@@ -422,17 +428,17 @@ impl MessageProcessor {
             },
             None => {
                 tracing::error!(
-                    "Missing arguments for codex-reply tool-call; the `thread_id` and `prompt` fields are required."
+                    "Missing arguments for crewon-reply tool-call; the `thread_id` and `prompt` fields are required."
                 );
                 let result = CallToolResult::error(vec![rmcp::model::Content::text(
-                    "Missing arguments for codex-reply tool-call; the `thread_id` and `prompt` fields are required.",
+                    "Missing arguments for crewon-reply tool-call; the `thread_id` and `prompt` fields are required.",
                 )]);
                 self.outgoing.send_response(request_id, result).await;
                 return;
             }
         };
 
-        let thread_id = match codex_tool_call_reply_param.get_thread_id() {
+        let thread_id = match crewon_tool_call_reply_param.get_thread_id() {
             Ok(id) => id,
             Err(e) => {
                 tracing::error!("Failed to parse thread_id: {e}");
@@ -446,13 +452,13 @@ impl MessageProcessor {
 
         // Clone outgoing to move into async task.
         let outgoing = self.outgoing.clone();
-        let running_requests_id_to_codex_uuid = self.running_requests_id_to_codex_uuid.clone();
+        let running_requests_id_to_thread_id = self.running_requests_id_to_thread_id.clone();
 
-        let codex = match self.thread_manager.get_thread(thread_id).await {
+        let crewon_thread = match self.thread_manager.get_thread(thread_id).await {
             Ok(c) => c,
             Err(_) => {
                 tracing::warn!("Session not found for thread_id: {thread_id}");
-                let result = crate::codex_tool_runner::create_call_tool_result_with_thread_id(
+                let result = crate::crewon_tool_runner::create_call_tool_result_with_thread_id(
                     thread_id,
                     format!("Session not found for thread_id: {thread_id}"),
                     Some(true),
@@ -463,19 +469,19 @@ impl MessageProcessor {
         };
 
         // Spawn the long-running reply handler.
-        let prompt = codex_tool_call_reply_param.prompt.clone();
+        let prompt = crewon_tool_call_reply_param.prompt.clone();
         tokio::spawn({
             let outgoing = outgoing.clone();
-            let running_requests_id_to_codex_uuid = running_requests_id_to_codex_uuid.clone();
+            let running_requests_id_to_thread_id = running_requests_id_to_thread_id.clone();
 
             async move {
-                crate::codex_tool_runner::run_codex_tool_session_reply(
+                crate::crewon_tool_runner::run_crewon_tool_session_reply(
                     thread_id,
-                    codex,
+                    crewon_thread,
                     outgoing,
                     request_id,
                     prompt,
-                    running_requests_id_to_codex_uuid,
+                    running_requests_id_to_thread_id,
                 )
                 .await;
             }
@@ -514,7 +520,7 @@ impl MessageProcessor {
 
         // Obtain the thread id while holding the first lock, then release.
         let thread_id = {
-            let map_guard = self.running_requests_id_to_codex_uuid.lock().await;
+            let map_guard = self.running_requests_id_to_thread_id.lock().await;
             match map_guard.get(&request_id) {
                 Some(id) => *id,
                 None => {
@@ -525,8 +531,8 @@ impl MessageProcessor {
         };
         tracing::info!("thread_id: {thread_id}");
 
-        // Obtain the Codex thread from the server.
-        let codex_arc = match self.thread_manager.get_thread(thread_id).await {
+        // Obtain the Crewon thread from the server.
+        let crewon_thread = match self.thread_manager.get_thread(thread_id).await {
             Ok(c) => c,
             Err(_) => {
                 tracing::warn!("Session not found for thread_id: {thread_id}");
@@ -534,21 +540,21 @@ impl MessageProcessor {
             }
         };
 
-        // Submit interrupt to Codex.
-        if let Err(e) = codex_arc
+        // Submit interrupt to Crewon.
+        if let Err(e) = crewon_thread
             .submit_with_id(Submission {
                 id: request_id_string,
-                op: codex_protocol::protocol::Op::Interrupt,
+                op: crewon_protocol::protocol::Op::Interrupt,
                 client_user_message_id: None,
                 trace: None,
             })
             .await
         {
-            tracing::error!("Failed to submit interrupt to Codex: {e}");
+            tracing::error!("Failed to submit interrupt to Crewon: {e}");
             return;
         }
         // unregister the id so we don't keep it in the map
-        self.running_requests_id_to_codex_uuid
+        self.running_requests_id_to_thread_id
             .lock()
             .await
             .remove(&request_id);

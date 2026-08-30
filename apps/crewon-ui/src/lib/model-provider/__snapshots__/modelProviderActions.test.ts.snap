@@ -1,0 +1,49 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`final Provider control actions > keeps native model setup available before the Control runtime starts 1`] = `
+{
+  "actions": [
+    {
+      "id": "model-provider-add",
+      "label": "Add provider",
+      "tone": "primary",
+    },
+    {
+      "id": "refresh-model-providers",
+      "label": "Refresh",
+    },
+  ],
+  "body": "Runtime: Unavailable
+
+Notes
+- LiteLLM Gateway is recommended. LiteLLM adapts OpenAI, Anthropic, Gemini, Bedrock, DeepSeek, and other major vendors or local models; CrewON does not duplicate vendor protocols.
+- CrewON calls the Responses API. Connect directly only when the service supports Responses; route other models through LiteLLM's Responses bridge.
+- An API key entered here is stored only in the OS credential store: macOS Keychain, Windows Credential Manager, or Linux Secret Service. The desktop catalog stores only provider identity and endpoint.
+- Saving or switching performs a supervised Worker restart only while no task is active; an active task rejects the switch instead of being interrupted.",
+  "rows": [
+    {
+      "actions": [
+        {
+          "id": "model-provider-edit:gateway",
+          "label": "Edit",
+        },
+        {
+          "id": "model-provider-delete:gateway",
+          "label": "Delete",
+          "tone": "danger",
+        },
+      ],
+      "badge": "In use",
+      "id": "gateway",
+      "meta": [
+        "model gateway-model",
+        "key stored",
+      ],
+      "subtitle": "https://api.example.com/v1",
+      "title": "gateway",
+    },
+  ],
+  "subtitle": "Desktop credential catalog",
+  "title": "Model access",
+}
+`;

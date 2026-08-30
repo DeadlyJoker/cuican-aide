@@ -29,7 +29,7 @@ use crate::oauth::compute_expires_at_millis;
 use crate::save_oauth_tokens;
 use crate::utils::apply_default_headers;
 use crate::utils::build_default_headers;
-use codex_config::types::OAuthCredentialsStoreMode;
+use crewon_config::types::OAuthCredentialsStoreMode;
 
 struct OauthHeaders {
     http_headers: Option<HashMap<String, String>>,
@@ -612,7 +612,7 @@ async fn start_authorization(
     else {
         let mut oauth_state = OAuthState::new(server_url, Some(http_client)).await?;
         oauth_state
-            .start_authorization(scopes, redirect_uri, Some("Codex"))
+            .start_authorization(scopes, redirect_uri, Some("Crewon"))
             .await?;
         return Ok(oauth_state);
     };

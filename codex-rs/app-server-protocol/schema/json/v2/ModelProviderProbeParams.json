@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "providerId": {
+      "description": "Key under `model_providers` in config to probe. When omitted, the currently selected `model_provider` is probed.",
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "title": "ModelProviderProbeParams",
+  "type": "object"
+}

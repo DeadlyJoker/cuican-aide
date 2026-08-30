@@ -1,33 +1,5 @@
 use anyhow::Context;
 use anyhow::Result;
-use codex_config::types::ApprovalsReviewer;
-use codex_core::config::Constrained;
-use codex_exec_server::CopyOptions;
-use codex_exec_server::CreateDirectoryOptions;
-use codex_exec_server::FileSystemSandboxContext;
-use codex_exec_server::LOCAL_ENVIRONMENT_ID;
-use codex_exec_server::REMOTE_ENVIRONMENT_ID;
-use codex_exec_server::RemoveOptions;
-use codex_features::Feature;
-use codex_protocol::models::FileSystemPermissions;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::ApplyPatchApprovalRequestEvent;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::ReviewDecision;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_protocol::protocol::TurnEnvironmentSelection;
-use codex_protocol::request_permissions::PermissionGrantScope;
-use codex_protocol::request_permissions::RequestPermissionProfile;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
-use codex_protocol::user_input::UserInput;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::PathBufExt;
 use core_test_support::PathExt;
 use core_test_support::get_remote_test_env;
@@ -40,11 +12,39 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::test_env;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::test_env;
 use core_test_support::wait_for_event;
+use crewon_config::types::ApprovalsReviewer;
+use crewon_core::config::Constrained;
+use crewon_exec_server::CopyOptions;
+use crewon_exec_server::CreateDirectoryOptions;
+use crewon_exec_server::FileSystemSandboxContext;
+use crewon_exec_server::LOCAL_ENVIRONMENT_ID;
+use crewon_exec_server::REMOTE_ENVIRONMENT_ID;
+use crewon_exec_server::RemoveOptions;
+use crewon_features::Feature;
+use crewon_protocol::models::FileSystemPermissions;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::ApplyPatchApprovalRequestEvent;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::ReviewDecision;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_protocol::protocol::TurnEnvironmentSelection;
+use crewon_protocol::request_permissions::PermissionGrantScope;
+use crewon_protocol::request_permissions::RequestPermissionProfile;
+use crewon_protocol::request_permissions::RequestPermissionsResponse;
+use crewon_protocol::user_input::UserInput;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -54,8 +54,8 @@ use std::process::Command;
 use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 use tempfile::TempDir;
-async fn unified_exec_test(server: &wiremock::MockServer) -> Result<TestCodex> {
-    let mut builder = test_codex().with_config(|config| {
+async fn unified_exec_test(server: &wiremock::MockServer) -> Result<TestCrewon> {
+    let mut builder = test_crewon().with_config(|config| {
         config.use_experimental_unified_exec_tool = true;
         let result = config.features.enable(Feature::UnifiedExec);
         assert!(
@@ -67,15 +67,15 @@ async fn unified_exec_test(server: &wiremock::MockServer) -> Result<TestCodex> {
 }
 
 async fn submit_turn_with_approval_and_environments(
-    test: &TestCodex,
+    test: &TestCrewon,
     prompt: &str,
     environments: Vec<TurnEnvironmentSelection>,
 ) -> Result<()> {
-    let turn_environment_selections = codex_protocol::protocol::TurnEnvironmentSelections::new(
+    let turn_environment_selections = crewon_protocol::protocol::TurnEnvironmentSelections::new(
         test.config.cwd.clone(),
         environments,
     );
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: prompt.into(),
@@ -84,14 +84,14 @@ async fn submit_turn_with_approval_and_environments(
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(turn_environment_selections),
                 approval_policy: Some(AskForApproval::OnRequest),
                 approvals_reviewer: Some(ApprovalsReviewer::User),
                 sandbox_policy: Some(SandboxPolicy::new_read_only_policy()),
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: test.session_configured.model.clone(),
                         reasoning_effort: None,
                         developer_instructions: None,
@@ -106,10 +106,10 @@ async fn submit_turn_with_approval_and_environments(
 }
 
 async fn expect_patch_approval(
-    test: &TestCodex,
+    test: &TestCrewon,
     expected_call_id: &str,
 ) -> ApplyPatchApprovalRequestEvent {
-    let event = wait_for_event(&test.codex, |event| {
+    let event = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::ApplyPatchApprovalRequest(_) | EventMsg::TurnComplete(_)
@@ -127,8 +127,8 @@ async fn expect_patch_approval(
     }
 }
 
-async fn wait_for_completion_without_patch_approval(test: &TestCodex) {
-    let event = wait_for_event(&test.codex, |event| {
+async fn wait_for_completion_without_patch_approval(test: &TestCrewon) {
+    let event = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::ApplyPatchApprovalRequest(_) | EventMsg::TurnComplete(_)
@@ -246,7 +246,7 @@ fn remote_exec(script: &str) -> Result<()> {
 }
 
 async fn exec_command_routing_output(
-    test: &TestCodex,
+    test: &TestCrewon,
     server: &wiremock::MockServer,
     call_id: &str,
     arguments: Value,
@@ -358,7 +358,7 @@ async fn remote_request_permissions_grant_unblocks_later_remote_exec() -> Result
     };
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config.use_experimental_unified_exec_tool = true;
         config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
         config.approvals_reviewer = ApprovalsReviewer::User;
@@ -472,7 +472,7 @@ async fn remote_request_permissions_grant_unblocks_later_remote_exec() -> Result
     )
     .await?;
 
-    let event = wait_for_event(&test.codex, |event| {
+    let event = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::RequestPermissions(_) | EventMsg::TurnComplete(_)
@@ -490,14 +490,14 @@ async fn remote_request_permissions_grant_unblocks_later_remote_exec() -> Result
     assert_eq!(request.cwd.as_ref(), Some(&remote_cwd));
     assert_eq!(request.permissions, expected_permissions);
 
-    test.codex
+    test.crewon
         .submit(Op::RequestPermissionsResponse {
             id: "permissions-call".to_string(),
             response: approved_response.clone(),
         })
         .await?;
 
-    let event = wait_for_event(&test.codex, |event| {
+    let event = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::ExecApprovalRequest(_) | EventMsg::TurnComplete(_)
@@ -558,7 +558,7 @@ async fn apply_patch_freeform_routes_to_selected_remote_environment() -> Result<
     };
 
     let server = start_mock_server().await;
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let test = builder.build_with_remote_and_local_env(&server).await?;
     let local_cwd = TempDir::new()?;
     let file_name = "apply_patch_remote_freeform.txt";
@@ -640,7 +640,7 @@ async fn apply_patch_approvals_are_remembered_per_environment() -> Result<()> {
     };
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config.permissions.approval_policy = Constrained::allow_any(AskForApproval::OnRequest);
         config.approvals_reviewer = ApprovalsReviewer::User;
     });
@@ -660,7 +660,7 @@ async fn apply_patch_approvals_are_remembered_per_environment() -> Result<()> {
         .await?;
 
     let target_path = PathBuf::from(format!(
-        "/tmp/codex-apply-patch-approval-scope-{}.txt",
+        "/tmp/crewon-apply-patch-approval-scope-{}.txt",
         SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis()
     ))
     .abs();
@@ -740,13 +740,13 @@ async fn apply_patch_approvals_are_remembered_per_environment() -> Result<()> {
     )
     .await?;
     let approval = expect_patch_approval(&test, "call-local").await;
-    test.codex
+    test.crewon
         .submit(Op::PatchApproval {
             id: approval.call_id,
             decision: ReviewDecision::ApprovedForSession,
         })
         .await?;
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -759,13 +759,13 @@ async fn apply_patch_approvals_are_remembered_per_environment() -> Result<()> {
     )
     .await?;
     let approval = expect_patch_approval(&test, "call-remote").await;
-    test.codex
+    test.crewon
         .submit(Op::PatchApproval {
             id: approval.call_id,
             decision: ReviewDecision::ApprovedForSession,
         })
         .await?;
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -1134,7 +1134,7 @@ fn remote_test_file_path() -> PathBuf {
         Err(_) => 0,
     };
     PathBuf::from(format!(
-        "/tmp/codex-remote-test-env-{}-{nanos}.txt",
+        "/tmp/crewon-remote-test-env-{}-{nanos}.txt",
         std::process::id()
     ))
 }

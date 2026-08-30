@@ -1,0 +1,101 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "ModelProviderProbeStatus": {
+      "description": "Outcome of a provider reachability check.\n\nThe model catalog falls back to a bundled list when a provider cannot be reached, so `model/list` succeeding says nothing about whether the configured provider actually works. These variants let a client tell a wrong key apart from a wrong address instead of reporting one generic failure.",
+      "oneOf": [
+        {
+          "description": "The provider answered and returned a usable model catalog.",
+          "enum": [
+            "ok"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The provider answered, but rejected the credential.",
+          "enum": [
+            "unauthorized"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The provider answered with an error status.",
+          "enum": [
+            "httpError"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The provider could not be reached at all (DNS, TLS, refused, timeout).",
+          "enum": [
+            "unreachable"
+          ],
+          "type": "string"
+        },
+        {
+          "description": "The provider answered, but the body was not a model catalog.",
+          "enum": [
+            "invalidResponse"
+          ],
+          "type": "string"
+        }
+      ]
+    }
+  },
+  "properties": {
+    "authenticated": {
+      "description": "Whether a credential was attached, so \"works without auth\" is visible.",
+      "type": "boolean"
+    },
+    "endpoint": {
+      "description": "Endpoint the probe requested, for surfacing a wrong base URL.",
+      "type": "string"
+    },
+    "httpStatus": {
+      "description": "HTTP status returned by the provider, when it answered at all.",
+      "format": "uint16",
+      "minimum": 0.0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "latencyMs": {
+      "format": "uint64",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "message": {
+      "description": "Failure detail from the provider or transport.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "modelCount": {
+      "description": "Models the provider advertised, when the catalog parsed.",
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": [
+        "integer",
+        "null"
+      ]
+    },
+    "providerId": {
+      "description": "Provider that was probed, so a client can tell which entry answered.",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/definitions/ModelProviderProbeStatus"
+    }
+  },
+  "required": [
+    "authenticated",
+    "endpoint",
+    "latencyMs",
+    "providerId",
+    "status"
+  ],
+  "title": "ModelProviderProbeResponse",
+  "type": "object"
+}

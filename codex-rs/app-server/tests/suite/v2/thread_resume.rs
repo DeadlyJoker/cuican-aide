@@ -14,74 +14,74 @@ use app_test_support::test_absolute_path;
 use app_test_support::to_response;
 use app_test_support::write_chatgpt_auth;
 use chrono::Utc;
-use codex_app_server_protocol::AskForApproval;
-use codex_app_server_protocol::ClientInfo;
-use codex_app_server_protocol::CommandExecutionApprovalDecision;
-use codex_app_server_protocol::CommandExecutionRequestApprovalResponse;
-use codex_app_server_protocol::FileChangeApprovalDecision;
-use codex_app_server_protocol::FileChangeRequestApprovalResponse;
-use codex_app_server_protocol::ItemStartedNotification;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::PatchApplyStatus;
-use codex_app_server_protocol::PatchChangeKind;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::ServerRequest;
-use codex_app_server_protocol::SessionSource;
-use codex_app_server_protocol::ThreadGoalClearResponse;
-use codex_app_server_protocol::ThreadGoalSetResponse;
-use codex_app_server_protocol::ThreadGoalStatus;
-use codex_app_server_protocol::ThreadItem;
-use codex_app_server_protocol::ThreadMetadataGitInfoUpdateParams;
-use codex_app_server_protocol::ThreadMetadataUpdateParams;
-use codex_app_server_protocol::ThreadReadParams;
-use codex_app_server_protocol::ThreadReadResponse;
-use codex_app_server_protocol::ThreadResumeInitialTurnsPageParams;
-use codex_app_server_protocol::ThreadResumeParams;
-use codex_app_server_protocol::ThreadResumeResponse;
-use codex_app_server_protocol::ThreadSource;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::ThreadStatus;
-use codex_app_server_protocol::ThreadUnsubscribeParams;
-use codex_app_server_protocol::TurnItemsView;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::TurnStatus;
-use codex_app_server_protocol::UserInput;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_core::ARCHIVED_SESSIONS_SUBDIR;
-use codex_login::REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR;
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::Personality;
-use codex_protocol::mcp::CallToolResult;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::AgentMessageEvent;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ImageGenerationEndEvent;
-use codex_protocol::protocol::McpInvocation;
-use codex_protocol::protocol::McpToolCallEndEvent;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource as RolloutSessionSource;
-use codex_protocol::protocol::TokenCountEvent;
-use codex_protocol::protocol::TokenUsage;
-use codex_protocol::protocol::TokenUsageInfo;
-use codex_protocol::protocol::TurnAbortReason;
-use codex_protocol::protocol::TurnAbortedEvent;
-use codex_protocol::protocol::TurnStartedEvent;
-use codex_protocol::user_input::ByteRange;
-use codex_protocol::user_input::TextElement;
-use codex_rollout::append_rollout_item_to_path;
-use codex_rollout::read_session_meta_line;
-use codex_state::StateRuntime;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::responses;
 use core_test_support::skip_if_no_network;
+use crewon_app_server_protocol::AskForApproval;
+use crewon_app_server_protocol::ClientInfo;
+use crewon_app_server_protocol::CommandExecutionApprovalDecision;
+use crewon_app_server_protocol::CommandExecutionRequestApprovalResponse;
+use crewon_app_server_protocol::FileChangeApprovalDecision;
+use crewon_app_server_protocol::FileChangeRequestApprovalResponse;
+use crewon_app_server_protocol::ItemStartedNotification;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::PatchApplyStatus;
+use crewon_app_server_protocol::PatchChangeKind;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ServerRequest;
+use crewon_app_server_protocol::SessionSource;
+use crewon_app_server_protocol::ThreadGoalClearResponse;
+use crewon_app_server_protocol::ThreadGoalSetResponse;
+use crewon_app_server_protocol::ThreadGoalStatus;
+use crewon_app_server_protocol::ThreadItem;
+use crewon_app_server_protocol::ThreadMetadataGitInfoUpdateParams;
+use crewon_app_server_protocol::ThreadMetadataUpdateParams;
+use crewon_app_server_protocol::ThreadReadParams;
+use crewon_app_server_protocol::ThreadReadResponse;
+use crewon_app_server_protocol::ThreadResumeInitialTurnsPageParams;
+use crewon_app_server_protocol::ThreadResumeParams;
+use crewon_app_server_protocol::ThreadResumeResponse;
+use crewon_app_server_protocol::ThreadSource;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::ThreadStatus;
+use crewon_app_server_protocol::ThreadUnsubscribeParams;
+use crewon_app_server_protocol::TurnItemsView;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::TurnStatus;
+use crewon_app_server_protocol::UserInput;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_core::ARCHIVED_SESSIONS_SUBDIR;
+use crewon_login::REFRESH_TOKEN_URL_OVERRIDE_ENV_VAR;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::Personality;
+use crewon_protocol::mcp::CallToolResult;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::AgentMessageEvent;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::ImageGenerationEndEvent;
+use crewon_protocol::protocol::McpInvocation;
+use crewon_protocol::protocol::McpToolCallEndEvent;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource as RolloutSessionSource;
+use crewon_protocol::protocol::TokenCountEvent;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_protocol::protocol::TokenUsageInfo;
+use crewon_protocol::protocol::TurnAbortReason;
+use crewon_protocol::protocol::TurnAbortedEvent;
+use crewon_protocol::protocol::TurnStartedEvent;
+use crewon_protocol::user_input::ByteRange;
+use crewon_protocol::user_input::TextElement;
+use crewon_rollout::append_rollout_item_to_path;
+use crewon_rollout::read_session_meta_line;
+use crewon_state::StateRuntime;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::fs::FileTimes;
@@ -109,7 +109,7 @@ use super::analytics::wait_for_goal_event;
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(25);
 #[cfg(not(windows))]
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
-const CODEX_5_2_INSTRUCTIONS_TEMPLATE_DEFAULT: &str = "You are Codex, a coding agent based on GPT-5. You and the user share the same workspace and collaborate to achieve the user's goals.";
+const CODEX_5_2_INSTRUCTIONS_TEMPLATE_DEFAULT: &str = "You are Crewon, a coding agent. You and the user share the same workspace and collaborate to achieve the user's goals.";
 
 fn normalized_existing_path(path: impl AsRef<Path>) -> Result<PathBuf> {
     Ok(AbsolutePathBuf::from_absolute_path(path.as_ref().canonicalize()?)?.into_path_buf())
@@ -586,8 +586,8 @@ async fn thread_resume_returns_rollout_history() -> Result<()> {
     assert_eq!(thread.model_provider, "mock_provider");
     assert!(thread.path.as_ref().expect("thread path").is_absolute());
     assert_eq!(thread.cwd, test_absolute_path("/"));
-    assert_eq!(thread.cli_version, "0.0.0");
-    assert_eq!(thread.source, SessionSource::Cli);
+    assert_eq!(thread.client_version, "0.0.0");
+    assert_eq!(thread.source, SessionSource::LegacyCli);
     assert_eq!(thread.git_info, None);
     assert_eq!(thread.status, ThreadStatus::Idle);
 
@@ -617,7 +617,7 @@ async fn thread_resume_returns_rollout_history() -> Result<()> {
 
 #[tokio::test]
 async fn thread_resume_redacts_payloads_for_chatgpt_remote_clients() -> Result<()> {
-    for client_name in ["codex_chatgpt_android_remote", "codex_chatgpt_ios_remote"] {
+    for client_name in ["crewon_chatgpt_android_remote", "crewon_chatgpt_ios_remote"] {
         let remote_resume = resume_redaction_fixture(Some(client_name)).await?;
         let remote_turn = remote_resume
             .thread
@@ -907,9 +907,7 @@ async fn thread_resume_rejects_archived_session_by_id() -> Result<()> {
     let message = resume_err.error.message;
     assert!(
         message.contains(&format!("session {conversation_id} is archived"))
-            && message.contains(&format!(
-                "codex unarchive {conversation_id}` to unarchive it first"
-            )),
+            && message.contains("Unarchive the session before resuming it."),
         "unexpected resume error: {message}"
     );
 
@@ -1272,7 +1270,7 @@ async fn thread_goal_set_edits_objective_without_resetting_usage() -> Result<()>
             thread_id,
             /*time_delta_seconds*/ 12,
             /*token_delta*/ 50,
-            codex_state::GoalAccountingMode::ActiveOnly,
+            crewon_state::GoalAccountingMode::ActiveOnly,
             Some(persisted_goal.goal_id.as_str()),
         )
         .await?;
@@ -1488,7 +1486,7 @@ async fn thread_goal_lifecycle_emits_analytics_and_clear_deletes_goal() -> Resul
         mcp.read_stream_until_response_message(RequestId::Integer(get_id)),
     )
     .await??;
-    let get: codex_app_server_protocol::ThreadGoalGetResponse = to_response(get_resp)?;
+    let get: crewon_app_server_protocol::ThreadGoalGetResponse = to_response(get_resp)?;
     assert_eq!(None, get.goal);
 
     let clear_again_id = mcp
@@ -1945,8 +1943,8 @@ stream_max_retries = 0
         timestamp: "2025-01-05T12:00:00Z".to_string(),
         cwd: repo_path.clone(),
         originator: "codex".to_string(),
-        cli_version: "0.0.0".to_string(),
-        source: RolloutSessionSource::Cli,
+        client_version: "0.0.0".to_string(),
+        source: RolloutSessionSource::LegacyCli,
         thread_source: None,
         agent_path: None,
         agent_nickname: None,
@@ -1966,6 +1964,7 @@ stream_max_retries = 0
                 "payload": serde_json::to_value(SessionMetaLine {
                     meta: session_meta,
                     git: None,
+                    scene_runtime: None,
                 })?,
             })
             .to_string(),
@@ -2304,9 +2303,6 @@ async fn thread_resume_keeps_in_flight_turn_streaming() -> Result<()> {
     .await??;
     primary.clear_message_buffer();
 
-    let mut secondary = TestAppServer::new(codex_home.path()).await?;
-    timeout(DEFAULT_READ_TIMEOUT, secondary.initialize()).await??;
-
     let turn_id = primary
         .send_turn_start_request(TurnStartParams {
             thread_id: thread.id.clone(),
@@ -2329,7 +2325,7 @@ async fn thread_resume_keeps_in_flight_turn_streaming() -> Result<()> {
     )
     .await??;
 
-    let resume_id = secondary
+    let resume_id = primary
         .send_thread_resume_request(ThreadResumeParams {
             thread_id: thread.id,
             ..Default::default()
@@ -2337,7 +2333,7 @@ async fn thread_resume_keeps_in_flight_turn_streaming() -> Result<()> {
         .await?;
     let resume_resp: JSONRPCResponse = timeout(
         DEFAULT_READ_TIMEOUT,
-        secondary.read_stream_until_response_message(RequestId::Integer(resume_id)),
+        primary.read_stream_until_response_message(RequestId::Integer(resume_id)),
     )
     .await??;
     let ThreadResumeResponse {
@@ -2829,10 +2825,7 @@ async fn thread_resume_can_skip_turns_when_thread_is_running() -> Result<()> {
     )
     .await??;
 
-    let mut secondary = TestAppServer::new(codex_home.path()).await?;
-    timeout(DEFAULT_READ_TIMEOUT, secondary.initialize()).await??;
-
-    let resume_id = secondary
+    let resume_id = primary
         .send_thread_resume_request(ThreadResumeParams {
             thread_id: thread.id.clone(),
             exclude_turns: true,
@@ -2841,7 +2834,7 @@ async fn thread_resume_can_skip_turns_when_thread_is_running() -> Result<()> {
         .await?;
     let resume_resp: JSONRPCResponse = timeout(
         DEFAULT_READ_TIMEOUT,
-        secondary.read_stream_until_response_message(RequestId::Integer(resume_id)),
+        primary.read_stream_until_response_message(RequestId::Integer(resume_id)),
     )
     .await??;
     let ThreadResumeResponse {
@@ -3090,7 +3083,7 @@ async fn thread_resume_replays_pending_file_change_request_approval() -> Result<
     let expected_readme_path = workspace.join("README.md");
     let expected_file_change = ThreadItem::FileChange {
         id: "patch-call".to_string(),
-        changes: vec![codex_app_server_protocol::FileUpdateChange {
+        changes: vec![crewon_app_server_protocol::FileUpdateChange {
             path: expected_readme_path.to_string_lossy().into_owned(),
             kind: PatchChangeKind::Add,
             diff: "new line\n".to_string(),
@@ -3624,6 +3617,7 @@ async fn thread_resume_accepts_personality_override() -> Result<()> {
         primary.read_stream_until_notification_message("turn/completed"),
     )
     .await??;
+    primary.shutdown().await?;
 
     let mut secondary = TestAppServer::new(codex_home.path()).await?;
     timeout(DEFAULT_READ_TIMEOUT, secondary.initialize()).await??;

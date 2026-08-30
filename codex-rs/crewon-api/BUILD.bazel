@@ -1,0 +1,20 @@
+load("//:defs.bzl", "crewon_rust_crate")
+
+crewon_rust_crate(
+    name = "crewon-api",
+    crate_name = "crewon_api",
+    test_data_extra = [
+        "//:packages/test-contracts/fixtures/provider-usage-validation.reference.json",
+        "//:packages/test-contracts/fixtures/provider-turn-state.reference.json",
+        "//:packages/test-contracts/fixtures/responses-created-without-id.reference.json",
+        "//:packages/test-contracts/fixtures/responses-generic-terminal.reference.json",
+        "//:packages/test-contracts/fixtures/responses-completed-without-output.reference.json",
+        "//:packages/test-contracts/fixtures/responses-completed-without-usage.reference.json",
+        "//:packages/test-contracts/fixtures/responses-post-terminal.reference.json",
+        "//:packages/test-contracts/fixtures/responses-reasoning.reference.json",
+        "//:packages/test-contracts/fixtures/responses-terminal-without-created.reference.json",
+        "//:packages/test-contracts/fixtures/responses-top-level-error.reference.json",
+        "//:packages/test-contracts/fixtures/responses-top-level-error-payload.reference.json",
+        "//:packages/test-contracts/fixtures/responses-unknown-event.reference.json",
+    ],
+)

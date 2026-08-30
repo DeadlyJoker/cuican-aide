@@ -1,0 +1,85 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "WorkflowNodeExecution": {
+      "properties": {
+        "agentId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "error": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "nodeId": {
+          "type": "string"
+        },
+        "nodeType": {
+          "type": "string"
+        },
+        "output": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string"
+        },
+        "title": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "nodeId",
+        "nodeType",
+        "output",
+        "status",
+        "title"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "config": true,
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "executedNodes": {
+      "items": {
+        "$ref": "#/definitions/WorkflowNodeExecution"
+      },
+      "type": "array"
+    },
+    "executionId": {
+      "type": "string"
+    },
+    "filePath": {
+      "type": "string"
+    },
+    "output": {
+      "type": "string"
+    },
+    "status": {
+      "type": "string"
+    },
+    "workflowId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "config",
+    "executedNodes",
+    "executionId",
+    "filePath",
+    "output",
+    "status",
+    "workflowId"
+  ],
+  "title": "WorkflowRunCancelResponse",
+  "type": "object"
+}

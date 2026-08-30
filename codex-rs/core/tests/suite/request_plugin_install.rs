@@ -2,14 +2,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use anyhow::Result;
-use codex_config::types::ToolSuggestDiscoverable;
-use codex_config::types::ToolSuggestDiscoverableType;
-use codex_core::config::Config;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_models_manager::bundled_models_response;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
 use core_test_support::apps_test_server::AppsTestServer;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -18,7 +10,15 @@ use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::test_crewon;
+use crewon_config::types::ToolSuggestDiscoverable;
+use crewon_config::types::ToolSuggestDiscoverableType;
+use crewon_core::config::Config;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_models_manager::bundled_models_response;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
 use serde_json::Value;
 
 const TOOL_SEARCH_TOOL_NAME: &str = "tool_search";
@@ -106,8 +106,8 @@ async fn request_plugin_install_is_available_without_search_tool_after_discovery
     )
     .await;
 
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(move |config| {
             configure_apps_without_search_tool(config, apps_server.chatgpt_base_url.as_str())
         });

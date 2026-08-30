@@ -1,5 +1,5 @@
-use codex_features::FEATURES;
-use codex_features::Feature;
+use crewon_features::FEATURES;
+use crewon_features::Feature;
 use std::collections::BTreeMap;
 use std::path::Path;
 
@@ -102,6 +102,7 @@ base_url = "{server_uri}/v1"
 wire_api = "responses"
 request_max_retries = 0
 stream_max_retries = 0
+supports_websockets = false
 "#
         ),
     )

@@ -19,24 +19,24 @@ use crate::tools::handlers::multi_agents_spec::MULTI_AGENT_V1_NAMESPACE;
 use crate::tools::handlers::parse_arguments;
 use crate::tools::registry::CoreToolRuntime;
 use crate::tools::registry::ToolExecutor;
-use codex_protocol::ThreadId;
-use codex_protocol::models::ResponseInputItem;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::CollabAgentInteractionBeginEvent;
-use codex_protocol::protocol::CollabAgentInteractionEndEvent;
-use codex_protocol::protocol::CollabAgentRef;
-use codex_protocol::protocol::CollabAgentSpawnBeginEvent;
-use codex_protocol::protocol::CollabAgentSpawnEndEvent;
-use codex_protocol::protocol::CollabCloseBeginEvent;
-use codex_protocol::protocol::CollabCloseEndEvent;
-use codex_protocol::protocol::CollabResumeBeginEvent;
-use codex_protocol::protocol::CollabResumeEndEvent;
-use codex_protocol::protocol::CollabWaitingBeginEvent;
-use codex_protocol::protocol::CollabWaitingEndEvent;
-use codex_protocol::user_input::UserInput;
-use codex_tools::ToolName;
-use codex_tools::ToolSearchInfo;
-use codex_tools::ToolSearchSourceInfo;
+use crewon_protocol::ThreadId;
+use crewon_protocol::models::ResponseInputItem;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::protocol::CollabAgentInteractionBeginEvent;
+use crewon_protocol::protocol::CollabAgentInteractionEndEvent;
+use crewon_protocol::protocol::CollabAgentRef;
+use crewon_protocol::protocol::CollabAgentSpawnBeginEvent;
+use crewon_protocol::protocol::CollabAgentSpawnEndEvent;
+use crewon_protocol::protocol::CollabCloseBeginEvent;
+use crewon_protocol::protocol::CollabCloseEndEvent;
+use crewon_protocol::protocol::CollabResumeBeginEvent;
+use crewon_protocol::protocol::CollabResumeEndEvent;
+use crewon_protocol::protocol::CollabWaitingBeginEvent;
+use crewon_protocol::protocol::CollabWaitingEndEvent;
+use crewon_protocol::user_input::UserInput;
+use crewon_tools::ToolName;
+use crewon_tools::ToolSearchInfo;
+use crewon_tools::ToolSearchSourceInfo;
 use serde::Deserialize;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
@@ -67,7 +67,7 @@ pub(crate) fn parse_agent_id_targets(
 
 fn multi_agent_tool_search_info(
     search_text: &str,
-    spec: codex_tools::ToolSpec,
+    spec: crewon_tools::ToolSpec,
 ) -> Option<ToolSearchInfo> {
     ToolSearchInfo::from_spec(
         search_text.to_string(),

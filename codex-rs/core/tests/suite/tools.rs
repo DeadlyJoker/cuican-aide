@@ -7,15 +7,6 @@ use std::time::Instant;
 
 use anyhow::Context;
 use anyhow::Result;
-use codex_core::sandboxing::SandboxPermissions;
-use codex_features::Feature;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
 use core_test_support::assert_regex_match;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -28,8 +19,17 @@ use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_sandbox;
-use core_test_support::test_codex::local;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::local;
+use core_test_support::test_crewon::test_crewon;
+use crewon_core::sandboxing::SandboxPermissions;
+use crewon_features::Feature;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
 use regex_lite::Regex;
 use serde_json::Value;
 use serde_json::json;
@@ -66,7 +66,7 @@ async fn empty_turn_environments_omits_environment_backed_tools() -> Result<()> 
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::UnifiedExec)
@@ -107,7 +107,7 @@ async fn turn_environment_selection_keeps_environment_backed_tools() -> Result<(
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::UnifiedExec)
@@ -134,14 +134,19 @@ async fn turn_environment_selection_keeps_environment_backed_tools() -> Result<(
 async fn custom_tool_unknown_returns_custom_output_error() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/unknown-custom-tool.reference.json"
+    )?;
+    let reference: Value = serde_json::from_str(&std::fs::read_to_string(fixture_path)?)?;
+
     let server = start_mock_server().await;
-    let mut builder = test_codex();
+    let mut builder = test_crewon();
     let test = builder.build(&server).await?;
 
     let call_id = "custom-unsupported";
     let tool_name = "unsupported_tool";
 
-    mount_sse_once(
+    let first_mock = mount_sse_once(
         &server,
         sse(vec![
             ev_response_created("resp-1"),
@@ -171,8 +176,18 @@ async fn custom_tool_unknown_returns_custom_output_error() -> Result<()> {
         .get("output")
         .and_then(Value::as_str)
         .unwrap_or_default();
-    let expected = format!("unsupported custom tool call: {tool_name}");
+    let expected = reference
+        .pointer("/events/1/data/output")
+        .and_then(Value::as_str)
+        .expect("AR-013 output fixture");
     assert_eq!(output, expected);
+    assert_eq!(
+        first_mock.requests().len() + mock.requests().len(),
+        reference
+            .pointer("/finalState/requestCount")
+            .and_then(Value::as_u64)
+            .expect("AR-013 request count") as usize
+    );
 
     Ok(())
 }
@@ -182,7 +197,7 @@ async fn shell_command_escalated_permissions_rejected_then_ok() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_model("test-gpt-5-codex");
+    let mut builder = test_crewon().with_model("test-gpt-5-codex");
     let test = builder.build(&server).await?;
 
     let command = "echo shell ok";
@@ -276,7 +291,7 @@ async fn sandbox_denied_shell_command_returns_original_output() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_model("gpt-5.4");
+    let mut builder = test_crewon().with_model("gpt-5.4");
     let fixture = builder.build(&server).await?;
 
     let call_id = "sandbox-denied-shell-command";
@@ -367,7 +382,7 @@ async fn shell_command_enforces_glob_deny_read_policy() -> Result<()> {
     skip_if_sandbox!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_model("gpt-5.4")
         .with_config(move |config| {
             let mut file_system_sandbox_policy = FileSystemSandboxPolicy::default();
@@ -476,7 +491,7 @@ async fn collect_tools(use_unified_exec: bool) -> Result<Vec<String>> {
     ])];
     let mock = mount_sse_sequence(&server, responses).await;
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         if use_unified_exec {
             config
                 .features
@@ -534,7 +549,7 @@ async fn shell_command_timeout_includes_timeout_prefix_and_metadata() -> Result<
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_model("test-gpt-5-codex");
+    let mut builder = test_crewon().with_model("test-gpt-5-codex");
     let test = builder.build(&server).await?;
 
     let call_id = "shell-command-timeout";
@@ -620,7 +635,7 @@ async fn shell_command_timeout_handles_background_grandchild_stdout() -> Result<
     skip_if_no_network!(Ok(()));
 
     let server = start_mock_server().await;
-    let mut builder = test_codex().with_model("gpt-5.4").with_config(|config| {
+    let mut builder = test_crewon().with_model("gpt-5.4").with_config(|config| {
         config
             .permissions
             .set_permission_profile(PermissionProfile::Disabled)

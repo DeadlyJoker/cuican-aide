@@ -96,7 +96,7 @@ impl McpRequestProcessor {
     async fn load_thread(
         &self,
         thread_id: &str,
-    ) -> Result<(ThreadId, Arc<CodexThread>), JSONRPCErrorError> {
+    ) -> Result<(ThreadId, Arc<CrewonThread>), JSONRPCErrorError> {
         let thread_id = ThreadId::from_string(thread_id)
             .map_err(|err| invalid_request(format!("invalid thread id: {err}")))?;
 
@@ -128,7 +128,7 @@ impl McpRequestProcessor {
             .await;
         let Some(server) = effective_servers
             .get(&name)
-            .and_then(codex_mcp::EffectiveMcpServer::configured_config)
+            .and_then(crewon_mcp::EffectiveMcpServer::configured_config)
         else {
             return Err(invalid_request(format!(
                 "No MCP server named '{name}' found."
@@ -245,8 +245,8 @@ impl McpRequestProcessor {
         outgoing: Arc<OutgoingMessageSender>,
         request_id: ConnectionRequestId,
         params: ListMcpServerStatusParams,
-        mcp_config: codex_mcp::McpConfig,
-        auth: Option<CodexAuth>,
+        mcp_config: crewon_mcp::McpConfig,
+        auth: Option<CrewonAuth>,
         runtime_context: McpRuntimeContext,
     ) {
         let result = Self::list_mcp_server_status_response(
@@ -263,8 +263,8 @@ impl McpRequestProcessor {
     async fn list_mcp_server_status_response(
         request_id: String,
         params: ListMcpServerStatusParams,
-        mcp_config: codex_mcp::McpConfig,
-        auth: Option<CodexAuth>,
+        mcp_config: crewon_mcp::McpConfig,
+        auth: Option<CrewonAuth>,
         runtime_context: McpRuntimeContext,
     ) -> Result<ListMcpServerStatusResponse, JSONRPCErrorError> {
         let detail = match params.detail.unwrap_or(McpServerStatusDetail::Full) {

@@ -13,6 +13,9 @@ pub(super) struct ListenerTaskContext {
     pub(super) fallback_model_provider: String,
     pub(super) codex_home: PathBuf,
     pub(super) skills_watcher: Arc<SkillsWatcher>,
+    pub(super) office_auto_dispatch: Option<OfficeAutoDispatchContext>,
+    pub(super) dynamic_tool_server:
+        Arc<crate::platform_control::thread_dynamic_tool_server::ThreadDynamicToolServer>,
 }
 
 struct UnloadingState {
@@ -212,7 +215,7 @@ pub(super) fn log_listener_attach_result(
 pub(super) async fn ensure_listener_task_running(
     listener_task_context: ListenerTaskContext,
     conversation_id: ThreadId,
-    conversation: Arc<CodexThread>,
+    conversation: Arc<CrewonThread>,
     thread_state: Arc<Mutex<ThreadState>>,
 ) -> Result<(), JSONRPCErrorError> {
     let (cancel_tx, mut cancel_rx) = oneshot::channel();
@@ -261,6 +264,7 @@ pub(super) async fn ensure_listener_task_running(
             .register_listener_command_tx(conversation_id, listener_command_tx);
         (listener_command_rx, listener_generation)
     };
+    let office_auto_dispatch = listener_task_context.office_auto_dispatch.clone();
     let ListenerTaskContext {
         outgoing,
         thread_manager,
@@ -270,7 +274,9 @@ pub(super) async fn ensure_listener_task_running(
         thread_list_state_permit,
         fallback_model_provider,
         codex_home,
-        ..
+        dynamic_tool_server,
+        office_auto_dispatch: _,
+        skills_watcher: _,
     } = listener_task_context;
     let outgoing_for_task = Arc::clone(&outgoing);
     tokio::spawn(async move {
@@ -318,6 +324,10 @@ pub(super) async fn ensure_listener_task_running(
                     let subscribed_connection_ids = thread_state_manager
                         .subscribed_connection_ids(conversation_id)
                         .await;
+                    let auto_dispatch_connection_id = subscribed_connection_ids
+                        .first()
+                        .copied()
+                        .unwrap_or(ConnectionId(0));
                     let thread_outgoing = ThreadScopedOutgoingMessageSender::new(
                         outgoing_for_task.clone(),
                         subscribed_connection_ids,
@@ -337,6 +347,8 @@ pub(super) async fn ensure_listener_task_running(
                         continue;
                     }
 
+                    let terminal_office_turn =
+                        office_terminal_turn_from_event(&event.id, &event.msg);
                     apply_bespoke_event_handling(
                         event.clone(),
                         conversation_id,
@@ -347,8 +359,47 @@ pub(super) async fn ensure_listener_task_running(
                         thread_watch_manager.clone(),
                         thread_list_state_permit.clone(),
                         fallback_model_provider.clone(),
+                        office_auto_dispatch
+                            .as_ref()
+                            .map(|context| Arc::clone(&context.domain_processor)),
+                        Some(Arc::clone(&dynamic_tool_server)),
                     )
                     .await;
+                    if let (Some(office_auto_dispatch), Some(turn)) =
+                        (office_auto_dispatch.as_ref(), terminal_office_turn)
+                    {
+                        let office_sync_cwd = conversation
+                            .config_snapshot()
+                            .await
+                            .cwd()
+                            .as_path()
+                            .to_string_lossy()
+                            .into_owned();
+                        /*
+                         * Office dispatch runs first because it owns the
+                         * delegation state a terminal turn is expected to
+                         * advance. Workflow sync reads its own store, which is
+                         * absent in workspaces that only use Office, so letting
+                         * it go first delays the delegation behind an await that
+                         * has nothing to do with it.
+                         */
+                        let _ = office_auto_dispatch
+                            .dispatch_after_terminal_turn(
+                                &office_sync_cwd,
+                                &conversation_id.to_string(),
+                                turn.clone(),
+                                auto_dispatch_connection_id,
+                            )
+                            .await;
+                        office_auto_dispatch
+                            .dispatch_workflow_after_terminal_turn(
+                                &office_sync_cwd,
+                                &conversation_id.to_string(),
+                                turn,
+                                auto_dispatch_connection_id,
+                            )
+                            .await;
+                    }
                 }
                 unloading_watchers_open = unloading_state.wait_for_unloading_trigger() => {
                     if !unloading_watchers_open {
@@ -395,7 +446,7 @@ pub(super) async fn ensure_listener_task_running(
     Ok(())
 }
 
-pub(super) async fn wait_for_thread_shutdown(thread: &Arc<CodexThread>) -> ThreadShutdownResult {
+pub(super) async fn wait_for_thread_shutdown(thread: &Arc<CrewonThread>) -> ThreadShutdownResult {
     match tokio::time::timeout(Duration::from_secs(10), thread.shutdown_and_wait()).await {
         Ok(Ok(())) => ThreadShutdownResult::Complete,
         Ok(Err(_)) => ThreadShutdownResult::SubmitFailed,
@@ -410,7 +461,7 @@ pub(super) async fn unload_thread_without_subscribers(
     thread_state_manager: ThreadStateManager,
     thread_watch_manager: ThreadWatchManager,
     thread_id: ThreadId,
-    thread: Arc<CodexThread>,
+    thread: Arc<CrewonThread>,
 ) {
     info!("thread {thread_id} has no subscribers and is idle; shutting down");
 
@@ -458,7 +509,7 @@ pub(super) async fn unload_thread_without_subscribers(
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn handle_thread_listener_command(
     conversation_id: ThreadId,
-    conversation: &Arc<CodexThread>,
+    conversation: &Arc<CrewonThread>,
     codex_home: &Path,
     thread_state_manager: &ThreadStateManager,
     thread_state: &Arc<Mutex<ThreadState>>,
@@ -528,7 +579,7 @@ pub(super) async fn handle_thread_listener_command(
 )]
 pub(super) async fn handle_pending_thread_resume_request(
     conversation_id: ThreadId,
-    conversation: &Arc<CodexThread>,
+    conversation: &Arc<CrewonThread>,
     _codex_home: &Path,
     thread_state_manager: &ThreadStateManager,
     thread_state: &Arc<Mutex<ThreadState>>,
@@ -559,24 +610,35 @@ pub(super) async fn handle_pending_thread_resume_request(
     let connection_id = request_id.connection_id;
     let mut thread = pending.thread_summary;
     if pending.include_turns {
-        populate_thread_turns_from_history(
-            &mut thread,
-            &pending.history_items,
-            active_turn.as_ref(),
-        );
+        if let Some(projected_turns) = pending.projected_turns.clone() {
+            thread.turns = projected_turns;
+        } else {
+            populate_thread_turns_from_history(
+                &mut thread,
+                &pending.history_items,
+                active_turn.as_ref(),
+            );
+        }
     }
 
     let thread_status = thread_watch_manager
         .loaded_status_for_thread(&thread.id)
         .await;
 
-    set_thread_status_and_interrupt_stale_turns(
-        &mut thread,
-        thread_status,
-        has_live_in_progress_turn,
-    );
-    let token_usage_thread = pending.include_turns.then(|| thread.clone());
-    let mut initial_turns_page = if let Some(params) = pending.initial_turns_page.as_ref() {
+    if let Some(projected_status) = pending.projected_thread_status.clone() {
+        thread.status = projected_status;
+    } else {
+        set_thread_status_and_interrupt_stale_turns(
+            &mut thread,
+            thread_status,
+            has_live_in_progress_turn,
+        );
+    }
+    let token_usage_thread = (pending.include_turns && pending.projected_thread_status.is_none())
+        .then(|| thread.clone());
+    let mut initial_turns_page = if pending.projected_initial_turns_page.is_some() {
+        pending.projected_initial_turns_page.clone()
+    } else if let Some(params) = pending.initial_turns_page.as_ref() {
         match super::thread_processor::build_thread_resume_initial_turns_page(
             &pending.history_items,
             thread.status.clone(),
@@ -639,6 +701,7 @@ pub(super) async fn handle_pending_thread_resume_request(
         active_permission_profile,
         workspace_roots,
         reasoning_effort,
+        scene_runtime,
         ..
     } = config_snapshot;
     let instruction_sources = pending.instruction_sources;
@@ -650,6 +713,7 @@ pub(super) async fn handle_pending_thread_resume_request(
 
     let response = ThreadResumeResponse {
         thread,
+        execution_context: pending.execution_context,
         model,
         model_provider: model_provider_id,
         service_tier,
@@ -661,6 +725,7 @@ pub(super) async fn handle_pending_thread_resume_request(
         sandbox,
         active_permission_profile,
         reasoning_effort,
+        scene_runtime: scene_runtime.map(Into::into),
         initial_turns_page,
     };
     outgoing.send_response(request_id, response).await;

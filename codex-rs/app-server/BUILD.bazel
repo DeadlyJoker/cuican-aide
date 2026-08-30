@@ -1,8 +1,8 @@
-load("//:defs.bzl", "codex_rust_crate")
+load("//:defs.bzl", "crewon_rust_crate")
 
-codex_rust_crate(
+crewon_rust_crate(
     name = "app-server",
-    crate_name = "codex_app_server",
+    crate_name = "crewon_app_server",
     integration_test_timeout = "long",
     test_shard_counts = {
         # Note app-server-all-test has a large number of integration tests, so
@@ -16,6 +16,10 @@ codex_rust_crate(
     },
     extra_binaries = [
         "//codex-rs/bwrap:bwrap",
+    ],
+    test_data_extra = [
+        "//codex-rs/provider-agent-platform:tests/fixtures/provider_rs256_test_private.pem",
+        "//:packages/test-contracts/fixtures/workflow-rust-compatibility.reference.json",
     ],
     test_tags = ["no-sandbox"],
 )

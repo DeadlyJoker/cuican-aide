@@ -1,0 +1,62 @@
+{
+  "aspect": "16:9",
+  "theme": { "accent": "#2F6FED", "accentSoft": "#E5EDFD", "ink": "#1A1A1A" },
+  "slides": [
+    {
+      "layout": "cover",
+      "title": "CrewON 三场景能力落地",
+      "subtitle": "办公 · 生码 · 设计",
+      "meta": "2026-08-06 · 平台组"
+    },
+    { "layout": "section", "title": "01 现状", "subtitle": "场景契约已就绪，工具层缺失" },
+    {
+      "layout": "bullets",
+      "title": "问题定位",
+      "subtitle": "后端契约齐全，前端只有提示词",
+      "bullets": [
+        "office / design 只有提示词差异，缺少专属工具",
+        { "text": "code 已接通真实文件树、终端、git diff", "level": 1 },
+        "scene/list 已实现但前端从未调用"
+      ],
+      "notes": "强调 mode 契约没有 UI 入口"
+    },
+    {
+      "layout": "cards",
+      "title": "三条落地路径",
+      "columns": 3,
+      "cards": [
+        { "title": "办公", "body": "docx / pptx / xlsx 生成、读取、校验全链路脚本" },
+        { "title": "生码", "body": "复用现有工作台能力，补齐验证与证据链" },
+        { "title": "设计", "body": "HTML 渲染 + headless Chrome 截图与导出" }
+      ]
+    },
+    {
+      "layout": "metrics",
+      "title": "覆盖度",
+      "metrics": [
+        { "value": "10", "label": "docx 区块类型" },
+        { "value": "9", "label": "pptx 版式" },
+        { "value": "3", "label": "落地场景" }
+      ]
+    },
+    {
+      "layout": "table",
+      "title": "交付对照",
+      "header": ["场景", "工具", "校验方式"],
+      "rows": [
+        ["办公", "build_docx / build_pptx / build_xlsx", "validate_office"],
+        ["生码", "工作台 RPC", "测试 + diff"],
+        ["设计", "render_design", "截图 + 对比"]
+      ]
+    },
+    {
+      "layout": "twoColumn",
+      "title": "做了什么",
+      "columns": [
+        { "title": "新增", "body": ["三套构建脚本", "统一 spec 载入", "文件校验器"] },
+        { "title": "沿用", "body": ["skill 加载机制", "scene-runtime 契约", "app-server RPC"] }
+      ]
+    },
+    { "layout": "closing", "title": "已可用", "subtitle": "脚本随二进制分发，落盘即生效" }
+  ]
+}

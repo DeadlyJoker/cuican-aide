@@ -1,11 +1,11 @@
 [package]
-name = "codex-realtime-webrtc"
+name = "crewon-realtime-webrtc"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "codex_realtime_webrtc"
+name = "crewon_realtime_webrtc"
 path = "src/lib.rs"
 test = false
 doctest = false

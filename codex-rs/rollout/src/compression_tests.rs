@@ -1,19 +1,25 @@
 use std::fs;
 use std::fs::FileTimes;
+#[cfg(feature = "legacy-fence-artifact")]
+use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::time::Duration;
 use std::time::SystemTime;
 
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::UserMessageEvent;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::InitialHistory;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+#[cfg(feature = "legacy-fence-artifact")]
+use crewon_protocol::protocol::UserInputOnceMarker;
+#[cfg(feature = "legacy-fence-artifact")]
+use crewon_protocol::protocol::UserInputOnceMarkerPhase;
+use crewon_protocol::protocol::UserMessageEvent;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use uuid::Uuid;
@@ -354,6 +360,85 @@ async fn worker_skips_existing_compressed_archived_rollouts() -> anyhow::Result<
 }
 
 #[tokio::test]
+async fn worker_skips_active_writer_then_compresses_after_shutdown() -> anyhow::Result<()> {
+    let home = TempDir::new()?;
+    let config = RolloutConfig {
+        codex_home: home.path().to_path_buf(),
+        sqlite_home: home.path().to_path_buf(),
+        cwd: home.path().to_path_buf(),
+        model_provider_id: "test-provider".to_string(),
+        generate_memories: true,
+    };
+    let uuid = Uuid::from_u128(16);
+    let thread_id = ThreadId::from_string(&uuid.to_string())?;
+    let rollout_path = archived_rollout_path(home.path(), "2025-01-03T12-00-00", uuid);
+    write_rollout(&rollout_path, thread_id, "old but actively written")?;
+    set_old_mtime(&rollout_path)?;
+    let recorder = RolloutRecorder::new(
+        &config,
+        RolloutRecorderParams::resume_for_thread(rollout_path.clone(), thread_id),
+    )
+    .await?;
+
+    worker::run(home.path().to_path_buf()).await?;
+
+    assert!(rollout_path.exists());
+    assert!(!compressed_rollout_path(&rollout_path).exists());
+
+    recorder.shutdown().await?;
+    fs::remove_file(home.path().join(".tmp").join("rollout-compression.lock"))?;
+    worker::run(home.path().to_path_buf()).await?;
+
+    assert!(!rollout_path.exists());
+    assert!(compressed_rollout_path(&rollout_path).exists());
+    Ok(())
+}
+
+#[cfg(feature = "legacy-fence-artifact")]
+#[tokio::test]
+async fn worker_skips_marker_bearing_and_unreadable_rollouts_without_changing_bytes()
+-> anyhow::Result<()> {
+    let home = TempDir::new()?;
+    let marker_uuid = Uuid::from_u128(1601);
+    let marker_thread_id = ThreadId::from_string(&marker_uuid.to_string())?;
+    let marker_path = archived_rollout_path(home.path(), "2025-01-03T12-00-00", marker_uuid);
+    write_rollout(&marker_path, marker_thread_id, "marker bearing")?;
+    append_raw_rollout_item(
+        marker_path.as_path(),
+        RolloutItem::UserInputOnceMarker(UserInputOnceMarker {
+            version: 1,
+            phase: UserInputOnceMarkerPhase::Admission,
+            thread_id: marker_thread_id,
+            client_id: "compression-fence".to_string(),
+            payload_hash: "hash".to_string(),
+            turn_id: "turn".to_string(),
+        }),
+    )?;
+    set_old_mtime(marker_path.as_path())?;
+    let marker_bytes = fs::read(marker_path.as_path())?;
+
+    let unreadable_uuid = Uuid::from_u128(1602);
+    let unreadable_thread_id = ThreadId::from_string(&unreadable_uuid.to_string())?;
+    let unreadable_path =
+        archived_rollout_path(home.path(), "2025-01-03T12-00-01", unreadable_uuid);
+    write_rollout(&unreadable_path, unreadable_thread_id, "unreadable")?;
+    fs::OpenOptions::new()
+        .append(true)
+        .open(unreadable_path.as_path())?
+        .write_all(b"{not-json}\n")?;
+    set_old_mtime(unreadable_path.as_path())?;
+    let unreadable_bytes = fs::read(unreadable_path.as_path())?;
+
+    worker::run(home.path().to_path_buf()).await?;
+
+    assert_eq!(fs::read(marker_path.as_path())?, marker_bytes);
+    assert!(!compressed_rollout_path(marker_path.as_path()).exists());
+    assert_eq!(fs::read(unreadable_path.as_path())?, unreadable_bytes);
+    assert!(!compressed_rollout_path(unreadable_path.as_path()).exists());
+    Ok(())
+}
+
+#[tokio::test]
 async fn worker_skips_when_fresh_run_marker_exists() -> anyhow::Result<()> {
     let home = TempDir::new()?;
     let uuid = Uuid::from_u128(11);
@@ -462,8 +547,8 @@ fn write_rollout(path: &std::path::Path, thread_id: ThreadId, message: &str) -> 
             timestamp: "2025-01-03T12:00:00Z".to_string(),
             cwd: parent.to_path_buf(),
             originator: "test".to_string(),
-            cli_version: "test".to_string(),
-            source: SessionSource::Cli,
+            client_version: "test".to_string(),
+            source: SessionSource::LegacyCli,
             thread_source: None,
             agent_path: None,
             agent_nickname: None,
@@ -475,6 +560,7 @@ fn write_rollout(path: &std::path::Path, thread_id: ThreadId, message: &str) -> 
             multi_agent_version: None,
         },
         git: None,
+        scene_runtime: None,
     };
     let lines = [
         RolloutLine {
@@ -495,6 +581,17 @@ fn write_rollout(path: &std::path::Path, thread_id: ThreadId, message: &str) -> 
         .collect::<Result<Vec<_>, _>>()?
         .join("\n");
     fs::write(path, format!("{jsonl}\n"))?;
+    Ok(())
+}
+
+#[cfg(feature = "legacy-fence-artifact")]
+fn append_raw_rollout_item(path: &Path, item: RolloutItem) -> anyhow::Result<()> {
+    let line = RolloutLine {
+        timestamp: "2025-01-03T12:00:02Z".to_string(),
+        item,
+    };
+    let mut file = fs::OpenOptions::new().append(true).open(path)?;
+    writeln!(file, "{}", serde_json::to_string(&line)?)?;
     Ok(())
 }
 

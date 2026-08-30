@@ -7,15 +7,18 @@
 use std::io::ErrorKind;
 use std::path::Path;
 
-use codex_rollout::ARCHIVED_SESSIONS_SUBDIR;
-use codex_rollout::SESSIONS_SUBDIR;
-use codex_rollout::find_archived_thread_path_by_id_str;
-use codex_rollout::find_thread_path_by_id_str;
-use codex_rollout::remove_thread_name_entries;
+use crewon_rollout::ARCHIVED_SESSIONS_SUBDIR;
+use crewon_rollout::RolloutMutation;
+use crewon_rollout::RolloutWriterLease;
+use crewon_rollout::SESSIONS_SUBDIR;
+use crewon_rollout::find_archived_thread_path_by_id_str;
+use crewon_rollout::find_thread_path_by_id_str;
+use crewon_rollout::remove_thread_name_entries;
 
 use super::LocalThreadStore;
 use super::helpers::matching_rollout_file_name;
 use super::helpers::scoped_rollout_path;
+use super::live_writer;
 use crate::DeleteThreadParams;
 use crate::ThreadStoreError;
 use crate::ThreadStoreResult;
@@ -26,13 +29,12 @@ pub(super) async fn delete_thread(
 ) -> ThreadStoreResult<()> {
     let thread_id = params.thread_id;
     let thread_id_str = thread_id.to_string();
-    let state_db_ctx = store.state_db().await;
     let mut rollout_paths = Vec::new();
 
     match find_thread_path_by_id_str(
         store.config.codex_home.as_path(),
         thread_id_str.as_str(),
-        state_db_ctx.as_deref(),
+        /*state_db_ctx*/ None,
     )
     .await
     {
@@ -48,7 +50,7 @@ pub(super) async fn delete_thread(
     match find_archived_thread_path_by_id_str(
         store.config.codex_home.as_path(),
         thread_id_str.as_str(),
-        state_db_ctx.as_deref(),
+        /*state_db_ctx*/ None,
     )
     .await
     {
@@ -65,8 +67,35 @@ pub(super) async fn delete_thread(
         }
     }
 
-    let found_rollout_path = !rollout_paths.is_empty();
-    for rollout_path in rollout_paths {
+    if rollout_paths.is_empty() {
+        return Err(ThreadStoreError::ThreadNotFound { thread_id });
+    }
+
+    let rollout_paths = rollout_paths
+        .into_iter()
+        .map(|path| canonical_delete_rollout_path(store, path.as_path(), thread_id))
+        .collect::<ThreadStoreResult<Vec<_>>>()?;
+    let Some((first_rollout_path, remaining_rollout_paths)) = rollout_paths.split_first() else {
+        unreachable!("non-empty rollout candidates must have a first path");
+    };
+    let writer_lease = RolloutWriterLease::acquire_for_existing_mutation(
+        store.config.codex_home.as_path(),
+        first_rollout_path.as_path(),
+        thread_id,
+        RolloutMutation::Delete,
+    )
+    .map_err(live_writer::map_recorder_error)?;
+    for rollout_path in remaining_rollout_paths {
+        writer_lease
+            .ensure_existing_mutation_allowed(
+                rollout_path.as_path(),
+                thread_id,
+                RolloutMutation::Delete,
+            )
+            .map_err(live_writer::map_recorder_error)?;
+    }
+
+    for rollout_path in &rollout_paths {
         delete_rollout_file(store, rollout_path.as_path(), thread_id)?;
     }
     remove_thread_name_entries(store.config.codex_home.as_path(), thread_id)
@@ -75,21 +104,38 @@ pub(super) async fn delete_thread(
             message: format!("failed to delete thread name index entries for {thread_id}: {err}"),
         })?;
 
-    if !found_rollout_path {
-        return Err(ThreadStoreError::ThreadNotFound { thread_id });
-    }
-
     store.live_recorders.lock().await.remove(&thread_id);
 
     Ok(())
 }
 
+fn canonical_delete_rollout_path(
+    store: &LocalThreadStore,
+    rollout_path: &Path,
+    thread_id: crewon_protocol::ThreadId,
+) -> ThreadStoreResult<std::path::PathBuf> {
+    let canonical_rollout_path = scoped_rollout_path(
+        store.config.codex_home.join(SESSIONS_SUBDIR),
+        rollout_path,
+        "sessions",
+    )
+    .or_else(|_| {
+        scoped_rollout_path(
+            store.config.codex_home.join(ARCHIVED_SESSIONS_SUBDIR),
+            rollout_path,
+            "archived sessions",
+        )
+    })?;
+    matching_rollout_file_name(&canonical_rollout_path, thread_id, rollout_path)?;
+    Ok(canonical_rollout_path)
+}
+
 fn delete_rollout_file(
     store: &LocalThreadStore,
     rollout_path: &Path,
-    thread_id: codex_protocol::ThreadId,
+    thread_id: crewon_protocol::ThreadId,
 ) -> ThreadStoreResult<bool> {
-    let plain_path = codex_rollout::plain_rollout_path(rollout_path);
+    let plain_path = crewon_rollout::plain_rollout_path(rollout_path);
     let compressed_path = plain_path.with_extension("jsonl.zst");
     let deleted_plain = delete_rollout_path(store, plain_path.as_path(), thread_id)?;
     let deleted_compressed = delete_rollout_path(store, compressed_path.as_path(), thread_id)?;
@@ -99,7 +145,7 @@ fn delete_rollout_file(
 fn delete_rollout_path(
     store: &LocalThreadStore,
     rollout_path: &Path,
-    thread_id: codex_protocol::ThreadId,
+    thread_id: crewon_protocol::ThreadId,
 ) -> ThreadStoreResult<bool> {
     let canonical_rollout_path = scoped_rollout_path(
         store.config.codex_home.join(SESSIONS_SUBDIR),
@@ -132,13 +178,17 @@ fn delete_rollout_path(
 
 #[cfg(test)]
 mod tests {
-    use codex_protocol::ThreadId;
+    use crewon_protocol::ThreadId;
+    use crewon_protocol::protocol::ThreadMemoryMode;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
     use uuid::Uuid;
 
     use super::*;
+    use crate::ResumeThreadParams;
+    use crate::ThreadPersistenceMetadata;
     use crate::ThreadStore;
+    use crate::ThreadStoreError;
     use crate::local::LocalThreadStore;
     use crate::local::test_support::test_config;
     use crate::local::test_support::write_archived_session_file;
@@ -206,5 +256,55 @@ mod tests {
             err.to_string(),
             "thread 00000000-0000-0000-0000-000000000304 not found"
         );
+    }
+
+    #[tokio::test]
+    async fn delete_thread_conflicts_with_another_store_writer_then_succeeds_after_shutdown() {
+        let home = TempDir::new().expect("temp dir");
+        let uuid = Uuid::from_u128(306);
+        let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
+        let active_path =
+            write_session_file(home.path(), "2025-01-03T14-00-00", uuid).expect("session file");
+        let first_store = LocalThreadStore::new(test_config(home.path()), /*state_db*/ None);
+        let second_store = LocalThreadStore::new(test_config(home.path()), /*state_db*/ None);
+        first_store
+            .resume_thread(resume_params(home.path(), thread_id, active_path.clone()))
+            .await
+            .expect("first store should own writer");
+
+        let err = second_store
+            .delete_thread(DeleteThreadParams { thread_id })
+            .await
+            .expect_err("delete must fail while another writer is active");
+        assert!(matches!(err, ThreadStoreError::Conflict { .. }));
+        assert!(active_path.exists());
+
+        first_store
+            .shutdown_thread(thread_id)
+            .await
+            .expect("release first writer");
+        second_store
+            .delete_thread(DeleteThreadParams { thread_id })
+            .await
+            .expect("delete after writer shutdown");
+        assert!(!active_path.exists());
+    }
+
+    fn resume_params(
+        cwd: &std::path::Path,
+        thread_id: ThreadId,
+        rollout_path: std::path::PathBuf,
+    ) -> ResumeThreadParams {
+        ResumeThreadParams {
+            thread_id,
+            rollout_path: Some(rollout_path),
+            history: None,
+            include_archived: true,
+            metadata: ThreadPersistenceMetadata {
+                cwd: Some(cwd.to_path_buf()),
+                model_provider: "test-provider".to_string(),
+                memory_mode: ThreadMemoryMode::Enabled,
+            },
+        }
     }
 }

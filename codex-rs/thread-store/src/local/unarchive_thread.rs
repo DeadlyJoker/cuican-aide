@@ -1,12 +1,15 @@
-use codex_rollout::find_archived_thread_path_by_id_str;
-use codex_rollout::read_thread_item_from_rollout;
-use codex_rollout::rollout_date_parts;
+use crewon_rollout::RolloutMutation;
+use crewon_rollout::RolloutWriterLease;
+use crewon_rollout::find_archived_thread_path_by_id_str;
+use crewon_rollout::read_thread_item_from_rollout;
+use crewon_rollout::rollout_date_parts;
 
 use super::LocalThreadStore;
 use super::helpers::matching_rollout_file_name;
 use super::helpers::scoped_rollout_path;
 use super::helpers::stored_thread_from_rollout_item;
 use super::helpers::touch_modified_time;
+use super::live_writer;
 use crate::ArchiveThreadParams;
 use crate::StoredThread;
 use crate::ThreadStoreError;
@@ -21,7 +24,7 @@ pub(super) async fn unarchive_thread(
     let archived_path = find_archived_thread_path_by_id_str(
         store.config.codex_home.as_path(),
         &thread_id.to_string(),
-        state_db_ctx.as_deref(),
+        /*state_db_ctx*/ None,
     )
     .await
     .map_err(|err| ThreadStoreError::InvalidRequest {
@@ -35,7 +38,7 @@ pub(super) async fn unarchive_thread(
         store
             .config
             .codex_home
-            .join(codex_rollout::ARCHIVED_SESSIONS_SUBDIR),
+            .join(crewon_rollout::ARCHIVED_SESSIONS_SUBDIR),
         archived_path.as_path(),
         "archived",
     )?;
@@ -52,11 +55,18 @@ pub(super) async fn unarchive_thread(
             ),
         });
     };
+    let _writer_lease = RolloutWriterLease::acquire_for_existing_mutation(
+        store.config.codex_home.as_path(),
+        canonical_archived_path.as_path(),
+        thread_id,
+        RolloutMutation::Unarchive,
+    )
+    .map_err(live_writer::map_recorder_error)?;
 
     let dest_dir = store
         .config
         .codex_home
-        .join(codex_rollout::SESSIONS_SUBDIR)
+        .join(crewon_rollout::SESSIONS_SUBDIR)
         .join(year)
         .join(month)
         .join(day);
@@ -103,14 +113,18 @@ pub(super) async fn unarchive_thread(
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use codex_protocol::ThreadId;
-    use codex_protocol::protocol::SessionSource;
+    use crewon_protocol::ThreadId;
+    use crewon_protocol::protocol::SessionSource;
+    use crewon_protocol::protocol::ThreadMemoryMode;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
     use uuid::Uuid;
 
     use super::*;
+    use crate::ResumeThreadParams;
+    use crate::ThreadPersistenceMetadata;
     use crate::ThreadStore;
+    use crate::ThreadStoreError;
     use crate::local::LocalThreadStore;
     use crate::local::test_support::test_config;
     use crate::local::test_support::write_archived_session_file;
@@ -153,7 +167,7 @@ mod tests {
         let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
         let archived_path = write_archived_session_file(home.path(), "2025-01-03T13-00-00", uuid)
             .expect("archived session file");
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             home.path().to_path_buf(),
             config.default_model_provider_id.clone(),
         )
@@ -164,11 +178,11 @@ mod tests {
             .mark_backfill_complete(/*last_watermark*/ None)
             .await
             .expect("backfill should be complete");
-        let mut builder = codex_state::ThreadMetadataBuilder::new(
+        let mut builder = crewon_state::ThreadMetadataBuilder::new(
             thread_id,
             archived_path.clone(),
             Utc::now(),
-            SessionSource::Cli,
+            SessionSource::LegacyCli,
         );
         builder.model_provider = Some(config.default_model_provider_id.clone());
         builder.cwd = home.path().to_path_buf();
@@ -196,5 +210,61 @@ mod tests {
             .expect("thread metadata should exist");
         assert_eq!(updated.rollout_path, restored_path);
         assert_eq!(updated.archived_at, None);
+    }
+
+    #[tokio::test]
+    async fn unarchive_thread_conflicts_with_another_store_writer_then_succeeds_after_shutdown() {
+        let home = TempDir::new().expect("temp dir");
+        let uuid = Uuid::from_u128(206);
+        let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
+        let archived_path = write_archived_session_file(home.path(), "2025-01-03T14-30-00", uuid)
+            .expect("archived session file");
+        let first_store = LocalThreadStore::new(test_config(home.path()), /*state_db*/ None);
+        let second_store = LocalThreadStore::new(test_config(home.path()), /*state_db*/ None);
+        first_store
+            .resume_thread(resume_params(home.path(), thread_id, archived_path.clone()))
+            .await
+            .expect("first store should own writer");
+
+        let err = second_store
+            .unarchive_thread(ArchiveThreadParams { thread_id })
+            .await
+            .expect_err("unarchive must fail while another writer is active");
+        assert!(matches!(err, ThreadStoreError::Conflict { .. }));
+        assert!(archived_path.exists());
+        let restored_path = home
+            .path()
+            .join("sessions/2025/01/03")
+            .join(archived_path.file_name().expect("file name"));
+        assert!(!restored_path.exists());
+
+        first_store
+            .shutdown_thread(thread_id)
+            .await
+            .expect("release first writer");
+        second_store
+            .unarchive_thread(ArchiveThreadParams { thread_id })
+            .await
+            .expect("unarchive after writer shutdown");
+        assert!(!archived_path.exists());
+        assert!(restored_path.exists());
+    }
+
+    fn resume_params(
+        cwd: &std::path::Path,
+        thread_id: ThreadId,
+        rollout_path: std::path::PathBuf,
+    ) -> ResumeThreadParams {
+        ResumeThreadParams {
+            thread_id,
+            rollout_path: Some(rollout_path),
+            history: None,
+            include_archived: true,
+            metadata: ThreadPersistenceMetadata {
+                cwd: Some(cwd.to_path_buf()),
+                model_provider: "test-provider".to_string(),
+                memory_mode: ThreadMemoryMode::Enabled,
+            },
+        }
     }
 }

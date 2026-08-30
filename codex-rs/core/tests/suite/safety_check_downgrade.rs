@@ -1,14 +1,4 @@
 use anyhow::Result;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::CodexErrorInfo;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ModelRerouteReason;
-use codex_protocol::protocol::ModelVerification;
-use codex_protocol::protocol::Op;
-use codex_protocol::user_input::UserInput;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_function_call;
 use core_test_support::responses::ev_model_verification_metadata;
@@ -20,11 +10,21 @@ use core_test_support::responses::sse_completed;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::CodexErrorInfo;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::ModelRerouteReason;
+use crewon_protocol::protocol::ModelVerification;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use wiremock::ResponseTemplate;
 
@@ -32,10 +32,7 @@ const SERVER_MODEL: &str = "gpt-5.2";
 const REQUESTED_MODEL: &str = "gpt-5.3-codex";
 const TRUSTED_ACCESS_FOR_CYBER_VERIFICATION: &str = "trusted_access_for_cyber";
 
-const CYBER_POLICY_MESSAGE: &str =
-    "This request has been flagged for potentially high-risk cyber activity.";
-
-fn disabled_text_turn(test: &TestCodex, text: &str) -> Op {
+fn disabled_text_turn(test: &TestCrewon, text: &str) -> Op {
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(PermissionProfile::Disabled, test.cwd_path());
     Op::UserInput {
@@ -46,14 +43,14 @@ fn disabled_text_turn(test: &TestCodex, text: &str) -> Op {
         final_output_json_schema: None,
         responsesapi_client_metadata: None,
         additional_context: Default::default(),
-        thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+        thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
             environments: Some(local_selections(test.config.cwd.clone())),
             approval_policy: Some(AskForApproval::Never),
             sandbox_policy: Some(sandbox_policy),
             permission_profile,
-            collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                mode: codex_protocol::config_types::ModeKind::Default,
-                settings: codex_protocol::config_types::Settings {
+            collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                mode: crewon_protocol::config_types::ModeKind::Default,
+                settings: crewon_protocol::config_types::Settings {
                     model: REQUESTED_MODEL.to_string(),
                     reasoning_effort: test.config.model_reasoning_effort.clone(),
                     developer_instructions: None,
@@ -73,14 +70,14 @@ async fn openai_model_header_mismatch_emits_warning_event() -> Result<()> {
         sse_response(sse_completed("resp-1")).insert_header("OpenAI-Model", SERVER_MODEL);
     let _mock = mount_response_once(&server, response).await;
 
-    let mut builder = test_codex().with_model(REQUESTED_MODEL);
+    let mut builder = test_crewon().with_model(REQUESTED_MODEL);
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(disabled_text_turn(&test, "trigger safety check"))
         .await?;
 
-    let reroute = wait_for_event(&test.codex, |event| {
+    let reroute = wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::ModelReroute(_))
     })
     .await;
@@ -91,14 +88,14 @@ async fn openai_model_header_mismatch_emits_warning_event() -> Result<()> {
     assert_eq!(reroute.to_model, SERVER_MODEL);
     assert_eq!(reroute.reason, ModelRerouteReason::HighRiskCyberActivity);
 
-    let warning = wait_for_event(&test.codex, |event| matches!(event, EventMsg::Warning(_))).await;
+    let warning = wait_for_event(&test.crewon, |event| matches!(event, EventMsg::Warning(_))).await;
     let EventMsg::Warning(warning) = warning else {
         panic!("expected warning event");
     };
     assert!(warning.message.contains(REQUESTED_MODEL));
     assert!(warning.message.contains(SERVER_MODEL));
 
-    let _ = wait_for_event(&test.codex, |event| {
+    let _ = wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -110,29 +107,57 @@ async fn openai_model_header_mismatch_emits_warning_event() -> Result<()> {
 async fn cyber_policy_response_emits_typed_error_without_retry() -> Result<()> {
     skip_if_no_network!(Ok(()));
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/typed-policy-failure.reference.json"
+    )
+    .expect("resolve AR-030 typed policy failure fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-030 typed policy failure fixture"),
+    )
+    .expect("parse AR-030 typed policy failure fixture");
+    let provider_failure = &reference["providerFailure"];
+    let status = u16::try_from(
+        provider_failure["httpStatus"]
+            .as_u64()
+            .expect("fixture provider HTTP status"),
+    )
+    .expect("fixture provider HTTP status fits u16");
+    let provider_type = provider_failure["type"]
+        .as_str()
+        .expect("fixture provider error type");
+    let provider_code = provider_failure["code"]
+        .as_str()
+        .expect("fixture provider error code");
+    let provider_message = provider_failure["message"]
+        .as_str()
+        .expect("fixture provider error message");
+    assert_eq!(reference["finalState"]["requestCount"], 1);
+    assert_eq!(reference["finalState"]["samplingRetries"], 0);
+    assert_eq!(reference["events"][0]["data"]["retryable"], false);
+
     let server = start_mock_server().await;
-    let response = ResponseTemplate::new(400).set_body_json(serde_json::json!({
+    let response = ResponseTemplate::new(status).set_body_json(serde_json::json!({
         "error": {
-            "message": CYBER_POLICY_MESSAGE,
-            "type": "invalid_request",
+            "message": provider_message,
+            "type": provider_type,
             "param": null,
-            "code": "cyber_policy"
+            "code": provider_code
         }
     }));
     let mock = mount_response_once(&server, response).await;
 
-    let mut builder = test_codex().with_model(REQUESTED_MODEL);
+    let mut builder = test_crewon().with_model(REQUESTED_MODEL);
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(disabled_text_turn(&test, "trigger cyber policy error"))
         .await?;
 
-    let error = wait_for_event(&test.codex, |event| matches!(event, EventMsg::Error(_))).await;
+    let error = wait_for_event(&test.crewon, |event| matches!(event, EventMsg::Error(_))).await;
     let EventMsg::Error(error) = error else {
         panic!("expected error event");
     };
-    assert_eq!(error.message, CYBER_POLICY_MESSAGE);
+    assert_eq!(error.message, provider_message);
     assert_eq!(error.codex_error_info, Some(CodexErrorInfo::CyberPolicy));
 
     mock.single_request();
@@ -160,14 +185,14 @@ async fn response_model_field_mismatch_emits_warning_when_header_matches_request
     .insert_header("OpenAI-Model", REQUESTED_MODEL);
     let _mock = mount_response_once(&server, response).await;
 
-    let mut builder = test_codex().with_model(REQUESTED_MODEL);
+    let mut builder = test_crewon().with_model(REQUESTED_MODEL);
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(disabled_text_turn(&test, "trigger response model check"))
         .await?;
 
-    let reroute = wait_for_event(&test.codex, |event| {
+    let reroute = wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::ModelReroute(_))
     })
     .await;
@@ -178,7 +203,7 @@ async fn response_model_field_mismatch_emits_warning_when_header_matches_request
     assert_eq!(reroute.to_model, SERVER_MODEL);
     assert_eq!(reroute.reason, ModelRerouteReason::HighRiskCyberActivity);
 
-    let warning = wait_for_event(&test.codex, |event| {
+    let warning = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::Warning(warning)
@@ -194,7 +219,7 @@ async fn response_model_field_mismatch_emits_warning_when_header_matches_request
     assert!(warning.message.contains(REQUESTED_MODEL));
     assert!(warning.message.contains(SERVER_MODEL));
 
-    let _ = wait_for_event(&test.codex, |event| {
+    let _ = wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -230,16 +255,16 @@ async fn openai_model_header_mismatch_only_emits_one_warning_per_turn() -> Resul
     .insert_header("OpenAI-Model", SERVER_MODEL);
     let _mock = mount_response_sequence(&server, vec![first_response, second_response]).await;
 
-    let mut builder = test_codex().with_model(REQUESTED_MODEL);
+    let mut builder = test_crewon().with_model(REQUESTED_MODEL);
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(disabled_text_turn(&test, "trigger follow-up turn"))
         .await?;
 
     let mut warning_count = 0;
     loop {
-        let event = wait_for_event(&test.codex, |_| true).await;
+        let event = wait_for_event(&test.crewon, |_| true).await;
         match event {
             EventMsg::Warning(warning) if warning.message.contains(REQUESTED_MODEL) => {
                 warning_count += 1;
@@ -264,17 +289,17 @@ async fn openai_model_header_casing_only_mismatch_does_not_warn() -> Result<()> 
         .insert_header("OpenAI-Model", requested_header.as_str());
     let _mock = mount_response_once(&server, response).await;
 
-    let mut builder = test_codex().with_model(REQUESTED_MODEL);
+    let mut builder = test_crewon().with_model(REQUESTED_MODEL);
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(disabled_text_turn(&test, "trigger casing check"))
         .await?;
 
     let mut reroute_count = 0;
     let mut warning_count = 0;
     loop {
-        let event = wait_for_event(&test.codex, |_| true).await;
+        let event = wait_for_event(&test.crewon, |_| true).await;
         match event {
             EventMsg::ModelReroute(_) => reroute_count += 1,
             EventMsg::Warning(warning)
@@ -307,10 +332,10 @@ async fn model_verification_emits_structured_event_without_reroute_or_warning() 
     ]));
     let _mock = mount_response_once(&server, response).await;
 
-    let mut builder = test_codex().with_model(REQUESTED_MODEL);
+    let mut builder = test_crewon().with_model(REQUESTED_MODEL);
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(disabled_text_turn(&test, "trigger model verification"))
         .await?;
 
@@ -319,7 +344,7 @@ async fn model_verification_emits_structured_event_without_reroute_or_warning() 
     let mut warning_count = 0;
     let mut warning_item_count = 0;
     loop {
-        let event = wait_for_event(&test.codex, |_| true).await;
+        let event = wait_for_event(&test.crewon, |_| true).await;
         match event {
             EventMsg::ModelVerification(event) => {
                 assert_eq!(
@@ -383,10 +408,10 @@ async fn model_verification_only_emits_once_per_turn() -> Result<()> {
     ]));
     let _mock = mount_response_sequence(&server, vec![first_response, second_response]).await;
 
-    let mut builder = test_codex().with_model(REQUESTED_MODEL);
+    let mut builder = test_crewon().with_model(REQUESTED_MODEL);
     let test = builder.build(&server).await?;
 
-    test.codex
+    test.crewon
         .submit(disabled_text_turn(
             &test,
             "trigger follow-up model verification",
@@ -395,7 +420,7 @@ async fn model_verification_only_emits_once_per_turn() -> Result<()> {
 
     let mut verification_count = 0;
     loop {
-        let event = wait_for_event(&test.codex, |_| true).await;
+        let event = wait_for_event(&test.crewon, |_| true).await;
         match event {
             EventMsg::ModelVerification(_) => verification_count += 1,
             EventMsg::Warning(warning) if warning.message.contains("high-risk cyber activity") => {

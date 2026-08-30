@@ -31,7 +31,7 @@ use crate::upstream::UpstreamClient;
 use crate::upstream::proxy_for_connect;
 use anyhow::Context as _;
 use anyhow::Result;
-use codex_utils_rustls_provider::ensure_rustls_crypto_provider;
+use crewon_utils_rustls_provider::ensure_rustls_crypto_provider;
 use rama_core::Layer;
 use rama_core::Service;
 use rama_core::error::BoxError;
@@ -1061,6 +1061,7 @@ mod tests {
         let policy = {
             let mut policy = NetworkProxySettings::default();
             policy.set_allowed_domains(vec!["example.com".to_string()]);
+            policy.allow_local_binding = true;
             policy
         };
         let state = Arc::new(network_proxy_state_for_policy(policy));
@@ -1118,11 +1119,12 @@ mod tests {
                 host: "api.github.com".to_string(),
                 matcher: crate::mitm_hook::MitmHookMatchConfig {
                     methods: vec!["POST".to_string()],
-                    path_prefixes: vec!["/repos/openai/".to_string()],
+                    path_prefixes: vec!["/repos/crewon/".to_string()],
                     ..crate::mitm_hook::MitmHookMatchConfig::default()
                 },
                 actions: crate::mitm_hook::MitmHookActionsConfig::default(),
             }],
+            allow_local_binding: true,
             ..Default::default()
         };
         policy.set_allowed_domains(vec!["api.github.com".to_string()]);
@@ -1324,7 +1326,7 @@ mod tests {
         ));
         let mut req = Request::builder()
             .method(Method::GET)
-            .uri("http://raw.githubusercontent.com/openai/codex/main/README.md")
+            .uri("http://raw.githubusercontent.com/crewon/example/main/README.md")
             .header(header::HOST, "api.github.com")
             .body(Body::empty())
             .unwrap();

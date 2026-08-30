@@ -1,21 +1,21 @@
 use super::*;
-use codex_protocol::protocol::Product;
+use crewon_protocol::protocol::Product;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 use tempfile::tempdir;
 
-const ALTERNATE_MARKETPLACE_RELATIVE_PATH: &str = ".claude-plugin/marketplace.json";
-const ALTERNATE_PLUGIN_MANIFEST_RELATIVE_PATH: &str = ".claude-plugin/plugin.json";
+const LEGACY_MARKETPLACE_RELATIVE_PATH: &str = ".codex-plugin/marketplace.json";
+const LEGACY_PLUGIN_MANIFEST_RELATIVE_PATH: &str = ".codex-plugin/plugin.json";
 
 fn write_alternate_marketplace(repo_root: &Path, contents: &str) -> AbsolutePathBuf {
-    let marketplace_path = repo_root.join(ALTERNATE_MARKETPLACE_RELATIVE_PATH);
+    let marketplace_path = repo_root.join(LEGACY_MARKETPLACE_RELATIVE_PATH);
     fs::create_dir_all(marketplace_path.parent().unwrap()).unwrap();
     fs::write(&marketplace_path, contents).unwrap();
     AbsolutePathBuf::try_from(marketplace_path).unwrap()
 }
 
 fn write_alternate_plugin_manifest(plugin_root: &Path, contents: &str) {
-    let manifest_path = plugin_root.join(ALTERNATE_PLUGIN_MANIFEST_RELATIVE_PATH);
+    let manifest_path = plugin_root.join(LEGACY_PLUGIN_MANIFEST_RELATIVE_PATH);
     fs::create_dir_all(manifest_path.parent().unwrap()).unwrap();
     fs::write(manifest_path, contents).unwrap();
 }
@@ -30,7 +30,7 @@ fn find_marketplace_plugin_finds_repo_marketplace_plugin() {
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "local-plugin",
@@ -53,7 +53,7 @@ fn find_marketplace_plugin_finds_repo_marketplace_plugin() {
     assert_eq!(
         resolved,
         ResolvedMarketplacePlugin {
-            plugin_id: PluginId::new("local-plugin".to_string(), "codex-curated".to_string())
+            plugin_id: PluginId::new("local-plugin".to_string(), "crewon-curated".to_string())
                 .unwrap(),
             source: MarketplacePluginSource::Local {
                 path: AbsolutePathBuf::try_from(repo_root.join("plugin-1")).unwrap(),
@@ -121,7 +121,7 @@ fn find_marketplace_plugin_supports_git_subdir_sources() {
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "remote-plugin",
@@ -147,7 +147,7 @@ fn find_marketplace_plugin_supports_git_subdir_sources() {
     assert_eq!(
         resolved,
         ResolvedMarketplacePlugin {
-            plugin_id: PluginId::new("remote-plugin".to_string(), "codex-curated".to_string())
+            plugin_id: PluginId::new("remote-plugin".to_string(), "crewon-curated".to_string())
                 .unwrap(),
             source: MarketplacePluginSource::Git {
                 url: "https://github.com/openai/joey_marketplace3.git".to_string(),
@@ -175,7 +175,7 @@ fn find_marketplace_plugin_normalizes_github_shorthand_with_dot_git_suffix() {
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "remote-plugin",
@@ -220,7 +220,7 @@ fn find_marketplace_plugin_normalizes_relative_git_source_urls_to_marketplace_ro
             repo_root.join(".agents/plugins/marketplace.json"),
             format!(
                 r#"{{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {{
       "name": "remote-plugin",
@@ -291,7 +291,7 @@ fn find_marketplace_plugin_skips_root_equivalent_git_subdir_paths() {
             repo_root.join(".agents/plugins/marketplace.json"),
             format!(
                 r#"{{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {{
       "name": "remote-plugin",
@@ -315,7 +315,7 @@ fn find_marketplace_plugin_skips_root_equivalent_git_subdir_paths() {
 
         assert_eq!(
             err.to_string(),
-            "plugin `remote-plugin` was not found in marketplace `codex-curated`"
+            "plugin `remote-plugin` was not found in marketplace `crewon-curated`"
         );
     }
 }
@@ -328,7 +328,7 @@ fn find_marketplace_plugin_reports_missing_plugin() {
     fs::create_dir_all(repo_root.join(".agents/plugins")).unwrap();
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
-        r#"{"name":"codex-curated","plugins":[]}"#,
+        r#"{"name":"crewon-curated","plugins":[]}"#,
     )
     .unwrap();
 
@@ -340,7 +340,7 @@ fn find_marketplace_plugin_reports_missing_plugin() {
 
     assert_eq!(
         err.to_string(),
-        "plugin `missing` was not found in marketplace `codex-curated`"
+        "plugin `missing` was not found in marketplace `crewon-curated`"
     );
 }
 
@@ -534,7 +534,7 @@ fn list_marketplaces_returns_home_and_repo_marketplaces() {
     fs::write(
         home_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "shared-plugin",
@@ -557,7 +557,7 @@ fn list_marketplaces_returns_home_and_repo_marketplaces() {
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "shared-plugin",
@@ -589,7 +589,7 @@ fn list_marketplaces_returns_home_and_repo_marketplaces() {
         marketplaces,
         vec![
             Marketplace {
-                name: "codex-curated".to_string(),
+                name: "crewon-curated".to_string(),
                 path:
                     AbsolutePathBuf::try_from(home_root.join(".agents/plugins/marketplace.json"),)
                         .unwrap(),
@@ -626,7 +626,7 @@ fn list_marketplaces_returns_home_and_repo_marketplaces() {
                 ],
             },
             Marketplace {
-                name: "codex-curated".to_string(),
+                name: "crewon-curated".to_string(),
                 path:
                     AbsolutePathBuf::try_from(repo_root.join(".agents/plugins/marketplace.json"),)
                         .unwrap(),
@@ -681,7 +681,7 @@ fn list_marketplaces_keeps_distinct_entries_for_same_name() {
     fs::write(
         home_marketplace.clone(),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "local-plugin",
@@ -697,7 +697,7 @@ fn list_marketplaces_keeps_distinct_entries_for_same_name() {
     fs::write(
         repo_marketplace.clone(),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "local-plugin",
@@ -722,7 +722,7 @@ fn list_marketplaces_keeps_distinct_entries_for_same_name() {
         marketplaces,
         vec![
             Marketplace {
-                name: "codex-curated".to_string(),
+                name: "crewon-curated".to_string(),
                 path: AbsolutePathBuf::try_from(home_marketplace).unwrap(),
                 interface: None,
                 plugins: vec![MarketplacePlugin {
@@ -741,7 +741,7 @@ fn list_marketplaces_keeps_distinct_entries_for_same_name() {
                 }],
             },
             Marketplace {
-                name: "codex-curated".to_string(),
+                name: "crewon-curated".to_string(),
                 path: AbsolutePathBuf::try_from(repo_marketplace.clone()).unwrap(),
                 interface: None,
                 plugins: vec![MarketplacePlugin {
@@ -788,7 +788,7 @@ fn list_marketplaces_dedupes_multiple_roots_in_same_repo() {
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "local-plugin",
@@ -815,7 +815,7 @@ fn list_marketplaces_dedupes_multiple_roots_in_same_repo() {
     assert_eq!(
         marketplaces,
         vec![Marketplace {
-            name: "codex-curated".to_string(),
+            name: "crewon-curated".to_string(),
             path: AbsolutePathBuf::try_from(repo_root.join(".agents/plugins/marketplace.json"))
                 .unwrap(),
             interface: None,
@@ -1161,11 +1161,11 @@ fn list_marketplaces_resolves_plugin_interface_paths_to_absolute() {
     let plugin_root = repo_root.join("plugins/demo-plugin");
     fs::create_dir_all(repo_root.join(".git")).unwrap();
     fs::create_dir_all(repo_root.join(".agents/plugins")).unwrap();
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).unwrap();
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "demo-plugin",
@@ -1185,7 +1185,7 @@ fn list_marketplaces_resolves_plugin_interface_paths_to_absolute() {
     )
     .unwrap();
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{
   "name": "demo-plugin",
   "interface": {
@@ -1217,7 +1217,7 @@ fn list_marketplaces_resolves_plugin_interface_paths_to_absolute() {
     );
     assert_eq!(
         marketplaces[0].plugins[0].policy.products,
-        Some(vec![Product::Codex, Product::Chatgpt, Product::Atlas])
+        Some(vec![Product::Crewon, Product::Chatgpt, Product::Atlas])
     );
     assert_eq!(
         marketplaces[0].plugins[0].interface,
@@ -1254,7 +1254,7 @@ fn list_marketplaces_ignores_legacy_top_level_policy_fields() {
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "demo-plugin",
@@ -1296,11 +1296,11 @@ fn list_marketplaces_ignores_plugin_interface_assets_without_dot_slash() {
 
     fs::create_dir_all(repo_root.join(".git")).unwrap();
     fs::create_dir_all(repo_root.join(".agents/plugins")).unwrap();
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).unwrap();
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "demo-plugin",
@@ -1314,7 +1314,7 @@ fn list_marketplaces_ignores_plugin_interface_assets_without_dot_slash() {
     )
     .unwrap();
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{
   "name": "demo-plugin",
   "interface": {
@@ -1374,7 +1374,7 @@ fn find_marketplace_plugin_skips_invalid_local_paths() {
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "local-plugin",
@@ -1396,7 +1396,7 @@ fn find_marketplace_plugin_skips_invalid_local_paths() {
 
     assert_eq!(
         err.to_string(),
-        "plugin `local-plugin` was not found in marketplace `codex-curated`"
+        "plugin `local-plugin` was not found in marketplace `crewon-curated`"
     );
 }
 
@@ -1409,7 +1409,7 @@ fn find_marketplace_plugin_uses_first_duplicate_entry() {
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "local-plugin",
@@ -1453,7 +1453,7 @@ fn find_installable_marketplace_plugin_rejects_disallowed_product() {
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "chatgpt-plugin",
@@ -1479,7 +1479,7 @@ fn find_installable_marketplace_plugin_rejects_disallowed_product() {
 
     assert_eq!(
         err.to_string(),
-        "plugin `chatgpt-plugin` is not available for install in marketplace `codex-curated`"
+        "plugin `chatgpt-plugin` is not available for install in marketplace `crewon-curated`"
     );
 }
 
@@ -1492,7 +1492,7 @@ fn find_marketplace_plugin_allows_missing_products_field() {
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "default-plugin",
@@ -1513,7 +1513,7 @@ fn find_marketplace_plugin_allows_missing_products_field() {
     )
     .unwrap();
 
-    assert_eq!(resolved.plugin_id.as_key(), "default-plugin@codex-curated");
+    assert_eq!(resolved.plugin_id.as_key(), "default-plugin@crewon-curated");
 }
 
 #[test]
@@ -1525,7 +1525,7 @@ fn find_installable_marketplace_plugin_rejects_explicit_empty_products() {
     fs::write(
         repo_root.join(".agents/plugins/marketplace.json"),
         r#"{
-  "name": "codex-curated",
+  "name": "crewon-curated",
   "plugins": [
     {
       "name": "disabled-plugin",
@@ -1545,12 +1545,12 @@ fn find_installable_marketplace_plugin_rejects_explicit_empty_products() {
     let err = find_installable_marketplace_plugin(
         &AbsolutePathBuf::try_from(repo_root.join(".agents/plugins/marketplace.json")).unwrap(),
         "disabled-plugin",
-        Some(Product::Codex),
+        Some(Product::Crewon),
     )
     .unwrap_err();
 
     assert_eq!(
         err.to_string(),
-        "plugin `disabled-plugin` is not available for install in marketplace `codex-curated`"
+        "plugin `disabled-plugin` is not available for install in marketplace `crewon-curated`"
     );
 }

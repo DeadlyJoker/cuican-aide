@@ -1,0 +1,46 @@
+{
+  "schemaVersion": "crewon.trace.v0",
+  "caseId": "AR-009-content-filter-incomplete",
+  "events": [
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 1,
+      "type": "model.output.delta",
+      "identity": {
+        "turnSlot": "first"
+      },
+      "data": {
+        "delta": "continued chunk"
+      }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 2,
+      "type": "turn.failed",
+      "identity": {
+        "turnSlot": "first"
+      },
+      "data": {
+        "code": "responses_incomplete_content_filter",
+        "retryable": false
+      }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 3,
+      "type": "turn.released",
+      "identity": {
+        "turnSlot": "first"
+      },
+      "data": {
+        "workItemSettled": true
+      }
+    }
+  ],
+  "finalState": {
+    "status": "failed",
+    "requestCount": 1,
+    "assistantMessageCommitted": false,
+    "pendingWorkItems": 0
+  }
+}

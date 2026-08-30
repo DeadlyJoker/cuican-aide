@@ -1,10 +1,10 @@
 use super::AgentControl;
-use codex_protocol::ThreadId;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result as CodexResult;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::SessionSource;
+use crewon_protocol::ThreadId;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result as CrewonResult;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::SessionSource;
 use std::sync::Arc;
 use std::sync::OnceLock;
 use std::sync::atomic::AtomicUsize;
@@ -31,16 +31,16 @@ impl AgentControl {
         &self,
         thread_id: ThreadId,
         op: &Op,
-    ) -> CodexResult<()> {
+    ) -> CrewonResult<()> {
         if !op_starts_turn(op) {
             return Ok(());
         }
         let state = self.upgrade()?;
         let thread = state.get_thread(thread_id).await?;
-        if thread.codex.session.active_turn.lock().await.is_some() {
+        if thread.engine.session.active_turn.lock().await.is_some() {
             return Ok(());
         }
-        let config = thread.codex.session.get_config().await;
+        let config = thread.engine.session.get_config().await;
         let multi_agent_version = thread
             .multi_agent_version()
             .unwrap_or_else(|| config.multi_agent_version_from_features());
@@ -51,7 +51,7 @@ impl AgentControl {
         &self,
         multi_agent_version: MultiAgentVersion,
         session_source: &SessionSource,
-    ) -> CodexResult<()> {
+    ) -> CrewonResult<()> {
         if !is_execution_limited(multi_agent_version, session_source) {
             return Ok(());
         }

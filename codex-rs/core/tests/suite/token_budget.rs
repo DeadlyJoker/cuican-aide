@@ -1,8 +1,4 @@
 use anyhow::Result;
-use codex_features::Feature;
-use codex_model_provider_info::built_in_model_providers;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use core_test_support::PathBufExt;
 use core_test_support::context_snapshot;
 use core_test_support::context_snapshot::ContextSnapshotOptions;
@@ -16,9 +12,13 @@ use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::local;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::local;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_features::Feature;
+use crewon_model_provider_info::built_in_model_providers;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -58,7 +58,7 @@ async fn token_budget_context_is_only_emitted_with_full_context() -> Result<()> 
         ],
     )
     .await;
-    let test = test_codex()
+    let test = test_crewon()
         .with_config(|config| {
             config.model_context_window = Some(CONFIGURED_CONTEXT_WINDOW);
             config
@@ -124,7 +124,7 @@ async fn token_budget_remaining_context_emits_on_first_threshold_crossing() -> R
         ],
     )
     .await;
-    let test = test_codex()
+    let test = test_crewon()
         .with_config(|config| {
             config.model_context_window = Some(10_000);
             config
@@ -206,7 +206,7 @@ async fn get_context_remaining_returns_token_budget_remaining_fragment() -> Resu
         ],
     )
     .await;
-    let test = test_codex()
+    let test = test_crewon()
         .with_config(|config| {
             config.model_context_window = Some(10_000);
             config
@@ -268,7 +268,7 @@ async fn get_context_remaining_returns_unknown_when_window_is_unavailable() -> R
         ],
     )
     .await;
-    let test = test_codex()
+    let test = test_crewon()
         .with_model_info_override("gpt-5.2", |model_info| {
             model_info.context_window = None;
             model_info.max_context_window = None;
@@ -333,7 +333,7 @@ async fn token_budget_context_uses_new_window_after_compaction() -> Result<()> {
     model_provider.base_url = Some(format!("{}/v1", server.uri()));
     model_provider.supports_websockets = false;
 
-    let test = test_codex()
+    let test = test_crewon()
         .with_config(move |config| {
             config.model_provider = model_provider;
             config.model_context_window = Some(CONFIGURED_CONTEXT_WINDOW);
@@ -346,8 +346,8 @@ async fn token_budget_context_uses_new_window_after_compaction() -> Result<()> {
         .await?;
 
     test.submit_turn("before compact").await?;
-    test.codex.submit(Op::Compact).await?;
-    wait_for_event(&test.codex, |event| {
+    test.crewon.submit(Op::Compact).await?;
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -401,7 +401,7 @@ async fn new_context_tool_starts_new_window_before_follow_up() -> Result<()> {
         ],
     )
     .await;
-    let test = test_codex()
+    let test = test_crewon()
         .with_config(|config| {
             config.model_context_window = Some(CONFIGURED_CONTEXT_WINDOW);
             config

@@ -1,0 +1,63 @@
+{
+  "caseId": "AR-034-responses-completed-without-output",
+  "invariant": "A response.completed terminal may omit the redundant final output snapshot; streamed output, usage, response identity, and successful terminal state remain unchanged.",
+  "events": [
+    {
+      "type": "response.created",
+      "sequence_number": 0,
+      "response": { "id": "resp-without-final-output" }
+    },
+    {
+      "type": "response.output_text.delta",
+      "sequence_number": 1,
+      "delta": "streamed answer"
+    },
+    {
+      "type": "response.output_item.done",
+      "sequence_number": 2,
+      "item": {
+        "type": "message",
+        "role": "assistant",
+        "content": [{ "type": "output_text", "text": "streamed answer" }]
+      }
+    },
+    {
+      "type": "response.completed",
+      "sequence_number": 3,
+      "response": {
+        "id": "resp-without-final-output",
+        "status": "completed",
+        "usage": {
+          "input_tokens": 4,
+          "input_tokens_details": { "cached_tokens": 1 },
+          "output_tokens": 2,
+          "total_tokens": 6
+        }
+      }
+    }
+  ],
+  "expected": {
+    "terminal": true,
+    "responseId": "resp-without-final-output",
+    "stableEvents": [
+      "output.delta",
+      "output.item.completed",
+      "usage",
+      "completed"
+    ],
+    "output": "streamed answer",
+    "completedItem": {
+      "type": "message",
+      "role": "assistant",
+      "content": "streamed answer"
+    },
+    "usage": {
+      "inputTokens": 4,
+      "cachedInputTokens": 1,
+      "outputTokens": 2,
+      "totalTokens": 6
+    },
+    "errorCategory": null,
+    "retryable": null
+  }
+}

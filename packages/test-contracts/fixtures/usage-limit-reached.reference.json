@@ -1,0 +1,64 @@
+{
+  "schemaVersion": "crewon.trace.v0",
+  "caseId": "AR-008-usage-limit-reached",
+  "events": [
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 1,
+      "type": "rate_limit.updated",
+      "identity": {
+        "turnSlot": "first"
+      },
+      "data": {
+        "snapshot": {
+          "limitId": "codex",
+          "limitName": null,
+          "primary": {
+            "usedPercent": 100.0,
+            "windowMinutes": 15,
+            "resetsAt": null
+          },
+          "secondary": {
+            "usedPercent": 87.5,
+            "windowMinutes": 60,
+            "resetsAt": null
+          },
+          "credits": null,
+          "individualLimit": null,
+          "planType": null,
+          "rateLimitReachedType": null
+        }
+      }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 2,
+      "type": "turn.failed",
+      "identity": {
+        "turnSlot": "first"
+      },
+      "data": {
+        "code": "responses_usage_limit_reached",
+        "retryable": false
+      }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 3,
+      "type": "turn.released",
+      "identity": {
+        "turnSlot": "first"
+      },
+      "data": {
+        "workItemSettled": true
+      }
+    }
+  ],
+  "finalState": {
+    "status": "failed",
+    "requestCount": 1,
+    "samplingRetries": 0,
+    "assistantMessageCommitted": false,
+    "pendingWorkItems": 0
+  }
+}

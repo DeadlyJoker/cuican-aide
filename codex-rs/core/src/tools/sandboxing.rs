@@ -11,22 +11,22 @@ use crate::session::turn_context::TurnContext;
 use crate::state::SessionServices;
 use crate::tools::hook_names::HookToolName;
 use crate::tools::network_approval::NetworkApprovalSpec;
-use codex_network_proxy::NetworkProxy;
-use codex_protocol::approvals::ExecPolicyAmendment;
-use codex_protocol::approvals::NetworkApprovalContext;
-use codex_protocol::error::CodexErr;
-use codex_protocol::permissions::FileSystemSandboxKind;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::ReviewDecision;
-use codex_sandboxing::SandboxCommand;
-use codex_sandboxing::SandboxManager;
-use codex_sandboxing::SandboxTransformError;
-use codex_sandboxing::SandboxTransformRequest;
-use codex_sandboxing::SandboxType;
-use codex_sandboxing::SandboxablePreference;
-use codex_tools::ToolName;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_network_proxy::NetworkProxy;
+use crewon_protocol::approvals::ExecPolicyAmendment;
+use crewon_protocol::approvals::NetworkApprovalContext;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::permissions::FileSystemSandboxKind;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::ReviewDecision;
+use crewon_sandboxing::SandboxCommand;
+use crewon_sandboxing::SandboxManager;
+use crewon_sandboxing::SandboxTransformError;
+use crewon_sandboxing::SandboxTransformRequest;
+use crewon_sandboxing::SandboxType;
+use crewon_sandboxing::SandboxablePreference;
+use crewon_tools::ToolName;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use futures::Future;
 use futures::future::BoxFuture;
 use serde::Serialize;
@@ -97,7 +97,7 @@ where
     let decision = fetch().await;
 
     services.session_telemetry.counter(
-        "codex.approval.requested",
+        "crewon.approval.requested",
         /*inc*/ 1,
         &[
             ("tool", tool_name),
@@ -164,7 +164,7 @@ pub(crate) enum ExecApprovalRequirement {
         /// greenlit by policy).
         bypass_sandbox: bool,
         /// Proposed execpolicy amendment to skip future approvals for similar commands
-        /// Only applies if the command fails to run in sandbox and codex prompts the user to run outside the sandbox.
+        /// Only applies if the command fails to run in sandbox and crewon prompts the user to run outside the sandbox.
         proposed_execpolicy_amendment: Option<ExecPolicyAmendment>,
     },
     /// Approval required for this tool call.
@@ -386,7 +386,7 @@ pub(crate) struct ToolCtx {
 #[derive(Debug)]
 pub(crate) enum ToolError {
     Rejected(String),
-    Codex(CodexErr),
+    Crewon(CodexErr),
 }
 
 pub(crate) trait ToolRuntime<Req, Out>: Approvable<Req> + Sandboxable {
@@ -408,14 +408,14 @@ pub(crate) trait ToolRuntime<Req, Out>: Approvable<Req> + Sandboxable {
 
 pub(crate) struct SandboxAttempt<'a> {
     pub sandbox: SandboxType,
-    pub permissions: &'a codex_protocol::models::PermissionProfile,
+    pub permissions: &'a crewon_protocol::models::PermissionProfile,
     pub enforce_managed_network: bool,
     pub(crate) manager: &'a SandboxManager,
     pub(crate) sandbox_cwd: &'a AbsolutePathBuf,
     pub(crate) workspace_roots: &'a [AbsolutePathBuf],
-    pub codex_linux_sandbox_exe: Option<&'a std::path::PathBuf>,
+    pub crewon_linux_sandbox_exe: Option<&'a std::path::PathBuf>,
     pub use_legacy_landlock: bool,
-    pub windows_sandbox_level: codex_protocol::config_types::WindowsSandboxLevel,
+    pub windows_sandbox_level: crewon_protocol::config_types::WindowsSandboxLevel,
     pub windows_sandbox_private_desktop: bool,
     pub network_denial_cancellation_token: Option<CancellationToken>,
 }
@@ -435,8 +435,8 @@ impl<'a> SandboxAttempt<'a> {
                 enforce_managed_network: self.enforce_managed_network,
                 network,
                 sandbox_policy_cwd: self.sandbox_cwd,
-                codex_linux_sandbox_exe: self
-                    .codex_linux_sandbox_exe
+                crewon_linux_sandbox_exe: self
+                    .crewon_linux_sandbox_exe
                     .map(std::path::PathBuf::as_path),
                 use_legacy_landlock: self.use_legacy_landlock,
                 windows_sandbox_level: self.windows_sandbox_level,
@@ -444,7 +444,7 @@ impl<'a> SandboxAttempt<'a> {
             })
             .map(|request| {
                 let windows_sandbox_policy_cwd =
-                    codex_utils_absolute_path::AbsolutePathBuf::try_from(
+                    crewon_utils_absolute_path::AbsolutePathBuf::try_from(
                         self.sandbox_cwd.to_path_buf(),
                     )
                     .unwrap_or_else(|_| request.cwd.clone());

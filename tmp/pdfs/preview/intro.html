@@ -1,0 +1,267 @@
+<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"><title>CrewON 智能工作平台</title><style>
+@page {
+  size: A4;
+  margin: 18mm 16mm 16mm 16mm;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "PingFang SC", "Helvetica Neue", "Hiragino Sans GB", sans-serif;
+  font-size: 10.2pt;
+  line-height: 1.75;
+  color: #1f2328;
+  -webkit-font-smoothing: antialiased;
+}
+h1, h2, h3, h4 { color: #0b1220; font-weight: 600; }
+h1 {
+  font-size: 26pt;
+  line-height: 1.3;
+  margin: 0 0 6mm;
+  letter-spacing: -0.5px;
+}
+h2 {
+  font-size: 15pt;
+  margin: 11mm 0 4mm;
+  padding-bottom: 2.4mm;
+  border-bottom: 1.6px solid #0b1220;
+  break-after: avoid;
+}
+h3 {
+  font-size: 11.6pt;
+  margin: 7mm 0 2.6mm;
+  break-after: avoid;
+}
+p { margin: 0 0 3.2mm; }
+strong { color: #0b1220; font-weight: 600; }
+ul { margin: 0 0 3.6mm; padding-left: 5.4mm; }
+li { margin: 0 0 1.4mm; }
+hr {
+  border: none;
+  border-top: 1px solid #e3e6ea;
+  margin: 8mm 0;
+}
+blockquote {
+  margin: 4mm 0 5mm;
+  padding: 4mm 5mm;
+  background: #f5f7f9;
+  border-left: 3px solid #0b1220;
+  font-size: 11pt;
+  color: #0b1220;
+}
+blockquote p { margin: 0; }
+code {
+  font-family: ui-monospace, Menlo, monospace;
+  font-size: 9pt;
+  background: #f1f3f5;
+  padding: 0.4mm 1.2mm;
+  border-radius: 2px;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 4mm 0 6mm;
+  font-size: 9.2pt;
+  break-inside: avoid;
+}
+th, td {
+  border: 1px solid #dfe3e8;
+  padding: 2.4mm 2.8mm;
+  text-align: left;
+  vertical-align: top;
+}
+th {
+  background: #f5f7f9;
+  font-weight: 600;
+  color: #0b1220;
+}
+tbody tr:nth-child(even) td { background: #fafbfc; }
+figure {
+  margin: 5mm 0 6mm;
+  break-inside: avoid;
+}
+figure img {
+  width: 100%;
+  display: block;
+  border: 1px solid #e3e6ea;
+  border-radius: 3px;
+}
+figcaption {
+  margin-top: 2mm;
+  font-size: 8.4pt;
+  color: #6b7280;
+  text-align: center;
+}
+.cover {
+  height: 246mm;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  break-after: page;
+  text-align: left;
+}
+.cover .mark {
+  width: 15mm;
+  height: 15mm;
+  border-radius: 4mm;
+  background: #0b1220;
+  color: #fff;
+  font-size: 20pt;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 9mm;
+}
+.cover h1 { font-size: 34pt; margin-bottom: 4mm; }
+.cover .tagline {
+  font-size: 15pt;
+  color: #374151;
+  margin: 0 0 12mm;
+  font-weight: 400;
+}
+.cover .toc {
+  border-top: 1px solid #e3e6ea;
+  padding-top: 6mm;
+  font-size: 10pt;
+  color: #4b5563;
+  columns: 2;
+  column-gap: 12mm;
+}
+.cover .toc div { margin-bottom: 2.2mm; break-inside: avoid; }
+.cover .meta {
+  margin-top: 14mm;
+  font-size: 9pt;
+  color: #9ca3af;
+}
+.contact-block {
+  margin-top: 10mm;
+  padding: 7mm;
+  background: #f5f7f9;
+  border-radius: 4px;
+  break-inside: avoid;
+}
+.contact-block h3 { margin-top: 0; }
+.contact-block p:last-child { margin-bottom: 0; }
+section.body h2:first-of-type { margin-top: 0; }
+</style></head><body><section class="cover"><div class="mark">C</div><h1>CrewON 智能工作平台</h1><p class="tagline">让 AI 真正替你把工作做完</p><div class="toc"><div>一、我们解决什么问题</div><div>二、CrewON 是什么</div><div>三、与常见 AI 工具的区别</div><div>四、核心能力</div><div>五、安全与治理</div><div>六、技术特点</div><div>七、典型应用场景</div><div>八、产品成熟度</div><div>九、发展方向</div><div>十、总结</div></div><p class="meta">产品介绍 · 2026 年 8 月</p></section><section class="body"><hr>
+<h2>一、我们解决什么问题</h2>
+<p>今天大部分企业已经用上了 AI 对话工具。但真实的工作场景里，员工仍然要做这些事：</p>
+<ul><li>把 AI 给的答案手动复制到文档、表格、邮件里</li><li>自己去翻文件、找数据、跑命令、核对结果</li><li>遇到多环节的复杂任务，AI 帮不上忙，只能人来拆解和推进</li><li>换个同事、换台电脑，之前的工作上下文全部丢失</li></ul>
+<p><strong>问题的本质是：AI 能"回答"，但不能"完成"。</strong></p>
+<p>CrewON 要做的，是把 AI 从一个回答问题的窗口，变成一个能真正进入工作流程、完成交付、并且过程可查可控的工作伙伴。</p>
+<figure><img src="assets/01-home.jpg" alt="CrewON 统一任务工作台"><figcaption>CrewON 统一任务工作台</figcaption></figure>
+<hr>
+<h2>二、CrewON 是什么</h2>
+<p>CrewON 是一款面向个人、专业团队和企业协作的智能工作平台。</p>
+<p>用一句话概括：</p>
+<blockquote><p><strong>你描述目标，CrewON 组织能力去完成，并把成果、过程和依据一并交给你。</strong></p></blockquote>
+<p>它把大模型、企业知识、办公工具、代码仓库、设计资产、外部系统连接器统一组织到一个任务入口里。用户不需要学习提示词技巧，也不需要在多个工具之间来回搬运信息。</p>
+<h3>三类核心工作场景</h3>
+<table><thead><tr><th>场景</th><th>用户输入什么</th><th>CrewON 交付什么</th></tr></thead><tbody><tr><td><strong>日常办公</strong></td><td>"整理今天的项目事项，安排会议、跟进阻塞，并把结论写入知识库"</td><td>项目汇报、会议材料、行动项清单、知识条目</td></tr><tr><td><strong>生码</strong></td><td>"读取当前仓库规则，实现这个功能并运行适用测试"</td><td>代码改动、测试证据、审阅发现、可定位的验证结果</td></tr><tr><td><strong>设计创意</strong></td><td>"基于这个 Brief 探索三个方向，并制作可预览的页面方案"</td><td>设计方向、页面与组件、视觉资产、交付说明</td></tr></tbody></table>
+<p>每个场景有各自的任务方式、上下文对象和完成标准，不是简单换个提示词模板。</p>
+<figure><img src="assets/02-coding.jpg" alt="生码场景"><figcaption>生码场景</figcaption></figure>
+<figure><img src="assets/03-design.jpg" alt="设计创意场景"><figcaption>设计创意场景</figcaption></figure>
+<hr>
+<h2>三、CrewON 与常见 AI 工具的区别</h2>
+<p>以下对比用于说明产品定位，不代表对任何具体厂商最新版本的功能评测。</p>
+<table><thead><tr><th>维度</th><th>通用对话助手</th><th>低代码 Agent 平台</th><th>代码智能助手</th><th><strong>CrewON</strong></th></tr></thead><tbody><tr><td>用户做什么</td><td>提问、复制答案</td><td>搭建并发布 AI 应用</td><td>在 IDE 里写代码</td><td><strong>描述目标，收结果</strong></td></tr><tr><td>能否操作真实文件</td><td>通常不能</td><td>依赖节点配置</td><td>可以</td><td><strong>文件、终端、Git、浏览器统一接入</strong></td></tr><tr><td>多环节复杂任务</td><td>需要人来拆解</td><td>需要预先画好流程</td><td>单任务为主</td><td><strong>主控 Agent 自动拆解、分工、验收</strong></td></tr><tr><td>工作上下文保留</td><td>仅对话历史</td><td>仅应用配置</td><td>仅当前仓库</td><td><strong>任务、空间、资源、产物与长期记忆</strong></td></tr><tr><td>结果可信度</td><td>无法核对</td><td>看日志</td><td>看 diff</td><td><strong>过程、证据、来源、审批记录全程可查</strong></td></tr><tr><td>交付形态</td><td>一段文本</td><td>一个应用</td><td>代码改动</td><td><strong>文档、代码、设计资产、报告与验证证据</strong></td></tr></tbody></table>
+<p><strong>关键差异有三点：</strong></p>
+<ol><li><strong>不只是回答，而是完成。</strong> CrewON 会真的去读文件、跑命令、调用外部系统，然后把成果交给你。</li><li><strong>不只是单个助手，而是一个团队。</strong> 复杂任务可以交给"办公室"，由主控 Agent 组织多个成员分工执行、互相验收。</li><li><strong>不只是给结果，而是给依据。</strong> 每一次执行都有过程记录、工具调用轨迹、产物来源和审批痕迹。</li></ol>
+<hr>
+<h2>四、核心能力</h2>
+<h3>4.1 一个入口，完成所有工作</h3>
+<p>用户只需要在一个输入框里描述目标，可以附加文件、图片、工作空间和能力资源，选择模型和执行主体，然后开始任务。</p>
+<figure><img src="assets/09-composer.jpg" alt="统一任务输入"><figcaption>统一任务输入</figcaption></figure>
+<p>任务开始后，CrewON 会实时展示它在做什么：推理过程、工具调用、需要确认的操作、产生的文件。用户随时知道进展到哪里，而不是干等一段最终文本。</p>
+<figure><img src="assets/10-running.jpg" alt="实时执行过程"><figcaption>实时执行过程</figcaption></figure>
+<h3>4.2 真实执行，不是模拟</h3>
+<p>CrewON 在权限和沙箱约束下可以：</p>
+<ul><li>读取、创建、修改工作区文件</li><li>在受控环境中运行命令并返回结构化结果</li><li>读取仓库状态、分析变更、辅助代码审阅</li><li>访问网页、外部应用和企业系统</li><li>检索企业知识和历史结论</li></ul>
+<h3>4.3 结果可交付、可核对</h3>
+<p>任务完成后交付的不是一段描述，而是结构化的、可以直接使用的成果，并附带过程依据。</p>
+<figure><img src="assets/11-result.jpg" alt="结构化交付结果"><figcaption>结构化交付结果</figcaption></figure>
+<h3>4.4 丰富的现成能力，开箱可用</h3>
+<p>CrewON 内置了大量可直接使用的专业技能和企业系统连接器，无需从零配置。</p>
+<p><strong>专业技能</strong>：文档生成、演示文稿制作、表格分析、邮件处理、会议助手、知识整理、网页调研、金融研究、新闻简报、问卷设计、行程规划、长文写作、发布与 CI 等。</p>
+<figure><img src="assets/05-skills.jpg" alt="专业技能库"><figcaption>专业技能库</figcaption></figure>
+<p><strong>企业系统连接器</strong>：企业微信、飞书、钉钉、腾讯文档、腾讯会议、金山文档、TAPD、CNB、腾讯微云、ima 知识库、QQ 邮箱、腾讯地图、腾讯新闻，以及 GitHub、Notion、Figma、Sentry 等常用外部服务。</p>
+<figure><img src="assets/06-services.jpg" alt="企业系统连接器"><figcaption>企业系统连接器</figcaption></figure>
+<p>企业也可以把内部方法沉淀为自定义技能、把内部系统封装为连接器，在不同任务和团队中复用。</p>
+<h3>4.5 智能体：从通用助手到专业角色</h3>
+<p>用户既可以使用 CrewON 默认智能体处理通用任务，也可以配置专业智能体：指定角色定位、模型、工作指令、权限范围和可用能力。</p>
+<figure><img src="assets/04-agents.jpg" alt="智能体管理"><figcaption>智能体管理</figcaption></figure>
+<h3>4.6 团队协作：复杂任务交给"办公室"</h3>
+<p>对于持续推进、需要分工和验收的复杂任务，用户可以进入"办公室"：</p>
+<ul><li>一个主控 Agent 负责理解目标、制定计划、拆解任务</li><li>按角色把工作委派给不同成员，成员各自独立执行</li><li>成员只回传结论、证据和产物，不把过程噪音倒进主会话</li><li>验收失败时主控 Agent 重新规划；需要人工决策时任务进入等待</li><li>全过程的任务、委派、审批和成果都被记录，可随时恢复</li></ul>
+<p>用户始终通过一条主会话掌握目标、进度、审批和最终结果，不需要在多个对话里来回切换。</p>
+<h3>4.7 企业知识与记忆</h3>
+<p>CrewON 可以引用企业知识库、工作空间知识文件和历史结论，把重要结果沉淀下来供后续任务使用。</p>
+<p>记忆内容区分"待确认""已接受""已拒绝"三种状态，只有经过确认的内容才会进入后续任务的上下文，避免错误信息扩散。</p>
+<h3>4.8 自动化与日程</h3>
+<p>固定重复的工作可以保存为自动化：设定任务内容、执行主体、触发时间和交付方式，CrewON 按计划自动执行并把结果发给你。</p>
+<figure><img src="assets/07-schedule.jpg" alt="日程与自动化"><figcaption>日程与自动化</figcaption></figure>
+<p>典型用法：每天早上汇总项目进展和阻塞项、每周生成周报、定期巡检项目状态。</p>
+<hr>
+<h2>五、安全与治理</h2>
+<p>企业采用 AI 工具最关心的是可控性。CrewON 在这一点上的设计原则很明确。</p>
+<h3>5.1 权限与审批内建</h3>
+<ul><li>涉及文件写入、命令执行、外部发送、发布或删除等有副作用的操作，平台可以要求人工确认</li><li>审批绑定具体的动作和参数；任务内容变化后，旧的批准不会被沿用</li><li>本地命令和工具执行受沙箱隔离约束</li></ul>
+<h3>5.2 身份与边界由服务端裁定</h3>
+<p>用户身份、所属空间、可访问资源和执行权限全部由服务端解析和校验。客户端只能提交用户的选择，不能自行声明权限结果。</p>
+<h3>5.3 数据不被误当成指令</h3>
+<p>工具返回内容、外部知识和用户文件默认作为不可信数据处理，不会被直接当作系统指令执行。敏感内容和密钥不会被无限写入日志。</p>
+<h3>5.4 结果可追溯</h3>
+<p>每个任务产物都记录来源：来自哪个任务、哪次运行、哪个成员、哪个文件路径或外部引用，并可附带摘要和验证状态。界面只展示真实发生的执行事件，不用前端动画假装进度。</p>
+<hr>
+<h2>六、技术特点</h2>
+<p>以下内容面向关注技术架构的读者，业务读者可以跳过。</p>
+<h3>6.1 统一后端，多端一致</h3>
+<p>PC、Web 客户端共用同一套后端服务、执行运行时和任务状态。客户端只负责交互和呈现，核心任务语义、权限和运行状态由共享后端维护。这意味着不同端上看到的是同一份事实，不会出现状态分裂。</p>
+<h3>6.2 单智能体与团队协作共用同一套运行时</h3>
+<p>普通任务和办公室成员任务复用同一套模型调用、工具执行、审批和沙箱机制，不存在第二套推理逻辑。这降低了行为不一致和维护成本。</p>
+<h3>6.3 上下文有边界、可恢复</h3>
+<ul><li>任务历史增量保存，不做重写，保证上下文稳定</li><li>进入模型的每一类内容都有来源标记、信任级别和容量上限</li><li>长内容通过文件和产物引用传递，不直接堆进对话</li><li>服务重启后可以从持久化状态恢复未完成的工作</li></ul>
+<h3>6.4 本地与云端协同</h3>
+<p>CrewON 可以使用本地文件、Git、终端和执行环境，也可以通过企业平台接入云端智能体、远程工具和知识资源。云端能力采用明确的资源绑定和服务端授权，模型密钥和权威身份不会下发到浏览器。</p>
+<h3>6.5 开放标准</h3>
+<p>CrewON 兼容 Model Context Protocol（MCP），可以连接本地或远程的 MCP 服务。企业已有的内部系统可以通过标准协议接入，不需要为 CrewON 做定制改造。</p>
+<hr>
+<h2>七、典型应用场景</h2>
+<h3>研发任务闭环</h3>
+<p>从需求或 Issue 开始，读取仓库规则和现有代码，制定实施计划、完成修改、运行测试、检查变更，输出验证结果和审阅说明。</p>
+<h3>项目运营与汇报</h3>
+<p>汇总工作空间文件、日程、知识和任务信息，整理进展、风险、责任人和下一步，生成可直接使用的项目汇报或会议材料。</p>
+<h3>专业团队协作</h3>
+<p>在办公室中配置产品、研发、测试、运营等角色，由主控 Agent 拆分工作、委派成员、汇总证据，验收失败时重新规划。</p>
+<h3>设计与交付</h3>
+<p>根据 Brief 和参考资料探索设计方向，生成页面与视觉资产，完成走查并输出交付说明。</p>
+<h3>能力资产复用</h3>
+<p>把团队方法沉淀为技能，把内部系统封装为连接器，在不同智能体、团队和任务中反复使用，让经验成为组织资产。</p>
+<h3>自动化巡检与跟进</h3>
+<p>把固定的检查和汇总工作保存为自动化，定期执行、生成摘要、提醒需要人工处理的事项。</p>
+<hr>
+<h2>八、产品成熟度</h2>
+<p>我们希望对交付状态保持透明。</p>
+<table><thead><tr><th>状态</th><th>能力</th></tr></thead><tbody><tr><td><strong>已可用</strong></td><td>统一任务工作台、单智能体执行、三类工作场景、文件/终端/Git 等工作区能力、技能与连接器体系、企业知识引用、办公室协作与任务委派、审批与产物管理、PC 与 Web 端</td></tr><tr><td><strong>依部署配置可用</strong></td><td>企业平台账号与资源目录、云端智能体、企业统一认证、远程执行环境、自动化定时运行、浏览器与外部应用接入</td></tr><tr><td><strong>持续完善中</strong></td><td>办公室运行时统一、自动化与日程恢复能力、多端体验一致性、运维与可观测能力</td></tr><tr><td><strong>规划中</strong></td><td>协作流编排、专家团模式、移动端完整产品、跨设备云端持续运行</td></tr></tbody></table>
+<p>"依部署配置可用"指的是能力已经实现，但需要企业侧提供相应的账号、密钥、网络或权限配置后才能启用。</p>
+<hr>
+<h2>九、发展方向</h2>
+<h3>第一阶段：统一工作平台体验</h3>
+<p>持续完善三类工作场景的执行能力，统一智能体、技能、连接器、知识和外部资源的发现与使用体验，优化 PC 与 Web 端的一致性。</p>
+<h3>第二阶段：协作与自动化闭环</h3>
+<p>把办公室迁移到更清晰的统一任务运行时；完成协作流的阶段、节点、责任人和人工确认环节；完成专家团模式；增强自动化、日程、后台恢复、失败重试和通知交付。</p>
+<h3>第三阶段：多端与企业能力</h3>
+<p>完善移动端的任务查看、审批和提醒；完善企业统一认证、组织与空间权限；增强部署、监控、审计、成本和运维工具。</p>
+<h3>长期方向</h3>
+<p>在跨设备协作、后台持续运行和高并发任务形成真实需求并通过验证后，建设独立的云端执行能力；在云端智能体调用本地资源的需求明确并通过安全验证后，开放受控的本地桥接。</p>
+<p>我们的原则是：<strong>先验证真实需求，再投入建设</strong>，不为架构完美度做过度设计。</p>
+<hr>
+<h2>十、总结</h2>
+<p>CrewON 与通用聊天工具、单一代码助手和低代码搭建平台的区别在于：</p>
+<ul><li><strong>以任务为入口</strong>，而不是以对话或流程编辑器为入口</li><li><strong>以真实执行为核心</strong>，而不是以生成文本为核心</li><li><strong>以智能体和团队为组织方式</strong>，而不是靠用户手动串联</li><li><strong>以技能、连接器、知识和企业资源为能力生态</strong>，而不是把逻辑固化在应用里</li><li><strong>以权限、上下文、产物和恢复机制为保障</strong>，让结果可信、过程可查</li></ul>
+<p>一句话：让智能体从"能够回答"，走向"能够安全、持续、可验证地完成工作"。</p>
+<hr>
+<div class="contact-block">
+<h3>了解更多</h3>
+<p>如需产品演示、试点方案或技术对接，欢迎与我们联系。</p>
+</div></section></body></html>

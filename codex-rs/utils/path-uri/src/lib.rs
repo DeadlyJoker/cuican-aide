@@ -2,7 +2,7 @@
 //!
 //! See [`PathUri`] for scheme, normalization, and serialization behavior.
 
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Deserializer;
@@ -23,7 +23,7 @@ pub const FILE_SCHEME: &str = "file";
 /// Only the `file:` scheme is currently accepted. Construction validates the
 /// URL, and the URI cannot be mutated after construction. [`Self::basename`],
 /// [`Self::parent`], and [`Self::join`] operate on URI path segments without
-/// interpreting them using the operating system running Codex.
+/// interpreting them using the operating system running Crewon.
 ///
 /// `file:` paths retain their URI spelling so they can be parsed independently
 /// of the current host. In particular, `/C:/src` remains ambiguous between a

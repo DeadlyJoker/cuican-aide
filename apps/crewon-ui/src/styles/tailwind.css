@@ -1,0 +1,38 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@theme {
+  /* Map to existing CSS variables so shadcn components pick up the current theme */
+  --color-background: var(--bg);
+  --color-foreground: var(--text);
+  --color-card: var(--surface);
+  --color-card-foreground: var(--text);
+  --color-popover: var(--surface-raised);
+  --color-popover-foreground: var(--text);
+  --color-primary: var(--accent);
+  --color-primary-foreground: var(--accent-strong);
+  --color-secondary: var(--accent-soft);
+  --color-secondary-foreground: var(--text);
+  --color-muted: var(--panel-subtle);
+  --color-muted-foreground: var(--text-muted);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-strong);
+  --color-destructive: var(--danger);
+  --color-destructive-foreground: #ffffff;
+  --color-border: var(--border);
+  --color-input: var(--border);
+  --color-ring: var(--focus);
+  --color-warning: var(--warning);
+  --color-success: var(--success);
+
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-xl: var(--radius-xl);
+
+  --font-sans: var(--user-ui-font, -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Segoe UI", system-ui, sans-serif);
+  --font-mono: var(--user-code-font, ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, Consolas, monospace);
+}
+
+/* Disable Tailwind preflight to avoid breaking existing global CSS.
+   We use Tailwind utilities only where explicitly applied. */

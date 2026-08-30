@@ -1,11 +1,11 @@
 [package]
-name = "codex-uds"
+name = "crewon-uds"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "codex_uds"
+name = "crewon_uds"
 path = "src/lib.rs"
 doctest = false
 

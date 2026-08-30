@@ -1,0 +1,12 @@
+load("//:defs.bzl", "crewon_rust_crate")
+
+crewon_rust_crate(
+    name = "otel",
+    crate_name = "crewon_otel",
+    integration_test_args = ["--test-threads=1"],
+)
+
+alias(
+    name = "crewon-otel",
+    actual = ":otel",
+)

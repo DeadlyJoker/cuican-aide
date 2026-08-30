@@ -1,27 +1,27 @@
 use std::sync::Arc;
 use std::sync::Weak;
 
-use codex_analytics::AnalyticsEventsClient;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::ThreadGoal;
-use codex_app_server_protocol::ThreadGoalUpdatedNotification;
-use codex_core::NewThread;
-use codex_core::StartThreadOptions;
-use codex_core::ThreadManager;
-use codex_core::config::Config;
-use codex_extension_api::AgentSpawnFuture;
-use codex_extension_api::AgentSpawner;
-use codex_extension_api::ExtensionEventSink;
-use codex_extension_api::ExtensionRegistry;
-use codex_extension_api::ExtensionRegistryBuilder;
-use codex_goal_extension::GoalService;
-use codex_login::AuthManager;
-use codex_protocol::ThreadId;
-use codex_protocol::error::CodexErr;
-use codex_protocol::protocol::Event;
-use codex_protocol::protocol::EventMsg;
-use codex_rollout::state_db::StateDbHandle;
-use codex_thread_store::ThreadStore;
+use crewon_analytics::AnalyticsEventsClient;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ThreadGoal;
+use crewon_app_server_protocol::ThreadGoalUpdatedNotification;
+use crewon_core::NewThread;
+use crewon_core::StartThreadOptions;
+use crewon_core::ThreadManager;
+use crewon_core::config::Config;
+use crewon_extension_api::AgentSpawnFuture;
+use crewon_extension_api::AgentSpawner;
+use crewon_extension_api::ExtensionEventSink;
+use crewon_extension_api::ExtensionRegistry;
+use crewon_extension_api::ExtensionRegistryBuilder;
+use crewon_goal_extension::GoalService;
+use crewon_login::AuthManager;
+use crewon_protocol::ThreadId;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::protocol::Event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_rollout::state_db::StateDbHandle;
+use crewon_thread_store::ThreadStore;
 
 use crate::outgoing_message::OutgoingMessageSender;
 use crate::thread_state::ThreadListenerCommand;
@@ -34,7 +34,7 @@ pub(crate) struct ThreadExtensionDependencies {
     pub(crate) analytics_events_client: AnalyticsEventsClient,
     pub(crate) thread_manager: Weak<ThreadManager>,
     pub(crate) goal_service: Arc<GoalService>,
-    pub(crate) executor_skill_provider: Arc<dyn codex_skills_extension::SkillProvider>,
+    pub(crate) executor_skill_provider: Arc<dyn crewon_skills_extension::SkillProvider>,
     /// Process-scoped persistence backend for extensions that need stored thread history.
     pub(crate) thread_store: Arc<dyn ThreadStore>,
 }
@@ -58,29 +58,29 @@ where
     } = dependencies;
     let mut builder = ExtensionRegistryBuilder::<Config>::with_event_sink(event_sink);
     if let Some(state_db) = state_db {
-        codex_goal_extension::install_with_backend(
+        crewon_goal_extension::install_with_backend(
             &mut builder,
             state_db,
             analytics_events_client,
-            codex_otel::global(),
+            crewon_otel::global(),
             thread_manager,
             goal_service,
-            |config: &Config| config.features.enabled(codex_features::Feature::Goals),
+            |config: &Config| config.features.enabled(crewon_features::Feature::Goals),
         );
     }
-    codex_guardian::install(&mut builder, guardian_agent_spawner);
-    codex_memories_extension::install(&mut builder, codex_otel::global());
-    codex_mcp_extension::install(&mut builder);
-    codex_web_search_extension::install(&mut builder, auth_manager.clone());
-    codex_image_generation_extension::install(&mut builder, auth_manager);
-    codex_skills_extension::install_with_providers(
+    crewon_guardian::install(&mut builder, guardian_agent_spawner);
+    crewon_memories_extension::install(&mut builder, crewon_otel::global());
+    crewon_mcp_extension::install(&mut builder);
+    crewon_web_search_extension::install(&mut builder, auth_manager.clone());
+    crewon_image_generation_extension::install(&mut builder, auth_manager);
+    crewon_skills_extension::install_with_providers(
         &mut builder,
-        codex_skills_extension::SkillProviders::new()
+        crewon_skills_extension::SkillProviders::new()
             .with_executor_provider(executor_skill_provider)
             .with_orchestrator_provider(Arc::new(
-                codex_skills_extension::OrchestratorSkillProvider::new(),
+                crewon_skills_extension::OrchestratorSkillProvider::new(),
             )),
-        |config: &Config| codex_skills_extension::SkillsExtensionConfig {
+        |config: &Config| crewon_skills_extension::SkillsExtensionConfig {
             include_instructions: config.include_skill_instructions,
             bundled_skills_enabled: config.bundled_skills_enabled(),
         },
@@ -167,9 +167,9 @@ pub(crate) fn guardian_agent_spawner(
 mod tests {
     use std::time::Duration;
 
-    use codex_protocol::protocol::ThreadGoal as CoreThreadGoal;
-    use codex_protocol::protocol::ThreadGoalStatus;
-    use codex_protocol::protocol::ThreadGoalUpdatedEvent;
+    use crewon_protocol::protocol::ThreadGoal as CoreThreadGoal;
+    use crewon_protocol::protocol::ThreadGoalStatus;
+    use crewon_protocol::protocol::ThreadGoalUpdatedEvent;
     use pretty_assertions::assert_eq;
     use tokio::sync::mpsc;
     use tokio::time::timeout;

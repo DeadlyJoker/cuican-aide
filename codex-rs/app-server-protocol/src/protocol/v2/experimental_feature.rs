@@ -41,7 +41,7 @@ pub enum ExperimentalFeatureStage {
 #[serde(rename_all = "camelCase")]
 #[ts(export_to = "v2/")]
 pub struct ExperimentalFeature {
-    /// Stable key used in config.toml and CLI flag toggles.
+    /// Stable key used in config.toml and feature enablement requests.
     pub name: String,
     /// Lifecycle stage of this feature flag.
     pub stage: ExperimentalFeatureStage,

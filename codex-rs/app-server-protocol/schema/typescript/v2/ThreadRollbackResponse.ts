@@ -7,8 +7,8 @@ export type ThreadRollbackResponse = {
 /**
  * The updated thread after applying the rollback, with `turns` populated.
  *
- * The ThreadItems stored in each Turn are lossy since we explicitly do not
- * persist all agent interactions, such as command executions. This is the same
- * behavior as `thread/resume`.
+ * The ThreadItems stored in each Turn are lossy for some interaction kinds.
+ * Agent command executions are retained (with truncated output); user-shell
+ * bang commands are still omitted. This matches `thread/resume`.
  */
 thread: Thread, };

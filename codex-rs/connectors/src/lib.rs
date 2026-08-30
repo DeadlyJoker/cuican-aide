@@ -5,9 +5,9 @@ use std::sync::Mutex as StdMutex;
 use std::time::Duration;
 use std::time::Instant;
 
-use codex_app_server_protocol::AppBranding;
-use codex_app_server_protocol::AppInfo;
-use codex_app_server_protocol::AppMetadata;
+use crewon_app_server_protocol::AppBranding;
+use crewon_app_server_protocol::AppInfo;
+use crewon_app_server_protocol::AppMetadata;
 use serde::Deserialize;
 use serde::Serialize;
 

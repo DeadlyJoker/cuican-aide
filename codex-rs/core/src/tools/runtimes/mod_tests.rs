@@ -6,26 +6,26 @@ use crate::shell::ShellType;
 use crate::shell_snapshot::ShellSnapshot;
 use crate::tools::sandboxing::SandboxAttempt;
 use crate::tools::sandboxing::managed_network_for_sandbox_permissions;
-#[cfg(target_os = "macos")]
-use codex_network_proxy::CODEX_PROXY_GIT_SSH_COMMAND_MARKER;
-use codex_network_proxy::CUSTOM_CA_ENV_KEYS;
-use codex_network_proxy::ConfigReloader;
-use codex_network_proxy::ConfigState;
-use codex_network_proxy::NetworkProxy;
-use codex_network_proxy::NetworkProxyConfig;
-use codex_network_proxy::NetworkProxyConstraints;
-use codex_network_proxy::NetworkProxyState;
-use codex_network_proxy::PROXY_ACTIVE_ENV_KEY;
-use codex_network_proxy::PROXY_ENV_KEYS;
-#[cfg(target_os = "macos")]
-use codex_network_proxy::PROXY_GIT_SSH_COMMAND_ENV_KEY;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::PermissionProfile;
-use codex_sandboxing::SandboxManager;
-use codex_sandboxing::SandboxType;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::PathBufExt;
 use core_test_support::PathExt;
+#[cfg(target_os = "macos")]
+use crewon_network_proxy::CREWON_PROXY_GIT_SSH_COMMAND_MARKER;
+use crewon_network_proxy::CUSTOM_CA_ENV_KEYS;
+use crewon_network_proxy::ConfigReloader;
+use crewon_network_proxy::ConfigState;
+use crewon_network_proxy::NetworkProxy;
+use crewon_network_proxy::NetworkProxyConfig;
+use crewon_network_proxy::NetworkProxyConstraints;
+use crewon_network_proxy::NetworkProxyState;
+use crewon_network_proxy::PROXY_ACTIVE_ENV_KEY;
+use crewon_network_proxy::PROXY_ENV_KEYS;
+#[cfg(target_os = "macos")]
+use crewon_network_proxy::PROXY_GIT_SSH_COMMAND_ENV_KEY;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::PermissionProfile;
+use crewon_sandboxing::SandboxManager;
+use crewon_sandboxing::SandboxType;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use std::path::PathBuf;
 use std::process::Command;
@@ -68,7 +68,7 @@ fn shell_with_snapshot(
 }
 
 async fn test_network_proxy() -> anyhow::Result<NetworkProxy> {
-    let state = codex_network_proxy::build_config_state(
+    let state = crewon_network_proxy::build_config_state(
         NetworkProxyConfig::default(),
         NetworkProxyConstraints::default(),
     )?;
@@ -77,7 +77,7 @@ async fn test_network_proxy() -> anyhow::Result<NetworkProxy> {
             state,
             Arc::new(StaticReloader),
         )))
-        .managed_by_codex(/*managed_by_codex*/ false)
+        .managed_by_crewon(/*managed_by_crewon*/ false)
         .http_addr("127.0.0.1:43128".parse()?)
         .socks_addr("127.0.0.1:48081".parse()?)
         .build()
@@ -113,7 +113,7 @@ async fn explicit_escalation_prepares_exec_without_managed_network() -> anyhow::
         manager: &manager,
         sandbox_cwd: &cwd,
         workspace_roots: std::slice::from_ref(&cwd),
-        codex_linux_sandbox_exe: None,
+        crewon_linux_sandbox_exe: None,
         use_legacy_landlock: false,
         windows_sandbox_level: WindowsSandboxLevel::Disabled,
         windows_sandbox_private_desktop: false,
@@ -172,16 +172,16 @@ fn runtime_path_prepends_records_runtime_path_prepend() {
     let mut env = HashMap::from([("PATH".to_string(), "/usr/bin:/bin".to_string())]);
     let mut runtime_path_prepends = RuntimePathPrepends::default();
 
-    runtime_path_prepends.prepend(&mut env, PathBuf::from("/package/codex-path").as_path());
+    runtime_path_prepends.prepend(&mut env, PathBuf::from("/package/crewon-path").as_path());
 
     assert_eq!(
         env.get("PATH").map(String::as_str),
-        Some("/package/codex-path:/usr/bin:/bin"),
+        Some("/package/crewon-path:/usr/bin:/bin"),
         "runtime PATH prepend should update the live exec environment"
     );
     assert_eq!(
         runtime_path_prepends.entries,
-        vec!["/package/codex-path"],
+        vec!["/package/crewon-path"],
         "runtime PATH prepend should be recorded for snapshot replay"
     );
 }
@@ -191,20 +191,20 @@ fn runtime_path_prepends_records_runtime_path_prepend() {
 fn runtime_path_prepends_drops_empty_path_entries() {
     let mut env = HashMap::from([(
         "PATH".to_string(),
-        ":/usr/bin:/package/codex-path::/bin:".to_string(),
+        ":/usr/bin:/package/crewon-path::/bin:".to_string(),
     )]);
     let mut runtime_path_prepends = RuntimePathPrepends::default();
 
-    runtime_path_prepends.prepend(&mut env, PathBuf::from("/package/codex-path").as_path());
+    runtime_path_prepends.prepend(&mut env, PathBuf::from("/package/crewon-path").as_path());
 
     assert_eq!(
         env.get("PATH").map(String::as_str),
-        Some("/package/codex-path:/usr/bin:/bin"),
+        Some("/package/crewon-path:/usr/bin:/bin"),
         "empty PATH entries should be dropped instead of preserving current-directory lookup"
     );
     assert_eq!(
         runtime_path_prepends.entries,
-        vec!["/package/codex-path"],
+        vec!["/package/crewon-path"],
         "deduped runtime PATH prepend should still be recorded once"
     );
 }
@@ -256,15 +256,15 @@ fn apply_zsh_fork_path_prepend_uses_shell_parent() {
     apply_zsh_fork_path_prepend(
         &mut env,
         &mut runtime_path_prepends,
-        PathBuf::from("/package/codex-resources/zsh/bin/zsh").as_path(),
+        PathBuf::from("/package/crewon-resources/zsh/bin/zsh").as_path(),
     );
 
-    let expected = "/package/codex-resources/zsh/bin:/usr/bin:/bin";
+    let expected = "/package/crewon-resources/zsh/bin:/usr/bin:/bin";
     assert_eq!(env.get("PATH").map(String::as_str), Some(expected));
     assert_eq!(
         runtime_path_prepends,
         RuntimePathPrepends {
-            entries: vec!["/package/codex-resources/zsh/bin".to_string()]
+            entries: vec!["/package/crewon-resources/zsh/bin".to_string()]
         }
     );
 }
@@ -274,7 +274,7 @@ fn apply_zsh_fork_path_prepend_uses_shell_parent() {
 fn apply_zsh_fork_path_prepend_moves_existing_shell_parent_to_front() {
     let mut env = HashMap::from([(
         "PATH".to_string(),
-        "/usr/bin:/package/codex-resources/zsh/bin:/bin:/package/codex-resources/zsh/bin"
+        "/usr/bin:/package/crewon-resources/zsh/bin:/bin:/package/crewon-resources/zsh/bin"
             .to_string(),
     )]);
     let mut runtime_path_prepends = RuntimePathPrepends::default();
@@ -282,17 +282,17 @@ fn apply_zsh_fork_path_prepend_moves_existing_shell_parent_to_front() {
     apply_zsh_fork_path_prepend(
         &mut env,
         &mut runtime_path_prepends,
-        PathBuf::from("/package/codex-resources/zsh/bin/zsh").as_path(),
+        PathBuf::from("/package/crewon-resources/zsh/bin/zsh").as_path(),
     );
 
     assert_eq!(
         env.get("PATH").map(String::as_str),
-        Some("/package/codex-resources/zsh/bin:/usr/bin:/bin")
+        Some("/package/crewon-resources/zsh/bin:/usr/bin:/bin")
     );
     assert_eq!(
         runtime_path_prepends,
         RuntimePathPrepends {
-            entries: vec!["/package/codex-resources/zsh/bin".to_string()]
+            entries: vec!["/package/crewon-resources/zsh/bin".to_string()]
         }
     );
 }
@@ -585,7 +585,7 @@ fn maybe_wrap_shell_lc_with_snapshot_restores_explicit_override_precedence() {
 }
 
 #[test]
-fn maybe_wrap_shell_lc_with_snapshot_restores_codex_thread_id_from_env() {
+fn maybe_wrap_shell_lc_with_snapshot_restores_crewon_thread_id_from_env() {
     let dir = tempdir().expect("create temp dir");
     let snapshot_path = dir.path().join("snapshot.sh");
     std::fs::write(
@@ -681,10 +681,10 @@ fn maybe_wrap_shell_lc_with_snapshot_refreshes_codex_proxy_git_ssh_command() {
     let dir = tempdir().expect("create temp dir");
     let snapshot_path = dir.path().join("snapshot.sh");
     let stale_command = format!(
-        "{CODEX_PROXY_GIT_SSH_COMMAND_MARKER}ssh -o ProxyCommand='nc -X 5 -x 127.0.0.1:8081 %h %p'"
+        "{CREWON_PROXY_GIT_SSH_COMMAND_MARKER}ssh -o ProxyCommand='nc -X 5 -x 127.0.0.1:8081 %h %p'"
     );
     let fresh_command = format!(
-        "{CODEX_PROXY_GIT_SSH_COMMAND_MARKER}ssh -o ProxyCommand='nc -X 5 -x 127.0.0.1:48081 %h %p'"
+        "{CREWON_PROXY_GIT_SSH_COMMAND_MARKER}ssh -o ProxyCommand='nc -X 5 -x 127.0.0.1:48081 %h %p'"
     );
     std::fs::write(
         &snapshot_path,
@@ -729,7 +729,7 @@ fn maybe_wrap_shell_lc_with_snapshot_restores_custom_git_ssh_command() {
     let dir = tempdir().expect("create temp dir");
     let snapshot_path = dir.path().join("snapshot.sh");
     let stale_command = format!(
-        "{CODEX_PROXY_GIT_SSH_COMMAND_MARKER}ssh -o ProxyCommand='nc -X 5 -x 127.0.0.1:8081 %h %p'"
+        "{CREWON_PROXY_GIT_SSH_COMMAND_MARKER}ssh -o ProxyCommand='nc -X 5 -x 127.0.0.1:8081 %h %p'"
     );
     let custom_command = "ssh -o ProxyCommand='tsh proxy ssh --cluster=dev %r@%h:%p'";
     std::fs::write(
@@ -775,7 +775,7 @@ fn maybe_wrap_shell_lc_with_snapshot_clears_stale_codex_git_ssh_command_without_
     let dir = tempdir().expect("create temp dir");
     let snapshot_path = dir.path().join("snapshot.sh");
     let stale_command = format!(
-        "{CODEX_PROXY_GIT_SSH_COMMAND_MARKER}ssh -o ProxyCommand='nc -X 5 -x 127.0.0.1:8081 %h %p'"
+        "{CREWON_PROXY_GIT_SSH_COMMAND_MARKER}ssh -o ProxyCommand='nc -X 5 -x 127.0.0.1:8081 %h %p'"
     );
     std::fs::write(
         &snapshot_path,
@@ -1040,7 +1040,7 @@ fn run_snapshot_path_probe_with_runtime_path_prepend(
         "-lc".to_string(),
         "printf '%s' \"$PATH\"".to_string(),
     ];
-    let package_path_dir = dir.path().join("codex-path");
+    let package_path_dir = dir.path().join("crewon-path");
     let mut env = HashMap::from([("PATH".to_string(), "/worktree/bin".to_string())]);
     let mut runtime_path_prepends = RuntimePathPrepends::default();
     runtime_path_prepends.prepend(&mut env, package_path_dir.as_path());
@@ -1090,7 +1090,7 @@ fn maybe_wrap_shell_lc_with_snapshot_preserves_zsh_fork_path_prepend() {
     ];
     let zsh_path = dir
         .path()
-        .join("codex-resources")
+        .join("crewon-resources")
         .join("zsh")
         .join("bin")
         .join("zsh");

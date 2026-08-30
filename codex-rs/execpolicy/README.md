@@ -1,14 +1,12 @@
-# codex-execpolicy
+# crewon-execpolicy
 
 ## Overview
 
-- Policy engine and CLI built around `prefix_rule(pattern=[...], decision?, justification?, match?, not_match?)` plus `host_executable(name=..., paths=[...])`.
+- Policy engine built around `prefix_rule(pattern=[...], decision?, justification?, match?, not_match?)` plus `host_executable(name=..., paths=[...])`.
 - This release covers the prefix-rule subset of the execpolicy language plus host executable metadata; a richer language will follow.
 - Tokens are matched in order; any `pattern` element may be a list to denote alternatives. `decision` defaults to `allow`; valid values: `allow`, `prompt`, `forbidden`.
 - `justification` is an optional human-readable rationale for why a rule exists. It can be provided for any `decision` and may be surfaced in different contexts (for example, in approval prompts or rejection messages). When `decision = "forbidden"` is used, include a recommended alternative in the `justification`, when appropriate (e.g., ``"Use `jj` instead of `git`."``).
 - `match` / `not_match` supply example invocations that are validated at load time (think of them as unit tests); examples can be token arrays or strings (strings are tokenized with `shlex`).
-- The CLI always prints the JSON serialization of the evaluation result.
-- The legacy rule matcher lives in `codex-execpolicy-legacy`.
 
 ## Policy shapes
 
@@ -44,34 +42,6 @@ host_executable(
   - If `host_executable(name="git", ...)` exists, basename fallback is only allowed for listed absolute paths.
   - If no `host_executable()` entry exists for a basename, basename fallback is allowed.
 
-## CLI
-
-- From the Codex CLI, run `codex execpolicy check` subcommand with one or more policy files (for example `src/default.rules`) to check a command:
-
-```bash
-codex execpolicy check --rules path/to/policy.rules git status
-```
-
-- To opt into basename fallback for absolute program paths, pass `--resolve-host-executables`:
-
-```bash
-codex execpolicy check \
-  --rules path/to/policy.rules \
-  --resolve-host-executables \
-  /usr/bin/git status
-```
-
-- Pass multiple `--rules` flags to merge rules, evaluated in the order provided, and use `--pretty` for formatted JSON.
-- You can also run the standalone dev binary directly during development:
-
-```bash
-cargo run -p codex-execpolicy -- check --rules path/to/policy.rules git status
-```
-
-- Example outcomes:
-  - Match: `{"matchedRules":[{...}],"decision":"allow"}`
-  - No match: `{"matchedRules":[]}`
-
 ## Response shape
 
 ```json
@@ -95,4 +65,4 @@ cargo run -p codex-execpolicy -- check --rules path/to/policy.rules git status
 - `resolvedProgram` is omitted unless an absolute executable path matched via basename fallback.
 - The effective `decision` is the strictest severity across all matches (`forbidden` > `prompt` > `allow`).
 
-Note: `execpolicy` commands are still in preview. The API may have breaking changes in the future.
+Note: `execpolicy` APIs are still in preview. The API may have breaking changes in the future.

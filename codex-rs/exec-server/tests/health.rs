@@ -2,8 +2,8 @@
 
 mod common;
 
-use codex_exec_server::Environment;
 use common::exec_server::exec_server;
+use crewon_exec_server::Environment;
 use pretty_assertions::assert_eq;
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

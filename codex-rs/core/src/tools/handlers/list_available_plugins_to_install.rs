@@ -1,8 +1,8 @@
-use codex_tools::LIST_AVAILABLE_PLUGINS_TO_INSTALL_TOOL_NAME;
-use codex_tools::ListAvailablePluginsToInstallResult;
-use codex_tools::RequestPluginInstallEntry;
-use codex_tools::ToolName;
-use codex_tools::ToolSpec;
+use crewon_tools::LIST_AVAILABLE_PLUGINS_TO_INSTALL_TOOL_NAME;
+use crewon_tools::ListAvailablePluginsToInstallResult;
+use crewon_tools::RequestPluginInstallEntry;
+use crewon_tools::ToolName;
+use crewon_tools::ToolSpec;
 
 use crate::function_tool::FunctionCallError;
 use crate::tools::context::FunctionToolOutput;
@@ -67,7 +67,7 @@ impl ToolExecutor<ToolInvocation> for ListAvailablePluginsToInstallHandler {
         false
     }
 
-    fn handle(&self, invocation: ToolInvocation) -> codex_tools::ToolExecutorFuture<'_> {
+    fn handle(&self, invocation: ToolInvocation) -> crewon_tools::ToolExecutorFuture<'_> {
         Box::pin(self.handle_call(invocation))
     }
 }
@@ -112,7 +112,7 @@ fn truncate_to_char_boundary(value: &str, max_chars: usize) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_tools::DiscoverableToolType;
+    use crewon_tools::DiscoverableToolType;
     use pretty_assertions::assert_eq;
 
     #[test]

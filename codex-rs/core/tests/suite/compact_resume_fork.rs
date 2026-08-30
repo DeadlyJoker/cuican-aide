@@ -4,25 +4,13 @@
 //!
 //! Each test sets up a mocked SSE conversation and drives the conversation through
 //! a specific sequence of operations. After every operation we capture the
-//! request payload that Codex would send to the model and assert that the
+//! request payload that Crewon would send to the model and assert that the
 //! model-visible history matches the expected sequence of messages.
 
 use super::compact::COMPACT_WARNING_MESSAGE;
 use super::compact::FIRST_REPLY;
 use super::compact::SUMMARY_TEXT;
 use anyhow::Result;
-use codex_core::CodexThread;
-use codex_core::ThreadManager;
-use codex_core::compact::SUMMARIZATION_PROMPT;
-use codex_core::config::Config;
-use codex_core::spawn::CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR;
-use codex_protocol::config_types::CollaborationMode;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::Settings;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::WarningEvent;
-use codex_protocol::user_input::UserInput;
 use core_test_support::context_snapshot;
 use core_test_support::context_snapshot::ContextSnapshotOptions;
 use core_test_support::context_snapshot::ContextSnapshotRenderMode;
@@ -34,9 +22,21 @@ use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_sse_once_match;
 use core_test_support::responses::mount_sse_sequence;
 use core_test_support::responses::sse;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
+use crewon_core::CrewonThread;
+use crewon_core::ThreadManager;
+use crewon_core::compact::SUMMARIZATION_PROMPT;
+use crewon_core::config::Config;
+use crewon_core::spawn::CODEX_SANDBOX_NETWORK_DISABLED_ENV_VAR;
+use crewon_protocol::config_types::CollaborationMode;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::Settings;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::WarningEvent;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -133,6 +133,16 @@ async fn compact_resume_and_fork_preserve_model_history_view() {
         println!("Skipping test because network is disabled in this sandbox");
         return;
     }
+
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/legacy-rollout-resume-fork.reference.json"
+    )
+    .expect("resolve AR-026/027 legacy rollout fixture");
+    let reference: Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-026/027 legacy rollout fixture"),
+    )
+    .expect("parse AR-026/027 legacy rollout fixture");
+    let expected_views = &reference["expected"]["userTextViews"];
 
     // 1. Arrange mocked SSE responses for the initial compact/resume/fork flow.
     let server = MockServer::start().await;
@@ -278,7 +288,31 @@ async fn compact_resume_and_fork_preserve_model_history_view() {
             assert_eq!(chunk, seeded_user_prefix);
         }
     }
+    assert_relevant_user_view(
+        &json_message_input_texts(&requests[2], "user"),
+        &expected_views["afterCompact"],
+    );
+    assert_relevant_user_view(
+        &json_message_input_texts(&requests[3], "user"),
+        &expected_views["afterResume"],
+    );
+    assert_relevant_user_view(&after_fork_user_texts, &expected_views["afterFork"]);
     assert_eq!(requests.len(), 5);
+}
+
+fn assert_relevant_user_view(actual: &[String], expected: &Value) {
+    let expected = expected
+        .as_array()
+        .expect("fixture user text view")
+        .iter()
+        .map(|value| value.as_str().expect("fixture user text").to_string())
+        .collect::<Vec<_>>();
+    let relevant = actual
+        .iter()
+        .filter(|value| expected.contains(value))
+        .cloned()
+        .collect::<Vec<_>>();
+    assert_eq!(relevant, expected);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -551,7 +585,7 @@ async fn snapshot_rollback_followup_turn_trims_context_updates() -> Result<()> {
     std::fs::create_dir_all(&override_cwd)?;
     core_test_support::submit_thread_settings(
         &conversation,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             environments: Some(local_selections(override_cwd.clone())),
             collaboration_mode: Some(CollaborationMode {
                 mode: ModeKind::Default,
@@ -755,10 +789,10 @@ async fn mount_second_compact_sequence(server: &MockServer) -> ResponseMock {
 async fn start_test_conversation(
     server: &MockServer,
     model: Option<&str>,
-) -> (Arc<TempDir>, Config, Arc<ThreadManager>, Arc<CodexThread>) {
+) -> (Arc<TempDir>, Config, Arc<ThreadManager>, Arc<CrewonThread>) {
     let base_url = format!("{}/v1", server.uri());
     let model = model.map(str::to_string);
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider.name = "Non-OpenAI Model provider".to_string();
         config.model_provider.base_url = Some(base_url);
         config.compact_prompt = Some(SUMMARIZATION_PROMPT.to_string());
@@ -769,10 +803,10 @@ async fn start_test_conversation(
     let test = Box::pin(builder.build(server))
         .await
         .expect("create conversation");
-    (test.home, test.config, test.thread_manager, test.codex)
+    (test.home, test.config, test.thread_manager, test.crewon)
 }
 
-async fn user_turn(conversation: &Arc<CodexThread>, text: &str) {
+async fn user_turn(conversation: &Arc<CrewonThread>, text: &str) {
     conversation
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
@@ -789,7 +823,7 @@ async fn user_turn(conversation: &Arc<CodexThread>, text: &str) {
     wait_for_event(conversation, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 }
 
-async fn compact_conversation(conversation: &Arc<CodexThread>) {
+async fn compact_conversation(conversation: &Arc<CrewonThread>) {
     conversation
         .submit(Op::Compact)
         .await
@@ -808,11 +842,11 @@ async fn compact_conversation(conversation: &Arc<CodexThread>) {
     wait_for_event(conversation, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
 }
 
-fn fetch_conversation_path(conversation: &Arc<CodexThread>) -> std::path::PathBuf {
+fn fetch_conversation_path(conversation: &Arc<CrewonThread>) -> std::path::PathBuf {
     conversation.rollout_path().expect("rollout path")
 }
 
-async fn shutdown_conversation(conversation: &Arc<CodexThread>) {
+async fn shutdown_conversation(conversation: &Arc<CrewonThread>) {
     conversation
         .shutdown_and_wait()
         .await
@@ -823,9 +857,9 @@ async fn resume_conversation(
     manager: &ThreadManager,
     config: &Config,
     path: std::path::PathBuf,
-) -> Arc<CodexThread> {
-    let auth_manager = codex_core::test_support::auth_manager_from_auth(
-        codex_login::CodexAuth::from_api_key("dummy"),
+) -> Arc<CrewonThread> {
+    let auth_manager = crewon_core::test_support::auth_manager_from_auth(
+        crewon_login::CrewonAuth::from_api_key("dummy"),
     );
     Box::pin(manager.resume_thread_from_rollout(
         config.clone(),
@@ -844,7 +878,7 @@ async fn fork_thread(
     config: &Config,
     path: std::path::PathBuf,
     nth_user_message: usize,
-) -> Arc<CodexThread> {
+) -> Arc<CrewonThread> {
     Box::pin(manager.fork_thread(
         nth_user_message,
         config.clone(),

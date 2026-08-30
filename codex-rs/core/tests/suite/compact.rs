@@ -1,31 +1,6 @@
 #![allow(clippy::expect_used)]
 use anyhow::Result;
 use anyhow::anyhow;
-use codex_core::compact::SUMMARIZATION_PROMPT;
-use codex_core::compact::SUMMARY_PREFIX;
-use codex_core::config::Config;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_model_provider_info::built_in_model_providers;
-use codex_models_manager::bundled_models_response;
-use codex_protocol::config_types::AutoCompactTokenLimitScope;
-use codex_protocol::items::TurnItem;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelsResponse;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::HookEventName;
-use codex_protocol::protocol::HookRunStatus;
-use codex_protocol::protocol::ItemCompletedEvent;
-use codex_protocol::protocol::ItemStartedEvent;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::WarningEvent;
-use codex_protocol::user_input::UserInput;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::PathBufExt;
 use core_test_support::context_snapshot;
 use core_test_support::context_snapshot::ContextSnapshotOptions;
@@ -35,12 +10,37 @@ use core_test_support::responses;
 use core_test_support::responses::ev_reasoning_item;
 use core_test_support::responses::mount_models_once;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::test_path_buf;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_event_match;
+use crewon_core::compact::SUMMARIZATION_PROMPT;
+use crewon_core::compact::SUMMARY_PREFIX;
+use crewon_core::config::Config;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_model_provider_info::built_in_model_providers;
+use crewon_models_manager::bundled_models_response;
+use crewon_protocol::config_types::AutoCompactTokenLimitScope;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelsResponse;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::HookEventName;
+use crewon_protocol::protocol::HookRunStatus;
+use crewon_protocol::protocol::ItemCompletedEvent;
+use crewon_protocol::protocol::ItemStartedEvent;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::WarningEvent;
+use crewon_protocol::user_input::UserInput;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::path::PathBuf;
 
 use core_test_support::responses::ev_assistant_message;
@@ -111,14 +111,14 @@ fn disabled_permission_user_turn(text: impl Into<String>, cwd: PathBuf, model: S
         final_output_json_schema: None,
         responsesapi_client_metadata: None,
         additional_context: Default::default(),
-        thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+        thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
             environments: Some(local_selections(cwd.abs())),
             approval_policy: Some(AskForApproval::Never),
             sandbox_policy: Some(sandbox_policy),
             permission_profile,
-            collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                mode: codex_protocol::config_types::ModeKind::Default,
-                settings: codex_protocol::config_types::Settings {
+            collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                mode: crewon_protocol::config_types::ModeKind::Default,
+                settings: crewon_protocol::config_types::Settings {
                     model,
                     reasoning_effort: None,
                     developer_instructions: None,
@@ -409,7 +409,9 @@ fn assert_pre_sampling_switch_compaction_requests(
     );
 }
 
-async fn assert_compaction_uses_turn_lifecycle_id(codex: &std::sync::Arc<codex_core::CodexThread>) {
+async fn assert_compaction_uses_turn_lifecycle_id(
+    codex: &std::sync::Arc<crewon_core::CrewonThread>,
+) {
     let mut turn_started_id = None;
     let mut turn_completed_id = None;
     let mut compact_started_id = None;
@@ -493,15 +495,15 @@ async fn summarize_context_three_requests_and_instructions() {
     // inspect them without relying on specific prompt markers.
     let request_log = mount_sse_sequence(&server, vec![sse1, sse2, sse3]).await;
 
-    // Build config pointing to the mock server and spawn Codex.
+    // Build config pointing to the mock server and spawn Crewon.
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         set_test_compact_prompt(config);
         config.model_auto_compact_token_limit = Some(200_000);
     });
     let test = builder.build(&server).await.unwrap();
-    let codex = test.codex.clone();
+    let codex = test.crewon.clone();
     let rollout_path = test.session_configured.rollout_path.expect("rollout path");
 
     // 1) Normal user input – should hit server once.
@@ -636,7 +638,7 @@ async fn summarize_context_three_requests_and_instructions() {
         "third request should not include the summarize trigger"
     );
 
-    // Shut down Codex to flush rollout entries before inspecting the file.
+    // Shut down Crewon to flush rollout entries before inspecting the file.
     codex.submit(Op::Shutdown).await.unwrap();
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::ShutdownComplete)).await;
 
@@ -695,7 +697,7 @@ async fn manual_pre_compact_block_decision_does_not_block_compaction() {
     let request_log = mount_sse_sequence(&server, vec![first_turn, compact_turn]).await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(write_unsupported_blocking_pre_compact_hook)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -703,7 +705,7 @@ async fn manual_pre_compact_block_decision_does_not_block_compaction() {
             set_test_compact_prompt(config);
         });
     let test = builder.build(&server).await.expect("create conversation");
-    let codex = test.codex.clone();
+    let codex = test.crewon.clone();
 
     codex
         .submit(Op::UserInput {
@@ -768,7 +770,7 @@ async fn compact_hooks_respect_matchers_and_post_runs_after_compaction() {
     let request_log = mount_sse_sequence(&server, vec![first_turn, compact_turn]).await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(write_matching_compact_hooks)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -776,7 +778,7 @@ async fn compact_hooks_respect_matchers_and_post_runs_after_compaction() {
             set_test_compact_prompt(config);
         });
     let test = builder.build(&server).await.expect("create conversation");
-    let codex = test.codex.clone();
+    let codex = test.crewon.clone();
 
     codex
         .submit(Op::UserInput {
@@ -838,7 +840,7 @@ async fn manual_compact_uses_custom_prompt() {
     let custom_prompt = "Use this compact prompt instead";
 
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         config.compact_prompt = Some(custom_prompt.to_string());
     });
@@ -846,7 +848,7 @@ async fn manual_compact_uses_custom_prompt() {
         .build(&server)
         .await
         .expect("create conversation")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -930,11 +932,11 @@ async fn manual_compact_emits_api_and_local_token_usage_events() {
     mount_sse_once(&server, sse_compact).await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         set_test_compact_prompt(config);
     });
-    let codex = builder.build(&server).await.unwrap().codex;
+    let codex = builder.build(&server).await.unwrap().crewon;
 
     // Trigger manual compact and collect TokenCount events for the compact turn.
     codex.submit(Op::Compact).await.unwrap();
@@ -989,11 +991,11 @@ async fn manual_compact_emits_context_compaction_items() {
     mount_sse_sequence(&server, vec![sse1, sse2]).await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         set_test_compact_prompt(config);
     });
-    let codex = builder.build(&server).await.unwrap().codex;
+    let codex = builder.build(&server).await.unwrap().crewon;
 
     codex
         .submit(Op::UserInput {
@@ -1053,17 +1055,26 @@ async fn manual_compact_emits_context_compaction_items() {
 async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
     skip_if_no_network!();
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/token-limit-compaction.reference.json"
+    )
+    .expect("resolve AR-023 token-limit compaction fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path).expect("read AR-023 token-limit compaction fixture"),
+    )
+    .expect("parse AR-023 token-limit compaction fixture");
+
     let server = start_mock_server().await;
 
     let non_openai_provider_name = non_openai_model_provider(&server).name;
-    let codex = test_codex()
+    let codex = test_crewon()
         .with_config(move |config| {
             config.model_provider.name = non_openai_provider_name;
         })
         .build(&server)
         .await
         .expect("build codex")
-        .codex;
+        .crewon;
 
     // user message
     let user_message = "create an app";
@@ -1079,9 +1090,13 @@ async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
     let prefixed_second_summary = summary_with_prefix(second_summary_text);
     let prefixed_third_summary = summary_with_prefix(third_summary_text);
     // token used count after long work
-    let token_count_used = 270_000;
+    let token_count_used = reference["triggerTotalTokens"]
+        .as_i64()
+        .expect("triggerTotalTokens should be an integer");
     // token used count after compaction
-    let token_count_used_after_compaction = 80000;
+    let token_count_used_after_compaction = reference["postCompactionTotalTokens"]
+        .as_i64()
+        .expect("postCompactionTotalTokens should be an integer");
 
     // mock responses from the model
 
@@ -1178,6 +1193,26 @@ async fn multiple_auto_compact_per_task_runs_after_token_limit_hit() {
 
     // collect the requests payloads from the model
     let requests_payloads = request_log.requests();
+    let request_kinds = requests_payloads
+        .iter()
+        .map(|request| {
+            if body_contains_text(&request.body_json().to_string(), SUMMARIZATION_PROMPT) {
+                "compaction"
+            } else {
+                "model"
+            }
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(json!(request_kinds), reference["expected"]["requestKinds"]);
+    assert_eq!(
+        request_kinds
+            .iter()
+            .filter(|kind| **kind == "compaction")
+            .count(),
+        reference["expected"]["contextCompactedEventCount"]
+            .as_u64()
+            .expect("contextCompactedEventCount should be an integer") as usize
+    );
     let body = requests_payloads[0].body_json();
     let input = body.get("input").and_then(|v| v.as_array()).unwrap();
 
@@ -1626,12 +1661,12 @@ async fn auto_compact_runs_after_token_limit_hit() {
 
     let model_provider = non_openai_model_provider(&server);
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         set_test_compact_prompt(config);
         config.model_auto_compact_token_limit = Some(200_000);
     });
-    let codex = builder.build(&server).await.unwrap().codex;
+    let codex = builder.build(&server).await.unwrap().crewon;
 
     codex
         .submit(Op::UserInput {
@@ -1824,12 +1859,12 @@ async fn auto_compact_emits_context_compaction_items() {
     mount_sse_sequence(&server, vec![sse1, sse2, sse3, sse4]).await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         set_test_compact_prompt(config);
         config.model_auto_compact_token_limit = Some(200_000);
     });
-    let codex = builder.build(&server).await.unwrap().codex;
+    let codex = builder.build(&server).await.unwrap().crewon;
 
     let mut started_item = None;
     let mut completed_item = None;
@@ -1910,12 +1945,12 @@ async fn auto_compact_starts_after_turn_started() {
     mount_sse_sequence(&server, vec![sse1, sse2, sse3, sse4]).await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         set_test_compact_prompt(config);
         config.model_auto_compact_token_limit = Some(200_000);
     });
-    let codex = builder.build(&server).await.unwrap().codex;
+    let codex = builder.build(&server).await.unwrap().crewon;
 
     codex
         .submit(Op::UserInput {
@@ -1997,22 +2032,22 @@ async fn auto_compact_runs_after_resume_when_token_usage_is_over_limit() {
     let remote_summary = "REMOTE_COMPACT_SUMMARY";
 
     let compacted_history = vec![
-        codex_protocol::models::ResponseItem::Message {
+        crewon_protocol::models::ResponseItem::Message {
             id: None,
             role: "assistant".to_string(),
-            content: vec![codex_protocol::models::ContentItem::OutputText {
+            content: vec![crewon_protocol::models::ContentItem::OutputText {
                 text: remote_summary.to_string(),
             }],
             phase: None,
         },
-        codex_protocol::models::ResponseItem::Compaction {
+        crewon_protocol::models::ResponseItem::Compaction {
             encrypted_content: "ENCRYPTED_COMPACTION_SUMMARY".to_string(),
         },
     ];
     let compact_mock =
         mount_compact_json_once(&server, serde_json::json!({ "output": compacted_history })).await;
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         set_test_compact_prompt(config);
         config.model_auto_compact_token_limit = Some(limit);
         let _ = config.features.disable(Feature::RemoteCompactionV2);
@@ -2040,8 +2075,9 @@ async fn auto_compact_runs_after_resume_when_token_usage_is_over_limit() {
         compact_mock.requests().is_empty(),
         "remote compaction should not run before the next user message"
     );
+    initial.crewon.shutdown_and_wait().await.unwrap();
 
-    let mut resume_builder = test_codex().with_config(move |config| {
+    let mut resume_builder = test_crewon().with_config(move |config| {
         set_test_compact_prompt(config);
         config.model_auto_compact_token_limit = Some(limit);
         let _ = config.features.disable(Feature::RemoteCompactionV2);
@@ -2064,7 +2100,7 @@ async fn auto_compact_runs_after_resume_when_token_usage_is_over_limit() {
     mount_sse_once_match(&server, follow_up_matcher, sse_follow_up).await;
 
     resumed
-        .codex
+        .crewon
         .submit(disabled_permission_user_turn(
             follow_up_user,
             resumed.cwd.path().to_path_buf(),
@@ -2073,11 +2109,11 @@ async fn auto_compact_runs_after_resume_when_token_usage_is_over_limit() {
         .await
         .unwrap();
 
-    wait_for_event(&resumed.codex, |event| {
+    wait_for_event(&resumed.crewon, |event| {
         matches!(event, EventMsg::ContextCompacted(_))
     })
     .await;
-    wait_for_event(&resumed.codex, |event| {
+    wait_for_event(&resumed.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -2099,16 +2135,40 @@ async fn auto_compact_runs_after_resume_when_token_usage_is_over_limit() {
 async fn pre_sampling_compact_runs_on_switch_to_smaller_context_model() {
     skip_if_no_network!();
 
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/model-switch-compaction.reference.json"
+    )
+    .expect("resolve AR-024 model-switch compaction fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path)
+            .expect("read AR-024 model-switch compaction fixture"),
+    )
+    .expect("parse AR-024 model-switch compaction fixture");
+
     let server = MockServer::start().await;
-    let previous_model = "gpt-5.3-codex";
-    let next_model = "gpt-5.2";
+    let previous_model = reference["previous"]["modelId"]
+        .as_str()
+        .expect("previous modelId should be text");
+    let next_model = reference["next"]["modelId"]
+        .as_str()
+        .expect("next modelId should be text");
 
     let models_mock = mount_models_once(
         &server,
         ModelsResponse {
             models: vec![
-                model_info_with_context_window(previous_model, /*context_window*/ 273_000),
-                model_info_with_context_window(next_model, /*context_window*/ 125_000),
+                model_info_with_context_window(
+                    previous_model,
+                    reference["previous"]["contextWindowTokens"]
+                        .as_i64()
+                        .expect("previous contextWindowTokens should be an integer"),
+                ),
+                model_info_with_context_window(
+                    next_model,
+                    reference["next"]["contextWindowTokens"]
+                        .as_i64()
+                        .expect("next contextWindowTokens should be an integer"),
+                ),
             ],
         },
     )
@@ -2119,7 +2179,12 @@ async fn pre_sampling_compact_runs_on_switch_to_smaller_context_model() {
         vec![
             sse(vec![
                 ev_assistant_message("m1", "before switch"),
-                ev_completed_with_tokens("r1", /*total_tokens*/ 120_000),
+                ev_completed_with_tokens(
+                    "r1",
+                    reference["previous"]["totalTokens"]
+                        .as_i64()
+                        .expect("previous totalTokens should be an integer"),
+                ),
             ]),
             sse(vec![
                 ev_assistant_message("m2", "PRE_SAMPLING_SUMMARY"),
@@ -2134,8 +2199,8 @@ async fn pre_sampling_compact_runs_on_switch_to_smaller_context_model() {
     .await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model(previous_model)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -2143,7 +2208,7 @@ async fn pre_sampling_compact_runs_on_switch_to_smaller_context_model() {
         });
     let test = builder.build(&server).await.expect("build test codex");
 
-    test.codex
+    test.crewon
         .submit(disabled_permission_user_turn(
             "before switch",
             test.cwd.path().to_path_buf(),
@@ -2151,12 +2216,12 @@ async fn pre_sampling_compact_runs_on_switch_to_smaller_context_model() {
         ))
         .await
         .expect("submit first user turn");
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
 
-    test.codex
+    test.crewon
         .submit(disabled_permission_user_turn(
             "after switch",
             test.cwd.path().to_path_buf(),
@@ -2164,7 +2229,7 @@ async fn pre_sampling_compact_runs_on_switch_to_smaller_context_model() {
         ))
         .await
         .expect("submit second user turn");
-    assert_compaction_uses_turn_lifecycle_id(&test.codex).await;
+    assert_compaction_uses_turn_lifecycle_id(&test.crewon).await;
 
     let requests = request_log.requests();
     assert_eq!(models_mock.requests().len(), 1);
@@ -2172,6 +2237,27 @@ async fn pre_sampling_compact_runs_on_switch_to_smaller_context_model() {
         requests.len(),
         3,
         "expected user, compact, and follow-up requests"
+    );
+    assert_eq!(
+        json!(
+            requests
+                .iter()
+                .map(|request| request.body_json()["model"].clone())
+                .collect::<Vec<_>>()
+        ),
+        reference["expected"]["requestModels"]
+    );
+    assert_eq!(
+        !body_contains_text(&requests[1].body_json().to_string(), "after switch"),
+        reference["expected"]["compactionExcludesIncomingUser"]
+            .as_bool()
+            .expect("compactionExcludesIncomingUser should be a boolean")
+    );
+    assert_eq!(
+        body_contains_text(&requests[2].body_json().to_string(), "after switch"),
+        reference["expected"]["followUpIncludesIncomingUser"]
+            .as_bool()
+            .expect("followUpIncludesIncomingUser should be a boolean")
     );
     assert_pre_sampling_switch_compaction_requests(
         &requests[0].body_json(),
@@ -2236,8 +2322,8 @@ async fn pre_sampling_compact_runs_when_comp_hash_changes() {
     .await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model(previous_model)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -2245,7 +2331,7 @@ async fn pre_sampling_compact_runs_when_comp_hash_changes() {
         });
     let test = builder.build(&server).await.expect("build test codex");
 
-    test.codex
+    test.crewon
         .submit(disabled_permission_user_turn(
             "before switch",
             test.cwd.path().to_path_buf(),
@@ -2253,12 +2339,12 @@ async fn pre_sampling_compact_runs_when_comp_hash_changes() {
         ))
         .await
         .expect("submit first user turn");
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
 
-    test.codex
+    test.crewon
         .submit(disabled_permission_user_turn(
             "after switch",
             test.cwd.path().to_path_buf(),
@@ -2266,7 +2352,7 @@ async fn pre_sampling_compact_runs_when_comp_hash_changes() {
         ))
         .await
         .expect("submit second user turn");
-    assert_compaction_uses_turn_lifecycle_id(&test.codex).await;
+    assert_compaction_uses_turn_lifecycle_id(&test.crewon).await;
 
     let requests = request_log.requests();
     assert_eq!(models_mock.requests().len(), 1);
@@ -2328,8 +2414,8 @@ async fn pre_sampling_compact_skips_when_either_comp_hash_is_missing() {
     .await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model(model_without_hash)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -2337,7 +2423,7 @@ async fn pre_sampling_compact_skips_when_either_comp_hash_is_missing() {
         });
     let test = builder.build(&server).await.expect("build test codex");
 
-    test.codex
+    test.crewon
         .submit(disabled_permission_user_turn(
             "before hash",
             test.cwd.path().to_path_buf(),
@@ -2345,12 +2431,12 @@ async fn pre_sampling_compact_skips_when_either_comp_hash_is_missing() {
         ))
         .await
         .expect("submit first user turn");
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
 
-    test.codex
+    test.crewon
         .submit(disabled_permission_user_turn(
             "hash introduced",
             test.cwd.path().to_path_buf(),
@@ -2358,12 +2444,12 @@ async fn pre_sampling_compact_skips_when_either_comp_hash_is_missing() {
         ))
         .await
         .expect("submit second user turn");
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
 
-    test.codex
+    test.crewon
         .submit(disabled_permission_user_turn(
             "hash removed",
             test.cwd.path().to_path_buf(),
@@ -2371,7 +2457,7 @@ async fn pre_sampling_compact_skips_when_either_comp_hash_is_missing() {
         ))
         .await
         .expect("submit third user turn");
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -2433,8 +2519,8 @@ async fn body_after_prefix_model_switch_budget_compacts_with_next_model() {
     .await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model(previous_model)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -2446,7 +2532,7 @@ async fn body_after_prefix_model_switch_budget_compacts_with_next_model() {
         });
     let test = builder.build(&server).await.expect("build test codex");
 
-    test.codex
+    test.crewon
         .submit(disabled_permission_user_turn(
             "before switch",
             test.cwd.path().to_path_buf(),
@@ -2454,12 +2540,12 @@ async fn body_after_prefix_model_switch_budget_compacts_with_next_model() {
         ))
         .await
         .expect("submit first user turn");
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
 
-    test.codex
+    test.crewon
         .submit(disabled_permission_user_turn(
             "after switch",
             test.cwd.path().to_path_buf(),
@@ -2467,7 +2553,7 @@ async fn body_after_prefix_model_switch_budget_compacts_with_next_model() {
         ))
         .await
         .expect("submit second user turn");
-    assert_compaction_uses_turn_lifecycle_id(&test.codex).await;
+    assert_compaction_uses_turn_lifecycle_id(&test.crewon).await;
 
     let requests = request_log.requests();
     assert_eq!(models_mock.requests().len(), 1);
@@ -2527,8 +2613,8 @@ async fn pre_sampling_compact_runs_after_resume_and_switch_to_smaller_model() {
     .await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut initial_builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut initial_builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model(previous_model)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -2546,7 +2632,7 @@ async fn pre_sampling_compact_runs_after_resume_and_switch_to_smaller_model() {
         .expect("rollout path");
 
     initial
-        .codex
+        .crewon
         .submit(disabled_permission_user_turn(
             "before resume",
             initial.cwd.path().to_path_buf(),
@@ -2554,24 +2640,24 @@ async fn pre_sampling_compact_runs_after_resume_and_switch_to_smaller_model() {
         ))
         .await
         .expect("submit pre-resume turn");
-    wait_for_event(&initial.codex, |event| {
+    wait_for_event(&initial.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
 
     initial
-        .codex
+        .crewon
         .submit(Op::Shutdown)
         .await
         .expect("shutdown initial session");
-    wait_for_event(&initial.codex, |event| {
+    wait_for_event(&initial.crewon, |event| {
         matches!(event, EventMsg::ShutdownComplete)
     })
     .await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut resumed_builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut resumed_builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model(previous_model)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -2583,7 +2669,7 @@ async fn pre_sampling_compact_runs_after_resume_and_switch_to_smaller_model() {
         .expect("resume codex");
 
     resumed
-        .codex
+        .crewon
         .submit(disabled_permission_user_turn(
             "after resume",
             resumed.cwd.path().to_path_buf(),
@@ -2591,7 +2677,7 @@ async fn pre_sampling_compact_runs_after_resume_and_switch_to_smaller_model() {
         ))
         .await
         .expect("submit resumed user turn");
-    assert_compaction_uses_turn_lifecycle_id(&resumed.codex).await;
+    assert_compaction_uses_turn_lifecycle_id(&resumed.crewon).await;
 
     let requests = request_log.requests();
     assert_eq!(models_mock.requests().len(), 1);
@@ -2648,8 +2734,8 @@ async fn pre_sampling_compact_recovers_comp_hash_after_resume() {
     .await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut initial_builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut initial_builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model(previous_model)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -2667,7 +2753,7 @@ async fn pre_sampling_compact_recovers_comp_hash_after_resume() {
         .expect("rollout path");
 
     initial
-        .codex
+        .crewon
         .submit(disabled_permission_user_turn(
             "before resume",
             initial.cwd.path().to_path_buf(),
@@ -2675,17 +2761,17 @@ async fn pre_sampling_compact_recovers_comp_hash_after_resume() {
         ))
         .await
         .expect("submit pre-resume turn");
-    wait_for_event(&initial.codex, |event| {
+    wait_for_event(&initial.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
 
     initial
-        .codex
+        .crewon
         .submit(Op::Shutdown)
         .await
         .expect("shutdown initial session");
-    wait_for_event(&initial.codex, |event| {
+    wait_for_event(&initial.crewon, |event| {
         matches!(event, EventMsg::ShutdownComplete)
     })
     .await;
@@ -2701,8 +2787,8 @@ async fn pre_sampling_compact_recovers_comp_hash_after_resume() {
     assert_eq!(persisted_comp_hash.as_deref(), Some("hash-a"));
 
     let model_provider = non_openai_model_provider(&server);
-    let mut resumed_builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut resumed_builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model(previous_model)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -2714,7 +2800,7 @@ async fn pre_sampling_compact_recovers_comp_hash_after_resume() {
         .expect("resume codex");
 
     resumed
-        .codex
+        .crewon
         .submit(disabled_permission_user_turn(
             "after resume",
             resumed.cwd.path().to_path_buf(),
@@ -2722,7 +2808,7 @@ async fn pre_sampling_compact_recovers_comp_hash_after_resume() {
         ))
         .await
         .expect("submit resumed user turn");
-    assert_compaction_uses_turn_lifecycle_id(&resumed.codex).await;
+    assert_compaction_uses_turn_lifecycle_id(&resumed.crewon).await;
 
     let requests = request_log.requests();
     assert_eq!(models_mock.requests().len(), 1);
@@ -2775,8 +2861,8 @@ async fn pre_sampling_compact_skips_missing_comp_hash_after_resume() {
     .await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut initial_builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut initial_builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model(previous_model)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -2794,7 +2880,7 @@ async fn pre_sampling_compact_skips_missing_comp_hash_after_resume() {
         .expect("rollout path");
 
     initial
-        .codex
+        .crewon
         .submit(disabled_permission_user_turn(
             "before resume",
             initial.cwd.path().to_path_buf(),
@@ -2802,17 +2888,17 @@ async fn pre_sampling_compact_skips_missing_comp_hash_after_resume() {
         ))
         .await
         .expect("submit pre-resume turn");
-    wait_for_event(&initial.codex, |event| {
+    wait_for_event(&initial.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
 
     initial
-        .codex
+        .crewon
         .submit(Op::Shutdown)
         .await
         .expect("shutdown initial session");
-    wait_for_event(&initial.codex, |event| {
+    wait_for_event(&initial.crewon, |event| {
         matches!(event, EventMsg::ShutdownComplete)
     })
     .await;
@@ -2826,8 +2912,8 @@ async fn pre_sampling_compact_skips_missing_comp_hash_after_resume() {
     assert!(persisted_turn_context["payload"].get("comp_hash").is_none());
 
     let model_provider = non_openai_model_provider(&server);
-    let mut resumed_builder = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let mut resumed_builder = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model(previous_model)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -2839,7 +2925,7 @@ async fn pre_sampling_compact_skips_missing_comp_hash_after_resume() {
         .expect("resume codex");
 
     resumed
-        .codex
+        .crewon
         .submit(disabled_permission_user_turn(
             "after resume",
             resumed.cwd.path().to_path_buf(),
@@ -2847,7 +2933,7 @@ async fn pre_sampling_compact_skips_missing_comp_hash_after_resume() {
         ))
         .await
         .expect("submit resumed user turn");
-    wait_for_event(&resumed.codex, |event| {
+    wait_for_event(&resumed.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -2925,13 +3011,13 @@ async fn auto_compact_persists_rollout_entries() {
 
     let model_provider = non_openai_model_provider(&server);
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         set_test_compact_prompt(config);
         config.model_auto_compact_token_limit = Some(200_000);
     });
     let test = builder.build(&server).await.unwrap();
-    let codex = test.codex.clone();
+    let codex = test.crewon.clone();
     let session_configured = test.session_configured;
 
     codex
@@ -3017,6 +3103,15 @@ async fn auto_compact_persists_rollout_entries() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn manual_compact_retries_after_context_window_error() {
     skip_if_no_network!();
+    let fixture_path = crewon_utils_cargo_bin::find_resource!(
+        "../../packages/test-contracts/fixtures/context-window-compaction.reference.json"
+    )
+    .expect("resolve AR-025 context-window compaction fixture");
+    let reference: serde_json::Value = serde_json::from_str(
+        &std::fs::read_to_string(fixture_path)
+            .expect("read AR-025 context-window compaction fixture"),
+    )
+    .expect("parse AR-025 context-window compaction fixture");
 
     let server = start_mock_server().await;
 
@@ -3026,7 +3121,9 @@ async fn manual_compact_retries_after_context_window_error() {
     ]);
     let compact_failed = sse_failed(
         "resp-fail",
-        "context_length_exceeded",
+        reference["providerFailureCode"]
+            .as_str()
+            .expect("AR-025 provider failure code"),
         CONTEXT_LIMIT_MESSAGE,
     );
     let compact_succeeds = sse(vec![
@@ -3046,12 +3143,12 @@ async fn manual_compact_retries_after_context_window_error() {
 
     let model_provider = non_openai_model_provider(&server);
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         set_test_compact_prompt(config);
         config.model_auto_compact_token_limit = Some(200_000);
     });
-    let codex = builder.build(&server).await.unwrap().codex;
+    let codex = builder.build(&server).await.unwrap().crewon;
 
     codex
         .submit(Op::UserInput {
@@ -3115,6 +3212,14 @@ async fn manual_compact_retries_after_context_window_error() {
     } else {
         panic!("expected non-empty compact inputs");
     }
+    let candidate = json!({
+        "compactionRequestCount": requests.len().saturating_sub(1),
+        "historyItemsDroppedPerContextError": compact_input.len().saturating_sub(retry_input.len()),
+        "oldestItemChanged": compact_input.first() != retry_input.first(),
+        "promptStable": compact_contains_prompt == retry_contains_prompt,
+        "terminal": "completed",
+    });
+    assert_eq!(candidate, reference["expected"]);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -3146,7 +3251,7 @@ async fn manual_compact_non_context_failure_retries_then_emits_task_error() {
     let mut model_provider = non_openai_model_provider(&server);
     model_provider.stream_max_retries = Some(1);
 
-    let codex = test_codex()
+    let codex = test_crewon()
         .with_config(move |config| {
             config.model_provider = model_provider;
             set_test_compact_prompt(config);
@@ -3155,7 +3260,7 @@ async fn manual_compact_non_context_failure_retries_then_emits_task_error() {
         .build(&server)
         .await
         .expect("build codex")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -3246,11 +3351,11 @@ async fn manual_compact_twice_preserves_latest_user_messages() {
 
     let model_provider = non_openai_model_provider(&server);
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         set_test_compact_prompt(config);
     });
-    let codex = builder.build(&server).await.unwrap().codex;
+    let codex = builder.build(&server).await.unwrap().crewon;
 
     codex
         .submit(Op::UserInput {
@@ -3490,12 +3595,12 @@ async fn auto_compact_allows_multiple_attempts_when_interleaved_with_other_turn_
 
     let model_provider = non_openai_model_provider(&server);
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         set_test_compact_prompt(config);
         config.model_auto_compact_token_limit = Some(200);
     });
-    let codex = builder.build(&server).await.unwrap().codex;
+    let codex = builder.build(&server).await.unwrap().crewon;
 
     let mut auto_compact_lifecycle_events = Vec::new();
     for user in [MULTI_AUTO_MSG, follow_up_user, final_user] {
@@ -3596,13 +3701,13 @@ async fn snapshot_request_shape_mid_turn_continuation_compaction() {
 
     let model_provider = non_openai_model_provider(&server);
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         set_test_compact_prompt(config);
         config.model_context_window = Some(context_window);
         config.model_auto_compact_token_limit = Some(limit);
     });
-    let codex = builder.build(&server).await.unwrap().codex;
+    let codex = builder.build(&server).await.unwrap().crewon;
 
     codex
         .submit(Op::UserInput {
@@ -3700,7 +3805,7 @@ async fn auto_compact_clamps_config_limit_to_context_window() {
     mount_sse_once(&server, post_auto_compact_turn).await;
 
     let model_provider = non_openai_model_provider(&server);
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.model_provider = model_provider;
         set_test_compact_prompt(config);
         config.model_context_window = Some(context_window);
@@ -3761,7 +3866,7 @@ async fn auto_compact_body_after_prefix_ignores_starting_window_prefix() {
     .await;
 
     let model_provider = non_openai_model_provider(&server);
-    let test = test_codex()
+    let test = test_crewon()
         .with_config(move |config| {
             config.model_provider = model_provider;
             set_test_compact_prompt(config);
@@ -3849,7 +3954,7 @@ async fn auto_compact_body_after_prefix_counts_growth_after_compaction() {
     .await;
 
     let model_provider = non_openai_model_provider(&server);
-    let test = test_codex()
+    let test = test_crewon()
         .with_config(move |config| {
             config.model_provider = model_provider;
             set_test_compact_prompt(config);
@@ -3933,7 +4038,7 @@ async fn auto_compact_body_after_prefix_still_caps_at_context_window() {
     .await;
 
     let model_provider = non_openai_model_provider(&server);
-    let test = test_codex()
+    let test = test_crewon()
         .with_config(move |config| {
             config.model_provider = model_provider;
             set_test_compact_prompt(config);
@@ -4003,15 +4108,15 @@ async fn auto_compact_counts_encrypted_reasoning_before_last_user() {
     .await;
 
     let compacted_history = vec![
-        codex_protocol::models::ResponseItem::Message {
+        crewon_protocol::models::ResponseItem::Message {
             id: None,
             role: "assistant".to_string(),
-            content: vec![codex_protocol::models::ContentItem::OutputText {
+            content: vec![crewon_protocol::models::ContentItem::OutputText {
                 text: "REMOTE_COMPACT_SUMMARY".to_string(),
             }],
             phase: None,
         },
-        codex_protocol::models::ResponseItem::Compaction {
+        crewon_protocol::models::ResponseItem::Compaction {
             encrypted_content: "ENCRYPTED_COMPACTION_SUMMARY".to_string(),
         },
     ];
@@ -4019,8 +4124,8 @@ async fn auto_compact_counts_encrypted_reasoning_before_last_user() {
         mount_compact_json_once(&server, serde_json::json!({ "output": compacted_history })).await;
     let chatgpt_base_url = format!("{}/backend-api", server.uri());
 
-    let codex = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let codex = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(move |config| {
             config.chatgpt_base_url = chatgpt_base_url;
             set_test_compact_prompt(config);
@@ -4030,7 +4135,7 @@ async fn auto_compact_counts_encrypted_reasoning_before_last_user() {
         .build(&server)
         .await
         .expect("build codex")
-        .codex;
+        .crewon;
 
     for (idx, user) in [first_user, second_user, third_user]
         .into_iter()
@@ -4128,23 +4233,23 @@ async fn auto_compact_runs_when_reasoning_header_clears_between_turns() {
     mount_response_sequence(&server, responses).await;
 
     let compacted_history = vec![
-        codex_protocol::models::ResponseItem::Message {
+        crewon_protocol::models::ResponseItem::Message {
             id: None,
             role: "assistant".to_string(),
-            content: vec![codex_protocol::models::ContentItem::OutputText {
+            content: vec![crewon_protocol::models::ContentItem::OutputText {
                 text: "REMOTE_COMPACT_SUMMARY".to_string(),
             }],
             phase: None,
         },
-        codex_protocol::models::ResponseItem::Compaction {
+        crewon_protocol::models::ResponseItem::Compaction {
             encrypted_content: "ENCRYPTED_COMPACTION_SUMMARY".to_string(),
         },
     ];
     let compact_mock =
         mount_compact_json_once(&server, serde_json::json!({ "output": compacted_history })).await;
 
-    let codex = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let codex = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             set_test_compact_prompt(config);
             config.model_auto_compact_token_limit = Some(300);
@@ -4153,7 +4258,7 @@ async fn auto_compact_runs_when_reasoning_header_clears_between_turns() {
         .build(&server)
         .await
         .expect("build codex")
-        .codex;
+        .crewon;
 
     for user in [first_user, second_user, third_user] {
         codex
@@ -4206,7 +4311,7 @@ async fn snapshot_request_shape_pre_turn_compaction_including_incoming_user_mess
     let request_log = mount_sse_sequence(&server, vec![sse1, sse2, sse3, sse4]).await;
 
     let model_provider = non_openai_model_provider(&server);
-    let codex = test_codex()
+    let codex = test_crewon()
         .with_config(move |config| {
             config.model_provider = model_provider;
             set_test_compact_prompt(config);
@@ -4215,7 +4320,7 @@ async fn snapshot_request_shape_pre_turn_compaction_including_incoming_user_mess
         .build(&server)
         .await
         .expect("build codex")
-        .codex;
+        .crewon;
 
     for user in ["USER_ONE", "USER_TWO"] {
         codex
@@ -4235,7 +4340,7 @@ async fn snapshot_request_shape_pre_turn_compaction_including_incoming_user_mess
     }
     core_test_support::submit_thread_settings(
         &codex,
-        codex_protocol::protocol::ThreadSettingsOverrides {
+        crewon_protocol::protocol::ThreadSettingsOverrides {
             environments: Some(local_selections(
                 test_path_buf(PRETURN_CONTEXT_DIFF_CWD).abs(),
             )),
@@ -4331,8 +4436,8 @@ async fn snapshot_request_shape_pre_turn_compaction_strips_incoming_model_switch
     .await;
 
     let model_provider = non_openai_model_provider(&server);
-    let test = test_codex()
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+    let test = test_crewon()
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model(previous_model)
         .with_config(move |config| {
             config.model_provider = model_provider;
@@ -4344,7 +4449,7 @@ async fn snapshot_request_shape_pre_turn_compaction_strips_incoming_model_switch
         .await
         .expect("build codex");
 
-    test.codex
+    test.crewon
         .submit(disabled_permission_user_turn(
             "BEFORE_SWITCH_USER",
             test.cwd.path().to_path_buf(),
@@ -4352,12 +4457,12 @@ async fn snapshot_request_shape_pre_turn_compaction_strips_incoming_model_switch
         ))
         .await
         .expect("submit first user turn");
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
 
-    test.codex
+    test.crewon
         .submit(disabled_permission_user_turn(
             "AFTER_SWITCH_USER",
             test.cwd.path().to_path_buf(),
@@ -4365,7 +4470,7 @@ async fn snapshot_request_shape_pre_turn_compaction_strips_incoming_model_switch
         ))
         .await
         .expect("submit second user turn");
-    wait_for_event(&test.codex, |event| {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -4430,7 +4535,7 @@ async fn snapshot_request_shape_pre_turn_compaction_context_window_exceeded() {
 
     let mut model_provider = non_openai_model_provider(&server);
     model_provider.stream_max_retries = Some(0);
-    let codex = test_codex()
+    let codex = test_crewon()
         .with_config(move |config| {
             config.model_provider = model_provider;
             set_test_compact_prompt(config);
@@ -4439,7 +4544,7 @@ async fn snapshot_request_shape_pre_turn_compaction_context_window_exceeded() {
         .build(&server)
         .await
         .expect("build codex")
-        .codex;
+        .crewon;
 
     codex
         .submit(Op::UserInput {
@@ -4516,7 +4621,7 @@ async fn snapshot_request_shape_manual_compact_without_previous_user_messages() 
     let request_log = mount_sse_sequence(&server, vec![compact_turn, follow_up_turn]).await;
 
     let model_provider = non_openai_model_provider(&server);
-    let codex = test_codex()
+    let codex = test_crewon()
         .with_config(move |config| {
             config.model_provider = model_provider;
             set_test_compact_prompt(config);
@@ -4524,7 +4629,7 @@ async fn snapshot_request_shape_manual_compact_without_previous_user_messages() 
         .build(&server)
         .await
         .expect("build codex")
-        .codex;
+        .crewon;
 
     codex.submit(Op::Compact).await.expect("run /compact");
     wait_for_event(&codex, |ev| matches!(ev, EventMsg::TurnComplete(_))).await;
@@ -4595,7 +4700,7 @@ async fn manual_compaction_keeps_the_creation_time_global_instructions() -> Resu
     let provider = local_compaction_provider(&server);
 
     // Create the thread with the old global source loaded into its instruction snapshot.
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(Arc::clone(&home))
         .with_config(move |config| {
             config.model_provider = provider;
@@ -4604,7 +4709,7 @@ async fn manual_compaction_keeps_the_creation_time_global_instructions() -> Resu
 
     // Assert the pre-compaction source list points at the creation-time file.
     assert_eq!(
-        test.codex.instruction_sources().await,
+        test.crewon.instruction_sources().await,
         vec![source.clone()],
         "thread reports the creation-time global source before compaction"
     );
@@ -4618,8 +4723,8 @@ async fn manual_compaction_keeps_the_creation_time_global_instructions() -> Resu
     )?;
     assert_eq!(source, rewritten_source);
 
-    test.codex.submit(Op::Compact).await?;
-    wait_for_event(&test.codex, |event| {
+    test.crewon.submit(Op::Compact).await?;
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
@@ -4635,7 +4740,7 @@ async fn manual_compaction_keeps_the_creation_time_global_instructions() -> Resu
     assert_single_instruction_fragment(&requests[1], &expected_fragment);
     assert_single_instruction_fragment(&requests[2], &expected_fragment);
     assert_eq!(
-        test.codex.instruction_sources().await,
+        test.crewon.instruction_sources().await,
         vec![source],
         "thread retains the creation-time global source after compaction"
     );
@@ -4674,7 +4779,7 @@ async fn mid_turn_compaction_keeps_the_creation_time_global_instructions() -> Re
     let provider = local_compaction_provider(&server);
 
     // Create the thread with the old global source loaded into its instruction snapshot.
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(Arc::clone(&home))
         .with_config(move |config| {
             config.model_provider = provider;
@@ -4685,7 +4790,7 @@ async fn mid_turn_compaction_keeps_the_creation_time_global_instructions() -> Re
 
     // Assert the pre-compaction source list points at the creation-time file.
     assert_eq!(
-        test.codex.instruction_sources().await,
+        test.crewon.instruction_sources().await,
         vec![source.clone()],
         "thread reports the creation-time global source before mid-turn compaction"
     );
@@ -4708,7 +4813,7 @@ async fn mid_turn_compaction_keeps_the_creation_time_global_instructions() -> Re
     assert_single_instruction_fragment(&requests[1], &expected_fragment);
     assert_single_instruction_fragment(&requests[2], &expected_fragment);
     assert_eq!(
-        test.codex.instruction_sources().await,
+        test.crewon.instruction_sources().await,
         vec![source],
         "thread retains the creation-time global source after mid-turn compaction"
     );
@@ -4748,9 +4853,9 @@ async fn remote_v2_compaction_keeps_creation_time_instructions_after_same_path_m
         GLOBAL_AGENTS_FILENAME,
         OLD_GLOBAL_INSTRUCTIONS,
     )?;
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(Arc::clone(&home))
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(|config| {
             let _ = config.features.enable(Feature::RemoteCompactionV2);
         });
@@ -4764,13 +4869,13 @@ async fn remote_v2_compaction_keeps_creation_time_instructions_after_same_path_m
         NEW_GLOBAL_INSTRUCTIONS,
     )?;
     assert_eq!(source, rewritten_source);
-    test.codex.submit(Op::Compact).await?;
-    wait_for_event(&test.codex, |event| {
+    test.crewon.submit(Op::Compact).await?;
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
     test.submit_turn("after remote v2 compaction").await?;
-    test.codex.flush_rollout().await?;
+    test.crewon.flush_rollout().await?;
 
     // Assert the compact request, installed replacement history, and follow-up all keep the
     // creation-time item despite the file-backed source now containing new text.
@@ -4785,7 +4890,7 @@ async fn remote_v2_compaction_keeps_creation_time_instructions_after_same_path_m
         Some(&json!({"type": "compaction_trigger"})),
         "remote-v2 compact request should append exactly one compaction trigger"
     );
-    let rollout_path = test.codex.rollout_path().expect("rollout path");
+    let rollout_path = test.crewon.rollout_path().expect("rollout path");
     let replacement_history = replacement_history_from_rollout(&rollout_path)?;
     assert_eq!(
         instruction_fragments_in_items(&replacement_history),
@@ -4793,7 +4898,7 @@ async fn remote_v2_compaction_keeps_creation_time_instructions_after_same_path_m
         "remote-v2 replacement history currently omits the global-instruction fragment"
     );
     assert_eq!(
-        test.codex.instruction_sources().await,
+        test.crewon.instruction_sources().await,
         vec![source.clone()],
         "running thread retains the selected same-path source"
     );
@@ -4804,15 +4909,15 @@ async fn remote_v2_compaction_keeps_creation_time_instructions_after_same_path_m
     );
 
     // Cold-resume the persisted replacement history with freshly loaded same-path configuration.
-    test.codex.submit(Op::Shutdown).await?;
-    wait_for_event(&test.codex, |event| {
+    test.crewon.submit(Op::Shutdown).await?;
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::ShutdownComplete)
     })
     .await;
     let resumed_cwd = test.config.cwd.clone();
-    let mut resume_builder = test_codex()
+    let mut resume_builder = test_crewon()
         .with_home(Arc::clone(&home))
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(move |config| {
             config.cwd = resumed_cwd;
             let _ = config.features.enable(Feature::RemoteCompactionV2);
@@ -4842,7 +4947,7 @@ async fn remote_v2_compaction_keeps_creation_time_instructions_after_same_path_m
         "remote-v2 cold resume should replay the complete post-compaction structured prefix"
     );
     assert_eq!(
-        resumed.codex.instruction_sources().await,
+        resumed.crewon.instruction_sources().await,
         vec![source],
         "cold-resumed thread reports the same rewritten source path"
     );

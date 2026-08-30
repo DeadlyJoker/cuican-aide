@@ -21,18 +21,18 @@ use axum::http::StatusCode;
 use axum::http::Uri;
 use axum::http::header::AUTHORIZATION;
 use axum::routing::get;
-use codex_app_server_protocol::AppInfo;
-use codex_app_server_protocol::AppSummary;
-use codex_app_server_protocol::AppsListParams;
-use codex_app_server_protocol::AppsListResponse;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::PluginAuthPolicy;
-use codex_app_server_protocol::PluginAvailability;
-use codex_app_server_protocol::PluginInstallParams;
-use codex_app_server_protocol::PluginInstallResponse;
-use codex_app_server_protocol::RequestId;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::AppInfo;
+use crewon_app_server_protocol::AppSummary;
+use crewon_app_server_protocol::AppsListParams;
+use crewon_app_server_protocol::AppsListResponse;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::PluginAuthPolicy;
+use crewon_app_server_protocol::PluginAvailability;
+use crewon_app_server_protocol::PluginInstallParams;
+use crewon_app_server_protocol::PluginInstallResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use flate2::Compression;
 use flate2::write::GzEncoder;
 use pretty_assertions::assert_eq;
@@ -227,7 +227,7 @@ async fn plugin_install_writes_remote_plugin_to_cloud_and_cache() -> Result<()> 
     mount_remote_plugin_install_after_cache_write(
         &server,
         REMOTE_PLUGIN_ID,
-        installed_path.join(".codex-plugin/plugin.json"),
+        installed_path.join(".crewon-plugin/plugin.json"),
     )
     .await;
 
@@ -267,9 +267,9 @@ async fn plugin_install_writes_remote_plugin_to_cloud_and_cache() -> Result<()> 
         /*expected_count*/ 1,
     )
     .await?;
-    assert!(installed_path.join(".codex-plugin/plugin.json").is_file());
+    assert!(installed_path.join(".crewon-plugin/plugin.json").is_file());
     let installed_plugin_manifest: serde_json::Value = serde_json::from_str(
-        &std::fs::read_to_string(installed_path.join(".codex-plugin/plugin.json"))?,
+        &std::fs::read_to_string(installed_path.join(".crewon-plugin/plugin.json"))?,
     )?;
     assert_eq!(installed_plugin_manifest["name"], json!("linear"));
     assert_eq!(installed_plugin_manifest["version"], json!("1.2.3"));
@@ -556,7 +556,7 @@ async fn plugin_install_rejects_remote_plugin_disabled_by_admin_before_download(
 }
 
 #[tokio::test]
-async fn plugin_install_rejects_when_workspace_codex_plugins_disabled() -> Result<()> {
+async fn plugin_install_rejects_when_workspace_crewon_plugins_disabled() -> Result<()> {
     let codex_home = TempDir::new()?;
     let repo_root = TempDir::new()?;
     let server = MockServer::start().await;
@@ -617,7 +617,7 @@ async fn plugin_install_rejects_when_workspace_codex_plugins_disabled() -> Resul
     assert!(
         err.error
             .message
-            .contains("Codex plugins are disabled for this workspace")
+            .contains("Crewon plugins are disabled for this workspace")
     );
     Ok(())
 }
@@ -788,7 +788,7 @@ async fn plugin_install_tracks_analytics_event() -> Result<()> {
         payload,
         json!({
             "events": [{
-                "event_type": "codex_plugin_installed",
+                "event_type": "crewon_plugin_installed",
                 "event_params": {
                     "plugin_id": "sample-plugin@debug",
                     "plugin_name": "sample-plugin",
@@ -841,7 +841,7 @@ async fn plugin_install_tracks_remote_plugin_analytics_event() -> Result<()> {
         payload,
         json!({
             "events": [{
-                "event_type": "codex_plugin_installed",
+                "event_type": "crewon_plugin_installed",
                 "event_params": {
                     "plugin_id": REMOTE_PLUGIN_ID,
                     "plugin_name": "linear",
@@ -1779,9 +1779,9 @@ fn write_plugin_source(
     app_ids: &[&str],
 ) -> Result<()> {
     let plugin_root = repo_root.join(plugin_name);
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin"))?;
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))?;
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         format!(r#"{{"name":"{plugin_name}"}}"#),
     )?;
 
@@ -1810,7 +1810,7 @@ fn remote_plugin_bundle_tar_gz_bytes_with_contents(
     let mut tar = tar::Builder::new(encoder);
     let mut entries = vec![
         (
-            ".codex-plugin/plugin.json",
+            ".crewon-plugin/plugin.json",
             plugin_manifest.as_bytes(),
             /*mode*/ 0o644,
         ),

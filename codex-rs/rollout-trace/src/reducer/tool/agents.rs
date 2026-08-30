@@ -1,14 +1,14 @@
 use anyhow::Context;
 use anyhow::Result;
 use anyhow::bail;
-use codex_protocol::protocol::CollabAgentInteractionBeginEvent;
-use codex_protocol::protocol::CollabAgentInteractionEndEvent;
-use codex_protocol::protocol::CollabAgentSpawnEndEvent;
-use codex_protocol::protocol::CollabCloseBeginEvent;
-use codex_protocol::protocol::CollabCloseEndEvent;
-use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::SubAgentActivityEvent;
-use codex_protocol::protocol::SubAgentActivityKind;
+use crewon_protocol::protocol::CollabAgentInteractionBeginEvent;
+use crewon_protocol::protocol::CollabAgentInteractionEndEvent;
+use crewon_protocol::protocol::CollabAgentSpawnEndEvent;
+use crewon_protocol::protocol::CollabCloseBeginEvent;
+use crewon_protocol::protocol::CollabCloseEndEvent;
+use crewon_protocol::protocol::InterAgentCommunication;
+use crewon_protocol::protocol::SubAgentActivityEvent;
+use crewon_protocol::protocol::SubAgentActivityKind;
 use serde::Deserialize;
 use serde_json::Value;
 

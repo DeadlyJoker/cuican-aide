@@ -1,0 +1,51 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "activeConnections": {
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "description": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "id": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "inputVariables": {
+      "items": true,
+      "type": "array"
+    },
+    "isPublished": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "maxConcurrency": {
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "name": {
+      "type": "string"
+    },
+    "version": {
+      "format": "int64",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "activeConnections",
+    "id",
+    "inputVariables",
+    "isPublished",
+    "maxConcurrency",
+    "name",
+    "version"
+  ],
+  "title": "AgentPlatformWorkflowInfoResponse",
+  "type": "object"
+}

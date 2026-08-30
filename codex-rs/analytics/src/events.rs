@@ -2,15 +2,15 @@ use std::time::Instant;
 
 use crate::facts::AcceptedLineFingerprint;
 use crate::facts::AppInvocation;
-use crate::facts::CodexCompactionEvent;
-use crate::facts::CodexErrKind;
-use crate::facts::CodexGoalEvent;
 use crate::facts::CompactionImplementation;
 use crate::facts::CompactionPhase;
 use crate::facts::CompactionReason;
 use crate::facts::CompactionStatus;
 use crate::facts::CompactionStrategy;
 use crate::facts::CompactionTrigger;
+use crate::facts::CrewonCompactionEvent;
+use crate::facts::CrewonErrKind;
+use crate::facts::CrewonGoalEvent;
 use crate::facts::GoalEventKind;
 use crate::facts::HookRunFact;
 use crate::facts::InvocationType;
@@ -23,23 +23,23 @@ use crate::facts::TurnSteerRejectionReason;
 use crate::facts::TurnSteerResult;
 use crate::facts::TurnSubmissionType;
 use crate::now_unix_millis;
-use codex_app_server_protocol::CodexErrorInfo;
-use codex_app_server_protocol::CommandExecutionSource;
-use codex_login::default_client::originator;
-use codex_plugin::PluginTelemetryMetadata;
-use codex_protocol::approvals::NetworkApprovalProtocol;
-use codex_protocol::models::AdditionalPermissionProfile;
-use codex_protocol::models::SandboxPermissions;
-use codex_protocol::protocol::GuardianAssessmentOutcome;
-use codex_protocol::protocol::GuardianCommandSource;
-use codex_protocol::protocol::GuardianRiskLevel;
-use codex_protocol::protocol::GuardianUserAuthorization;
-use codex_protocol::protocol::HookEventName;
-use codex_protocol::protocol::HookRunStatus;
-use codex_protocol::protocol::HookSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::protocol::ThreadSource;
-use codex_protocol::protocol::TokenUsage;
+use crewon_app_server_protocol::CodexErrorInfo;
+use crewon_app_server_protocol::CommandExecutionSource;
+use crewon_login::default_client::originator;
+use crewon_plugin::PluginTelemetryMetadata;
+use crewon_protocol::approvals::NetworkApprovalProtocol;
+use crewon_protocol::models::AdditionalPermissionProfile;
+use crewon_protocol::models::SandboxPermissions;
+use crewon_protocol::protocol::GuardianAssessmentOutcome;
+use crewon_protocol::protocol::GuardianCommandSource;
+use crewon_protocol::protocol::GuardianRiskLevel;
+use crewon_protocol::protocol::GuardianUserAuthorization;
+use crewon_protocol::protocol::HookEventName;
+use crewon_protocol::protocol::HookRunStatus;
+use crewon_protocol::protocol::HookSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::ThreadSource;
+use crewon_protocol::protocol::TokenUsage;
 use serde::Serialize;
 
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -61,28 +61,28 @@ pub(crate) enum TrackEventRequest {
     SkillInvocation(SkillInvocationEventRequest),
     ThreadInitialized(ThreadInitializedEvent),
     GuardianReview(Box<GuardianReviewEventRequest>),
-    AppMentioned(CodexAppMentionedEventRequest),
-    AppUsed(CodexAppUsedEventRequest),
-    HookRun(CodexHookRunEventRequest),
-    Compaction(Box<CodexCompactionEventRequest>),
-    Goal(Box<CodexGoalEventRequest>),
-    TurnEvent(Box<CodexTurnEventRequest>),
-    TurnSteer(CodexTurnSteerEventRequest),
-    CommandExecution(CodexCommandExecutionEventRequest),
-    FileChange(CodexFileChangeEventRequest),
-    McpToolCall(CodexMcpToolCallEventRequest),
-    DynamicToolCall(CodexDynamicToolCallEventRequest),
-    CollabAgentToolCall(CodexCollabAgentToolCallEventRequest),
-    WebSearch(CodexWebSearchEventRequest),
-    ImageGeneration(CodexImageGenerationEventRequest),
-    AcceptedLineFingerprints(Box<CodexAcceptedLineFingerprintsEventRequest>),
+    AppMentioned(CrewonAppMentionedEventRequest),
+    AppUsed(CrewonAppUsedEventRequest),
+    HookRun(CrewonHookRunEventRequest),
+    Compaction(Box<CrewonCompactionEventRequest>),
+    Goal(Box<CrewonGoalEventRequest>),
+    TurnEvent(Box<CrewonTurnEventRequest>),
+    TurnSteer(CrewonTurnSteerEventRequest),
+    CommandExecution(CrewonCommandExecutionEventRequest),
+    FileChange(CrewonFileChangeEventRequest),
+    McpToolCall(CrewonMcpToolCallEventRequest),
+    DynamicToolCall(CrewonDynamicToolCallEventRequest),
+    CollabAgentToolCall(CrewonCollabAgentToolCallEventRequest),
+    WebSearch(CrewonWebSearchEventRequest),
+    ImageGeneration(CrewonImageGenerationEventRequest),
+    AcceptedLineFingerprints(Box<CrewonAcceptedLineFingerprintsEventRequest>),
     #[allow(dead_code)]
-    ReviewEvent(CodexReviewEventRequest),
-    PluginUsed(CodexPluginUsedEventRequest),
-    PluginInstalled(CodexPluginEventRequest),
-    PluginUninstalled(CodexPluginEventRequest),
-    PluginEnabled(CodexPluginEventRequest),
-    PluginDisabled(CodexPluginEventRequest),
+    ReviewEvent(CrewonReviewEventRequest),
+    PluginUsed(CrewonPluginUsedEventRequest),
+    PluginInstalled(CrewonPluginEventRequest),
+    PluginUninstalled(CrewonPluginEventRequest),
+    PluginEnabled(CrewonPluginEventRequest),
+    PluginDisabled(CrewonPluginEventRequest),
 }
 
 impl TrackEventRequest {
@@ -92,7 +92,7 @@ impl TrackEventRequest {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexAcceptedLineFingerprintsEventParams {
+pub(crate) struct CrewonAcceptedLineFingerprintsEventParams {
     pub(crate) event_type: &'static str,
     pub(crate) turn_id: String,
     pub(crate) thread_id: String,
@@ -106,9 +106,9 @@ pub(crate) struct CodexAcceptedLineFingerprintsEventParams {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexAcceptedLineFingerprintsEventRequest {
+pub(crate) struct CrewonAcceptedLineFingerprintsEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexAcceptedLineFingerprintsEventParams,
+    pub(crate) event_params: CrewonAcceptedLineFingerprintsEventParams,
 }
 
 #[derive(Serialize)]
@@ -132,7 +132,7 @@ pub(crate) struct SkillInvocationEventParams {
 }
 
 #[derive(Clone, Serialize)]
-pub(crate) struct CodexAppServerClientMetadata {
+pub(crate) struct CrewonAppServerClientMetadata {
     pub(crate) product_client_id: String,
     pub(crate) client_name: Option<String>,
     pub(crate) client_version: Option<String>,
@@ -141,8 +141,8 @@ pub(crate) struct CodexAppServerClientMetadata {
 }
 
 #[derive(Clone, Serialize)]
-pub(crate) struct CodexRuntimeMetadata {
-    pub(crate) codex_rs_version: String,
+pub(crate) struct CrewonRuntimeMetadata {
+    pub(crate) crewon_rs_version: String,
     pub(crate) runtime_os: String,
     pub(crate) runtime_os_version: String,
     pub(crate) runtime_arch: String,
@@ -152,8 +152,8 @@ pub(crate) struct CodexRuntimeMetadata {
 pub(crate) struct ThreadInitializedEventParams {
     pub(crate) thread_id: String,
     pub(crate) session_id: String,
-    pub(crate) app_server_client: CodexAppServerClientMetadata,
-    pub(crate) runtime: CodexRuntimeMetadata,
+    pub(crate) app_server_client: CrewonAppServerClientMetadata,
+    pub(crate) runtime: CrewonRuntimeMetadata,
     pub(crate) model: String,
     pub(crate) ephemeral: bool,
     pub(crate) thread_source: Option<ThreadSource>,
@@ -215,7 +215,7 @@ pub enum GuardianReviewSessionKind {
 #[derive(Clone, Copy, Debug, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GuardianApprovalRequestSource {
-    /// Approval requested directly by the main Codex turn.
+    /// Approval requested directly by the main Crewon turn.
     MainTurn,
     /// Approval requested by a delegated subagent and routed through the parent
     /// session for guardian review.
@@ -431,8 +431,8 @@ impl GuardianReviewAnalyticsResult {
 #[derive(Serialize)]
 pub(crate) struct GuardianReviewEventPayload {
     pub(crate) session_id: String,
-    pub(crate) app_server_client: CodexAppServerClientMetadata,
-    pub(crate) runtime: CodexRuntimeMetadata,
+    pub(crate) app_server_client: CrewonAppServerClientMetadata,
+    pub(crate) runtime: CrewonRuntimeMetadata,
     #[serde(flatten)]
     pub(crate) guardian_review: GuardianReviewEventParams,
 }
@@ -476,14 +476,14 @@ pub(crate) enum ToolItemFailureKind {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexToolItemEventBase {
+pub(crate) struct CrewonToolItemEventBase {
     pub(crate) thread_id: String,
     pub(crate) turn_id: String,
     /// App-server ThreadItem.id. For tool-originated items this generally
     /// corresponds to the originating core call_id.
     pub(crate) item_id: String,
-    pub(crate) app_server_client: CodexAppServerClientMetadata,
-    pub(crate) runtime: CodexRuntimeMetadata,
+    pub(crate) app_server_client: CrewonAppServerClientMetadata,
+    pub(crate) runtime: CrewonRuntimeMetadata,
     pub(crate) thread_source: Option<ThreadSource>,
     pub(crate) subagent_source: Option<String>,
     pub(crate) parent_thread_id: Option<String>,
@@ -554,13 +554,13 @@ pub(crate) enum ReviewResolution {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexReviewEventParams {
+pub(crate) struct CrewonReviewEventParams {
     pub(crate) thread_id: String,
     pub(crate) turn_id: String,
     pub(crate) item_id: Option<String>,
     pub(crate) review_id: String,
-    pub(crate) app_server_client: CodexAppServerClientMetadata,
-    pub(crate) runtime: CodexRuntimeMetadata,
+    pub(crate) app_server_client: CrewonAppServerClientMetadata,
+    pub(crate) runtime: CrewonRuntimeMetadata,
     pub(crate) thread_source: Option<ThreadSource>,
     pub(crate) subagent_source: Option<String>,
     pub(crate) parent_thread_id: Option<String>,
@@ -576,9 +576,9 @@ pub(crate) struct CodexReviewEventParams {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexReviewEventRequest {
+pub(crate) struct CrewonReviewEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexReviewEventParams,
+    pub(crate) event_params: CrewonReviewEventParams,
 }
 #[allow(dead_code)]
 #[derive(Clone, Copy, Debug, Serialize)]
@@ -591,9 +591,9 @@ pub(crate) enum WebSearchActionKind {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexCommandExecutionEventParams {
+pub(crate) struct CrewonCommandExecutionEventParams {
     #[serde(flatten)]
-    pub(crate) base: CodexToolItemEventBase,
+    pub(crate) base: CrewonToolItemEventBase,
     pub(crate) command_execution_source: CommandExecutionSource,
     pub(crate) exit_code: Option<i32>,
     pub(crate) command_total_action_count: u64,
@@ -604,15 +604,15 @@ pub(crate) struct CodexCommandExecutionEventParams {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexCommandExecutionEventRequest {
+pub(crate) struct CrewonCommandExecutionEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexCommandExecutionEventParams,
+    pub(crate) event_params: CrewonCommandExecutionEventParams,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexFileChangeEventParams {
+pub(crate) struct CrewonFileChangeEventParams {
     #[serde(flatten)]
-    pub(crate) base: CodexToolItemEventBase,
+    pub(crate) base: CrewonToolItemEventBase,
     pub(crate) file_change_count: u64,
     pub(crate) file_add_count: u64,
     pub(crate) file_update_count: u64,
@@ -621,30 +621,30 @@ pub(crate) struct CodexFileChangeEventParams {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexFileChangeEventRequest {
+pub(crate) struct CrewonFileChangeEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexFileChangeEventParams,
+    pub(crate) event_params: CrewonFileChangeEventParams,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexMcpToolCallEventParams {
+pub(crate) struct CrewonMcpToolCallEventParams {
     #[serde(flatten)]
-    pub(crate) base: CodexToolItemEventBase,
+    pub(crate) base: CrewonToolItemEventBase,
     pub(crate) mcp_server_name: String,
     pub(crate) mcp_tool_name: String,
     pub(crate) mcp_error_present: bool,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexMcpToolCallEventRequest {
+pub(crate) struct CrewonMcpToolCallEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexMcpToolCallEventParams,
+    pub(crate) event_params: CrewonMcpToolCallEventParams,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexDynamicToolCallEventParams {
+pub(crate) struct CrewonDynamicToolCallEventParams {
     #[serde(flatten)]
-    pub(crate) base: CodexToolItemEventBase,
+    pub(crate) base: CrewonToolItemEventBase,
     pub(crate) dynamic_tool_name: String,
     pub(crate) success: Option<bool>,
     pub(crate) output_content_item_count: Option<u64>,
@@ -653,15 +653,15 @@ pub(crate) struct CodexDynamicToolCallEventParams {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexDynamicToolCallEventRequest {
+pub(crate) struct CrewonDynamicToolCallEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexDynamicToolCallEventParams,
+    pub(crate) event_params: CrewonDynamicToolCallEventParams,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexCollabAgentToolCallEventParams {
+pub(crate) struct CrewonCollabAgentToolCallEventParams {
     #[serde(flatten)]
-    pub(crate) base: CodexToolItemEventBase,
+    pub(crate) base: CrewonToolItemEventBase,
     pub(crate) sender_thread_id: String,
     pub(crate) receiver_thread_count: u64,
     pub(crate) receiver_thread_ids: Option<Vec<String>>,
@@ -673,42 +673,42 @@ pub(crate) struct CodexCollabAgentToolCallEventParams {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexCollabAgentToolCallEventRequest {
+pub(crate) struct CrewonCollabAgentToolCallEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexCollabAgentToolCallEventParams,
+    pub(crate) event_params: CrewonCollabAgentToolCallEventParams,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexWebSearchEventParams {
+pub(crate) struct CrewonWebSearchEventParams {
     #[serde(flatten)]
-    pub(crate) base: CodexToolItemEventBase,
+    pub(crate) base: CrewonToolItemEventBase,
     pub(crate) web_search_action: Option<WebSearchActionKind>,
     pub(crate) query_present: bool,
     pub(crate) query_count: Option<u64>,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexWebSearchEventRequest {
+pub(crate) struct CrewonWebSearchEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexWebSearchEventParams,
+    pub(crate) event_params: CrewonWebSearchEventParams,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexImageGenerationEventParams {
+pub(crate) struct CrewonImageGenerationEventParams {
     #[serde(flatten)]
-    pub(crate) base: CodexToolItemEventBase,
+    pub(crate) base: CrewonToolItemEventBase,
     pub(crate) revised_prompt_present: bool,
     pub(crate) saved_path_present: bool,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexImageGenerationEventRequest {
+pub(crate) struct CrewonImageGenerationEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexImageGenerationEventParams,
+    pub(crate) event_params: CrewonImageGenerationEventParams,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexAppMetadata {
+pub(crate) struct CrewonAppMetadata {
     pub(crate) connector_id: Option<String>,
     pub(crate) thread_id: Option<String>,
     pub(crate) turn_id: Option<String>,
@@ -719,19 +719,19 @@ pub(crate) struct CodexAppMetadata {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexAppMentionedEventRequest {
+pub(crate) struct CrewonAppMentionedEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexAppMetadata,
+    pub(crate) event_params: CrewonAppMetadata,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexAppUsedEventRequest {
+pub(crate) struct CrewonAppUsedEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexAppMetadata,
+    pub(crate) event_params: CrewonAppMetadata,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexHookRunMetadata {
+pub(crate) struct CrewonHookRunMetadata {
     pub(crate) thread_id: Option<String>,
     pub(crate) turn_id: Option<String>,
     pub(crate) model_slug: Option<String>,
@@ -741,18 +741,18 @@ pub(crate) struct CodexHookRunMetadata {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexHookRunEventRequest {
+pub(crate) struct CrewonHookRunEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexHookRunMetadata,
+    pub(crate) event_params: CrewonHookRunMetadata,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexCompactionEventParams {
+pub(crate) struct CrewonCompactionEventParams {
     pub(crate) thread_id: String,
     pub(crate) session_id: String,
     pub(crate) turn_id: String,
-    pub(crate) app_server_client: CodexAppServerClientMetadata,
-    pub(crate) runtime: CodexRuntimeMetadata,
+    pub(crate) app_server_client: CrewonAppServerClientMetadata,
+    pub(crate) runtime: CrewonRuntimeMetadata,
     pub(crate) thread_source: Option<ThreadSource>,
     pub(crate) subagent_source: Option<String>,
     pub(crate) parent_thread_id: Option<String>,
@@ -762,8 +762,8 @@ pub(crate) struct CodexCompactionEventParams {
     pub(crate) phase: CompactionPhase,
     pub(crate) strategy: CompactionStrategy,
     pub(crate) status: CompactionStatus,
-    pub(crate) codex_error_kind: Option<CodexErrKind>,
-    pub(crate) codex_error_http_status_code: Option<u16>,
+    pub(crate) crewon_error_kind: Option<CrewonErrKind>,
+    pub(crate) crewon_error_http_status_code: Option<u16>,
     pub(crate) active_context_tokens_before: i64,
     pub(crate) active_context_tokens_after: i64,
     pub(crate) retained_image_count: Option<usize>,
@@ -775,45 +775,45 @@ pub(crate) struct CodexCompactionEventParams {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexCompactionEventRequest {
+pub(crate) struct CrewonCompactionEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexCompactionEventParams,
+    pub(crate) event_params: CrewonCompactionEventParams,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexGoalEventParams {
+pub(crate) struct CrewonGoalEventParams {
     pub(crate) thread_id: String,
     pub(crate) session_id: String,
     pub(crate) turn_id: Option<String>,
-    pub(crate) app_server_client: CodexAppServerClientMetadata,
-    pub(crate) runtime: CodexRuntimeMetadata,
+    pub(crate) app_server_client: CrewonAppServerClientMetadata,
+    pub(crate) runtime: CrewonRuntimeMetadata,
     pub(crate) thread_source: Option<ThreadSource>,
     pub(crate) subagent_source: Option<String>,
     pub(crate) parent_thread_id: Option<String>,
     pub(crate) goal_id: String,
     pub(crate) event_kind: GoalEventKind,
-    pub(crate) goal_status: codex_state::ThreadGoalStatus,
+    pub(crate) goal_status: crewon_state::ThreadGoalStatus,
     pub(crate) has_token_budget: bool,
     pub(crate) cumulative_tokens_accounted: Option<i64>,
     pub(crate) cumulative_time_accounted_seconds: Option<i64>,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexGoalEventRequest {
+pub(crate) struct CrewonGoalEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexGoalEventParams,
+    pub(crate) event_params: CrewonGoalEventParams,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexTurnEventParams {
+pub(crate) struct CrewonTurnEventParams {
     pub(crate) thread_id: String,
     pub(crate) session_id: String,
     pub(crate) turn_id: String,
     // TODO(rhan-oai): Populate once queued/default submission type is plumbed from
     // the turn/start callsites instead of always being reported as None.
     pub(crate) submission_type: Option<TurnSubmissionType>,
-    pub(crate) app_server_client: CodexAppServerClientMetadata,
-    pub(crate) runtime: CodexRuntimeMetadata,
+    pub(crate) app_server_client: CrewonAppServerClientMetadata,
+    pub(crate) runtime: CrewonRuntimeMetadata,
     pub(crate) ephemeral: bool,
     pub(crate) thread_source: Option<ThreadSource>,
     pub(crate) initialization_mode: ThreadInitializationMode,
@@ -835,8 +835,8 @@ pub(crate) struct CodexTurnEventParams {
     pub(crate) is_first_turn: bool,
     pub(crate) status: Option<TurnStatus>,
     pub(crate) turn_error: Option<CodexErrorInfo>,
-    pub(crate) codex_error_kind: Option<CodexErrKind>,
-    pub(crate) codex_error_http_status_code: Option<u16>,
+    pub(crate) crewon_error_kind: Option<CrewonErrKind>,
+    pub(crate) crewon_error_http_status_code: Option<u16>,
     pub(crate) steer_count: Option<usize>,
     pub(crate) total_tool_call_count: Option<usize>,
     pub(crate) shell_command_count: Option<usize>,
@@ -864,19 +864,19 @@ pub(crate) struct CodexTurnEventParams {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexTurnEventRequest {
+pub(crate) struct CrewonTurnEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexTurnEventParams,
+    pub(crate) event_params: CrewonTurnEventParams,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexTurnSteerEventParams {
+pub(crate) struct CrewonTurnSteerEventParams {
     pub(crate) thread_id: String,
     pub(crate) session_id: String,
     pub(crate) expected_turn_id: Option<String>,
     pub(crate) accepted_turn_id: Option<String>,
-    pub(crate) app_server_client: CodexAppServerClientMetadata,
-    pub(crate) runtime: CodexRuntimeMetadata,
+    pub(crate) app_server_client: CrewonAppServerClientMetadata,
+    pub(crate) runtime: CrewonRuntimeMetadata,
     pub(crate) thread_source: Option<ThreadSource>,
     pub(crate) subagent_source: Option<String>,
     pub(crate) parent_thread_id: Option<String>,
@@ -887,13 +887,13 @@ pub(crate) struct CodexTurnSteerEventParams {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexTurnSteerEventRequest {
+pub(crate) struct CrewonTurnSteerEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexTurnSteerEventParams,
+    pub(crate) event_params: CrewonTurnSteerEventParams,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexPluginMetadata {
+pub(crate) struct CrewonPluginMetadata {
     pub(crate) plugin_id: Option<String>,
     pub(crate) plugin_name: Option<String>,
     pub(crate) marketplace_name: Option<String>,
@@ -904,9 +904,9 @@ pub(crate) struct CodexPluginMetadata {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexPluginUsedMetadata {
+pub(crate) struct CrewonPluginUsedMetadata {
     #[serde(flatten)]
-    pub(crate) plugin: CodexPluginMetadata,
+    pub(crate) plugin: CrewonPluginMetadata,
     pub(crate) mcp_server_names: Option<Vec<String>>,
     pub(crate) thread_id: Option<String>,
     pub(crate) turn_id: Option<String>,
@@ -914,31 +914,31 @@ pub(crate) struct CodexPluginUsedMetadata {
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexPluginEventRequest {
+pub(crate) struct CrewonPluginEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexPluginMetadata,
+    pub(crate) event_params: CrewonPluginMetadata,
 }
 
 #[derive(Serialize)]
-pub(crate) struct CodexPluginUsedEventRequest {
+pub(crate) struct CrewonPluginUsedEventRequest {
     pub(crate) event_type: &'static str,
-    pub(crate) event_params: CodexPluginUsedMetadata,
+    pub(crate) event_params: CrewonPluginUsedMetadata,
 }
 
 pub(crate) fn plugin_state_event_type(state: PluginState) -> &'static str {
     match state {
-        PluginState::Installed => "codex_plugin_installed",
-        PluginState::Uninstalled => "codex_plugin_uninstalled",
-        PluginState::Enabled => "codex_plugin_enabled",
-        PluginState::Disabled => "codex_plugin_disabled",
+        PluginState::Installed => "crewon_plugin_installed",
+        PluginState::Uninstalled => "crewon_plugin_uninstalled",
+        PluginState::Enabled => "crewon_plugin_enabled",
+        PluginState::Disabled => "crewon_plugin_disabled",
     }
 }
 
-pub(crate) fn codex_app_metadata(
+pub(crate) fn crewon_app_metadata(
     tracking: &TrackEventsContext,
     app: AppInvocation,
-) -> CodexAppMetadata {
-    CodexAppMetadata {
+) -> CrewonAppMetadata {
+    CrewonAppMetadata {
         connector_id: app.connector_id,
         thread_id: Some(tracking.thread_id.clone()),
         turn_id: Some(tracking.turn_id.clone()),
@@ -949,14 +949,14 @@ pub(crate) fn codex_app_metadata(
     }
 }
 
-pub(crate) fn codex_plugin_metadata(plugin: PluginTelemetryMetadata) -> CodexPluginMetadata {
+pub(crate) fn crewon_plugin_metadata(plugin: PluginTelemetryMetadata) -> CrewonPluginMetadata {
     let PluginTelemetryMetadata {
         plugin_id,
         remote_plugin_id,
         capability_summary,
     } = plugin;
     let event_plugin_id = remote_plugin_id.unwrap_or_else(|| plugin_id.as_key());
-    CodexPluginMetadata {
+    CrewonPluginMetadata {
         plugin_id: Some(event_plugin_id),
         plugin_name: Some(plugin_id.plugin_name),
         marketplace_name: Some(plugin_id.marketplace_name),
@@ -977,16 +977,16 @@ pub(crate) fn codex_plugin_metadata(plugin: PluginTelemetryMetadata) -> CodexPlu
     }
 }
 
-pub(crate) fn codex_compaction_event_params(
-    input: CodexCompactionEvent,
+pub(crate) fn crewon_compaction_event_params(
+    input: CrewonCompactionEvent,
     session_id: String,
-    app_server_client: CodexAppServerClientMetadata,
-    runtime: CodexRuntimeMetadata,
+    app_server_client: CrewonAppServerClientMetadata,
+    runtime: CrewonRuntimeMetadata,
     thread_source: Option<ThreadSource>,
     subagent_source: Option<String>,
     parent_thread_id: Option<String>,
-) -> CodexCompactionEventParams {
-    CodexCompactionEventParams {
+) -> CrewonCompactionEventParams {
+    CrewonCompactionEventParams {
         thread_id: input.thread_id,
         session_id,
         turn_id: input.turn_id,
@@ -1001,8 +1001,8 @@ pub(crate) fn codex_compaction_event_params(
         phase: input.phase,
         strategy: input.strategy,
         status: input.status,
-        codex_error_kind: input.codex_error_kind,
-        codex_error_http_status_code: input.codex_error_http_status_code,
+        crewon_error_kind: input.crewon_error_kind,
+        crewon_error_http_status_code: input.crewon_error_http_status_code,
         active_context_tokens_before: input.active_context_tokens_before,
         active_context_tokens_after: input.active_context_tokens_after,
         retained_image_count: input.retained_image_count,
@@ -1014,16 +1014,16 @@ pub(crate) fn codex_compaction_event_params(
     }
 }
 
-pub(crate) fn codex_goal_event_params(
-    input: CodexGoalEvent,
+pub(crate) fn crewon_goal_event_params(
+    input: CrewonGoalEvent,
     session_id: String,
-    app_server_client: CodexAppServerClientMetadata,
-    runtime: CodexRuntimeMetadata,
+    app_server_client: CrewonAppServerClientMetadata,
+    runtime: CrewonRuntimeMetadata,
     thread_source: Option<ThreadSource>,
     subagent_source: Option<String>,
     parent_thread_id: Option<String>,
-) -> CodexGoalEventParams {
-    CodexGoalEventParams {
+) -> CrewonGoalEventParams {
+    CrewonGoalEventParams {
         thread_id: input.thread_id,
         session_id,
         turn_id: input.turn_id,
@@ -1041,16 +1041,16 @@ pub(crate) fn codex_goal_event_params(
     }
 }
 
-pub(crate) fn codex_plugin_used_metadata(
+pub(crate) fn crewon_plugin_used_metadata(
     tracking: &TrackEventsContext,
     plugin: PluginTelemetryMetadata,
-) -> CodexPluginUsedMetadata {
+) -> CrewonPluginUsedMetadata {
     let mcp_server_names = plugin
         .capability_summary
         .as_ref()
         .map(|summary| summary.mcp_server_names.clone());
-    CodexPluginUsedMetadata {
-        plugin: codex_plugin_metadata(plugin),
+    CrewonPluginUsedMetadata {
+        plugin: crewon_plugin_metadata(plugin),
         mcp_server_names,
         thread_id: Some(tracking.thread_id.clone()),
         turn_id: Some(tracking.turn_id.clone()),
@@ -1058,11 +1058,11 @@ pub(crate) fn codex_plugin_used_metadata(
     }
 }
 
-pub(crate) fn codex_hook_run_metadata(
+pub(crate) fn crewon_hook_run_metadata(
     tracking: &TrackEventsContext,
     hook: HookRunFact,
-) -> CodexHookRunMetadata {
-    CodexHookRunMetadata {
+) -> CrewonHookRunMetadata {
+    CrewonHookRunMetadata {
         thread_id: Some(tracking.thread_id.clone()),
         turn_id: Some(tracking.turn_id.clone()),
         model_slug: Some(tracking.model_slug.clone()),
@@ -1103,10 +1103,10 @@ fn analytics_hook_source(source: HookSource) -> &'static str {
     }
 }
 
-pub(crate) fn current_runtime_metadata() -> CodexRuntimeMetadata {
+pub(crate) fn current_runtime_metadata() -> CrewonRuntimeMetadata {
     let os_info = os_info::get();
-    CodexRuntimeMetadata {
-        codex_rs_version: env!("CARGO_PKG_VERSION").to_string(),
+    CrewonRuntimeMetadata {
+        crewon_rs_version: env!("CARGO_PKG_VERSION").to_string(),
         runtime_os: std::env::consts::OS.to_string(),
         runtime_os_version: os_info.version().to_string(),
         runtime_arch: std::env::consts::ARCH.to_string(),
@@ -1119,7 +1119,7 @@ pub(crate) fn subagent_thread_started_event_request(
     let event_params = ThreadInitializedEventParams {
         thread_id: input.thread_id,
         session_id: input.session_id,
-        app_server_client: CodexAppServerClientMetadata {
+        app_server_client: CrewonAppServerClientMetadata {
             product_client_id: input.product_client_id,
             client_name: Some(input.client_name),
             client_version: Some(input.client_version),
@@ -1137,7 +1137,7 @@ pub(crate) fn subagent_thread_started_event_request(
         created_at: input.created_at,
     };
     ThreadInitializedEvent {
-        event_type: "codex_thread_initialized",
+        event_type: "crewon_thread_initialized",
         event_params,
     }
 }

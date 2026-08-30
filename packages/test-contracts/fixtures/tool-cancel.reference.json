@@ -1,0 +1,28 @@
+{
+  "schemaVersion": "crewon.trace.v0",
+  "caseId": "AR-020-tool-cancel",
+  "events": [
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 1,
+      "type": "tool.requested",
+      "identity": { "turnSlot": "first" },
+      "data": {
+        "callId": "call-long-running",
+        "kind": "function",
+        "name": "long_running_tool"
+      }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 2,
+      "type": "turn.aborted",
+      "identity": { "turnSlot": "first" },
+      "data": { "reason": "user_requested" }
+    }
+  ],
+  "finalState": {
+    "status": "canceled",
+    "toolCompleted": false
+  }
+}

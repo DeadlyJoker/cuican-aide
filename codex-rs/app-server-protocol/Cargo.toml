@@ -1,11 +1,11 @@
 [package]
-name = "codex-app-server-protocol"
+name = "crewon-app-server-protocol"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 
 [lib]
-name = "codex_app_server_protocol"
+name = "crewon_app_server_protocol"
 path = "src/lib.rs"
 doctest = false
 
@@ -15,10 +15,11 @@ workspace = true
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
-codex-experimental-api-macros = { workspace = true }
-codex-protocol = { workspace = true }
-codex-shell-command = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
+crewon-experimental-api-macros = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-scene-runtime = { workspace = true }
+crewon-shell-command = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -38,7 +39,7 @@ uuid = { workspace = true, features = ["serde", "v7"] }
 
 [dev-dependencies]
 anyhow = { workspace = true }
-codex-utils-cargo-bin = { workspace = true }
+crewon-utils-cargo-bin = { workspace = true }
 pretty_assertions = { workspace = true }
 similar = { workspace = true }
 tempfile = { workspace = true }

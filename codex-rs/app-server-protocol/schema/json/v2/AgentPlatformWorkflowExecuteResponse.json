@@ -1,0 +1,63 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "activeConnections": {
+      "format": "uint32",
+      "minimum": 0.0,
+      "type": "integer"
+    },
+    "durationSeconds": {
+      "format": "double",
+      "type": [
+        "number",
+        "null"
+      ]
+    },
+    "error": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "executedNodes": {
+      "items": true,
+      "type": "array"
+    },
+    "executionId": {
+      "format": "int64",
+      "type": "integer"
+    },
+    "finishedAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "nodeResults": true,
+    "outputs": true,
+    "startedAt": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "status": {
+      "type": "string"
+    },
+    "workflowId": {
+      "format": "int64",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "activeConnections",
+    "executedNodes",
+    "executionId",
+    "nodeResults",
+    "outputs",
+    "status",
+    "workflowId"
+  ],
+  "title": "AgentPlatformWorkflowExecuteResponse",
+  "type": "object"
+}

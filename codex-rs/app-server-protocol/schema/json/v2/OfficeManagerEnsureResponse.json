@@ -1,0 +1,33 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "definitions": {
+    "OfficeManagerEnsureStatus": {
+      "enum": [
+        "created",
+        "reusedServerOwned",
+        "reusedLegacy"
+      ],
+      "type": "string"
+    }
+  },
+  "properties": {
+    "config": true,
+    "filePath": {
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/definitions/OfficeManagerEnsureStatus"
+    },
+    "threadId": {
+      "type": "string"
+    }
+  },
+  "required": [
+    "config",
+    "filePath",
+    "status",
+    "threadId"
+  ],
+  "title": "OfficeManagerEnsureResponse",
+  "type": "object"
+}

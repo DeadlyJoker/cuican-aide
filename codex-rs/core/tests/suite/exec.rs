@@ -1,17 +1,17 @@
 #![cfg(target_os = "macos")]
 
-use codex_core::exec::ExecCapturePolicy;
-use codex_core::exec::ExecParams;
-use codex_core::exec::process_exec_tool_call;
-use codex_core::sandboxing::SandboxPermissions;
-use codex_core::spawn::CODEX_SANDBOX_ENV_VAR;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::error::Result;
-use codex_protocol::exec_output::ExecToolCallOutput;
-use codex_protocol::models::PermissionProfile;
-use codex_sandboxing::SandboxType;
-use codex_sandboxing::get_platform_sandbox;
 use core_test_support::PathExt;
+use crewon_core::exec::ExecCapturePolicy;
+use crewon_core::exec::ExecParams;
+use crewon_core::exec::process_exec_tool_call;
+use crewon_core::sandboxing::SandboxPermissions;
+use crewon_core::spawn::CODEX_SANDBOX_ENV_VAR;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::error::Result;
+use crewon_protocol::exec_output::ExecToolCallOutput;
+use crewon_protocol::models::PermissionProfile;
+use crewon_sandboxing::SandboxType;
+use crewon_sandboxing::get_platform_sandbox;
 use std::collections::HashMap;
 use tempfile::TempDir;
 

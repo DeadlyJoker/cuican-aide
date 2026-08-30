@@ -1,6 +1,6 @@
 //! Windows command runner used by the **elevated** sandbox path.
 //!
-//! The CLI launches this binary under the sandbox user when Windows sandbox level is
+//! The parent process launches this binary under the sandbox user when Windows sandbox level is
 //! Elevated. It connects to the IPC pipes, reads the framed `SpawnRequest`, derives a
 //! restricted token from the sandbox user, and spawns the child process via ConPTY
 //! (`tty=true`) or pipes (`tty=false`). It then streams output frames back to the parent,
@@ -13,35 +13,35 @@ mod cwd_junction;
 
 use anyhow::Context;
 use anyhow::Result;
-use codex_windows_sandbox::ErrorPayload;
-use codex_windows_sandbox::ExitPayload;
-use codex_windows_sandbox::FramedMessage;
-use codex_windows_sandbox::IPC_PROTOCOL_VERSION;
-use codex_windows_sandbox::LocalSid;
-use codex_windows_sandbox::Message;
-use codex_windows_sandbox::OutputPayload;
-use codex_windows_sandbox::OutputStream;
-use codex_windows_sandbox::PipeSpawnHandles;
-use codex_windows_sandbox::ResizePayload;
-use codex_windows_sandbox::SpawnReady;
-use codex_windows_sandbox::SpawnRequest;
-use codex_windows_sandbox::StderrMode;
-use codex_windows_sandbox::StdinMode;
-use codex_windows_sandbox::WindowsSandboxTokenMode;
-use codex_windows_sandbox::allow_null_device;
-use codex_windows_sandbox::create_readonly_token_with_caps_and_user_from;
-use codex_windows_sandbox::create_workspace_write_token_with_caps_and_user_from;
-use codex_windows_sandbox::decode_bytes;
-use codex_windows_sandbox::encode_bytes;
-use codex_windows_sandbox::get_current_token_for_restriction;
-use codex_windows_sandbox::hide_current_user_profile_dir;
-use codex_windows_sandbox::log_note;
-use codex_windows_sandbox::read_frame;
-use codex_windows_sandbox::read_handle_loop;
-use codex_windows_sandbox::spawn_process_with_pipes;
-use codex_windows_sandbox::to_wide;
-use codex_windows_sandbox::token_mode_for_permission_profile;
-use codex_windows_sandbox::write_frame;
+use crewon_windows_sandbox::ErrorPayload;
+use crewon_windows_sandbox::ExitPayload;
+use crewon_windows_sandbox::FramedMessage;
+use crewon_windows_sandbox::IPC_PROTOCOL_VERSION;
+use crewon_windows_sandbox::LocalSid;
+use crewon_windows_sandbox::Message;
+use crewon_windows_sandbox::OutputPayload;
+use crewon_windows_sandbox::OutputStream;
+use crewon_windows_sandbox::PipeSpawnHandles;
+use crewon_windows_sandbox::ResizePayload;
+use crewon_windows_sandbox::SpawnReady;
+use crewon_windows_sandbox::SpawnRequest;
+use crewon_windows_sandbox::StderrMode;
+use crewon_windows_sandbox::StdinMode;
+use crewon_windows_sandbox::WindowsSandboxTokenMode;
+use crewon_windows_sandbox::allow_null_device;
+use crewon_windows_sandbox::create_readonly_token_with_caps_and_user_from;
+use crewon_windows_sandbox::create_workspace_write_token_with_caps_and_user_from;
+use crewon_windows_sandbox::decode_bytes;
+use crewon_windows_sandbox::encode_bytes;
+use crewon_windows_sandbox::get_current_token_for_restriction;
+use crewon_windows_sandbox::hide_current_user_profile_dir;
+use crewon_windows_sandbox::log_note;
+use crewon_windows_sandbox::read_frame;
+use crewon_windows_sandbox::read_handle_loop;
+use crewon_windows_sandbox::spawn_process_with_pipes;
+use crewon_windows_sandbox::to_wide;
+use crewon_windows_sandbox::token_mode_for_permission_profile;
+use crewon_windows_sandbox::write_frame;
 use std::ffi::OsStr;
 use std::fs::File;
 use std::os::windows::io::FromRawHandle;
@@ -76,7 +76,7 @@ use windows_sys::Win32::System::Threading::PROCESS_INFORMATION;
 use windows_sys::Win32::System::Threading::TerminateProcess;
 use windows_sys::Win32::System::Threading::WaitForSingleObject;
 
-const READ_ACL_MUTEX_NAME: &str = "Local\\CodexSandboxReadAcl";
+const READ_ACL_MUTEX_NAME: &str = "Local\\CrewonSandboxReadAcl";
 const WAIT_TIMEOUT: u32 = 0x0000_0102;
 
 struct IpcSpawnedProcess {
@@ -85,7 +85,7 @@ struct IpcSpawnedProcess {
     stdout_handle: HANDLE,
     stderr_handle: HANDLE,
     stdin_handle: Option<HANDLE>,
-    conpty_owner: Option<codex_windows_sandbox::ConptyInstance>,
+    conpty_owner: Option<crewon_windows_sandbox::ConptyInstance>,
     hpc_handle: Option<HANDLE>,
     _pipe_handles: Option<PipeSpawnHandles>,
 }
@@ -284,7 +284,7 @@ fn spawn_ipc_process(req: &SpawnRequest) -> Result<IpcSpawnedProcess> {
     let mut hpc_handle: Option<HANDLE> = None;
     let mut pipe_handles = None;
     let (pi, stdout_handle, stderr_handle, stdin_handle) = if req.tty {
-        let (pi, mut conpty) = codex_windows_sandbox::spawn_conpty_process_as_user(
+        let (pi, mut conpty) = crewon_windows_sandbox::spawn_conpty_process_as_user(
             h_token.raw(),
             &req.command,
             &effective_cwd,

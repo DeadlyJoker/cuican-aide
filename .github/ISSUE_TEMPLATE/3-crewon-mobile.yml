@@ -1,0 +1,56 @@
+name: 📱 Crewon Mobile Bug
+description: Report an issue with the Crewon mobile client
+labels:
+  - mobile
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before submitting a new issue, please search for existing issues to see if your issue has already been reported.
+        If it has, please add a 👍 reaction (no need to leave a comment) to the existing issue instead of creating a new one.
+
+  - type: input
+    id: version
+    attributes:
+      label: What version of Crewon Mobile are you using?
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: What mobile platform are you using?
+      options:
+        - iOS
+        - Android
+        - Mobile web
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: What device and OS version are you using?
+      description: For example, iPhone 16 on iOS 19, Pixel 10 on Android 17, or iPadOS 19.
+  - type: textarea
+    id: actual
+    attributes:
+      label: What issue are you seeing?
+      description: Please include full error messages and prompts with PII redacted. If possible, provide text instead of a screenshot.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What steps can reproduce the bug?
+      description: Include the screen or workflow, network state, model/provider if relevant, and whether the issue reproduces after restart.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What is the expected behavior?
+      description: If possible, please provide text instead of a screenshot.
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional information
+      description: Is there anything else you think we should know?

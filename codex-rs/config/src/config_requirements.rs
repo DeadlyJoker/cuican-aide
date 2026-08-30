@@ -1,9 +1,9 @@
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::config_types::SandboxMode;
-use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::config_types::ApprovalsReviewer;
+use crewon_protocol::config_types::SandboxMode;
+use crewon_protocol::config_types::WebSearchMode;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use serde::Deserialize;
 use serde::Serialize;
 use serde::de::Error as _;
@@ -1476,12 +1476,12 @@ mod tests {
     use super::*;
     use crate::HookEventsToml;
     use anyhow::Result;
-    use codex_execpolicy::Decision;
-    use codex_execpolicy::Evaluation;
-    use codex_execpolicy::RuleMatch;
-    use codex_protocol::permissions::NetworkSandboxPolicy;
-    use codex_utils_absolute_path::AbsolutePathBuf;
-    use codex_utils_absolute_path::AbsolutePathBufGuard;
+    use crewon_execpolicy::Decision;
+    use crewon_execpolicy::Evaluation;
+    use crewon_execpolicy::RuleMatch;
+    use crewon_protocol::permissions::NetworkSandboxPolicy;
+    use crewon_utils_absolute_path::AbsolutePathBuf;
+    use crewon_utils_absolute_path::AbsolutePathBufGuard;
     use pretty_assertions::assert_eq;
     use toml::from_str;
 
@@ -3342,7 +3342,7 @@ command = "python3 /enterprise/hooks/pre.py"
     fn deserialize_mcp_server_requirements() -> Result<()> {
         let toml_str = r#"
             [mcp_servers.docs.identity]
-            command = "codex-mcp"
+            command = "crewon-mcp"
 
             [mcp_servers.remote.identity]
             url = "https://example.com/mcp"
@@ -3358,7 +3358,7 @@ command = "python3 /enterprise/hooks/pre.py"
                         "docs".to_string(),
                         McpServerRequirement {
                             identity: McpServerIdentity::Command {
-                                command: "codex-mcp".to_string(),
+                                command: "crewon-mcp".to_string(),
                             },
                         },
                     ),

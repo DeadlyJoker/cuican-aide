@@ -1,7 +1,7 @@
-use codex_protocol::config_types::WebSearchConfig;
-use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::openai_models::WebSearchToolType;
-use codex_tools::ToolSpec;
+use crewon_protocol::config_types::WebSearchConfig;
+use crewon_protocol::config_types::WebSearchMode;
+use crewon_protocol::openai_models::WebSearchToolType;
+use crewon_tools::ToolSpec;
 
 const WEB_SEARCH_TEXT_AND_IMAGE_CONTENT_TYPES: [&str; 2] = ["text", "image"];
 

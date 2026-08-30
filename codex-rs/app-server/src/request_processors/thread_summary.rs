@@ -3,6 +3,8 @@ use super::*;
 #[cfg(test)]
 use chrono::DateTime;
 #[cfg(test)]
+use chrono::SecondsFormat;
+#[cfg(test)]
 use chrono::Utc;
 
 #[cfg(test)]
@@ -29,6 +31,7 @@ pub(crate) async fn read_summary_from_rollout(
     let SessionMetaLine {
         meta: session_meta,
         git,
+        scene_runtime: _,
     } = session_meta_line;
     let mut session_meta = session_meta;
     session_meta.source = with_thread_spawn_agent_metadata(
@@ -74,7 +77,7 @@ pub(crate) async fn read_summary_from_rollout(
         preview: String::new(),
         model_provider,
         cwd: session_meta.cwd,
-        cli_version: session_meta.cli_version,
+        cli_version: session_meta.client_version,
         source: session_meta.source,
         git_info,
     })
@@ -92,7 +95,7 @@ fn extract_conversation_summary(
     let preview = head
         .iter()
         .filter_map(|value| serde_json::from_value::<ResponseItem>(value.clone()).ok())
-        .find_map(|item| match codex_core::parse_turn_item(&item) {
+        .find_map(|item| match crewon_core::parse_turn_item(&item) {
             Some(TurnItem::UserMessage(user)) => Some(user.message()),
             _ => None,
         })?;
@@ -123,7 +126,7 @@ fn extract_conversation_summary(
         preview: preview.to_string(),
         model_provider,
         cwd: session_meta.cwd.clone(),
-        cli_version: session_meta.cli_version.clone(),
+        cli_version: session_meta.client_version.clone(),
         source: session_meta.source.clone(),
         git_info,
     })
@@ -139,25 +142,25 @@ fn map_git_info(git_info: &CoreGitInfo) -> ConversationGitInfo {
 }
 
 pub(super) fn with_thread_spawn_agent_metadata(
-    source: codex_protocol::protocol::SessionSource,
+    source: crewon_protocol::protocol::SessionSource,
     agent_nickname: Option<String>,
     agent_role: Option<String>,
-) -> codex_protocol::protocol::SessionSource {
+) -> crewon_protocol::protocol::SessionSource {
     if agent_nickname.is_none() && agent_role.is_none() {
         return source;
     }
 
     match source {
-        codex_protocol::protocol::SessionSource::SubAgent(
-            codex_protocol::protocol::SubAgentSource::ThreadSpawn {
+        crewon_protocol::protocol::SessionSource::SubAgent(
+            crewon_protocol::protocol::SubAgentSource::ThreadSpawn {
                 parent_thread_id,
                 depth,
                 agent_path,
                 agent_nickname: existing_agent_nickname,
                 agent_role: existing_agent_role,
             },
-        ) => codex_protocol::protocol::SessionSource::SubAgent(
-            codex_protocol::protocol::SubAgentSource::ThreadSpawn {
+        ) => crewon_protocol::protocol::SessionSource::SubAgent(
+            crewon_protocol::protocol::SubAgentSource::ThreadSpawn {
                 parent_thread_id,
                 depth,
                 agent_path,
@@ -170,16 +173,16 @@ pub(super) fn with_thread_spawn_agent_metadata(
 }
 
 pub(crate) fn thread_response_active_permission_profile(
-    active_permission_profile: Option<codex_protocol::models::ActivePermissionProfile>,
-) -> Option<codex_app_server_protocol::ActivePermissionProfile> {
+    active_permission_profile: Option<crewon_protocol::models::ActivePermissionProfile>,
+) -> Option<crewon_app_server_protocol::ActivePermissionProfile> {
     active_permission_profile.map(Into::into)
 }
 
 pub(crate) fn thread_response_sandbox_policy(
-    permission_profile: &codex_protocol::models::PermissionProfile,
+    permission_profile: &crewon_protocol::models::PermissionProfile,
     cwd: &Path,
-) -> codex_app_server_protocol::SandboxPolicy {
-    let sandbox_policy = codex_sandboxing::compatibility_sandbox_policy_for_permission_profile(
+) -> crewon_app_server_protocol::SandboxPolicy {
+    let sandbox_policy = crewon_sandboxing::compatibility_sandbox_policy_for_permission_profile(
         permission_profile,
         cwd,
     );
@@ -211,9 +214,9 @@ pub(crate) fn thread_settings_from_config_snapshot(
 }
 
 pub(crate) fn thread_settings_from_core_snapshot(
-    snapshot: codex_protocol::protocol::ThreadSettingsSnapshot,
+    snapshot: crewon_protocol::protocol::ThreadSettingsSnapshot,
 ) -> ThreadSettings {
-    let codex_protocol::protocol::ThreadSettingsSnapshot {
+    let crewon_protocol::protocol::ThreadSettingsSnapshot {
         model,
         model_provider_id,
         service_tier,
@@ -323,7 +326,7 @@ pub(crate) fn summary_to_thread(
         status: ThreadStatus::NotLoaded,
         path: (!path.as_os_str().is_empty()).then_some(path),
         cwd,
-        cli_version,
+        client_version: cli_version,
         agent_nickname: source.get_nickname(),
         agent_role: source.get_agent_role(),
         source: source.into(),

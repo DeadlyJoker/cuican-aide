@@ -1,6 +1,6 @@
-use codex_config::HooksFile;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_plugins::find_plugin_manifest_path;
+use crewon_config::HooksFile;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_plugins::find_plugin_manifest_path;
 use serde::Deserialize;
 use serde_json::Value as JsonValue;
 use std::fs;
@@ -471,15 +471,15 @@ mod tests {
     use std::path::Path;
     use tempfile::tempdir;
 
-    const ALTERNATE_PLUGIN_MANIFEST_RELATIVE_PATH: &str = ".claude-plugin/plugin.json";
+    const LEGACY_PLUGIN_MANIFEST_RELATIVE_PATH: &str = ".codex-plugin/plugin.json";
 
     fn write_manifest(plugin_root: &Path, version: Option<&str>, interface: &str) {
-        fs::create_dir_all(plugin_root.join(".codex-plugin")).expect("create manifest dir");
+        fs::create_dir_all(plugin_root.join(".crewon-plugin")).expect("create manifest dir");
         let version = version
             .map(|version| format!("  \"version\": \"{version}\",\n"))
             .unwrap_or_default();
         fs::write(
-            plugin_root.join(".codex-plugin/plugin.json"),
+            plugin_root.join(".crewon-plugin/plugin.json"),
             format!(
                 r#"{{
   "name": "demo-plugin",
@@ -492,7 +492,7 @@ mod tests {
     }
 
     fn write_alternate_plugin_manifest(plugin_root: &Path, contents: &str) {
-        let manifest_path = plugin_root.join(ALTERNATE_PLUGIN_MANIFEST_RELATIVE_PATH);
+        let manifest_path = plugin_root.join(LEGACY_PLUGIN_MANIFEST_RELATIVE_PATH);
         fs::create_dir_all(manifest_path.parent().expect("manifest parent"))
             .expect("create manifest dir");
         fs::write(manifest_path, contents).expect("write manifest");
@@ -601,9 +601,9 @@ mod tests {
     fn plugin_manifest_reads_keywords() {
         let tmp = tempdir().expect("tempdir");
         let plugin_root = tmp.path().join("demo-plugin");
-        fs::create_dir_all(plugin_root.join(".codex-plugin")).expect("create manifest dir");
+        fs::create_dir_all(plugin_root.join(".crewon-plugin")).expect("create manifest dir");
         fs::write(
-            plugin_root.join(".codex-plugin/plugin.json"),
+            plugin_root.join(".crewon-plugin/plugin.json"),
             r#"{
   "name": "demo-plugin",
   "keywords": ["api-key", "developer tools"]

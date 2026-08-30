@@ -8,7 +8,7 @@ use crate::export::GeneratedSchema;
 use crate::export::write_json_schema;
 use crate::protocol::v1;
 use crate::protocol::v2;
-use codex_experimental_api_macros::ExperimentalApi;
+use crewon_experimental_api_macros::ExperimentalApi;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -19,9 +19,9 @@ use ts_rs::TS;
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Display, JsonSchema, TS)]
 #[serde(rename_all = "lowercase")]
 pub enum AuthMode {
-    /// OpenAI API key provided by the caller and stored by Codex.
+    /// OpenAI API key provided by the caller and stored by Crewon.
     ApiKey,
-    /// ChatGPT OAuth managed by Codex (tokens persisted and refreshed by Codex).
+    /// ChatGPT OAuth managed by Crewon (tokens persisted and refreshed by Crewon).
     Chatgpt,
     /// [UNSTABLE] FOR OPENAI INTERNAL USE ONLY - DO NOT USE.
     ///
@@ -31,17 +31,17 @@ pub enum AuthMode {
     #[ts(rename = "chatgptAuthTokens")]
     #[strum(serialize = "chatgptAuthTokens")]
     ChatgptAuthTokens,
-    /// Programmatic Codex auth backed by a registered Agent Identity.
+    /// Programmatic Crewon auth backed by a registered Agent Identity.
     #[serde(rename = "agentIdentity")]
     #[ts(rename = "agentIdentity")]
     #[strum(serialize = "agentIdentity")]
     AgentIdentity,
-    /// Programmatic Codex auth backed by a personal access token.
+    /// Programmatic Crewon auth backed by a personal access token.
     #[serde(rename = "personalAccessToken")]
     #[ts(rename = "personalAccessToken")]
     #[strum(serialize = "personalAccessToken")]
     PersonalAccessToken,
-    /// Amazon Bedrock bearer token managed by Codex.
+    /// Amazon Bedrock bearer token managed by Crewon.
     #[serde(rename = "bedrockApiKey")]
     #[ts(rename = "bedrockApiKey")]
     #[strum(serialize = "bedrockApiKey")]
@@ -647,6 +647,11 @@ client_request_definitions! {
         serialization: global_shared_read("config"),
         response: v2::SkillsListResponse,
     },
+    SkillsCreate => "skills/create" {
+        params: v2::SkillsCreateParams,
+        serialization: global("config"),
+        response: v2::SkillsCreateResponse,
+    },
     SkillsExtraRootsSet => "skills/extraRoots/set" {
         params: v2::SkillsExtraRootsSetParams,
         serialization: global("config"),
@@ -721,6 +726,321 @@ client_request_definitions! {
         params: v2::AppsListParams,
         serialization: None,
         response: v2::AppsListResponse,
+    },
+    AgentList => "agent/list" {
+        params: v2::AgentListParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentListResponse,
+    },
+    AgentSave => "agent/save" {
+        params: v2::AgentSaveParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentSaveResponse,
+    },
+    AgentCreate => "agent/create" {
+        params: v2::AgentCreateParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentCreateResponse,
+    },
+    AgentUpdate => "agent/update" {
+        params: v2::AgentUpdateParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentUpdateResponse,
+    },
+    AgentRead => "agent/read" {
+        params: v2::AgentReadParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentReadResponse,
+    },
+    AgentRecruitableList => "agent/recruitable/list" {
+        params: v2::AgentRecruitableListParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentRecruitableListResponse,
+    },
+    AgentDelete => "agent/delete" {
+        params: v2::AgentDeleteParams,
+        serialization: global("crewon-domain"),
+        response: v2::AgentDeleteResponse,
+    },
+    WorkflowList => "workflow/list" {
+        params: v2::WorkflowListParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowListResponse,
+    },
+    WorkflowCreate => "workflow/create" {
+        params: v2::WorkflowCreateParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowCreateResponse,
+    },
+    WorkflowRead => "workflow/read" {
+        params: v2::WorkflowReadParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowReadResponse,
+    },
+    WorkflowRun => "workflow/run" {
+        params: v2::WorkflowRunParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowRunResponse,
+    },
+    WorkflowGateResolve => "workflow/gate/resolve" {
+        params: v2::WorkflowGateResolveParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowGateResolveResponse,
+    },
+    WorkflowRunCancel => "workflow/run/cancel" {
+        params: v2::WorkflowRunCancelParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowRunCancelResponse,
+    },
+    WorkflowDelete => "workflow/delete" {
+        params: v2::WorkflowDeleteParams,
+        serialization: global("crewon-domain"),
+        response: v2::WorkflowDeleteResponse,
+    },
+    AgentPlatformAuth => "agentPlatform/auth" {
+        params: v2::AgentPlatformAuthParams,
+        serialization: None,
+        response: v2::AgentPlatformAuthResponse,
+    },
+    AgentPlatformAgentInfo => "agentPlatform/agent/info" {
+        params: v2::AgentPlatformAgentParams,
+        serialization: None,
+        response: v2::AgentPlatformAgentInfoResponse,
+    },
+    AgentPlatformWorkflowInfo => "agentPlatform/workflow/info" {
+        params: v2::AgentPlatformWorkflowInfoParams,
+        serialization: None,
+        response: v2::AgentPlatformWorkflowInfoResponse,
+    },
+    AgentPlatformWorkflowExecute => "agentPlatform/workflow/execute" {
+        params: v2::AgentPlatformWorkflowExecuteParams,
+        serialization: None,
+        response: v2::AgentPlatformWorkflowExecuteResponse,
+    },
+    ExpertTeamList => "expertTeam/list" {
+        params: v2::ExpertTeamListParams,
+        serialization: global("crewon-domain"),
+        response: v2::ExpertTeamListResponse,
+    },
+    ExpertTeamCreate => "expertTeam/create" {
+        params: v2::ExpertTeamCreateParams,
+        serialization: global("crewon-domain"),
+        response: v2::ExpertTeamCreateResponse,
+    },
+    ExpertTeamRead => "expertTeam/read" {
+        params: v2::ExpertTeamReadParams,
+        serialization: global("crewon-domain"),
+        response: v2::ExpertTeamReadResponse,
+    },
+    OfficeList => "office/list" {
+        params: v2::OfficeListParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeListResponse,
+    },
+    OfficeSave => "office/save" {
+        params: v2::OfficeSaveParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeSaveResponse,
+    },
+    OfficeCreate => "office/create" {
+        params: v2::OfficeCreateParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeCreateResponse,
+    },
+    OfficeManagerEnsure => "office/manager/ensure" {
+        params: v2::OfficeManagerEnsureParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeManagerEnsureResponse,
+    },
+    OfficeRead => "office/read" {
+        params: v2::OfficeReadParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeReadResponse,
+    },
+    OfficeMessageSend => "office/message/send" {
+        params: v2::OfficeMessageSendParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeMessageSendResponse,
+    },
+    OfficeMessageSubmit => "office/message/submit" {
+        params: v2::OfficeMessageSubmitParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeMessageSubmitResponse,
+    },
+    OfficeRun => "office/run" {
+        params: v2::OfficeRunParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeRunResponse,
+    },
+    OfficeRunSync => "office/run/sync" {
+        params: v2::OfficeRunSyncParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeRunSyncResponse,
+    },
+    OfficeRunCancel => "office/run/cancel" {
+        params: v2::OfficeRunCancelParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeRunCancelResponse,
+    },
+    OfficeDelegationCancel => "office/delegation/cancel" {
+        params: v2::OfficeDelegationCancelParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeDelegationCancelResponse,
+    },
+    OfficeDelegationRetry => "office/delegation/retry" {
+        params: v2::OfficeDelegationRetryParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeDelegationRetryResponse,
+    },
+    OfficeVerificationCancel => "office/verification/cancel" {
+        params: v2::OfficeVerificationCancelParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeVerificationCancelResponse,
+    },
+    OfficeVerificationRetry => "office/verification/retry" {
+        params: v2::OfficeVerificationRetryParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeVerificationRetryResponse,
+    },
+    OfficeRunRetry => "office/run/retry" {
+        params: v2::OfficeRunRetryParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeRunRetryResponse,
+    },
+    OfficeDelegationDispatch => "office/delegation/dispatch" {
+        params: v2::OfficeDelegationDispatchParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeDelegationDispatchResponse,
+    },
+    OfficeDelegationDispatchNext => "office/delegation/dispatch/next" {
+        params: v2::OfficeDelegationDispatchNextParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeDelegationDispatchNextResponse,
+    },
+    OfficeVerificationDispatchNext => "office/verification/dispatch/next" {
+        params: v2::OfficeVerificationDispatchNextParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeVerificationDispatchNextResponse,
+    },
+    OfficeMemberContextPreview => "office/member/context/preview" {
+        params: v2::OfficeMemberContextPreviewParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeMemberContextPreviewResponse,
+    },
+    OfficeMemberAdd => "office/member/add" {
+        params: v2::OfficeMemberAddParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeMemberAddResponse,
+    },
+    OfficeApprovalDecide => "office/approval/decide" {
+        params: v2::OfficeApprovalDecideParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeApprovalDecideResponse,
+    },
+    OfficeArtifactUpsert => "office/artifact/upsert" {
+        params: v2::OfficeArtifactUpsertParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeArtifactUpsertResponse,
+    },
+    OfficeMemoryList => "office/memory/list" {
+        params: v2::OfficeMemoryListParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeMemoryListResponse,
+    },
+    OfficeMemoryDecide => "office/memory/decide" {
+        params: v2::OfficeMemoryDecideParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeMemoryDecideResponse,
+    },
+    OfficeDelete => "office/delete" {
+        params: v2::OfficeDeleteParams,
+        serialization: global("crewon-domain"),
+        response: v2::OfficeDeleteResponse,
+    },
+    AutomationList => "automation/list" {
+        params: v2::AutomationListParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationListResponse,
+    },
+    AutomationSave => "automation/save" {
+        params: v2::AutomationSaveParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationSaveResponse,
+    },
+    AutomationCreate => "automation/create" {
+        params: v2::AutomationCreateParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationCreateResponse,
+    },
+    AutomationRead => "automation/read" {
+        params: v2::AutomationReadParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationReadResponse,
+    },
+    AutomationUpdate => "automation/update" {
+        params: v2::AutomationUpdateParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationUpdateResponse,
+    },
+    AutomationRun => "automation/run" {
+        params: v2::AutomationRunParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationRunResponse,
+    },
+    AutomationRunStart => "automation/run/start" {
+        params: v2::AutomationRunStartParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationRunStartResponse,
+    },
+    AutomationRunUpdate => "automation/run/update" {
+        params: v2::AutomationRunUpdateParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationRunUpdateResponse,
+    },
+    AutomationRunsList => "automation/runs/list" {
+        params: v2::AutomationRunsListParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationRunsListResponse,
+    },
+    AutomationDelete => "automation/delete" {
+        params: v2::AutomationDeleteParams,
+        serialization: global("crewon-domain"),
+        response: v2::AutomationDeleteResponse,
+    },
+    KnowledgeList => "knowledge/list" {
+        params: v2::KnowledgeListParams,
+        serialization: global("knowledge"),
+        response: v2::KnowledgeListResponse,
+    },
+    KnowledgeMemoryWrite => "knowledge/memory/write" {
+        params: v2::KnowledgeMemoryWriteParams,
+        serialization: global("knowledge"),
+        response: v2::KnowledgeMemoryWriteResponse,
+    },
+    ToolList => "tool/list" {
+        params: v2::ToolListParams,
+        serialization: global("crewon-domain"),
+        response: v2::ToolListResponse,
+    },
+    ToolRead => "tool/read" {
+        params: v2::ToolReadParams,
+        serialization: global("crewon-domain"),
+        response: v2::ToolReadResponse,
+    },
+    ToolSave => "tool/save" {
+        params: v2::ToolSaveParams,
+        serialization: global("crewon-domain"),
+        response: v2::ToolSaveResponse,
+    },
+    ToolUpdate => "tool/update" {
+        params: v2::ToolUpdateParams,
+        serialization: global("crewon-domain"),
+        response: v2::ToolUpdateResponse,
+    },
+    ToolDelete => "tool/delete" {
+        params: v2::ToolDeleteParams,
+        serialization: global("crewon-domain"),
+        response: v2::ToolDeleteResponse,
     },
     // File system requests are intentionally concurrent. Desktop already treats local
     // file system operations as concurrent, and app-server remote fs mirrors that model.
@@ -847,6 +1167,11 @@ client_request_definitions! {
         serialization: None,
         response: v2::ModelProviderCapabilitiesReadResponse,
     },
+    ModelProviderProbe => "modelProvider/probe" {
+        params: v2::ModelProviderProbeParams,
+        serialization: None,
+        response: v2::ModelProviderProbeResponse,
+    },
     ExperimentalFeatureList => "experimentalFeature/list" {
         params: v2::ExperimentalFeatureListParams,
         serialization: global("config"),
@@ -856,6 +1181,66 @@ client_request_definitions! {
         params: v2::PermissionProfileListParams,
         serialization: global_shared_read("config"),
         response: v2::PermissionProfileListResponse,
+    },
+    #[experimental("identity/read")]
+    IdentityRead => "identity/read" {
+        params: #[ts(type = "undefined")] #[serde(skip_serializing_if = "Option::is_none")] Option<()>,
+        serialization: None,
+        response: v2::IdentityReadResponse,
+    },
+    #[experimental("workspace/list")]
+    WorkspaceList => "workspace/list" {
+        params: v2::WorkspaceListParams,
+        serialization: None,
+        response: v2::WorkspaceListResponse,
+    },
+    #[experimental("workspace/bind")]
+    WorkspaceBind => "workspace/bind" {
+        params: v2::WorkspaceBindParams,
+        serialization: None,
+        response: v2::WorkspaceBindResponse,
+    },
+    #[experimental("provider/connect")]
+    ProviderConnect => "provider/connect" {
+        params: v2::ProviderConnectParams,
+        serialization: None,
+        response: v2::ProviderConnectResponse,
+    },
+    #[experimental("provider/read")]
+    ProviderRead => "provider/read" {
+        params: v2::ProviderReadParams,
+        serialization: None,
+        response: v2::ProviderReadResponse,
+    },
+    #[experimental("resource/list")]
+    ResourceList => "resource/list" {
+        params: v2::ResourceListParams,
+        serialization: None,
+        response: v2::ResourceListResponse,
+    },
+    #[experimental("resource/read")]
+    ResourceRead => "resource/read" {
+        params: v2::ResourceReadParams,
+        serialization: None,
+        response: v2::ResourceReadResponse,
+    },
+    #[experimental("resource/bind")]
+    ResourceBind => "resource/bind" {
+        params: v2::ResourceBindParams,
+        serialization: None,
+        response: v2::ResourceBindResponse,
+    },
+    #[experimental("resource/unbind")]
+    ResourceUnbind => "resource/unbind" {
+        params: v2::ResourceUnbindParams,
+        serialization: None,
+        response: v2::ResourceUnbindResponse,
+    },
+    #[experimental("threadExecutionContext/update")]
+    ThreadExecutionContextUpdate => "threadExecutionContext/update" {
+        params: v2::ThreadExecutionContextUpdateParams,
+        serialization: thread_id(params.thread_id),
+        response: v2::ThreadExecutionContextUpdateResponse,
     },
     ExperimentalFeatureEnablementSet => "experimentalFeature/enablement/set" {
         params: v2::ExperimentalFeatureEnablementSetParams,
@@ -911,6 +1296,13 @@ client_request_definitions! {
         serialization: None,
         response: v2::CollaborationModeListResponse,
     },
+    #[experimental("scene/list")]
+    /// Lists built-in scene presets and their executable contracts.
+    SceneList => "scene/list" {
+        params: v2::SceneListParams,
+        serialization: None,
+        response: v2::SceneListResponse,
+    },
     #[experimental("mock/experimentalMethod")]
     /// Test-only method used to validate experimental gating.
     MockExperimentalMethod => "mock/experimentalMethod" {
@@ -942,6 +1334,30 @@ client_request_definitions! {
         params: v2::ListMcpServerStatusParams,
         serialization: global("mcp-registry"),
         response: v2::ListMcpServerStatusResponse,
+    },
+
+    McpServerConfigList => "mcpServerConfig/list" {
+        params: v2::McpServerConfigListParams,
+        serialization: global_shared_read("config"),
+        response: v2::McpServerConfigListResponse,
+    },
+
+    McpServerConfigRead => "mcpServerConfig/read" {
+        params: v2::McpServerConfigReadParams,
+        serialization: global_shared_read("config"),
+        response: v2::McpServerConfigReadResponse,
+    },
+
+    McpServerConfigSave => "mcpServerConfig/save" {
+        params: v2::McpServerConfigSaveParams,
+        serialization: global("config"),
+        response: v2::McpServerConfigSaveResponse,
+    },
+
+    McpServerConfigDelete => "mcpServerConfig/delete" {
+        params: v2::McpServerConfigDeleteParams,
+        serialization: global("config"),
+        response: v2::McpServerConfigDeleteResponse,
     },
 
     McpResourceRead => "mcpServer/resource/read" {
@@ -1036,7 +1452,7 @@ client_request_definitions! {
         response: v2::CommandExecResizeResponse,
     },
     #[experimental("process/spawn")]
-    /// Spawn a standalone process (argv vector) without a Codex sandbox.
+    /// Spawn a standalone process (argv vector) without a Crewon sandbox.
     ProcessSpawn => "process/spawn" {
         params: v2::ProcessSpawnParams,
         serialization: process_handle(params.process_handle),
@@ -1466,7 +1882,7 @@ pub struct FuzzyFileSearchParams {
     pub cancellation_token: Option<String>,
 }
 
-/// Superset of [`codex_file_search::FileMatch`]
+/// Superset of [`crewon_file_search::FileMatch`]
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, JsonSchema, TS)]
 pub struct FuzzyFileSearchResult {
     pub root: String,
@@ -1564,7 +1980,7 @@ server_notification_definitions! {
     ItemGuardianApprovalReviewStarted => "item/autoApprovalReview/started" (v2::ItemGuardianApprovalReviewStartedNotification),
     ItemGuardianApprovalReviewCompleted => "item/autoApprovalReview/completed" (v2::ItemGuardianApprovalReviewCompletedNotification),
     ItemCompleted => "item/completed" (v2::ItemCompletedNotification),
-    /// This event is internal-only. Used by Codex Cloud.
+    /// This event is internal-only. Used by Crewon Cloud.
     RawResponseItemCompleted => "rawResponseItem/completed" (v2::RawResponseItemCompletedNotification),
     AgentMessageDelta => "item/agentMessage/delta" (v2::AgentMessageDeltaNotification),
     /// EXPERIMENTAL - proposed plan streaming deltas for plan items.
@@ -1589,6 +2005,10 @@ server_notification_definitions! {
     AccountUpdated => "account/updated" (v2::AccountUpdatedNotification),
     AccountRateLimitsUpdated => "account/rateLimits/updated" (v2::AccountRateLimitsUpdatedNotification),
     AppListUpdated => "app/list/updated" (v2::AppListUpdatedNotification),
+    OfficeRunUpdated => "office/run/updated" (v2::OfficeRunUpdatedNotification),
+    WorkflowRunUpdated => "workflow/run/updated" (v2::WorkflowRunUpdatedNotification),
+    #[experimental("resource/binding/updated")]
+    ResourceBindingUpdated => "resource/binding/updated" (v2::ResourceBindingUpdatedNotification),
     RemoteControlStatusChanged => "remoteControl/status/changed" (v2::RemoteControlStatusChangedNotification),
     ExternalAgentConfigImportCompleted => "externalAgentConfig/import/completed" (v2::ExternalAgentConfigImportCompletedNotification),
     FsChanged => "fs/changed" (v2::FsChangedNotification),
@@ -1643,16 +2063,16 @@ client_notification_definitions! {
 mod tests {
     use super::*;
     use anyhow::Result;
-    use codex_protocol::ThreadId;
-    use codex_protocol::account::PlanType;
-    use codex_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY;
-    use codex_protocol::parse_command::ParsedCommand;
-    use codex_protocol::protocol::RealtimeConversationVersion;
-    use codex_protocol::protocol::RealtimeOutputModality;
-    use codex_protocol::protocol::RealtimeVoice;
-    use codex_utils_absolute_path::AbsolutePathBuf;
-    use codex_utils_absolute_path::test_support::PathBufExt;
-    use codex_utils_absolute_path::test_support::test_path_buf;
+    use crewon_protocol::ThreadId;
+    use crewon_protocol::account::PlanType;
+    use crewon_protocol::models::BUILT_IN_PERMISSION_PROFILE_READ_ONLY;
+    use crewon_protocol::parse_command::ParsedCommand;
+    use crewon_protocol::protocol::RealtimeConversationVersion;
+    use crewon_protocol::protocol::RealtimeOutputModality;
+    use crewon_protocol::protocol::RealtimeVoice;
+    use crewon_utils_absolute_path::AbsolutePathBuf;
+    use crewon_utils_absolute_path::test_support::PathBufExt;
+    use crewon_utils_absolute_path::test_support::test_path_buf;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use std::path::PathBuf;
@@ -2123,8 +2543,8 @@ mod tests {
             request_id: RequestId::Integer(42),
             params: v1::InitializeParams {
                 client_info: v1::ClientInfo {
-                    name: "codex_vscode".to_string(),
-                    title: Some("Codex VS Code Extension".to_string()),
+                    name: "crewon_pc".to_string(),
+                    title: Some("Crewon PC Client".to_string()),
                     version: "0.1.0".to_string(),
                 },
                 capabilities: Some(v1::InitializeCapabilities {
@@ -2144,8 +2564,8 @@ mod tests {
                 "id": 42,
                 "params": {
                     "clientInfo": {
-                        "name": "codex_vscode",
-                        "title": "Codex VS Code Extension",
+                        "name": "crewon_pc",
+                        "title": "Crewon PC Client",
                         "version": "0.1.0"
                     },
                     "capabilities": {
@@ -2170,8 +2590,8 @@ mod tests {
             "id": 42,
             "params": {
                 "clientInfo": {
-                    "name": "codex_vscode",
-                    "title": "Codex VS Code Extension",
+                    "name": "crewon_pc",
+                    "title": "Crewon PC Client",
                     "version": "0.1.0"
                 },
                 "capabilities": {
@@ -2191,8 +2611,8 @@ mod tests {
                 request_id: RequestId::Integer(42),
                 params: v1::InitializeParams {
                     client_info: v1::ClientInfo {
-                        name: "codex_vscode".to_string(),
-                        title: Some("Codex VS Code Extension".to_string()),
+                        name: "crewon_pc".to_string(),
+                        title: Some("Crewon PC Client".to_string()),
                         version: "0.1.0".to_string(),
                     },
                     capabilities: Some(v1::InitializeCapabilities {
@@ -2374,7 +2794,7 @@ mod tests {
         let params = v2::McpServerElicitationRequestParams {
             thread_id: "thr_123".to_string(),
             turn_id: Some("turn_123".to_string()),
-            server_name: "codex_apps".to_string(),
+            server_name: "crewon_apps".to_string(),
             request: v2::McpServerElicitationRequest::Form {
                 meta: None,
                 message: "Allow this request?".to_string(),
@@ -2393,7 +2813,7 @@ mod tests {
                 "params": {
                     "threadId": "thr_123",
                     "turnId": "turn_123",
-                    "serverName": "codex_apps",
+                    "serverName": "crewon_apps",
                     "mode": "form",
                     "_meta": null,
                     "message": "Allow this request?",
@@ -2472,7 +2892,7 @@ mod tests {
                     status: v2::ThreadStatus::Idle,
                     path: None,
                     cwd: cwd.clone(),
-                    cli_version: "0.0.0".to_string(),
+                    client_version: "0.0.0".to_string(),
                     source: v2::SessionSource::Exec,
                     thread_source: None,
                     agent_nickname: None,
@@ -2481,6 +2901,7 @@ mod tests {
                     name: None,
                     turns: Vec::new(),
                 },
+                execution_context: None,
                 model: "gpt-5".to_string(),
                 model_provider: "openai".to_string(),
                 service_tier: None,
@@ -2492,6 +2913,7 @@ mod tests {
                 sandbox: v2::SandboxPolicy::DangerFullAccess,
                 active_permission_profile: None,
                 reasoning_effort: None,
+                scene_runtime: None,
             },
         };
 
@@ -2517,7 +2939,7 @@ mod tests {
                         },
                         "path": null,
                         "cwd": absolute_path_string("tmp"),
-                        "cliVersion": "0.0.0",
+                        "clientVersion": "0.0.0",
                         "source": "exec",
                         "threadSource": null,
                         "agentNickname": null,
@@ -2526,6 +2948,7 @@ mod tests {
                         "name": null,
                         "turns": []
                     },
+                    "executionContext": null,
                     "model": "gpt-5",
                     "modelProvider": "openai",
                     "serviceTier": null,
@@ -2538,7 +2961,8 @@ mod tests {
                         "type": "dangerFullAccess"
                     },
                     "activePermissionProfile": null,
-                    "reasoningEffort": null
+                    "reasoningEffort": null,
+                    "sceneRuntime": null
                 }
             }),
             serde_json::to_value(&response)?,
@@ -3349,9 +3773,9 @@ mod tests {
                     service_tier: None,
                     effort: None,
                     summary: None,
-                    collaboration_mode: codex_protocol::config_types::CollaborationMode {
-                        mode: codex_protocol::config_types::ModeKind::Default,
-                        settings: codex_protocol::config_types::Settings {
+                    collaboration_mode: crewon_protocol::config_types::CollaborationMode {
+                        mode: crewon_protocol::config_types::ModeKind::Default,
+                        settings: crewon_protocol::config_types::Settings {
                             model: "gpt-5.4".to_string(),
                             reasoning_effort: None,
                             developer_instructions: None,

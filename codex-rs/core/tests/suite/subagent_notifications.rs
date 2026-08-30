@@ -1,18 +1,4 @@
 use anyhow::Result;
-use codex_core::StartThreadOptions;
-use codex_core::ThreadConfigSnapshot;
-use codex_core::config::AgentRoleConfig;
-use codex_features::Feature;
-use codex_protocol::ThreadId;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::user_input::UserInput;
 use core_test_support::hooks::trust_discovered_hooks;
 use core_test_support::responses::ResponsesRequest;
 use core_test_support::responses::ev_assistant_message;
@@ -29,11 +15,25 @@ use core_test_support::responses::sse;
 use core_test_support::responses::sse_response;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event_match;
+use crewon_core::StartThreadOptions;
+use crewon_core::ThreadConfigSnapshot;
+use crewon_core::config::AgentRoleConfig;
+use crewon_features::Feature;
+use crewon_protocol::ThreadId;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::InitialHistory;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::user_input::UserInput;
 use pretty_assertions::assert_eq;
 use serde_json::Value;
 use serde_json::json;
@@ -293,7 +293,7 @@ async fn wait_for_hook_log(
     }
 }
 
-async fn wait_for_spawned_thread_id(test: &TestCodex) -> Result<String> {
+async fn wait_for_spawned_thread_id(test: &TestCrewon) -> Result<String> {
     let deadline = Instant::now() + Duration::from_secs(2);
     loop {
         let ids = test.thread_manager.list_thread_ids().await;
@@ -329,7 +329,7 @@ async fn wait_for_requests(
 async fn setup_turn_one_with_spawned_child(
     server: &MockServer,
     child_response_delay: Option<Duration>,
-) -> Result<(TestCodex, String)> {
+) -> Result<(TestCrewon, String)> {
     let (test, spawned_id, _child_request_log) = setup_turn_one_with_custom_spawned_child(
         server,
         json!({
@@ -349,10 +349,10 @@ async fn setup_turn_one_with_custom_spawned_child(
     child_response_delay: Option<Duration>,
     wait_for_parent_notification: bool,
     configure_test: impl FnOnce(
-        core_test_support::test_codex::TestCodexBuilder,
-    ) -> core_test_support::test_codex::TestCodexBuilder,
+        core_test_support::test_crewon::TestCrewonBuilder,
+    ) -> core_test_support::test_crewon::TestCrewonBuilder,
 ) -> Result<(
-    TestCodex,
+    TestCrewon,
     String,
     core_test_support::responses::ResponseMock,
 )> {
@@ -411,7 +411,7 @@ async fn setup_turn_one_with_custom_spawned_child(
     .await;
 
     #[allow(clippy::expect_used)]
-    let mut builder = configure_test(test_codex().with_config(|config| {
+    let mut builder = configure_test(test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::Collab)
@@ -424,7 +424,7 @@ async fn setup_turn_one_with_custom_spawned_child(
     if child_response_delay.is_none() && wait_for_parent_notification {
         let _ = wait_for_requests(&child_request_log).await?;
         let rollout_path = test
-            .codex
+            .crewon
             .rollout_path()
             .ok_or_else(|| anyhow::anyhow!("expected parent rollout path"))?;
         let deadline = Instant::now() + Duration::from_secs(6);
@@ -452,8 +452,8 @@ async fn spawn_child_and_capture_snapshot(
     server: &MockServer,
     spawn_args: serde_json::Value,
     configure_test: impl FnOnce(
-        core_test_support::test_codex::TestCodexBuilder,
-    ) -> core_test_support::test_codex::TestCodexBuilder,
+        core_test_support::test_crewon::TestCrewonBuilder,
+    ) -> core_test_support::test_crewon::TestCrewonBuilder,
 ) -> Result<ThreadConfigSnapshot> {
     let (test, spawned_id, _child_request_log) = setup_turn_one_with_custom_spawned_child(
         server,
@@ -526,7 +526,7 @@ async fn subagent_start_replaces_session_start_and_injects_context() -> Result<(
     )
     .await;
 
-    let test = test_codex()
+    let test = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) =
                 write_subagent_lifecycle_hooks(home, /*stop_prompts*/ &[], "worker")
@@ -673,7 +673,7 @@ async fn subagent_stop_replaces_stop_and_skips_internal_subagents() -> Result<()
     )
     .await;
 
-    let test = test_codex()
+    let test = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(error) = write_subagent_lifecycle_hooks(
                 home,
@@ -773,7 +773,7 @@ async fn subagent_stop_replaces_stop_and_skips_internal_subagents() -> Result<()
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(test.config.cwd.clone())),
                 approval_policy: Some(AskForApproval::Never),
                 sandbox_policy: Some(sandbox_policy),
@@ -891,7 +891,7 @@ async fn spawned_child_receives_forked_parent_context() -> Result<()> {
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::Collab)
@@ -1003,7 +1003,7 @@ async fn spawned_multi_agent_v2_child_inherits_parent_developer_context() -> Res
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::Collab)
@@ -1068,7 +1068,7 @@ async fn encrypted_multi_agent_v2_spawn_sends_agent_message_to_child() -> Result
     )
     .await;
 
-    let mut builder = test_codex().with_model("koffing").with_config(|config| {
+    let mut builder = test_crewon().with_model("koffing").with_config(|config| {
         config
             .features
             .enable(Feature::Collab)
@@ -1150,7 +1150,7 @@ async fn skills_toggle_skips_instructions_for_parent_and_spawned_child() -> Resu
     )
     .await;
 
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_pre_build_hook(|home| {
             if let Err(err) = write_home_skill(home, "demo", "demo-skill", "demo skill") {
                 panic!("write home skill: {err}");
@@ -1255,7 +1255,7 @@ async fn spawn_agent_tool_description_mentions_role_locked_settings() -> Result<
     )
     .await;
 
-    let mut builder = test_codex().with_config(|config| {
+    let mut builder = test_crewon().with_config(|config| {
         config
             .features
             .enable(Feature::Collab)

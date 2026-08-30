@@ -1,11 +1,11 @@
 use std::collections::HashSet;
 
-use codex_app_server_protocol::ConfigLayerSource;
-use codex_config::ConfigLayerStack;
-use codex_config::ConfigLayerStackOrdering;
-use codex_config::SkillConfig;
-use codex_config::SkillsConfig;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::ConfigLayerSource;
+use crewon_config::ConfigLayerStack;
+use crewon_config::ConfigLayerStackOrdering;
+use crewon_config::SkillConfig;
+use crewon_config::SkillsConfig;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use tracing::warn;
 
 use crate::SkillMetadata;

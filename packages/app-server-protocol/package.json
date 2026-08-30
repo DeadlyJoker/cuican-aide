@@ -1,0 +1,19 @@
+{
+  "name": "@crewon/app-server-protocol",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Self-contained TypeScript protocol types used by CrewON clients",
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./platform/*": "./src/platform/*.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check": "node scripts/check-protocol-closure.mjs",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.9.3"
+  }
+}

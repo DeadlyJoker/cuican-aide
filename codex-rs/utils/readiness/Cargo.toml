@@ -1,5 +1,5 @@
 [package]
-name = "codex-utils-readiness"
+name = "crewon-utils-readiness"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -18,4 +18,5 @@ tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
 workspace = true
 
 [lib]
+name = "crewon_utils_readiness"
 doctest = false

@@ -6,15 +6,15 @@ use std::time::Duration;
 use std::time::Instant;
 
 use async_channel::unbounded;
-pub use codex_app_server_protocol::AppBranding;
-pub use codex_app_server_protocol::AppInfo;
-pub use codex_app_server_protocol::AppMetadata;
-use codex_connectors::ConnectorDirectoryCacheContext;
-use codex_connectors::ConnectorDirectoryCacheKey;
-use codex_exec_server::EnvironmentManager;
-use codex_exec_server::ExecServerRuntimePaths;
-use codex_protocol::models::PermissionProfile;
-use codex_tools::DiscoverableTool;
+pub use crewon_app_server_protocol::AppBranding;
+pub use crewon_app_server_protocol::AppInfo;
+pub use crewon_app_server_protocol::AppMetadata;
+use crewon_connectors::ConnectorDirectoryCacheContext;
+use crewon_connectors::ConnectorDirectoryCacheKey;
+use crewon_exec_server::EnvironmentManager;
+use crewon_exec_server::ExecServerRuntimePaths;
+use crewon_protocol::models::PermissionProfile;
+use crewon_tools::DiscoverableTool;
 use rmcp::model::ToolAnnotations;
 use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
@@ -24,25 +24,25 @@ use crate::config::Config;
 use crate::mcp::McpManager;
 use crate::plugins::list_tool_suggest_discoverable_plugins;
 use crate::session::INITIAL_SUBMIT_ID;
-use codex_config::AppsRequirementsToml;
-use codex_config::types::AppToolApproval;
-use codex_config::types::ApprovalsReviewer;
-use codex_config::types::AppsConfigToml;
-use codex_config::types::ToolSuggestDiscoverableType;
-use codex_core_plugins::PluginsManager;
-use codex_features::Feature;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_login::default_client::originator;
-use codex_mcp::CODEX_APPS_MCP_SERVER_NAME;
-use codex_mcp::McpConnectionManager;
-use codex_mcp::McpRuntimeContext;
-use codex_mcp::ToolInfo;
-use codex_mcp::ToolPluginProvenance;
-use codex_mcp::codex_apps_tools_cache_key;
-use codex_mcp::compute_auth_statuses;
-use codex_mcp::effective_mcp_servers;
-use codex_mcp::host_owned_codex_apps_enabled;
+use crewon_config::AppsRequirementsToml;
+use crewon_config::types::AppToolApproval;
+use crewon_config::types::ApprovalsReviewer;
+use crewon_config::types::AppsConfigToml;
+use crewon_config::types::ToolSuggestDiscoverableType;
+use crewon_core_plugins::PluginsManager;
+use crewon_features::Feature;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_login::default_client::originator;
+use crewon_mcp::CREWON_APPS_MCP_SERVER_NAME;
+use crewon_mcp::McpConnectionManager;
+use crewon_mcp::McpRuntimeContext;
+use crewon_mcp::ToolInfo;
+use crewon_mcp::ToolPluginProvenance;
+use crewon_mcp::compute_auth_statuses;
+use crewon_mcp::crewon_apps_tools_cache_key;
+use crewon_mcp::effective_mcp_servers;
+use crewon_mcp::host_owned_crewon_apps_enabled;
 
 const CONNECTORS_READY_TIMEOUT_ON_EMPTY_TOOLS: Duration = Duration::from_secs(30);
 
@@ -82,7 +82,7 @@ static ACCESSIBLE_CONNECTORS_CACHE: LazyLock<StdMutex<Option<CachedAccessibleCon
 #[derive(Debug, Clone)]
 pub struct AccessibleConnectorsStatus {
     pub connectors: Vec<AppInfo>,
-    pub codex_apps_ready: bool,
+    pub crewon_apps_ready: bool,
 }
 
 pub async fn list_accessible_connectors_from_mcp_tools(
@@ -113,17 +113,17 @@ pub(crate) async fn list_accessible_and_enabled_connectors_from_manager(
 pub(crate) async fn list_tool_suggest_discoverable_tools_with_auth(
     config: &Config,
     plugins_manager: &PluginsManager,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     accessible_connectors: &[AppInfo],
     loaded_plugin_app_connector_ids: &[String],
 ) -> anyhow::Result<Vec<DiscoverableTool>> {
     let connector_ids = tool_suggest_connector_ids(config, loaded_plugin_app_connector_ids);
-    let directory_connectors = codex_connectors::merge::merge_plugin_connectors(
+    let directory_connectors = crewon_connectors::merge::merge_plugin_connectors(
         cached_directory_connectors_for_tool_suggest_with_auth(config, auth).await,
         connector_ids.iter().cloned(),
     );
     let discoverable_connectors =
-        codex_connectors::filter::filter_tool_suggest_discoverable_connectors(
+        crewon_connectors::filter::filter_tool_suggest_discoverable_connectors(
             directory_connectors,
             accessible_connectors,
             &connector_ids,
@@ -153,13 +153,13 @@ pub async fn list_cached_accessible_connectors_from_mcp_tools(
     let auth = auth_manager.auth().await;
     if !config
         .features
-        .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend))
+        .apps_enabled_for_auth(auth.as_ref().is_some_and(CrewonAuth::uses_crewon_backend))
     {
         return Some(Vec::new());
     }
     let cache_key = accessible_connectors_cache_key(config, auth.as_ref());
     read_cached_accessible_connectors(&cache_key).map(|connectors| {
-        codex_connectors::filter::filter_disallowed_connectors(
+        crewon_connectors::filter::filter_disallowed_connectors(
             connectors,
             originator().value.as_str(),
         )
@@ -168,7 +168,7 @@ pub async fn list_cached_accessible_connectors_from_mcp_tools(
 
 pub(crate) fn refresh_accessible_connectors_cache_from_mcp_tools(
     config: &Config,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     mcp_tools: &[ToolInfo],
 ) {
     if !config.features.enabled(Feature::Apps) {
@@ -176,7 +176,7 @@ pub(crate) fn refresh_accessible_connectors_cache_from_mcp_tools(
     }
 
     let cache_key = accessible_connectors_cache_key(config, auth);
-    let accessible_connectors = codex_connectors::filter::filter_disallowed_connectors(
+    let accessible_connectors = crewon_connectors::filter::filter_disallowed_connectors(
         accessible_connectors_from_mcp_tools(mcp_tools),
         originator().value.as_str(),
     );
@@ -203,7 +203,7 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_options_and_status(
     // of constructing a temporary manager here.
     let local_runtime_paths = ExecServerRuntimePaths::from_optional_paths(
         config.codex_self_exe.clone(),
-        config.codex_linux_sandbox_exe.clone(),
+        config.crewon_linux_sandbox_exe.clone(),
     )?;
     let environment_manager =
         EnvironmentManager::from_codex_home(config.codex_home.clone(), Some(local_runtime_paths))
@@ -243,36 +243,36 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_mcp_manager(
     let auth = auth_manager.auth().await;
     if !config
         .features
-        .apps_enabled_for_auth(auth.as_ref().is_some_and(CodexAuth::uses_codex_backend))
+        .apps_enabled_for_auth(auth.as_ref().is_some_and(CrewonAuth::uses_crewon_backend))
     {
         return Ok(AccessibleConnectorsStatus {
             connectors: Vec::new(),
-            codex_apps_ready: true,
+            crewon_apps_ready: true,
         });
     }
     let cache_key = accessible_connectors_cache_key(config, auth.as_ref());
     let tool_plugin_provenance = mcp_manager.tool_plugin_provenance(config).await;
     if !force_refetch && let Some(cached_connectors) = read_cached_accessible_connectors(&cache_key)
     {
-        let cached_connectors = codex_connectors::filter::filter_disallowed_connectors(
+        let cached_connectors = crewon_connectors::filter::filter_disallowed_connectors(
             cached_connectors,
             originator().value.as_str(),
         );
         let cached_connectors = with_app_plugin_sources(cached_connectors, &tool_plugin_provenance);
         return Ok(AccessibleConnectorsStatus {
             connectors: cached_connectors,
-            codex_apps_ready: true,
+            crewon_apps_ready: true,
         });
     }
 
     let mcp_config = mcp_manager.runtime_config(config).await;
     let mut mcp_servers = effective_mcp_servers(&mcp_config, auth.as_ref());
-    mcp_servers.retain(|name, _| name == CODEX_APPS_MCP_SERVER_NAME);
-    let host_owned_codex_apps_enabled = host_owned_codex_apps_enabled(&mcp_config, auth.as_ref());
+    mcp_servers.retain(|name, _| name == CREWON_APPS_MCP_SERVER_NAME);
+    let host_owned_crewon_apps_enabled = host_owned_crewon_apps_enabled(&mcp_config, auth.as_ref());
     if mcp_servers.is_empty() {
         return Ok(AccessibleConnectorsStatus {
             connectors: Vec::new(),
-            codex_apps_ready: true,
+            crewon_apps_ready: true,
         });
     }
 
@@ -300,8 +300,8 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_mcp_manager(
         // one exists, but do not reintroduce the old hidden-local fallback.
         McpRuntimeContext::new(environment_manager, config.cwd.to_path_buf()),
         config.codex_home.to_path_buf(),
-        codex_apps_tools_cache_key(auth.as_ref()),
-        host_owned_codex_apps_enabled,
+        crewon_apps_tools_cache_key(auth.as_ref()),
+        host_owned_crewon_apps_enabled,
         mcp_config.prefix_mcp_tool_names,
         mcp_config.client_elicitation_capability,
         ToolPluginProvenance::default(),
@@ -312,13 +312,13 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_mcp_manager(
 
     let refreshed_tools = if force_refetch {
         match mcp_connection_manager
-            .hard_refresh_codex_apps_tools_cache()
+            .hard_refresh_crewon_apps_tools_cache()
             .await
         {
             Ok(tools) => Some(tools),
             Err(err) => {
                 warn!(
-                    "failed to force-refresh tools for MCP server '{CODEX_APPS_MCP_SERVER_NAME}', using cached/startup tools: {err:#}"
+                    "failed to force-refresh tools for MCP server '{CREWON_APPS_MCP_SERVER_NAME}', using cached/startup tools: {err:#}"
                 );
                 None
             }
@@ -334,11 +334,11 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_mcp_manager(
         mcp_connection_manager.list_all_tools().await
     };
     let mut should_reload_tools = false;
-    let codex_apps_ready = if refreshed_tools_succeeded {
+    let crewon_apps_ready = if refreshed_tools_succeeded {
         true
-    } else if let Some(cfg) = mcp_servers.get(CODEX_APPS_MCP_SERVER_NAME) {
+    } else if let Some(cfg) = mcp_servers.get(CREWON_APPS_MCP_SERVER_NAME) {
         let immediate_ready = mcp_connection_manager
-            .wait_for_server_ready(CODEX_APPS_MCP_SERVER_NAME, Duration::ZERO)
+            .wait_for_server_ready(CREWON_APPS_MCP_SERVER_NAME, Duration::ZERO)
             .await;
         if immediate_ready {
             true
@@ -348,7 +348,7 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_mcp_manager(
                 .and_then(|config| config.startup_timeout_sec)
                 .unwrap_or(CONNECTORS_READY_TIMEOUT_ON_EMPTY_TOOLS);
             let ready = mcp_connection_manager
-                .wait_for_server_ready(CODEX_APPS_MCP_SERVER_NAME, timeout)
+                .wait_for_server_ready(CREWON_APPS_MCP_SERVER_NAME, timeout)
                 .await;
             should_reload_tools = ready;
             ready
@@ -361,15 +361,15 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_mcp_manager(
     if should_reload_tools {
         tools = mcp_connection_manager.list_all_tools().await;
     }
-    if codex_apps_ready {
+    if crewon_apps_ready {
         cancel_token.cancel();
     }
 
-    let accessible_connectors = codex_connectors::filter::filter_disallowed_connectors(
+    let accessible_connectors = crewon_connectors::filter::filter_disallowed_connectors(
         accessible_connectors_from_mcp_tools(&tools),
         originator().value.as_str(),
     );
-    if codex_apps_ready || !accessible_connectors.is_empty() {
+    if crewon_apps_ready || !accessible_connectors.is_empty() {
         write_cached_accessible_connectors(cache_key, &accessible_connectors);
     }
     let accessible_connectors =
@@ -377,17 +377,17 @@ pub async fn list_accessible_connectors_from_mcp_tools_with_mcp_manager(
     mcp_connection_manager.shutdown().await;
     Ok(AccessibleConnectorsStatus {
         connectors: accessible_connectors,
-        codex_apps_ready,
+        crewon_apps_ready,
     })
 }
 
 fn accessible_connectors_cache_key(
     config: &Config,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
 ) -> AccessibleConnectorsCacheKey {
-    let account_id = auth.and_then(CodexAuth::get_account_id);
-    let chatgpt_user_id = auth.and_then(CodexAuth::get_chatgpt_user_id);
-    let is_workspace_account = auth.is_some_and(CodexAuth::is_workspace_account);
+    let account_id = auth.and_then(CrewonAuth::get_account_id);
+    let chatgpt_user_id = auth.and_then(CrewonAuth::get_chatgpt_user_id);
+    let is_workspace_account = auth.is_some_and(CrewonAuth::is_workspace_account);
     AccessibleConnectorsCacheKey {
         chatgpt_base_url: config.chatgpt_base_url.clone(),
         account_id,
@@ -425,7 +425,7 @@ fn write_cached_accessible_connectors(
         .unwrap_or_else(std::sync::PoisonError::into_inner);
     *cache_guard = Some(CachedAccessibleConnectors {
         key: cache_key,
-        expires_at: Instant::now() + codex_connectors::CONNECTORS_CACHE_TTL,
+        expires_at: Instant::now() + crewon_connectors::CONNECTORS_CACHE_TTL,
         connectors: connectors.to_vec(),
     });
 }
@@ -459,7 +459,7 @@ fn tool_suggest_connector_ids(
 
 async fn cached_directory_connectors_for_tool_suggest_with_auth(
     config: &Config,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
 ) -> Vec<AppInfo> {
     if !config.features.enabled(Feature::Apps) {
         return Vec::new();
@@ -474,7 +474,7 @@ async fn cached_directory_connectors_for_tool_suggest_with_auth(
         loaded_auth = auth_manager.auth().await;
         loaded_auth.as_ref()
     };
-    let Some(auth) = auth.filter(|auth| auth.uses_codex_backend()) else {
+    let Some(auth) = auth.filter(|auth| auth.uses_crewon_backend()) else {
         return Vec::new();
     };
 
@@ -493,25 +493,25 @@ async fn cached_directory_connectors_for_tool_suggest_with_auth(
         ),
     );
 
-    codex_connectors::cached_directory_connectors(&cache_context).unwrap_or_default()
+    crewon_connectors::cached_directory_connectors(&cache_context).unwrap_or_default()
 }
 
 pub(crate) fn accessible_connectors_from_mcp_tools(mcp_tools: &[ToolInfo]) -> Vec<AppInfo> {
     // ToolInfo already carries plugin provenance, so app-level plugin sources
     // can be derived here instead of requiring a separate enrichment pass.
     let tools = mcp_tools.iter().filter_map(|tool| {
-        if tool.server_name != CODEX_APPS_MCP_SERVER_NAME {
+        if tool.server_name != CREWON_APPS_MCP_SERVER_NAME {
             return None;
         }
         let connector_id = tool.connector_id.as_deref()?;
-        Some(codex_connectors::accessible::AccessibleConnectorTool {
+        Some(crewon_connectors::accessible::AccessibleConnectorTool {
             connector_id: connector_id.to_string(),
             connector_name: tool.connector_name.clone(),
             connector_description: tool.namespace_description.clone(),
             plugin_display_names: tool.plugin_display_names.clone(),
         })
     });
-    codex_connectors::accessible::collect_accessible_connectors(tools)
+    crewon_connectors::accessible::collect_accessible_connectors(tools)
 }
 
 pub fn with_app_enabled_state(mut connectors: Vec<AppInfo>, config: &Config) -> Vec<AppInfo> {
@@ -575,8 +575,8 @@ pub(crate) fn app_tool_policy(
     )
 }
 
-pub(crate) fn codex_app_tool_is_enabled(config: &Config, tool_info: &ToolInfo) -> bool {
-    if tool_info.server_name != CODEX_APPS_MCP_SERVER_NAME {
+pub(crate) fn crewon_app_tool_is_enabled(config: &Config, tool_info: &ToolInfo) -> bool {
+    if tool_info.server_name != CREWON_APPS_MCP_SERVER_NAME {
         return true;
     }
 
@@ -595,7 +595,7 @@ pub(crate) fn mcp_approvals_reviewer(
     server_name: &str,
     connector_id: Option<&str>,
 ) -> ApprovalsReviewer {
-    let app_reviewer = if server_name == CODEX_APPS_MCP_SERVER_NAME {
+    let app_reviewer = if server_name == CREWON_APPS_MCP_SERVER_NAME {
         read_user_apps_config(config).and_then(|apps_config| {
             connector_id
                 .and_then(|connector_id| apps_config.apps.get(connector_id))

@@ -1,7 +1,7 @@
-use codex_aws_auth::AwsAuthConfig;
-use codex_model_provider_info::ModelProviderAwsAuthInfo;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result;
+use crewon_aws_auth::AwsAuthConfig;
+use crewon_model_provider_info::ModelProviderAwsAuthInfo;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result;
 
 use super::auth::BedrockAuthMethod;
 use super::auth::resolve_auth_method;
@@ -88,11 +88,11 @@ mod tests {
     fn aws_auth_config_uses_profile_and_mantle_service() {
         assert_eq!(
             aws_auth_config(&ModelProviderAwsAuthInfo {
-                profile: Some("codex-bedrock".to_string()),
+                profile: Some("crewon-bedrock".to_string()),
                 region: None,
             }),
             AwsAuthConfig {
-                profile: Some("codex-bedrock".to_string()),
+                profile: Some("crewon-bedrock".to_string()),
                 region: None,
                 service: "bedrock-mantle".to_string(),
             }

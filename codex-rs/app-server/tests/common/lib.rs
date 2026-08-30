@@ -12,7 +12,6 @@ pub use auth_fixtures::ChatGptAuthFixture;
 pub use auth_fixtures::ChatGptIdTokenClaims;
 pub use auth_fixtures::encode_id_token;
 pub use auth_fixtures::write_chatgpt_auth;
-use codex_app_server_protocol::JSONRPCResponse;
 pub use config::write_mock_responses_config_toml;
 pub use config::write_mock_responses_config_toml_with_chatgpt_base_url;
 pub use core_test_support::PathBufExt;
@@ -24,9 +23,11 @@ pub use core_test_support::test_absolute_path;
 pub use core_test_support::test_path_buf_with_windows;
 pub use core_test_support::test_tmp_path;
 pub use core_test_support::test_tmp_path_buf;
+use crewon_app_server_protocol::JSONRPCResponse;
 pub use mock_model_server::create_mock_responses_server_repeating_assistant;
 pub use mock_model_server::create_mock_responses_server_sequence;
 pub use mock_model_server::create_mock_responses_server_sequence_unchecked;
+pub use mock_model_server::create_mock_responses_server_sequence_unchecked_with_delays;
 pub use models_cache::write_models_cache;
 pub use models_cache::write_models_cache_with_models;
 pub use responses::create_apply_patch_sse_response;
@@ -48,6 +49,6 @@ pub use test_app_server::TestAppServer;
 
 pub fn to_response<T: DeserializeOwned>(response: JSONRPCResponse) -> anyhow::Result<T> {
     let value = serde_json::to_value(response.result)?;
-    let codex_response = serde_json::from_value(value)?;
-    Ok(codex_response)
+    let crewon_response = serde_json::from_value(value)?;
+    Ok(crewon_response)
 }

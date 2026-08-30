@@ -1,0 +1,42 @@
+{
+  "schemaVersion": "crewon.trace.v0",
+  "caseId": "AR-030-typed-policy-failure",
+  "providerFailure": {
+    "httpStatus": 400,
+    "type": "invalid_request",
+    "code": "cyber_policy",
+    "message": "This request has been flagged for potentially high-risk cyber activity."
+  },
+  "events": [
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 1,
+      "type": "turn.failed",
+      "identity": {
+        "turnSlot": "first"
+      },
+      "data": {
+        "code": "responses_provider_cyber_policy",
+        "retryable": false
+      }
+    },
+    {
+      "schemaVersion": "crewon.turn-event.v0",
+      "sequence": 2,
+      "type": "turn.released",
+      "identity": {
+        "turnSlot": "first"
+      },
+      "data": {
+        "workItemSettled": true
+      }
+    }
+  ],
+  "finalState": {
+    "status": "failed",
+    "requestCount": 1,
+    "samplingRetries": 0,
+    "assistantMessageCommitted": false,
+    "pendingWorkItems": 0
+  }
+}

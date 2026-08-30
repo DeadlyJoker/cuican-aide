@@ -1,8 +1,8 @@
 //! Responses API tool definitions for persisted thread goals.
 
-use codex_tools::JsonSchema;
-use codex_tools::ResponsesApiTool;
-use codex_tools::ToolSpec;
+use crewon_tools::JsonSchema;
+use crewon_tools::ResponsesApiTool;
+use crewon_tools::ToolSpec;
 use serde_json::json;
 use std::collections::BTreeMap;
 

@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "properties": {
+    "config": true,
+    "cwd": {
+      "type": "string"
+    },
+    "locale": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "message": true,
+    "text": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "workspace": true
+  },
+  "required": [
+    "config",
+    "cwd",
+    "message"
+  ],
+  "title": "OfficeMessageSendParams",
+  "type": "object"
+}

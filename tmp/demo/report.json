@@ -1,0 +1,107 @@
+{
+  "theme": { "headingColor": "#2F6FED", "cjkFont": "Microsoft YaHei", "bodySize": 11 },
+  "page": { "marginTop": 1, "marginBottom": 1, "marginLeft": 1.1, "marginRight": 1.1 },
+  "header": "CrewON 平台组",
+  "footer": "内部技术评审材料",
+  "blocks": [
+    { "type": "heading", "level": 0, "text": "CrewON 三场景能力落地技术报告" },
+    {
+      "type": "kv",
+      "pairs": [
+        ["报告人", "平台组"],
+        ["日期", "2026-08-06"],
+        ["范围", "office / code / design 三场景工具链"],
+        ["状态", "**已落地，待评审**"]
+      ]
+    },
+    { "type": "toc", "title": "目录" },
+    { "type": "pageBreak" },
+    { "type": "heading", "level": 1, "text": "一、问题定位" },
+    {
+      "type": "paragraph",
+      "text": "改造前，`codex-rs/scene-runtime` 的场景契约已完整（写权限策略、外部动作策略、交付物类型、15 个交互模式），但 office 与 design 两个场景**只有提示词差异，没有任何专属工具**。按项目规格文档的判定标准，这不算场景功能完成。"
+    },
+    {
+      "type": "table",
+      "header": ["场景", "改造前状态", "缺口"],
+      "rows": [
+        ["office", "仅提示词 + 快捷 prompt", "无文档生成能力，Calendar 宣称但未接线"],
+        ["code", "已接通文件树、终端、git diff", "缺工具链发现与交付前自检"],
+        ["design", "仅提示词", "Vision / Figma / Image Generation 三项均未接线"]
+      ],
+      "widths": [1.1, 2.2, 2.4]
+    },
+    { "type": "heading", "level": 1, "text": "二、落地方案" },
+    {
+      "type": "paragraph",
+      "text": "以 skill 作为工具承载层。三套 skill 随二进制分发，安装到 `$CODEX_HOME/skills/.system/`，由 `scene-runtime` 的场景指令指向。"
+    },
+    { "type": "heading", "level": 2, "text": "2.1 办公 office-suite" },
+    {
+      "type": "list",
+      "items": [
+        "`build_docx.py` — 10 种区块，含活的 TOC 域、页码域、CJK 字体槽",
+        "`build_pptx.py` — 9 种自绘版式，不依赖 python-pptx 默认占位符",
+        "`build_xlsx.py` — 真实公式、图表、条件格式",
+        "`read_office.py` — docx/pptx/xlsx/pdf 转 Markdown，用于编辑前读取",
+        "`validate_office.py` — 交付前校验容器完整性、空内容与占位文本"
+      ]
+    },
+    {
+      "type": "paragraph",
+      "text": "对标 Anthropic 官方 document-skills，但**未采用**其 pandoc + docx-js 路线：目标机器普遍缺少 pandoc 与 LibreOffice，该路径在干净环境会直接失败。改为纯 Python，依赖自举进独立 venv，不污染用户解释器。"
+    },
+    { "type": "heading", "level": 2, "text": "2.2 生码 code-craft" },
+    {
+      "type": "list",
+      "items": [
+        "`detect_toolchain.py` — 读真实 manifest 报告可用的 build/test/lint 命令",
+        "`review_diff.py` — 交付前自检变更规模、敏感路径、调试残留、测试覆盖"
+      ]
+    },
+    { "type": "heading", "level": 2, "text": "2.3 设计 design-studio" },
+    {
+      "type": "list",
+      "items": [
+        "`render_design.py` — HTML 转 PNG / PDF，支持全页与四断点批量",
+        "`audit_design.py` — WCAG 对比度、无障碍名称、标题层级、横向溢出、AI 味检查"
+      ]
+    },
+    { "type": "heading", "level": 1, "text": "三、过程中修复的真实缺陷" },
+    {
+      "type": "table",
+      "header": ["缺陷", "现象", "根因"],
+      "rows": [
+        ["Chrome 挂死", "headless 渲染 120 秒超时", "完整 Chrome 在 --headless=new 下卡死，改用 chrome-headless-shell"],
+        ["全页截图截断", "只截窗口高度", "--screenshot 不测量文档高度，改为 iframe 两阶段测高"],
+        ["能力条高度异常", "32px 文字占 235px", "grid 双重拉伸，需 align-items 与 align-self 同时设置"],
+        ["hero 窄屏塌缩", "1000px 下子项塌到一两百 px", "容器无列定义，隐式列按最宽内容算"]
+      ],
+      "widths": [1.2, 1.8, 2.7]
+    },
+    { "type": "heading", "level": 1, "text": "四、验证结果" },
+    {
+      "type": "table",
+      "header": ["验证项", "命令", "结果"],
+      "rows": [
+        ["Rust 测试", "just test -p crewon-skills -p crewon-scene-runtime", "18/18 通过"],
+        ["前端测试", "pnpm --filter @crewon/ui test", "1548/1548 通过"],
+        ["类型检查", "tsc -b --noEmit", "通过"],
+        ["构建", "pnpm --filter @crewon/ui build", "通过"],
+        ["设计审计", "audit_design.py（浅色 / 暗色）", "0 error 0 warning"]
+      ],
+      "widths": [1.3, 2.5, 1.6]
+    },
+    { "type": "heading", "level": 1, "text": "五、遗留与决策项" },
+    {
+      "type": "list",
+      "ordered": true,
+      "items": [
+        "场景能力条经评审判定信息重复且挤压输入框，已移除",
+        "前端未调用 scene/list，前后端 preset 仍是两份独立定义，无版本校验",
+        "scenePreset.modes 定义 15 个模式但无 UI 消费方，后端契约能力未被利用"
+      ]
+    },
+    { "type": "quote", "text": "只修改标签、placeholder 和快捷 prompt 不算场景功能完成。" }
+  ]
+}

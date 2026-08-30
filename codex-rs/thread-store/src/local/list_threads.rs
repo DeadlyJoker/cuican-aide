@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
 
-use codex_protocol::ThreadId;
-use codex_rollout::RolloutConfig;
-use codex_rollout::RolloutRecorder;
-use codex_rollout::find_thread_names_by_ids;
-use codex_rollout::parse_cursor;
+use crewon_protocol::ThreadId;
+use crewon_rollout::RolloutConfig;
+use crewon_rollout::RolloutRecorder;
+use crewon_rollout::find_thread_names_by_ids;
+use crewon_rollout::parse_cursor;
 
 use super::LocalThreadStore;
 use super::helpers::distinct_thread_metadata_title;
@@ -20,7 +20,7 @@ use crate::ThreadStoreResult;
 
 pub(super) async fn list_threads(
     store: &LocalThreadStore,
-    params: ListThreadsParams,
+    mut params: ListThreadsParams,
 ) -> ThreadStoreResult<ThreadPage> {
     let cursor = params
         .cursor
@@ -32,14 +32,17 @@ pub(super) async fn list_threads(
         })
         .transpose()?;
     let sort_key = match params.sort_key {
-        ThreadSortKey::CreatedAt => codex_rollout::ThreadSortKey::CreatedAt,
-        ThreadSortKey::UpdatedAt => codex_rollout::ThreadSortKey::UpdatedAt,
+        ThreadSortKey::CreatedAt => crewon_rollout::ThreadSortKey::CreatedAt,
+        ThreadSortKey::UpdatedAt => crewon_rollout::ThreadSortKey::UpdatedAt,
     };
     let sort_direction = match params.sort_direction {
-        SortDirection::Asc => codex_rollout::SortDirection::Asc,
-        SortDirection::Desc => codex_rollout::SortDirection::Desc,
+        SortDirection::Asc => crewon_rollout::SortDirection::Asc,
+        SortDirection::Desc => crewon_rollout::SortDirection::Desc,
     };
     let state_db = store.state_db().await;
+    if store.cloud_agent_thread_index_active().await? {
+        params.use_state_db_only = true;
+    }
     let rollout_config = RolloutConfig {
         codex_home: store.config.codex_home.clone(),
         sqlite_home: store.config.sqlite_home.clone(),
@@ -108,14 +111,14 @@ pub(super) async fn list_threads(
 }
 
 pub(super) async fn list_rollout_threads(
-    state_db: Option<codex_rollout::StateDbHandle>,
+    state_db: Option<crewon_rollout::StateDbHandle>,
     config: &RolloutConfig,
     default_model_provider_id: &str,
     params: &ListThreadsParams,
-    cursor: Option<&codex_rollout::Cursor>,
-    sort_key: codex_rollout::ThreadSortKey,
-    sort_direction: codex_rollout::SortDirection,
-) -> ThreadStoreResult<codex_rollout::ThreadsPage> {
+    cursor: Option<&crewon_rollout::Cursor>,
+    sort_key: crewon_rollout::ThreadSortKey,
+    sort_direction: crewon_rollout::SortDirection,
+) -> ThreadStoreResult<crewon_rollout::ThreadsPage> {
     let page = if params.use_state_db_only && params.archived {
         RolloutRecorder::list_archived_threads_from_state_db(
             state_db,
@@ -185,8 +188,8 @@ pub(super) async fn list_rollout_threads(
 #[cfg(test)]
 mod tests {
     use chrono::Utc;
-    use codex_protocol::ThreadId;
-    use codex_protocol::protocol::SessionSource;
+    use crewon_protocol::ThreadId;
+    use crewon_protocol::protocol::SessionSource;
     use pretty_assertions::assert_eq;
     use std::fs;
     use tempfile::TempDir;
@@ -243,7 +246,7 @@ mod tests {
         let rollout_path = home.path().join("rollout-title-search.jsonl");
         fs::write(&rollout_path, "").expect("placeholder rollout file");
 
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             home.path().to_path_buf(),
             config.default_model_provider_id.clone(),
         )
@@ -255,11 +258,11 @@ mod tests {
             .await
             .expect("backfill should be complete");
         let created_at = Utc::now();
-        let mut builder = codex_state::ThreadMetadataBuilder::new(
+        let mut builder = crewon_state::ThreadMetadataBuilder::new(
             thread_id,
             rollout_path,
             created_at,
-            SessionSource::Cli,
+            SessionSource::LegacyCli,
         );
         builder.model_provider = Some(config.default_model_provider_id.clone());
         builder.cwd = home.path().to_path_buf();
@@ -384,7 +387,7 @@ mod tests {
                 cursor: None,
                 sort_key: ThreadSortKey::CreatedAt,
                 sort_direction: SortDirection::Desc,
-                allowed_sources: vec![SessionSource::Cli],
+                allowed_sources: vec![SessionSource::LegacyCli],
                 model_providers: Some(vec!["test-provider".to_string()]),
                 cwd_filters: None,
                 archived: false,
@@ -406,7 +409,7 @@ mod tests {
         );
         assert_eq!(page.items[0].model_provider, "test-provider");
         assert_eq!(page.items[0].cli_version, "test_version");
-        assert_eq!(page.items[0].source, SessionSource::Cli);
+        assert_eq!(page.items[0].source, SessionSource::LegacyCli);
     }
 
     #[tokio::test]

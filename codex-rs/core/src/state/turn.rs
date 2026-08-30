@@ -2,19 +2,20 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::sync::Mutex as StdMutex;
 use tokio::sync::Mutex;
 use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use tokio_util::task::AbortOnDropHandle;
 
-use codex_extension_api::ExtensionData;
-use codex_protocol::dynamic_tools::DynamicToolResponse;
-use codex_protocol::protocol::TurnEnvironmentSelection;
-use codex_protocol::request_permissions::RequestPermissionProfile;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
-use codex_protocol::request_user_input::RequestUserInputResponse;
-use codex_rmcp_client::ElicitationResponse;
-use codex_sandboxing::policy_transforms::merge_permission_profiles;
+use crewon_extension_api::ExtensionData;
+use crewon_protocol::dynamic_tools::DynamicToolResponse;
+use crewon_protocol::protocol::TurnEnvironmentSelection;
+use crewon_protocol::request_permissions::RequestPermissionProfile;
+use crewon_protocol::request_permissions::RequestPermissionsResponse;
+use crewon_protocol::request_user_input::RequestUserInputResponse;
+use crewon_rmcp_client::ElicitationResponse;
+use crewon_sandboxing::policy_transforms::merge_permission_profiles;
 use rmcp::model::RequestId;
 use tokio::sync::oneshot;
 
@@ -22,14 +23,63 @@ use crate::agent::control::AgentExecutionGuard;
 use crate::session::TurnInputQueue;
 use crate::session::turn_context::TurnContext;
 use crate::tasks::AnySessionTask;
-use codex_protocol::models::AdditionalPermissionProfile;
-use codex_protocol::protocol::ReviewDecision;
-use codex_protocol::protocol::TokenUsage;
+use crewon_protocol::models::AdditionalPermissionProfile;
+use crewon_protocol::protocol::ReviewDecision;
+use crewon_protocol::protocol::TokenUsage;
 
 /// Metadata about the currently running turn.
 pub(crate) struct ActiveTurn {
     pub(crate) task: Option<RunningTask>,
     pub(crate) turn_state: Arc<Mutex<TurnState>>,
+}
+
+/// Tracks exact turns still owned by this process while their terminal event is being persisted.
+#[derive(Clone, Default)]
+pub(crate) struct RuntimeTurnOwnership {
+    retained: Arc<StdMutex<HashMap<String, usize>>>,
+}
+
+pub(crate) struct RuntimeTurnOwnershipGuard {
+    retained: Arc<StdMutex<HashMap<String, usize>>>,
+    turn_id: String,
+}
+
+impl RuntimeTurnOwnership {
+    pub(crate) fn retain(&self, turn_id: &str) -> RuntimeTurnOwnershipGuard {
+        let mut retained = self
+            .retained
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        *retained.entry(turn_id.to_string()).or_default() += 1;
+        RuntimeTurnOwnershipGuard {
+            retained: Arc::clone(&self.retained),
+            turn_id: turn_id.to_string(),
+        }
+    }
+
+    pub(crate) fn contains(&self, turn_id: &str) -> bool {
+        self.retained
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .contains_key(turn_id)
+    }
+}
+
+impl Drop for RuntimeTurnOwnershipGuard {
+    fn drop(&mut self) {
+        let mut retained = self
+            .retained
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let Some(count) = retained.get_mut(&self.turn_id) else {
+            return;
+        };
+        if *count == 1 {
+            retained.remove(&self.turn_id);
+        } else {
+            *count -= 1;
+        }
+    }
 }
 
 /// Whether mailbox deliveries should still be folded into the current turn.
@@ -62,6 +112,10 @@ impl Default for ActiveTurn {
     }
 }
 
+#[cfg(test)]
+#[path = "turn_tests.rs"]
+mod tests;
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) enum TaskKind {
     Regular,
@@ -79,7 +133,7 @@ pub(crate) struct RunningTask {
     pub(crate) turn_extension_data: Arc<ExtensionData>,
     pub(crate) _agent_execution_guard: Option<AgentExecutionGuard>,
     // Timer recorded when the task drops to capture the full turn duration.
-    pub(crate) _timer: Option<codex_otel::Timer>,
+    pub(crate) _timer: Option<crewon_otel::Timer>,
 }
 
 /// Mutable state for a single turn.

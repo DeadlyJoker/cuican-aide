@@ -5,13 +5,13 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use async_trait::async_trait;
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_protocol::config_types::EnvironmentVariablePattern;
-use codex_protocol::config_types::ShellEnvironmentPolicy;
-use codex_protocol::shell_environment;
-use codex_utils_pty::ExecCommandSession;
-use codex_utils_pty::ProcessSignal as PtyProcessSignal;
-use codex_utils_pty::TerminalSize;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_protocol::config_types::EnvironmentVariablePattern;
+use crewon_protocol::config_types::ShellEnvironmentPolicy;
+use crewon_protocol::shell_environment;
+use crewon_utils_pty::ExecCommandSession;
+use crewon_utils_pty::ProcessSignal as PtyProcessSignal;
+use crewon_utils_pty::TerminalSize;
 use tokio::sync::Mutex;
 use tokio::sync::Notify;
 use tokio::sync::mpsc;
@@ -168,7 +168,7 @@ impl LocalProcess {
 
         let env = child_env(&params);
         let spawned_result = if params.tty {
-            codex_utils_pty::spawn_pty_process(
+            crewon_utils_pty::spawn_pty_process(
                 program,
                 args,
                 params.cwd.as_path(),
@@ -178,7 +178,7 @@ impl LocalProcess {
             )
             .await
         } else if params.pipe_stdin {
-            codex_utils_pty::spawn_pipe_process(
+            crewon_utils_pty::spawn_pipe_process(
                 program,
                 args,
                 params.cwd.as_path(),
@@ -187,7 +187,7 @@ impl LocalProcess {
             )
             .await
         } else {
-            codex_utils_pty::spawn_pipe_process_no_stdin(
+            crewon_utils_pty::spawn_pipe_process_no_stdin(
                 program,
                 args,
                 params.cwd.as_path(),
@@ -754,8 +754,8 @@ fn notification_sender(inner: &Inner) -> Option<RpcNotificationSender> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_protocol::config_types::ShellEnvironmentPolicyInherit;
-    use codex_utils_pty::ProcessDriver;
+    use crewon_protocol::config_types::ShellEnvironmentPolicyInherit;
+    use crewon_utils_pty::ProcessDriver;
     use pretty_assertions::assert_eq;
     use tokio::sync::oneshot;
     use tokio::time::timeout;
@@ -978,7 +978,7 @@ mod tests {
         let (_stderr_tx, stderr_rx) = tokio::sync::broadcast::channel(1);
         let (_exit_tx, exit_rx) = oneshot::channel();
 
-        codex_utils_pty::spawn_from_driver(ProcessDriver {
+        crewon_utils_pty::spawn_from_driver(ProcessDriver {
             writer_tx,
             stdout_rx,
             stderr_rx: Some(stderr_rx),

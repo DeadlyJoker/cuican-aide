@@ -2,16 +2,16 @@ use super::*;
 use crate::SkillMetadata;
 use crate::config_rules::resolve_disabled_skill_paths;
 use crate::config_rules::skill_config_rules_from_stack;
-use codex_app_server_protocol::ConfigLayerSource;
-use codex_config::CONFIG_TOML_FILE;
-use codex_config::ConfigLayerEntry;
-use codex_config::ConfigLayerStack;
-use codex_config::ConfigRequirementsToml;
-use codex_exec_server::LOCAL_FS;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_absolute_path::test_support::PathBufExt;
-use codex_utils_absolute_path::test_support::PathExt;
-use codex_utils_plugins::PluginSkillRoot;
+use crewon_app_server_protocol::ConfigLayerSource;
+use crewon_config::CONFIG_TOML_FILE;
+use crewon_config::ConfigLayerEntry;
+use crewon_config::ConfigLayerStack;
+use crewon_config::ConfigRequirementsToml;
+use crewon_exec_server::LOCAL_FS;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::test_support::PathBufExt;
+use crewon_utils_absolute_path::test_support::PathExt;
+use crewon_utils_plugins::PluginSkillRoot;
 use pretty_assertions::assert_eq;
 use std::collections::HashSet;
 use std::fs;
@@ -42,10 +42,10 @@ fn write_plugin_skill(
         .join(plugin_name)
         .join("local");
     let skill_dir = plugin_root.join("skills").join(dir);
-    fs::create_dir_all(plugin_root.join(".codex-plugin")).unwrap();
+    fs::create_dir_all(plugin_root.join(".crewon-plugin")).unwrap();
     fs::create_dir_all(&skill_dir).unwrap();
     fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         format!(r#"{{"name":"{plugin_name}"}}"#),
     )
     .unwrap();
@@ -395,11 +395,11 @@ async fn skills_for_config_disables_plugin_skills_by_name() {
 async fn skills_for_cwd_loads_repo_and_user_roots_with_local_fs() {
     let codex_home = tempfile::tempdir().expect("tempdir");
     let cwd = tempfile::tempdir().expect("tempdir");
-    let repo_dot_codex = cwd.path().join(".codex");
-    fs::create_dir_all(&repo_dot_codex).expect("create repo config dir");
+    let repo_config_dir = cwd.path().join(".codex");
+    fs::create_dir_all(&repo_config_dir).expect("create repo config dir");
 
     write_user_skill(&codex_home, "user", "user-skill", "from local user root");
-    let repo_skill_dir = repo_dot_codex.join("skills/repo");
+    let repo_skill_dir = cwd.path().join(".crewon/skill/repo");
     fs::create_dir_all(&repo_skill_dir).expect("create repo skill dir");
     fs::write(
         repo_skill_dir.join("SKILL.md"),
@@ -412,7 +412,7 @@ async fn skills_for_cwd_loads_repo_and_user_roots_with_local_fs() {
             user_config_layer(&codex_home, ""),
             ConfigLayerEntry::new(
                 ConfigLayerSource::Project {
-                    dot_codex_folder: repo_dot_codex.abs(),
+                    dot_codex_folder: repo_config_dir.abs(),
                 },
                 toml::Value::Table(toml::map::Map::new()),
             ),
@@ -458,11 +458,11 @@ async fn skills_for_cwd_loads_repo_and_user_roots_with_local_fs() {
 async fn skills_for_cwd_without_fs_skips_repo_roots() {
     let codex_home = tempfile::tempdir().expect("tempdir");
     let cwd = tempfile::tempdir().expect("tempdir");
-    let repo_dot_codex = cwd.path().join(".codex");
-    fs::create_dir_all(&repo_dot_codex).expect("create repo config dir");
+    let repo_config_dir = cwd.path().join(".codex");
+    fs::create_dir_all(&repo_config_dir).expect("create repo config dir");
 
     write_user_skill(&codex_home, "user", "user-skill", "from local user root");
-    let repo_skill_dir = repo_dot_codex.join("skills/repo");
+    let repo_skill_dir = cwd.path().join(".crewon/skill/repo");
     fs::create_dir_all(&repo_skill_dir).expect("create repo skill dir");
     fs::write(
         repo_skill_dir.join("SKILL.md"),
@@ -475,7 +475,7 @@ async fn skills_for_cwd_without_fs_skips_repo_roots() {
             user_config_layer(&codex_home, ""),
             ConfigLayerEntry::new(
                 ConfigLayerSource::Project {
-                    dot_codex_folder: repo_dot_codex.abs(),
+                    dot_codex_folder: repo_config_dir.abs(),
                 },
                 toml::Value::Table(toml::map::Map::new()),
             ),

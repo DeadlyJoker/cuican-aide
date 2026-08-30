@@ -2,24 +2,28 @@ use std::path::Path;
 use std::path::PathBuf;
 
 use chrono::Utc;
-use codex_protocol::ThreadId;
-use codex_protocol::protocol::GitInfo;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::ThreadMemoryMode;
-use codex_rollout::ARCHIVED_SESSIONS_SUBDIR;
-use codex_rollout::append_rollout_item_to_path;
-use codex_rollout::append_thread_name;
-use codex_rollout::find_archived_thread_path_by_id_str;
-use codex_rollout::find_thread_path_by_id_str;
-use codex_rollout::read_session_meta_line;
-use codex_state::ThreadMetadataBuilder;
+use crewon_protocol::ThreadId;
+use crewon_protocol::protocol::GitInfo;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::ThreadMemoryMode;
+use crewon_rollout::RolloutMutation;
+use crewon_rollout::RolloutRecorder;
+use crewon_rollout::RolloutWriterLease;
+use crewon_rollout::append_rollout_item_to_path_with_lease;
+use crewon_rollout::append_thread_name;
+use crewon_rollout::read_session_meta_line;
+use crewon_state::ThreadMetadataBuilder;
 use tracing::warn;
 
 use super::LocalThreadStore;
 use super::helpers::git_info_from_parts;
 use super::helpers::permission_profile_to_metadata_value;
 use super::live_writer;
+use super::metadata_rollout_path::ResolvedRolloutPath;
+use super::metadata_rollout_path::resolve_metadata_rollout_path;
+use super::metadata_rollout_path::resolve_rollout_path;
+use super::metadata_rollout_path::rollout_path_is_archived;
 use crate::GitInfoPatch;
 use crate::ReadThreadParams;
 use crate::StoredThread;
@@ -29,9 +33,9 @@ use crate::ThreadStoreResult;
 use crate::UpdateThreadMetadataParams;
 use crate::local::read_thread;
 
-struct ResolvedRolloutPath {
-    path: PathBuf,
-    archived: bool,
+enum RolloutMetadataWriter<'a> {
+    Live(&'a RolloutRecorder),
+    Cold(&'a RolloutWriterLease),
 }
 
 pub(super) async fn update_thread_metadata(
@@ -53,6 +57,39 @@ pub(super) async fn update_thread_metadata(
     }
 
     let needs_rollout_compat = needs_rollout_compatibility_update(&patch);
+    let live_recorder = store.live_recorder(thread_id).await.ok();
+    if live_recorder.is_some() {
+        // A live recorder already owns this thread lease. It only exists after marker-free resume
+        // admission (or a new create), and its append path rejects durable fence markers. Reacquiring
+        // here would self-conflict, so keep all live metadata writes ordered through that recorder.
+        live_writer::persist_thread(store, thread_id).await?;
+    }
+    let mut resolved_rollout_path = resolve_metadata_rollout_path(
+        store,
+        thread_id,
+        patch.rollout_path.as_deref(),
+        params.include_archived,
+    )
+    .await?;
+    let cold_writer_lease = if live_recorder.is_none() {
+        Some(
+            RolloutWriterLease::acquire_for_existing_mutation(
+                store.config.codex_home.as_path(),
+                resolved_rollout_path.path.as_path(),
+                thread_id,
+                RolloutMutation::Metadata,
+            )
+            .map_err(live_writer::map_recorder_error)?,
+        )
+    } else {
+        None
+    };
+    let rollout_writer = match (&live_recorder, &cold_writer_lease) {
+        (Some(recorder), None) => Some(RolloutMetadataWriter::Live(recorder)),
+        (None, Some(lease)) => Some(RolloutMetadataWriter::Cold(lease)),
+        (None, None) => None,
+        (Some(_), Some(_)) => unreachable!("metadata writer mode must be exclusive"),
+    };
     let require_sqlite_write = sqlite_write_failure_should_block(&patch);
     let updated = apply_metadata_update(
         store,
@@ -66,21 +103,22 @@ pub(super) async fn update_thread_metadata(
         return Ok(updated);
     }
 
-    if live_writer::rollout_path(store, thread_id).await.is_ok() {
-        live_writer::persist_thread(store, thread_id).await?;
-    }
-    let mut resolved_rollout_path =
-        resolve_rollout_path(store, thread_id, params.include_archived).await?;
     let name = patch.name;
     let git_info = patch.git_info;
     if let Some(memory_mode) = patch.memory_mode {
-        apply_thread_memory_mode(resolved_rollout_path.path.as_path(), thread_id, memory_mode)
-            .await?;
+        let writer = required_rollout_metadata_writer(rollout_writer.as_ref())?;
+        apply_thread_memory_mode(
+            writer,
+            resolved_rollout_path.path.as_path(),
+            thread_id,
+            memory_mode,
+        )
+        .await?;
         refresh_resolved_rollout_path(&mut resolved_rollout_path).await;
     }
 
     let state_db_ctx = store.state_db().await;
-    codex_rollout::state_db::reconcile_rollout(
+    crewon_rollout::state_db::reconcile_rollout(
         state_db_ctx.as_deref(),
         resolved_rollout_path.path.as_path(),
         store.config.default_model_provider_id.as_str(),
@@ -136,6 +174,7 @@ pub(super) async fn update_thread_metadata(
     };
     if let Some(((sha, branch, origin_url), memory_mode)) = resolved_git_info.as_ref() {
         apply_thread_git_info_to_rollout(
+            required_rollout_metadata_writer(rollout_writer.as_ref())?,
             resolved_rollout_path.path.as_path(),
             thread_id,
             sha,
@@ -175,8 +214,16 @@ pub(super) async fn update_thread_metadata(
     Ok(thread)
 }
 
+fn required_rollout_metadata_writer<'writer, 'owner>(
+    writer: Option<&'writer RolloutMetadataWriter<'owner>>,
+) -> ThreadStoreResult<&'writer RolloutMetadataWriter<'owner>> {
+    writer.ok_or_else(|| ThreadStoreError::Internal {
+        message: "rollout compatibility update requires writer ownership".to_string(),
+    })
+}
+
 async fn refresh_resolved_rollout_path(resolved: &mut ResolvedRolloutPath) {
-    if let Some(path) = codex_rollout::existing_rollout_path(resolved.path.as_path()).await {
+    if let Some(path) = crewon_rollout::existing_rollout_path(resolved.path.as_path()).await {
         resolved.path = path;
     }
 }
@@ -405,7 +452,7 @@ fn enum_to_string<T: serde::Serialize>(value: &T) -> String {
 }
 
 fn normalize_cwd(cwd: PathBuf) -> PathBuf {
-    codex_utils_path::normalize_for_path_comparison(cwd.as_path()).unwrap_or(cwd)
+    crewon_utils_path::normalize_for_path_comparison(cwd.as_path()).unwrap_or(cwd)
 }
 
 async fn apply_thread_git_info(
@@ -459,6 +506,7 @@ fn resolve_git_info_patch(
 }
 
 async fn apply_thread_git_info_to_rollout(
+    writer: &RolloutMetadataWriter<'_>,
     rollout_path: &Path,
     thread_id: ThreadId,
     sha: &Option<String>,
@@ -482,16 +530,21 @@ async fn apply_thread_git_info_to_rollout(
     }
 
     session_meta.git = Some(GitInfo {
-        commit_hash: sha.as_deref().map(codex_git_utils::GitSha::new),
+        commit_hash: sha.as_deref().map(crewon_git_utils::GitSha::new),
         branch: branch.clone(),
         repository_url: origin_url.clone(),
     });
     session_meta.meta.memory_mode = memory_mode.map(str::to_string);
-    append_rollout_item_to_path(rollout_path, &RolloutItem::SessionMeta(session_meta))
-        .await
-        .map_err(|err| ThreadStoreError::Internal {
-            message: format!("failed to set thread git metadata: {err}"),
-        })
+    append_rollout_metadata_item(
+        writer,
+        rollout_path,
+        thread_id,
+        RolloutItem::SessionMeta(session_meta),
+    )
+    .await
+    .map_err(|err| ThreadStoreError::Internal {
+        message: format!("failed to set thread git metadata: {err}"),
+    })
 }
 
 async fn apply_thread_name(
@@ -521,6 +574,7 @@ async fn apply_thread_name(
 }
 
 async fn apply_thread_memory_mode(
+    writer: &RolloutMetadataWriter<'_>,
     rollout_path: &Path,
     thread_id: ThreadId,
     memory_mode: ThreadMemoryMode,
@@ -544,11 +598,33 @@ async fn apply_thread_memory_mode(
     // code will preserve the latest prior git marker when this field is absent.
     session_meta.git = None;
     session_meta.meta.memory_mode = Some(memory_mode_as_str(memory_mode).to_string());
-    append_rollout_item_to_path(rollout_path, &RolloutItem::SessionMeta(session_meta))
-        .await
-        .map_err(|err| ThreadStoreError::Internal {
-            message: format!("failed to set thread memory mode: {err}"),
-        })
+    append_rollout_metadata_item(
+        writer,
+        rollout_path,
+        thread_id,
+        RolloutItem::SessionMeta(session_meta),
+    )
+    .await
+    .map_err(|err| ThreadStoreError::Internal {
+        message: format!("failed to set thread memory mode: {err}"),
+    })
+}
+
+async fn append_rollout_metadata_item(
+    writer: &RolloutMetadataWriter<'_>,
+    rollout_path: &Path,
+    thread_id: ThreadId,
+    item: RolloutItem,
+) -> std::io::Result<()> {
+    match writer {
+        RolloutMetadataWriter::Live(recorder) => {
+            recorder.record_canonical_items(&[item]).await?;
+            recorder.flush().await
+        }
+        RolloutMetadataWriter::Cold(lease) => {
+            append_rollout_item_to_path_with_lease(lease, rollout_path, thread_id, &item).await
+        }
+    }
 }
 
 fn memory_mode_as_str(mode: ThreadMemoryMode) -> &'static str {
@@ -558,62 +634,9 @@ fn memory_mode_as_str(mode: ThreadMemoryMode) -> &'static str {
     }
 }
 
-async fn resolve_rollout_path(
-    store: &LocalThreadStore,
-    thread_id: ThreadId,
-    include_archived: bool,
-) -> ThreadStoreResult<ResolvedRolloutPath> {
-    if let Ok(path) = live_writer::rollout_path(store, thread_id).await {
-        let archived = rollout_path_is_archived(store, path.as_path());
-        return Ok(ResolvedRolloutPath { path, archived });
-    }
-
-    let state_db_ctx = store.state_db().await;
-    let active_path = find_thread_path_by_id_str(
-        store.config.codex_home.as_path(),
-        &thread_id.to_string(),
-        state_db_ctx.as_deref(),
-    )
-    .await
-    .map_err(|err| ThreadStoreError::InvalidRequest {
-        message: format!("failed to locate thread id {thread_id}: {err}"),
-    })?;
-    if let Some(path) = active_path {
-        return Ok(ResolvedRolloutPath {
-            path,
-            archived: false,
-        });
-    }
-    if !include_archived {
-        return Err(ThreadStoreError::InvalidRequest {
-            message: format!("thread not found: {thread_id}"),
-        });
-    }
-    find_archived_thread_path_by_id_str(
-        store.config.codex_home.as_path(),
-        &thread_id.to_string(),
-        state_db_ctx.as_deref(),
-    )
-    .await
-    .map_err(|err| ThreadStoreError::InvalidRequest {
-        message: format!("failed to locate archived thread id {thread_id}: {err}"),
-    })?
-    .map(|path| ResolvedRolloutPath {
-        path,
-        archived: true,
-    })
-    .ok_or_else(|| ThreadStoreError::InvalidRequest {
-        message: format!("thread not found: {thread_id}"),
-    })
-}
-
-fn rollout_path_is_archived(store: &LocalThreadStore, path: &Path) -> bool {
-    path.starts_with(store.config.codex_home.join(ARCHIVED_SESSIONS_SUBDIR))
-}
-
 #[cfg(test)]
 mod tests {
-    use codex_protocol::models::PermissionProfile;
+    use crewon_protocol::models::PermissionProfile;
     use pretty_assertions::assert_eq;
     use serde_json::Value;
     use serde_json::json;
@@ -655,7 +678,7 @@ mod tests {
             .expect("set thread name");
 
         assert_eq!(thread.name.as_deref(), Some("A sharper name"));
-        let latest_name = codex_rollout::find_thread_name_by_id(home.path(), &thread_id)
+        let latest_name = crewon_rollout::find_thread_name_by_id(home.path(), &thread_id)
             .await
             .expect("find thread name");
         assert_eq!(latest_name.as_deref(), Some("A sharper name"));
@@ -669,7 +692,7 @@ mod tests {
         let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
         let path =
             write_session_file(home.path(), "2025-01-03T14-30-00", uuid).expect("session file");
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             home.path().to_path_buf(),
             config.default_model_provider_id.clone(),
         )
@@ -709,7 +732,7 @@ mod tests {
         let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
         let path =
             write_session_file(home.path(), "2025-01-03T18-30-00", uuid).expect("session file");
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             config.sqlite_home.clone(),
             config.default_model_provider_id.clone(),
         )
@@ -753,7 +776,7 @@ mod tests {
         assert_eq!(appended["payload"]["memory_mode"], "disabled");
         assert_eq!(appended["payload"]["git"]["branch"], "feature");
 
-        codex_rollout::state_db::reconcile_rollout(
+        crewon_rollout::state_db::reconcile_rollout(
             Some(runtime.as_ref()),
             path.as_path(),
             config.default_model_provider_id.as_str(),
@@ -814,7 +837,7 @@ mod tests {
     async fn update_thread_metadata_sets_git_info() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             config.sqlite_home.clone(),
             config.default_model_provider_id.clone(),
         )
@@ -857,7 +880,7 @@ mod tests {
     async fn update_thread_metadata_sets_permission_profile() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             config.sqlite_home.clone(),
             config.default_model_provider_id.clone(),
         )
@@ -896,7 +919,7 @@ mod tests {
     async fn update_thread_metadata_partially_updates_git_info() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             config.sqlite_home.clone(),
             config.default_model_provider_id.clone(),
         )
@@ -954,7 +977,7 @@ mod tests {
     async fn update_thread_metadata_clears_git_info_fields() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             config.sqlite_home.clone(),
             config.default_model_provider_id.clone(),
         )
@@ -1003,7 +1026,7 @@ mod tests {
         assert_eq!(appended["type"], "session_meta");
         assert_eq!(appended["payload"]["git"], json!({}));
 
-        codex_rollout::state_db::reconcile_rollout(
+        crewon_rollout::state_db::reconcile_rollout(
             Some(runtime.as_ref()),
             path.as_path(),
             config.default_model_provider_id.as_str(),
@@ -1037,7 +1060,7 @@ mod tests {
         let appended = last_rollout_item(path.as_path());
         assert_eq!(appended["type"], "session_meta");
         assert_eq!(appended["payload"].get("git"), None);
-        codex_rollout::state_db::reconcile_rollout(
+        crewon_rollout::state_db::reconcile_rollout(
             Some(runtime.as_ref()),
             path.as_path(),
             config.default_model_provider_id.as_str(),
@@ -1097,7 +1120,7 @@ mod tests {
         let appended = last_rollout_item(path.as_path());
         assert_eq!(appended["type"], "session_meta");
         assert_eq!(appended["payload"].get("git"), None);
-        codex_rollout::state_db::reconcile_rollout(
+        crewon_rollout::state_db::reconcile_rollout(
             Some(runtime.as_ref()),
             path.as_path(),
             config.default_model_provider_id.as_str(),
@@ -1157,7 +1180,7 @@ mod tests {
     async fn update_thread_metadata_applies_combined_explicit_patch() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             home.path().to_path_buf(),
             config.default_model_provider_id.clone(),
         )
@@ -1195,7 +1218,7 @@ mod tests {
         assert_eq!(appended["type"], "session_meta");
         assert_eq!(appended["payload"]["memory_mode"], "disabled");
         assert_eq!(appended["payload"]["git"]["branch"], "combined");
-        let latest_name = codex_rollout::find_thread_name_by_id(home.path(), &thread_id)
+        let latest_name = crewon_rollout::find_thread_name_by_id(home.path(), &thread_id)
             .await
             .expect("find thread name");
         assert_eq!(latest_name.as_deref(), Some("Combined metadata"));
@@ -1250,7 +1273,7 @@ mod tests {
     async fn metadata_patch_applies_title_over_existing_name() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             home.path().to_path_buf(),
             config.default_model_provider_id.clone(),
         )
@@ -1293,7 +1316,7 @@ mod tests {
     async fn metadata_patch_applies_latest_preview_and_first_user_message() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             home.path().to_path_buf(),
             config.default_model_provider_id.clone(),
         )
@@ -1351,7 +1374,7 @@ mod tests {
     async fn observed_metadata_rejects_unknown_thread_without_rollout() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             home.path().to_path_buf(),
             config.default_model_provider_id.clone(),
         )
@@ -1393,7 +1416,7 @@ mod tests {
         let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
         write_archived_session_file(home.path(), "2025-01-03T19-30-00", uuid)
             .expect("archived session file");
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             home.path().to_path_buf(),
             config.default_model_provider_id.clone(),
         )
@@ -1429,7 +1452,7 @@ mod tests {
     async fn observed_metadata_normalizes_cwd_for_list_filters() {
         let home = TempDir::new().expect("temp dir");
         let config = test_config(home.path());
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             home.path().to_path_buf(),
             config.default_model_provider_id.clone(),
         )
@@ -1443,7 +1466,7 @@ mod tests {
         let child = workspace.join("child");
         std::fs::create_dir_all(child.as_path()).expect("create workspace");
         let unnormalized_cwd = child.join("..");
-        let normalized_cwd = codex_utils_path::normalize_for_path_comparison(workspace.as_path())
+        let normalized_cwd = crewon_utils_path::normalize_for_path_comparison(workspace.as_path())
             .expect("normalize cwd");
 
         store
@@ -1497,7 +1520,7 @@ mod tests {
         let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
         let archived_path = write_archived_session_file(home.path(), "2025-01-03T16-00-00", uuid)
             .expect("archived session file");
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             home.path().to_path_buf(),
             config.default_model_provider_id.clone(),
         )
@@ -1508,7 +1531,7 @@ mod tests {
             .mark_backfill_complete(/*last_watermark*/ None)
             .await
             .expect("backfill should be complete");
-        codex_rollout::state_db::reconcile_rollout(
+        crewon_rollout::state_db::reconcile_rollout(
             Some(runtime.as_ref()),
             archived_path.as_path(),
             config.default_model_provider_id.as_str(),
@@ -1560,7 +1583,7 @@ mod tests {
         let thread_id = ThreadId::from_string(&uuid.to_string()).expect("valid thread id");
         let archived_path = write_archived_session_file(home.path(), "2025-01-03T16-30-00", uuid)
             .expect("archived session file");
-        let runtime = codex_state::StateRuntime::init(
+        let runtime = crewon_state::StateRuntime::init(
             home.path().to_path_buf(),
             config.default_model_provider_id.clone(),
         )
@@ -1571,7 +1594,7 @@ mod tests {
             .mark_backfill_complete(/*last_watermark*/ None)
             .await
             .expect("backfill should be complete");
-        codex_rollout::state_db::reconcile_rollout(
+        crewon_rollout::state_db::reconcile_rollout(
             Some(runtime.as_ref()),
             archived_path.as_path(),
             config.default_model_provider_id.as_str(),

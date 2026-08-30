@@ -1,7 +1,7 @@
-//! Migration helpers for importing external-agent configuration into Codex.
+//! Migration helpers for importing external-agent configuration into Crewon.
 
-use codex_hooks::HOOK_EVENT_NAMES;
-use codex_hooks::HOOK_EVENT_NAMES_WITH_MATCHERS;
+use crewon_hooks::HOOK_EVENT_NAMES;
+use crewon_hooks::HOOK_EVENT_NAMES_WITH_MATCHERS;
 use serde_json::Value as JsonValue;
 use serde_yaml::Value as YamlValue;
 use std::collections::BTreeMap;
@@ -1302,7 +1302,7 @@ fn rewrite_external_agent_terms(content: &str) -> String {
         "AGENTS.md",
     );
     for from in external_agent_term_variants() {
-        rewritten = replace_case_insensitive_with_boundaries(&rewritten, &from, "Codex");
+        rewritten = replace_case_insensitive_with_boundaries(&rewritten, &from, "Crewon");
     }
     rewritten
 }
@@ -1714,7 +1714,7 @@ command = "enabled-server"
     }
 
     #[test]
-    fn command_skill_names_must_fit_codex_skill_loader_limit() {
+    fn command_skill_names_must_fit_crewon_skill_loader_limit() {
         let root = source_path("commands");
         let file = source_path("commands/this/is/a/deeply/nested/command/with/a/very/long/name.md");
         let document = parse_document_content("---\ndescription: Review PR\n---\nReview\n");
@@ -1774,7 +1774,7 @@ command = "enabled-server"
     }
 
     #[test]
-    fn subagent_requires_minimum_codex_agent_fields() {
+    fn subagent_requires_minimum_crewon_agent_fields() {
         let missing_description =
             parse_document_content("---\nname: incomplete\n---\nInvestigate carefully.\n");
         let missing_body =

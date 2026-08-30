@@ -1,8 +1,8 @@
-use codex_protocol::protocol::ReviewFinding;
-use codex_protocol::protocol::ReviewOutputEvent;
+use crewon_protocol::protocol::ReviewFinding;
+use crewon_protocol::protocol::ReviewOutputEvent;
 
 // Note: We keep this module UI-agnostic. It returns plain strings that
-// higher layers (e.g., TUI) may style as needed.
+// higher layers may style as needed.
 
 fn format_location(item: &ReviewFinding) -> String {
     let path = item.code_location.absolute_file_path.display();

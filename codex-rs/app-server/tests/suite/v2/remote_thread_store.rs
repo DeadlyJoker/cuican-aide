@@ -8,10 +8,11 @@
 //!
 //! The important failure mode is accidentally materializing local persistence
 //! while a non-local store is configured. After `thread/start` and a simple turn,
-//! the temporary `codex_home` must not contain rollout session files or sqlite
-//! state files. This does not observe read-only probes that leave no artifact; it
-//! is a stop-gap that prevents additional local persistence writes from slipping
-//! in unnoticed.
+//! the temporary `codex_home` must not contain rollout session files or unexpected
+//! sqlite files. The app-server's platform State DB is expected even with a
+//! non-local thread store. This does not observe read-only probes that leave no
+//! artifact; it is a stop-gap that prevents additional local thread persistence
+//! writes from slipping in unnoticed.
 
 use std::collections::BTreeSet;
 use std::path::Path;
@@ -19,46 +20,48 @@ use std::sync::Arc;
 
 use anyhow::Result;
 use app_test_support::create_mock_responses_server_repeating_assistant;
-use codex_app_server::in_process;
-use codex_app_server::in_process::InProcessClientHandle;
-use codex_app_server::in_process::InProcessServerEvent;
-use codex_app_server::in_process::InProcessStartArgs;
-use codex_app_server_protocol::ClientInfo;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::InitializeParams;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ServerNotification;
-use codex_app_server_protocol::ThreadDeleteParams;
-use codex_app_server_protocol::ThreadDeleteResponse;
-use codex_app_server_protocol::ThreadListParams;
-use codex_app_server_protocol::ThreadListResponse;
-use codex_app_server_protocol::ThreadResumeParams;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_arg0::Arg0DispatchPaths;
-use codex_config::CloudConfigBundleLoader;
-use codex_config::LoaderOverrides;
-use codex_config::NoopThreadConfigLoader;
-use codex_core::config::Config;
-use codex_core::config::ConfigBuilder;
-use codex_exec_server::EnvironmentManager;
-use codex_feedback::CodexFeedback;
-use codex_protocol::ThreadId;
-use codex_protocol::models::BaseInstructions;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::ThreadMemoryMode;
-use codex_thread_store::CreateThreadParams as StoreCreateThreadParams;
-use codex_thread_store::InMemoryThreadStore;
-use codex_thread_store::ThreadPersistenceMetadata;
-use codex_thread_store::ThreadStore;
+use crewon_app_server::in_process;
+use crewon_app_server::in_process::InProcessClientHandle;
+use crewon_app_server::in_process::InProcessServerEvent;
+use crewon_app_server::in_process::InProcessStartArgs;
+use crewon_app_server_protocol::ClientInfo;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::InitializeParams;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_app_server_protocol::ThreadDeleteParams;
+use crewon_app_server_protocol::ThreadDeleteResponse;
+use crewon_app_server_protocol::ThreadListParams;
+use crewon_app_server_protocol::ThreadListResponse;
+use crewon_app_server_protocol::ThreadResumeParams;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::UserInput as V2UserInput;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_config::CloudConfigBundleLoader;
+use crewon_config::LoaderOverrides;
+use crewon_config::NoopThreadConfigLoader;
+use crewon_core::config::Config;
+use crewon_core::config::ConfigBuilder;
+use crewon_exec_server::EnvironmentManager;
+use crewon_feedback::CrewonFeedback;
+use crewon_protocol::ThreadId;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::ThreadMemoryMode;
+use crewon_thread_store::CreateThreadParams as StoreCreateThreadParams;
+use crewon_thread_store::InMemoryThreadStore;
+use crewon_thread_store::ThreadPersistenceMetadata;
+use crewon_thread_store::ThreadStore;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use tokio::time::timeout;
 use uuid::Uuid;
 
 const DEFAULT_READ_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+const ROLLOUT_WRITER_LOCKS_DIR: &str = ".rollout-writer-locks";
+const ROLLOUT_WRITER_GENERATION_LOCK: &str = "generation-v1.lock";
 
 #[tokio::test]
 async fn thread_delete_with_non_local_thread_store_does_not_create_local_persistence() -> Result<()>
@@ -150,7 +153,7 @@ async fn thread_delete_with_non_local_thread_store_does_not_create_local_persist
             extra_config: None,
             forked_from_id: None,
             parent_thread_id: None,
-            source: SessionSource::Cli,
+            source: SessionSource::LegacyCli,
             thread_source: None,
             base_instructions: BaseInstructions::default(),
             dynamic_tools: Vec::new(),
@@ -173,7 +176,10 @@ async fn thread_delete_with_non_local_thread_store_does_not_create_local_persist
 
     let calls = thread_store.calls().await;
     assert_eq!(calls.create_thread, 2);
-    assert_eq!(calls.list_threads, 1);
+    // One list comes from the startup personality migration probe and one from
+    // the explicit thread/list request above. Both must stay on the configured
+    // non-local store.
+    assert_eq!(calls.list_threads, 2);
     assert_eq!(calls.delete_thread, 2);
     assert!(
         calls.append_items > 0,
@@ -294,21 +300,21 @@ async fn start_in_process_client(
     in_process::start(InProcessStartArgs {
         arg0_paths: Arg0DispatchPaths::default(),
         config,
-        cli_overrides: Vec::new(),
+        config_overrides: Vec::new(),
         loader_overrides,
         strict_config: false,
         cloud_config_bundle: CloudConfigBundleLoader::default(),
         thread_config_loader: Arc::new(NoopThreadConfigLoader),
-        feedback: CodexFeedback::new(),
+        feedback: CrewonFeedback::new(),
         log_db: None,
         state_db: None,
         environment_manager: Arc::new(EnvironmentManager::default_for_tests()),
         config_warnings: Vec::new(),
-        session_source: SessionSource::Cli,
+        session_source: SessionSource::LegacyCli,
         enable_codex_api_key_env: false,
         initialize: InitializeParams {
             client_info: ClientInfo {
-                name: "codex-app-server-tests".to_string(),
+                name: "crewon-app-server-tests".to_string(),
                 title: None,
                 version: "0.1.0".to_string(),
             },
@@ -337,9 +343,8 @@ async fn delete_thread(
 
 fn assert_no_local_persistence_artifacts(codex_home: &Path) -> Result<()> {
     // These are the observable tripwires for accidental local persistence. If a
-    // future code path constructs a local rollout/session store or opens the
-    // local thread sqlite database, it should leave one of these artifacts in
-    // the isolated test codex_home.
+    // future code path constructs a local rollout/session store, it should leave
+    // one of these artifacts in the isolated test codex_home.
     assert!(
         !codex_home.join("sessions").exists(),
         "non-local thread persistence should not create local rollout sessions"
@@ -348,9 +353,10 @@ fn assert_no_local_persistence_artifacts(codex_home: &Path) -> Result<()> {
         !codex_home.join("archived_sessions").exists(),
         "non-local thread persistence should not create archived rollout sessions"
     );
+    let state_db_path = crewon_state::state_db_path(codex_home);
     assert!(
-        !codex_state::state_db_path(codex_home).exists(),
-        "non-local thread persistence should not create local thread sqlite"
+        state_db_path.exists(),
+        "in-process app-server should initialize its platform State DB"
     );
 
     let sqlite_artifacts = std::fs::read_dir(codex_home)?
@@ -365,17 +371,28 @@ fn assert_no_local_persistence_artifacts(codex_home: &Path) -> Result<()> {
                         || name.ends_with(".sqlite-wal")
                 })
         })
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_none_or(|name| !is_platform_sqlite_artifact(name))
+        })
         .collect::<Vec<_>>();
 
     assert!(
         sqlite_artifacts.is_empty(),
         "non-local thread persistence should not create sqlite artifacts: {sqlite_artifacts:?}"
     );
+    assert_only_rollout_writer_generation_fence(codex_home)?;
     let mut entries = codex_home_entries(codex_home)?;
     // Bazel test runs may initialize shell snapshot storage under codex_home.
-    // That is not thread persistence; keep the assertion focused on rollout,
-    // session, sqlite, and other unexpected thread-store artifacts.
+    // The platform State DB is also expected independently of the configured
+    // ThreadStore. The process-lifetime rollout writer generation fence is also
+    // expected for every app-server, including one using a non-local store.
+    // Keep the assertion focused on rollout, session, and other unexpected
+    // thread-store artifacts.
     entries.remove("shell_snapshots");
+    entries.remove(ROLLOUT_WRITER_LOCKS_DIR);
+    entries.retain(|name| !is_platform_sqlite_artifact(name));
     assert_eq!(
         entries,
         BTreeSet::from([
@@ -387,6 +404,30 @@ fn assert_no_local_persistence_artifacts(codex_home: &Path) -> Result<()> {
     );
 
     Ok(())
+}
+
+fn assert_only_rollout_writer_generation_fence(codex_home: &Path) -> Result<()> {
+    let writer_locks_dir = codex_home.join(ROLLOUT_WRITER_LOCKS_DIR);
+    assert_eq!(
+        codex_home_entries(writer_locks_dir.as_path())?,
+        BTreeSet::from([ROLLOUT_WRITER_GENERATION_LOCK.to_string()]),
+        "a non-local thread store should acquire only the process generation fence, not per-thread rollout writer locks"
+    );
+    Ok(())
+}
+
+fn is_platform_sqlite_artifact(name: &str) -> bool {
+    let base_name = name
+        .strip_suffix("-shm")
+        .or_else(|| name.strip_suffix("-wal"))
+        .unwrap_or(name);
+    matches!(
+        base_name,
+        crewon_state::STATE_DB_FILENAME
+            | crewon_state::LOGS_DB_FILENAME
+            | crewon_state::GOALS_DB_FILENAME
+            | crewon_state::MEMORIES_DB_FILENAME
+    )
 }
 
 fn codex_home_entries(codex_home: &Path) -> Result<BTreeSet<String>> {

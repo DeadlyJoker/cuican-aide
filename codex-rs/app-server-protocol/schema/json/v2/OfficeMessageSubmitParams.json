@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "OfficeMessageMention": {
+      "additionalProperties": false,
+      "properties": {
+        "memberId": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "memberId"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "clientUserMessageId": {
+      "type": "string"
+    },
+    "config": true,
+    "cwd": {
+      "type": "string"
+    },
+    "locale": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "mentions": {
+      "items": {
+        "$ref": "#/definitions/OfficeMessageMention"
+      },
+      "type": [
+        "array",
+        "null"
+      ]
+    },
+    "text": {
+      "type": "string"
+    },
+    "threadId": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  },
+  "required": [
+    "clientUserMessageId",
+    "config",
+    "cwd",
+    "text"
+  ],
+  "title": "OfficeMessageSubmitParams",
+  "type": "object"
+}

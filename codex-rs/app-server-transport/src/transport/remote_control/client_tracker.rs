@@ -11,7 +11,7 @@ use crate::outgoing_message::ConnectionId;
 use crate::outgoing_message::QueuedOutgoingMessage;
 use crate::transport::ConnectionOrigin;
 use crate::transport::remote_control::QueuedServerEnvelope;
-use codex_app_server_protocol::JSONRPCMessage;
+use crewon_app_server_protocol::JSONRPCMessage;
 use std::collections::HashMap;
 use tokio::sync::mpsc;
 use tokio::sync::watch;
@@ -168,6 +168,7 @@ impl ClientTracker {
                 self.send_transport_event(TransportEvent::ConnectionOpened {
                     connection_id,
                     origin: ConnectionOrigin::RemoteControl,
+                    authentication: super::super::TransportAuthentication::ConnectionScoped,
                     writer: writer_tx,
                     disconnect_sender: Some(disconnect_token.clone()),
                 })
@@ -429,7 +430,7 @@ fn transport_event_name(event: &TransportEvent) -> &'static str {
 fn remote_control_message_starts_connection(message: &JSONRPCMessage) -> bool {
     matches!(
         message,
-        JSONRPCMessage::Request(codex_app_server_protocol::JSONRPCRequest { method, .. })
+        JSONRPCMessage::Request(crewon_app_server_protocol::JSONRPCRequest { method, .. })
             if method == "initialize"
     )
 }
@@ -444,10 +445,10 @@ mod tests {
     use crate::outgoing_message::OutgoingMessage;
     use crate::transport::remote_control::protocol::ClientEnvelope;
     use crate::transport::remote_control::protocol::ClientEvent;
-    use codex_app_server_protocol::ConfigWarningNotification;
-    use codex_app_server_protocol::JSONRPCRequest;
-    use codex_app_server_protocol::RequestId;
-    use codex_app_server_protocol::ServerNotification;
+    use crewon_app_server_protocol::ConfigWarningNotification;
+    use crewon_app_server_protocol::JSONRPCRequest;
+    use crewon_app_server_protocol::RequestId;
+    use crewon_app_server_protocol::ServerNotification;
     use pretty_assertions::assert_eq;
     use serde_json::json;
     use tokio::time::timeout;
@@ -482,7 +483,7 @@ mod tests {
     }
 
     fn initialized_notification() -> JSONRPCMessage {
-        JSONRPCMessage::Notification(codex_app_server_protocol::JSONRPCNotification {
+        JSONRPCMessage::Notification(crewon_app_server_protocol::JSONRPCNotification {
             method: "initialized".to_string(),
             params: None,
         })
@@ -913,7 +914,7 @@ mod tests {
             .handle_message(ClientEnvelope {
                 event: ClientEvent::ClientMessage {
                     message: JSONRPCMessage::Notification(
-                        codex_app_server_protocol::JSONRPCNotification {
+                        crewon_app_server_protocol::JSONRPCNotification {
                             method: "initialized".to_string(),
                             params: None,
                         },

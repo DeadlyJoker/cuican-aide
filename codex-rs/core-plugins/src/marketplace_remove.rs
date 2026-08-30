@@ -1,8 +1,8 @@
 use crate::installed_marketplaces::marketplace_install_root;
-use codex_config::RemoveMarketplaceConfigOutcome;
-use codex_config::remove_user_marketplace_config;
-use codex_plugin::validate_plugin_segment;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_config::RemoveMarketplaceConfigOutcome;
+use crewon_config::remove_user_marketplace_config;
+use crewon_plugin::validate_plugin_segment;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
@@ -107,8 +107,8 @@ fn remove_marketplace_root(root: &Path) -> Result<Option<AbsolutePathBuf>, Marke
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_config::MarketplaceConfigUpdate;
-    use codex_config::record_user_marketplace;
+    use crewon_config::MarketplaceConfigUpdate;
+    use crewon_config::record_user_marketplace;
     use pretty_assertions::assert_eq;
     use tempfile::TempDir;
 
@@ -150,7 +150,7 @@ mod tests {
             Some(AbsolutePathBuf::try_from(installed_root.clone()).unwrap())
         );
         let config =
-            fs::read_to_string(codex_home.path().join(codex_config::CONFIG_TOML_FILE)).unwrap();
+            fs::read_to_string(codex_home.path().join(crewon_config::CONFIG_TOML_FILE)).unwrap();
         assert!(!config.contains("[marketplaces.debug]"));
         assert!(!installed_root.exists());
     }
@@ -206,7 +206,7 @@ mod tests {
         );
         assert!(installed_root.exists());
         let config =
-            fs::read_to_string(codex_home.path().join(codex_config::CONFIG_TOML_FILE)).unwrap();
+            fs::read_to_string(codex_home.path().join(crewon_config::CONFIG_TOML_FILE)).unwrap();
         assert!(config.contains("[marketplaces.debug]"));
     }
 
@@ -214,7 +214,7 @@ mod tests {
     fn remove_marketplace_sync_keeps_installed_root_when_config_removal_fails() {
         let codex_home = TempDir::new().unwrap();
         fs::write(
-            codex_home.path().join(codex_config::CONFIG_TOML_FILE),
+            codex_home.path().join(crewon_config::CONFIG_TOML_FILE),
             "[marketplaces.debug\n",
         )
         .unwrap();
@@ -275,7 +275,7 @@ mod tests {
         );
         assert!(!installed_root.exists());
         let config =
-            fs::read_to_string(codex_home.path().join(codex_config::CONFIG_TOML_FILE)).unwrap();
+            fs::read_to_string(codex_home.path().join(crewon_config::CONFIG_TOML_FILE)).unwrap();
         assert!(!config.contains("[marketplaces.debug]"));
     }
 
@@ -283,7 +283,7 @@ mod tests {
     fn remove_marketplace_sync_removes_inline_config_entry() {
         let codex_home = TempDir::new().unwrap();
         fs::write(
-            codex_home.path().join(codex_config::CONFIG_TOML_FILE),
+            codex_home.path().join(crewon_config::CONFIG_TOML_FILE),
             r#"
 marketplaces = { debug = { source_type = "git", source = "https://github.com/owner/repo.git" } }
 "#,
@@ -307,7 +307,7 @@ marketplaces = { debug = { source_type = "git", source = "https://github.com/own
         );
         assert!(!installed_root.exists());
         let config =
-            fs::read_to_string(codex_home.path().join(codex_config::CONFIG_TOML_FILE)).unwrap();
+            fs::read_to_string(codex_home.path().join(crewon_config::CONFIG_TOML_FILE)).unwrap();
         assert!(!config.contains("debug"));
     }
 }

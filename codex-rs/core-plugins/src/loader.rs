@@ -10,30 +10,30 @@ use crate::remote::REMOTE_GLOBAL_MARKETPLACE_NAME;
 use crate::remote::RemoteInstalledPlugin;
 use crate::store::PluginStore;
 use crate::store::plugin_version_for_source;
-use codex_config::ConfigLayerStack;
-use codex_config::HooksFile;
-use codex_config::types::McpServerConfig;
-use codex_config::types::PluginConfig;
-use codex_config::types::PluginMcpServerConfig;
-use codex_core_skills::SkillMetadata;
-use codex_core_skills::config_rules::SkillConfigRules;
-use codex_core_skills::config_rules::resolve_disabled_skill_paths;
-use codex_core_skills::config_rules::skill_config_rules_from_stack;
-use codex_core_skills::loader::SkillRoot;
-use codex_core_skills::loader::load_skills_from_roots;
-use codex_exec_server::LOCAL_FS;
-use codex_plugin::AppConnectorId;
-use codex_plugin::LoadedPlugin;
-use codex_plugin::PluginCapabilitySummary;
-use codex_plugin::PluginHookSource;
-use codex_plugin::PluginId;
-use codex_plugin::PluginIdError;
-use codex_plugin::PluginLoadOutcome;
-use codex_plugin::PluginTelemetryMetadata;
-use codex_protocol::protocol::Product;
-use codex_protocol::protocol::SkillScope;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_plugins::find_plugin_manifest_path;
+use crewon_config::ConfigLayerStack;
+use crewon_config::HooksFile;
+use crewon_config::types::McpServerConfig;
+use crewon_config::types::PluginConfig;
+use crewon_config::types::PluginMcpServerConfig;
+use crewon_core_skills::SkillMetadata;
+use crewon_core_skills::config_rules::SkillConfigRules;
+use crewon_core_skills::config_rules::resolve_disabled_skill_paths;
+use crewon_core_skills::config_rules::skill_config_rules_from_stack;
+use crewon_core_skills::loader::SkillRoot;
+use crewon_core_skills::loader::load_skills_from_roots;
+use crewon_exec_server::LOCAL_FS;
+use crewon_plugin::AppConnectorId;
+use crewon_plugin::LoadedPlugin;
+use crewon_plugin::PluginCapabilitySummary;
+use crewon_plugin::PluginHookSource;
+use crewon_plugin::PluginId;
+use crewon_plugin::PluginIdError;
+use crewon_plugin::PluginLoadOutcome;
+use crewon_plugin::PluginTelemetryMetadata;
+use crewon_protocol::protocol::Product;
+use crewon_protocol::protocol::SkillScope;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_plugins::find_plugin_manifest_path;
 use indexmap::IndexMap;
 use serde::Deserialize;
 use serde_json::Map as JsonMap;
@@ -908,7 +908,7 @@ pub fn load_plugin_hooks(
         Some(PluginManifestHooks::Inline(hooks_files)) => {
             let manifest_path = find_plugin_manifest_path(plugin_root.as_path())
                 .and_then(|path| AbsolutePathBuf::try_from(path).ok())
-                .unwrap_or_else(|| plugin_root.join(".codex-plugin/plugin.json"));
+                .unwrap_or_else(|| plugin_root.join(".crewon-plugin/plugin.json"));
             for (index, hooks_file) in hooks_files.iter().enumerate() {
                 if hooks_file.hooks.is_empty() {
                     continue;
@@ -1179,7 +1179,7 @@ fn normalize_plugin_mcp_server_value(
         if oauth.remove("callbackPort").is_some() {
             warn!(
                 plugin = %plugin_root.display(),
-                "plugin MCP server OAuth callbackPort is ignored; Codex uses global MCP OAuth callback settings"
+                "plugin MCP server OAuth callbackPort is ignored; Crewon uses global MCP OAuth callback settings"
             );
         }
 

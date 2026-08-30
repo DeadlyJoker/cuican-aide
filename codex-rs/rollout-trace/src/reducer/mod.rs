@@ -442,7 +442,7 @@ impl TraceReducer {
                 };
                 let Some(codex_turn_id) = event.codex_turn_id else {
                     bail!(
-                        "compaction installed event {compaction_id} did not include a codex turn id"
+                        "compaction installed event {compaction_id} did not include a Crewon turn id"
                     );
                 };
                 self.reduce_compaction_installed_event(

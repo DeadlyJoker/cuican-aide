@@ -16,16 +16,16 @@
 //! 3.  We do **not** walk past the project root.
 
 use crate::config::Config;
-use codex_app_server_protocol::ConfigLayerSource;
-use codex_config::ConfigLayerStackOrdering;
-use codex_config::default_project_root_markers;
-use codex_config::merge_toml_values;
-use codex_config::project_root_markers_from_config;
-use codex_exec_server::Environment;
-use codex_exec_server::ExecutorFileSystem;
-use codex_features::Feature;
-use codex_prompts::HIERARCHICAL_AGENTS_MESSAGE;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::ConfigLayerSource;
+use crewon_config::ConfigLayerStackOrdering;
+use crewon_config::default_project_root_markers;
+use crewon_config::merge_toml_values;
+use crewon_config::project_root_markers_from_config;
+use crewon_exec_server::Environment;
+use crewon_exec_server::ExecutorFileSystem;
+use crewon_features::Feature;
+use crewon_prompts::HIERARCHICAL_AGENTS_MESSAGE;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use std::io;
 use toml::Value as TomlValue;
 use tracing::error;
@@ -330,7 +330,7 @@ impl LoadedAgentsMd {
     /// Creates source-less user instructions for tests.
     ///
     /// This cannot be gated with `#[cfg(test)]` because integration tests
-    /// compile `codex-core` as a normal dependency without that configuration.
+    /// compile `crewon-core` as a normal dependency without that configuration.
     pub fn from_text_for_testing(contents: impl Into<String>) -> Self {
         let contents = contents.into();
         if contents.trim().is_empty() {

@@ -44,108 +44,108 @@ use async_channel::Receiver;
 use async_channel::Sender;
 use chrono::Local;
 use chrono::Utc;
-use codex_analytics::AnalyticsEventsClient;
-use codex_analytics::SubAgentThreadStartedInput;
-use codex_analytics::TurnCodexErrorFact;
-use codex_app_server_protocol::McpServerElicitationRequest;
-use codex_app_server_protocol::McpServerElicitationRequestParams;
-use codex_config::types::OAuthCredentialsStoreMode;
-use codex_exec_server::Environment;
-use codex_exec_server::EnvironmentManager;
-use codex_exec_server::FileSystemSandboxContext;
-use codex_extension_api::ExtensionDataInit;
-use codex_extension_api::PromptSlot;
-use codex_features::FEATURES;
-use codex_features::Feature;
-use codex_features::unstable_features_warning_event;
-use codex_hooks::Hooks;
-use codex_hooks::HooksConfig;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_login::auth_env_telemetry::collect_auth_env_telemetry;
-use codex_login::default_client::originator;
-use codex_mcp::McpConnectionManager;
-use codex_mcp::McpResourceClient;
-use codex_mcp::McpRuntimeContext;
-use codex_mcp::codex_apps_tools_cache_key;
-use codex_models_manager::manager::RefreshStrategy;
-use codex_models_manager::manager::SharedModelsManager;
-use codex_network_proxy::NetworkProxy;
-use codex_network_proxy::NetworkProxyAuditMetadata;
-use codex_network_proxy::normalize_host;
-use codex_otel::current_span_trace_id;
-use codex_otel::current_span_w3c_trace_context;
-use codex_otel::set_parent_from_w3c_trace_context;
-use codex_protocol::SessionId;
-use codex_protocol::ThreadId;
-use codex_protocol::approvals::ElicitationRequestEvent;
-use codex_protocol::approvals::ExecPolicyAmendment;
-use codex_protocol::approvals::NetworkPolicyAmendment;
-use codex_protocol::approvals::NetworkPolicyRuleAction;
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::config_types::AutoCompactTokenLimitScope;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
-use codex_protocol::config_types::Settings;
-use codex_protocol::config_types::WebSearchMode;
-use codex_protocol::dynamic_tools::DynamicToolResponse;
-use codex_protocol::dynamic_tools::DynamicToolSpec;
-use codex_protocol::items::TurnItem;
-use codex_protocol::items::UserMessageItem;
-use codex_protocol::mcp::CallToolResult;
-use codex_protocol::models::ActivePermissionProfile;
-use codex_protocol::models::AdditionalPermissionProfile;
-use codex_protocol::models::BaseInstructions;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::models::SandboxEnforcement;
-use codex_protocol::models::format_allow_prefixes;
-use codex_protocol::openai_models::ModelInfo;
-use codex_protocol::openai_models::ModelPreset;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::AdditionalContextEntry;
-use codex_protocol::protocol::FileChange;
-use codex_protocol::protocol::HasLegacyEvent;
-use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::ItemCompletedEvent;
-use codex_protocol::protocol::ItemStartedEvent;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::RawResponseItemEvent;
-use codex_protocol::protocol::ReviewRequest;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::protocol::ThreadSource;
-use codex_protocol::protocol::TurnAbortReason;
-use codex_protocol::protocol::TurnContextItem;
-use codex_protocol::protocol::TurnContextNetworkItem;
-use codex_protocol::protocol::TurnEnvironmentSelection;
-use codex_protocol::protocol::TurnEnvironmentSelections;
-use codex_protocol::protocol::W3cTraceContext;
-use codex_protocol::request_permissions::PermissionGrantScope;
-use codex_protocol::request_permissions::RequestPermissionProfile;
-use codex_protocol::request_permissions::RequestPermissionsArgs;
-use codex_protocol::request_permissions::RequestPermissionsEvent;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
-use codex_protocol::request_user_input::RequestUserInputArgs;
-use codex_protocol::request_user_input::RequestUserInputResponse;
-use codex_rmcp_client::ElicitationResponse;
-use codex_rollout::state_db;
-use codex_rollout_trace::AgentResultTracePayload;
-use codex_rollout_trace::ThreadStartedTraceMetadata;
-use codex_rollout_trace::ThreadTraceContext;
-use codex_sandboxing::policy_transforms::intersect_permission_profiles;
-use codex_shell_command::parse_command::parse_command;
-use codex_terminal_detection::user_agent;
-use codex_thread_store::CreateThreadParams;
-use codex_thread_store::LiveThread;
-use codex_thread_store::LiveThreadInitGuard;
-use codex_thread_store::LocalThreadStore;
-use codex_thread_store::ReadThreadParams;
-use codex_thread_store::ResumeThreadParams;
-use codex_thread_store::ThreadPersistenceMetadata;
-use codex_thread_store::ThreadStore;
-use codex_utils_output_truncation::TruncationPolicy;
+use crewon_analytics::AnalyticsEventsClient;
+use crewon_analytics::SubAgentThreadStartedInput;
+use crewon_analytics::TurnCrewonErrorFact;
+use crewon_app_server_protocol::McpServerElicitationRequest;
+use crewon_app_server_protocol::McpServerElicitationRequestParams;
+use crewon_config::types::OAuthCredentialsStoreMode;
+use crewon_exec_server::Environment;
+use crewon_exec_server::EnvironmentManager;
+use crewon_exec_server::FileSystemSandboxContext;
+use crewon_extension_api::ExtensionDataInit;
+use crewon_extension_api::PromptSlot;
+use crewon_features::FEATURES;
+use crewon_features::Feature;
+use crewon_features::unstable_features_warning_event;
+use crewon_hooks::Hooks;
+use crewon_hooks::HooksConfig;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_login::auth_env_telemetry::collect_auth_env_telemetry;
+use crewon_login::default_client::originator;
+use crewon_mcp::McpConnectionManager;
+use crewon_mcp::McpResourceClient;
+use crewon_mcp::McpRuntimeContext;
+use crewon_mcp::crewon_apps_tools_cache_key;
+use crewon_models_manager::manager::RefreshStrategy;
+use crewon_models_manager::manager::SharedModelsManager;
+use crewon_network_proxy::NetworkProxy;
+use crewon_network_proxy::NetworkProxyAuditMetadata;
+use crewon_network_proxy::normalize_host;
+use crewon_otel::current_span_trace_id;
+use crewon_otel::current_span_w3c_trace_context;
+use crewon_otel::set_parent_from_w3c_trace_context;
+use crewon_protocol::SessionId;
+use crewon_protocol::ThreadId;
+use crewon_protocol::approvals::ElicitationRequestEvent;
+use crewon_protocol::approvals::ExecPolicyAmendment;
+use crewon_protocol::approvals::NetworkPolicyAmendment;
+use crewon_protocol::approvals::NetworkPolicyRuleAction;
+use crewon_protocol::config_types::ApprovalsReviewer;
+use crewon_protocol::config_types::AutoCompactTokenLimitScope;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
+use crewon_protocol::config_types::Settings;
+use crewon_protocol::config_types::WebSearchMode;
+use crewon_protocol::dynamic_tools::DynamicToolResponse;
+use crewon_protocol::dynamic_tools::DynamicToolSpec;
+use crewon_protocol::items::TurnItem;
+use crewon_protocol::items::UserMessageItem;
+use crewon_protocol::mcp::CallToolResult;
+use crewon_protocol::models::ActivePermissionProfile;
+use crewon_protocol::models::AdditionalPermissionProfile;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::models::SandboxEnforcement;
+use crewon_protocol::models::format_allow_prefixes;
+use crewon_protocol::openai_models::ModelInfo;
+use crewon_protocol::openai_models::ModelPreset;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::AdditionalContextEntry;
+use crewon_protocol::protocol::FileChange;
+use crewon_protocol::protocol::HasLegacyEvent;
+use crewon_protocol::protocol::InterAgentCommunication;
+use crewon_protocol::protocol::ItemCompletedEvent;
+use crewon_protocol::protocol::ItemStartedEvent;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::RawResponseItemEvent;
+use crewon_protocol::protocol::ReviewRequest;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::ThreadSource;
+use crewon_protocol::protocol::TurnAbortReason;
+use crewon_protocol::protocol::TurnContextItem;
+use crewon_protocol::protocol::TurnContextNetworkItem;
+use crewon_protocol::protocol::TurnEnvironmentSelection;
+use crewon_protocol::protocol::TurnEnvironmentSelections;
+use crewon_protocol::protocol::W3cTraceContext;
+use crewon_protocol::request_permissions::PermissionGrantScope;
+use crewon_protocol::request_permissions::RequestPermissionProfile;
+use crewon_protocol::request_permissions::RequestPermissionsArgs;
+use crewon_protocol::request_permissions::RequestPermissionsEvent;
+use crewon_protocol::request_permissions::RequestPermissionsResponse;
+use crewon_protocol::request_user_input::RequestUserInputArgs;
+use crewon_protocol::request_user_input::RequestUserInputResponse;
+use crewon_rmcp_client::ElicitationResponse;
+use crewon_rollout::state_db;
+use crewon_rollout_trace::AgentResultTracePayload;
+use crewon_rollout_trace::ThreadStartedTraceMetadata;
+use crewon_rollout_trace::ThreadTraceContext;
+use crewon_sandboxing::policy_transforms::intersect_permission_profiles;
+use crewon_shell_command::parse_command::parse_command;
+use crewon_terminal_detection::user_agent;
+use crewon_thread_store::CreateThreadParams;
+use crewon_thread_store::LiveThread;
+use crewon_thread_store::LiveThreadInitGuard;
+use crewon_thread_store::LocalThreadStore;
+use crewon_thread_store::ReadThreadParams;
+use crewon_thread_store::ResumeThreadParams;
+use crewon_thread_store::ThreadPersistenceMetadata;
+use crewon_thread_store::ThreadStore;
+use crewon_utils_output_truncation::TruncationPolicy;
 use futures::future::BoxFuture;
 use futures::future::Shared;
 use futures::prelude::*;
@@ -176,7 +176,6 @@ use tracing::warn;
 use uuid::Uuid;
 
 use crate::client::ModelClient;
-use crate::codex_thread::ThreadConfigSnapshot;
 use crate::compact::collect_user_messages;
 use crate::config::Config;
 use crate::config::Constrained;
@@ -186,17 +185,18 @@ use crate::config::PermissionProfileState;
 use crate::config::StartedNetworkProxy;
 use crate::config::resolve_web_search_mode_for_turn;
 use crate::context_manager::ContextManager;
+use crate::crewon_thread::ThreadConfigSnapshot;
 use crate::thread_rollout_truncation::initial_history_has_prior_user_turns;
-use codex_config::CONFIG_TOML_FILE;
-use codex_config::ConfigLayerSource;
-use codex_config::ConfigLayerStackOrdering;
-use codex_config::types::McpServerConfig;
-use codex_model_provider_info::ModelProviderInfo;
-use codex_protocol::config_types::ShellEnvironmentPolicy;
-use codex_protocol::error::CodexErr;
-use codex_protocol::error::Result as CodexResult;
+use crewon_config::CONFIG_TOML_FILE;
+use crewon_config::ConfigLayerSource;
+use crewon_config::ConfigLayerStackOrdering;
+use crewon_config::types::McpServerConfig;
+use crewon_model_provider_info::ModelProviderInfo;
+use crewon_protocol::config_types::ShellEnvironmentPolicy;
+use crewon_protocol::error::CodexErr;
+use crewon_protocol::error::Result as CrewonResult;
 #[cfg(test)]
-use codex_protocol::exec_output::StreamOutput;
+use crewon_protocol::exec_output::StreamOutput;
 
 mod config_lock;
 mod handlers;
@@ -211,6 +211,9 @@ pub(crate) mod session;
 mod token_budget;
 pub(crate) mod turn;
 pub(crate) mod turn_context;
+mod user_input_once;
+mod user_input_once_durable;
+mod user_input_once_index;
 use self::config_lock::export_config_lock_if_configured;
 use self::config_lock::validate_config_lock_if_configured;
 #[cfg(test)]
@@ -229,7 +232,15 @@ use self::turn::AssistantMessageStreamParsers;
 use self::turn::collect_explicit_app_ids_from_skill_items;
 use self::turn::realtime_text_for_event;
 use self::turn_context::TurnContext;
+pub use self::turn_context::TurnContextPrecondition;
 use self::turn_context::TurnSkillsContext;
+pub use self::user_input_once::ExistingUserInputOncePolicy;
+pub(crate) use self::user_input_once::SessionSubmission;
+pub use self::user_input_once::SubmitUserInputOnceError;
+pub use self::user_input_once::SubmitUserInputOnceOutcome;
+pub use self::user_input_once::SubmitUserInputOnceRequest;
+pub use self::user_input_once_index::UserInputOnceExecutionState;
+pub use self::user_input_once_index::UserInputOnceState;
 #[cfg(test)]
 mod rollout_reconstruction_tests;
 
@@ -320,65 +331,65 @@ use crate::turn_timing::TurnTimingState;
 use crate::turn_timing::record_turn_ttfm_metric;
 use crate::unified_exec::UnifiedExecProcessManager;
 use crate::windows_sandbox::WindowsSandboxLevelExt;
-use codex_core_plugins::PluginsManager;
-use codex_git_utils::get_git_repo_root;
-use codex_mcp::compute_auth_statuses;
-use codex_mcp::effective_mcp_servers_from_configured;
-use codex_mcp::host_owned_codex_apps_enabled;
-use codex_otel::SessionTelemetry;
-use codex_otel::THREAD_STARTED_METRIC;
-use codex_otel::TelemetryAuthMode;
-use codex_protocol::config_types::CollaborationMode;
-use codex_protocol::config_types::Personality;
-use codex_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
-use codex_protocol::config_types::WindowsSandboxLevel;
-use codex_protocol::models::LocalImagePreparation;
-use codex_protocol::models::ResponseInputItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
-use codex_protocol::protocol::ApplyPatchApprovalRequestEvent;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::CodexErrorInfo;
-use codex_protocol::protocol::CompactedItem;
-use codex_protocol::protocol::DeprecationNoticeEvent;
-use codex_protocol::protocol::ErrorEvent;
-use codex_protocol::protocol::Event;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ExecApprovalRequestEvent;
-use codex_protocol::protocol::InitialHistory;
-use codex_protocol::protocol::McpServerRefreshConfig;
-use codex_protocol::protocol::ModelRerouteEvent;
-use codex_protocol::protocol::ModelRerouteReason;
-use codex_protocol::protocol::ModelVerification;
-use codex_protocol::protocol::ModelVerificationEvent;
-use codex_protocol::protocol::NetworkApprovalContext;
-use codex_protocol::protocol::NonSteerableTurnKind;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::RateLimitSnapshot;
-use codex_protocol::protocol::RequestUserInputEvent;
-use codex_protocol::protocol::ReviewDecision;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_protocol::protocol::SessionConfiguredEvent;
-use codex_protocol::protocol::SessionNetworkProxyRuntime;
-use codex_protocol::protocol::StreamErrorEvent;
-use codex_protocol::protocol::Submission;
-use codex_protocol::protocol::ThreadMemoryMode;
-use codex_protocol::protocol::TokenCountEvent;
-use codex_protocol::protocol::TokenUsage;
-use codex_protocol::protocol::TokenUsageInfo;
-use codex_protocol::protocol::TurnModerationMetadataEvent;
-use codex_protocol::protocol::WarningEvent;
-use codex_protocol::user_input::UserInput;
-use codex_tools::ToolEnvironmentMode;
-use codex_tools::UnifiedExecShellMode;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_core_plugins::PluginsManager;
+use crewon_git_utils::get_git_repo_root;
+use crewon_mcp::compute_auth_statuses;
+use crewon_mcp::effective_mcp_servers_from_configured;
+use crewon_mcp::host_owned_crewon_apps_enabled;
+use crewon_otel::SessionTelemetry;
+use crewon_otel::THREAD_STARTED_METRIC;
+use crewon_otel::TelemetryAuthMode;
+use crewon_protocol::config_types::CollaborationMode;
+use crewon_protocol::config_types::Personality;
+use crewon_protocol::config_types::ReasoningSummary as ReasoningSummaryConfig;
+use crewon_protocol::config_types::WindowsSandboxLevel;
+use crewon_protocol::models::LocalImagePreparation;
+use crewon_protocol::models::ResponseInputItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::openai_models::ReasoningEffort as ReasoningEffortConfig;
+use crewon_protocol::protocol::ApplyPatchApprovalRequestEvent;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::CodexErrorInfo;
+use crewon_protocol::protocol::CompactedItem;
+use crewon_protocol::protocol::DeprecationNoticeEvent;
+use crewon_protocol::protocol::ErrorEvent;
+use crewon_protocol::protocol::Event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::ExecApprovalRequestEvent;
+use crewon_protocol::protocol::InitialHistory;
+use crewon_protocol::protocol::McpServerRefreshConfig;
+use crewon_protocol::protocol::ModelRerouteEvent;
+use crewon_protocol::protocol::ModelRerouteReason;
+use crewon_protocol::protocol::ModelVerification;
+use crewon_protocol::protocol::ModelVerificationEvent;
+use crewon_protocol::protocol::NetworkApprovalContext;
+use crewon_protocol::protocol::NonSteerableTurnKind;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::RateLimitSnapshot;
+use crewon_protocol::protocol::RequestUserInputEvent;
+use crewon_protocol::protocol::ReviewDecision;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_protocol::protocol::SessionConfiguredEvent;
+use crewon_protocol::protocol::SessionNetworkProxyRuntime;
+use crewon_protocol::protocol::StreamErrorEvent;
+use crewon_protocol::protocol::Submission;
+use crewon_protocol::protocol::ThreadMemoryMode;
+use crewon_protocol::protocol::TokenCountEvent;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_protocol::protocol::TokenUsageInfo;
+use crewon_protocol::protocol::TurnModerationMetadataEvent;
+use crewon_protocol::protocol::WarningEvent;
+use crewon_protocol::user_input::UserInput;
+use crewon_tools::ToolEnvironmentMode;
+use crewon_tools::UnifiedExecShellMode;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 #[cfg(test)]
-use codex_utils_stream_parser::ProposedPlanSegment;
+use crewon_utils_stream_parser::ProposedPlanSegment;
 
-/// The high-level interface to the Codex system.
+/// The high-level interface to the Crewon system.
 /// It operates as a queue pair where you send submissions and receive events.
-pub struct Codex {
-    pub(crate) tx_sub: Sender<Submission>,
+pub struct Crewon {
+    pub(crate) tx_sub: Sender<SessionSubmission>,
     pub(crate) rx_event: Receiver<Event>,
     // Last known status of the agent.
     pub(crate) agent_status: watch::Receiver<AgentStatus>,
@@ -390,14 +401,14 @@ pub struct Codex {
 
 pub(crate) type SessionLoopTermination = Shared<BoxFuture<'static, ()>>;
 
-/// Wrapper returned by [`Codex::spawn`] containing the spawned [`Codex`] and
+/// Wrapper returned by [`Crewon::spawn`] containing the spawned [`Crewon`] and
 /// the unique session id.
-pub struct CodexSpawnOk {
-    pub codex: Codex,
+pub struct CrewonSpawnOk {
+    pub engine: Crewon,
     pub thread_id: ThreadId,
 }
 
-pub(crate) struct CodexSpawnArgs {
+pub(crate) struct CrewonSpawnArgs {
     pub(crate) config: Config,
     pub(crate) installation_id: String,
     pub(crate) auth_manager: Arc<AuthManager>,
@@ -406,7 +417,7 @@ pub(crate) struct CodexSpawnArgs {
     pub(crate) skills_manager: Arc<SkillsManager>,
     pub(crate) plugins_manager: Arc<PluginsManager>,
     pub(crate) mcp_manager: Arc<McpManager>,
-    pub(crate) extensions: Arc<codex_extension_api::ExtensionRegistry<crate::config::Config>>,
+    pub(crate) extensions: Arc<crewon_extension_api::ExtensionRegistry<crate::config::Config>>,
     pub(crate) conversation_history: InitialHistory,
     pub(crate) session_source: SessionSource,
     pub(crate) forked_from_thread_id: Option<ThreadId>,
@@ -455,12 +466,12 @@ pub(crate) const SUBMISSION_CHANNEL_CAPACITY: usize = 512;
 const CYBER_VERIFY_URL: &str = "https://chatgpt.com/cyber";
 const CYBER_SAFETY_URL: &str = "https://developers.openai.com/codex/concepts/cyber-safety";
 
-impl Codex {
-    /// Spawn a new [`Codex`] and initialize the session.
-    pub(crate) async fn spawn(args: CodexSpawnArgs) -> CodexResult<CodexSpawnOk> {
+impl Crewon {
+    /// Spawn a new [`Crewon`] and initialize the session.
+    pub(crate) async fn spawn(args: CrewonSpawnArgs) -> CrewonResult<CrewonSpawnOk> {
         let parent_trace = match args.parent_trace {
             Some(trace) => {
-                if codex_otel::context_from_w3c_trace_context(&trace).is_some() {
+                if crewon_otel::context_from_w3c_trace_context(&trace).is_some() {
                     Some(trace)
                 } else {
                     warn!("ignoring invalid thread spawn trace carrier");
@@ -473,7 +484,7 @@ impl Codex {
         if let Some(trace) = parent_trace.as_ref() {
             let _ = set_parent_from_w3c_trace_context(&thread_spawn_span, trace);
         }
-        Self::spawn_internal(CodexSpawnArgs {
+        Self::spawn_internal(CrewonSpawnArgs {
             parent_trace,
             ..args
         })
@@ -481,8 +492,8 @@ impl Codex {
         .await
     }
 
-    async fn spawn_internal(args: CodexSpawnArgs) -> CodexResult<CodexSpawnOk> {
-        let CodexSpawnArgs {
+    async fn spawn_internal(args: CrewonSpawnArgs) -> CrewonResult<CrewonSpawnOk> {
+        let CrewonSpawnArgs {
             mut config,
             installation_id,
             auth_manager,
@@ -510,8 +521,42 @@ impl Codex {
             analytics_events_client,
             thread_store,
             attestation_provider,
-            inherited_multi_agent_version,
+            mut inherited_multi_agent_version,
         } = args;
+        if config.extra_config.is_none()
+            && let Some(scene_runtime) = conversation_history.get_scene_runtime()
+        {
+            config.extra_config = Some(crate::config::ExtraConfig {
+                scene_runtime: Some(scene_runtime),
+                scene_execution_target_profile: None,
+            });
+        }
+        if let Some(scene_runtime) = config
+            .extra_config
+            .as_ref()
+            .and_then(|extra| extra.scene_runtime.as_ref())
+        {
+            match scene_runtime.execution_strategy {
+                crewon_protocol::scene::SceneExecutionStrategy::Single => {
+                    config
+                        .features
+                        .disable(Feature::Collab)
+                        .map_err(|err| CodexErr::InvalidRequest(err.to_string()))?;
+                    config
+                        .features
+                        .disable(Feature::MultiAgentV2)
+                        .map_err(|err| CodexErr::InvalidRequest(err.to_string()))?;
+                    inherited_multi_agent_version = Some(MultiAgentVersion::Disabled);
+                }
+                crewon_protocol::scene::SceneExecutionStrategy::Team => {
+                    config
+                        .features
+                        .enable(Feature::MultiAgentV2)
+                        .map_err(|err| CodexErr::InvalidRequest(err.to_string()))?;
+                    inherited_multi_agent_version = Some(MultiAgentVersion::V2);
+                }
+            }
+        }
         let (tx_sub, rx_sub) = async_channel::bounded(SUBMISSION_CHANNEL_CAPACITY);
         let (tx_event, rx_event) = async_channel::unbounded();
 
@@ -543,14 +588,14 @@ impl Codex {
 
         let config = Arc::new(config);
         let refresh_strategy = if session_source.is_non_root_agent() {
-            codex_models_manager::manager::RefreshStrategy::Offline
+            crewon_models_manager::manager::RefreshStrategy::Offline
         } else {
-            codex_models_manager::manager::RefreshStrategy::OnlineIfUncached
+            crewon_models_manager::manager::RefreshStrategy::OnlineIfUncached
         };
         if config.model.is_none()
             || !matches!(
                 refresh_strategy,
-                codex_models_manager::manager::RefreshStrategy::Offline
+                crewon_models_manager::manager::RefreshStrategy::Offline
             )
         {
             let _ = models_manager.list_models(refresh_strategy).await;
@@ -586,7 +631,17 @@ impl Codex {
         // TODO (aibrahim): Consolidate config.model and config.model_reasoning_effort into config.collaboration_mode
         // to avoid extracting these fields separately and constructing CollaborationMode here.
         let collaboration_mode = CollaborationMode {
-            mode: ModeKind::Default,
+            mode: if config
+                .extra_config
+                .as_ref()
+                .and_then(|extra| extra.scene_runtime.as_ref())
+                .is_some_and(|scene| {
+                    scene.contract.mode == crewon_protocol::scene::SceneInteractionMode::Plan
+                }) {
+                ModeKind::Plan
+            } else {
+                ModeKind::Default
+            },
             settings: Settings {
                 model: model.clone(),
                 reasoning_effort: config.model_reasoning_effort.clone(),
@@ -632,7 +687,7 @@ impl Codex {
             user_shell_override,
         };
 
-        // Generate a unique ID for the lifetime of this Codex session.
+        // Generate a unique ID for the lifetime of this Crewon session.
         let session_source_clone = session_configuration.session_source.clone();
         let (agent_status_tx, agent_status_rx) = watch::channel(AgentStatus::PendingInit);
 
@@ -674,7 +729,7 @@ impl Codex {
                 .instrument(info_span!("session_loop", thread_id = %thread_id))
                 .await;
         });
-        let codex = Codex {
+        let engine = Crewon {
             tx_sub,
             rx_event,
             agent_status: agent_status_rx,
@@ -682,11 +737,11 @@ impl Codex {
             session_loop_termination: session_loop_termination_from_handle(session_loop_handle),
         };
 
-        Ok(CodexSpawnOk { codex, thread_id })
+        Ok(CrewonSpawnOk { engine, thread_id })
     }
 
     /// Submit the `op` wrapped in a `Submission` with a unique ID.
-    pub async fn submit(&self, op: Op) -> CodexResult<String> {
+    pub async fn submit(&self, op: Op) -> CrewonResult<String> {
         self.submit_with_trace(op, /*trace*/ None).await
     }
 
@@ -694,7 +749,7 @@ impl Codex {
         &self,
         op: Op,
         trace: Option<W3cTraceContext>,
-    ) -> CodexResult<String> {
+    ) -> CrewonResult<String> {
         let id = Uuid::now_v7().to_string();
         let sub = Submission {
             id: id.clone(),
@@ -711,7 +766,7 @@ impl Codex {
         op: Op,
         trace: Option<W3cTraceContext>,
         client_user_message_id: Option<String>,
-    ) -> CodexResult<String> {
+    ) -> CrewonResult<String> {
         debug_assert!(matches!(op, Op::UserInput { .. }));
         let id = Uuid::now_v7().to_string();
         let sub = Submission {
@@ -724,16 +779,13 @@ impl Codex {
         Ok(id)
     }
 
-    /// Use sparingly: prefer `submit()` so Codex is responsible for generating
+    /// Use sparingly: prefer `submit()` so Crewon is responsible for generating
     /// unique IDs for each submission.
-    pub async fn submit_with_id(&self, mut sub: Submission) -> CodexResult<()> {
+    pub async fn submit_with_id(&self, mut sub: Submission) -> CrewonResult<()> {
         if sub.trace.is_none() {
             sub.trace = current_span_w3c_trace_context();
         }
-        self.tx_sub
-            .send(sub)
-            .await
-            .map_err(|_| CodexErr::InternalAgentDied)?;
+        self.submit_session(sub.into()).await?;
         Ok(())
     }
 
@@ -743,12 +795,12 @@ impl Codex {
     /// and does not involve the model.
     pub async fn set_thread_memory_mode(
         &self,
-        mode: codex_protocol::protocol::ThreadMemoryMode,
+        mode: crewon_protocol::protocol::ThreadMemoryMode,
     ) -> anyhow::Result<()> {
         handlers::persist_thread_memory_mode_update(&self.session, mode).await
     }
 
-    pub async fn shutdown_and_wait(&self) -> CodexResult<()> {
+    pub async fn shutdown_and_wait(&self) -> CrewonResult<()> {
         let session_loop_termination = self.session_loop_termination.clone();
         match self.submit(Op::Shutdown).await {
             Ok(_) => {}
@@ -759,7 +811,7 @@ impl Codex {
         Ok(())
     }
 
-    pub async fn next_event(&self) -> CodexResult<Event> {
+    pub async fn next_event(&self) -> CrewonResult<Event> {
         let event = self
             .rx_event
             .recv()
@@ -858,7 +910,7 @@ fn get_service_tier(
 
 fn session_permission_profile_state_from_config(
     config: &Config,
-) -> CodexResult<PermissionProfileState> {
+) -> CrewonResult<PermissionProfileState> {
     Ok(config.permissions.permission_profile_state().clone())
 }
 
@@ -954,10 +1006,10 @@ impl Session {
 
     async fn start_managed_network_proxy(
         spec: &crate::config::NetworkProxySpec,
-        exec_policy: &codex_execpolicy::Policy,
+        exec_policy: &crewon_execpolicy::Policy,
         permission_profile: &PermissionProfile,
-        network_policy_decider: Option<Arc<dyn codex_network_proxy::NetworkPolicyDecider>>,
-        blocked_request_observer: Option<Arc<dyn codex_network_proxy::BlockedRequestObserver>>,
+        network_policy_decider: Option<Arc<dyn crewon_network_proxy::NetworkPolicyDecider>>,
+        blocked_request_observer: Option<Arc<dyn crewon_network_proxy::BlockedRequestObserver>>,
         managed_network_requirements_enabled: bool,
         audit_metadata: NetworkProxyAuditMetadata,
     ) -> anyhow::Result<(StartedNetworkProxy, SessionNetworkProxyRuntime)> {
@@ -1253,7 +1305,7 @@ impl Session {
                         EventMsg::Warning(WarningEvent {
                             message: format!(
                                 "This session was recorded with model `{prev}` but is resuming with `{curr}`. \
-                         Consider switching back to `{prev}` as it may affect Codex performance."
+                         Consider switching back to `{prev}` as it may affect Crewon performance."
                             ),
                         }),
                     )
@@ -1475,6 +1527,19 @@ impl Session {
         Ok(())
     }
 
+    pub(crate) async fn dynamic_tools(&self) -> Vec<DynamicToolSpec> {
+        self.state
+            .lock()
+            .await
+            .session_configuration
+            .dynamic_tools
+            .clone()
+    }
+
+    pub(crate) async fn replace_dynamic_tools(&self, dynamic_tools: Vec<DynamicToolSpec>) {
+        self.state.lock().await.session_configuration.dynamic_tools = dynamic_tools;
+    }
+
     pub(crate) async fn preview_settings(
         &self,
         updates: &SessionSettingsUpdate,
@@ -1671,10 +1736,10 @@ impl Session {
     }
 
     /// Record a terminal CodexErr before the app-server completion notification is reduced.
-    pub(crate) fn track_turn_codex_error(&self, turn_context: &TurnContext, error: &CodexErr) {
+    pub(crate) fn track_turn_crewon_error(&self, turn_context: &TurnContext, error: &CodexErr) {
         self.services
             .analytics_events_client
-            .track_turn_codex_error(TurnCodexErrorFact::from_codex_err(
+            .track_turn_crewon_error(TurnCrewonErrorFact::from_codex_err(
                 self.thread_id.to_string(),
                 turn_context.sub_id.clone(),
                 error,
@@ -1686,7 +1751,7 @@ impl Session {
         let legacy_source = msg.clone();
         self.services
             .rollout_thread_trace
-            .record_codex_turn_event(&turn_context.sub_id, &legacy_source);
+            .record_crewon_turn_event(&turn_context.sub_id, &legacy_source);
         self.services
             .rollout_thread_trace
             .record_tool_call_event(turn_context.sub_id.clone(), &legacy_source);
@@ -1756,13 +1821,13 @@ impl Session {
         &self,
         turn_context: &TurnContext,
         parent_thread_id: ThreadId,
-        child_agent_path: &codex_protocol::AgentPath,
+        child_agent_path: &crewon_protocol::AgentPath,
         status: AgentStatus,
     ) {
         let Some(parent_agent_path) = child_agent_path
             .as_str()
             .rsplit_once('/')
-            .and_then(|(parent, _)| codex_protocol::AgentPath::try_from(parent).ok())
+            .and_then(|(parent, _)| crewon_protocol::AgentPath::try_from(parent).ok())
         else {
             return;
         };
@@ -1899,6 +1964,16 @@ impl Session {
             .await?;
 
         Ok(())
+    }
+
+    pub(crate) async fn owns_exact_runtime_turn(&self, sub_id: &str) -> bool {
+        let active = self.active_turn.lock().await;
+        let active_matches = active
+            .as_ref()
+            .and_then(|turn| turn.task.as_ref())
+            .is_some_and(|task| task.turn_context.sub_id == sub_id);
+        drop(active);
+        active_matches || self.runtime_turn_ownership.contains(sub_id)
     }
 
     pub(crate) async fn turn_context_for_sub_id(&self, sub_id: &str) -> Option<Arc<TurnContext>> {
@@ -2202,7 +2277,7 @@ impl Session {
                 review_id,
                 request,
                 /*retry_reason*/ None,
-                codex_analytics::GuardianApprovalRequestSource::MainTurn,
+                crewon_analytics::GuardianApprovalRequestSource::MainTurn,
                 cancellation_token.clone(),
             );
             let decision = tokio::select! {
@@ -2731,7 +2806,7 @@ impl Session {
         }
         {
             let mut state = self.state.lock().await;
-            state.queue_pending_session_start_source(codex_hooks::SessionStartSource::Compact);
+            state.queue_pending_session_start_source(crewon_hooks::SessionStartSource::Compact);
         }
     }
 
@@ -2935,6 +3010,24 @@ impl Session {
             developer_sections.push(plugin_instructions.render());
         }
         let context_contributors = self.services.extensions.context_contributors().to_vec();
+        if let Some(scene_runtime) = turn_context
+            .config
+            .extra_config
+            .as_ref()
+            .and_then(|extra| extra.scene_runtime.clone())
+        {
+            developer_sections
+                .push(crate::context::SceneContextFragment::new(scene_runtime).render());
+        }
+        if let Some(profile) = turn_context
+            .config
+            .extra_config
+            .as_ref()
+            .and_then(|extra| extra.scene_execution_target_profile.clone())
+        {
+            developer_sections
+                .push(crate::context::ExecutionTargetContextFragment::new(profile).render());
+        }
         for contributor in context_contributors {
             for fragment in contributor
                 .contribute(
@@ -3093,7 +3186,7 @@ impl Session {
         .await;
         {
             let mut state = self.state.lock().await;
-            state.queue_pending_session_start_source(codex_hooks::SessionStartSource::Compact);
+            state.queue_pending_session_start_source(crewon_hooks::SessionStartSource::Compact);
         }
         self.recompute_token_usage(turn_context).await;
         Some(window_id)
@@ -3466,7 +3559,7 @@ impl Session {
 
     pub(crate) async fn take_pending_session_start_source(
         &self,
-    ) -> Option<codex_hooks::SessionStartSource> {
+    ) -> Option<crewon_hooks::SessionStartSource> {
         let mut state = self.state.lock().await;
         state.take_pending_session_start_source()
     }
@@ -3529,7 +3622,7 @@ async fn build_hooks_for_config(
     let plugin_hook_load_warnings = plugin_outcome.effective_plugin_hook_warnings();
     Hooks::new(HooksConfig {
         legacy_notify_argv: config.notify.clone(),
-        feature_enabled: config.features.enabled(Feature::CodexHooks),
+        feature_enabled: config.features.enabled(Feature::Hooks),
         bypass_hook_trust: config.bypass_hook_trust,
         config_layer_stack: Some(config.config_layer_stack.clone()),
         plugin_hook_sources,

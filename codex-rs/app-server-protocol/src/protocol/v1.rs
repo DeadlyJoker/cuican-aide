@@ -1,21 +1,21 @@
 use std::collections::HashMap;
 use std::path::PathBuf;
 
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::ForcedLoginMethod;
-use codex_protocol::config_types::ReasoningSummary;
-use codex_protocol::config_types::SandboxMode;
-use codex_protocol::config_types::Verbosity;
-use codex_protocol::openai_models::ReasoningEffort;
-use codex_protocol::parse_command::ParsedCommand;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::FileChange;
-pub use codex_protocol::protocol::GitSha;
-use codex_protocol::protocol::ReviewDecision;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::TurnAbortReason;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::ForcedLoginMethod;
+use crewon_protocol::config_types::ReasoningSummary;
+use crewon_protocol::config_types::SandboxMode;
+use crewon_protocol::config_types::Verbosity;
+use crewon_protocol::openai_models::ReasoningEffort;
+use crewon_protocol::parse_command::ParsedCommand;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::FileChange;
+pub use crewon_protocol::protocol::GitSha;
+use crewon_protocol::protocol::ReviewDecision;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::TurnAbortReason;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use schemars::JsonSchema;
 use serde::Deserialize;
 use serde::Serialize;
@@ -60,7 +60,8 @@ pub struct InitializeCapabilities {
 #[serde(rename_all = "camelCase")]
 pub struct InitializeResponse {
     pub user_agent: String,
-    /// Absolute path to the server's $CODEX_HOME directory.
+    /// Absolute path to the server's Crewon home directory. The wire field name remains
+    /// `codexHome` for compatibility with existing clients.
     pub codex_home: AbsolutePathBuf,
     /// Platform family for the running app-server target, for example
     /// `"unix"` or `"windows"`.
@@ -129,8 +130,8 @@ pub struct GitDiffToRemoteResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ApplyPatchApprovalParams {
     pub conversation_id: ThreadId,
-    /// Use to correlate this with [codex_protocol::protocol::PatchApplyBeginEvent]
-    /// and [codex_protocol::protocol::PatchApplyEndEvent].
+    /// Use to correlate this with [crewon_protocol::protocol::PatchApplyBeginEvent]
+    /// and [crewon_protocol::protocol::PatchApplyEndEvent].
     pub call_id: String,
     pub file_changes: HashMap<PathBuf, FileChange>,
     /// Optional explanatory reason (e.g. request for extra write access).
@@ -150,8 +151,8 @@ pub struct ApplyPatchApprovalResponse {
 #[serde(rename_all = "camelCase")]
 pub struct ExecCommandApprovalParams {
     pub conversation_id: ThreadId,
-    /// Use to correlate this with [codex_protocol::protocol::ExecCommandBeginEvent]
-    /// and [codex_protocol::protocol::ExecCommandEndEvent].
+    /// Use to correlate this with [crewon_protocol::protocol::ExecCommandBeginEvent]
+    /// and [crewon_protocol::protocol::ExecCommandEndEvent].
     pub call_id: String,
     /// Identifier for this specific approval callback.
     pub approval_id: Option<String>,

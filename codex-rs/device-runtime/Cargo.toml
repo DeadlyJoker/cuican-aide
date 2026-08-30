@@ -1,0 +1,52 @@
+[package]
+name = "crewon-device-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+name = "crewon_device_runtime"
+path = "src/lib.rs"
+doctest = false
+
+[[bin]]
+name = "crewon-device-runtime"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+chrono = { workspace = true }
+crewon-device = { workspace = true }
+crewon-device-journal = { workspace = true }
+crewon-device-protocol = { workspace = true }
+crewon-utils-rustls-provider = { workspace = true }
+futures = { workspace = true }
+rustls = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = [
+    "io-std",
+    "io-util",
+    "macros",
+    "net",
+    "rt-multi-thread",
+    "sync",
+    "time",
+] }
+tokio-tungstenite = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true, features = ["v4"] }
+zeroize = { workspace = true, features = ["derive", "serde"] }
+
+[dev-dependencies]
+base64 = { workspace = true }
+crewon-utils-cargo-bin = { workspace = true }
+ed25519-dalek = { workspace = true, features = ["pem"] }
+pretty_assertions = { workspace = true }
+rcgen = { workspace = true }
+tempfile = { workspace = true }
+tokio-rustls = { workspace = true }

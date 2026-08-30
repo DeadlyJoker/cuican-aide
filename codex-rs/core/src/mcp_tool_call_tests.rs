@@ -7,30 +7,6 @@ use crate::state::ActiveTurn;
 use crate::test_support::models_manager_with_provider;
 use crate::tools::hook_names::HookToolName;
 use crate::turn_metadata::McpTurnMetadataContext;
-use codex_config::CONFIG_TOML_FILE;
-use codex_config::config_toml::ConfigToml;
-use codex_config::types::AppConfig;
-use codex_config::types::AppToolConfig;
-use codex_config::types::AppToolsConfig;
-use codex_config::types::ApprovalsReviewer;
-use codex_config::types::AppsConfigToml;
-use codex_config::types::McpServerConfig;
-use codex_config::types::McpServerToolConfig;
-use codex_features::Features;
-use codex_hooks::Hooks;
-use codex_hooks::HooksConfig;
-use codex_model_provider::create_model_provider;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::GranularApprovalConfig;
-use codex_protocol::protocol::McpInvocation;
-use codex_protocol::protocol::SessionSource;
-use codex_rollout_trace::ThreadStartedTraceMetadata;
-use codex_rollout_trace::ToolDispatchInvocation;
-use codex_rollout_trace::ToolDispatchPayload;
-use codex_rollout_trace::ToolDispatchRequester;
-use codex_rollout_trace::replay_bundle;
 use core_test_support::hooks::trusted_config_layer_stack;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
@@ -38,6 +14,30 @@ use core_test_support::responses::ev_response_created;
 use core_test_support::responses::mount_sse_once;
 use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
+use crewon_config::CONFIG_TOML_FILE;
+use crewon_config::config_toml::ConfigToml;
+use crewon_config::types::AppConfig;
+use crewon_config::types::AppToolConfig;
+use crewon_config::types::AppToolsConfig;
+use crewon_config::types::ApprovalsReviewer;
+use crewon_config::types::AppsConfigToml;
+use crewon_config::types::McpServerConfig;
+use crewon_config::types::McpServerToolConfig;
+use crewon_features::Features;
+use crewon_hooks::Hooks;
+use crewon_hooks::HooksConfig;
+use crewon_model_provider::create_model_provider;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::GranularApprovalConfig;
+use crewon_protocol::protocol::McpInvocation;
+use crewon_protocol::protocol::SessionSource;
+use crewon_rollout_trace::ThreadStartedTraceMetadata;
+use crewon_rollout_trace::ToolDispatchInvocation;
+use crewon_rollout_trace::ToolDispatchPayload;
+use crewon_rollout_trace::ToolDispatchRequester;
+use crewon_rollout_trace::replay_bundle;
 use pretty_assertions::assert_eq;
 use serde::Deserialize;
 use std::collections::HashMap;
@@ -82,7 +82,7 @@ fn approval_metadata(
         tool_title: tool_title.map(str::to_string),
         tool_description: tool_description.map(str::to_string),
         mcp_app_resource_uri: None,
-        codex_apps_meta: None,
+        crewon_apps_meta: None,
         openai_file_input_params: None,
     }
 }
@@ -96,9 +96,10 @@ fn mcp_turn_metadata_context(turn_context: &TurnContext) -> McpTurnMetadataConte
 
 fn write_sample_plugin_mcp(codex_home: &std::path::Path) {
     let plugin_root = codex_home.join("plugins/cache/test/sample/local");
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin")).expect("create plugin manifest dir");
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))
+        .expect("create plugin manifest dir");
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         r#"{
   "name": "sample"
 }"#,
@@ -198,7 +199,7 @@ fn install_mcp_permission_request_hook(
         .join("mcp_permission_request_hook_log.jsonl");
     let hook_output = hook_output.to_string();
     std::fs::create_dir_all(&turn_context.config.codex_home)
-        .expect("create codex home for MCP permission hook");
+        .expect("create crewon home for MCP permission hook");
     let script = format!(
         r#"import json
 from pathlib import Path
@@ -241,7 +242,7 @@ print({hook_output:?})
         .to_string(),
     )
     .expect("write hooks.json");
-    let hook_list = codex_hooks::list_hooks(HooksConfig {
+    let hook_list = crewon_hooks::list_hooks(HooksConfig {
         feature_enabled: true,
         config_layer_stack: Some(turn_context.config.config_layer_stack.clone()),
         ..HooksConfig::default()
@@ -278,7 +279,7 @@ fn attach_trace_bundle(
     root: &Path,
 ) -> anyhow::Result<()> {
     let rollout_thread_trace =
-        codex_rollout_trace::ThreadTraceContext::start_root_in_root_for_test(
+        crewon_rollout_trace::ThreadTraceContext::start_root_in_root_for_test(
             root,
             ThreadStartedTraceMetadata {
                 thread_id: session.thread_id.to_string(),
@@ -340,14 +341,14 @@ fn mcp_app_resource_uri_reads_known_tool_meta_keys() {
 }
 
 #[test]
-fn openai_file_params_are_only_honored_for_codex_apps() {
+fn openai_file_params_are_only_honored_for_crewon_apps() {
     let meta = serde_json::json!({
         "openai/fileParams": ["file"],
     });
     let meta = meta.as_object();
 
     assert_eq!(
-        openai_file_input_params_for_server(CODEX_APPS_MCP_SERVER_NAME, meta),
+        openai_file_input_params_for_server(CREWON_APPS_MCP_SERVER_NAME, meta),
         Some(vec!["file".to_string()])
     );
     assert_eq!(
@@ -516,8 +517,8 @@ async fn mcp_result_telemetry_records_allowlisted_span_fields() {
     .await;
 
     assert!(
-        logs.contains("codex.mcp.target.id=\"com.apple.reminders\"")
-            && logs.contains("codex.mcp.server_user_flow.triggered=false"),
+        logs.contains("crewon.mcp.target.id=\"com.apple.reminders\"")
+            && logs.contains("crewon.mcp.server_user_flow.triggered=false"),
         "missing MCP result telemetry span fields\nlogs:\n{logs}"
     );
     assert!(
@@ -539,8 +540,8 @@ async fn mcp_result_telemetry_ignores_invalid_and_missing_values() {
     })))
     .await;
     assert!(
-        !invalid_logs.contains("codex.mcp.target.id=")
-            && !invalid_logs.contains("codex.mcp.server_user_flow.triggered="),
+        !invalid_logs.contains("crewon.mcp.target.id=")
+            && !invalid_logs.contains("crewon.mcp.server_user_flow.triggered="),
         "invalid MCP result telemetry values should be ignored\nlogs:\n{invalid_logs}"
     );
 
@@ -549,15 +550,15 @@ async fn mcp_result_telemetry_ignores_invalid_and_missing_values() {
     })))
     .await;
     assert!(
-        !missing_logs.contains("codex.mcp.target.id=")
-            && !missing_logs.contains("codex.mcp.server_user_flow.triggered="),
+        !missing_logs.contains("crewon.mcp.target.id=")
+            && !missing_logs.contains("crewon.mcp.server_user_flow.triggered="),
         "missing MCP result telemetry span object should be ignored\nlogs:\n{missing_logs}"
     );
 
     let no_meta_logs = mcp_result_telemetry_span_logs(/*meta*/ None).await;
     assert!(
-        !no_meta_logs.contains("codex.mcp.target.id=")
-            && !no_meta_logs.contains("codex.mcp.server_user_flow.triggered="),
+        !no_meta_logs.contains("crewon.mcp.target.id=")
+            && !no_meta_logs.contains("crewon.mcp.server_user_flow.triggered="),
         "missing MCP result metadata should be ignored\nlogs:\n{no_meta_logs}"
     );
 }
@@ -576,7 +577,7 @@ async fn mcp_result_telemetry_truncates_long_target_id() {
     .await;
 
     assert!(
-        logs.contains(&format!("codex.mcp.target.id=\"{truncated}\"")) && !logs.contains("tail"),
+        logs.contains(&format!("crewon.mcp.target.id=\"{truncated}\"")) && !logs.contains("tail"),
         "long MCP result telemetry target_id should be truncated\nlogs:\n{logs}"
     );
 }
@@ -599,7 +600,7 @@ async fn approval_elicitation_request_uses_message_override_and_preserves_tool_p
     let (session, turn_context) = make_session_and_context().await;
     let question = build_mcp_tool_approval_question(
         "q".to_string(),
-        CODEX_APPS_MCP_SERVER_NAME,
+        CREWON_APPS_MCP_SERVER_NAME,
         "create_event",
         Some("Calendar"),
         prompt_options(
@@ -612,7 +613,7 @@ async fn approval_elicitation_request_uses_message_override_and_preserves_tool_p
         &session,
         &turn_context,
         McpToolApprovalElicitationRequest {
-            server: CODEX_APPS_MCP_SERVER_NAME,
+            server: CREWON_APPS_MCP_SERVER_NAME,
             metadata: Some(&approval_metadata(
                 Some("calendar"),
                 Some("Calendar"),
@@ -649,7 +650,7 @@ async fn approval_elicitation_request_uses_message_override_and_preserves_tool_p
         McpServerElicitationRequestParams {
             thread_id: session.thread_id.to_string(),
             turn_id: Some(turn_context.sub_id),
-            server_name: CODEX_APPS_MCP_SERVER_NAME.to_string(),
+            server_name: CREWON_APPS_MCP_SERVER_NAME.to_string(),
             request: McpServerElicitationRequest::Form {
                 meta: Some(serde_json::json!({
                     MCP_TOOL_APPROVAL_KIND_KEY: MCP_TOOL_APPROVAL_KIND_MCP_TOOL_CALL,
@@ -721,10 +722,10 @@ fn custom_mcp_tool_question_mentions_server_name() {
 }
 
 #[test]
-fn codex_apps_tool_question_uses_fallback_app_label() {
+fn crewon_apps_tool_question_uses_fallback_app_label() {
     let question = build_mcp_tool_approval_question(
         "q".to_string(),
-        CODEX_APPS_MCP_SERVER_NAME,
+        CREWON_APPS_MCP_SERVER_NAME,
         "run_action",
         /*connector_name*/ None,
         prompt_options(
@@ -740,10 +741,10 @@ fn codex_apps_tool_question_uses_fallback_app_label() {
 }
 
 #[test]
-fn trusted_codex_apps_tool_question_offers_always_allow() {
+fn trusted_crewon_apps_tool_question_offers_always_allow() {
     let question = build_mcp_tool_approval_question(
         "q".to_string(),
-        CODEX_APPS_MCP_SERVER_NAME,
+        CREWON_APPS_MCP_SERVER_NAME,
         "run_action",
         Some("Calendar"),
         prompt_options(
@@ -776,16 +777,16 @@ fn trusted_codex_apps_tool_question_offers_always_allow() {
 }
 
 #[test]
-fn codex_apps_tool_question_without_elicitation_omits_always_allow() {
+fn crewon_apps_tool_question_without_elicitation_omits_always_allow() {
     let session_key = McpToolApprovalKey {
-        server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
+        server: CREWON_APPS_MCP_SERVER_NAME.to_string(),
         connector_id: Some("calendar".to_string()),
         tool_name: "run_action".to_string(),
     };
     let persistent_key = session_key.clone();
     let question = build_mcp_tool_approval_question(
         "q".to_string(),
-        CODEX_APPS_MCP_SERVER_NAME,
+        CREWON_APPS_MCP_SERVER_NAME,
         "run_action",
         Some("Calendar"),
         mcp_tool_approval_prompt_options(
@@ -868,9 +869,9 @@ fn custom_servers_support_session_and_persistent_approval() {
 }
 
 #[test]
-fn codex_apps_connectors_support_persistent_approval() {
+fn crewon_apps_connectors_support_persistent_approval() {
     let invocation = McpInvocation {
-        server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
+        server: CREWON_APPS_MCP_SERVER_NAME.to_string(),
         tool: "calendar/list_events".to_string(),
         arguments: None,
     };
@@ -882,7 +883,7 @@ fn codex_apps_connectors_support_persistent_approval() {
         /*tool_description*/ None,
     );
     let expected = McpToolApprovalKey {
-        server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
+        server: CREWON_APPS_MCP_SERVER_NAME.to_string(),
         connector_id: Some("calendar".to_string()),
         tool_name: "calendar/list_events".to_string(),
     };
@@ -1149,7 +1150,7 @@ async fn mcp_tool_call_item_includes_plugin_id() {
 }
 
 #[tokio::test]
-async fn codex_apps_tool_call_request_meta_includes_turn_metadata_and_codex_apps_meta() {
+async fn crewon_apps_tool_call_request_meta_includes_turn_metadata_and_crewon_apps_meta() {
     let (_, turn_context) = make_session_and_context().await;
     let expected_turn_metadata = turn_context
         .turn_metadata_state
@@ -1164,7 +1165,7 @@ async fn codex_apps_tool_call_request_meta_includes_turn_metadata_and_codex_apps
         tool_title: Some("Create Event".to_string()),
         tool_description: Some("Create a calendar event.".to_string()),
         mcp_app_resource_uri: None,
-        codex_apps_meta: Some(
+        crewon_apps_meta: Some(
             serde_json::json!({
                 "resource_uri": "connector://calendar/tools/calendar_create_event",
                 "contains_mcp_source": true,
@@ -1172,7 +1173,7 @@ async fn codex_apps_tool_call_request_meta_includes_turn_metadata_and_codex_apps
             })
             .as_object()
             .cloned()
-            .expect("_codex_apps metadata should be an object"),
+            .expect("_crewon_apps metadata should be an object"),
         ),
         openai_file_input_params: None,
     };
@@ -1180,13 +1181,13 @@ async fn codex_apps_tool_call_request_meta_includes_turn_metadata_and_codex_apps
     assert_eq!(
         build_mcp_tool_call_request_meta(
             &turn_context,
-            CODEX_APPS_MCP_SERVER_NAME,
+            CREWON_APPS_MCP_SERVER_NAME,
             "call_abc123xyz789",
             Some(&metadata),
         ),
         Some(serde_json::json!({
             crate::X_CODEX_TURN_METADATA_HEADER: expected_turn_metadata,
-            MCP_TOOL_CODEX_APPS_META_KEY: {
+            MCP_TOOL_CREWON_APPS_META_KEY: {
                 "call_id": "call_abc123xyz789",
                 "resource_uri": "connector://calendar/tools/calendar_create_event",
                 "contains_mcp_source": true,
@@ -1197,7 +1198,7 @@ async fn codex_apps_tool_call_request_meta_includes_turn_metadata_and_codex_apps
 }
 
 #[tokio::test]
-async fn codex_apps_tool_call_request_meta_includes_call_id_without_existing_codex_apps_meta() {
+async fn crewon_apps_tool_call_request_meta_includes_call_id_without_existing_crewon_apps_meta() {
     let (_, turn_context) = make_session_and_context().await;
     let expected_turn_metadata = turn_context
         .turn_metadata_state
@@ -1207,20 +1208,20 @@ async fn codex_apps_tool_call_request_meta_includes_call_id_without_existing_cod
     assert_eq!(
         build_mcp_tool_call_request_meta(
             &turn_context,
-            CODEX_APPS_MCP_SERVER_NAME,
+            CREWON_APPS_MCP_SERVER_NAME,
             "call_abc123xyz789",
             /*metadata*/ None,
         ),
         Some(serde_json::json!({
             crate::X_CODEX_TURN_METADATA_HEADER: expected_turn_metadata,
-            MCP_TOOL_CODEX_APPS_META_KEY: {
+            MCP_TOOL_CREWON_APPS_META_KEY: {
                 "call_id": "call_abc123xyz789",
             },
         }))
     );
 }
 
-fn codex_apps_auth_failure_result() -> CallToolResult {
+fn crewon_apps_auth_failure_result() -> CallToolResult {
     CallToolResult {
         content: vec![serde_json::json!({
             "type": "text",
@@ -1229,7 +1230,7 @@ fn codex_apps_auth_failure_result() -> CallToolResult {
         structured_content: None,
         is_error: Some(true),
         meta: Some(serde_json::json!({
-            MCP_TOOL_CODEX_APPS_META_KEY: {
+            MCP_TOOL_CREWON_APPS_META_KEY: {
                 "connector_auth_failure": {
                     "is_auth_failure": true,
                     "auth_reason": "reauthentication_required",
@@ -1245,7 +1246,7 @@ fn codex_apps_auth_failure_result() -> CallToolResult {
     }
 }
 
-fn codex_apps_auth_failure_metadata() -> McpToolApprovalMetadata {
+fn crewon_apps_auth_failure_metadata() -> McpToolApprovalMetadata {
     approval_metadata(
         Some("connector_calendar"),
         Some("Google Calendar"),
@@ -1255,9 +1256,9 @@ fn codex_apps_auth_failure_metadata() -> McpToolApprovalMetadata {
     )
 }
 
-async fn install_host_owned_codex_apps_manager(session: &Session, turn_context: &TurnContext) {
+async fn install_host_owned_crewon_apps_manager(session: &Session, turn_context: &TurnContext) {
     let auth = session.services.auth_manager.auth().await;
-    let manager = codex_mcp::McpConnectionManager::new(
+    let manager = crewon_mcp::McpConnectionManager::new(
         &HashMap::new(),
         turn_context.config.mcp_oauth_credentials_store_mode,
         HashMap::new(),
@@ -1266,16 +1267,16 @@ async fn install_host_owned_codex_apps_manager(session: &Session, turn_context: 
         session.get_tx_event(),
         CancellationToken::new(),
         turn_context.permission_profile(),
-        codex_mcp::McpRuntimeContext::new(Arc::clone(&session.services.environment_manager), {
+        crewon_mcp::McpRuntimeContext::new(Arc::clone(&session.services.environment_manager), {
             #[allow(deprecated)]
             turn_context.cwd.to_path_buf()
         }),
         turn_context.config.codex_home.to_path_buf(),
-        codex_mcp::codex_apps_tools_cache_key(auth.as_ref()),
-        /*host_owned_codex_apps_enabled*/ true,
+        crewon_mcp::crewon_apps_tools_cache_key(auth.as_ref()),
+        /*host_owned_crewon_apps_enabled*/ true,
         turn_context.config.prefix_mcp_tool_names(),
         rmcp::model::ElicitationCapability::default(),
-        codex_mcp::ToolPluginProvenance::default(),
+        crewon_mcp::ToolPluginProvenance::default(),
         auth.as_ref(),
         /*elicitation_reviewer*/ None,
     )
@@ -1287,17 +1288,17 @@ async fn install_host_owned_codex_apps_manager(session: &Session, turn_context: 
 }
 
 #[tokio::test]
-async fn codex_apps_auth_elicitation_feature_disabled_returns_original_result() {
+async fn crewon_apps_auth_elicitation_feature_disabled_returns_original_result() {
     let (session, turn_context, rx_event) = make_session_and_context_with_rx().await;
-    install_host_owned_codex_apps_manager(&session, &turn_context).await;
-    let result = codex_apps_auth_failure_result();
-    let metadata = codex_apps_auth_failure_metadata();
+    install_host_owned_crewon_apps_manager(&session, &turn_context).await;
+    let result = crewon_apps_auth_failure_result();
+    let metadata = crewon_apps_auth_failure_metadata();
 
-    let returned = maybe_request_codex_apps_auth_elicitation(
+    let returned = maybe_request_crewon_apps_auth_elicitation(
         &session,
         &turn_context,
         "call_123",
-        CODEX_APPS_MCP_SERVER_NAME,
+        CREWON_APPS_MCP_SERVER_NAME,
         Some(&metadata),
         result.clone(),
     )
@@ -1308,21 +1309,21 @@ async fn codex_apps_auth_elicitation_feature_disabled_returns_original_result() 
 }
 
 #[tokio::test]
-async fn codex_apps_auth_elicitation_non_host_owned_server_returns_original_result() {
+async fn crewon_apps_auth_elicitation_non_host_owned_server_returns_original_result() {
     let (session, mut turn_context, rx_event) = make_session_and_context_with_rx().await;
     let mut features = Features::with_defaults();
     features.enable(Feature::AuthElicitation);
     Arc::get_mut(&mut turn_context)
         .expect("single turn context ref")
         .features = ManagedFeatures::from(features);
-    let result = codex_apps_auth_failure_result();
-    let metadata = codex_apps_auth_failure_metadata();
+    let result = crewon_apps_auth_failure_result();
+    let metadata = crewon_apps_auth_failure_metadata();
 
-    let returned = maybe_request_codex_apps_auth_elicitation(
+    let returned = maybe_request_crewon_apps_auth_elicitation(
         &session,
         &turn_context,
         "call_123",
-        CODEX_APPS_MCP_SERVER_NAME,
+        CREWON_APPS_MCP_SERVER_NAME,
         Some(&metadata),
         result.clone(),
     )
@@ -1333,9 +1334,9 @@ async fn codex_apps_auth_elicitation_non_host_owned_server_returns_original_resu
 }
 
 #[tokio::test]
-async fn codex_apps_auth_elicitation_disallowed_by_policy_returns_original_result() {
+async fn crewon_apps_auth_elicitation_disallowed_by_policy_returns_original_result() {
     let (session, mut turn_context, rx_event) = make_session_and_context_with_rx().await;
-    install_host_owned_codex_apps_manager(&session, &turn_context).await;
+    install_host_owned_crewon_apps_manager(&session, &turn_context).await;
     let mut features = Features::with_defaults();
     features.enable(Feature::AuthElicitation);
     let turn_context = Arc::get_mut(&mut turn_context).expect("single turn context ref");
@@ -1344,14 +1345,14 @@ async fn codex_apps_auth_elicitation_disallowed_by_policy_returns_original_resul
         .approval_policy
         .set(AskForApproval::Never)
         .expect("test setup should allow updating approval policy");
-    let result = codex_apps_auth_failure_result();
-    let metadata = codex_apps_auth_failure_metadata();
+    let result = crewon_apps_auth_failure_result();
+    let metadata = crewon_apps_auth_failure_metadata();
 
-    let returned = maybe_request_codex_apps_auth_elicitation(
+    let returned = maybe_request_crewon_apps_auth_elicitation(
         &session,
         turn_context,
         "call_123",
-        CODEX_APPS_MCP_SERVER_NAME,
+        CREWON_APPS_MCP_SERVER_NAME,
         Some(&metadata),
         result.clone(),
     )
@@ -1362,9 +1363,9 @@ async fn codex_apps_auth_elicitation_disallowed_by_policy_returns_original_resul
 }
 
 #[tokio::test]
-async fn codex_apps_auth_elicitation_granular_mcp_disabled_returns_original_result() {
+async fn crewon_apps_auth_elicitation_granular_mcp_disabled_returns_original_result() {
     let (session, mut turn_context, rx_event) = make_session_and_context_with_rx().await;
-    install_host_owned_codex_apps_manager(&session, &turn_context).await;
+    install_host_owned_crewon_apps_manager(&session, &turn_context).await;
     let mut features = Features::with_defaults();
     features.enable(Feature::AuthElicitation);
     let turn_context = Arc::get_mut(&mut turn_context).expect("single turn context ref");
@@ -1379,14 +1380,14 @@ async fn codex_apps_auth_elicitation_granular_mcp_disabled_returns_original_resu
             mcp_elicitations: false,
         }))
         .expect("test setup should allow updating approval policy");
-    let result = codex_apps_auth_failure_result();
-    let metadata = codex_apps_auth_failure_metadata();
+    let result = crewon_apps_auth_failure_result();
+    let metadata = crewon_apps_auth_failure_metadata();
 
-    let returned = maybe_request_codex_apps_auth_elicitation(
+    let returned = maybe_request_crewon_apps_auth_elicitation(
         &session,
         turn_context,
         "call_123",
-        CODEX_APPS_MCP_SERVER_NAME,
+        CREWON_APPS_MCP_SERVER_NAME,
         Some(&metadata),
         result.clone(),
     )
@@ -1397,27 +1398,27 @@ async fn codex_apps_auth_elicitation_granular_mcp_disabled_returns_original_resu
 }
 
 #[tokio::test]
-async fn codex_apps_auth_elicitation_feature_enabled_requests_elicitation() {
+async fn crewon_apps_auth_elicitation_feature_enabled_requests_elicitation() {
     let (session, mut turn_context, rx_event) = make_session_and_context_with_rx().await;
-    install_host_owned_codex_apps_manager(&session, &turn_context).await;
+    install_host_owned_crewon_apps_manager(&session, &turn_context).await;
     *session.active_turn.lock().await = Some(ActiveTurn::default());
     let mut features = Features::with_defaults();
     features.enable(Feature::AuthElicitation);
     Arc::get_mut(&mut turn_context)
         .expect("single turn context ref")
         .features = ManagedFeatures::from(features);
-    let result = codex_apps_auth_failure_result();
-    let metadata = codex_apps_auth_failure_metadata();
+    let result = crewon_apps_auth_failure_result();
+    let metadata = crewon_apps_auth_failure_metadata();
 
     let request_task = tokio::spawn({
         let session = Arc::clone(&session);
         let turn_context = Arc::clone(&turn_context);
         async move {
-            maybe_request_codex_apps_auth_elicitation(
+            maybe_request_crewon_apps_auth_elicitation(
                 &session,
                 &turn_context,
                 "call_123",
-                CODEX_APPS_MCP_SERVER_NAME,
+                CREWON_APPS_MCP_SERVER_NAME,
                 Some(&metadata),
                 result,
             )
@@ -1434,20 +1435,20 @@ async fn codex_apps_auth_elicitation_feature_enabled_requests_elicitation() {
             break request;
         }
     };
-    assert_eq!(request.server_name, CODEX_APPS_MCP_SERVER_NAME);
+    assert_eq!(request.server_name, CREWON_APPS_MCP_SERVER_NAME);
     assert_eq!(
         request.id,
-        codex_protocol::mcp::RequestId::String("codex_apps_auth_call_123".to_string())
+        crewon_protocol::mcp::RequestId::String("crewon_apps_auth_call_123".to_string())
     );
     assert!(matches!(
         request.request,
-        codex_protocol::approvals::ElicitationRequest::Url { .. }
+        crewon_protocol::approvals::ElicitationRequest::Url { .. }
     ));
 
     session
         .resolve_elicitation(
-            CODEX_APPS_MCP_SERVER_NAME.to_string(),
-            rmcp::model::RequestId::String("codex_apps_auth_call_123".into()),
+            CREWON_APPS_MCP_SERVER_NAME.to_string(),
+            rmcp::model::RequestId::String("crewon_apps_auth_call_123".into()),
             ElicitationResponse {
                 action: ElicitationAction::Accept,
                 content: None,
@@ -1573,7 +1574,7 @@ fn approval_elicitation_meta_merges_session_and_always_persist_for_custom_server
 #[test]
 fn guardian_mcp_review_request_includes_invocation_metadata() {
     let invocation = McpInvocation {
-        server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
+        server: CREWON_APPS_MCP_SERVER_NAME.to_string(),
         tool: "browser_navigate".to_string(),
         arguments: Some(serde_json::json!({
             "url": "https://example.com",
@@ -1596,7 +1597,7 @@ fn guardian_mcp_review_request_includes_invocation_metadata() {
         request,
         GuardianApprovalRequest::McpToolCall {
             id: "call-1".to_string(),
-            server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
+            server: CREWON_APPS_MCP_SERVER_NAME.to_string(),
             tool_name: "browser_navigate".to_string(),
             arguments: Some(serde_json::json!({
                 "url": "https://example.com",
@@ -1627,7 +1628,7 @@ fn guardian_mcp_review_request_includes_annotations_when_present() {
         tool_title: None,
         tool_description: None,
         mcp_app_resource_uri: None,
-        codex_apps_meta: None,
+        crewon_apps_meta: None,
         openai_file_input_params: None,
     };
 
@@ -1672,7 +1673,7 @@ async fn guardian_review_decision_maps_to_mcp_tool_decision() {
         "review-id".to_string(),
         crate::guardian::GuardianRejection {
             rationale: "too risky".to_string(),
-            source: codex_protocol::protocol::GuardianAssessmentDecisionSource::Agent,
+            source: crewon_protocol::protocol::GuardianAssessmentDecisionSource::Agent,
         },
     );
     let denial = mcp_tool_approval_decision_from_guardian(
@@ -1715,10 +1716,10 @@ async fn guardian_review_decision_maps_to_mcp_tool_decision() {
 }
 
 #[test]
-fn approval_elicitation_meta_includes_connector_source_for_codex_apps() {
+fn approval_elicitation_meta_includes_connector_source_for_crewon_apps() {
     assert_eq!(
         build_mcp_tool_approval_elicitation_meta(
-            CODEX_APPS_MCP_SERVER_NAME,
+            CREWON_APPS_MCP_SERVER_NAME,
             Some(&approval_metadata(
                 Some("calendar"),
                 Some("Calendar"),
@@ -1753,7 +1754,7 @@ fn approval_elicitation_meta_includes_connector_source_for_codex_apps() {
 fn approval_elicitation_meta_merges_session_and_always_persist_with_connector_source() {
     assert_eq!(
         build_mcp_tool_approval_elicitation_meta(
-            CODEX_APPS_MCP_SERVER_NAME,
+            CREWON_APPS_MCP_SERVER_NAME,
             Some(&approval_metadata(
                 Some("calendar"),
                 Some("Calendar"),
@@ -1868,7 +1869,7 @@ fn accepted_elicitation_without_content_defaults_to_accept() {
 }
 
 #[tokio::test]
-async fn persist_codex_app_tool_approval_writes_tool_override() {
+async fn persist_crewon_app_tool_approval_writes_tool_override() {
     let tmp = tempdir().expect("tempdir");
     let config = ConfigBuilder::default()
         .codex_home(tmp.path().to_path_buf())
@@ -1876,7 +1877,7 @@ async fn persist_codex_app_tool_approval_writes_tool_override() {
         .await
         .expect("load config");
 
-    persist_codex_app_tool_approval(&config, "calendar", "calendar/list_events")
+    persist_crewon_app_tool_approval(&config, "calendar", "calendar/list_events")
         .await
         .expect("persist approval");
 
@@ -2081,9 +2082,9 @@ approval_mode = "approve"
 async fn maybe_persist_mcp_tool_approval_reloads_session_config() {
     let (session, turn_context) = make_session_and_context().await;
     let codex_home = session.codex_home().await;
-    std::fs::create_dir_all(&codex_home).expect("create codex home");
+    std::fs::create_dir_all(&codex_home).expect("create crewon home");
     let key = McpToolApprovalKey {
-        server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
+        server: CREWON_APPS_MCP_SERVER_NAME.to_string(),
         connector_id: Some("calendar".to_string()),
         tool_name: "calendar/list_events".to_string(),
     };
@@ -2120,7 +2121,7 @@ async fn maybe_persist_mcp_tool_approval_reloads_session_config() {
 async fn maybe_persist_mcp_tool_approval_reloads_session_config_for_custom_server() {
     let (session, mut turn_context) = make_session_and_context().await;
     let codex_home = session.codex_home().await;
-    std::fs::create_dir_all(&codex_home).expect("create codex home");
+    std::fs::create_dir_all(&codex_home).expect("create crewon home");
     std::fs::write(
         codex_home.join(CONFIG_TOML_FILE),
         "[mcp_servers.docs]\ncommand = \"docs-server\"\n",
@@ -2220,17 +2221,17 @@ async fn maybe_persist_mcp_tool_approval_writes_project_config_for_project_serve
     let codex_home = session.codex_home().await;
     let project_dir = tempdir().expect("tempdir");
     std::fs::write(project_dir.path().join(".git"), "gitdir: nowhere").expect("seed git marker");
-    let project_codex_dir = project_dir.path().join(".codex");
-    std::fs::create_dir_all(&project_codex_dir).expect("create project .codex dir");
+    let project_crewon_config_dir = project_dir.path().join(".codex");
+    std::fs::create_dir_all(&project_crewon_config_dir).expect("create project .codex dir");
     std::fs::write(
-        project_codex_dir.join(CONFIG_TOML_FILE),
+        project_crewon_config_dir.join(CONFIG_TOML_FILE),
         "[mcp_servers.docs]\ncommand = \"docs-server\"\n",
     )
     .expect("seed project config");
     ConfigEditsBuilder::new(&codex_home)
         .set_project_trust_level(
             project_dir.path(),
-            codex_protocol::config_types::TrustLevel::Trusted,
+            crewon_protocol::config_types::TrustLevel::Trusted,
         )
         .apply()
         .await
@@ -2250,7 +2251,7 @@ async fn maybe_persist_mcp_tool_approval_writes_project_config_for_project_serve
 
     maybe_persist_mcp_tool_approval(&session, &turn_context, key.clone()).await;
 
-    let contents = std::fs::read_to_string(project_codex_dir.join(CONFIG_TOML_FILE))
+    let contents = std::fs::read_to_string(project_crewon_config_dir.join(CONFIG_TOML_FILE))
         .expect("read project config");
     let parsed: ConfigToml = toml::from_str(&contents).expect("parse project config");
     let tool = parsed
@@ -2292,7 +2293,7 @@ async fn approve_mode_skips_when_annotations_do_not_require_approval() {
         tool_title: Some("Read Only Tool".to_string()),
         tool_description: None,
         mcp_app_resource_uri: None,
-        codex_apps_meta: None,
+        crewon_apps_meta: None,
         openai_file_input_params: None,
     };
 
@@ -2366,7 +2367,7 @@ async fn guardian_mode_skips_auto_when_annotations_do_not_require_approval() {
         tool_title: Some("Read Only Tool".to_string()),
         tool_description: None,
         mcp_app_resource_uri: None,
-        codex_apps_meta: None,
+        crewon_apps_meta: None,
         openai_file_input_params: None,
     };
 
@@ -2423,7 +2424,7 @@ async fn permission_request_hook_allows_mcp_tool_call() {
         tool_title: Some("Create entities".to_string()),
         tool_description: None,
         mcp_app_resource_uri: None,
-        codex_apps_meta: None,
+        crewon_apps_meta: None,
         openai_file_input_params: None,
     };
 
@@ -2559,7 +2560,7 @@ async fn permission_request_hook_runs_after_remembered_mcp_approval() {
         tool_title: Some("Create entities".to_string()),
         tool_description: None,
         mcp_app_resource_uri: None,
-        codex_apps_meta: None,
+        crewon_apps_meta: None,
         openai_file_input_params: None,
     };
     let remembered_key =
@@ -2646,7 +2647,7 @@ async fn guardian_mode_mcp_denial_returns_rationale_message() {
         tool_title: Some("Dangerous Tool".to_string()),
         tool_description: Some("Reads calendar data.".to_string()),
         mcp_app_resource_uri: None,
-        codex_apps_meta: None,
+        crewon_apps_meta: None,
         openai_file_input_params: None,
     };
 
@@ -2700,7 +2701,7 @@ async fn prompt_mode_waits_for_approval_when_annotations_do_not_require_approval
         tool_title: Some("Read Only Tool".to_string()),
         tool_description: None,
         mcp_app_resource_uri: None,
-        codex_apps_meta: None,
+        crewon_apps_meta: None,
         openai_file_input_params: None,
     };
 
@@ -2742,7 +2743,7 @@ async fn full_access_mode_skips_mcp_tool_approval_for_all_approval_modes() {
     let session = Arc::new(session);
     let turn_context = Arc::new(turn_context);
     let invocation = McpInvocation {
-        server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
+        server: CREWON_APPS_MCP_SERVER_NAME.to_string(),
         tool: "dangerous_tool".to_string(),
         arguments: Some(serde_json::json!({ "id": 1 })),
     };
@@ -2755,7 +2756,7 @@ async fn full_access_mode_skips_mcp_tool_approval_for_all_approval_modes() {
         tool_title: Some("Dangerous Tool".to_string()),
         tool_description: Some("Performs a risky action.".to_string()),
         mcp_app_resource_uri: None,
-        codex_apps_meta: None,
+        crewon_apps_meta: None,
         openai_file_input_params: None,
     };
 
@@ -2795,7 +2796,7 @@ async fn approve_mode_skips_guardian_in_every_permission_mode() {
         .await;
 
     let invocation = McpInvocation {
-        server: CODEX_APPS_MCP_SERVER_NAME.to_string(),
+        server: CREWON_APPS_MCP_SERVER_NAME.to_string(),
         tool: "dangerous_tool".to_string(),
         arguments: Some(serde_json::json!({ "id": 1 })),
     };
@@ -2808,7 +2809,7 @@ async fn approve_mode_skips_guardian_in_every_permission_mode() {
         tool_title: Some("Dangerous Tool".to_string()),
         tool_description: Some("Performs a risky action.".to_string()),
         mcp_app_resource_uri: None,
-        codex_apps_meta: None,
+        crewon_apps_meta: None,
         openai_file_input_params: None,
     };
 
@@ -2827,7 +2828,7 @@ async fn approve_mode_skips_guardian_in_every_permission_mode() {
     ] {
         let (mut session, mut turn_context) = make_session_and_context().await;
         turn_context.auth_manager = Some(crate::test_support::auth_manager_from_auth(
-            codex_login::CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+            crewon_login::CrewonAuth::create_dummy_chatgpt_auth_for_testing(),
         ));
         turn_context
             .approval_policy

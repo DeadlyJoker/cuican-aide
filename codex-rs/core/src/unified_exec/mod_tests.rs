@@ -1,6 +1,6 @@
 use super::head_tail_buffer::HeadTailBuffer;
 use super::*;
-use crate::codex_thread::BackgroundTerminalInfo;
+use crate::crewon_thread::BackgroundTerminalInfo;
 use crate::exec::ExecCapturePolicy;
 use crate::exec::ExecExpiration;
 use crate::sandboxing::ExecRequest;
@@ -11,21 +11,21 @@ use crate::tools::context::ExecCommandToolOutput;
 use crate::unified_exec::WriteStdinRequest;
 use crate::unified_exec::process::OutputHandles;
 use async_trait::async_trait;
-use codex_exec_server::ExecProcess;
-use codex_exec_server::ExecProcessEventReceiver;
-use codex_exec_server::ExecServerError;
-use codex_exec_server::ProcessId;
-use codex_exec_server::ProcessSignal;
-use codex_exec_server::ReadResponse;
-use codex_exec_server::StartedExecProcess;
-use codex_exec_server::WriteResponse;
-use codex_exec_server::WriteStatus;
-use codex_sandboxing::SandboxType;
-use codex_utils_output_truncation::TruncationPolicy;
-use codex_utils_output_truncation::approx_token_count;
 use core_test_support::get_remote_test_env;
 use core_test_support::skip_if_sandbox;
-use core_test_support::test_codex::test_env as remote_test_env;
+use core_test_support::test_crewon::test_env as remote_test_env;
+use crewon_exec_server::ExecProcess;
+use crewon_exec_server::ExecProcessEventReceiver;
+use crewon_exec_server::ExecServerError;
+use crewon_exec_server::ProcessId;
+use crewon_exec_server::ProcessSignal;
+use crewon_exec_server::ReadResponse;
+use crewon_exec_server::StartedExecProcess;
+use crewon_exec_server::WriteResponse;
+use crewon_exec_server::WriteStatus;
+use crewon_sandboxing::SandboxType;
+use crewon_utils_output_truncation::TruncationPolicy;
+use crewon_utils_output_truncation::approx_token_count;
 use pretty_assertions::assert_eq;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -365,7 +365,7 @@ async fn unified_exec_persists_across_requests() -> anyhow::Result<()> {
     write_stdin(
         &session,
         process_id,
-        "export CODEX_INTERACTIVE_SHELL_VAR=codex\n",
+        "export CODEX_INTERACTIVE_SHELL_VAR=crewon\n",
         /*yield_time_ms*/ 2_500,
     )
     .await?;
@@ -380,7 +380,7 @@ async fn unified_exec_persists_across_requests() -> anyhow::Result<()> {
     assert!(
         out_2
             .truncated_output(DEFAULT_MAX_OUTPUT_TOKENS)
-            .contains("codex"),
+            .contains("crewon"),
         "expected environment variable output"
     );
 
@@ -406,7 +406,7 @@ async fn multi_unified_exec_sessions() -> anyhow::Result<()> {
     write_stdin(
         &session,
         session_a,
-        "export CODEX_INTERACTIVE_SHELL_VAR=codex\n",
+        "export CODEX_INTERACTIVE_SHELL_VAR=crewon\n",
         /*yield_time_ms*/ 2_500,
     )
     .await?;
@@ -427,7 +427,7 @@ async fn multi_unified_exec_sessions() -> anyhow::Result<()> {
     assert!(
         !out_2
             .truncated_output(DEFAULT_MAX_OUTPUT_TOKENS)
-            .contains("codex"),
+            .contains("crewon"),
         "short command should run in a fresh shell"
     );
 
@@ -441,7 +441,7 @@ async fn multi_unified_exec_sessions() -> anyhow::Result<()> {
     assert!(
         out_3
             .truncated_output(DEFAULT_MAX_OUTPUT_TOKENS)
-            .contains("codex"),
+            .contains("crewon"),
         "session should preserve state"
     );
 
@@ -547,7 +547,7 @@ async fn requests_with_large_timeout_are_capped() -> anyhow::Result<()> {
     let result = exec_command(
         &session,
         &turn,
-        "echo codex",
+        "echo crewon",
         /*yield_time_ms*/ 120_000,
         /*workdir*/ None,
     )
@@ -557,7 +557,7 @@ async fn requests_with_large_timeout_are_capped() -> anyhow::Result<()> {
     assert!(
         result
             .truncated_output(DEFAULT_MAX_OUTPUT_TOKENS)
-            .contains("codex")
+            .contains("crewon")
     );
 
     Ok(())
@@ -570,7 +570,7 @@ async fn completed_commands_do_not_persist_sessions() -> anyhow::Result<()> {
     let result = exec_command(
         &session,
         &turn,
-        "echo codex",
+        "echo crewon",
         /*yield_time_ms*/ 2_500,
         /*workdir*/ None,
     )
@@ -583,7 +583,7 @@ async fn completed_commands_do_not_persist_sessions() -> anyhow::Result<()> {
     assert!(
         result
             .truncated_output(DEFAULT_MAX_OUTPUT_TOKENS)
-            .contains("codex")
+            .contains("crewon")
     );
 
     assert!(
@@ -795,7 +795,7 @@ async fn completed_pipe_commands_preserve_exit_code() -> anyhow::Result<()> {
         shell_env(),
     );
 
-    let environment = codex_exec_server::Environment::default_for_tests();
+    let environment = crewon_exec_server::Environment::default_for_tests();
     let process = UnifiedExecProcessManager::default()
         .open_session_with_exec_env(
             /*process_id*/ 1234,

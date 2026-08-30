@@ -37,6 +37,34 @@ impl ThreadRequestProcessor {
         let thread_id = ThreadId::from_string(&params.thread_id)
             .map_err(|err| invalid_request(format!("invalid thread id: {err}")))?;
 
+        match self.thread_manager.get_thread(thread_id).await {
+            Ok(thread) => {
+                super::cloud_agent_thread_source_fence::ensure_loaded_thread_mutation_allowed(
+                    thread.as_ref(),
+                    "thread/delete",
+                )
+                .await?;
+            }
+            Err(_) => match self
+                .thread_store
+                .read_thread(StoreReadThreadParams {
+                    thread_id,
+                    include_archived: true,
+                    include_history: false,
+                })
+                .await
+            {
+                Ok(thread) => {
+                    super::cloud_agent_thread_source_fence::ensure_thread_source_mutation_allowed(
+                        thread.thread_source.as_ref(),
+                        "thread/delete",
+                    )?;
+                }
+                Err(ThreadStoreError::ThreadNotFound { .. }) => {}
+                Err(error) => return Err(thread_store_delete_error(error)),
+            },
+        }
+
         let mut thread_ids = self.state_db_spawn_subtree_thread_ids(thread_id).await?;
         let mut seen = thread_ids.iter().copied().collect::<HashSet<_>>();
 

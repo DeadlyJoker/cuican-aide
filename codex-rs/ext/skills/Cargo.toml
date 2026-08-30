@@ -1,11 +1,11 @@
 [package]
 edition.workspace = true
 license.workspace = true
-name = "codex-skills-extension"
+name = "crewon-skills-extension"
 version.workspace = true
 
 [lib]
-name = "codex_skills_extension"
+name = "crewon_skills_extension"
 path = "src/lib.rs"
 test = false
 doctest = false
@@ -14,14 +14,14 @@ doctest = false
 workspace = true
 
 [dependencies]
-codex-core-skills = { workspace = true }
-codex-exec-server = { workspace = true }
-codex-extension-api = { workspace = true }
-codex-mcp = { workspace = true }
-codex-protocol = { workspace = true }
-codex-tools = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
-codex-utils-string = { workspace = true }
+crewon-core-skills = { workspace = true }
+crewon-exec-server = { workspace = true }
+crewon-extension-api = { workspace = true }
+crewon-mcp = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-tools = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
+crewon-utils-string = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }

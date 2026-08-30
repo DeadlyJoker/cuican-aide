@@ -1,5 +1,5 @@
 [package]
-name = "codex-file-system"
+name = "crewon-file-system"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -9,10 +9,11 @@ workspace = true
 
 [dependencies]
 async-trait = { workspace = true }
-codex-protocol = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 
 [lib]
+name = "crewon_file_system"
 test = false
 doctest = false

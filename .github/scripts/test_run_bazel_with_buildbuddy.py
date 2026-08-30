@@ -16,40 +16,49 @@ class RunBazelWithBuildBuddyTest(unittest.TestCase):
         self,
         temp_dir: str,
         *,
-        repository: str = "openai/codex",
+        repository: str = "crewon/crewon",
         fork: bool = False,
         event_name: str = "pull_request",
+        trusted_repository: str | None = "crewon/crewon",
     ) -> dict[str, str]:
         event_path = Path(temp_dir) / "event.json"
         event_path.write_text(
             json.dumps({"pull_request": {"head": {"repo": {"fork": fork}}}}),
             encoding="utf-8",
         )
-        return {
+        env = {
             "BUILDBUDDY_API_KEY": "token",
             "GITHUB_ACTIONS": "true",
             "GITHUB_EVENT_NAME": event_name,
             "GITHUB_EVENT_PATH": str(event_path),
             "GITHUB_REPOSITORY": repository,
         }
+        if trusted_repository is not None:
+            env["CREWON_TRUSTED_UPSTREAM_REPOSITORY"] = trusted_repository
+        return env
 
     def test_keyless_invocation_drops_remote_ci_configuration(self) -> None:
         self.assertIsNone(
             run_bazel_with_buildbuddy.remote_config(
-                ["build", "--config=ci-linux", "//codex-rs/cli:codex"],
+                ["build", "--config=ci-linux", "//codex-rs/app-server:app-server"],
                 {},
             )
         )
         self.assertEqual(
             run_bazel_with_buildbuddy.bazel_args_with_remote_config(
-                ["build", "--config=ci-linux", "--", "//codex-rs/cli:codex"],
+                [
+                    "build",
+                    "--config=ci-linux",
+                    "--",
+                    "//codex-rs/app-server:app-server",
+                ],
                 {},
             ),
-            ["build", "--", "//codex-rs/cli:codex"],
+            ["build", "--", "//codex-rs/app-server:app-server"],
         )
 
     def test_program_arguments_after_separator_do_not_select_or_lose_rbe(self) -> None:
-        args = ["run", "//codex-rs/cli:codex", "--", "--config=remote"]
+        args = ["run", "//codex-rs/app-server:app-server", "--", "--config=remote"]
 
         self.assertEqual(
             run_bazel_with_buildbuddy.bazel_args_with_remote_config(args, {}),
@@ -62,22 +71,27 @@ class RunBazelWithBuildBuddyTest(unittest.TestCase):
             "buildbuddy-generic",
         )
 
-    def test_upstream_push_selects_openai_rbe_before_target_separator(self) -> None:
+    def test_trusted_push_selects_private_rbe_before_target_separator(self) -> None:
         with TemporaryDirectory() as temp_dir:
             env = self.github_env(temp_dir, event_name="push")
 
             self.assertEqual(
                 run_bazel_with_buildbuddy.bazel_args_with_remote_config(
-                    ["build", "--config=ci-linux", "--", "//codex-rs/cli:codex"],
+                    [
+                        "build",
+                        "--config=ci-linux",
+                        "--",
+                        "//codex-rs/app-server:app-server",
+                    ],
                     env,
                 ),
                 [
                     "build",
-                    "--config=buildbuddy-openai-rbe",
+                    "--config=buildbuddy-private-rbe",
                     "--remote_header=x-buildbuddy-api-key=token",
                     "--config=ci-linux",
                     "--",
-                    "//codex-rs/cli:codex",
+                    "//codex-rs/app-server:app-server",
                 ],
             )
 
@@ -86,7 +100,11 @@ class RunBazelWithBuildBuddyTest(unittest.TestCase):
 
         self.assertEqual(
             run_bazel_with_buildbuddy.bazel_args_with_remote_config(
-                ["build", "--config=ci-windows-cross", "//codex-rs/cli:codex"],
+                [
+                    "build",
+                    "--config=ci-windows-cross",
+                    "//codex-rs/app-server:app-server",
+                ],
                 env,
             ),
             [
@@ -94,7 +112,7 @@ class RunBazelWithBuildBuddyTest(unittest.TestCase):
                 "--config=buildbuddy-generic-rbe",
                 "--remote_header=x-buildbuddy-api-key=fork-token",
                 "--config=ci-windows-cross",
-                "//codex-rs/cli:codex",
+                "//codex-rs/app-server:app-server",
             ],
         )
 
@@ -124,16 +142,16 @@ class RunBazelWithBuildBuddyTest(unittest.TestCase):
                     ],
                 )
 
-    def test_same_repository_pull_request_selects_openai_host(self) -> None:
+    def test_same_repository_pull_request_selects_private_host(self) -> None:
         with TemporaryDirectory() as temp_dir:
             self.assertEqual(
                 run_bazel_with_buildbuddy.remote_config(
                     ["build", "--config=ci-v8"], self.github_env(temp_dir)
                 ),
-                "buildbuddy-openai-rbe",
+                "buildbuddy-private-rbe",
             )
 
-    def test_fork_pull_request_cannot_select_openai_host(self) -> None:
+    def test_fork_pull_request_cannot_select_private_host(self) -> None:
         with TemporaryDirectory() as temp_dir:
             env = self.github_env(temp_dir, fork=True)
 
@@ -144,9 +162,20 @@ class RunBazelWithBuildBuddyTest(unittest.TestCase):
                 "buildbuddy-generic-rbe",
             )
 
-    def test_run_in_fork_repository_cannot_select_openai_host(self) -> None:
+    def test_unconfigured_trusted_repository_cannot_select_private_host(self) -> None:
         with TemporaryDirectory() as temp_dir:
-            env = self.github_env(temp_dir, repository="contributor/codex")
+            env = self.github_env(temp_dir, trusted_repository=None)
+
+            self.assertEqual(
+                run_bazel_with_buildbuddy.remote_config(
+                    ["build", "--config=ci-v8"], env
+                ),
+                "buildbuddy-generic-rbe",
+            )
+
+    def test_run_in_fork_repository_cannot_select_private_host(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            env = self.github_env(temp_dir, repository="contributor/crewon")
 
             self.assertEqual(
                 run_bazel_with_buildbuddy.remote_config(
@@ -161,7 +190,8 @@ class RunBazelWithBuildBuddyTest(unittest.TestCase):
                 "BUILDBUDDY_API_KEY": "token",
                 "GITHUB_ACTIONS": "true",
                 "GITHUB_EVENT_NAME": "pull_request",
-                "GITHUB_REPOSITORY": "openai/codex",
+                "GITHUB_REPOSITORY": "crewon/crewon",
+                "CREWON_TRUSTED_UPSTREAM_REPOSITORY": "crewon/crewon",
             }
             if event_path is not None:
                 env["GITHUB_EVENT_PATH"] = event_path
@@ -177,9 +207,17 @@ class RunBazelWithBuildBuddyTest(unittest.TestCase):
             run_bazel_with_buildbuddy.bazel_command(
                 "info",
                 "execution_root",
-                env={"CODEX_BAZEL_BIN": "fake-bazel"},
+                env={"CREWON_BAZEL_BIN": "fake-bazel"},
             ),
             ["fake-bazel", "info", "execution_root"],
+        )
+        self.assertEqual(
+            run_bazel_with_buildbuddy.bazel_command(
+                "info",
+                "execution_root",
+                env={"CODEX_BAZEL_BIN": "legacy-fake-bazel"},
+            ),
+            ["legacy-fake-bazel", "info", "execution_root"],
         )
 
     def test_bazel_command_normalizes_github_actions_startup_options(self) -> None:
@@ -222,7 +260,8 @@ class RunBazelWithBuildBuddyTest(unittest.TestCase):
             f"import sys; sys.exit(37 if sys.argv[1] == {spaced_arg!r} else 91)"
         )
         env = os.environ.copy()
-        env["CODEX_BAZEL_BIN"] = sys.executable
+        env["CREWON_BAZEL_BIN"] = sys.executable
+        env.pop("CODEX_BAZEL_BIN", None)
         env.pop("BAZEL_OUTPUT_USER_ROOT", None)
         env.pop("BUILDBUDDY_API_KEY", None)
         env.pop("GITHUB_ACTIONS", None)

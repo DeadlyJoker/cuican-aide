@@ -1,0 +1,12 @@
+load("//:defs.bzl", "crewon_rust_crate")
+
+crewon_rust_crate(
+    name = "provider-agent-platform",
+    crate_name = "crewon_provider_agent_platform",
+    compile_data = [
+        "//codex-rs/app-server-protocol:schema/canonical/provider_discovery.v1.json",
+        "//codex-rs/app-server-protocol:schema/canonical/provider_dynamic_execution.v3.json",
+        "//codex-rs/app-server-protocol:schema/canonical/provider_identity_source.v1.json",
+    ],
+    test_data_extra = ["tests/fixtures/provider_rs256_test_private.pem"],
+)

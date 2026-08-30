@@ -1,0 +1,45 @@
+[package]
+edition.workspace = true
+license.workspace = true
+name = "crewon-mcp"
+version.workspace = true
+
+[lib]
+name = "crewon_mcp"
+path = "src/lib.rs"
+doctest = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+arc-swap = { workspace = true }
+async-channel = { workspace = true }
+crewon-async-utils = { workspace = true }
+crewon-api = { workspace = true }
+crewon-config = { workspace = true }
+crewon-exec-server = { workspace = true }
+crewon-login = { workspace = true }
+crewon-model-provider = { workspace = true }
+crewon-otel = { workspace = true }
+crewon-plugin = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-rmcp-client = { workspace = true }
+crewon-utils-plugins = { workspace = true }
+futures = { workspace = true }
+regex-lite = { workspace = true }
+rmcp = { workspace = true, default-features = false, features = ["base64", "macros", "schemars", "server"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sha1 = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "macros", "rt-multi-thread"] }
+tokio-util = { workspace = true, features = ["rt"] }
+tracing = { workspace = true }
+url = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
+rmcp = { workspace = true, default-features = false, features = ["base64", "macros", "schemars", "server"] }
+tempfile = { workspace = true }

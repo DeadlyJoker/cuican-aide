@@ -21,12 +21,12 @@ pub enum PullEvent {
 }
 
 /// A simple observer for pull progress events. Implementations decide how to
-/// render progress (CLI, TUI, logs, ...).
+/// render progress (interactive stderr, rich clients, logs, ...).
 pub trait PullProgressReporter {
     fn on_event(&mut self, event: &PullEvent) -> io::Result<()>;
 }
 
-/// A minimal CLI reporter that writes inline progress to stderr.
+/// A minimal interactive reporter that writes inline progress to stderr.
 pub struct CliProgressReporter {
     printed_header: bool,
     last_line_len: usize,
@@ -135,8 +135,8 @@ impl PullProgressReporter for CliProgressReporter {
     }
 }
 
-/// For now the TUI reporter delegates to the CLI reporter. This keeps UI and
-/// CLI behavior aligned until a dedicated TUI integration is implemented.
+/// For now the rich-client reporter delegates to the stderr reporter. This keeps
+/// interactive behavior aligned until a dedicated rich-client integration exists.
 #[derive(Default)]
 pub struct TuiProgressReporter(CliProgressReporter);
 

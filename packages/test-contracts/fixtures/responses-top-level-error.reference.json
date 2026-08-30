@@ -1,0 +1,105 @@
+{
+  "schemaVersion": "crewon.responses-top-level-error.v0",
+  "caseId": "AR-038-responses-top-level-error",
+  "cases": [
+    {
+      "name": "nested retryable provider error",
+      "events": [
+        {
+          "type": "error",
+          "sequence_number": 0,
+          "error": {
+            "code": "server_error",
+            "message": "provider temporarily unavailable"
+          }
+        },
+        {
+          "type": "response.created",
+          "sequence_number": 1,
+          "response": { "id": "resp-poison-retryable" }
+        },
+        {
+          "type": "response.output_text.delta",
+          "sequence_number": 2,
+          "delta": "poison"
+        },
+        {
+          "type": "response.output_item.done",
+          "sequence_number": 3,
+          "item": {
+            "type": "message",
+            "role": "assistant",
+            "content": [{ "type": "output_text", "text": "poison" }]
+          }
+        },
+        {
+          "type": "response.completed",
+          "sequence_number": 4,
+          "response": {
+            "id": "resp-poison-retryable",
+            "status": "completed",
+            "usage": {
+              "input_tokens": 11,
+              "output_tokens": 7,
+              "total_tokens": 18
+            }
+          }
+        }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "terminal": "failed",
+        "errorCategory": "provider",
+        "retryable": true,
+        "partialOutput": "",
+        "completedHistory": [],
+        "usage": null,
+        "responseId": null
+      }
+    },
+    {
+      "name": "flat non-retryable provider error",
+      "events": [
+        {
+          "type": "error",
+          "sequence_number": 0,
+          "code": "invalid_prompt",
+          "message": "request rejected"
+        },
+        {
+          "type": "response.created",
+          "sequence_number": 1,
+          "response": { "id": "resp-poison-nonretryable" }
+        },
+        {
+          "type": "response.output_text.delta",
+          "sequence_number": 2,
+          "delta": "poison"
+        },
+        {
+          "type": "response.completed",
+          "sequence_number": 3,
+          "response": {
+            "id": "resp-poison-nonretryable",
+            "status": "completed",
+            "usage": {
+              "input_tokens": 5,
+              "output_tokens": 6,
+              "total_tokens": 11
+            }
+          }
+        }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "terminal": "failed",
+        "errorCategory": "provider",
+        "retryable": false,
+        "partialOutput": "",
+        "completedHistory": [],
+        "usage": null,
+        "responseId": null
+      }
+    }
+  ]
+}

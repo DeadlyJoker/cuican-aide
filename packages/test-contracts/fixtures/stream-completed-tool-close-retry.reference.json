@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "crewon.agent-retry-boundary.v0",
+  "caseId": "AR-002-completed-tool-close-retry",
+  "completedItem": {
+    "type": "tool_call",
+    "kind": "function",
+    "callId": "missing-terminal-call",
+    "name": "unsupported_tool",
+    "input": "{}"
+  },
+  "expectedSecondRequestItems": [
+    {
+      "type": "tool_call",
+      "kind": "function",
+      "callId": "missing-terminal-call",
+      "name": "unsupported_tool",
+      "input": "{}"
+    },
+    {
+      "type": "tool_result",
+      "kind": "function",
+      "callId": "missing-terminal-call",
+      "output": "unsupported call: unsupported_tool"
+    }
+  ],
+  "finalState": {
+    "requestCount": 2,
+    "tsCandidateToolHandlerInvocationCount": 1,
+    "toolRequestedEventCount": 1,
+    "toolCompletedEventCount": 1,
+    "finalOutput": "done",
+    "duplicateFinalOutput": false
+  },
+  "rustSourcePointer": "codex-rs/core/tests/suite/stream_no_completed.rs#completed_tool_item_is_preserved_in_retry_request"
+}

@@ -6,9 +6,9 @@ mod executor;
 mod host;
 mod orchestrator;
 
-use codex_core_skills::HostLoadedSkills;
-use codex_mcp::McpResourceClient;
-use codex_protocol::capabilities::SelectedCapabilityRoot;
+use crewon_core_skills::HostLoadedSkills;
+use crewon_mcp::McpResourceClient;
+use crewon_protocol::capabilities::SelectedCapabilityRoot;
 
 use crate::catalog::SkillAuthority;
 use crate::catalog::SkillCatalog;

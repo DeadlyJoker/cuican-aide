@@ -1,11 +1,11 @@
 use anyhow::Result;
 use app_test_support::TestAppServer;
 use app_test_support::to_response;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::MarketplaceAddParams;
-use codex_app_server_protocol::MarketplaceAddResponse;
-use codex_app_server_protocol::RequestId;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::MarketplaceAddParams;
+use crewon_app_server_protocol::MarketplaceAddResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 use tokio::time::Duration;
@@ -18,13 +18,13 @@ async fn marketplace_add_local_directory_source() -> Result<()> {
     let codex_home = TempDir::new()?;
     let source = codex_home.path().join("marketplace");
     std::fs::create_dir_all(source.join(".agents/plugins"))?;
-    std::fs::create_dir_all(source.join("plugins/sample/.codex-plugin"))?;
+    std::fs::create_dir_all(source.join("plugins/sample/.crewon-plugin"))?;
     std::fs::write(
         source.join(".agents/plugins/marketplace.json"),
         r#"{"name":"debug","plugins":[]}"#,
     )?;
     std::fs::write(
-        source.join("plugins/sample/.codex-plugin/plugin.json"),
+        source.join("plugins/sample/.crewon-plugin/plugin.json"),
         r#"{"name":"sample"}"#,
     )?;
     std::fs::write(source.join("plugins/sample/marker.txt"), "local ref")?;

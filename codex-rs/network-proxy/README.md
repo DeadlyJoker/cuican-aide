@@ -1,6 +1,6 @@
-# codex-network-proxy
+# crewon-network-proxy
 
-`codex-network-proxy` is Codex's local network policy enforcement proxy. It runs:
+`crewon-network-proxy` is Crewon's local network policy enforcement proxy. It runs:
 
 - an HTTP proxy (default `127.0.0.1:3128`)
 - a SOCKS5 proxy (default `127.0.0.1:8081`, enabled by default)
@@ -11,7 +11,7 @@ It enforces an allow/deny policy and a "limited" mode intended for read-only net
 
 ### 1) Configure
 
-`codex-network-proxy` reads from Codex's merged `config.toml` (via `codex-core` config loading).
+`crewon-network-proxy` reads from Crewon's merged `config.toml` (via `crewon-core` config loading).
 
 Network settings live under the selected permissions profile. Example config:
 
@@ -34,9 +34,9 @@ allow_upstream_proxy = true
 dangerously_allow_non_loopback_proxy = false
 mode = "full" # default when unset; use "limited" for read-only mode
 # HTTPS MITM is enabled automatically when `mode = "limited"` or when MITM hooks are configured.
-# CA cert/key are managed internally under $CODEX_HOME/proxy/ (ca.pem + ca.key).
+# CA cert/key are managed internally under $CREWON_HOME/proxy/ (ca.pem + ca.key).
 # When MITM is active, spawned commands receive CA bundle env vars pointing at
-# immutable bundles under $CODEX_HOME/proxy/ so common HTTPS clients trust the managed CA.
+# immutable bundles under $CREWON_HOME/proxy/ so common HTTPS clients trust the managed CA.
 
 # If false, local/private networking is rejected. Explicit allowlisting of local IP literals
 # (or `localhost`) is required to permit them.
@@ -48,11 +48,11 @@ allow_local_binding = false
 dangerously_allow_all_unix_sockets = false
 
 # Hosts must match the allowlist (unless denied).
-# Use exact hosts or scoped wildcards like `*.openai.com` or `**.openai.com`.
+# Use exact hosts or scoped wildcards like `*.example.com` or `**.example.com`.
 # The global `*` wildcard is rejected.
 # If no domain entries are marked `allow`, the proxy blocks requests until an allowlist is configured.
 [permissions.workspace.network.domains]
-"*.openai.com" = "allow"
+"*.example.com" = "allow"
 "localhost" = "allow"
 "127.0.0.1" = "allow"
 "::1" = "allow"
@@ -62,7 +62,7 @@ dangerously_allow_all_unix_sockets = false
 [permissions.workspace.network.mitm.hooks.github_write]
 host = "api.github.com"
 methods = ["POST", "PUT"]
-path_prefixes = ["/repos/openai/"]
+path_prefixes = ["/repos/crewon/"]
 action = ["strip_auth"]
 
 # Named actions can be shared across hooks and overridden by higher-precedence config layers.
@@ -77,7 +77,7 @@ strip_request_headers = ["authorization"]
 ### 2) Run the proxy
 
 ```bash
-cargo run -p codex-network-proxy --
+cargo run -p crewon-network-proxy --
 ```
 
 ### 3) Point a client at it
@@ -116,10 +116,10 @@ through the same host allowlist/denylist checks.
 
 ## Library API
 
-`codex-network-proxy` can be embedded as a library with a thin API:
+`crewon-network-proxy` can be embedded as a library with a thin API:
 
 ```rust
-use codex_network_proxy::{NetworkProxy, NetworkDecision, NetworkPolicyRequest};
+use crewon_network_proxy::{NetworkProxy, NetworkDecision, NetworkPolicyRequest};
 
 let proxy = NetworkProxy::builder()
     .http_addr("127.0.0.1:8080".parse()?)
@@ -157,12 +157,12 @@ the decider can auto-allow network requests originating from that command.
 
 ## OTEL Audit Events (embedded/managed)
 
-When `codex-network-proxy` is embedded in managed Codex runtime, policy decisions emit structured
-OTEL-compatible events with `target=codex_otel.network_proxy`.
+When `crewon-network-proxy` is embedded in managed Crewon runtime, policy decisions emit structured
+OTEL-compatible events with `target=crewon_otel.network_proxy`.
 
 Event name:
 
-- `codex.network_proxy.policy_decision`
+- `crewon.network_proxy.policy_decision`
   - emitted for each policy decision (`domain` and `non_domain`).
   - `network.policy.scope = "domain"` for host-policy evaluations (`evaluate_host_policy`).
   - `network.policy.scope = "non_domain"` for mode-guard/proxy-state checks (including unix-socket guard paths and unix-socket allow decisions).
@@ -203,7 +203,7 @@ Audit events intentionally avoid logging full URL/path/query data.
 
 ## Security notes (important)
 
-This section documents the protections implemented by `codex-network-proxy`, and the boundaries of
+This section documents the protections implemented by `crewon-network-proxy`, and the boundaries of
 what it can reasonably guarantee.
 
 - Allowlist-first policy: if `domains` has no `allow` entries, requests are blocked until an allowlist is configured.

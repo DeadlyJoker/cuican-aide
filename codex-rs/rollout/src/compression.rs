@@ -228,6 +228,7 @@ mod worker {
     use std::fs::FileTimes;
     use std::fs::Permissions;
     use std::io;
+    use std::io::BufRead;
     use std::io::Write;
     use std::path::Path;
     use std::path::PathBuf;
@@ -241,8 +242,15 @@ mod worker {
 
     use tokio::task::JoinSet;
 
+    use crewon_protocol::ThreadId;
+    use crewon_protocol::protocol::RolloutItem;
+    use crewon_protocol::protocol::RolloutLine;
+
     use crate::ARCHIVED_SESSIONS_SUBDIR;
+    use crate::RolloutMutation;
+    use crate::RolloutWriterLease;
     use crate::SESSIONS_SUBDIR;
+    use crate::is_legacy_fence_violation;
 
     use super::RolloutFile;
     use super::metrics;
@@ -364,7 +372,13 @@ mod worker {
             let mut stats = CompressionStats::default();
             if started_at.elapsed() < WORKER_MAX_RUNTIME {
                 let archived_root = codex_home.join(ARCHIVED_SESSIONS_SUBDIR);
-                compress_rollouts_in_root(archived_root.as_path(), started_at, &mut stats).await?;
+                compress_rollouts_in_root(
+                    codex_home.as_path(),
+                    archived_root.as_path(),
+                    started_at,
+                    &mut stats,
+                )
+                .await?;
             }
             Ok::<_, io::Error>(stats)
         }
@@ -402,6 +416,7 @@ mod worker {
     }
 
     async fn compress_rollouts_in_root(
+        codex_home: &Path,
         root: &Path,
         started_at: Instant,
         stats: &mut CompressionStats,
@@ -467,9 +482,11 @@ mod worker {
                 while jobs.len() >= MAX_CONCURRENT_COMPRESSION_JOBS {
                     collect_next_compression_job(&mut jobs, stats).await;
                 }
+                let codex_home = codex_home.to_path_buf();
                 jobs.spawn_blocking(move || {
                     let started_at = Instant::now();
-                    let result = compress_rollout_if_cold_blocking(path.as_path());
+                    let result =
+                        compress_rollout_if_cold_blocking(codex_home.as_path(), path.as_path());
                     let duration = started_at.elapsed();
                     (path, duration, result)
                 });
@@ -484,6 +501,8 @@ mod worker {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     enum CompressionOutcome {
         Compressed,
+        SkippedActiveWriter,
+        SkippedLegacyFence,
         SkippedNotCold,
         SkippedChanged,
         SkippedAlreadyCompressed,
@@ -493,6 +512,8 @@ mod worker {
         fn tag(self) -> &'static str {
             match self {
                 CompressionOutcome::Compressed => "compressed",
+                CompressionOutcome::SkippedActiveWriter => "skipped_active_writer",
+                CompressionOutcome::SkippedLegacyFence => "skipped_legacy_fence",
                 CompressionOutcome::SkippedNotCold => "skipped_not_cold",
                 CompressionOutcome::SkippedChanged => "skipped_changed",
                 CompressionOutcome::SkippedAlreadyCompressed => "skipped_already_compressed",
@@ -549,6 +570,8 @@ mod worker {
                         stats.compressed = stats.compressed.saturating_add(1);
                     }
                     CompressionOutcome::SkippedNotCold
+                    | CompressionOutcome::SkippedActiveWriter
+                    | CompressionOutcome::SkippedLegacyFence
                     | CompressionOutcome::SkippedChanged
                     | CompressionOutcome::SkippedAlreadyCompressed => {
                         stats.skipped = stats.skipped.saturating_add(1);
@@ -580,7 +603,46 @@ mod worker {
         }
     }
 
-    fn compress_rollout_if_cold_blocking(path: &Path) -> io::Result<CompressionMeasurement> {
+    fn compress_rollout_if_cold_blocking(
+        codex_home: &Path,
+        path: &Path,
+    ) -> io::Result<CompressionMeasurement> {
+        let thread_id = thread_id_for_rollout(path)?;
+        let _writer_lease = match RolloutWriterLease::acquire_for_existing_mutation(
+            codex_home,
+            path,
+            thread_id,
+            RolloutMutation::Compact,
+        ) {
+            Ok(writer_lease) => writer_lease,
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                return Ok(CompressionMeasurement::new(
+                    CompressionOutcome::SkippedActiveWriter,
+                    /*source_bytes*/ None,
+                    /*compressed_bytes*/ None,
+                ));
+            }
+            Err(err) if is_legacy_fence_violation(&err) => {
+                return Ok(CompressionMeasurement::new(
+                    CompressionOutcome::SkippedLegacyFence,
+                    /*source_bytes*/ None,
+                    /*compressed_bytes*/ None,
+                ));
+            }
+            Err(err) => return Err(err),
+        };
+
+        let compressed_path = path::compressed_rollout_path(path);
+        if !path.exists() {
+            let outcome = if compressed_path.exists() {
+                CompressionOutcome::SkippedAlreadyCompressed
+            } else {
+                CompressionOutcome::SkippedChanged
+            };
+            return Ok(CompressionMeasurement::new(
+                outcome, /*source_bytes*/ None, /*compressed_bytes*/ None,
+            ));
+        }
         let before = match cold_file_state(path)? {
             ColdFileState::Cold(state) => state,
             ColdFileState::NotCold(state) => {
@@ -592,7 +654,6 @@ mod worker {
             }
         };
         let source_bytes = Some(before.len);
-        let compressed_path = path::compressed_rollout_path(path);
         if compressed_path.exists() {
             return Ok(CompressionMeasurement::new(
                 CompressionOutcome::SkippedAlreadyCompressed,
@@ -649,6 +710,42 @@ mod worker {
             source_bytes,
             Some(compressed_bytes),
         ))
+    }
+
+    fn thread_id_for_rollout(path: &Path) -> io::Result<ThreadId> {
+        let filename_thread_id = path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .and_then(crate::list::parse_timestamp_uuid_from_filename)
+            .and_then(|(_timestamp, uuid)| ThreadId::from_string(&uuid.to_string()).ok());
+
+        let file = File::open(path)?;
+        let mut metadata_thread_id = None;
+        for line in io::BufReader::new(file).lines() {
+            let line = line?;
+            let Ok(line) = serde_json::from_str::<RolloutLine>(&line) else {
+                continue;
+            };
+            if let RolloutItem::SessionMeta(session_meta) = line.item {
+                metadata_thread_id = Some(session_meta.meta.id);
+                break;
+            }
+        }
+
+        match (filename_thread_id, metadata_thread_id) {
+            (Some(filename), Some(metadata)) if filename != metadata => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!(
+                    "rollout filename thread id {filename} does not match session metadata {metadata}: {}",
+                    path.display()
+                ),
+            )),
+            (Some(thread_id), _) | (None, Some(thread_id)) => Ok(thread_id),
+            (None, None) => Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                format!("failed to determine rollout thread id: {}", path.display()),
+            )),
+        }
     }
 
     struct FileState {
@@ -867,21 +964,21 @@ mod metrics {
     }
 
     fn counter(name: &str, tags: &[(&str, &str)]) {
-        let Some(metrics) = codex_otel::global() else {
+        let Some(metrics) = crewon_otel::global() else {
             return;
         };
         let _ = metrics.counter(name, /*inc*/ 1, tags);
     }
 
     fn histogram(name: &str, value: i64, tags: &[(&str, &str)]) {
-        let Some(metrics) = codex_otel::global() else {
+        let Some(metrics) = crewon_otel::global() else {
             return;
         };
         let _ = metrics.histogram(name, value, tags);
     }
 
     fn duration_histogram(name: &str, duration: Duration, tags: &[(&str, &str)]) {
-        let Some(metrics) = codex_otel::global() else {
+        let Some(metrics) = crewon_otel::global() else {
             return;
         };
         let _ = metrics.record_duration(name, duration, tags);

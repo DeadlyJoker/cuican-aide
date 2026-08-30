@@ -1,37 +1,301 @@
 use super::*;
 use base64::Engine;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
-use codex_protocol::AgentPath;
-use codex_protocol::models::BaseInstructions;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::DEFAULT_IMAGE_DETAIL;
-use codex_protocol::models::FunctionCallOutputBody;
-use codex_protocol::models::FunctionCallOutputContentItem;
-use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::ImageDetail;
-use codex_protocol::models::LocalShellAction;
-use codex_protocol::models::LocalShellExecAction;
-use codex_protocol::models::LocalShellStatus;
-use codex_protocol::models::ReasoningItemContent;
-use codex_protocol::models::ReasoningItemReasoningSummary;
-use codex_protocol::openai_models::InputModality;
-use codex_protocol::openai_models::default_input_modalities;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::InterAgentCommunication;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_protocol::protocol::TurnContextItem;
-use codex_utils_output_truncation::TruncationPolicy;
-use codex_utils_output_truncation::truncate_text;
+use crewon_protocol::AgentPath;
+use crewon_protocol::models::BaseInstructions;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::DEFAULT_IMAGE_DETAIL;
+use crewon_protocol::models::FunctionCallOutputBody;
+use crewon_protocol::models::FunctionCallOutputContentItem;
+use crewon_protocol::models::FunctionCallOutputPayload;
+use crewon_protocol::models::ImageDetail;
+use crewon_protocol::models::LocalShellAction;
+use crewon_protocol::models::LocalShellExecAction;
+use crewon_protocol::models::LocalShellStatus;
+use crewon_protocol::models::ReasoningItemContent;
+use crewon_protocol::models::ReasoningItemReasoningSummary;
+use crewon_protocol::openai_models::InputModality;
+use crewon_protocol::openai_models::default_input_modalities;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::InterAgentCommunication;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_protocol::protocol::TurnContextItem;
+use crewon_utils_output_truncation::TruncationPolicy;
+use crewon_utils_output_truncation::truncate_text;
 use image::ImageBuffer;
 use image::ImageFormat;
 use image::Luma;
 use image::Rgba;
 use pretty_assertions::assert_eq;
 use regex_lite::Regex;
+use serde::Deserialize;
 use std::path::PathBuf;
 
 const EXEC_FORMAT_MAX_BYTES: usize = 10_000;
 const EXEC_FORMAT_MAX_TOKENS: usize = 2_500;
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ContextNormalizationReference {
+    cases: Vec<ContextNormalizationCase>,
+}
+
+#[derive(Debug, Deserialize)]
+struct ContextNormalizationCase {
+    name: String,
+    input: Vec<ContextNormalizationItem>,
+    expected: Vec<ContextNormalizationItem>,
+    repairs: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RollbackParityReference {
+    schema_version: String,
+    cases: Vec<RollbackParityCase>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RollbackParityCase {
+    case_id: String,
+    support: RollbackParitySupport,
+    initial_items: Vec<RollbackParityItem>,
+    operations: Vec<RollbackParityOperation>,
+}
+
+#[derive(Debug, Deserialize)]
+struct RollbackParitySupport {
+    typescript: String,
+    rust: String,
+    reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RollbackParityItem {
+    sequence: u64,
+    item_id: String,
+    kind: String,
+}
+
+#[derive(Debug)]
+struct RollbackParityTrackedItem {
+    item: RollbackParityItem,
+    response: ResponseItem,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type", rename_all = "camelCase")]
+enum RollbackParityOperation {
+    Rollback {
+        #[serde(rename = "requestedTurns")]
+        requested_turns: u32,
+        expected: RollbackParityExpectedRollback,
+    },
+    Append {
+        items: Vec<RollbackParityItem>,
+        expected: RollbackParityExpectedState,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RollbackParityExpectedState {
+    effective_sequences: Vec<u64>,
+    remaining_item_ids: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RollbackParityExpectedRollback {
+    requested_turns: u32,
+    removed_turns: usize,
+    history_from_sequence: Option<u64>,
+    history_through_sequence: u64,
+    marker_history_sequence: u64,
+    effective_sequences: Vec<u64>,
+    remaining_item_ids: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ContextNormalizationItem {
+    Message {
+        role: String,
+        content: String,
+    },
+    ToolCall {
+        kind: String,
+        #[serde(rename = "callId")]
+        call_id: String,
+        name: String,
+        input: String,
+    },
+    ToolResult {
+        kind: String,
+        #[serde(rename = "callId")]
+        call_id: String,
+        output: String,
+    },
+}
+
+#[test]
+fn normalize_matches_shared_ar_028_reference() {
+    let reference: ContextNormalizationReference = serde_json::from_str(include_str!(
+        "../../../../packages/test-contracts/fixtures/context-normalization.reference.json"
+    ))
+    .expect("context normalization reference fixture must parse");
+
+    for case in reference.cases {
+        let mut history = create_history_with_items(
+            case.input
+                .iter()
+                .cloned()
+                .map(context_normalization_response_item)
+                .collect(),
+        );
+        let outcome = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            history.normalize_history(&default_input_modalities());
+        }));
+
+        if cfg!(debug_assertions) && !case.repairs.is_empty() {
+            assert!(
+                outcome.is_err(),
+                "debug normalization must reject repaired case: {}",
+                case.name
+            );
+            continue;
+        }
+        outcome.expect("clean or release normalization must complete");
+        let actual = history
+            .raw_items()
+            .iter()
+            .map(context_normalization_reference_item)
+            .collect::<Vec<_>>();
+        assert_eq!(actual, case.expected, "fixture case: {}", case.name);
+    }
+}
+
+fn context_normalization_response_item(item: ContextNormalizationItem) -> ResponseItem {
+    match item {
+        ContextNormalizationItem::Message { role, content } => ResponseItem::Message {
+            id: None,
+            content: vec![if role == "assistant" {
+                ContentItem::OutputText { text: content }
+            } else {
+                ContentItem::InputText { text: content }
+            }],
+            role,
+            phase: None,
+        },
+        ContextNormalizationItem::ToolCall {
+            kind,
+            call_id,
+            name,
+            input,
+        } if kind == "function" => ResponseItem::FunctionCall {
+            id: None,
+            name,
+            namespace: None,
+            arguments: input,
+            call_id,
+        },
+        ContextNormalizationItem::ToolCall {
+            kind,
+            call_id,
+            name,
+            input,
+        } if kind == "custom" => ResponseItem::CustomToolCall {
+            id: None,
+            status: None,
+            call_id,
+            name,
+            input,
+        },
+        ContextNormalizationItem::ToolResult {
+            kind,
+            call_id,
+            output,
+        } if kind == "function" => ResponseItem::FunctionCallOutput {
+            call_id,
+            output: FunctionCallOutputPayload::from_text(output),
+        },
+        ContextNormalizationItem::ToolResult {
+            kind,
+            call_id,
+            output,
+        } if kind == "custom" => ResponseItem::CustomToolCallOutput {
+            call_id,
+            name: None,
+            output: FunctionCallOutputPayload::from_text(output),
+        },
+        ContextNormalizationItem::ToolCall { kind, .. }
+        | ContextNormalizationItem::ToolResult { kind, .. } => {
+            panic!("unsupported fixture Tool kind: {kind}")
+        }
+    }
+}
+
+fn context_normalization_reference_item(item: &ResponseItem) -> ContextNormalizationItem {
+    match item {
+        ResponseItem::Message { role, content, .. } => {
+            let text = match content.as_slice() {
+                [ContentItem::InputText { text } | ContentItem::OutputText { text }] => {
+                    text.clone()
+                }
+                _ => panic!("fixture Message must contain exactly one text item"),
+            };
+            ContextNormalizationItem::Message {
+                role: role.clone(),
+                content: text,
+            }
+        }
+        ResponseItem::FunctionCall {
+            name,
+            arguments,
+            call_id,
+            ..
+        } => ContextNormalizationItem::ToolCall {
+            kind: "function".to_string(),
+            call_id: call_id.clone(),
+            name: name.clone(),
+            input: arguments.clone(),
+        },
+        ResponseItem::CustomToolCall {
+            call_id,
+            name,
+            input,
+            ..
+        } => ContextNormalizationItem::ToolCall {
+            kind: "custom".to_string(),
+            call_id: call_id.clone(),
+            name: name.clone(),
+            input: input.clone(),
+        },
+        ResponseItem::FunctionCallOutput { call_id, output } => {
+            ContextNormalizationItem::ToolResult {
+                kind: "function".to_string(),
+                call_id: call_id.clone(),
+                output: output
+                    .text_content()
+                    .expect("fixture output must be text")
+                    .to_string(),
+            }
+        }
+        ResponseItem::CustomToolCallOutput {
+            call_id, output, ..
+        } => ContextNormalizationItem::ToolResult {
+            kind: "custom".to_string(),
+            call_id: call_id.clone(),
+            output: output
+                .text_content()
+                .expect("fixture output must be text")
+                .to_string(),
+        },
+        _ => panic!("unexpected normalized fixture item: {item:?}"),
+    }
+}
 
 fn assistant_msg(text: &str) -> ResponseItem {
     ResponseItem::Message {
@@ -60,6 +324,63 @@ fn inter_agent_assistant_msg(text: &str) -> ResponseItem {
         }],
         phase: None,
     }
+}
+
+fn append_rollback_parity_items(
+    case_id: &str,
+    tracked: &mut Vec<RollbackParityTrackedItem>,
+    through_sequence: &mut u64,
+    items: Vec<RollbackParityItem>,
+) {
+    for item in items {
+        assert_eq!(
+            item.sequence,
+            through_sequence.saturating_add(1),
+            "{case_id}"
+        );
+        *through_sequence = item.sequence;
+        let response = match item.kind.as_str() {
+            "user" => user_input_text_msg(&item.item_id),
+            "assistant" => assistant_msg(&item.item_id),
+            "contextualGoal" => user_input_text_msg(
+                "<goal_context>\nContinue working toward the active thread goal.\n</goal_context>",
+            ),
+            "compaction" => ResponseItem::Compaction {
+                encrypted_content: item.item_id.clone(),
+            },
+            "structuredInterAgent" => inter_agent_assistant_msg(&item.item_id),
+            kind => panic!("unsupported rollback parity item kind {kind:?} in {case_id}"),
+        };
+        tracked.push(RollbackParityTrackedItem { item, response });
+    }
+}
+
+fn assert_rollback_parity_state(
+    case_id: &str,
+    tracked: &[RollbackParityTrackedItem],
+    expected_sequences: &[u64],
+    expected_item_ids: &[String],
+) {
+    assert_eq!(
+        tracked
+            .iter()
+            .map(|item| item.item.sequence)
+            .collect::<Vec<_>>(),
+        expected_sequences,
+        "{case_id}"
+    );
+    assert_eq!(
+        tracked
+            .iter()
+            .map(|item| item.item.item_id.clone())
+            .collect::<Vec<_>>(),
+        expected_item_ids,
+        "{case_id}"
+    );
+}
+
+fn rollback_parity_is_instruction_turn(kind: &str) -> bool {
+    matches!(kind, "user" | "structuredInterAgent")
 }
 
 fn create_history_with_items(items: Vec<ResponseItem>) -> ContextManager {
@@ -136,7 +457,7 @@ fn reference_context_item() -> TurnContextItem {
         multi_agent_version: None,
         realtime_active: Some(false),
         effort: None,
-        summary: codex_protocol::config_types::ReasoningSummary::Auto,
+        summary: crewon_protocol::config_types::ReasoningSummary::Auto,
     }
 }
 
@@ -298,6 +619,111 @@ fn inter_agent_assistant_messages_are_turn_boundaries() {
     let item = inter_agent_assistant_msg("continue");
 
     assert!(is_user_turn_boundary(&item));
+}
+
+#[test]
+fn rollback_matches_shared_provider_neutral_parity_fixture() {
+    let reference: RollbackParityReference = serde_json::from_str(include_str!(
+        "../../../../packages/test-contracts/fixtures/thread-rollback-parity.reference.json"
+    ))
+    .expect("thread rollback parity reference fixture must parse");
+    assert_eq!(reference.schema_version, "crewon.thread-rollback-parity.v0");
+    let mut unsupported_structured_inter_agent_cases = 0;
+
+    for fixture_case in reference.cases {
+        let case_id = fixture_case.case_id;
+        assert_eq!(fixture_case.support.rust, "supported", "{case_id}");
+        if fixture_case.support.typescript == "unsupported" {
+            assert_eq!(case_id, "structured-inter-agent-boundary");
+            assert_eq!(
+                fixture_case.support.reason.as_deref(),
+                Some("typescript_model_history_has_no_structured_inter_agent_source")
+            );
+            unsupported_structured_inter_agent_cases += 1;
+        }
+
+        let mut tracked = Vec::new();
+        let mut through_sequence = 0;
+        append_rollback_parity_items(
+            &case_id,
+            &mut tracked,
+            &mut through_sequence,
+            fixture_case.initial_items,
+        );
+
+        for operation in fixture_case.operations {
+            match operation {
+                RollbackParityOperation::Append { items, expected } => {
+                    append_rollback_parity_items(
+                        &case_id,
+                        &mut tracked,
+                        &mut through_sequence,
+                        items,
+                    );
+                    assert_rollback_parity_state(
+                        &case_id,
+                        &tracked,
+                        &expected.effective_sequences,
+                        &expected.remaining_item_ids,
+                    );
+                }
+                RollbackParityOperation::Rollback {
+                    requested_turns,
+                    expected,
+                } => {
+                    assert_eq!(requested_turns, expected.requested_turns, "{case_id}");
+                    assert_eq!(
+                        through_sequence, expected.history_through_sequence,
+                        "{case_id}"
+                    );
+                    let instruction_turns_before = tracked
+                        .iter()
+                        .filter(|item| rollback_parity_is_instruction_turn(&item.item.kind))
+                        .count();
+                    let mut history = create_history_with_items(
+                        tracked.iter().map(|item| item.response.clone()).collect(),
+                    );
+                    history.drop_last_n_user_turns(requested_turns);
+                    let remaining_len = history.raw_items().len();
+                    let expected_remaining = tracked
+                        .iter()
+                        .take(remaining_len)
+                        .map(|item| item.response.clone())
+                        .collect::<Vec<_>>();
+                    assert_eq!(history.raw_items(), expected_remaining, "{case_id}");
+                    let instruction_turns_after = tracked
+                        .iter()
+                        .take(remaining_len)
+                        .filter(|item| rollback_parity_is_instruction_turn(&item.item.kind))
+                        .count();
+                    let removed_turns =
+                        instruction_turns_before.saturating_sub(instruction_turns_after);
+                    let history_from_sequence =
+                        (removed_turns > 0).then(|| tracked[remaining_len].item.sequence);
+                    assert_eq!(removed_turns, expected.removed_turns, "{case_id}");
+                    assert_eq!(
+                        history_from_sequence, expected.history_from_sequence,
+                        "{case_id}"
+                    );
+                    assert_eq!(
+                        expected.marker_history_sequence,
+                        through_sequence.saturating_add(1),
+                        "{case_id}"
+                    );
+                    tracked.truncate(remaining_len);
+                    through_sequence = expected.marker_history_sequence;
+                    assert_rollback_parity_state(
+                        &case_id,
+                        &tracked,
+                        &expected.effective_sequences,
+                        &expected.remaining_item_ids,
+                    );
+                }
+            }
+        }
+    }
+
+    assert_eq!(unsupported_structured_inter_agent_cases, 1);
 }
 
 #[test]

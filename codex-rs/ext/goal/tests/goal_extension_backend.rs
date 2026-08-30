@@ -4,46 +4,54 @@ use std::sync::PoisonError;
 use std::sync::Weak;
 use std::time::Duration;
 
-use codex_analytics::AnalyticsEventsClient;
-use codex_extension_api::ExtensionData;
-use codex_extension_api::ExtensionEventSink;
-use codex_extension_api::ExtensionRegistryBuilder;
-use codex_extension_api::FunctionCallError;
-use codex_extension_api::NoopTurnItemEmitter;
-use codex_extension_api::ThreadResumeInput;
-use codex_extension_api::ThreadStartInput;
-use codex_extension_api::ThreadStopInput;
-use codex_extension_api::ToolCall;
-use codex_extension_api::ToolCallOutcome;
-use codex_extension_api::ToolCallSource;
-use codex_extension_api::ToolExecutor;
-use codex_extension_api::ToolFinishInput;
-use codex_extension_api::ToolPayload;
-use codex_extension_api::TurnErrorInput;
-use codex_extension_api::TurnStartInput;
-use codex_extension_api::TurnStopInput;
-use codex_goal_extension::GoalObjectiveUpdate;
-use codex_goal_extension::GoalRuntimeHandle;
-use codex_goal_extension::GoalService;
-use codex_goal_extension::GoalSetRequest;
-use codex_goal_extension::GoalTokenBudgetUpdate;
-use codex_goal_extension::install_with_backend;
-use codex_protocol::ThreadId;
-use codex_protocol::config_types::CollaborationMode;
-use codex_protocol::config_types::ModeKind;
-use codex_protocol::config_types::Settings;
-use codex_protocol::protocol::CodexErrorInfo;
-use codex_protocol::protocol::Event;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
-use codex_protocol::protocol::ThreadGoalStatus;
-use codex_protocol::protocol::TokenUsage;
-use codex_protocol::protocol::TokenUsageInfo;
-use codex_protocol::protocol::TruncationPolicy;
+use crewon_analytics::AnalyticsEventsClient;
+use crewon_extension_api::ExtensionData;
+use crewon_extension_api::ExtensionEventSink;
+use crewon_extension_api::ExtensionRegistryBuilder;
+use crewon_extension_api::FunctionCallError;
+use crewon_extension_api::NoopTurnItemEmitter;
+use crewon_extension_api::ThreadResumeInput;
+use crewon_extension_api::ThreadStartInput;
+use crewon_extension_api::ThreadStopInput;
+use crewon_extension_api::ToolCall;
+use crewon_extension_api::ToolCallOutcome;
+use crewon_extension_api::ToolCallSource;
+use crewon_extension_api::ToolExecutor;
+use crewon_extension_api::ToolFinishInput;
+use crewon_extension_api::ToolPayload;
+use crewon_extension_api::TurnAbortInput;
+use crewon_extension_api::TurnErrorInput;
+use crewon_extension_api::TurnStartInput;
+use crewon_extension_api::TurnStopInput;
+use crewon_goal_extension::GoalObjectiveUpdate;
+use crewon_goal_extension::GoalRuntimeHandle;
+use crewon_goal_extension::GoalService;
+use crewon_goal_extension::GoalSetRequest;
+use crewon_goal_extension::GoalTokenBudgetUpdate;
+use crewon_goal_extension::install_with_backend;
+use crewon_protocol::ThreadId;
+use crewon_protocol::config_types::CollaborationMode;
+use crewon_protocol::config_types::ModeKind;
+use crewon_protocol::config_types::Settings;
+use crewon_protocol::protocol::CodexErrorInfo;
+use crewon_protocol::protocol::Event;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::ThreadGoal;
+use crewon_protocol::protocol::ThreadGoalStatus;
+use crewon_protocol::protocol::TokenUsage;
+use crewon_protocol::protocol::TokenUsageInfo;
+use crewon_protocol::protocol::TruncationPolicy;
+use crewon_protocol::protocol::TurnAbortReason;
 use pretty_assertions::assert_eq;
+use serde_json::Value;
 use serde_json::json;
 use tempfile::TempDir;
+
+const GOAL_RUNTIME_REFERENCE: &str = include_str!(
+    "../../../../packages/test-contracts/fixtures/goal-runtime-semantics.reference.json"
+);
 
 #[tokio::test]
 async fn installed_goal_tools_create_goal_and_fill_empty_preview() -> anyhow::Result<()> {
@@ -99,7 +107,7 @@ async fn goal_tools_hidden_for_ephemeral_threads() -> anyhow::Result<()> {
     let tools = installed_tools_with_start(
         runtime,
         thread_id,
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
         /*persistent_thread_state_available*/ false,
     )
     .await;
@@ -407,7 +415,7 @@ async fn budget_limited_goal_keeps_accruing_until_turn_stop() -> anyhow::Result<
         .await?
         .ok_or_else(|| anyhow::anyhow!("goal should exist"))?;
     assert_eq!(35, goal.tokens_used);
-    assert_eq!(codex_state::ThreadGoalStatus::BudgetLimited, goal.status);
+    assert_eq!(crewon_state::ThreadGoalStatus::BudgetLimited, goal.status);
 
     assert_eq!(
         vec![
@@ -484,7 +492,7 @@ async fn budget_limited_goal_keeps_accounting_after_later_tool_finish() -> anyho
         .await?
         .ok_or_else(|| anyhow::anyhow!("goal should exist"))?;
     assert_eq!(35, goal.tokens_used);
-    assert_eq!(codex_state::ThreadGoalStatus::BudgetLimited, goal.status);
+    assert_eq!(crewon_state::ThreadGoalStatus::BudgetLimited, goal.status);
     Ok(())
 }
 
@@ -526,7 +534,7 @@ async fn turn_error_usage_limit_accounts_progress_and_clears_accounting() -> any
         .await?
         .ok_or_else(|| anyhow::anyhow!("goal should exist"))?;
     assert_eq!(23, goal.tokens_used);
-    assert_eq!(codex_state::ThreadGoalStatus::UsageLimited, goal.status);
+    assert_eq!(crewon_state::ThreadGoalStatus::UsageLimited, goal.status);
     assert_eq!(
         vec![
             CapturedGoalEvent {
@@ -566,7 +574,7 @@ async fn turn_error_usage_limit_accounts_progress_and_clears_accounting() -> any
         .await?
         .ok_or_else(|| anyhow::anyhow!("goal should exist"))?;
     assert_eq!(23, goal.tokens_used);
-    assert_eq!(codex_state::ThreadGoalStatus::UsageLimited, goal.status);
+    assert_eq!(crewon_state::ThreadGoalStatus::UsageLimited, goal.status);
     Ok(())
 }
 
@@ -596,7 +604,7 @@ async fn turn_error_blocks_goal() -> anyhow::Result<()> {
         .get_thread_goal(thread_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("goal should exist"))?;
-    assert_eq!(codex_state::ThreadGoalStatus::Blocked, goal.status);
+    assert_eq!(crewon_state::ThreadGoalStatus::Blocked, goal.status);
     Ok(())
 }
 
@@ -658,7 +666,7 @@ async fn usage_limit_budget_limited_goal_accounts_remaining_progress() -> anyhow
         .await?
         .ok_or_else(|| anyhow::anyhow!("goal should exist"))?;
     assert_eq!(35, goal.tokens_used);
-    assert_eq!(codex_state::ThreadGoalStatus::UsageLimited, goal.status);
+    assert_eq!(crewon_state::ThreadGoalStatus::UsageLimited, goal.status);
     assert_eq!(
         vec![
             CapturedGoalEvent {
@@ -711,7 +719,7 @@ async fn usage_limit_plan_turn_does_not_stop_goal() -> anyhow::Result<()> {
         .get_thread_goal(thread_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("goal should exist"))?;
-    assert_eq!(codex_state::ThreadGoalStatus::Active, goal.status);
+    assert_eq!(crewon_state::ThreadGoalStatus::Active, goal.status);
     assert_eq!(Vec::<CapturedGoalEvent>::new(), harness.sink.goal_events());
     Ok(())
 }
@@ -748,7 +756,7 @@ async fn usage_limit_stale_turn_does_not_stop_current_goal() -> anyhow::Result<(
         .get_thread_goal(thread_id)
         .await?
         .ok_or_else(|| anyhow::anyhow!("goal should exist"))?;
-    assert_eq!(codex_state::ThreadGoalStatus::Active, goal.status);
+    assert_eq!(crewon_state::ThreadGoalStatus::Active, goal.status);
     assert_eq!(Vec::<CapturedGoalEvent>::new(), harness.sink.goal_events());
     Ok(())
 }
@@ -813,7 +821,7 @@ async fn update_goal_can_block_and_accounts_final_progress() -> anyhow::Result<(
         .await?
         .ok_or_else(|| anyhow::anyhow!("goal should exist"))?;
     assert_eq!(23, goal.tokens_used);
-    assert_eq!(codex_state::ThreadGoalStatus::Blocked, goal.status);
+    assert_eq!(crewon_state::ThreadGoalStatus::Blocked, goal.status);
 
     assert_eq!(
         vec![
@@ -1013,7 +1021,7 @@ async fn thread_resume_rehydrates_active_goal_idle_accounting() -> anyhow::Resul
         .replace_thread_goal(
             thread_id,
             "ship goal extension backend",
-            codex_state::ThreadGoalStatus::Active,
+            crewon_state::ThreadGoalStatus::Active,
             /*token_budget*/ None,
         )
         .await?;
@@ -1091,21 +1099,243 @@ async fn goal_service_sets_gets_and_clears_thread_goal() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tokio::test]
+async fn goal_runtime_matches_shared_provider_neutral_semantics_reference() -> anyhow::Result<()> {
+    let reference: Value =
+        serde_json::from_str(GOAL_RUNTIME_REFERENCE).expect("parse Goal runtime reference");
+    assert_eq!(
+        reference_string(&reference, "/schemaVersion"),
+        "crewon.goal-runtime-semantics.v0"
+    );
+    assert_eq!(
+        reference_string(&reference, "/accountingPolicy"),
+        "nonCachedInputPlusOutput.v1"
+    );
+    assert_eq!(
+        reference
+            .pointer("/publicGoalProjectionFields")
+            .expect("public Goal projection fields"),
+        &json!(["objective", "status", "tokenBudget", "tokensUsed"])
+    );
+    assert!(
+        GOAL_RUNTIME_REFERENCE.len()
+            <= usize::try_from(reference_i64(&reference, "/maxFixtureBytes"))?
+    );
+
+    for boundary in reference_array(&reference, "/toolBoundaryCases") {
+        let case_id = reference_string(boundary, "/id");
+        let runtime = test_runtime().await?;
+        let thread_id = test_thread_id()?;
+        seed_thread_metadata(runtime.as_ref(), thread_id).await?;
+        let harness = GoalExtensionHarness::new(runtime.clone(), thread_id).await?;
+        harness.start_turn("turn-1", &TokenUsage::default()).await;
+        create_reference_goal(
+            &harness,
+            boundary.pointer("/initialGoal").expect("initial Goal"),
+        )
+        .await?;
+        harness.sink.clear();
+
+        let usage =
+            reference_token_usage(boundary.pointer("/usageDelta").expect("Tool usage delta"));
+        harness.record_token_usage("turn-1", &usage).await;
+        harness
+            .notify_tool_finish("turn-1", "call-reference-tool", "shell")
+            .await;
+        if reference_bool(boundary, "/repeatSameBoundary") {
+            harness
+                .notify_tool_finish("turn-1", "call-reference-tool-replay", "shell")
+                .await;
+        }
+
+        let goal = harness
+            .goal_service
+            .get_thread_goal(runtime.as_ref(), thread_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("{case_id}: Goal should exist"))?;
+        assert_eq!(
+            boundary
+                .pointer("/expectedGoal")
+                .expect("expected Tool Goal"),
+            &comparable_goal(&goal),
+            "{case_id}"
+        );
+        assert_eq!(
+            usize::try_from(reference_i64(boundary, "/expectedDurableGoalMutations"))?,
+            harness.sink.goal_events().len(),
+            "{case_id}"
+        );
+        assert_eq!(
+            reference_bool(boundary, "/expectedCrossedBudget"),
+            goal.status == ThreadGoalStatus::BudgetLimited,
+            "{case_id}"
+        );
+    }
+
+    for terminal in reference_array(&reference, "/terminalCases") {
+        let case_id = reference_string(terminal, "/id");
+        let runtime = test_runtime().await?;
+        let thread_id = test_thread_id()?;
+        seed_thread_metadata(runtime.as_ref(), thread_id).await?;
+        let harness = GoalExtensionHarness::new(runtime.clone(), thread_id).await?;
+        harness.start_turn("turn-1", &TokenUsage::default()).await;
+        create_reference_goal(
+            &harness,
+            terminal.pointer("/initialGoal").expect("initial Goal"),
+        )
+        .await?;
+        harness.sink.clear();
+        let usage = reference_token_usage(terminal.pointer("/usageDelta").expect("terminal usage"));
+        harness.record_token_usage("turn-1", &usage).await;
+
+        let outcome = terminal.pointer("/outcome").expect("terminal outcome");
+        match reference_string(outcome, "/kind") {
+            "completed" => {
+                harness.stop_turn("turn-1").await;
+                harness.stop_turn("turn-1").await;
+            }
+            "canceled" => {
+                harness.abort_turn("turn-1").await;
+                harness.abort_turn("turn-1").await;
+            }
+            "failed" => {
+                let error = if reference_string(outcome, "/code") == "responses_usage_limit_reached"
+                {
+                    CodexErrorInfo::UsageLimitExceeded
+                } else {
+                    CodexErrorInfo::Other
+                };
+                harness.notify_turn_error("turn-1", error.clone()).await;
+                harness.notify_turn_error("turn-1", error).await;
+            }
+            other => anyhow::bail!("{case_id}: unsupported terminal outcome {other}"),
+        }
+
+        assert!(reference_bool(terminal, "/repeatTerminalMustNotMutate"));
+        let goal = harness
+            .goal_service
+            .get_thread_goal(runtime.as_ref(), thread_id)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("{case_id}: Goal should exist"))?;
+        assert_eq!(
+            terminal
+                .pointer("/expectedGoal")
+                .expect("expected terminal Goal"),
+            &comparable_goal(&goal),
+            "{case_id}"
+        );
+    }
+
+    let mutation = reference
+        .pointer("/objectiveMutation")
+        .expect("objective mutation reference");
+    let runtime = test_runtime().await?;
+    let thread_id = test_thread_id()?;
+    seed_thread_metadata(runtime.as_ref(), thread_id).await?;
+    let harness = GoalExtensionHarness::new(runtime.clone(), thread_id).await?;
+    harness.start_turn("turn-1", &TokenUsage::default()).await;
+    create_reference_goal(
+        &harness,
+        mutation.pointer("/initialGoal").expect("mutation Goal"),
+    )
+    .await?;
+    harness.sink.clear();
+    let usage = reference_token_usage(
+        mutation
+            .pointer("/preEditUsageDelta")
+            .expect("pre-edit usage"),
+    );
+    harness.record_token_usage("turn-1", &usage).await;
+    harness
+        .notify_tool_finish("turn-1", "call-before-objective-edit", "shell")
+        .await;
+
+    let edited = harness
+        .goal_service
+        .set_thread_goal(
+            runtime.as_ref(),
+            GoalSetRequest {
+                thread_id,
+                objective: GoalObjectiveUpdate::Set(reference_string(mutation, "/editedObjective")),
+                status: Some(ThreadGoalStatus::Active),
+                token_budget: GoalTokenBudgetUpdate::Keep,
+            },
+        )
+        .await?;
+    edited.apply_runtime_effects(&harness.goal_service).await;
+    assert_eq!(
+        mutation
+            .pointer("/expectedEditedGoal")
+            .expect("expected edited Goal"),
+        &comparable_goal(&edited.goal)
+    );
+
+    assert_eq!(
+        reference_bool(mutation, "/clear/firstClearChanged"),
+        harness
+            .goal_service
+            .clear_thread_goal(runtime.as_ref(), thread_id)
+            .await?
+    );
+    assert_eq!(
+        reference_bool(mutation, "/clear/replayClearChanged"),
+        harness
+            .goal_service
+            .clear_thread_goal(runtime.as_ref(), thread_id)
+            .await?
+    );
+    assert_eq!(
+        mutation
+            .pointer("/clear/expectedGoal")
+            .expect("expected cleared Goal"),
+        &serde_json::to_value(
+            harness
+                .goal_service
+                .get_thread_goal(runtime.as_ref(), thread_id)
+                .await?
+        )?
+    );
+
+    harness
+        .record_token_usage(
+            "turn-1",
+            &token_usage(
+                /*input_tokens*/ 50, /*cached_input_tokens*/ 5,
+                /*output_tokens*/ 20, /*reasoning_output_tokens*/ 0,
+                /*total_tokens*/ 70,
+            ),
+        )
+        .await;
+    harness
+        .notify_turn_error("turn-1", CodexErrorInfo::Other)
+        .await;
+    harness.stop_turn("turn-1").await;
+    assert!(reference_bool(mutation, "/clear/lateTerminalMustNotRevive"));
+    assert_eq!(
+        None,
+        harness
+            .goal_service
+            .get_thread_goal(runtime.as_ref(), thread_id)
+            .await?
+    );
+    Ok(())
+}
+
 async fn installed_tools(
-    runtime: Arc<codex_state::StateRuntime>,
+    runtime: Arc<crewon_state::StateRuntime>,
     thread_id: ThreadId,
 ) -> Vec<Arc<dyn ToolExecutor<ToolCall>>> {
     installed_tools_with_start(
         runtime,
         thread_id,
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
         /*persistent_thread_state_available*/ true,
     )
     .await
 }
 
 async fn installed_tools_with_start(
-    runtime: Arc<codex_state::StateRuntime>,
+    runtime: Arc<crewon_state::StateRuntime>,
     thread_id: ThreadId,
     session_source: SessionSource,
     persistent_thread_state_available: bool,
@@ -1148,7 +1378,7 @@ fn tool_names(tools: &[Arc<dyn ToolExecutor<ToolCall>>]) -> Vec<String> {
 }
 
 struct GoalExtensionHarness {
-    registry: codex_extension_api::ExtensionRegistry<()>,
+    registry: crewon_extension_api::ExtensionRegistry<()>,
     session_store: ExtensionData,
     thread_store: ExtensionData,
     goal_service: Arc<GoalService>,
@@ -1157,7 +1387,7 @@ struct GoalExtensionHarness {
 
 impl GoalExtensionHarness {
     async fn new(
-        runtime: Arc<codex_state::StateRuntime>,
+        runtime: Arc<crewon_state::StateRuntime>,
         thread_id: ThreadId,
     ) -> anyhow::Result<Self> {
         let sink = Arc::new(RecordingEventSink::default());
@@ -1175,7 +1405,7 @@ impl GoalExtensionHarness {
         let registry = builder.build();
         let session_store = ExtensionData::new("session-1");
         let thread_store = ExtensionData::new(thread_id.to_string());
-        let session_source = SessionSource::Cli;
+        let session_source = SessionSource::LegacyCli;
         for contributor in registry.thread_lifecycle_contributors() {
             contributor
                 .on_thread_start(ThreadStartInput {
@@ -1240,6 +1470,20 @@ impl GoalExtensionHarness {
         }
     }
 
+    async fn abort_turn(&self, turn_id: &str) {
+        let turn_store = ExtensionData::new(turn_id);
+        for contributor in self.registry.turn_lifecycle_contributors() {
+            contributor
+                .on_turn_abort(TurnAbortInput {
+                    reason: TurnAbortReason::Interrupted,
+                    session_store: &self.session_store,
+                    thread_store: &self.thread_store,
+                    turn_store: &turn_store,
+                })
+                .await;
+        }
+    }
+
     async fn record_token_usage(&self, turn_id: &str, usage: &TokenUsage) {
         let turn_store = ExtensionData::new(turn_id);
         let token_usage = TokenUsageInfo {
@@ -1283,7 +1527,7 @@ impl GoalExtensionHarness {
 
     async fn notify_tool_finish(&self, turn_id: &str, call_id: &str, tool_name: &str) {
         let turn_store = ExtensionData::new(turn_id);
-        let tool_name = codex_extension_api::ToolName::plain(tool_name);
+        let tool_name = crewon_extension_api::ToolName::plain(tool_name);
         for contributor in self.registry.tool_lifecycle_contributors() {
             contributor
                 .on_tool_finish(ToolFinishInput {
@@ -1336,10 +1580,10 @@ fn tool_call(tool_name: &str, call_id: &str, arguments: serde_json::Value) -> To
     ToolCall {
         turn_id: "turn-1".to_string(),
         call_id: call_id.to_string(),
-        tool_name: codex_extension_api::ToolName::plain(tool_name),
+        tool_name: crewon_extension_api::ToolName::plain(tool_name),
         model: "gpt-test".to_string(),
         truncation_policy: TruncationPolicy::Bytes(1024),
-        conversation_history: codex_extension_api::ConversationHistory::default(),
+        conversation_history: crewon_extension_api::ConversationHistory::default(),
         turn_item_emitter: Arc::new(NoopTurnItemEmitter),
         payload: ToolPayload::Function {
             arguments: arguments.to_string(),
@@ -1347,9 +1591,9 @@ fn tool_call(tool_name: &str, call_id: &str, arguments: serde_json::Value) -> To
     }
 }
 
-async fn test_runtime() -> anyhow::Result<Arc<codex_state::StateRuntime>> {
+async fn test_runtime() -> anyhow::Result<Arc<crewon_state::StateRuntime>> {
     let tempdir = TempDir::new()?;
-    codex_state::StateRuntime::init(tempdir.keep(), "test-provider".to_string()).await
+    crewon_state::StateRuntime::init(tempdir.keep(), "test-provider".to_string()).await
 }
 
 fn test_thread_id() -> anyhow::Result<ThreadId> {
@@ -1357,16 +1601,16 @@ fn test_thread_id() -> anyhow::Result<ThreadId> {
 }
 
 async fn seed_thread_metadata(
-    runtime: &codex_state::StateRuntime,
+    runtime: &crewon_state::StateRuntime,
     thread_id: ThreadId,
 ) -> anyhow::Result<()> {
-    let builder = codex_state::ThreadMetadataBuilder::new(
+    let builder = crewon_state::ThreadMetadataBuilder::new(
         thread_id,
         runtime
             .codex_home()
             .join(format!("rollout-{thread_id}.jsonl")),
         chrono::Utc::now(),
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     );
     runtime.upsert_thread(&builder.build("test-provider")).await
 }
@@ -1442,13 +1686,82 @@ fn token_usage(
     }
 }
 
-fn protocol_status(status: codex_state::ThreadGoalStatus) -> ThreadGoalStatus {
+fn protocol_status(status: crewon_state::ThreadGoalStatus) -> ThreadGoalStatus {
     match status {
-        codex_state::ThreadGoalStatus::Active => ThreadGoalStatus::Active,
-        codex_state::ThreadGoalStatus::Paused => ThreadGoalStatus::Paused,
-        codex_state::ThreadGoalStatus::Blocked => ThreadGoalStatus::Blocked,
-        codex_state::ThreadGoalStatus::UsageLimited => ThreadGoalStatus::UsageLimited,
-        codex_state::ThreadGoalStatus::BudgetLimited => ThreadGoalStatus::BudgetLimited,
-        codex_state::ThreadGoalStatus::Complete => ThreadGoalStatus::Complete,
+        crewon_state::ThreadGoalStatus::Active => ThreadGoalStatus::Active,
+        crewon_state::ThreadGoalStatus::Paused => ThreadGoalStatus::Paused,
+        crewon_state::ThreadGoalStatus::Blocked => ThreadGoalStatus::Blocked,
+        crewon_state::ThreadGoalStatus::UsageLimited => ThreadGoalStatus::UsageLimited,
+        crewon_state::ThreadGoalStatus::BudgetLimited => ThreadGoalStatus::BudgetLimited,
+        crewon_state::ThreadGoalStatus::Complete => ThreadGoalStatus::Complete,
     }
+}
+
+async fn create_reference_goal(
+    harness: &GoalExtensionHarness,
+    reference: &Value,
+) -> anyhow::Result<()> {
+    let tools = harness.tools();
+    tool_by_name(&tools, "create_goal")
+        .handle(tool_call(
+            "create_goal",
+            "call-create-reference-goal",
+            json!({
+                "objective": reference_string(reference, "/objective"),
+                "token_budget": reference_i64(reference, "/tokenBudget"),
+            }),
+        ))
+        .await?;
+    Ok(())
+}
+
+fn reference_token_usage(reference: &Value) -> TokenUsage {
+    let input_tokens = reference_i64(reference, "/inputTokens");
+    let cached_input_tokens = reference_i64(reference, "/cachedInputTokens");
+    let output_tokens = reference_i64(reference, "/outputTokens");
+    token_usage(
+        input_tokens,
+        cached_input_tokens,
+        output_tokens,
+        /*reasoning_output_tokens*/ 0,
+        input_tokens + output_tokens,
+    )
+}
+
+fn comparable_goal(goal: &ThreadGoal) -> Value {
+    json!({
+        "objective": goal.objective,
+        "status": goal.status,
+        "tokenBudget": goal.token_budget,
+        "tokensUsed": goal.tokens_used,
+    })
+}
+
+fn reference_string<'a>(reference: &'a Value, pointer: &str) -> &'a str {
+    reference
+        .pointer(pointer)
+        .and_then(Value::as_str)
+        .unwrap_or_else(|| panic!("reference string missing at {pointer}"))
+}
+
+fn reference_i64(reference: &Value, pointer: &str) -> i64 {
+    reference
+        .pointer(pointer)
+        .and_then(Value::as_i64)
+        .unwrap_or_else(|| panic!("reference integer missing at {pointer}"))
+}
+
+fn reference_bool(reference: &Value, pointer: &str) -> bool {
+    reference
+        .pointer(pointer)
+        .and_then(Value::as_bool)
+        .unwrap_or_else(|| panic!("reference boolean missing at {pointer}"))
+}
+
+fn reference_array<'a>(reference: &'a Value, pointer: &str) -> &'a [Value] {
+    reference
+        .pointer(pointer)
+        .and_then(Value::as_array)
+        .map(Vec::as_slice)
+        .unwrap_or_else(|| panic!("reference array missing at {pointer}"))
 }

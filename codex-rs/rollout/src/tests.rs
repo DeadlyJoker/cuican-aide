@@ -28,19 +28,19 @@ use crate::list::get_threads;
 use crate::list::read_head_for_summary;
 use crate::rollout_date_parts;
 use anyhow::Result;
-use codex_protocol::ThreadId;
-use codex_protocol::models::ContentItem;
-use codex_protocol::models::ResponseItem;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::RolloutItem;
-use codex_protocol::protocol::RolloutLine;
-use codex_protocol::protocol::SessionMeta;
-use codex_protocol::protocol::SessionMetaLine;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::ThreadGoal;
-use codex_protocol::protocol::ThreadGoalStatus;
-use codex_protocol::protocol::ThreadGoalUpdatedEvent;
-use codex_protocol::protocol::UserMessageEvent;
+use crewon_protocol::ThreadId;
+use crewon_protocol::models::ContentItem;
+use crewon_protocol::models::ResponseItem;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::RolloutItem;
+use crewon_protocol::protocol::RolloutLine;
+use crewon_protocol::protocol::SessionMeta;
+use crewon_protocol::protocol::SessionMetaLine;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::ThreadGoal;
+use crewon_protocol::protocol::ThreadGoalStatus;
+use crewon_protocol::protocol::ThreadGoalUpdatedEvent;
+use crewon_protocol::protocol::UserMessageEvent;
 
 const NO_SOURCE_FILTER: &[SessionSource] = &[];
 const TEST_PROVIDER: &str = "test-provider";
@@ -62,7 +62,7 @@ async fn insert_state_db_thread(
     rollout_path: &Path,
     archived: bool,
 ) -> crate::state_db::StateDbHandle {
-    let runtime = codex_state::StateRuntime::init(home.to_path_buf(), TEST_PROVIDER.to_string())
+    let runtime = crewon_state::StateRuntime::init(home.to_path_buf(), TEST_PROVIDER.to_string())
         .await
         .expect("state db should initialize");
     runtime
@@ -73,11 +73,11 @@ async fn insert_state_db_thread(
         .with_ymd_and_hms(2025, 1, 3, 12, 0, 0)
         .single()
         .expect("valid datetime");
-    let mut builder = codex_state::ThreadMetadataBuilder::new(
+    let mut builder = crewon_state::ThreadMetadataBuilder::new(
         thread_id,
         rollout_path.to_path_buf(),
         created_at,
-        SessionSource::Cli,
+        SessionSource::LegacyCli,
     );
     builder.model_provider = Some(TEST_PROVIDER.to_string());
     builder.cwd = home.to_path_buf();
@@ -106,7 +106,7 @@ async fn find_thread_path_falls_back_when_db_path_is_stale() {
         ts,
         uuid,
         /*num_records*/ 1,
-        Some(SessionSource::Cli),
+        Some(SessionSource::LegacyCli),
     )
     .unwrap();
     let fs_rollout_path = home.join(format!("sessions/2025/01/03/rollout-{ts}-{uuid}.jsonl"));
@@ -141,7 +141,7 @@ async fn find_thread_path_falls_back_when_db_path_points_to_another_thread() {
         ts,
         uuid,
         /*num_records*/ 1,
-        Some(SessionSource::Cli),
+        Some(SessionSource::LegacyCli),
     )
     .unwrap();
     let fs_rollout_path = home.join(format!("sessions/2025/01/03/rollout-{ts}-{uuid}.jsonl"));
@@ -153,7 +153,7 @@ async fn find_thread_path_falls_back_when_db_path_points_to_another_thread() {
         other_ts,
         other_uuid,
         /*num_records*/ 1,
-        Some(SessionSource::Cli),
+        Some(SessionSource::LegacyCli),
     )
     .unwrap();
     let stale_db_path = home.join(format!(
@@ -186,13 +186,13 @@ async fn find_thread_path_repairs_missing_db_row_after_filesystem_fallback() {
         ts,
         uuid,
         /*num_records*/ 1,
-        Some(SessionSource::Cli),
+        Some(SessionSource::LegacyCli),
     )
     .unwrap();
     let fs_rollout_path = home.join(format!("sessions/2025/01/03/rollout-{ts}-{uuid}.jsonl"));
 
     // Create an empty state DB so lookup takes the DB-first path and then falls back to files.
-    let runtime = codex_state::StateRuntime::init(home.to_path_buf(), TEST_PROVIDER.to_string())
+    let runtime = crewon_state::StateRuntime::init(home.to_path_buf(), TEST_PROVIDER.to_string())
         .await
         .expect("state db should initialize");
     runtime
@@ -245,7 +245,7 @@ async fn assert_state_db_rollout_path(
     thread_id: ThreadId,
     expected_path: Option<&Path>,
 ) {
-    let runtime = codex_state::StateRuntime::init(home.to_path_buf(), TEST_PROVIDER.to_string())
+    let runtime = crewon_state::StateRuntime::init(home.to_path_buf(), TEST_PROVIDER.to_string())
         .await
         .expect("state db should initialize");
     let path = runtime
@@ -606,6 +606,7 @@ async fn test_list_conversations_latest_first() {
                 git_sha: None,
                 git_origin_url: None,
                 source: Some(SessionSource::VSCode),
+                thread_source: None,
                 parent_thread_id: None,
                 agent_nickname: None,
                 agent_role: None,
@@ -624,6 +625,7 @@ async fn test_list_conversations_latest_first() {
                 git_sha: None,
                 git_origin_url: None,
                 source: Some(SessionSource::VSCode),
+                thread_source: None,
                 parent_thread_id: None,
                 agent_nickname: None,
                 agent_role: None,
@@ -642,6 +644,7 @@ async fn test_list_conversations_latest_first() {
                 git_sha: None,
                 git_origin_url: None,
                 source: Some(SessionSource::VSCode),
+                thread_source: None,
                 parent_thread_id: None,
                 agent_nickname: None,
                 agent_role: None,
@@ -753,6 +756,7 @@ async fn test_pagination_cursor() {
                 git_sha: None,
                 git_origin_url: None,
                 source: Some(SessionSource::VSCode),
+                thread_source: None,
                 parent_thread_id: None,
                 agent_nickname: None,
                 agent_role: None,
@@ -771,6 +775,7 @@ async fn test_pagination_cursor() {
                 git_sha: None,
                 git_origin_url: None,
                 source: Some(SessionSource::VSCode),
+                thread_source: None,
                 parent_thread_id: None,
                 agent_nickname: None,
                 agent_role: None,
@@ -825,6 +830,7 @@ async fn test_pagination_cursor() {
                 git_sha: None,
                 git_origin_url: None,
                 source: Some(SessionSource::VSCode),
+                thread_source: None,
                 parent_thread_id: None,
                 agent_nickname: None,
                 agent_role: None,
@@ -843,6 +849,7 @@ async fn test_pagination_cursor() {
                 git_sha: None,
                 git_origin_url: None,
                 source: Some(SessionSource::VSCode),
+                thread_source: None,
                 parent_thread_id: None,
                 agent_nickname: None,
                 agent_role: None,
@@ -889,6 +896,7 @@ async fn test_pagination_cursor() {
             git_sha: None,
             git_origin_url: None,
             source: Some(SessionSource::VSCode),
+            thread_source: None,
             parent_thread_id: None,
             agent_nickname: None,
             agent_role: None,
@@ -1060,6 +1068,7 @@ async fn test_get_thread_contents() {
             git_sha: None,
             git_origin_url: None,
             source: Some(SessionSource::VSCode),
+            thread_source: None,
             parent_thread_id: None,
             agent_nickname: None,
             agent_role: None,
@@ -1264,7 +1273,7 @@ async fn test_updated_at_uses_file_mtime() -> Result<()> {
                 timestamp: ts.to_string(),
                 cwd: ".".into(),
                 originator: "test_originator".into(),
-                cli_version: "test_version".into(),
+                client_version: "test_version".into(),
                 source: SessionSource::VSCode,
                 thread_source: None,
                 agent_path: None,
@@ -1277,6 +1286,7 @@ async fn test_updated_at_uses_file_mtime() -> Result<()> {
                 multi_agent_version: None,
             },
             git: None,
+            scene_runtime: None,
         }),
     };
     writeln!(file, "{}", serde_json::to_string(&meta_line)?)?;
@@ -1414,6 +1424,7 @@ async fn test_timestamp_only_cursor_skips_same_second_filesystem_ties() {
                 git_sha: None,
                 git_origin_url: None,
                 source: Some(SessionSource::VSCode),
+                thread_source: None,
                 parent_thread_id: None,
                 agent_nickname: None,
                 agent_role: None,
@@ -1432,6 +1443,7 @@ async fn test_timestamp_only_cursor_skips_same_second_filesystem_ties() {
                 git_sha: None,
                 git_origin_url: None,
                 source: Some(SessionSource::VSCode),
+                thread_source: None,
                 parent_thread_id: None,
                 agent_nickname: None,
                 agent_role: None,
@@ -1483,7 +1495,7 @@ async fn test_source_filter_excludes_non_matching_sessions() {
         "2025-08-02T10-00-00",
         interactive_id,
         /*num_records*/ 2,
-        Some(SessionSource::Cli),
+        Some(SessionSource::LegacyCli),
     )
     .unwrap();
     write_session_file(

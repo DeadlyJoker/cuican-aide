@@ -1,23 +1,23 @@
 use super::*;
 use crate::config::Config;
 use crate::config::ConfigOverrides;
-use codex_config::config_toml::ConfigToml;
-use codex_config::permissions_toml::FilesystemPermissionToml;
-use codex_config::permissions_toml::FilesystemPermissionsToml;
-use codex_config::permissions_toml::NetworkDomainPermissionToml;
-use codex_config::permissions_toml::NetworkDomainPermissionsToml;
-use codex_config::permissions_toml::NetworkToml;
-use codex_config::permissions_toml::NetworkUnixSocketPermissionToml;
-use codex_config::permissions_toml::NetworkUnixSocketPermissionsToml;
-use codex_config::permissions_toml::PermissionProfileToml;
-use codex_config::permissions_toml::PermissionsToml;
-use codex_config::permissions_toml::WorkspaceRootsToml;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::FileSystemSpecialPath;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_config::config_toml::ConfigToml;
+use crewon_config::permissions_toml::FilesystemPermissionToml;
+use crewon_config::permissions_toml::FilesystemPermissionsToml;
+use crewon_config::permissions_toml::NetworkDomainPermissionToml;
+use crewon_config::permissions_toml::NetworkDomainPermissionsToml;
+use crewon_config::permissions_toml::NetworkToml;
+use crewon_config::permissions_toml::NetworkUnixSocketPermissionToml;
+use crewon_config::permissions_toml::NetworkUnixSocketPermissionsToml;
+use crewon_config::permissions_toml::PermissionProfileToml;
+use crewon_config::permissions_toml::PermissionsToml;
+use crewon_config::permissions_toml::WorkspaceRootsToml;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::FileSystemSpecialPath;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use std::collections::BTreeMap;
 use tempfile::TempDir;
@@ -50,9 +50,9 @@ async fn restricted_read_implicitly_allows_helper_executables() -> std::io::Resu
     let codex_home = temp_dir.path().join(".codex");
     let zsh_path = temp_dir.path().join("runtime").join("zsh");
     let arg0_root = codex_home.join("tmp").join("arg0");
-    let allowed_arg0_dir = arg0_root.join("codex-arg0-session");
-    let sibling_arg0_dir = arg0_root.join("codex-arg0-other-session");
-    let execve_wrapper = allowed_arg0_dir.join("codex-execve-wrapper");
+    let allowed_arg0_dir = arg0_root.join("crewon-arg0-session");
+    let sibling_arg0_dir = arg0_root.join("crewon-arg0-other-session");
+    let execve_wrapper = allowed_arg0_dir.join("crewon-execve-wrapper");
     std::fs::create_dir_all(&cwd)?;
     std::fs::create_dir_all(zsh_path.parent().expect("zsh path should have parent"))?;
     std::fs::create_dir_all(&allowed_arg0_dir)?;
@@ -221,7 +221,7 @@ fn network_toml_overlays_unix_socket_permissions_by_path() {
 
     assert_eq!(
         config.network.unix_sockets,
-        Some(codex_network_proxy::NetworkUnixSocketPermissions {
+        Some(crewon_network_proxy::NetworkUnixSocketPermissions {
             entries: BTreeMap::from([
                 (
                     "/tmp/base.sock".to_string(),
@@ -422,10 +422,10 @@ fn profile_network_proxy_config_keeps_proxy_disabled_for_proxy_policy() {
     assert!(!config.network.enable_socks5);
     assert_eq!(
         config.network.domains,
-        Some(codex_network_proxy::NetworkDomainPermissions {
-            entries: vec![codex_network_proxy::NetworkDomainPermissionEntry {
+        Some(crewon_network_proxy::NetworkDomainPermissions {
+            entries: vec![crewon_network_proxy::NetworkDomainPermissionEntry {
                 pattern: "openai.com".to_string(),
-                permission: codex_network_proxy::NetworkDomainPermission::Allow,
+                permission: crewon_network_proxy::NetworkDomainPermission::Allow,
             }],
         })
     );

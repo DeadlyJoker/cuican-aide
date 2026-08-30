@@ -136,6 +136,123 @@
       ],
       "type": "string"
     },
+    "SceneDeliverable": {
+      "enum": [
+        "conversation",
+        "document",
+        "table",
+        "action-list",
+        "message-draft",
+        "knowledge-entry",
+        "implementation-plan",
+        "code-change",
+        "code-review",
+        "design-directions",
+        "design-artifact",
+        "design-review",
+        "handoff-spec"
+      ],
+      "type": "string"
+    },
+    "SceneExecutionTargetSelection": {
+      "oneOf": [
+        {
+          "properties": {
+            "kind": {
+              "enum": [
+                "crewon"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind"
+          ],
+          "title": "CrewonSceneExecutionTargetSelection",
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "agent"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "team"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        },
+        {
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "kind": {
+              "enum": [
+                "experts"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "kind"
+          ],
+          "type": "object"
+        }
+      ]
+    },
+    "SceneId": {
+      "enum": [
+        "office",
+        "code",
+        "design"
+      ],
+      "type": "string"
+    },
+    "SceneInteractionMode": {
+      "enum": [
+        "auto",
+        "organize",
+        "write",
+        "analyze",
+        "coordinate",
+        "ask",
+        "plan",
+        "implement",
+        "review",
+        "explore",
+        "refine",
+        "produce",
+        "inspect"
+      ],
+      "type": "string"
+    },
     "SelectedCapabilityRoot": {
       "description": "A user-selected root that can expose one or more runtime capabilities.",
       "properties": {
@@ -155,6 +272,60 @@
       "required": [
         "id",
         "location"
+      ],
+      "type": "object"
+    },
+    "ThreadExecutionContextCreateParams": {
+      "additionalProperties": false,
+      "description": "Server-owned Provider resource selection used when creating a new thread authority.",
+      "properties": {
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "workspaceKey"
+      ],
+      "type": "object"
+    },
+    "ThreadSceneSelectionParams": {
+      "properties": {
+        "deliverable": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SceneDeliverable"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "executionTarget": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SceneExecutionTargetSelection"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "mode": {
+          "anyOf": [
+            {
+              "$ref": "#/definitions/SceneInteractionMode"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sceneId": {
+          "$ref": "#/definitions/SceneId"
+        }
+      },
+      "required": [
+        "sceneId"
       ],
       "type": "object"
     },

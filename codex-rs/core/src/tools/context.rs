@@ -7,17 +7,17 @@ use crate::tools::TELEMETRY_PREVIEW_MAX_LINES;
 use crate::tools::TELEMETRY_PREVIEW_TRUNCATION_NOTICE;
 use crate::turn_diff_tracker::TurnDiffTracker;
 use crate::unified_exec::resolve_max_tokens;
-use codex_protocol::mcp::CallToolResult;
-use codex_protocol::models::FunctionCallOutputBody;
-use codex_protocol::models::FunctionCallOutputContentItem;
-use codex_protocol::models::FunctionCallOutputPayload;
-use codex_protocol::models::ResponseInputItem;
-use codex_protocol::models::function_call_output_content_items_to_text;
-use codex_tools::LoadableToolSpec;
-use codex_tools::ToolName;
-use codex_utils_output_truncation::TruncationPolicy;
-use codex_utils_output_truncation::formatted_truncate_text;
-use codex_utils_string::take_bytes_at_char_boundary;
+use crewon_protocol::mcp::CallToolResult;
+use crewon_protocol::models::FunctionCallOutputBody;
+use crewon_protocol::models::FunctionCallOutputContentItem;
+use crewon_protocol::models::FunctionCallOutputPayload;
+use crewon_protocol::models::ResponseInputItem;
+use crewon_protocol::models::function_call_output_content_items_to_text;
+use crewon_tools::LoadableToolSpec;
+use crewon_tools::ToolName;
+use crewon_utils_output_truncation::TruncationPolicy;
+use crewon_utils_output_truncation::formatted_truncate_text;
+use crewon_utils_string::take_bytes_at_char_boundary;
 use serde::Serialize;
 use serde_json::Value as JsonValue;
 use std::sync::Arc;
@@ -25,8 +25,8 @@ use std::time::Duration;
 use tokio::sync::Mutex;
 use tokio_util::sync::CancellationToken;
 
-pub use codex_tools::ToolOutput;
-pub use codex_tools::ToolPayload;
+pub use crewon_tools::ToolOutput;
+pub use crewon_tools::ToolPayload;
 
 pub(crate) fn boxed_tool_output<T>(output: T) -> Box<dyn ToolOutput>
 where
@@ -44,7 +44,7 @@ pub enum ToolCallSource {
         /// Runtime cell that issued the nested tool request.
         cell_id: String,
         /// Code-mode's per-cell tool invocation id. This is useful for
-        /// debugging the JS/runtime bridge, but it is not the Codex tool call id
+        /// debugging the JS/runtime bridge, but it is not the Crewon tool call id
         /// because the runtime id only needs to be unique within one cell.
         runtime_tool_call_id: String,
     },

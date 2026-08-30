@@ -2,13 +2,17 @@ mod amazon_bedrock;
 mod auth;
 mod bearer_auth_provider;
 mod models_endpoint;
+mod probe;
 mod provider;
 
 pub use auth::auth_provider_from_auth;
 pub use auth::unauthenticated_auth_provider;
 pub use bearer_auth_provider::BearerAuthProvider;
 pub use bearer_auth_provider::BearerAuthProvider as CoreAuthProvider;
-pub use codex_protocol::account::ProviderAccount;
+pub use crewon_protocol::account::ProviderAccount;
+pub use probe::ProbeOutcome;
+pub use probe::ProbeStatus;
+pub use probe::probe_model_provider;
 pub use provider::ModelProvider;
 pub use provider::ProviderAccountError;
 pub use provider::ProviderAccountResult;

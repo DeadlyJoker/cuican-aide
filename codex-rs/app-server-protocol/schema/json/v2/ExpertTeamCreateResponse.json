@@ -1,0 +1,116 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "additionalProperties": false,
+  "definitions": {
+    "ExpertRole": {
+      "additionalProperties": false,
+      "description": "One bounded local role in an Experts definition.",
+      "properties": {
+        "agentType": {
+          "type": "string"
+        },
+        "instructions": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "name": {
+          "type": "string"
+        },
+        "role": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "agentType",
+        "name",
+        "role"
+      ],
+      "type": "object"
+    },
+    "ExpertTeamConfig": {
+      "additionalProperties": false,
+      "description": "Path-free Experts definition owned by one subject and Conversation workspace.",
+      "properties": {
+        "experts": {
+          "items": {
+            "$ref": "#/definitions/ExpertRole"
+          },
+          "type": "array"
+        },
+        "expertsId": {
+          "type": "string"
+        },
+        "goal": {
+          "type": "string"
+        },
+        "leader": {
+          "$ref": "#/definitions/ExpertRole"
+        },
+        "ownerSubject": {
+          "type": "string"
+        },
+        "recordRevision": {
+          "type": "string"
+        },
+        "spaceId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tenantId": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "title": {
+          "type": "string"
+        },
+        "workspaceKey": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "experts",
+        "expertsId",
+        "goal",
+        "leader",
+        "ownerSubject",
+        "recordRevision",
+        "title",
+        "workspaceKey"
+      ],
+      "type": "object"
+    },
+    "ExpertTeamRecord": {
+      "additionalProperties": false,
+      "description": "Server-owned Experts record projection. The file path is never accepted in create/read params.",
+      "properties": {
+        "config": {
+          "$ref": "#/definitions/ExpertTeamConfig"
+        },
+        "filePath": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "config",
+        "filePath"
+      ],
+      "type": "object"
+    }
+  },
+  "properties": {
+    "record": {
+      "$ref": "#/definitions/ExpertTeamRecord"
+    }
+  },
+  "required": [
+    "record"
+  ],
+  "title": "ExpertTeamCreateResponse",
+  "type": "object"
+}

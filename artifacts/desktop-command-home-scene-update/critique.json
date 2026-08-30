@@ -1,0 +1,26 @@
+{
+  "kind": "critique-panel",
+  "score": 4.9,
+  "axes": {
+    "philosophy": {
+      "score": 5,
+      "notes": "主页场景从偏系统能力的命名收敛为真实用户工作语境：日常办公、代码开发、设计创意，仍保持蓝灰轻工作台和任务输入为中心。"
+    },
+    "hierarchy": {
+      "score": 4.9,
+      "notes": "三枚场景按钮仍位于主输入框上方，默认日常办公；快捷建议跟随场景切换，避免治理、安全、Workflow 等内部能力抢占首屏理解。"
+    },
+    "execution": {
+      "score": 4.9,
+      "notes": "desktop-command.html 已同步 data-zh/data-en、run title、run copy、toast 和默认 placeholder；app.js 场景切换逻辑无需改动。"
+    },
+    "specificity": {
+      "score": 4.9,
+      "notes": "日常办公提供事项、会议、项目同步、知识库；代码开发提供任务拆解、Code Review、测试；设计创意提供方向、走查、交付清单。"
+    },
+    "restraint": {
+      "score": 4.8,
+      "notes": "只替换主页场景与快捷建议文案，没有新增面板或改动布局；现有场景切换和输入组件继续复用。"
+    }
+  }
+}

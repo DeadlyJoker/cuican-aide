@@ -1,0 +1,134 @@
+{
+  "schemaVersion": "crewon.responses-created-parity.v0",
+  "caseId": "AR-036-responses-created-without-id",
+  "rustAcceptanceAudit": [
+    { "name": "created-empty-response", "eventIndex": 0, "outcome": "created" },
+    {
+      "name": "text-delta-after-empty-id",
+      "eventIndex": 1,
+      "outcome": "output.delta"
+    },
+    {
+      "name": "completed-item-after-empty-id",
+      "eventIndex": 2,
+      "outcome": "output.item.completed"
+    },
+    {
+      "name": "completed-with-later-id-and-status",
+      "eventIndex": 3,
+      "outcome": "completed"
+    },
+    {
+      "name": "failed-without-later-id-status",
+      "case": "failed",
+      "eventIndex": 1,
+      "outcome": "terminal.error",
+      "terminalCategory": "provider"
+    },
+    {
+      "name": "incomplete-with-later-id-status",
+      "case": "incomplete",
+      "eventIndex": 1,
+      "outcome": "terminal.error",
+      "terminalCategory": "incomplete"
+    }
+  ],
+  "cases": [
+    {
+      "name": "completed",
+      "events": [
+        {
+          "type": "response.created",
+          "sequence_number": 0,
+          "response": {}
+        },
+        {
+          "type": "response.output_text.delta",
+          "sequence_number": 1,
+          "delta": "done"
+        },
+        {
+          "type": "response.output_item.done",
+          "sequence_number": 2,
+          "item": {
+            "type": "message",
+            "role": "assistant",
+            "content": [{ "type": "output_text", "text": "done" }]
+          }
+        },
+        {
+          "type": "response.completed",
+          "sequence_number": 3,
+          "response": {
+            "id": "resp-late-identity",
+            "status": "completed",
+            "output": [
+              {
+                "type": "message",
+                "role": "assistant",
+                "content": [{ "type": "output_text", "text": "done" }]
+              }
+            ]
+          }
+        }
+      ],
+      "expected": {
+        "stableEvents": ["output.delta", "output.item.completed", "completed"],
+        "terminal": "completed",
+        "errorCategory": null,
+        "retryable": null,
+        "responseId": "resp-late-identity"
+      }
+    },
+    {
+      "name": "failed",
+      "events": [
+        {
+          "type": "response.created",
+          "sequence_number": 0,
+          "response": {}
+        },
+        {
+          "type": "response.failed",
+          "sequence_number": 1,
+          "response": {
+            "error": { "code": "server_error", "message": "provider busy" }
+          }
+        }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "terminal": "failed",
+        "errorCategory": "provider",
+        "retryable": true,
+        "responseId": null
+      }
+    },
+    {
+      "name": "incomplete",
+      "events": [
+        {
+          "type": "response.created",
+          "sequence_number": 0,
+          "response": {}
+        },
+        {
+          "type": "response.incomplete",
+          "sequence_number": 1,
+          "response": {
+            "id": "resp-incomplete-late",
+            "status": "incomplete",
+            "incomplete_details": { "reason": "content_filter" }
+          }
+        }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "terminal": "failed",
+        "errorCategory": "incomplete",
+        "retryable": false,
+        "responseId": null
+      }
+    }
+  ]
+}

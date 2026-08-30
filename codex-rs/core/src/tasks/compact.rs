@@ -6,7 +6,7 @@ use super::emit_compact_metric;
 use crate::session::TurnInput;
 use crate::session::turn_context::TurnContext;
 use crate::state::TaskKind;
-use codex_protocol::user_input::UserInput;
+use crewon_protocol::user_input::UserInput;
 use tokio_util::sync::CancellationToken;
 
 #[derive(Clone, Copy, Default)]
@@ -32,7 +32,7 @@ impl SessionTask for CompactTask {
         let _ = if crate::compact::should_use_remote_compact_task(ctx.provider.info()) {
             if ctx
                 .features
-                .enabled(codex_features::Feature::RemoteCompactionV2)
+                .enabled(crewon_features::Feature::RemoteCompactionV2)
             {
                 emit_compact_metric(
                     &session.services.session_telemetry,

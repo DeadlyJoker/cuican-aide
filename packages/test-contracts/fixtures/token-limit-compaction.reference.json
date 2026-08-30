@@ -1,0 +1,19 @@
+{
+  "schemaVersion": "crewon.token-limit-compaction-parity.v0",
+  "caseId": "AR-023-token-limit-mid-run-compaction",
+  "triggerTotalTokens": 270000,
+  "postCompactionTotalTokens": 80000,
+  "expected": {
+    "requestKinds": [
+      "model",
+      "compaction",
+      "model",
+      "compaction",
+      "model",
+      "compaction",
+      "model"
+    ],
+    "contextCompactedEventCount": 3,
+    "terminalStatus": "completed"
+  }
+}

@@ -1,0 +1,2 @@
+model_verbosity = "medium"
+sandbox_mode = "danger-full-access"

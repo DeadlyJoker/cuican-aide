@@ -1,4 +1,4 @@
-//! Bridges Apps SDK-style `openai/fileParams` metadata into Codex's MCP flow.
+//! Bridges Apps SDK-style `openai/fileParams` metadata into Crewon's MCP flow.
 //!
 //! Strategy:
 //! - Inspect `_meta["openai/fileParams"]` to discover which tool arguments are
@@ -7,13 +7,13 @@
 //!   and rewrite only the declared arguments into the provided-file payload
 //!   shape expected by the downstream Apps tool.
 //!
-//! Model-visible schema masking is owned by `codex-mcp` alongside MCP tool
+//! Model-visible schema masking is owned by `crewon-mcp` alongside MCP tool
 //! inventory, so this module only handles the execution-time argument rewrite.
 
 use crate::session::session::Session;
 use crate::session::turn_context::TurnContext;
-use codex_api::upload_local_file;
-use codex_login::CodexAuth;
+use crewon_api::upload_local_file;
+use crewon_login::CrewonAuth;
 use serde_json::Value as JsonValue;
 
 pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
@@ -57,7 +57,7 @@ pub(crate) async fn rewrite_mcp_tool_arguments_for_openai_files(
 
 async fn rewrite_argument_value_for_openai_files(
     turn_context: &TurnContext,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     field_name: &str,
     value: &JsonValue,
 ) -> Result<Option<JsonValue>, String> {
@@ -97,7 +97,7 @@ async fn rewrite_argument_value_for_openai_files(
 
 async fn build_uploaded_local_argument_value(
     turn_context: &TurnContext,
-    auth: Option<&CodexAuth>,
+    auth: Option<&CrewonAuth>,
     field_name: &str,
     index: Option<usize>,
     file_path: &str,
@@ -106,15 +106,15 @@ async fn build_uploaded_local_argument_value(
     let resolved_path = turn_context.resolve_path(Some(file_path.to_string()));
     let Some(auth) = auth else {
         return Err(
-            "ChatGPT auth is required to upload local files for Codex Apps tools".to_string(),
+            "ChatGPT auth is required to upload local files for Crewon Apps tools".to_string(),
         );
     };
-    if !auth.uses_codex_backend() {
+    if !auth.uses_crewon_backend() {
         return Err(
-            "ChatGPT auth is required to upload local files for Codex Apps tools".to_string(),
+            "ChatGPT auth is required to upload local files for Crewon Apps tools".to_string(),
         );
     }
-    let upload_auth = codex_model_provider::auth_provider_from_auth(auth);
+    let upload_auth = crewon_model_provider::auth_provider_from_auth(auth);
     let uploaded = upload_local_file(
         turn_context.config.chatgpt_base_url.trim_end_matches('/'),
         upload_auth.as_ref(),
@@ -141,7 +141,7 @@ async fn build_uploaded_local_argument_value(
 mod tests {
     use super::*;
     use crate::session::tests::make_session_and_context;
-    use codex_utils_absolute_path::AbsolutePathBuf;
+    use crewon_utils_absolute_path::AbsolutePathBuf;
     use pretty_assertions::assert_eq;
     use std::sync::Arc;
     use tempfile::tempdir;
@@ -150,7 +150,7 @@ mod tests {
     async fn openai_file_argument_rewrite_requires_declared_file_params() {
         let (session, turn_context) = make_session_and_context().await;
         let arguments = Some(serde_json::json!({
-            "file": "/tmp/codex-smoke-file.txt"
+            "file": "/tmp/crewon-smoke-file.txt"
         }));
 
         let rewritten = rewrite_mcp_tool_arguments_for_openai_files(
@@ -182,7 +182,7 @@ mod tests {
             .and(body_json(serde_json::json!({
                 "file_name": "file_report.csv",
                 "file_size": 5,
-                "use_case": "codex",
+                "use_case": "crewon",
             })))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "file_id": "file_123",
@@ -211,7 +211,7 @@ mod tests {
             .await;
 
         let (_, mut turn_context) = make_session_and_context().await;
-        let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+        let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
         let dir = tempdir().expect("temp dir");
         let local_path = dir.path().join("file_report.csv");
         tokio::fs::write(&local_path, b"hello")
@@ -266,7 +266,7 @@ mod tests {
             .and(body_json(serde_json::json!({
                 "file_name": "file_report.csv",
                 "file_size": 5,
-                "use_case": "codex",
+                "use_case": "crewon",
             })))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "file_id": "file_123",
@@ -295,7 +295,7 @@ mod tests {
             .await;
 
         let (_, mut turn_context) = make_session_and_context().await;
-        let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+        let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
         let dir = tempdir().expect("temp dir");
         let local_path = dir.path().join("file_report.csv");
         tokio::fs::write(&local_path, b"hello")
@@ -348,7 +348,7 @@ mod tests {
             .and(body_json(serde_json::json!({
                 "file_name": "one.csv",
                 "file_size": 3,
-                "use_case": "codex",
+                "use_case": "crewon",
             })))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "file_id": "file_1",
@@ -363,7 +363,7 @@ mod tests {
             .and(body_json(serde_json::json!({
                 "file_name": "two.csv",
                 "file_size": 3,
-                "use_case": "codex",
+                "use_case": "crewon",
             })))
             .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
                 "file_id": "file_2",
@@ -410,7 +410,7 @@ mod tests {
             .await;
 
         let (_, mut turn_context) = make_session_and_context().await;
-        let auth = CodexAuth::create_dummy_chatgpt_auth_for_testing();
+        let auth = CrewonAuth::create_dummy_chatgpt_auth_for_testing();
         let dir = tempdir().expect("temp dir");
         tokio::fs::write(dir.path().join("one.csv"), b"one")
             .await
@@ -462,7 +462,7 @@ mod tests {
     async fn rewrite_mcp_tool_arguments_for_openai_files_surfaces_upload_failures() {
         let (mut session, turn_context) = make_session_and_context().await;
         session.services.auth_manager = crate::test_support::auth_manager_from_auth(
-            CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+            CrewonAuth::create_dummy_chatgpt_auth_for_testing(),
         );
         let error = rewrite_mcp_tool_arguments_for_openai_files(
             &session,

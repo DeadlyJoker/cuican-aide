@@ -1,16 +1,28 @@
 [package]
 edition.workspace = true
 license.workspace = true
-name = "codex-core"
+name = "crewon-core"
 version.workspace = true
 
 [lib]
-name = "codex_core"
+name = "crewon_core"
 path = "src/lib.rs"
 
 [[bin]]
-name = "codex-write-config-schema"
+name = "crewon-write-config-schema"
 path = "src/bin/config_schema.rs"
+
+[[bin]]
+name = "test_stdio_server"
+path = "../rmcp-client/src/bin/test_stdio_server.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "test_streamable_http_server"
+path = "../rmcp-client/src/bin/test_streamable_http_server.rs"
+test = false
+doc = false
 
 [lints]
 workspace = true
@@ -20,61 +32,67 @@ anyhow = { workspace = true }
 arc-swap = { workspace = true }
 async-channel = { workspace = true }
 async-trait = { workspace = true }
+axum = { workspace = true, default-features = false, features = [
+    "http1",
+    "json",
+    "tokio",
+] }
 base64 = { workspace = true }
 bm25 = { workspace = true }
 chrono = { workspace = true, features = ["serde"] }
 clap = { workspace = true, features = ["derive"] }
-codex-analytics = { workspace = true }
-codex-api = { workspace = true }
-codex-app-server-protocol = { workspace = true }
-codex-apply-patch = { workspace = true }
-codex-async-utils = { workspace = true }
-codex-code-mode = { workspace = true }
-codex-connectors = { workspace = true }
-codex-context-fragments = { workspace = true }
-codex-config = { workspace = true }
-codex-core-plugins = { workspace = true }
-codex-core-skills = { workspace = true }
-codex-exec-server = { workspace = true }
-codex-extension-api = { workspace = true }
-codex-features = { workspace = true }
-codex-feedback = { workspace = true }
-codex-login = { workspace = true }
-codex-memories-read = { workspace = true }
-codex-mcp = { workspace = true }
-codex-model-provider-info = { workspace = true }
-codex-models-manager = { workspace = true }
-codex-shell-command = { workspace = true }
-codex-execpolicy = { workspace = true }
-codex-git-utils = { workspace = true }
-codex-hooks = { workspace = true }
-codex-install-context = { workspace = true }
-codex-network-proxy = { workspace = true }
-codex-otel = { workspace = true }
-codex-plugin = { workspace = true }
-codex-model-provider = { workspace = true }
-codex-protocol = { workspace = true }
-codex-response-debug-context = { workspace = true }
-codex-prompts = { workspace = true }
-codex-rollout = { workspace = true }
-codex-rollout-trace = { workspace = true }
-codex-rmcp-client = { workspace = true }
-codex-sandboxing = { workspace = true }
-codex-state = { workspace = true }
-codex-terminal-detection = { workspace = true }
-codex-thread-store = { workspace = true }
-codex-tools = { workspace = true }
-codex-utils-absolute-path = { workspace = true }
-codex-utils-cache = { workspace = true }
-codex-utils-image = { workspace = true }
-codex-utils-home-dir = { workspace = true }
-codex-utils-output-truncation = { workspace = true }
-codex-utils-path = { workspace = true }
-codex-utils-plugins = { workspace = true }
-codex-utils-pty = { workspace = true }
-codex-utils-string = { workspace = true }
-codex-utils-stream-parser = { workspace = true }
-codex-windows-sandbox = { package = "codex-windows-sandbox", path = "../windows-sandbox-rs" }
+crewon-analytics = { workspace = true }
+crewon-api = { workspace = true }
+crewon-app-server-protocol = { workspace = true }
+crewon-apply-patch = { workspace = true }
+crewon-async-utils = { workspace = true }
+crewon-code-mode = { workspace = true }
+crewon-connectors = { workspace = true }
+crewon-context-fragments = { workspace = true }
+crewon-config = { workspace = true }
+crewon-core-plugins = { workspace = true }
+crewon-core-skills = { workspace = true }
+crewon-exec-server = { workspace = true }
+crewon-extension-api = { workspace = true }
+crewon-features = { workspace = true }
+crewon-feedback = { workspace = true }
+crewon-login = { workspace = true }
+crewon-memories-read = { workspace = true }
+crewon-mcp = { workspace = true }
+crewon-model-provider-info = { workspace = true }
+crewon-models-manager = { workspace = true }
+crewon-shell-command = { workspace = true }
+crewon-execpolicy = { workspace = true }
+crewon-git-utils = { workspace = true }
+crewon-hooks = { workspace = true }
+crewon-install-context = { workspace = true }
+crewon-network-proxy = { workspace = true }
+crewon-otel = { workspace = true }
+crewon-plugin = { workspace = true }
+crewon-model-provider = { workspace = true }
+crewon-protocol = { workspace = true }
+crewon-response-debug-context = { workspace = true }
+crewon-prompts = { workspace = true }
+crewon-rollout = { workspace = true }
+crewon-rollout-trace = { workspace = true }
+crewon-rmcp-client = { workspace = true }
+crewon-sandboxing = { workspace = true }
+crewon-scene-runtime = { workspace = true }
+crewon-state = { workspace = true }
+crewon-terminal-detection = { workspace = true }
+crewon-thread-store = { workspace = true }
+crewon-tools = { workspace = true }
+crewon-utils-absolute-path = { workspace = true }
+crewon-utils-cache = { workspace = true }
+crewon-utils-image = { workspace = true }
+crewon-utils-home-dir = { workspace = true }
+crewon-utils-output-truncation = { workspace = true }
+crewon-utils-path = { workspace = true }
+crewon-utils-plugins = { workspace = true }
+crewon-utils-pty = { workspace = true }
+crewon-utils-string = { workspace = true }
+crewon-utils-stream-parser = { workspace = true }
+crewon-windows-sandbox = { package = "crewon-windows-sandbox", path = "../windows-sandbox-rs" }
 csv = { workspace = true }
 dirs = { workspace = true }
 dunce = { workspace = true }
@@ -90,10 +108,12 @@ rand = { workspace = true }
 regex-lite = { workspace = true }
 reqwest = { workspace = true, features = ["json", "stream"] }
 rmcp = { workspace = true, default-features = false, features = [
+    "auth",
     "base64",
     "macros",
     "schemars",
     "server",
+    "transport-streamable-http-server",
 ] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
@@ -103,11 +123,15 @@ similar = { workspace = true }
 tempfile = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = [
+    "io-util",
     "io-std",
     "macros",
+    "net",
     "process",
     "rt-multi-thread",
     "signal",
+    "sync",
+    "time",
 ] }
 tokio-util = { workspace = true, features = ["rt"] }
 tokio-tungstenite = { workspace = true }
@@ -128,16 +152,16 @@ openssl-sys = { workspace = true, features = ["vendored"] }
 openssl-sys = { workspace = true, features = ["vendored"] }
 
 [target.'cfg(unix)'.dependencies]
-codex-shell-escalation = { workspace = true }
+crewon-shell-escalation = { workspace = true }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
 assert_matches = { workspace = true }
-codex-image-generation-extension = { workspace = true }
-codex-otel = { workspace = true }
-codex-test-binary-support = { workspace = true }
-codex-utils-cargo-bin = { workspace = true }
-codex-web-search-extension = { workspace = true }
+crewon-image-generation-extension = { workspace = true }
+crewon-otel = { workspace = true }
+crewon-test-binary-support = { workspace = true }
+crewon-utils-cargo-bin = { workspace = true }
+crewon-web-search-extension = { workspace = true }
 core_test_support = { workspace = true }
 ctor = { workspace = true }
 insta = { workspace = true }

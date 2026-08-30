@@ -1,19 +1,19 @@
 use crate::shell::ShellType;
 
 use super::*;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::FileSystemAccessMode;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSandboxEntry;
-use codex_protocol::permissions::FileSystemSandboxPolicy;
-use codex_protocol::permissions::FileSystemSpecialPath;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::permissions::project_roots_glob_pattern;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::SandboxPolicy;
-use codex_protocol::protocol::TurnContextItem;
-use codex_utils_absolute_path::test_support::PathBufExt;
 use core_test_support::test_path_buf;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::FileSystemAccessMode;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSandboxEntry;
+use crewon_protocol::permissions::FileSystemSandboxPolicy;
+use crewon_protocol::permissions::FileSystemSpecialPath;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::permissions::project_roots_glob_pattern;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::SandboxPolicy;
+use crewon_protocol::protocol::TurnContextItem;
+use crewon_utils_absolute_path::test_support::PathBufExt;
 use pretty_assertions::assert_eq;
 use std::path::Path;
 use std::path::PathBuf;
@@ -184,7 +184,7 @@ fn turn_context_item_filesystem_uses_workspace_roots_instead_of_cwd() {
         multi_agent_version: None,
         realtime_active: None,
         effort: None,
-        summary: codex_protocol::config_types::ReasoningSummary::Auto,
+        summary: crewon_protocol::config_types::ReasoningSummary::Auto,
     };
 
     let context = EnvironmentContext::from_turn_context_item(&item, fake_shell_name()).render();

@@ -1,0 +1,47 @@
+{
+  "schemaVersion": "crewon.mcp-tool-scheduling.v0",
+  "cases": [
+    {
+      "caseId": "AR-017-default-unknown-tool",
+      "legacyRust": {
+        "admission": "available",
+        "execution": "serial",
+        "decision": "server-default"
+      },
+      "target": {
+        "admission": "unavailable",
+        "execution": null,
+        "decision": "unreviewed-tool-not-exposed"
+      },
+      "disposition": "redesign"
+    },
+    {
+      "caseId": "AR-018-reviewed-read-only-tool",
+      "legacyRust": {
+        "admission": "available",
+        "execution": "parallel",
+        "decision": "read-only"
+      },
+      "target": {
+        "admission": "available",
+        "execution": "parallel",
+        "decision": "read-only"
+      },
+      "disposition": "parity"
+    },
+    {
+      "caseId": "AR-019-server-opt-in-mutation-tool",
+      "legacyRust": {
+        "admission": "available",
+        "execution": "parallel",
+        "decision": "server-opt-in"
+      },
+      "target": {
+        "admission": "available",
+        "execution": "serial",
+        "decision": "mutation-receipt-gated"
+      },
+      "disposition": "redesign"
+    }
+  ]
+}

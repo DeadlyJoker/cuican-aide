@@ -1,10 +1,10 @@
 use anyhow::Result;
 use anyhow::anyhow;
 use app_test_support::TestAppServer;
-use codex_app_server_protocol::FuzzyFileSearchSessionCompletedNotification;
-use codex_app_server_protocol::FuzzyFileSearchSessionUpdatedNotification;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
+use crewon_app_server_protocol::FuzzyFileSearchSessionCompletedNotification;
+use crewon_app_server_protocol::FuzzyFileSearchSessionUpdatedNotification;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::path::Path;
@@ -216,7 +216,7 @@ async fn assert_no_session_updates_for(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn test_fuzzy_file_search_sorts_and_includes_indices() -> Result<()> {
-    // Prepare a temporary Codex home and a separate root with test files.
+    // Prepare a temporary Crewon home and a separate root with test files.
     let codex_home = TempDir::new()?;
     create_config_toml(codex_home.path())?;
     let root = TempDir::new()?;

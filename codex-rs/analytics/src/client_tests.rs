@@ -1,35 +1,35 @@
 use super::AnalyticsEventsClient;
 use super::AnalyticsEventsQueue;
 use super::track_event_request_batches;
-use crate::events::CodexAcceptedLineFingerprintsEventParams;
-use crate::events::CodexAcceptedLineFingerprintsEventRequest;
+use crate::events::CrewonAcceptedLineFingerprintsEventParams;
+use crate::events::CrewonAcceptedLineFingerprintsEventRequest;
 use crate::events::SkillInvocationEventParams;
 use crate::events::SkillInvocationEventRequest;
 use crate::events::TrackEventRequest;
 use crate::facts::AnalyticsFact;
 use crate::facts::InvocationType;
-use codex_app_server_protocol::ApprovalsReviewer as AppServerApprovalsReviewer;
-use codex_app_server_protocol::AskForApproval as AppServerAskForApproval;
-use codex_app_server_protocol::ClientRequest;
-use codex_app_server_protocol::ClientResponsePayload;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::SandboxPolicy as AppServerSandboxPolicy;
-use codex_app_server_protocol::SessionSource as AppServerSessionSource;
-use codex_app_server_protocol::Thread;
-use codex_app_server_protocol::ThreadArchiveParams;
-use codex_app_server_protocol::ThreadArchiveResponse;
-use codex_app_server_protocol::ThreadForkResponse;
-use codex_app_server_protocol::ThreadResumeResponse;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::ThreadStatus as AppServerThreadStatus;
-use codex_app_server_protocol::Turn;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::TurnStatus as AppServerTurnStatus;
-use codex_app_server_protocol::TurnSteerParams;
-use codex_app_server_protocol::TurnSteerResponse;
-use codex_utils_absolute_path::test_support::PathBufExt;
-use codex_utils_absolute_path::test_support::test_path_buf;
+use crewon_app_server_protocol::ApprovalsReviewer as AppServerApprovalsReviewer;
+use crewon_app_server_protocol::AskForApproval as AppServerAskForApproval;
+use crewon_app_server_protocol::ClientRequest;
+use crewon_app_server_protocol::ClientResponsePayload;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::SandboxPolicy as AppServerSandboxPolicy;
+use crewon_app_server_protocol::SessionSource as AppServerSessionSource;
+use crewon_app_server_protocol::Thread;
+use crewon_app_server_protocol::ThreadArchiveParams;
+use crewon_app_server_protocol::ThreadArchiveResponse;
+use crewon_app_server_protocol::ThreadForkResponse;
+use crewon_app_server_protocol::ThreadResumeResponse;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::ThreadStatus as AppServerThreadStatus;
+use crewon_app_server_protocol::Turn;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::TurnStatus as AppServerTurnStatus;
+use crewon_app_server_protocol::TurnSteerParams;
+use crewon_app_server_protocol::TurnSteerResponse;
+use crewon_utils_absolute_path::test_support::PathBufExt;
+use crewon_utils_absolute_path::test_support::test_path_buf;
 use std::collections::HashSet;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -38,13 +38,13 @@ use tokio::sync::mpsc::error::TryRecvError;
 
 fn sample_accepted_line_fingerprint_event(thread_id: &str) -> TrackEventRequest {
     TrackEventRequest::AcceptedLineFingerprints(Box::new(
-        CodexAcceptedLineFingerprintsEventRequest {
-            event_type: "codex_accepted_line_fingerprints",
-            event_params: CodexAcceptedLineFingerprintsEventParams {
-                event_type: "codex.accepted_line_fingerprints",
+        CrewonAcceptedLineFingerprintsEventRequest {
+            event_type: "crewon_accepted_line_fingerprints",
+            event_params: CrewonAcceptedLineFingerprintsEventParams {
+                event_type: "crewon.accepted_line_fingerprints",
                 turn_id: "turn-1".to_string(),
                 thread_id: thread_id.to_string(),
-                product_surface: Some("codex".to_string()),
+                product_surface: Some("crewon".to_string()),
                 model_slug: Some("gpt-5.1-codex".to_string()),
                 completed_at: 1,
                 repo_hash: None,
@@ -133,7 +133,7 @@ fn sample_thread(thread_id: &str) -> Thread {
         status: AppServerThreadStatus::Idle,
         path: None,
         cwd: test_path_buf("/tmp").abs(),
-        cli_version: "0.0.0".to_string(),
+        client_version: "0.0.0".to_string(),
         source: AppServerSessionSource::Exec,
         thread_source: None,
         agent_nickname: None,
@@ -200,7 +200,7 @@ fn sample_turn_start_response() -> ClientResponsePayload {
     ClientResponsePayload::TurnStart(TurnStartResponse {
         turn: Turn {
             id: "turn-1".to_string(),
-            items_view: codex_app_server_protocol::TurnItemsView::Full,
+            items_view: crewon_app_server_protocol::TurnItemsView::Full,
             items: Vec::new(),
             status: AppServerTurnStatus::InProgress,
             error: None,

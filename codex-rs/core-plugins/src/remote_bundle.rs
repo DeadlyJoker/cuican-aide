@@ -5,11 +5,11 @@ use crate::store::PluginInstallResult;
 use crate::store::PluginStore;
 use crate::store::PluginStoreError;
 use crate::store::validate_plugin_version_segment;
-use codex_login::default_client::build_reqwest_client;
-use codex_plugin::PluginId;
-use codex_plugin::PluginIdError;
-use codex_utils_absolute_path::AbsolutePathBuf;
-use codex_utils_plugins::find_plugin_manifest_path;
+use crewon_login::default_client::build_reqwest_client;
+use crewon_plugin::PluginId;
+use crewon_plugin::PluginIdError;
+use crewon_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_plugins::find_plugin_manifest_path;
 use reqwest::Response;
 use reqwest::StatusCode;
 use serde_json::Value as JsonValue;
@@ -745,7 +745,7 @@ mod tests {
             bundle,
             tar_gz_bytes(&[
                 (
-                    ".codex-plugin/plugin.json",
+                    ".crewon-plugin/plugin.json",
                     br#"{"name":"linear","version":"bundle-version"}"#,
                     /*mode*/ 0o644,
                 ),
@@ -763,7 +763,7 @@ mod tests {
             &std::fs::read_to_string(
                 result
                     .installed_path
-                    .join(".codex-plugin/plugin.json")
+                    .join(".crewon-plugin/plugin.json")
                     .as_path(),
             )
             .expect("read installed plugin manifest"),
@@ -796,10 +796,10 @@ mod tests {
     #[test]
     fn find_extracted_plugin_root_uses_local_manifest_discovery() {
         let extraction_root = tempdir().expect("tempdir");
-        std::fs::create_dir_all(extraction_root.path().join(".codex-plugin"))
+        std::fs::create_dir_all(extraction_root.path().join(".crewon-plugin"))
             .expect("create manifest dir");
         std::fs::write(
-            extraction_root.path().join(".codex-plugin/plugin.json"),
+            extraction_root.path().join(".crewon-plugin/plugin.json"),
             r#"{"name":"linear"}"#,
         )
         .expect("write manifest");
@@ -814,9 +814,9 @@ mod tests {
     fn find_extracted_plugin_root_rejects_nested_plugin_root() {
         let extraction_root = tempdir().expect("tempdir");
         let plugin_root = extraction_root.path().join("linear");
-        std::fs::create_dir_all(plugin_root.join(".codex-plugin")).expect("create manifest dir");
+        std::fs::create_dir_all(plugin_root.join(".crewon-plugin")).expect("create manifest dir");
         std::fs::write(
-            plugin_root.join(".codex-plugin/plugin.json"),
+            plugin_root.join(".crewon-plugin/plugin.json"),
             r#"{"name":"linear"}"#,
         )
         .expect("write manifest");
@@ -886,7 +886,7 @@ mod tests {
         extract_plugin_bundle_tar_gz(
             &tar_gz_bytes(&[
                 (
-                    ".codex-plugin/plugin.json",
+                    ".crewon-plugin/plugin.json",
                     b"{\"name\":\"linear\"}",
                     /*mode*/ 0o644,
                 ),

@@ -1,8 +1,8 @@
-use codex_tools::JsonSchema;
-use codex_tools::LIST_AVAILABLE_PLUGINS_TO_INSTALL_TOOL_NAME;
-use codex_tools::REQUEST_PLUGIN_INSTALL_TOOL_NAME;
-use codex_tools::ResponsesApiTool;
-use codex_tools::ToolSpec;
+use crewon_tools::JsonSchema;
+use crewon_tools::LIST_AVAILABLE_PLUGINS_TO_INSTALL_TOOL_NAME;
+use crewon_tools::REQUEST_PLUGIN_INSTALL_TOOL_NAME;
+use crewon_tools::ResponsesApiTool;
+use crewon_tools::ToolSpec;
 use std::collections::BTreeMap;
 
 pub(crate) fn create_request_plugin_install_tool() -> ToolSpec {
@@ -57,7 +57,7 @@ pub(crate) fn create_request_plugin_install_tool() -> ToolSpec {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use codex_tools::JsonSchema;
+    use crewon_tools::JsonSchema;
     use pretty_assertions::assert_eq;
     use std::collections::BTreeMap;
 

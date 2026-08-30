@@ -4,16 +4,17 @@ use crate::agents_md::LoadedAgentsMd;
 use crate::config::ConstraintError;
 use crate::skills::SkillError;
 use crate::state::ActiveTurn;
-use codex_extension_api::ExtensionDataInit;
-use codex_protocol::SessionId;
-use codex_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
-use codex_protocol::config_types::ServiceTier;
-use codex_protocol::permissions::FileSystemPath;
-use codex_protocol::permissions::FileSystemSpecialPath;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::ThreadSource;
-use codex_protocol::protocol::TurnEnvironmentSelection;
-use codex_protocol::protocol::TurnEnvironmentSelections;
+use crate::state::RuntimeTurnOwnership;
+use crewon_extension_api::ExtensionDataInit;
+use crewon_protocol::SessionId;
+use crewon_protocol::config_types::SERVICE_TIER_DEFAULT_REQUEST_VALUE;
+use crewon_protocol::config_types::ServiceTier;
+use crewon_protocol::permissions::FileSystemPath;
+use crewon_protocol::permissions::FileSystemSpecialPath;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::ThreadSource;
+use crewon_protocol::protocol::TurnEnvironmentSelection;
+use crewon_protocol::protocol::TurnEnvironmentSelections;
 use std::sync::OnceLock;
 use tokio::sync::Semaphore;
 
@@ -37,7 +38,10 @@ pub(crate) struct Session {
     pub(super) pending_mcp_server_refresh_config: Mutex<Option<McpServerRefreshConfig>>,
     pub(crate) conversation: Arc<RealtimeConversationManager>,
     pub(crate) active_turn: Mutex<Option<ActiveTurn>>,
+    pub(crate) runtime_turn_ownership: RuntimeTurnOwnership,
     pub(crate) input_queue: InputQueue,
+    #[allow(dead_code)]
+    pub(crate) user_input_once_index: Mutex<user_input_once_index::UserInputOnceIndex>,
     pub(crate) guardian_review_session: GuardianReviewSessionManager,
     pub(crate) services: SessionServices,
     pub(super) next_internal_sub_id: AtomicU64,
@@ -83,7 +87,7 @@ pub(crate) struct SessionConfiguration {
     /// Thread-scoped runtime workspace roots for materializing symbolic
     /// workspace permissions at session runtime.
     pub(super) workspace_roots: Vec<AbsolutePathBuf>,
-    /// Directory containing all Codex state for this session.
+    /// Directory containing all Crewon state for this session.
     pub(super) codex_home: AbsolutePathBuf,
     /// Optional user-facing name for the thread, updated during the session.
     pub(super) thread_name: Option<String>,
@@ -94,7 +98,7 @@ pub(crate) struct SessionConfiguration {
     pub(super) metrics_service_name: Option<String>,
     pub(super) app_server_client_name: Option<String>,
     pub(super) app_server_client_version: Option<String>,
-    /// Source of the session (cli, vscode, exec, mcp, ...)
+    /// Source of the session (legacy CLI, vscode, exec, mcp, ...)
     pub(super) session_source: SessionSource,
     /// Immediate history source copied into this thread, when this thread was forked.
     pub(super) forked_from_thread_id: Option<ThreadId>,
@@ -157,7 +161,7 @@ impl SessionConfiguration {
 
     pub(super) fn sandbox_policy(&self) -> SandboxPolicy {
         let permission_profile = self.permission_profile();
-        codex_sandboxing::compatibility_sandbox_policy_for_permission_profile(
+        crewon_sandboxing::compatibility_sandbox_policy_for_permission_profile(
             &permission_profile,
             self.cwd(),
         )
@@ -194,6 +198,11 @@ impl SessionConfiguration {
             forked_from_thread_id: self.forked_from_thread_id,
             parent_thread_id: self.parent_thread_id,
             thread_source: self.thread_source.clone(),
+            scene_runtime: self
+                .original_config_do_not_use
+                .extra_config
+                .as_ref()
+                .and_then(|extra| extra.scene_runtime.clone()),
         }
     }
 
@@ -310,7 +319,7 @@ impl SessionConfiguration {
                         allowed: format!(
                             "configured permission profile with valid network policy ({err})"
                         ),
-                        requirement_source: codex_config::RequirementSource::Unknown,
+                        requirement_source: crewon_config::RequirementSource::Unknown,
                     })?;
                 config
                     .permissions
@@ -483,7 +492,7 @@ impl Session {
         skills_manager: Arc<SkillsManager>,
         plugins_manager: Arc<PluginsManager>,
         mcp_manager: Arc<McpManager>,
-        extensions: Arc<codex_extension_api::ExtensionRegistry<crate::config::Config>>,
+        extensions: Arc<crewon_extension_api::ExtensionRegistry<crate::config::Config>>,
         thread_extension_init: ExtensionDataInit,
         agent_control: AgentControl,
         environment_manager: Arc<EnvironmentManager>,
@@ -668,7 +677,7 @@ impl Session {
             let trace_agent_path = session_configuration
                 .session_source
                 .get_agent_path()
-                .unwrap_or_else(codex_protocol::AgentPath::root);
+                .unwrap_or_else(crewon_protocol::AgentPath::root);
             let trace_task_name =
                 (!trace_agent_path.is_root()).then(|| trace_agent_path.name().to_string());
             let trace_metadata = ThreadStartedTraceMetadata {
@@ -739,9 +748,9 @@ impl Session {
             }
 
             let auth = auth.as_ref();
-            let auth_mode = auth.map(CodexAuth::auth_mode).map(TelemetryAuthMode::from);
-            let account_id = auth.and_then(CodexAuth::get_account_id);
-            let account_email = auth.and_then(CodexAuth::get_account_email);
+            let auth_mode = auth.map(CrewonAuth::auth_mode).map(TelemetryAuthMode::from);
+            let account_id = auth.and_then(CrewonAuth::get_account_id);
+            let account_email = auth.and_then(CrewonAuth::get_account_email);
             let originator = originator().value;
             let terminal_type = user_agent();
             let session_model = session_configuration.collaboration_mode.model().to_string();
@@ -956,16 +965,16 @@ impl Session {
                 ),
             ));
             let session_extension_data =
-                codex_extension_api::ExtensionData::new(session_id.to_string());
+                crewon_extension_api::ExtensionData::new(session_id.to_string());
             session_extension_data.insert(McpResourceClient::new(Arc::clone(
                 &mcp_connection_manager,
             )));
-            let thread_extension_data = codex_extension_api::ExtensionData::new_with_init(
+            let thread_extension_data = crewon_extension_api::ExtensionData::new_with_init(
                 thread_id.to_string(),
                 thread_extension_init,
             );
             for contributor in extensions.thread_lifecycle_contributors() {
-                contributor.on_thread_start(codex_extension_api::ThreadStartInput {
+                contributor.on_thread_start(crewon_extension_api::ThreadStartInput {
                     config: config.as_ref(),
                     session_source: &session_configuration.session_source,
                     persistent_thread_state_available: state_db_ctx.is_some(),
@@ -1045,6 +1054,8 @@ impl Session {
             let (out_of_band_elicitation_paused, _out_of_band_elicitation_paused_rx) =
                 watch::channel(false);
 
+            let user_input_once_index =
+                user_input_once_index::UserInputOnceIndex::from_history(&initial_history, thread_id);
             let sess = Arc::new(Session {
                 thread_id,
                 installation_id,
@@ -1058,7 +1069,9 @@ impl Session {
                 pending_mcp_server_refresh_config: Mutex::new(None),
                 conversation: Arc::new(RealtimeConversationManager::new()),
                 active_turn: Mutex::new(None),
+                runtime_turn_ownership: RuntimeTurnOwnership::default(),
                 input_queue: InputQueue::new(),
+                user_input_once_index: Mutex::new(user_input_once_index),
                 guardian_review_session: GuardianReviewSessionManager::default(),
                 services,
                 next_internal_sub_id: AtomicU64::new(0),
@@ -1105,9 +1118,9 @@ impl Session {
             }
 
             let tool_plugin_provenance = mcp_manager.tool_plugin_provenance(config.as_ref()).await;
-            let host_owned_codex_apps_enabled = config
+            let host_owned_crewon_apps_enabled = config
                 .features
-                .apps_enabled_for_auth(auth.as_ref().is_some_and(|auth| auth.uses_codex_backend()));
+                .apps_enabled_for_auth(auth.as_ref().is_some_and(|auth| auth.uses_crewon_backend()));
             let client_elicitation_capability = if config.features.enabled(Feature::AuthElicitation) {
                 ElicitationCapability {
                     form: Some(FormElicitationCapability::default()),
@@ -1156,8 +1169,8 @@ impl Session {
                 session_configuration.permission_profile(),
                 mcp_runtime_context,
                 config.codex_home.to_path_buf(),
-                codex_apps_tools_cache_key(auth),
-                host_owned_codex_apps_enabled,
+                crewon_apps_tools_cache_key(auth),
+                host_owned_crewon_apps_enabled,
                 config.prefix_mcp_tool_names(),
                 client_elicitation_capability,
                 tool_plugin_provenance,
@@ -1175,11 +1188,11 @@ impl Session {
             sess.schedule_startup_prewarm(session_configuration.base_instructions.clone())
                 .await;
             let session_start_source = match &initial_history {
-                InitialHistory::Resumed(_) => codex_hooks::SessionStartSource::Resume,
+                InitialHistory::Resumed(_) => crewon_hooks::SessionStartSource::Resume,
                 InitialHistory::New | InitialHistory::Forked(_) => {
-                    codex_hooks::SessionStartSource::Startup
+                    crewon_hooks::SessionStartSource::Startup
                 }
-                InitialHistory::Cleared => codex_hooks::SessionStartSource::Clear,
+                InitialHistory::Cleared => crewon_hooks::SessionStartSource::Clear,
             };
 
             // record_initial_history can emit events. We record only after the SessionConfiguredEvent is emitted.

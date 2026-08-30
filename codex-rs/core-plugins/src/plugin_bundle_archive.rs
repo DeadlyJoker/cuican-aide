@@ -59,10 +59,10 @@ pub(crate) fn pack_plugin_bundle_tar_gz(
             reason: "expected a plugin directory".to_string(),
         });
     }
-    if !plugin_path.join(".codex-plugin/plugin.json").is_file() {
+    if !plugin_path.join(".crewon-plugin/plugin.json").is_file() {
         return Err(PluginBundlePackError::InvalidPluginPath {
             path: plugin_path.to_path_buf(),
-            reason: "missing .codex-plugin/plugin.json".to_string(),
+            reason: "missing .crewon-plugin/plugin.json".to_string(),
         });
     }
 

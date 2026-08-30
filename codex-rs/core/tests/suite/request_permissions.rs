@@ -1,25 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use anyhow::Result;
-use codex_core::config::Constrained;
-use codex_core::sandboxing::SandboxPermissions;
-use codex_features::Feature;
-use codex_protocol::config_types::ApprovalsReviewer;
-use codex_protocol::models::AdditionalPermissionProfile as PermissionProfile;
-use codex_protocol::models::FileSystemPermissions;
-use codex_protocol::models::PermissionProfile as CorePermissionProfile;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::AskForApproval;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::ExecApprovalRequestEvent;
-use codex_protocol::protocol::GranularApprovalConfig;
-use codex_protocol::protocol::Op;
-use codex_protocol::protocol::ReviewDecision;
-use codex_protocol::request_permissions::PermissionGrantScope;
-use codex_protocol::request_permissions::RequestPermissionProfile;
-use codex_protocol::request_permissions::RequestPermissionsResponse;
-use codex_protocol::user_input::UserInput;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::responses::ev_assistant_message;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_function_call;
@@ -30,11 +11,30 @@ use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::skip_if_sandbox;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::local_selections;
-use core_test_support::test_codex::test_codex;
-use core_test_support::test_codex::turn_permission_fields;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::local_selections;
+use core_test_support::test_crewon::test_crewon;
+use core_test_support::test_crewon::turn_permission_fields;
 use core_test_support::wait_for_event;
+use crewon_core::config::Constrained;
+use crewon_core::sandboxing::SandboxPermissions;
+use crewon_features::Feature;
+use crewon_protocol::config_types::ApprovalsReviewer;
+use crewon_protocol::models::AdditionalPermissionProfile as PermissionProfile;
+use crewon_protocol::models::FileSystemPermissions;
+use crewon_protocol::models::PermissionProfile as CorePermissionProfile;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::AskForApproval;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::ExecApprovalRequestEvent;
+use crewon_protocol::protocol::GranularApprovalConfig;
+use crewon_protocol::protocol::Op;
+use crewon_protocol::protocol::ReviewDecision;
+use crewon_protocol::request_permissions::PermissionGrantScope;
+use crewon_protocol::request_permissions::RequestPermissionProfile;
+use crewon_protocol::request_permissions::RequestPermissionsResponse;
+use crewon_protocol::user_input::UserInput;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use regex_lite::Regex;
 use serde_json::Value;
@@ -182,7 +182,7 @@ fn shell_event_with_raw_request_permissions(
 }
 
 async fn submit_turn(
-    test: &TestCodex,
+    test: &TestCrewon,
     prompt: &str,
     approval_policy: AskForApproval,
     permission_profile: CorePermissionProfile,
@@ -190,7 +190,7 @@ async fn submit_turn(
     let session_model = test.session_configured.model.clone();
     let (sandbox_policy, permission_profile) =
         turn_permission_fields(permission_profile, test.cwd.path());
-    test.codex
+    test.crewon
         .submit(Op::UserInput {
             items: vec![UserInput::Text {
                 text: prompt.into(),
@@ -199,15 +199,15 @@ async fn submit_turn(
             final_output_json_schema: None,
             responsesapi_client_metadata: None,
             additional_context: Default::default(),
-            thread_settings: codex_protocol::protocol::ThreadSettingsOverrides {
+            thread_settings: crewon_protocol::protocol::ThreadSettingsOverrides {
                 environments: Some(local_selections(test.config.cwd.clone())),
                 approval_policy: Some(approval_policy),
                 approvals_reviewer: Some(ApprovalsReviewer::User),
                 sandbox_policy: Some(sandbox_policy),
                 permission_profile,
-                collaboration_mode: Some(codex_protocol::config_types::CollaborationMode {
-                    mode: codex_protocol::config_types::ModeKind::Default,
-                    settings: codex_protocol::config_types::Settings {
+                collaboration_mode: Some(crewon_protocol::config_types::CollaborationMode {
+                    mode: crewon_protocol::config_types::ModeKind::Default,
+                    settings: crewon_protocol::config_types::Settings {
                         model: session_model,
                         reasoning_effort: None,
                         developer_instructions: None,
@@ -220,18 +220,18 @@ async fn submit_turn(
     Ok(())
 }
 
-async fn wait_for_completion(test: &TestCodex) {
-    wait_for_event(&test.codex, |event| {
+async fn wait_for_completion(test: &TestCrewon) {
+    wait_for_event(&test.crewon, |event| {
         matches!(event, EventMsg::TurnComplete(_))
     })
     .await;
 }
 
 async fn expect_exec_approval(
-    test: &TestCodex,
+    test: &TestCrewon,
     expected_command: &str,
 ) -> ExecApprovalRequestEvent {
-    let event = wait_for_event(&test.codex, |event| {
+    let event = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::ExecApprovalRequest(_) | EventMsg::TurnComplete(_)
@@ -255,9 +255,9 @@ async fn expect_exec_approval(
 }
 
 async fn wait_for_exec_approval_or_completion(
-    test: &TestCodex,
+    test: &TestCrewon,
 ) -> Option<ExecApprovalRequestEvent> {
-    let event = wait_for_event(&test.codex, |event| {
+    let event = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::ExecApprovalRequest(_) | EventMsg::TurnComplete(_)
@@ -273,10 +273,10 @@ async fn wait_for_exec_approval_or_completion(
 }
 
 async fn expect_request_permissions_event(
-    test: &TestCodex,
+    test: &TestCrewon,
     expected_call_id: &str,
 ) -> RequestPermissionProfile {
-    let event = wait_for_event(&test.codex, |event| {
+    let event = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::RequestPermissions(_) | EventMsg::TurnComplete(_)
@@ -333,7 +333,7 @@ async fn with_additional_permissions_requires_approval_under_on_request() -> Res
     let permission_profile = CorePermissionProfile::read_only();
     let permission_profile_for_config = CorePermissionProfile::read_only();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -390,7 +390,7 @@ async fn with_additional_permissions_requires_approval_under_on_request() -> Res
         approval.additional_permissions,
         Some(requested_permissions.clone())
     );
-    test.codex
+    test.crewon
         .submit(Op::ExecApproval {
             id: approval.effective_approval_id(),
             turn_id: None,
@@ -431,7 +431,7 @@ async fn request_permissions_tool_is_auto_denied_when_granular_request_permissio
     let permission_profile = CorePermissionProfile::read_only();
     let permission_profile_for_config = CorePermissionProfile::read_only();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -480,7 +480,7 @@ async fn request_permissions_tool_is_auto_denied_when_granular_request_permissio
     )
     .await?;
 
-    let event = wait_for_event(&test.codex, |event| {
+    let event = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::RequestPermissions(_) | EventMsg::TurnComplete(_)
@@ -517,7 +517,7 @@ async fn relative_additional_permissions_resolve_against_tool_workdir() -> Resul
     let permission_profile = CorePermissionProfile::read_only();
     let permission_profile_for_config = CorePermissionProfile::read_only();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -585,7 +585,7 @@ async fn relative_additional_permissions_resolve_against_tool_workdir() -> Resul
         approval.additional_permissions,
         Some(expected_permissions.clone())
     );
-    test.codex
+    test.crewon
         .submit(Op::ExecApproval {
             id: approval.effective_approval_id(),
             turn_id: None,
@@ -621,7 +621,7 @@ async fn read_only_with_additional_permissions_does_not_widen_to_unrequested_cwd
     let permission_profile = CorePermissionProfile::read_only();
     let permission_profile_for_config = CorePermissionProfile::read_only();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -682,7 +682,7 @@ async fn read_only_with_additional_permissions_does_not_widen_to_unrequested_cwd
         approval.additional_permissions,
         Some(requested_permissions.clone())
     );
-    test.codex
+    test.crewon
         .submit(Op::ExecApproval {
             id: approval.effective_approval_id(),
             turn_id: None,
@@ -724,7 +724,7 @@ async fn read_only_with_additional_permissions_does_not_widen_to_unrequested_tmp
     let permission_profile = CorePermissionProfile::read_only();
     let permission_profile_for_config = CorePermissionProfile::read_only();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -786,7 +786,7 @@ async fn read_only_with_additional_permissions_does_not_widen_to_unrequested_tmp
         approval.additional_permissions,
         Some(requested_permissions.clone())
     );
-    test.codex
+    test.crewon
         .submit(Op::ExecApproval {
             id: approval.effective_approval_id(),
             turn_id: None,
@@ -826,7 +826,7 @@ async fn workspace_write_with_additional_permissions_can_write_outside_cwd() -> 
     let permission_profile = workspace_write_excluding_tmp();
     let permission_profile_for_config = workspace_write_excluding_tmp();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -897,7 +897,7 @@ async fn workspace_write_with_additional_permissions_can_write_outside_cwd() -> 
         approval.additional_permissions,
         Some(normalized_requested_permissions.into())
     );
-    test.codex
+    test.crewon
         .submit(Op::ExecApproval {
             id: approval.effective_approval_id(),
             turn_id: None,
@@ -933,7 +933,7 @@ async fn with_additional_permissions_denied_approval_blocks_execution() -> Resul
     let permission_profile = workspace_write_excluding_tmp();
     let permission_profile_for_config = workspace_write_excluding_tmp();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -1002,7 +1002,7 @@ async fn with_additional_permissions_denied_approval_blocks_execution() -> Resul
         approval.additional_permissions,
         Some(normalized_requested_permissions)
     );
-    test.codex
+    test.crewon
         .submit(Op::ExecApproval {
             id: approval.effective_approval_id(),
             turn_id: None,
@@ -1041,7 +1041,7 @@ async fn request_permissions_grants_apply_to_later_exec_command_calls() -> Resul
     let permission_profile = workspace_write_excluding_tmp();
     let permission_profile_for_config = workspace_write_excluding_tmp();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -1119,7 +1119,7 @@ async fn request_permissions_grants_apply_to_later_exec_command_calls() -> Resul
         granted_permissions,
         normalized_requested_permissions.clone()
     );
-    test.codex
+    test.crewon
         .submit(Op::RequestPermissionsResponse {
             id: "permissions-call".to_string(),
             response: RequestPermissionsResponse {
@@ -1135,7 +1135,7 @@ async fn request_permissions_grants_apply_to_later_exec_command_calls() -> Resul
             approval.additional_permissions,
             Some(normalized_requested_permissions.clone().into())
         );
-        test.codex
+        test.crewon
             .submit(Op::ExecApproval {
                 id: approval.effective_approval_id(),
                 turn_id: None,
@@ -1168,7 +1168,7 @@ async fn request_permissions_preapprove_explicit_exec_permissions_outside_on_req
     let permission_profile = workspace_write_excluding_tmp();
     let permission_profile_for_config = workspace_write_excluding_tmp();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -1237,7 +1237,7 @@ async fn request_permissions_preapprove_explicit_exec_permissions_outside_on_req
         granted_permissions,
         normalized_requested_permissions.clone()
     );
-    test.codex
+    test.crewon
         .submit(Op::RequestPermissionsResponse {
             id: "permissions-call".to_string(),
             response: RequestPermissionsResponse {
@@ -1249,7 +1249,7 @@ async fn request_permissions_preapprove_explicit_exec_permissions_outside_on_req
         .await?;
 
     if let Some(approval) = wait_for_exec_approval_or_completion(&test).await {
-        test.codex
+        test.crewon
             .submit(Op::ExecApproval {
                 id: approval.effective_approval_id(),
                 turn_id: None,
@@ -1289,7 +1289,7 @@ async fn request_permissions_grants_apply_to_later_shell_command_calls() -> Resu
     let permission_profile = workspace_write_excluding_tmp();
     let permission_profile_for_config = workspace_write_excluding_tmp();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -1354,7 +1354,7 @@ async fn request_permissions_grants_apply_to_later_shell_command_calls() -> Resu
         granted_permissions,
         normalized_requested_permissions.clone()
     );
-    test.codex
+    test.crewon
         .submit(Op::RequestPermissionsResponse {
             id: "permissions-call".to_string(),
             response: RequestPermissionsResponse {
@@ -1366,7 +1366,7 @@ async fn request_permissions_grants_apply_to_later_shell_command_calls() -> Resu
         .await?;
 
     if let Some(approval) = wait_for_exec_approval_or_completion(&test).await {
-        test.codex
+        test.crewon
             .submit(Op::ExecApproval {
                 id: approval.effective_approval_id(),
                 turn_id: None,
@@ -1404,7 +1404,7 @@ async fn request_permissions_grants_apply_to_later_shell_command_calls_without_i
     let permission_profile = workspace_write_excluding_tmp();
     let permission_profile_for_config = workspace_write_excluding_tmp();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -1467,7 +1467,7 @@ async fn request_permissions_grants_apply_to_later_shell_command_calls_without_i
         granted_permissions,
         normalized_requested_permissions.clone()
     );
-    test.codex
+    test.crewon
         .submit(Op::RequestPermissionsResponse {
             id: "permissions-call".to_string(),
             response: RequestPermissionsResponse {
@@ -1479,7 +1479,7 @@ async fn request_permissions_grants_apply_to_later_shell_command_calls_without_i
         .await?;
 
     if let Some(approval) = wait_for_exec_approval_or_completion(&test).await {
-        test.codex
+        test.crewon
             .submit(Op::ExecApproval {
                 id: approval.effective_approval_id(),
                 turn_id: None,
@@ -1519,7 +1519,7 @@ async fn partial_request_permissions_grants_do_not_preapprove_new_permissions() 
     let permission_profile = workspace_write_excluding_tmp();
     let permission_profile_for_config = workspace_write_excluding_tmp();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -1617,7 +1617,7 @@ async fn partial_request_permissions_grants_do_not_preapprove_new_permissions() 
 
     let initial_request = expect_request_permissions_event(&test, "permissions-call").await;
     assert_eq!(initial_request, normalized_requested_permissions);
-    test.codex
+    test.crewon
         .submit(Op::RequestPermissionsResponse {
             id: "permissions-call".to_string(),
             response: RequestPermissionsResponse {
@@ -1655,7 +1655,7 @@ async fn partial_request_permissions_grants_do_not_preapprove_new_permissions() 
     expected_writes.sort_by_key(|path| path.display().to_string());
 
     assert_eq!(approval_writes, expected_writes);
-    test.codex
+    test.crewon
         .submit(Op::ExecApproval {
             id: approval.effective_approval_id(),
             turn_id: None,
@@ -1686,7 +1686,7 @@ async fn request_permissions_grants_do_not_carry_across_turns() -> Result<()> {
     let permission_profile = workspace_write_excluding_tmp();
     let permission_profile_for_config = workspace_write_excluding_tmp();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -1742,7 +1742,7 @@ async fn request_permissions_grants_do_not_carry_across_turns() -> Result<()> {
         granted_permissions,
         normalized_requested_permissions.clone()
     );
-    test.codex
+    test.crewon
         .submit(Op::RequestPermissionsResponse {
             id: "permissions-call".to_string(),
             response: RequestPermissionsResponse {
@@ -1802,7 +1802,7 @@ async fn request_permissions_session_grants_carry_across_turns() -> Result<()> {
     let permission_profile = workspace_write_excluding_tmp();
     let permission_profile_for_config = workspace_write_excluding_tmp();
 
-    let mut builder = test_codex().with_config(move |config| {
+    let mut builder = test_crewon().with_config(move |config| {
         config.permissions.approval_policy = Constrained::allow_any(approval_policy);
         config
             .permissions
@@ -1863,7 +1863,7 @@ async fn request_permissions_session_grants_carry_across_turns() -> Result<()> {
         granted_permissions,
         normalized_requested_permissions.clone()
     );
-    test.codex
+    test.crewon
         .submit(Op::RequestPermissionsResponse {
             id: "permissions-call".to_string(),
             response: RequestPermissionsResponse {
@@ -1900,7 +1900,7 @@ async fn request_permissions_session_grants_carry_across_turns() -> Result<()> {
     )
     .await?;
 
-    let completion_event = wait_for_event(&test.codex, |event| {
+    let completion_event = wait_for_event(&test.crewon, |event| {
         matches!(
             event,
             EventMsg::ExecApprovalRequest(_) | EventMsg::TurnComplete(_)
@@ -1908,7 +1908,7 @@ async fn request_permissions_session_grants_carry_across_turns() -> Result<()> {
     })
     .await;
     if let EventMsg::ExecApprovalRequest(approval) = completion_event {
-        test.codex
+        test.crewon
             .submit(Op::ExecApproval {
                 id: approval.effective_approval_id(),
                 turn_id: None,

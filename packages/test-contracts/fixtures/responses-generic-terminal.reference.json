@@ -1,0 +1,141 @@
+{
+  "caseId": "AR-039-responses-generic-terminal",
+  "cases": [
+    {
+      "name": "failed without error",
+      "events": [
+        { "type": "response.created", "sequence_number": 0, "response": { "id": "resp-generic-failed" } },
+        { "type": "response.failed", "sequence_number": 1, "response": { "id": "resp-generic-failed", "status": "failed" } },
+        { "type": "response.output_text.delta", "sequence_number": 2, "delta": "poison" },
+        { "type": "response.completed", "sequence_number": 3, "response": { "id": "resp-generic-failed", "status": "completed" } }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "terminal": "failed",
+        "errorCategory": "provider",
+        "code": "responses_provider_failed",
+        "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "",
+        "completedHistory": [],
+        "usage": null,
+        "checkpoint": null
+      }
+    },
+    {
+      "name": "failed with unclassifiable error",
+      "events": [
+        { "type": "response.failed", "sequence_number": 0, "response": { "error": null } },
+        { "type": "response.created", "sequence_number": 1, "response": { "id": "resp-poison" } }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "terminal": "failed",
+        "errorCategory": "provider",
+        "code": "responses_provider_failed",
+        "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "",
+        "completedHistory": [],
+        "usage": null,
+        "checkpoint": null
+      }
+    },
+    {
+      "name": "failed with unknown provider code",
+      "events": [
+        { "type": "response.failed", "sequence_number": 0, "response": { "error": { "code": "provider_failed" } } },
+        { "type": "response.completed", "sequence_number": 1, "response": { "id": "resp-poison", "status": "completed" } }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "terminal": "failed",
+        "errorCategory": "provider",
+        "code": "responses_provider_provider_failed",
+        "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "",
+        "completedHistory": [],
+        "usage": null,
+        "checkpoint": null
+      }
+    },
+    {
+      "name": "failed without response object",
+      "events": [
+        { "type": "response.failed", "sequence_number": 0 },
+        { "type": "response.created", "sequence_number": 1, "response": { "id": "resp-poison" } }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "terminal": "failed",
+        "errorCategory": "provider",
+        "code": "responses_provider_failed",
+        "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "",
+        "completedHistory": [],
+        "usage": null,
+        "checkpoint": null
+      }
+    },
+    {
+      "name": "incomplete without details",
+      "events": [
+        { "type": "response.created", "sequence_number": 0, "response": { "id": "resp-generic-incomplete" } },
+        { "type": "response.incomplete", "sequence_number": 1, "response": { "id": "resp-generic-incomplete", "status": "incomplete" } },
+        { "type": "response.completed", "sequence_number": 2, "response": { "id": "resp-generic-incomplete", "status": "completed" } }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "terminal": "failed",
+        "errorCategory": "incomplete",
+        "code": "responses_incomplete_unknown",
+        "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "",
+        "completedHistory": [],
+        "usage": null,
+        "checkpoint": null
+      }
+    },
+    {
+      "name": "incomplete with unclassifiable details",
+      "events": [
+        { "type": "response.incomplete", "sequence_number": 0, "response": { "incomplete_details": "unknown" } },
+        { "type": "response.output_text.delta", "sequence_number": 1, "delta": "poison" }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "terminal": "failed",
+        "errorCategory": "incomplete",
+        "code": "responses_incomplete_unknown",
+        "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "",
+        "completedHistory": [],
+        "usage": null,
+        "checkpoint": null
+      }
+    },
+    {
+      "name": "incomplete without response object",
+      "events": [
+        { "type": "response.incomplete", "sequence_number": 0 },
+        { "type": "response.output_text.delta", "sequence_number": 1, "delta": "poison" }
+      ],
+      "expected": {
+        "stableEvents": ["failed"],
+        "terminal": "failed",
+        "errorCategory": "incomplete",
+        "code": "responses_incomplete_unknown",
+        "retryable": true,
+        "durableRetryProjection": { "sampling": "retry", "afterBudgetExhausted": "fail" },
+        "partialOutput": "",
+        "completedHistory": [],
+        "usage": null,
+        "checkpoint": null
+      }
+    }
+  ]
+}

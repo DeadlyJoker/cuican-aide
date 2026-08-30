@@ -1,0 +1,295 @@
+{
+  "schemaVersion": "crewon.thread-rollback-parity.v0",
+  "cases": [
+    {
+      "caseId": "ordinary-one",
+      "support": { "typescript": "supported", "rust": "supported" },
+      "initialItems": [
+        { "sequence": 1, "itemId": "u1", "kind": "user" },
+        { "sequence": 2, "itemId": "a1", "kind": "assistant" },
+        { "sequence": 3, "itemId": "u2", "kind": "user" },
+        { "sequence": 4, "itemId": "a2", "kind": "assistant" }
+      ],
+      "operations": [
+        {
+          "type": "rollback",
+          "requestedTurns": 1,
+          "expected": {
+            "requestedTurns": 1,
+            "removedTurns": 1,
+            "historyFromSequence": 3,
+            "historyThroughSequence": 4,
+            "markerHistorySequence": 5,
+            "effectiveSequences": [1, 2],
+            "remainingItemIds": ["u1", "a1"]
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "ordinary-n",
+      "support": { "typescript": "supported", "rust": "supported" },
+      "initialItems": [
+        { "sequence": 1, "itemId": "u1", "kind": "user" },
+        { "sequence": 2, "itemId": "a1", "kind": "assistant" },
+        { "sequence": 3, "itemId": "u2", "kind": "user" },
+        { "sequence": 4, "itemId": "a2", "kind": "assistant" },
+        { "sequence": 5, "itemId": "u3", "kind": "user" },
+        { "sequence": 6, "itemId": "a3", "kind": "assistant" }
+      ],
+      "operations": [
+        {
+          "type": "rollback",
+          "requestedTurns": 2,
+          "expected": {
+            "requestedTurns": 2,
+            "removedTurns": 2,
+            "historyFromSequence": 3,
+            "historyThroughSequence": 6,
+            "markerHistorySequence": 7,
+            "effectiveSequences": [1, 2],
+            "remainingItemIds": ["u1", "a1"]
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "ordinary-overshoot",
+      "support": { "typescript": "supported", "rust": "supported" },
+      "initialItems": [
+        { "sequence": 1, "itemId": "prefix", "kind": "assistant" },
+        { "sequence": 2, "itemId": "u1", "kind": "user" },
+        { "sequence": 3, "itemId": "a1", "kind": "assistant" },
+        { "sequence": 4, "itemId": "u2", "kind": "user" },
+        { "sequence": 5, "itemId": "a2", "kind": "assistant" }
+      ],
+      "operations": [
+        {
+          "type": "rollback",
+          "requestedTurns": 99,
+          "expected": {
+            "requestedTurns": 99,
+            "removedTurns": 2,
+            "historyFromSequence": 2,
+            "historyThroughSequence": 5,
+            "markerHistorySequence": 6,
+            "effectiveSequences": [1],
+            "remainingItemIds": ["prefix"]
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "no-instruction-turn",
+      "support": { "typescript": "supported", "rust": "supported" },
+      "initialItems": [
+        { "sequence": 1, "itemId": "a1", "kind": "assistant" },
+        {
+          "sequence": 2,
+          "itemId": "goal1",
+          "kind": "contextualGoal",
+          "goalSource": "goalContinuation"
+        },
+        { "sequence": 3, "itemId": "a2", "kind": "assistant" }
+      ],
+      "operations": [
+        {
+          "type": "rollback",
+          "requestedTurns": 1,
+          "expected": {
+            "requestedTurns": 1,
+            "removedTurns": 0,
+            "historyFromSequence": null,
+            "historyThroughSequence": 3,
+            "markerHistorySequence": 4,
+            "effectiveSequences": [1, 2, 3],
+            "remainingItemIds": ["a1", "goal1", "a2"]
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "contextual-goal-is-suffix-not-boundary",
+      "support": { "typescript": "supported", "rust": "supported" },
+      "initialItems": [
+        { "sequence": 1, "itemId": "u1", "kind": "user" },
+        { "sequence": 2, "itemId": "a1", "kind": "assistant" },
+        {
+          "sequence": 3,
+          "itemId": "goal-steering",
+          "kind": "contextualGoal",
+          "goalSource": "goalSteering"
+        },
+        { "sequence": 4, "itemId": "u2", "kind": "user" },
+        { "sequence": 5, "itemId": "a2", "kind": "assistant" }
+      ],
+      "operations": [
+        {
+          "type": "rollback",
+          "requestedTurns": 1,
+          "expected": {
+            "requestedTurns": 1,
+            "removedTurns": 1,
+            "historyFromSequence": 3,
+            "historyThroughSequence": 5,
+            "markerHistorySequence": 6,
+            "effectiveSequences": [1, 2],
+            "remainingItemIds": ["u1", "a1"]
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "cumulative-rollback-with-new-tail",
+      "support": { "typescript": "supported", "rust": "supported" },
+      "initialItems": [
+        { "sequence": 1, "itemId": "u1", "kind": "user" },
+        { "sequence": 2, "itemId": "a1", "kind": "assistant" },
+        { "sequence": 3, "itemId": "u2", "kind": "user" },
+        { "sequence": 4, "itemId": "a2", "kind": "assistant" }
+      ],
+      "operations": [
+        {
+          "type": "rollback",
+          "requestedTurns": 1,
+          "expected": {
+            "requestedTurns": 1,
+            "removedTurns": 1,
+            "historyFromSequence": 3,
+            "historyThroughSequence": 4,
+            "markerHistorySequence": 5,
+            "effectiveSequences": [1, 2],
+            "remainingItemIds": ["u1", "a1"]
+          }
+        },
+        {
+          "type": "append",
+          "items": [
+            { "sequence": 6, "itemId": "u3", "kind": "user" },
+            { "sequence": 7, "itemId": "a3", "kind": "assistant" }
+          ],
+          "expected": {
+            "effectiveSequences": [1, 2, 6, 7],
+            "remainingItemIds": ["u1", "a1", "u3", "a3"]
+          }
+        },
+        {
+          "type": "rollback",
+          "requestedTurns": 1,
+          "expected": {
+            "requestedTurns": 1,
+            "removedTurns": 1,
+            "historyFromSequence": 6,
+            "historyThroughSequence": 7,
+            "markerHistorySequence": 8,
+            "effectiveSequences": [1, 2],
+            "remainingItemIds": ["u1", "a1"]
+          }
+        },
+        {
+          "type": "append",
+          "items": [{ "sequence": 9, "itemId": "u4", "kind": "user" }],
+          "expected": {
+            "effectiveSequences": [1, 2, 9],
+            "remainingItemIds": ["u1", "a1", "u4"]
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "compaction-before-rollback-boundary",
+      "support": { "typescript": "supported", "rust": "supported" },
+      "initialItems": [
+        { "sequence": 1, "itemId": "u1", "kind": "user" },
+        { "sequence": 2, "itemId": "a1", "kind": "assistant" },
+        {
+          "sequence": 3,
+          "itemId": "compact1",
+          "kind": "compaction",
+          "replacesThroughSequence": 2
+        },
+        { "sequence": 4, "itemId": "u2", "kind": "user" },
+        { "sequence": 5, "itemId": "a2", "kind": "assistant" }
+      ],
+      "operations": [
+        {
+          "type": "rollback",
+          "requestedTurns": 1,
+          "expected": {
+            "requestedTurns": 1,
+            "removedTurns": 1,
+            "historyFromSequence": 4,
+            "historyThroughSequence": 5,
+            "markerHistorySequence": 6,
+            "effectiveSequences": [1, 2, 3],
+            "remainingItemIds": ["u1", "a1", "compact1"]
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "compaction-after-rollback-boundary",
+      "support": { "typescript": "supported", "rust": "supported" },
+      "initialItems": [
+        { "sequence": 1, "itemId": "u1", "kind": "user" },
+        { "sequence": 2, "itemId": "a1", "kind": "assistant" },
+        { "sequence": 3, "itemId": "u2", "kind": "user" },
+        { "sequence": 4, "itemId": "a2", "kind": "assistant" },
+        {
+          "sequence": 5,
+          "itemId": "compact1",
+          "kind": "compaction",
+          "replacesThroughSequence": 4
+        }
+      ],
+      "operations": [
+        {
+          "type": "rollback",
+          "requestedTurns": 1,
+          "expected": {
+            "requestedTurns": 1,
+            "removedTurns": 1,
+            "historyFromSequence": 3,
+            "historyThroughSequence": 5,
+            "markerHistorySequence": 6,
+            "effectiveSequences": [1, 2],
+            "remainingItemIds": ["u1", "a1"]
+          }
+        }
+      ]
+    },
+    {
+      "caseId": "structured-inter-agent-boundary",
+      "support": {
+        "typescript": "unsupported",
+        "rust": "supported",
+        "reason": "typescript_model_history_has_no_structured_inter_agent_source"
+      },
+      "initialItems": [
+        { "sequence": 1, "itemId": "u1", "kind": "user" },
+        { "sequence": 2, "itemId": "a1", "kind": "assistant" },
+        {
+          "sequence": 3,
+          "itemId": "delegate1",
+          "kind": "structuredInterAgent"
+        },
+        { "sequence": 4, "itemId": "delegate-answer", "kind": "assistant" }
+      ],
+      "operations": [
+        {
+          "type": "rollback",
+          "requestedTurns": 1,
+          "expected": {
+            "requestedTurns": 1,
+            "removedTurns": 1,
+            "historyFromSequence": 3,
+            "historyThroughSequence": 4,
+            "markerHistorySequence": 5,
+            "effectiveSequences": [1, 2],
+            "remainingItemIds": ["u1", "a1"]
+          }
+        }
+      ]
+    }
+  ]
+}

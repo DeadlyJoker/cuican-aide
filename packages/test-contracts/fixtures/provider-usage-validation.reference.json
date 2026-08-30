@@ -1,0 +1,72 @@
+{
+  "schemaVersion": "crewon.provider-usage-validation.v0",
+  "cases": [
+    {
+      "caseId": "negative-input",
+      "usage": {
+        "input_tokens": -1,
+        "input_tokens_details": { "cached_tokens": 0 },
+        "output_tokens": 1,
+        "total_tokens": 0
+      },
+      "expected": "rejected"
+    },
+    {
+      "caseId": "negative-cached-input",
+      "usage": {
+        "input_tokens": 1,
+        "input_tokens_details": { "cached_tokens": -1 },
+        "output_tokens": 1,
+        "total_tokens": 2
+      },
+      "expected": "rejected"
+    },
+    {
+      "caseId": "cached-input-exceeds-input",
+      "usage": {
+        "input_tokens": 1,
+        "input_tokens_details": { "cached_tokens": 2 },
+        "output_tokens": 1,
+        "total_tokens": 2
+      },
+      "expected": "rejected"
+    },
+    {
+      "caseId": "negative-output",
+      "usage": {
+        "input_tokens": 1,
+        "output_tokens": -1,
+        "total_tokens": 0
+      },
+      "expected": "rejected"
+    },
+    {
+      "caseId": "negative-total",
+      "usage": {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": -1
+      },
+      "expected": "rejected"
+    },
+    {
+      "caseId": "total-mismatch",
+      "usage": {
+        "input_tokens": 2,
+        "input_tokens_details": { "cached_tokens": 1 },
+        "output_tokens": 3,
+        "total_tokens": 6
+      },
+      "expected": "rejected"
+    },
+    {
+      "caseId": "input-output-sum-overflow",
+      "usage": {
+        "input_tokens": 9223372036854775807,
+        "output_tokens": 1,
+        "total_tokens": 9223372036854775807
+      },
+      "expected": "rejected"
+    }
+  ]
+}

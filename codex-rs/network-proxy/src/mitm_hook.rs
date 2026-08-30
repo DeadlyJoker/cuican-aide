@@ -5,7 +5,7 @@ use crate::policy::normalize_host;
 use anyhow::Context as _;
 use anyhow::Result;
 use anyhow::anyhow;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use globset::GlobBuilder;
 use globset::GlobMatcher;
 use rama_http::HeaderValue;
@@ -665,14 +665,14 @@ mod tests {
             host: "api.github.com".to_string(),
             matcher: MitmHookMatchConfig {
                 methods: vec!["POST".to_string(), "PUT".to_string()],
-                path_prefixes: vec!["/repos/openai/".to_string()],
+                path_prefixes: vec!["/repos/crewon/".to_string()],
                 ..MitmHookMatchConfig::default()
             },
             actions: MitmHookActionsConfig {
                 strip_request_headers: vec!["authorization".to_string()],
                 inject_request_headers: vec![InjectedHeaderConfig {
                     name: "authorization".to_string(),
-                    secret_env_var: Some("CODEX_GITHUB_TOKEN".to_string()),
+                    secret_env_var: Some("CREWON_GITHUB_TOKEN".to_string()),
                     secret_file: None,
                     prefix: Some("Bearer ".to_string()),
                 }],
@@ -707,7 +707,7 @@ mod tests {
         let mut config = base_config();
         let mut hook = github_hook();
         hook.matcher.body = Some(MitmHookBodyConfig(serde_json::json!({
-            "repository": "openai/codex"
+            "repository": "crewon/example"
         })));
         config.network.mitm_hooks = vec![hook];
 
@@ -745,7 +745,7 @@ mod tests {
 
         let hooks = compile_mitm_hooks_with_resolvers(
             &config,
-            |name| (name == "CODEX_GITHUB_TOKEN").then(|| "ghp-secret".to_string()),
+            |name| (name == "CREWON_GITHUB_TOKEN").then(|| "ghp-secret".to_string()),
             |_| Err(anyhow!("unexpected file lookup")),
         )
         .unwrap();
@@ -754,7 +754,7 @@ mod tests {
         assert_eq!(compiled.len(), 1);
         assert_eq!(
             compiled[0].actions.inject_request_headers[0].source,
-            SecretSource::EnvVar("CODEX_GITHUB_TOKEN".to_string())
+            SecretSource::EnvVar("CREWON_GITHUB_TOKEN".to_string())
         );
         assert_eq!(
             compiled[0].actions.inject_request_headers[0].value,
@@ -786,7 +786,7 @@ mod tests {
     fn evaluate_returns_first_matching_hook() {
         let mut config = base_config();
         let mut first = github_hook();
-        first.matcher.path_prefixes = vec!["/repos/openai/".to_string()];
+        first.matcher.path_prefixes = vec!["/repos/crewon/".to_string()];
         let mut second = github_hook();
         second.actions.inject_request_headers[0].prefix = Some("Token ".to_string());
         config.network.mitm_hooks = vec![first, second];
@@ -799,7 +799,7 @@ mod tests {
         .unwrap();
         let req = Request::builder()
             .method(Method::POST)
-            .uri("/repos/openai/codex/issues")
+            .uri("/repos/crewon/example/issues")
             .header("x-trace", "1")
             .body(Body::empty())
             .unwrap();
@@ -837,7 +837,7 @@ mod tests {
         .unwrap();
         let req = Request::builder()
             .method(Method::POST)
-            .uri("/repos/openai/codex/issues?state=open&per_page=10")
+            .uri("/repos/crewon/example/issues?state=open&per_page=10")
             .header("x-github-api-version", "2022-11-28")
             .body(Body::empty())
             .unwrap();
@@ -854,7 +854,7 @@ mod tests {
     fn evaluate_matches_wildcard_path_query_and_header_constraints() {
         let mut config = base_config();
         let mut hook = github_hook();
-        hook.matcher.path_prefixes = vec!["pattern:/repos/*/codex/issues*".to_string()];
+        hook.matcher.path_prefixes = vec!["pattern:/repos/*/example/issues*".to_string()];
         hook.matcher.query =
             BTreeMap::from([("state".to_string(), vec!["pattern:op*".to_string()])]);
         hook.matcher.headers = BTreeMap::from([(
@@ -871,7 +871,7 @@ mod tests {
         .unwrap();
         let req = Request::builder()
             .method(Method::POST)
-            .uri("/repos/openai/codex/issues?state=open")
+            .uri("/repos/crewon/example/issues?state=open")
             .header("x-github-api-version", "2022-11-28-preview")
             .body(Body::empty())
             .unwrap();
@@ -899,7 +899,7 @@ mod tests {
     fn evaluate_path_wildcard_does_not_cross_segment_boundaries() {
         let mut config = base_config();
         let mut hook = github_hook();
-        hook.matcher.path_prefixes = vec!["pattern:/repos/*/codex/issues*".to_string()];
+        hook.matcher.path_prefixes = vec!["pattern:/repos/*/example/issues*".to_string()];
         config.network.mitm_hooks = vec![hook];
 
         let hooks = compile_mitm_hooks_with_resolvers(
@@ -910,7 +910,7 @@ mod tests {
         .unwrap();
         let nested_req = Request::builder()
             .method(Method::POST)
-            .uri("/repos/openai/private/codex/issues")
+            .uri("/repos/crewon/private/example/issues")
             .body(Body::empty())
             .unwrap();
 
@@ -940,13 +940,13 @@ mod tests {
         .unwrap();
         let exact_req = Request::builder()
             .method(Method::POST)
-            .uri("/repos/[draft]/codex/issues?state=op*")
+            .uri("/repos/[draft]/example/issues?state=op*")
             .header("x-github-api-version", "2022-11-28[preview]")
             .body(Body::empty())
             .unwrap();
         let non_literal_req = Request::builder()
             .method(Method::POST)
-            .uri("/repos/draft/codex/issues?state=open")
+            .uri("/repos/draft/example/issues?state=open")
             .header("x-github-api-version", "2022-11-28-preview")
             .body(Body::empty())
             .unwrap();
@@ -983,13 +983,13 @@ mod tests {
         .unwrap();
         let exact_req = Request::builder()
             .method(Method::POST)
-            .uri("/repos/openai/codex/issues?state=pattern%3A%2A")
+            .uri("/repos/crewon/example/issues?state=pattern%3A%2A")
             .header("x-github-api-version", "pattern:*")
             .body(Body::empty())
             .unwrap();
         let non_literal_req = Request::builder()
             .method(Method::POST)
-            .uri("/repos/openai/codex/issues?state=pattern%3Aopen")
+            .uri("/repos/crewon/example/issues?state=pattern%3Aopen")
             .header("x-github-api-version", "pattern:preview")
             .body(Body::empty())
             .unwrap();
@@ -1021,7 +1021,7 @@ mod tests {
         .unwrap();
         let req = Request::builder()
             .method(Method::POST)
-            .uri("/repos/openai/codex/issues?state=closed")
+            .uri("/repos/crewon/example/issues?state=closed")
             .body(Body::empty())
             .unwrap();
 
@@ -1035,7 +1035,7 @@ mod tests {
     fn evaluate_returns_no_hooks_for_unconfigured_host() {
         let req = Request::builder()
             .method(Method::POST)
-            .uri("/repos/openai/codex/issues")
+            .uri("/repos/crewon/example/issues")
             .body(Body::empty())
             .unwrap();
 

@@ -105,7 +105,7 @@ where
     W: AsyncWrite + Unpin + Send + 'static,
 {
     let processor = ConnectionProcessor::new(runtime_paths);
-    tracing::info!("codex-exec-server listening on stdio");
+    tracing::info!("crewon-exec-server listening on stdio");
     processor
         .run_connection(JsonRpcConnection::from_stdio(
             reader,
@@ -123,7 +123,7 @@ async fn run_websocket_listener(
     let listener = TcpListener::bind(bind_address).await?;
     let local_addr = listener.local_addr()?;
     let processor = ConnectionProcessor::new(runtime_paths);
-    info!("codex-exec-server listening on ws://{local_addr}");
+    info!("crewon-exec-server listening on ws://{local_addr}");
     println!("ws://{local_addr}");
     std::io::stdout().flush()?;
 

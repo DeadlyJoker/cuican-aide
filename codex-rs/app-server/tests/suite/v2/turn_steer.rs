@@ -8,24 +8,24 @@ use app_test_support::create_mock_responses_server_sequence_unchecked;
 use app_test_support::create_shell_command_sse_response;
 use app_test_support::to_response;
 use app_test_support::write_mock_responses_config_toml_with_chatgpt_base_url;
-use codex_app_server::INPUT_TOO_LARGE_ERROR_CODE;
-use codex_app_server::INVALID_PARAMS_ERROR_CODE;
-use codex_app_server_protocol::AdditionalContextEntry;
-use codex_app_server_protocol::AdditionalContextKind;
-use codex_app_server_protocol::ItemStartedNotification;
-use codex_app_server_protocol::JSONRPCError;
-use codex_app_server_protocol::JSONRPCNotification;
-use codex_app_server_protocol::JSONRPCResponse;
-use codex_app_server_protocol::RequestId;
-use codex_app_server_protocol::ThreadItem;
-use codex_app_server_protocol::ThreadStartParams;
-use codex_app_server_protocol::ThreadStartResponse;
-use codex_app_server_protocol::TurnStartParams;
-use codex_app_server_protocol::TurnStartResponse;
-use codex_app_server_protocol::TurnSteerParams;
-use codex_app_server_protocol::TurnSteerResponse;
-use codex_app_server_protocol::UserInput as V2UserInput;
-use codex_protocol::user_input::MAX_USER_INPUT_TEXT_CHARS;
+use crewon_app_server::INPUT_TOO_LARGE_ERROR_CODE;
+use crewon_app_server::INVALID_PARAMS_ERROR_CODE;
+use crewon_app_server_protocol::AdditionalContextEntry;
+use crewon_app_server_protocol::AdditionalContextKind;
+use crewon_app_server_protocol::ItemStartedNotification;
+use crewon_app_server_protocol::JSONRPCError;
+use crewon_app_server_protocol::JSONRPCNotification;
+use crewon_app_server_protocol::JSONRPCResponse;
+use crewon_app_server_protocol::RequestId;
+use crewon_app_server_protocol::ThreadItem;
+use crewon_app_server_protocol::ThreadStartParams;
+use crewon_app_server_protocol::ThreadStartResponse;
+use crewon_app_server_protocol::TurnStartParams;
+use crewon_app_server_protocol::TurnStartResponse;
+use crewon_app_server_protocol::TurnSteerParams;
+use crewon_app_server_protocol::TurnSteerResponse;
+use crewon_app_server_protocol::UserInput as V2UserInput;
+use crewon_protocol::user_input::MAX_USER_INPUT_TEXT_CHARS;
 use serde_json::Value;
 use std::collections::HashMap;
 use tempfile::TempDir;
@@ -87,7 +87,7 @@ async fn turn_steer_requires_active_turn() -> Result<()> {
     assert_eq!(steer_err.error.code, -32600);
 
     let event =
-        wait_for_analytics_event(&server, DEFAULT_READ_TIMEOUT, "codex_turn_steer_event").await?;
+        wait_for_analytics_event(&server, DEFAULT_READ_TIMEOUT, "crewon_turn_steer_event").await?;
     assert_eq!(event["event_params"]["thread_id"], thread.id);
     assert_eq!(event["event_params"]["result"], "rejected");
     assert_eq!(event["event_params"]["num_input_images"], 0);
@@ -341,7 +341,7 @@ async fn turn_steer_returns_active_turn_id() -> Result<()> {
     .await??;
 
     let event =
-        wait_for_analytics_event(&server, DEFAULT_READ_TIMEOUT, "codex_turn_steer_event").await?;
+        wait_for_analytics_event(&server, DEFAULT_READ_TIMEOUT, "crewon_turn_steer_event").await?;
     assert_eq!(event["event_params"]["thread_id"], thread.id);
     assert_eq!(event["event_params"]["session_id"], thread.session_id);
     assert_eq!(event["event_params"]["result"], "accepted");

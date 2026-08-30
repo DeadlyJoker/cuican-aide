@@ -1,13 +1,13 @@
 use super::*;
-use codex_protocol::models::PermissionProfile;
-use codex_protocol::permissions::NetworkSandboxPolicy;
-use codex_protocol::protocol::FileSystemAccessMode;
-use codex_protocol::protocol::FileSystemPath;
-use codex_protocol::protocol::FileSystemSandboxEntry;
-use codex_protocol::protocol::FileSystemSpecialPath;
-use codex_protocol::protocol::GranularApprovalConfig;
-use codex_utils_absolute_path::AbsolutePathBuf;
 use core_test_support::PathExt;
+use crewon_protocol::models::PermissionProfile;
+use crewon_protocol::permissions::NetworkSandboxPolicy;
+use crewon_protocol::protocol::FileSystemAccessMode;
+use crewon_protocol::protocol::FileSystemPath;
+use crewon_protocol::protocol::FileSystemSandboxEntry;
+use crewon_protocol::protocol::FileSystemSpecialPath;
+use crewon_protocol::protocol::GranularApprovalConfig;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 use pretty_assertions::assert_eq;
 use tempfile::TempDir;
 
@@ -285,7 +285,7 @@ fn explicit_read_only_subpaths_prevent_auto_approval_for_external_sandbox() {
 }
 
 #[test]
-fn missing_project_dot_codex_config_requires_approval() {
+fn missing_project_dot_crewon_config_requires_approval() {
     let tmp = TempDir::new().unwrap();
     let cwd = tmp.path().abs();
     let config_path = cwd.join(".codex").join("config.toml");

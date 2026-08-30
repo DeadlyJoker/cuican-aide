@@ -11,24 +11,24 @@ use crate::error_code::internal_error;
 use crate::error_code::invalid_params;
 use crate::outgoing_message::ConnectionRequestId;
 use crate::outgoing_message::OutgoingMessageSender;
-use codex_app_server_protocol::CommandMigration;
-use codex_app_server_protocol::ExternalAgentConfigDetectParams;
-use codex_app_server_protocol::ExternalAgentConfigDetectResponse;
-use codex_app_server_protocol::ExternalAgentConfigImportCompletedNotification;
-use codex_app_server_protocol::ExternalAgentConfigImportParams;
-use codex_app_server_protocol::ExternalAgentConfigImportResponse;
-use codex_app_server_protocol::ExternalAgentConfigMigrationItem;
-use codex_app_server_protocol::ExternalAgentConfigMigrationItemType;
-use codex_app_server_protocol::HookMigration;
-use codex_app_server_protocol::JSONRPCErrorError;
-use codex_app_server_protocol::McpServerMigration;
-use codex_app_server_protocol::MigrationDetails;
-use codex_app_server_protocol::PluginsMigration;
-use codex_app_server_protocol::ServerNotification;
-use codex_arg0::Arg0DispatchPaths;
-use codex_core::ThreadManager;
-use codex_external_agent_sessions::ExternalAgentSessionMigration as CoreSessionMigration;
-use codex_thread_store::ThreadStore;
+use crewon_app_server_protocol::CommandMigration;
+use crewon_app_server_protocol::ExternalAgentConfigDetectParams;
+use crewon_app_server_protocol::ExternalAgentConfigDetectResponse;
+use crewon_app_server_protocol::ExternalAgentConfigImportCompletedNotification;
+use crewon_app_server_protocol::ExternalAgentConfigImportParams;
+use crewon_app_server_protocol::ExternalAgentConfigImportResponse;
+use crewon_app_server_protocol::ExternalAgentConfigMigrationItem;
+use crewon_app_server_protocol::ExternalAgentConfigMigrationItemType;
+use crewon_app_server_protocol::HookMigration;
+use crewon_app_server_protocol::JSONRPCErrorError;
+use crewon_app_server_protocol::McpServerMigration;
+use crewon_app_server_protocol::MigrationDetails;
+use crewon_app_server_protocol::PluginsMigration;
+use crewon_app_server_protocol::ServerNotification;
+use crewon_arg0::Arg0DispatchPaths;
+use crewon_core::ThreadManager;
+use crewon_external_agent_sessions::ExternalAgentSessionMigration as CoreSessionMigration;
+use crewon_thread_store::ThreadStore;
 use std::collections::HashSet;
 use std::path::PathBuf;
 
@@ -128,7 +128,7 @@ impl ExternalAgentConfigRequestProcessor {
                         sessions: details
                             .sessions
                             .into_iter()
-                            .map(|session| codex_app_server_protocol::SessionMigration {
+                            .map(|session| crewon_app_server_protocol::SessionMigration {
                                 path: session.path,
                                 cwd: session.cwd,
                                 title: session.title,
@@ -149,7 +149,7 @@ impl ExternalAgentConfigRequestProcessor {
                         subagents: details
                             .subagents
                             .into_iter()
-                            .map(|subagent| codex_app_server_protocol::SubagentMigration {
+                            .map(|subagent| crewon_app_server_protocol::SubagentMigration {
                                 name: subagent.name,
                             })
                             .collect(),

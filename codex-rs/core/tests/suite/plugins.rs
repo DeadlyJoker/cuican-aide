@@ -6,10 +6,6 @@ use std::time::Duration;
 use std::time::Instant;
 
 use anyhow::Result;
-use codex_features::Feature;
-use codex_login::CodexAuth;
-use codex_protocol::protocol::EventMsg;
-use codex_protocol::protocol::Op;
 use core_test_support::apps_test_server::AppsTestServer;
 use core_test_support::responses::ev_completed;
 use core_test_support::responses::ev_response_created;
@@ -18,10 +14,14 @@ use core_test_support::responses::sse;
 use core_test_support::responses::start_mock_server;
 use core_test_support::skip_if_no_network;
 use core_test_support::stdio_server_bin;
-use core_test_support::test_codex::TestCodex;
-use core_test_support::test_codex::test_codex;
+use core_test_support::test_crewon::TestCrewon;
+use core_test_support::test_crewon::test_crewon;
 use core_test_support::wait_for_event;
 use core_test_support::wait_for_mcp_server;
+use crewon_features::Feature;
+use crewon_login::CrewonAuth;
+use crewon_protocol::protocol::EventMsg;
+use crewon_protocol::protocol::Op;
 use tempfile::TempDir;
 use wiremock::MockServer;
 
@@ -35,9 +35,10 @@ fn sample_plugin_root(home: &TempDir) -> std::path::PathBuf {
 
 fn write_sample_plugin_manifest_and_config(home: &TempDir) -> std::path::PathBuf {
     let plugin_root = sample_plugin_root(home);
-    std::fs::create_dir_all(plugin_root.join(".codex-plugin")).expect("create plugin manifest dir");
+    std::fs::create_dir_all(plugin_root.join(".crewon-plugin"))
+        .expect("create plugin manifest dir");
     std::fs::write(
-        plugin_root.join(".codex-plugin/plugin.json"),
+        plugin_root.join(".crewon-plugin/plugin.json"),
         format!(
             r#"{{"name":"{SAMPLE_PLUGIN_DISPLAY_NAME}","description":"{SAMPLE_PLUGIN_DESCRIPTION}"}}"#
         ),
@@ -99,14 +100,14 @@ fn write_plugin_app_plugin(home: &TempDir) {
     .expect("write plugin app config");
 }
 
-async fn build_analytics_plugin_test_codex(
+async fn build_analytics_plugin_test_crewon(
     server: &MockServer,
     codex_home: Arc<TempDir>,
-) -> Result<TestCodex> {
+) -> Result<TestCrewon> {
     let chatgpt_base_url = server.uri();
-    let mut builder = test_codex()
+    let mut builder = test_crewon()
         .with_home(codex_home)
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_model("gpt-5.2")
         .with_config(move |config| {
             config.chatgpt_base_url = chatgpt_base_url;
@@ -117,14 +118,14 @@ async fn build_analytics_plugin_test_codex(
         .expect("create new conversation"))
 }
 
-async fn build_apps_enabled_plugin_test_codex(
+async fn build_apps_enabled_plugin_test_crewon(
     server: &MockServer,
     codex_home: Arc<TempDir>,
     chatgpt_base_url: String,
-) -> Result<TestCodex> {
-    let mut builder = test_codex()
+) -> Result<TestCrewon> {
+    let mut builder = test_crewon()
         .with_home(codex_home)
-        .with_auth(CodexAuth::create_dummy_chatgpt_auth_for_testing())
+        .with_auth(CrewonAuth::create_dummy_chatgpt_auth_for_testing())
         .with_config(move |config| {
             config
                 .features
@@ -170,17 +171,17 @@ async fn capability_sections_render_in_developer_message_in_order() -> Result<()
     let codex_home = Arc::new(TempDir::new()?);
     write_plugin_skill_plugin(codex_home.as_ref());
     write_plugin_app_plugin(codex_home.as_ref());
-    let test_codex = build_apps_enabled_plugin_test_codex(
+    let test_crewon = build_apps_enabled_plugin_test_crewon(
         &server,
         Arc::clone(&codex_home),
         apps_server.chatgpt_base_url,
     )
     .await?;
-    let codex = Arc::clone(&test_codex.codex);
+    let codex = Arc::clone(&test_crewon.crewon);
 
     codex
         .submit(Op::UserInput {
-            items: vec![codex_protocol::user_input::UserInput::Text {
+            items: vec![crewon_protocol::user_input::UserInput::Text {
                 text: "hello".into(),
                 text_elements: Vec::new(),
             }],
@@ -252,15 +253,15 @@ async fn explicit_plugin_mentions_inject_plugin_guidance() -> Result<()> {
     write_plugin_mcp_plugin(codex_home.as_ref(), &rmcp_test_server_bin);
     write_plugin_app_plugin(codex_home.as_ref());
 
-    let test_codex =
-        build_apps_enabled_plugin_test_codex(&server, codex_home, apps_server.chatgpt_base_url)
+    let test_crewon =
+        build_apps_enabled_plugin_test_crewon(&server, codex_home, apps_server.chatgpt_base_url)
             .await?;
-    let codex = Arc::clone(&test_codex.codex);
+    let codex = Arc::clone(&test_crewon.crewon);
     wait_for_mcp_server(&codex, "sample").await?;
 
     codex
         .submit(Op::UserInput {
-            items: vec![codex_protocol::user_input::UserInput::Mention {
+            items: vec![crewon_protocol::user_input::UserInput::Mention {
                 name: "sample".into(),
                 path: format!("plugin://{SAMPLE_PLUGIN_CONFIG_NAME}"),
             }],
@@ -297,7 +298,7 @@ async fn explicit_plugin_mentions_inject_plugin_guidance() -> Result<()> {
     assert!(
         request_tools
             .iter()
-            .any(|name| name == "mcp__codex_apps__google_calendar"),
+            .any(|name| name == "mcp__crewon_apps__google_calendar"),
         "expected plugin app tools to become visible for this turn: {request_tools:?}"
     );
     let echo_tool = request
@@ -312,7 +313,7 @@ async fn explicit_plugin_mentions_inject_plugin_guidance() -> Result<()> {
         "expected plugin MCP provenance in tool description: {echo_description:?}"
     );
     let calendar_tool = request
-        .tool_by_name("mcp__codex_apps__google_calendar", "_create_event")
+        .tool_by_name("mcp__crewon_apps__google_calendar", "_create_event")
         .expect("plugin app tool should be present");
     let calendar_description = calendar_tool
         .get("description")
@@ -338,12 +339,12 @@ async fn explicit_plugin_mentions_track_plugin_used_analytics() -> Result<()> {
 
     let codex_home = Arc::new(TempDir::new()?);
     write_plugin_skill_plugin(codex_home.as_ref());
-    let test_codex = build_analytics_plugin_test_codex(&server, codex_home).await?;
-    let codex = Arc::clone(&test_codex.codex);
+    let test_crewon = build_analytics_plugin_test_crewon(&server, codex_home).await?;
+    let codex = Arc::clone(&test_crewon.crewon);
 
     codex
         .submit(Op::UserInput {
-            items: vec![codex_protocol::user_input::UserInput::Mention {
+            items: vec![crewon_protocol::user_input::UserInput::Mention {
                 name: "sample".into(),
                 path: format!("plugin://{SAMPLE_PLUGIN_CONFIG_NAME}"),
             }],
@@ -366,7 +367,7 @@ async fn explicit_plugin_mentions_track_plugin_used_analytics() -> Result<()> {
                 payload["events"].as_array().and_then(|events| {
                     events
                         .iter()
-                        .find(|event| event["event_type"] == "codex_plugin_used")
+                        .find(|event| event["event_type"] == "crewon_plugin_used")
                         .cloned()
                 })
             })
@@ -395,7 +396,7 @@ async fn explicit_plugin_mentions_track_plugin_used_analytics() -> Result<()> {
     );
     assert_eq!(
         event["event_params"]["product_client_id"],
-        serde_json::json!(codex_login::default_client::originator().value)
+        serde_json::json!(crewon_login::default_client::originator().value)
     );
     assert_eq!(event["event_params"]["model_slug"], "gpt-5.2");
     assert!(event["event_params"]["thread_id"].as_str().is_some());

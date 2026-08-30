@@ -1,6 +1,6 @@
-use codex_core::config::Config;
-use codex_login::AuthManager;
-use codex_login::default_client::create_client;
+use crewon_core::config::Config;
+use crewon_login::AuthManager;
+use crewon_login::default_client::create_client;
 
 use anyhow::Context;
 use serde::de::DeserializeOwned;
@@ -8,14 +8,6 @@ use std::time::Duration;
 
 const OAI_PRODUCT_SKU_HEADER: &str = "OAI-Product-Sku";
 const CODEX_PRODUCT_SKU: &str = "codex";
-
-/// Make a GET request to the ChatGPT backend API.
-pub(crate) async fn chatgpt_get_request<T: DeserializeOwned>(
-    config: &Config,
-    path: String,
-) -> anyhow::Result<T> {
-    chatgpt_get_request_with_timeout(config, path, /*timeout*/ None).await
-}
 
 pub(crate) async fn chatgpt_get_request_with_timeout<T: DeserializeOwned>(
     config: &Config,
@@ -30,12 +22,12 @@ pub(crate) async fn chatgpt_get_request_with_timeout<T: DeserializeOwned>(
         .await
         .ok_or_else(|| anyhow::anyhow!("ChatGPT auth not available"))?;
     anyhow::ensure!(
-        auth.uses_codex_backend(),
-        "ChatGPT backend requests require Codex backend auth"
+        auth.uses_crewon_backend(),
+        "ChatGPT backend requests require Crewon backend auth"
     );
     anyhow::ensure!(
         auth.get_account_id().is_some(),
-        "ChatGPT account ID not available, please re-run `codex login`"
+        "ChatGPT account ID not available, please sign in to Crewon again"
     );
 
     // Make direct HTTP request to ChatGPT backend API with the token
@@ -48,7 +40,7 @@ pub(crate) async fn chatgpt_get_request_with_timeout<T: DeserializeOwned>(
 
     let mut request = client
         .get(&url)
-        .headers(codex_model_provider::auth_provider_from_auth(&auth).to_auth_headers())
+        .headers(crewon_model_provider::auth_provider_from_auth(&auth).to_auth_headers())
         .header(OAI_PRODUCT_SKU_HEADER, CODEX_PRODUCT_SKU)
         .header("Content-Type", "application/json");
 

@@ -1,7 +1,7 @@
 use crate::session::turn_context::TurnContext;
-use codex_protocol::protocol::MultiAgentVersion;
-use codex_protocol::protocol::SessionSource;
-use codex_protocol::protocol::SubAgentSource;
+use crewon_protocol::protocol::MultiAgentVersion;
+use crewon_protocol::protocol::SessionSource;
+use crewon_protocol::protocol::SubAgentSource;
 
 pub(super) fn usage_hint_text<'a>(
     turn_context: &'a TurnContext,
@@ -20,7 +20,7 @@ pub(super) fn usage_hint_text<'a>(
         SessionSource::SubAgent(SubAgentSource::ThreadSpawn { .. }) => {
             multi_agent_v2.subagent_usage_hint_text.as_deref()
         }
-        SessionSource::Cli
+        SessionSource::LegacyCli
         | SessionSource::VSCode
         | SessionSource::Exec
         | SessionSource::Mcp

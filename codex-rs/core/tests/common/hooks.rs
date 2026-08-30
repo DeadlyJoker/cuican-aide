@@ -1,20 +1,20 @@
-use codex_config::CONFIG_TOML_FILE;
-use codex_config::ConfigLayerStack;
-use codex_config::TomlValue;
-use codex_core::config::Config;
-use codex_features::Feature;
-use codex_hooks::HookListEntry;
-use codex_utils_absolute_path::AbsolutePathBuf;
+use crewon_config::CONFIG_TOML_FILE;
+use crewon_config::ConfigLayerStack;
+use crewon_config::TomlValue;
+use crewon_core::config::Config;
+use crewon_features::Feature;
+use crewon_hooks::HookListEntry;
+use crewon_utils_absolute_path::AbsolutePathBuf;
 
 pub fn trust_discovered_hooks(config: &mut Config) {
-    if let Err(err) = config.features.enable(Feature::CodexHooks) {
+    if let Err(err) = config.features.enable(Feature::Hooks) {
         panic!("test config should allow feature update: {err}");
     }
 
-    let listed = codex_hooks::list_hooks(codex_hooks::HooksConfig {
+    let listed = crewon_hooks::list_hooks(crewon_hooks::HooksConfig {
         feature_enabled: true,
         config_layer_stack: Some(config.config_layer_stack.clone()),
-        ..codex_hooks::HooksConfig::default()
+        ..crewon_hooks::HooksConfig::default()
     });
     assert!(
         !listed.hooks.is_empty(),

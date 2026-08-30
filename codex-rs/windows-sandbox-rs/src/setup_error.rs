@@ -1,6 +1,6 @@
 use anyhow::Context;
 use anyhow::Result;
-use codex_utils_string::sanitize_metric_tag_value;
+use crewon_utils_string::sanitize_metric_tag_value;
 use serde::Deserialize;
 use serde::Serialize;
 use std::fs;
@@ -14,7 +14,7 @@ use std::path::PathBuf;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SetupErrorCode {
-    // Orchestrator (run in CLI) failures.
+    // Orchestrator process failures.
     /// Failed to create `codex_home/.sandbox` in the orchestrator.
     OrchestratorSandboxDirCreateFailed,
     /// Failed to determine whether the current process is elevated.

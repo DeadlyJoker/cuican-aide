@@ -1,11 +1,11 @@
 use crate::backend::BackendBundleClient;
 use crate::service::CLOUD_CONFIG_BUNDLE_TIMEOUT;
 use crate::service::CloudConfigBundleService;
-use codex_config::CloudConfigBundleLoadError;
-use codex_config::CloudConfigBundleLoadErrorCode;
-use codex_config::CloudConfigBundleLoader;
-use codex_config::types::AuthCredentialsStoreMode;
-use codex_login::AuthManager;
+use crewon_config::CloudConfigBundleLoadError;
+use crewon_config::CloudConfigBundleLoadErrorCode;
+use crewon_config::CloudConfigBundleLoader;
+use crewon_config::types::AuthCredentialsStoreMode;
+use crewon_login::AuthManager;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -20,12 +20,12 @@ fn refresher_task_slot() -> &'static Mutex<Option<JoinHandle<()>>> {
 pub fn cloud_config_bundle_loader(
     auth_manager: Arc<AuthManager>,
     chatgpt_base_url: String,
-    codex_home: PathBuf,
+    crewon_home: PathBuf,
 ) -> CloudConfigBundleLoader {
     let service = CloudConfigBundleService::new(
         auth_manager,
         Arc::new(BackendBundleClient::new(chatgpt_base_url)),
-        codex_home,
+        crewon_home,
         CLOUD_CONFIG_BUNDLE_TIMEOUT,
     );
     let refresh_service = service.clone();
@@ -52,17 +52,17 @@ pub fn cloud_config_bundle_loader(
 }
 
 pub async fn cloud_config_bundle_loader_for_storage(
-    codex_home: PathBuf,
+    crewon_home: PathBuf,
     enable_codex_api_key_env: bool,
     credentials_store_mode: AuthCredentialsStoreMode,
     chatgpt_base_url: String,
 ) -> CloudConfigBundleLoader {
     let auth_manager = AuthManager::shared(
-        codex_home.clone(),
+        crewon_home.clone(),
         enable_codex_api_key_env,
         credentials_store_mode,
         Some(chatgpt_base_url.clone()),
     )
     .await;
-    cloud_config_bundle_loader(auth_manager, chatgpt_base_url, codex_home)
+    cloud_config_bundle_loader(auth_manager, chatgpt_base_url, crewon_home)
 }

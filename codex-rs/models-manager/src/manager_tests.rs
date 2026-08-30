@@ -1,15 +1,15 @@
 use super::*;
 use crate::ModelsManagerConfig;
 use chrono::Utc;
-use codex_app_server_protocol::AuthMode;
-use codex_login::AuthCredentialsStoreMode;
-use codex_login::AuthManager;
-use codex_login::CodexAuth;
-use codex_login::ExternalAuth;
-use codex_login::ExternalAuthRefreshContext;
-use codex_login::ExternalAuthTokens;
-use codex_login::TokenData;
-use codex_protocol::openai_models::ModelsResponse;
+use crewon_app_server_protocol::AuthMode;
+use crewon_login::AuthCredentialsStoreMode;
+use crewon_login::AuthManager;
+use crewon_login::CrewonAuth;
+use crewon_login::ExternalAuth;
+use crewon_login::ExternalAuthRefreshContext;
+use crewon_login::ExternalAuthTokens;
+use crewon_login::TokenData;
+use crewon_protocol::openai_models::ModelsResponse;
 use pretty_assertions::assert_eq;
 use serde_json::json;
 use std::collections::VecDeque;
@@ -73,7 +73,7 @@ fn assert_models_contain(actual: &[ModelInfo], expected: &[ModelInfo]) {
 #[derive(Debug)]
 struct TestModelsEndpoint {
     has_command_auth: bool,
-    uses_codex_backend: bool,
+    uses_crewon_backend: bool,
     responses: Mutex<VecDeque<Vec<ModelInfo>>>,
     fetch_count: AtomicUsize,
 }
@@ -82,7 +82,7 @@ impl TestModelsEndpoint {
     fn new(responses: Vec<Vec<ModelInfo>>) -> Arc<Self> {
         Arc::new(Self {
             has_command_auth: false,
-            uses_codex_backend: true,
+            uses_crewon_backend: true,
             responses: Mutex::new(responses.into()),
             fetch_count: AtomicUsize::new(0),
         })
@@ -91,7 +91,7 @@ impl TestModelsEndpoint {
     fn without_refresh(responses: Vec<Vec<ModelInfo>>) -> Arc<Self> {
         Arc::new(Self {
             has_command_auth: false,
-            uses_codex_backend: false,
+            uses_crewon_backend: false,
             responses: Mutex::new(responses.into()),
             fetch_count: AtomicUsize::new(0),
         })
@@ -150,8 +150,8 @@ impl ModelsEndpointClient for TestModelsEndpoint {
         self.has_command_auth
     }
 
-    async fn uses_codex_backend(&self) -> bool {
-        self.uses_codex_backend
+    async fn uses_crewon_backend(&self) -> bool {
+        self.uses_crewon_backend
     }
 
     async fn list_models(
@@ -170,36 +170,36 @@ impl ModelsEndpointClient for TestModelsEndpoint {
 }
 
 fn openai_manager_for_tests(
-    codex_home: std::path::PathBuf,
+    crewon_home: std::path::PathBuf,
     endpoint_client: Arc<dyn ModelsEndpointClient>,
 ) -> OpenAiModelsManager {
     openai_manager_for_tests_with_auth(
-        codex_home,
+        crewon_home,
         endpoint_client,
         Some(AuthManager::from_auth_for_testing(
-            CodexAuth::create_dummy_chatgpt_auth_for_testing(),
+            CrewonAuth::create_dummy_chatgpt_auth_for_testing(),
         )),
     )
 }
 
 fn openai_manager_for_tests_with_auth(
-    codex_home: std::path::PathBuf,
+    crewon_home: std::path::PathBuf,
     endpoint_client: Arc<dyn ModelsEndpointClient>,
     auth_manager: Option<Arc<AuthManager>>,
 ) -> OpenAiModelsManager {
-    OpenAiModelsManager::new(codex_home, endpoint_client, auth_manager)
+    OpenAiModelsManager::new(crewon_home, endpoint_client, auth_manager)
 }
 
 fn static_manager_for_tests(model_catalog: ModelsResponse) -> StaticModelsManager {
     StaticModelsManager::new(/*auth_manager*/ None, model_catalog)
 }
 
-async fn chatgpt_auth_tokens_for_tests(codex_home: &Path) -> CodexAuth {
-    let auth_dot_json = codex_login::AuthDotJson {
+async fn chatgpt_auth_tokens_for_tests(crewon_home: &Path) -> CrewonAuth {
+    let auth_dot_json = crewon_login::AuthDotJson {
         auth_mode: Some(AuthMode::ChatgptAuthTokens),
         openai_api_key: None,
         tokens: Some(TokenData {
-            id_token: codex_login::token_data::parse_chatgpt_jwt_claims(
+            id_token: crewon_login::token_data::parse_chatgpt_jwt_claims(
                 "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.\
 eyJlbWFpbCI6InVzZXJAZXhhbXBsZS5jb20iLCJodHRwczovL2FwaS5vcGVuYWkuY29tL2F1dGgiOnsiY2hhdGdwdF9wbGFuX3R5cGUiOiJwcm8iLCJjaGF0Z3B0X3VzZXJfaWQiOiJ1c2VyLWlkIiwiY2hhdGdwdF9hY2NvdW50X2lkIjoiYWNjb3VudC1pZCJ9fQ.\
 c2ln",
@@ -214,15 +214,15 @@ c2ln",
         personal_access_token: None,
         bedrock_api_key: None,
     };
-    std::fs::create_dir_all(codex_home).expect("codex home should be created");
+    std::fs::create_dir_all(crewon_home).expect("crewon home should be created");
     std::fs::write(
-        codex_home.join("auth.json"),
+        crewon_home.join("auth.json"),
         serde_json::to_string(&auth_dot_json).expect("auth should serialize"),
     )
     .expect("auth.json should be written");
 
-    CodexAuth::from_auth_storage(
-        codex_home,
+    CrewonAuth::from_auth_storage(
+        crewon_home,
         AuthCredentialsStoreMode::File,
         /*chatgpt_base_url*/ None,
     )
@@ -233,10 +233,10 @@ c2ln",
 
 #[tokio::test]
 async fn get_model_info_tracks_fallback_usage() {
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let config = ModelsManagerConfig::default();
     let manager = openai_manager_for_tests(
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         TestModelsEndpoint::new(Vec::new()),
     );
     let known_slug = manager
@@ -304,7 +304,7 @@ async fn get_model_info_matches_hyphenated_provider_namespace_suffix() {
     let manager = static_manager_for_tests(ModelsResponse {
         models: vec![remote],
     });
-    let namespaced_model = "openai-codex/gpt-image".to_string();
+    let namespaced_model = "crewon/gpt-image".to_string();
 
     let model_info = manager.get_model_info(&namespaced_model, &config).await;
 
@@ -314,10 +314,10 @@ async fn get_model_info_matches_hyphenated_provider_namespace_suffix() {
 
 #[tokio::test]
 async fn get_model_info_rejects_multi_segment_namespace_suffix_matching() {
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let config = ModelsManagerConfig::default();
     let manager = openai_manager_for_tests(
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         TestModelsEndpoint::new(Vec::new()),
     );
     let known_slug = manager
@@ -341,9 +341,9 @@ async fn refresh_available_models_sorts_by_priority() {
         remote_model("priority-low", "Low", /*priority*/ 1),
         remote_model("priority-high", "High", /*priority*/ 0),
     ];
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let endpoint = TestModelsEndpoint::new(vec![remote_models.clone()]);
-    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
+    let manager = openai_manager_for_tests(crewon_home.path().to_path_buf(), endpoint.clone());
 
     manager
         .refresh_available_models(RefreshStrategy::OnlineIfUncached)
@@ -375,9 +375,9 @@ async fn refresh_available_models_uses_remote_only_catalog_for_chatgpt_auth() {
         "ChatGPT Visible",
         /*priority*/ 0,
     )];
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let endpoint = TestModelsEndpoint::new(vec![remote_models.clone()]);
-    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
+    let manager = openai_manager_for_tests(crewon_home.path().to_path_buf(), endpoint.clone());
 
     manager
         .refresh_available_models(RefreshStrategy::OnlineIfUncached)
@@ -395,10 +395,10 @@ async fn refresh_available_models_uses_cached_remote_only_catalog_for_chatgpt_au
         "ChatGPT Cached",
         /*priority*/ 0,
     )];
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let fetch_endpoint = TestModelsEndpoint::new(vec![remote_models.clone()]);
     let fetch_manager =
-        openai_manager_for_tests(codex_home.path().to_path_buf(), fetch_endpoint.clone());
+        openai_manager_for_tests(crewon_home.path().to_path_buf(), fetch_endpoint.clone());
 
     fetch_manager
         .refresh_available_models(RefreshStrategy::OnlineIfUncached)
@@ -407,7 +407,7 @@ async fn refresh_available_models_uses_cached_remote_only_catalog_for_chatgpt_au
 
     let cache_endpoint = TestModelsEndpoint::new(Vec::new());
     let cache_manager =
-        openai_manager_for_tests(codex_home.path().to_path_buf(), cache_endpoint.clone());
+        openai_manager_for_tests(crewon_home.path().to_path_buf(), cache_endpoint.clone());
 
     cache_manager
         .refresh_available_models(RefreshStrategy::OnlineIfUncached)
@@ -429,9 +429,9 @@ async fn get_model_info_uses_fallback_for_bundled_models_when_chatgpt_remote_is_
         "ChatGPT Model Info",
         /*priority*/ 0,
     )];
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let endpoint = TestModelsEndpoint::new(vec![remote_models]);
-    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+    let manager = openai_manager_for_tests(crewon_home.path().to_path_buf(), endpoint);
     let bundled_slug = load_remote_models_from_file()
         .expect("bundled models should parse")
         .first()
@@ -454,9 +454,9 @@ async fn get_model_info_uses_fallback_for_bundled_models_when_chatgpt_remote_is_
 
 #[tokio::test]
 async fn refresh_available_models_preserves_bundled_catalog_for_empty_chatgpt_remote() {
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let endpoint = TestModelsEndpoint::new(vec![Vec::new()]);
-    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+    let manager = openai_manager_for_tests(crewon_home.path().to_path_buf(), endpoint);
     let expected = load_remote_models_from_file().expect("bundled models should parse");
 
     manager
@@ -475,9 +475,9 @@ async fn refresh_available_models_merges_hidden_only_chatgpt_remote_with_bundled
         /*priority*/ 0,
         "hide",
     );
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let endpoint = TestModelsEndpoint::new(vec![vec![hidden_remote.clone()]]);
-    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint);
+    let manager = openai_manager_for_tests(crewon_home.path().to_path_buf(), endpoint);
     let mut expected = load_remote_models_from_file().expect("bundled models should parse");
     expected.push(hidden_remote);
 
@@ -496,19 +496,19 @@ async fn refresh_available_models_keeps_merging_for_api_auth() {
         "API Auth Visible",
         /*priority*/ 0,
     )];
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let endpoint = Arc::new(TestModelsEndpoint {
         has_command_auth: true,
-        uses_codex_backend: false,
+        uses_crewon_backend: false,
         responses: Mutex::new(vec![remote_models.clone()].into()),
         fetch_count: AtomicUsize::new(0),
     });
     let manager = openai_manager_for_tests_with_auth(
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         endpoint.clone(),
-        Some(AuthManager::from_auth_for_testing(CodexAuth::from_api_key(
-            "test-api-key",
-        ))),
+        Some(AuthManager::from_auth_for_testing(
+            CrewonAuth::from_api_key("test-api-key"),
+        )),
     );
     let mut expected = load_remote_models_from_file().expect("bundled models should parse");
     expected.extend(remote_models);
@@ -525,9 +525,9 @@ async fn refresh_available_models_keeps_merging_for_api_auth() {
 #[tokio::test]
 async fn refresh_available_models_uses_cache_when_fresh() {
     let remote_models = vec![remote_model("cached", "Cached", /*priority*/ 5)];
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let endpoint = TestModelsEndpoint::new(vec![remote_models.clone()]);
-    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
+    let manager = openai_manager_for_tests(crewon_home.path().to_path_buf(), endpoint.clone());
 
     manager
         .refresh_available_models(RefreshStrategy::OnlineIfUncached)
@@ -551,10 +551,10 @@ async fn refresh_available_models_uses_cache_when_fresh() {
 #[tokio::test]
 async fn refresh_available_models_refetches_when_cache_stale() {
     let initial_models = vec![remote_model("stale", "Stale", /*priority*/ 1)];
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let updated_models = vec![remote_model("fresh", "Fresh", /*priority*/ 9)];
     let endpoint = TestModelsEndpoint::new(vec![initial_models.clone(), updated_models.clone()]);
-    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
+    let manager = openai_manager_for_tests(crewon_home.path().to_path_buf(), endpoint.clone());
 
     manager
         .refresh_available_models(RefreshStrategy::OnlineIfUncached)
@@ -585,10 +585,10 @@ async fn refresh_available_models_refetches_when_cache_stale() {
 #[tokio::test]
 async fn refresh_available_models_refetches_when_version_mismatch() {
     let initial_models = vec![remote_model("old", "Old", /*priority*/ 1)];
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let updated_models = vec![remote_model("new", "New", /*priority*/ 2)];
     let endpoint = TestModelsEndpoint::new(vec![initial_models.clone(), updated_models.clone()]);
-    let manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
+    let manager = openai_manager_for_tests(crewon_home.path().to_path_buf(), endpoint.clone());
 
     manager
         .refresh_available_models(RefreshStrategy::OnlineIfUncached)
@@ -623,14 +623,14 @@ async fn refresh_available_models_drops_removed_remote_models() {
         "Remote Old",
         /*priority*/ 1,
     )];
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let refreshed_models = vec![remote_model(
         "remote-new",
         "Remote New",
         /*priority*/ 1,
     )];
     let endpoint = TestModelsEndpoint::new(vec![initial_models, refreshed_models]);
-    let mut manager = openai_manager_for_tests(codex_home.path().to_path_buf(), endpoint.clone());
+    let mut manager = openai_manager_for_tests(crewon_home.path().to_path_buf(), endpoint.clone());
     manager.cache_manager.set_ttl(Duration::ZERO);
 
     manager
@@ -664,14 +664,14 @@ async fn refresh_available_models_drops_removed_remote_models() {
 #[tokio::test]
 async fn refresh_available_models_skips_network_without_chatgpt_auth() {
     let dynamic_slug = "dynamic-model-only-for-test-noauth";
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let endpoint = TestModelsEndpoint::without_refresh(vec![vec![remote_model(
         dynamic_slug,
         "No Auth",
         /*priority*/ 1,
     )]]);
     let manager = openai_manager_for_tests_with_auth(
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         endpoint.clone(),
         /*auth_manager*/ None,
     );
@@ -721,13 +721,13 @@ impl ModelsEndpointClient for TestAuthAwareModelsEndpoint {
         false
     }
 
-    async fn uses_codex_backend(&self) -> bool {
+    async fn uses_crewon_backend(&self) -> bool {
         match self.auth_manager.as_ref() {
             Some(auth_manager) => auth_manager
                 .auth()
                 .await
                 .as_ref()
-                .is_some_and(CodexAuth::uses_codex_backend),
+                .is_some_and(CrewonAuth::uses_crewon_backend),
             None => false,
         }
     }
@@ -750,9 +750,9 @@ impl ModelsEndpointClient for TestAuthAwareModelsEndpoint {
 #[tokio::test]
 async fn refresh_available_models_skips_network_when_external_api_key_overrides_chatgpt_auth() {
     let dynamic_slug = "dynamic-model-only-for-test-external-api-key";
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let auth_manager =
-        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+        AuthManager::from_auth_for_testing(CrewonAuth::create_dummy_chatgpt_auth_for_testing());
     auth_manager.set_external_auth(Arc::new(TestExternalApiKeyAuth));
     let endpoint = TestAuthAwareModelsEndpoint::new(
         Some(Arc::clone(&auth_manager)),
@@ -763,7 +763,7 @@ async fn refresh_available_models_skips_network_when_external_api_key_overrides_
         )]],
     );
     let manager = openai_manager_for_tests_with_auth(
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         endpoint.clone(),
         Some(auth_manager),
     );
@@ -790,9 +790,9 @@ async fn refresh_available_models_skips_network_when_external_api_key_overrides_
 #[tokio::test]
 async fn refresh_available_models_uses_cached_chatgpt_when_external_api_key_is_unresolved() {
     let dynamic_slug = "dynamic-model-only-for-test-unresolved-external-api-key";
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let auth_manager =
-        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+        AuthManager::from_auth_for_testing(CrewonAuth::create_dummy_chatgpt_auth_for_testing());
     auth_manager.set_external_auth(Arc::new(TestUnresolvedExternalApiKeyAuth));
     let endpoint = TestAuthAwareModelsEndpoint::new(
         Some(Arc::clone(&auth_manager)),
@@ -803,7 +803,7 @@ async fn refresh_available_models_uses_cached_chatgpt_when_external_api_key_is_u
         )]],
     );
     let manager = openai_manager_for_tests_with_auth(
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         endpoint.clone(),
         Some(auth_manager),
     );
@@ -831,15 +831,15 @@ async fn refresh_available_models_uses_cached_chatgpt_when_external_api_key_is_u
 #[tokio::test]
 async fn refresh_available_models_fetches_with_chatgpt_auth_tokens() {
     let dynamic_slug = "dynamic-model-only-for-test-chatgpt-auth-tokens";
-    let codex_home = tempdir().expect("temp dir");
+    let crewon_home = tempdir().expect("temp dir");
     let endpoint = TestModelsEndpoint::new(vec![vec![remote_model(
         dynamic_slug,
         "ChatGPT Auth Tokens",
         /*priority*/ 1,
     )]]);
-    let auth = chatgpt_auth_tokens_for_tests(codex_home.path()).await;
+    let auth = chatgpt_auth_tokens_for_tests(crewon_home.path()).await;
     let manager = openai_manager_for_tests_with_auth(
-        codex_home.path().to_path_buf(),
+        crewon_home.path().to_path_buf(),
         endpoint.clone(),
         Some(AuthManager::from_auth_for_testing(auth)),
     );
@@ -885,7 +885,7 @@ fn build_available_models_picks_default_after_hiding_hidden_models() {
 #[tokio::test]
 async fn static_manager_reads_latest_auth_mode() {
     let auth_manager =
-        AuthManager::from_auth_for_testing(CodexAuth::create_dummy_chatgpt_auth_for_testing());
+        AuthManager::from_auth_for_testing(CrewonAuth::create_dummy_chatgpt_auth_for_testing());
     let chatgpt_only_model = {
         let mut model = remote_model("chatgpt-only", "ChatGPT Only", /*priority*/ 0);
         model.supported_in_api = false;

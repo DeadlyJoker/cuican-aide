@@ -14,11 +14,11 @@ use crate::api::TaskText;
 use chrono::DateTime;
 use chrono::Utc;
 
-use codex_api::SharedAuthProvider;
-use codex_backend_client as backend;
-use codex_backend_client::CodeTaskDetailsResponseExt;
-use codex_git_utils::ApplyGitRequest;
-use codex_git_utils::apply_git_patch;
+use crewon_api::SharedAuthProvider;
+use crewon_backend_client as backend;
+use crewon_backend_client::CodeTaskDetailsResponseExt;
+use crewon_git_utils::ApplyGitRequest;
+use crewon_git_utils::apply_git_patch;
 
 #[derive(Clone)]
 pub struct HttpClient {

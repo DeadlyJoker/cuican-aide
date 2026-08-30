@@ -1,7 +1,7 @@
 [package]
 edition.workspace = true
 license.workspace = true
-name = "codex-utils-pty"
+name = "crewon-utils-pty"
 version.workspace = true
 
 [lints]
@@ -34,4 +34,5 @@ winapi = { version = "0.3.9", features = [
 libc = { workspace = true }
 
 [lib]
+name = "crewon_utils_pty"
 doctest = false

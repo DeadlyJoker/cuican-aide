@@ -317,9 +317,10 @@ if [[ -n "${BAZEL_REPOSITORY_CACHE:-}" ]]; then
   post_config_bazel_args+=("--repository_cache=${BAZEL_REPOSITORY_CACHE}")
 fi
 
-if [[ -n "${CODEX_BAZEL_EXECUTION_LOG_COMPACT_DIR:-}" ]]; then
+crewon_bazel_execution_log_compact_dir="${CREWON_BAZEL_EXECUTION_LOG_COMPACT_DIR:-${CODEX_BAZEL_EXECUTION_LOG_COMPACT_DIR:-}}"
+if [[ -n "${crewon_bazel_execution_log_compact_dir}" ]]; then
   post_config_bazel_args+=(
-    "--execution_log_compact_file=${CODEX_BAZEL_EXECUTION_LOG_COMPACT_DIR}/execution-log-${bazel_args[0]}-${GITHUB_JOB:-local}-$$.zst"
+    "--execution_log_compact_file=${crewon_bazel_execution_log_compact_dir}/execution-log-${bazel_args[0]}-${GITHUB_JOB:-local}-$$.zst"
   )
 fi
 
@@ -355,26 +356,27 @@ if [[ "${RUNNER_OS:-}" == "Windows" ]]; then
     done
   fi
 
-  if [[ -z "${CODEX_BAZEL_WINDOWS_PATH:-}" ]]; then
-    echo "CODEX_BAZEL_WINDOWS_PATH must be set for Windows Bazel CI." >&2
+  crewon_bazel_windows_path="${CREWON_BAZEL_WINDOWS_PATH:-${CODEX_BAZEL_WINDOWS_PATH:-}}"
+  if [[ -z "${crewon_bazel_windows_path}" ]]; then
+    echo "CREWON_BAZEL_WINDOWS_PATH must be set for Windows Bazel CI." >&2
     exit 1
   fi
 
   if [[ $pass_windows_build_env -eq 1 ]]; then
     post_config_bazel_args+=(
-      "--action_env=PATH=${CODEX_BAZEL_WINDOWS_PATH}"
-      "--host_action_env=PATH=${CODEX_BAZEL_WINDOWS_PATH}"
+      "--action_env=PATH=${crewon_bazel_windows_path}"
+      "--host_action_env=PATH=${crewon_bazel_windows_path}"
     )
   elif [[ $windows_cross_compile -eq 1 ]]; then
     # Remote build actions run on Linux RBE workers. Give their shell snippets
-    # a Linux PATH while preserving CODEX_BAZEL_WINDOWS_PATH below for local
+    # a Linux PATH while preserving the Windows PATH below for local
     # Windows test execution.
     post_config_bazel_args+=(
       "--action_env=PATH=/usr/bin:/bin"
       "--host_action_env=PATH=/usr/bin:/bin"
     )
   fi
-  post_config_bazel_args+=("--test_env=PATH=${CODEX_BAZEL_WINDOWS_PATH}")
+  post_config_bazel_args+=("--test_env=PATH=${crewon_bazel_windows_path}")
 fi
 
 bazel_console_log="$(mktemp)"

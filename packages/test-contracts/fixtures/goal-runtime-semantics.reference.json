@@ -1,0 +1,208 @@
+{
+  "schemaVersion": "crewon.goal-runtime-semantics.v0",
+  "accountingPolicy": "nonCachedInputPlusOutput.v1",
+  "maxFixtureBytes": 16384,
+  "publicGoalProjectionFields": [
+    "objective",
+    "status",
+    "tokenBudget",
+    "tokensUsed"
+  ],
+  "toolBoundaryCases": [
+    {
+      "id": "ordinary-tool-boundary",
+      "initialGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "active",
+        "tokenBudget": 100,
+        "tokensUsed": 0
+      },
+      "usageDelta": {
+        "inputTokens": 20,
+        "cachedInputTokens": 5,
+        "outputTokens": 10
+      },
+      "repeatSameBoundary": true,
+      "expectedGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "active",
+        "tokenBudget": 100,
+        "tokensUsed": 25
+      },
+      "expectedCrossedBudget": false,
+      "expectedDurableGoalMutations": 1,
+      "budgetSteering": {
+        "required": false,
+        "atMostOncePerGoal": true
+      }
+    },
+    {
+      "id": "first-budget-crossing",
+      "initialGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "active",
+        "tokenBudget": 25,
+        "tokensUsed": 0
+      },
+      "usageDelta": {
+        "inputTokens": 20,
+        "cachedInputTokens": 5,
+        "outputTokens": 10
+      },
+      "repeatSameBoundary": true,
+      "expectedGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "budgetLimited",
+        "tokenBudget": 25,
+        "tokensUsed": 25
+      },
+      "expectedCrossedBudget": true,
+      "expectedDurableGoalMutations": 1,
+      "budgetSteering": {
+        "required": true,
+        "atMostOncePerGoal": true
+      }
+    }
+  ],
+  "terminalCases": [
+    {
+      "id": "completed-keeps-active",
+      "initialGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "active",
+        "tokenBudget": 100,
+        "tokensUsed": 0
+      },
+      "usageDelta": {
+        "inputTokens": 20,
+        "cachedInputTokens": 5,
+        "outputTokens": 8
+      },
+      "outcome": { "kind": "completed" },
+      "expectedGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "active",
+        "tokenBudget": 100,
+        "tokensUsed": 23
+      },
+      "repeatTerminalMustNotMutate": true
+    },
+    {
+      "id": "canceled-keeps-active",
+      "initialGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "active",
+        "tokenBudget": 100,
+        "tokensUsed": 0
+      },
+      "usageDelta": {
+        "inputTokens": 20,
+        "cachedInputTokens": 5,
+        "outputTokens": 8
+      },
+      "outcome": { "kind": "canceled" },
+      "expectedGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "active",
+        "tokenBudget": 100,
+        "tokensUsed": 23
+      },
+      "repeatTerminalMustNotMutate": true
+    },
+    {
+      "id": "failed-blocks-under-budget",
+      "initialGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "active",
+        "tokenBudget": 100,
+        "tokensUsed": 0
+      },
+      "usageDelta": {
+        "inputTokens": 20,
+        "cachedInputTokens": 5,
+        "outputTokens": 8
+      },
+      "outcome": { "kind": "failed", "code": "model_stream_failed" },
+      "expectedGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "blocked",
+        "tokenBudget": 100,
+        "tokensUsed": 23
+      },
+      "repeatTerminalMustNotMutate": true
+    },
+    {
+      "id": "budget-precedes-generic-failure",
+      "initialGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "active",
+        "tokenBudget": 20,
+        "tokensUsed": 0
+      },
+      "usageDelta": {
+        "inputTokens": 20,
+        "cachedInputTokens": 5,
+        "outputTokens": 8
+      },
+      "outcome": { "kind": "failed", "code": "model_stream_failed" },
+      "expectedGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "budgetLimited",
+        "tokenBudget": 20,
+        "tokensUsed": 23
+      },
+      "repeatTerminalMustNotMutate": true
+    },
+    {
+      "id": "usage-limit-precedes-budget",
+      "initialGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "active",
+        "tokenBudget": 20,
+        "tokensUsed": 0
+      },
+      "usageDelta": {
+        "inputTokens": 20,
+        "cachedInputTokens": 5,
+        "outputTokens": 8
+      },
+      "outcome": {
+        "kind": "failed",
+        "code": "responses_usage_limit_reached"
+      },
+      "expectedGoal": {
+        "objective": "ship goal runtime semantics",
+        "status": "usageLimited",
+        "tokenBudget": 20,
+        "tokensUsed": 23
+      },
+      "repeatTerminalMustNotMutate": true
+    }
+  ],
+  "objectiveMutation": {
+    "initialGoal": {
+      "objective": "old objective",
+      "status": "active",
+      "tokenBudget": 100,
+      "tokensUsed": 0
+    },
+    "preEditUsageDelta": {
+      "inputTokens": 20,
+      "cachedInputTokens": 5,
+      "outputTokens": 8
+    },
+    "editedObjective": "new objective",
+    "expectedEditedGoal": {
+      "objective": "new objective",
+      "status": "active",
+      "tokenBudget": 100,
+      "tokensUsed": 23
+    },
+    "clear": {
+      "expectedGoal": null,
+      "firstClearChanged": true,
+      "replayClearChanged": false,
+      "lateTerminalMustNotRevive": true
+    }
+  }
+}

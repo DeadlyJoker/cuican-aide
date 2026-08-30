@@ -1,0 +1,290 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`command workspace catalog style > snapshots the compact knowledge header and card density 1`] = `
+"/* Knowledge keeps its title, filters, search, and refresh action on one 64px row. */
+.screen-shell.command-screen .knowledge-catalog-header {
+  grid-template-columns: auto auto minmax(240px, 1fr);
+  box-sizing: border-box;
+  min-height: 64px;
+  gap: 16px;
+  padding-block: 8px;
+  border-bottom: 1px solid var(--n-250);
+}
+
+.screen-shell.command-screen .knowledge-catalog-title {
+  display: flex;
+  min-width: 148px;
+  align-items: center;
+  gap: 9px;
+}
+
+.screen-shell.command-screen .knowledge-catalog-title-icon {
+  display: grid;
+  width: var(--control-h-md);
+  height: var(--control-h-md);
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: var(--radius-md);
+  background: var(--n-100);
+  color: var(--n-800);
+}
+
+.screen-shell.command-screen .knowledge-catalog-title-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.screen-shell.command-screen .knowledge-catalog-title h1 {
+  margin: 0;
+  font-size: calc(16px + var(--user-ui-font-delta));
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.screen-shell.command-screen .knowledge-catalog-title p {
+  margin: 2px 0 0;
+  color: var(--n-650);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  line-height: 1.3;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .knowledge-catalog-location-filter {
+  min-height: var(--control-h-md);
+  margin: 0;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .knowledge-catalog-header .catalog-header-actions {
+  flex-wrap: nowrap;
+}
+
+.screen-shell.command-screen
+  .knowledge-catalog-header
+  .catalog-header-actions
+  .catalog-search {
+  max-width: 460px;
+}
+
+/* Wider tracks and clamped copy keep every knowledge card on one density rung. */
+.screen-shell.command-screen
+  .capability-catalog.knowledge-catalog[data-catalog-filter] {
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.screen-shell.command-screen
+  .capability-catalog.knowledge-catalog[data-catalog-filter]
+  .catalog-card {
+  grid-template-columns: 38px minmax(0, 1fr) 28px;
+  min-height: 146px;
+  gap: 10px;
+  padding: 14px;
+}
+
+.screen-shell.command-screen
+  .capability-catalog.knowledge-catalog[data-catalog-filter]
+  .catalog-card-head
+  span {
+  display: none;
+}
+
+.screen-shell.command-screen
+  .capability-catalog.knowledge-catalog[data-catalog-filter]
+  .catalog-card-head
+  strong {
+  display: -webkit-box;
+  overflow: hidden;
+  line-height: 1.4;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.screen-shell.command-screen
+  .capability-catalog.knowledge-catalog[data-catalog-filter]
+  .catalog-card-body
+  > p {
+  min-height: 35px;
+}
+
+.screen-shell.command-screen
+  .capability-catalog.knowledge-catalog[data-catalog-filter]
+  .catalog-card-action {
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  min-height: var(--control-h-sm);
+}
+
+.screen-shell.command-screen
+  .capability-catalog.knowledge-catalog[data-catalog-filter]
+  .catalog-card-actions {
+  min-width: var(--control-h-sm);
+}
+
+@container page-stack (max-width: 900px) {
+  .screen-shell.command-screen .knowledge-catalog-header {
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: auto;
+  }
+
+  .screen-shell.command-screen .knowledge-catalog-location-filter {
+    justify-self: end;
+  }
+
+  .screen-shell.command-screen
+    .knowledge-catalog-header
+    .catalog-header-actions {
+    grid-column: 1 / -1;
+  }
+}
+
+@container page-stack (max-width: 560px) {
+  .screen-shell.command-screen .knowledge-catalog-header {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .screen-shell.command-screen .knowledge-catalog-location-filter {
+    justify-self: start;
+  }
+
+  .screen-shell.command-screen
+    .knowledge-catalog-header
+    .catalog-header-actions {
+    grid-column: auto;
+    flex-wrap: wrap;
+  }
+
+  .screen-shell.command-screen
+    .knowledge-catalog-header
+    .catalog-header-actions
+    .catalog-search {
+    max-width: none;
+  }
+}"
+`;
+
+exports[`command workspace catalog style > snapshots the shared auto-fill capability catalog 1`] = `
+"/* Agents, skills, services, and knowledge share one auto-fill catalog grid. */
+.screen-shell.command-screen .capability-catalog[data-catalog-filter] {
+  /* auto-fill tracks the available width: in narrow page-view columns a fixed
+   * 4-up grid squeezed cards to ~99px and crushed the card body to zero width
+   * (the capability-page container query only applies where that container is
+   * registered, so it never fired here). */
+  grid-template-columns: repeat(auto-fill, minmax(248px, 1fr));
+  gap: 14px;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card {
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto;
+  align-content: start;
+  min-height: 136px;
+  gap: 12px;
+  padding: 16px;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-body {
+  display: contents;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-icon {
+  grid-row: 1;
+  grid-column: 1;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-head {
+  grid-row: 1;
+  grid-column: 2;
+  align-self: center;
+  margin-bottom: 0;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card
+  > .button,
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card
+  > .catalog-card-action,
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card
+  > .status,
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-actions {
+  grid-row: 1;
+  grid-column: 3;
+  align-self: start;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-action {
+  width: 30px;
+  height: 30px;
+  min-height: 30px;
+  padding: 0;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-action
+  svg {
+  width: 15px;
+  height: 15px;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-actions {
+  min-width: 30px;
+  align-items: flex-end;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card
+  > p,
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-card-body
+  > p {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  min-height: 38px;
+}
+
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-meta,
+.screen-shell.command-screen
+  .capability-catalog[data-catalog-filter]
+  .catalog-resource-meta {
+  grid-row: 3;
+  grid-column: 1 / -1;
+  margin-top: 0;
+}
+
+@container capability-page (max-width: 760px) {
+  .screen-shell.command-screen .capability-catalog[data-catalog-filter] {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container capability-page (max-width: 520px) {
+  .screen-shell.command-screen .capability-catalog[data-catalog-filter] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}"
+`;

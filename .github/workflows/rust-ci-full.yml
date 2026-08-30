@@ -8,6 +8,7 @@ on:
 
 # CI builds in debug (dev) for faster signal.
 env:
+  CREWON_TRUSTED_UPSTREAM_REPOSITORY: ${{ github.repository }}
   # Cargo's libgit2 transport has been flaky on macOS when fetching git
   # dependencies with nested submodules. Use the system git CLI, which has
   # better network/proxy behavior and matches Cargo's own suggested fallback.

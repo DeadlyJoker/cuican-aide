@@ -1,0 +1,76 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`theme parity > keeps dark composer send icons opposite their circular surface 1`] = `
+{
+  "app.css": [
+    {
+      "background": "var(--n-1000)",
+      "color": "var(--n-0)",
+      "opacity": undefined,
+      "states": [
+        "send",
+        "stop",
+      ],
+    },
+    {
+      "background": "var(--n-0)",
+      "color": "var(--n-1000)",
+      "opacity": undefined,
+      "states": [
+        "interactive",
+        "stop-interactive",
+      ],
+    },
+    {
+      "background": "var(--n-1000)",
+      "color": "var(--n-0)",
+      "opacity": "0.34",
+      "states": [
+        "disabled",
+      ],
+    },
+  ],
+  "original-shell-overrides.css": [
+    {
+      "background": "var(--n-1000)",
+      "color": "var(--n-0)",
+      "opacity": undefined,
+      "states": [
+        "send",
+      ],
+    },
+    {
+      "background": "var(--n-0)",
+      "color": "var(--n-1000)",
+      "opacity": undefined,
+      "states": [
+        "interactive",
+      ],
+    },
+    {
+      "background": "var(--n-1000)",
+      "color": "var(--n-0)",
+      "opacity": "0.34",
+      "states": [
+        "disabled",
+      ],
+    },
+    {
+      "background": "var(--n-1000)",
+      "color": "var(--n-0)",
+      "opacity": undefined,
+      "states": [
+        "stop",
+      ],
+    },
+    {
+      "background": "var(--n-0)",
+      "color": "var(--n-1000)",
+      "opacity": undefined,
+      "states": [
+        "stop-interactive",
+      ],
+    },
+  ],
+}
+`;

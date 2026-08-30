@@ -1,8 +1,8 @@
-load("//:defs.bzl", "codex_rust_crate")
+load("//:defs.bzl", "crewon_rust_crate")
 
-codex_rust_crate(
+crewon_rust_crate(
     name = "core",
-    crate_name = "codex_core",
+    crate_name = "crewon_core",
     compile_data = glob(
         include = ["**"],
         exclude = [
@@ -11,7 +11,10 @@ codex_rust_crate(
             "Cargo.toml",
         ],
         allow_empty = True,
-    ),
+    ) + [
+        "//:packages/test-contracts/fixtures/context-normalization.reference.json",
+        "//:packages/test-contracts/fixtures/thread-rollback-parity.reference.json",
+    ],
     rustc_env = {
         # Keep manifest-root path lookups inside the Bazel execroot for code
         # that relies on env!("CARGO_MANIFEST_DIR").
@@ -20,6 +23,32 @@ codex_rust_crate(
     integration_test_timeout = "long",
     test_data_extra = [
         "config.schema.json",
+        "//:packages/test-contracts/fixtures/agent-text-turn.reference.json",
+        "//:packages/test-contracts/fixtures/aborted-tool-history.reference.json",
+        "//:packages/test-contracts/fixtures/canonical-history-dedupe.reference.json",
+        "//:packages/test-contracts/fixtures/content-filter-incomplete.reference.json",
+        "//:packages/test-contracts/fixtures/context-normalization.reference.json",
+        "//:packages/test-contracts/fixtures/context-window-compaction.reference.json",
+        "//:packages/test-contracts/fixtures/governed-context.reference.json",
+        "//:packages/test-contracts/fixtures/legacy-rollout-resume-fork.reference.json",
+        "//:packages/test-contracts/fixtures/mcp-tool-scheduling.reference.json",
+        "//:packages/test-contracts/fixtures/model-switch-compaction.reference.json",
+        "//:packages/test-contracts/fixtures/prompt-tool-stability.reference.json",
+        "//:packages/test-contracts/fixtures/responses-lite-request.reference.json",
+        "//:packages/test-contracts/fixtures/shell-tool-output.reference.json",
+        "//:packages/test-contracts/fixtures/stream-early-close-retry.reference.json",
+        "//:packages/test-contracts/fixtures/stream-completed-assistant-close-retry.reference.json",
+        "//:packages/test-contracts/fixtures/stream-completed-tool-close-retry.reference.json",
+        "//:packages/test-contracts/fixtures/stream-partial-close-retry.reference.json",
+        "//:packages/test-contracts/fixtures/tool-cancel.reference.json",
+        "//:packages/test-contracts/fixtures/tool-output-truncation.reference.json",
+        "//:packages/test-contracts/fixtures/token-limit-compaction.reference.json",
+        "//:packages/test-contracts/fixtures/thread-rollback-parity.reference.json",
+        "//:packages/test-contracts/fixtures/typed-policy-failure.reference.json",
+        "//:packages/test-contracts/fixtures/turn-error-release.reference.json",
+        "//:packages/test-contracts/fixtures/unknown-custom-tool.reference.json",
+        "//:packages/test-contracts/fixtures/usage-limit-reached.reference.json",
+        "//:packages/test-contracts/fixtures/websocket-transport.reference.json",
     ] + glob([
         "src/**/snapshots/**",
     ]) + [
@@ -41,11 +70,10 @@ codex_rust_crate(
     unit_test_timeout = "long",
     extra_binaries = [
         "//codex-rs/bwrap:bwrap",
-        "//codex-rs/linux-sandbox:codex-linux-sandbox",
+        "//codex-rs/linux-sandbox:crewon-linux-sandbox",
         "//codex-rs/rmcp-client:test_stdio_server",
         "//codex-rs/rmcp-client:test_streamable_http_server",
-        "//codex-rs/cli:codex",
-        "//codex-rs/windows-sandbox-rs:codex-command-runner",
-        "//codex-rs/windows-sandbox-rs:codex-windows-sandbox-setup",
+        "//codex-rs/windows-sandbox-rs:crewon-command-runner",
+        "//codex-rs/windows-sandbox-rs:crewon-windows-sandbox-setup",
     ],
 )
