@@ -1,9 +1,0 @@
-load("//:defs.bzl", "crewon_rust_crate")
-
-crewon_rust_crate(
-    name = "write",
-    crate_name = "crewon_memories_write",
-    compile_data = glob([
-        "templates/**",
-    ]),
-)

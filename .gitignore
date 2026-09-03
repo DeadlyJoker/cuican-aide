@@ -9,8 +9,6 @@ node_modules
 
 # build
 dist/
-bazel-*
-user.bazelrc
 build/
 out/
 storybook-static/
@@ -18,9 +16,6 @@ apps/crewon-ui/dist-electron/
 apps/crewon-ui/desktop-resources/
 apps/crewon-ui/release/
 apps/crewon-ui/showcase.zip
-
-# ignore Nix derivation results
-result
 
 # editor
 .vscode/
@@ -37,6 +32,7 @@ AGENTS.override.md
 
 # caches
 .cache/
+tmp/
 .turbo/
 .parcel-cache/
 .eslintcache
@@ -98,10 +94,6 @@ CHANGELOG.ignore.md
 # secrets; a committed copy would let anyone sign an update this app installs.
 *.key
 !**/*.key.pub
-
-# nix related
-.direnv
-.envrc
 
 # Python bytecode files
 __pycache__/

@@ -1448,8 +1448,8 @@ export function demoSettingsPanel(
       title: zh(locale) ? "配置" : "Config",
       subtitle: "/Users/me/work/crewon",
       body: zh(locale)
-        ? "模型：gpt-5-codex（默认）\n推理强度：medium\n审批策略：on-request\n沙箱：workspace-write\n网络：受控放行\n\n工作区覆盖：\n- 测试命令：just test\n- 格式化：just fmt\n\n配置来源：~/.crewon/config.toml + 项目 .crewon/"
-        : "Model: gpt-5-codex (default)\nReasoning: medium\nApproval policy: on-request\nSandbox: workspace-write\nNetwork: controlled allow\n\nWorkspace overrides:\n- test: just test\n- format: just fmt\n\nSources: ~/.crewon/config.toml + project .crewon/",
+        ? "模型：gpt-5-codex（默认）\n推理强度：medium\n审批策略：on-request\n沙箱：workspace-write\n网络：受控放行\n\n工作区覆盖：\n- 测试命令：pnpm --filter @crewon/ui test\n- 格式化：pnpm format:fix\n\n配置来源：~/.crewon/config.toml + 项目 .crewon/"
+        : "Model: gpt-5-codex (default)\nReasoning: medium\nApproval policy: on-request\nSandbox: workspace-write\nNetwork: controlled allow\n\nWorkspace overrides:\n- test: pnpm --filter @crewon/ui test\n- format: pnpm format:fix\n\nSources: ~/.crewon/config.toml + project .crewon/",
       fields: [
         {
           id: "config-model",
@@ -2325,7 +2325,8 @@ function demoKnowledgeData(locale: Locale): KnowledgeData {
           glyph: "◆",
           accent: "blue" as const,
           kind: "Rule",
-          preview: "Define acceptance criteria first and keep interactions consistent.",
+          preview:
+            "Define acceptance criteria first and keep interactions consistent.",
           meta: "From AGENTS.md",
         },
         {
@@ -2333,7 +2334,8 @@ function demoKnowledgeData(locale: Locale): KnowledgeData {
           glyph: "✓",
           accent: "green" as const,
           kind: "Process",
-          preview: "Verify affected features first, then run the full release regression.",
+          preview:
+            "Verify affected features first, then run the full release regression.",
           meta: "Engineer note",
         },
         {

@@ -75,8 +75,15 @@ describe("workbench tool launcher", () => {
       "!launcherMenuRef.current?.contains(event.target as Node)",
     );
     expect(drawerSource).toContain("workbenchOverlayOpen={launcherOpen}");
-    expect(drawerSource).toContain("obscured={workbenchOverlayOpen}");
+    expect(drawerSource).toContain(
+      "obscured={workbenchOverlayOpen || interactionInactive}",
+    );
+    expect(drawerSource).toContain("active={open && activeTabId === tab.id}");
+    expect(drawerSource).toContain(
+      "interactive={active && !interactionInactive}",
+    );
     expect(browserSource).toContain("obscured={menuOpen || obscured}");
+    expect(browserSource).toContain("if (!interactive)");
   });
 });
 

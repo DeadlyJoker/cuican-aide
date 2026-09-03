@@ -14,6 +14,7 @@ import {
   type ActorContext,
   type ApplicationIdKind,
   type RunStore,
+  type SpaceScopedThreadStore,
   type WorkspaceOperationRecord,
 } from "@crewon/application";
 import {
@@ -2295,7 +2296,7 @@ function legacyRunState(runId: string, spaceId: string) {
 }
 
 function applicationService(
-  store: RunStore,
+  store: RunStore & SpaceScopedThreadStore,
   scriptedIds: string[],
   timestamp: string,
 ): RunApplicationService {

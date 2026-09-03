@@ -90,6 +90,25 @@ describe("App Workspace Control composition", () => {
     expect(rehydrate).toContain("runtime.selectThreadGoal(threadId)");
   });
 
+  it("keeps the Control Thread runtime alive across StrictMode effect replay", () => {
+    const source = readFileSync(
+      new URL("../control-runtime/useControlThreadRuntime.ts", import.meta.url),
+      "utf8",
+    );
+    const start = source.indexOf(
+      "const [runtime, setRuntime] = useState<ControlThreadRuntime | null>(null)",
+    );
+    const end = source.indexOf("const automationRuntime", start);
+    const runtimeLifetime = source.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(runtimeLifetime).toContain("new ControlThreadRuntime(");
+    expect(runtimeLifetime).toContain("setRuntime(control)");
+    expect(runtimeLifetime).toContain("return () => control.close()");
+    expect(source).not.toContain("runtime.close()");
+  });
+
   it("keeps the Control Goal snapshot authoritative when legacy transport is unavailable", () => {
     const source = readFileSync(
       new URL("../../App.tsx", import.meta.url),

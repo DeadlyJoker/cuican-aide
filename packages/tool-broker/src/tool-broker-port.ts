@@ -1,4 +1,4 @@
-import type { ActionIntent } from "@crewon/contracts";
+import type { ActionIntent, WorkspaceChangeSummary } from "@crewon/contracts";
 
 export type ToolCallKind = "function" | "custom";
 
@@ -43,6 +43,7 @@ export type ToolResult = Readonly<{
   output: string;
   isError: boolean;
   artifactRef: string | null;
+  workspaceChanges?: WorkspaceChangeSummary;
 }>;
 
 export type ToolExecutionPolicy = Readonly<{
@@ -54,6 +55,11 @@ export type ToolExecutionPolicy = Readonly<{
   capability: string;
   approvalRequirement: ActionIntent["approvalRequirement"];
   limits: ActionIntent["limits"];
+}>;
+
+/** Run-scoped host boundary used when a Tool exposes more than one safe policy. */
+export type ToolExecutionPolicyContext = Readonly<{
+  sandboxMode: "workspace-write" | "danger-full-access";
 }>;
 
 export type ToolExecutionCommand = ToolInvocation &
@@ -103,7 +109,11 @@ export type ToolExecutionResolution =
 
 /** Executes external effects and can reconcile the same action after a crash. */
 export interface ToolExecutionProviderPort {
-  executionPolicy(kind: ToolCallKind, name: string): ToolExecutionPolicy | null;
+  executionPolicy(
+    kind: ToolCallKind,
+    name: string,
+    context?: ToolExecutionPolicyContext,
+  ): ToolExecutionPolicy | null;
   execute(
     command: ToolExecutionCommand,
     signal: AbortSignal,
@@ -137,5 +147,16 @@ export class ToolBrokerError extends Error {
     super(code, options);
     this.name = "ToolBrokerError";
     this.code = code;
+  }
+}
+
+/**
+ * Raised by an execution adapter after a reconcilable mutation may have been
+ * dispatched but no trustworthy completion receipt was returned.
+ */
+export class ToolExecutionUnknownOutcomeError extends ToolBrokerError {
+  constructor(options?: ErrorOptions) {
+    super("tool_execution_unknown_outcome", options);
+    this.name = "ToolExecutionUnknownOutcomeError";
   }
 }

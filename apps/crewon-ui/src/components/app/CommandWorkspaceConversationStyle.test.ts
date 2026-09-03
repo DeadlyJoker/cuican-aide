@@ -35,6 +35,139 @@ describe("command workspace conversation style", () => {
     expect(contract).toMatchSnapshot();
   });
 
+  it("reserves a separate trailing slot for the tool disclosure icon", () => {
+    const appStyles = readFileSync(
+      new URL("../../styles/app.css", import.meta.url),
+      "utf8",
+    );
+    const conversationStyles = readFileSync(
+      new URL("../../styles/original-shell-overrides.css", import.meta.url),
+      "utf8",
+    );
+    const disclosureStart = appStyles.indexOf(
+      ".compact-tool-card summary::after,",
+    );
+    const disclosureEnd = appStyles.indexOf("}", disclosureStart) + 1;
+    const commandHeaderStart = conversationStyles.indexOf(
+      ".screen-shell.command-screen\n  .command-thread-room\n  .turn-process-items\n  .tool-card-header {",
+    );
+    const commandHeaderEnd =
+      conversationStyles.indexOf("}", commandHeaderStart) + 1;
+
+    expect([disclosureStart, commandHeaderStart]).not.toContain(-1);
+    expect(appStyles.slice(disclosureStart, disclosureEnd)).toContain(
+      "right: 10px",
+    );
+    expect(
+      conversationStyles.slice(commandHeaderStart, commandHeaderEnd),
+    ).toContain("padding: 0 26px 0 0");
+  });
+
+  it("aligns the tool approval bar with the composer above the input", () => {
+    const styles = readFileSync(
+      new URL("../../styles/original-shell-overrides.css", import.meta.url),
+      "utf8",
+    );
+    const start = styles.indexOf(
+      ".screen-shell.command-screen .composer-tool-approval {",
+    );
+    const end = styles.indexOf("}", start) + 1;
+
+    expect(start).toBeGreaterThan(-1);
+    expect(styles.slice(start, end)).toContain("width: min(720px, 100%)");
+    expect(styles.slice(start, end)).toContain(
+      "grid-template-columns: minmax(0, 1fr) auto",
+    );
+  });
+
+  it("keeps the portaled Run Plan checklist usable at low and narrow viewports", () => {
+    const styles = readFileSync(
+      new URL("../../styles/original-shell-overrides.css", import.meta.url),
+      "utf8",
+    );
+    const popoverStart = styles.indexOf(".composer-progress-popover {");
+    const headerStart = styles.indexOf(
+      ".composer-progress-popover-header {",
+      popoverStart,
+    );
+    const checklistStart = styles.indexOf(
+      ".composer-progress-checklist {",
+      headerStart,
+    );
+    const checklistEnd = styles.indexOf(
+      ".composer-progress-checklist > li {",
+      checklistStart,
+    );
+    const focusStart = styles.indexOf(
+      ".screen-shell.command-screen button.composer-progress-pill:focus-visible {",
+    );
+    const focusEnd = styles.indexOf("}", focusStart) + 1;
+    const narrowStart = styles.indexOf(
+      "@media (max-width: 420px)",
+      checklistEnd,
+    );
+    const narrowEnd = styles.indexOf("\n\n/*", narrowStart);
+
+    expect([
+      popoverStart,
+      headerStart,
+      checklistStart,
+      checklistEnd,
+      focusStart,
+      narrowStart,
+      narrowEnd,
+    ]).not.toContain(-1);
+    expect(styles.slice(popoverStart, headerStart)).toContain(
+      "width: min(360px, calc(100vw - 24px))",
+    );
+    expect(styles.slice(popoverStart, headerStart)).toContain(
+      "max-height: min(420px, var(--radix-popover-content-available-height))",
+    );
+    expect(styles.slice(popoverStart, headerStart)).toContain(
+      "overflow: hidden",
+    );
+    expect(styles.slice(checklistStart, checklistEnd)).toContain(
+      "var(--radix-popover-content-available-height)",
+    );
+    expect(styles.slice(checklistStart, checklistEnd)).toContain(
+      "overflow-y: auto",
+    );
+    expect(styles.slice(focusStart, focusEnd)).toContain(
+      "outline: 2px solid var(--accent)",
+    );
+    expect(styles.slice(narrowStart, narrowEnd)).toContain(
+      "width: calc(100vw - 16px)",
+    );
+  });
+
+  it("keeps Run Plan progress as flat metadata instead of a floating capsule", () => {
+    const styles = readFileSync(
+      new URL("../../styles/original-shell-overrides.css", import.meta.url),
+      "utf8",
+    );
+    const pillStart = styles.indexOf(
+      ".screen-shell.command-screen .composer-progress-pill {",
+    );
+    const buttonStart = styles.indexOf(
+      ".screen-shell.command-screen button.composer-progress-pill {",
+      pillStart,
+    );
+    const hoverStart = styles.indexOf(
+      ".screen-shell.command-screen button.composer-progress-pill:hover,",
+      buttonStart,
+    );
+
+    expect([pillStart, buttonStart, hoverStart]).not.toContain(-1);
+    const pillContract = styles.slice(pillStart, buttonStart);
+    expect(pillContract).toContain("border: 0");
+    expect(pillContract).toContain("background: transparent");
+    expect(pillContract).toContain("border-radius: var(--radius-sm)");
+    expect(pillContract).not.toContain("var(--radius-pill)");
+    const buttonContract = styles.slice(buttonStart, hoverStart);
+    expect(buttonContract).toContain("box-shadow: none");
+    expect(buttonContract).not.toContain("font: inherit");
+  });
+
   it("snapshots the assistant and home conversation alignment contract", () => {
     const conversationStyles = readFileSync(
       new URL("../../styles/original-shell-overrides.css", import.meta.url),

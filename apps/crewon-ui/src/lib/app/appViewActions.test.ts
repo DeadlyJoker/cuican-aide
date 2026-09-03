@@ -262,6 +262,20 @@ describe("app view actions", () => {
 
     expect(
       closeChromeOnEscapeAction({
+        event: { defaultPrevented: true, key: "Escape" },
+        setInspectorOpen: (open) => {
+          inspectorOpen = open;
+        },
+        setSidebarOpen: (open) => {
+          sidebarOpen = open;
+        },
+      }),
+    ).toBe(false);
+    expect(sidebarOpen).toBe(true);
+    expect(inspectorOpen).toBe(true);
+
+    expect(
+      closeChromeOnEscapeAction({
         event: { key: "Escape" },
         setInspectorOpen: (open) => {
           inspectorOpen = open;

@@ -68,6 +68,7 @@ const MAX_WORKBENCH_WIDTH = 840;
 const MIN_COMMAND_AREA_WIDTH = 560;
 const WORKBENCH_KEYBOARD_STEP = 24;
 const WORKBENCH_WIDTH_STORAGE_KEY = "crewon:command-workbench-width:v2";
+export const DEFAULT_COMMAND_WORKBENCH_ID = "command-workbench";
 
 function maximumWorkbenchWidth(viewportWidth: number): number {
   return Math.max(
@@ -126,6 +127,7 @@ export type CommandWorkspaceCapabilityDrawerProps = {
   busyToolId: ToolId | null;
   commandValue: string;
   disabled: boolean;
+  interactionInactive?: boolean;
   locale: Locale;
   open: boolean;
   panel: CapabilityPanel | null;
@@ -322,6 +324,7 @@ function WorkbenchSurface({
   busyToolId,
   commandValue,
   disabled,
+  interactionInactive,
   locale,
   tab,
   onCommandChange,
@@ -345,6 +348,7 @@ function WorkbenchSurface({
   busyToolId: ToolId | null;
   commandValue: string;
   disabled: boolean;
+  interactionInactive: boolean;
   locale: Locale;
   tab: WorkbenchTab;
   onCommandChange: (value: string) => void;
@@ -381,8 +385,9 @@ function WorkbenchSurface({
       <CommandWorkbenchBrowser
         active={active}
         instanceId={tab.id}
+        interactive={active && !interactionInactive}
         locale={locale}
-        obscured={workbenchOverlayOpen}
+        obscured={workbenchOverlayOpen || interactionInactive}
         onNewTab={onBrowserNewTab}
         onTitleChange={(title) => onBrowserTitleChange(tab.id, title)}
       />
@@ -391,7 +396,7 @@ function WorkbenchSurface({
   if (tab.toolId === "terminal") {
     return (
       <CommandWorkbenchTerminal
-        active={active}
+        active={active && !interactionInactive}
         cwd={terminalCwd}
         disabled={disabled}
         locale={locale}
@@ -434,6 +439,7 @@ export function CommandWorkspaceCapabilityDrawer({
   busyToolId,
   commandValue,
   disabled,
+  interactionInactive = false,
   locale,
   open,
   panel,
@@ -455,6 +461,7 @@ export function CommandWorkspaceCapabilityDrawer({
   terminalOutput,
   terminalProcessId,
 }: CommandWorkspaceCapabilityDrawerProps) {
+  const interactiveOpen = open && !interactionInactive;
   const initialWorkbenchTabs = initialTabs(panel);
   const sceneTools = workbenchTools(locale).filter((tool) =>
     SCENE_WORKBENCH_TOOLS[scene].includes(tool.id),
@@ -604,29 +611,22 @@ export function CommandWorkspaceCapabilityDrawer({
     if (!launcherOpen) {
       return;
     }
-    function closeLauncher(event: KeyboardEvent | PointerEvent) {
-      if (event instanceof KeyboardEvent && event.key === "Escape") {
-        setLauncherOpen(false);
-        return;
-      }
+    function closeLauncher(event: PointerEvent) {
       if (
-        event instanceof PointerEvent &&
         !launcherRef.current?.contains(event.target as Node) &&
         !launcherMenuRef.current?.contains(event.target as Node)
       ) {
         setLauncherOpen(false);
       }
     }
-    document.addEventListener("keydown", closeLauncher);
     document.addEventListener("pointerdown", closeLauncher);
     return () => {
-      document.removeEventListener("keydown", closeLauncher);
       document.removeEventListener("pointerdown", closeLauncher);
     };
   }, [launcherOpen]);
 
   useEffect(() => {
-    if (!open) {
+    if (!interactiveOpen) {
       return;
     }
     function handleWorkbenchShortcut(event: KeyboardEvent) {
@@ -659,7 +659,13 @@ export function CommandWorkspaceCapabilityDrawer({
     document.addEventListener("keydown", handleWorkbenchShortcut);
     return () =>
       document.removeEventListener("keydown", handleWorkbenchShortcut);
-  }, [open, scene, tabs]);
+  }, [interactiveOpen, scene, tabs]);
+
+  useEffect(() => {
+    if (!interactiveOpen) {
+      setLauncherOpen(false);
+    }
+  }, [interactiveOpen]);
 
   function addBrowserTab() {
     dismissedToolIdsRef.current.delete("web");
@@ -699,6 +705,18 @@ export function CommandWorkspaceCapabilityDrawer({
       );
     }
     setLauncherOpen(true);
+  }
+
+  function handleWorkbenchKeyDown(event: ReactKeyboardEvent<HTMLElement>) {
+    if (!launcherOpen || event.key !== "Escape") {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setLauncherOpen(false);
+    window.requestAnimationFrame(() => {
+      launcherRef.current?.querySelector<HTMLButtonElement>("button")?.focus();
+    });
   }
 
   function updateBrowserTitle(tabId: string, title: string) {
@@ -859,13 +877,17 @@ export function CommandWorkspaceCapabilityDrawer({
         </button>
       ) : null}
       <aside
+        aria-hidden={interactionInactive || undefined}
         aria-label={locale === "zh" ? "工作区工作台" : "Workspace workbench"}
         className="command-workbench"
         data-empty={tabs.length === 0 ? "true" : undefined}
         data-maximized={maximized ? "true" : undefined}
         data-resizing={resizing ? "true" : undefined}
         hidden={!open}
+        id={DEFAULT_COMMAND_WORKBENCH_ID}
+        inert={interactionInactive || undefined}
         style={maximized ? undefined : { width: workbenchWidth }}
+        onKeyDown={handleWorkbenchKeyDown}
       >
         {!maximized ? (
           <div
@@ -1002,6 +1024,7 @@ export function CommandWorkspaceCapabilityDrawer({
                   busyToolId={busyToolId}
                   commandValue={commandValue}
                   disabled={disabled}
+                  interactionInactive={interactionInactive}
                   locale={locale}
                   tab={tab}
                   onCommandChange={onCommandChange}

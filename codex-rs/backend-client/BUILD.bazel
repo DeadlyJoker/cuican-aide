@@ -1,7 +1,0 @@
-load("//:defs.bzl", "crewon_rust_crate")
-
-crewon_rust_crate(
-    name = "backend-client",
-    crate_name = "crewon_backend_client",
-    compile_data = glob(["tests/fixtures/**"]),
-)

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   beginWeComLogin,
   completeWeComLogin,
+  loginAgentPlatform,
   logoutAgentPlatform,
   readAgentPlatformCurrentUser,
   readWeComLoginConfig,
@@ -193,6 +194,74 @@ describe("agent-platform WeCom session", () => {
         method: "POST",
       }),
     );
+  });
+
+  it("retries one transient login outage and completes the account session", async () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json(
+          { error: "agent-platform unavailable" },
+          { status: 503 },
+        ),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+        }),
+      )
+      .mockResolvedValueOnce(
+        Response.json({
+          id: 7,
+          username: "regression-user",
+          email: "regression@example.com",
+          role: "user",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loginAgentPlatform("regression-user", "CrewON123"),
+    ).resolves.toEqual({
+      id: 7,
+      username: "regression-user",
+      email: "regression@example.com",
+      role: "user",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/agent-platform-api/api/v1/auth/login",
+      expect.objectContaining({
+        body: new URLSearchParams({
+          username: "regression-user",
+          password: "CrewON123",
+        }),
+        method: "POST",
+      }),
+    );
+  });
+
+  it("uses a stable localized error when the login service remains unavailable", async () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json(
+          {
+            message:
+              "Local agent-platform is not running. CrewON app-server conversations are still available.",
+          },
+          { status: 503 },
+        ),
+      ),
+    );
+
+    await expect(
+      loginAgentPlatform("regression-user", "CrewON123"),
+    ).rejects.toThrow("账号服务暂时不可用，请稍后重试。");
   });
 
   it("surfaces registration field validation messages", async () => {

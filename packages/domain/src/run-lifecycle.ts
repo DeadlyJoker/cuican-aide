@@ -6,11 +6,16 @@ import {
   runRateLimitSnapshotError,
   type RunRateLimitSnapshot,
 } from "./rate-limit-snapshot.ts";
+import { validateRunPlan, type RunPlan } from "./run-plan.ts";
 import {
   validateRunGoalBinding,
   type RunCollaborationMode,
   type RunGoalBinding,
 } from "./thread-goal.ts";
+import {
+  validateWorkspaceChangeSummary,
+  type WorkspaceChangeSummary,
+} from "./workspace-change-summary.ts";
 import {
   RunGoalAccountingError,
   consumeRunGoalSteering,
@@ -38,6 +43,12 @@ export const RUN_STATUSES = [
 export type RunStatus = (typeof RUN_STATUSES)[number];
 
 export type RunPurpose = "turn" | "manualCompaction" | "workflow";
+
+/** Immutable user-selected Tool approval and host sandbox behavior for one Run. */
+export type RunToolPermissionMode =
+  | "requestApproval"
+  | "approveForMe"
+  | "fullAccess";
 
 export type RunUsage = Readonly<{
   inputTokens: number;
@@ -70,6 +81,8 @@ export type RunLifecycleEvent =
         /** Present only for Workflow Runs; ordinary and legacy Runs omit it. */
         workflowVersionBinding?: FrozenWorkflowVersionBinding;
         collaborationMode: RunCollaborationMode;
+        /** Absent on legacy and non-interactive Runs; absence fails closed to requestApproval. */
+        toolPermissionMode?: RunToolPermissionMode;
         goalBinding: RunGoalBinding | null;
         /** Defers automatic Goal continuation after this Run; absent means automatic. */
         goalContinuationMode?: "deferred";
@@ -122,6 +135,13 @@ export type RunLifecycleEvent =
   | (RunEventBase & {
       type: "run.goal.steering.consumed";
       data: Readonly<{ handoffId: string }>;
+    })
+  | (RunEventBase & {
+      type: "run.plan.updated";
+      data: Readonly<{
+        callId: string;
+        plan: RunPlan;
+      }>;
     })
   | (RunEventBase & {
       type: "segment.started";
@@ -194,6 +214,7 @@ export type RunLifecycleEvent =
         isError: boolean;
         artifactRef: string | null;
         outputTruncated: boolean;
+        workspaceChanges?: WorkspaceChangeSummary;
       }>;
     })
   | (RunEventBase & {
@@ -296,6 +317,8 @@ export type RunState = Readonly<{
   /** Present only for Workflow Runs; absence remains the compatible non-Workflow shape. */
   workflowVersionBinding?: FrozenWorkflowVersionBinding;
   collaborationMode: RunCollaborationMode;
+  /** Absent on legacy and non-interactive Runs; execution treats absence as requestApproval. */
+  toolPermissionMode?: RunToolPermissionMode;
   /** Absent only on legacy snapshots created before Run purpose was durable. */
   purpose?: RunPurpose;
   /** Absent only on legacy snapshots; all newly reduced state uses null or a validated origin. */
@@ -304,6 +327,8 @@ export type RunState = Readonly<{
   /** Absent on ordinary and legacy Runs; deferred Runs leave an active Goal user-driven. */
   goalContinuationMode?: "deferred";
   goalAccounting: RunGoalAccountingCursor | null;
+  /** Absent only on historical snapshots created before Run Plans existed. */
+  plan?: RunPlan | null;
   usage: RunUsage;
   status: RunStatus;
   revision: number;
@@ -477,6 +502,34 @@ export function reduceRunLifecycleEvent(
           ),
         ),
       };
+    case "run.plan.updated": {
+      requireStatus(state, event.type, ["running"]);
+      if (
+        state.collaborationMode !== "default" ||
+        (state.purpose ?? "turn") !== "turn"
+      ) {
+        throw new RunLifecycleError("run_plan_mode_invalid");
+      }
+      requireBoundedString(event.data.callId, 512, "run_plan_call_id_invalid");
+      try {
+        validateRunPlan(event.data.plan);
+      } catch (error) {
+        throw new RunLifecycleError(
+          error instanceof Error ? error.message : "run_plan_invalid",
+        );
+      }
+      const currentPlan = state.plan ?? null;
+      if (
+        event.data.plan.planId !== state.runId ||
+        event.data.plan.revision !== (currentPlan?.revision ?? 0) + 1 ||
+        event.data.plan.createdAt !==
+          (currentPlan?.createdAt ?? event.occurredAt) ||
+        event.data.plan.updatedAt !== event.occurredAt
+      ) {
+        throw new RunLifecycleError("run_plan_revision_invalid");
+      }
+      return { ...next, plan: event.data.plan };
+    }
     case "segment.started":
       requireStatus(state, event.type, ["running"]);
       validateSegmentIdentity(event.data);
@@ -599,6 +652,13 @@ export function reduceRunLifecycleEvent(
         typeof event.data.outputTruncated !== "boolean"
       ) {
         throw new RunLifecycleError("tool_result_invalid");
+      }
+      if (event.data.workspaceChanges !== undefined) {
+        try {
+          validateWorkspaceChangeSummary(event.data.workspaceChanges);
+        } catch {
+          throw new RunLifecycleError("tool_workspace_changes_invalid");
+        }
       }
       return next;
     case "context.compacted":
@@ -727,6 +787,14 @@ function createRun(event: RunLifecycleEvent): RunState {
   ) {
     throw new RunLifecycleError("collaboration_mode_invalid");
   }
+  if (
+    event.data.toolPermissionMode !== undefined &&
+    event.data.toolPermissionMode !== "requestApproval" &&
+    event.data.toolPermissionMode !== "approveForMe" &&
+    event.data.toolPermissionMode !== "fullAccess"
+  ) {
+    throw new RunLifecycleError("tool_permission_mode_invalid");
+  }
   if (event.data.goalBinding !== null) {
     try {
       validateRunGoalBinding(event.data.goalBinding);
@@ -800,10 +868,11 @@ function createRun(event: RunLifecycleEvent): RunState {
     agentVersionId: event.data.agentVersionId,
     policySnapshotId: event.data.policySnapshotId,
     workspaceBindingId: event.data.workspaceBindingId,
-    ...(workflowVersionBinding === undefined
-      ? {}
-      : { workflowVersionBinding }),
+    ...(workflowVersionBinding === undefined ? {} : { workflowVersionBinding }),
     collaborationMode: event.data.collaborationMode,
+    ...(event.data.toolPermissionMode === undefined
+      ? {}
+      : { toolPermissionMode: event.data.toolPermissionMode }),
     ...(event.data.purpose === undefined
       ? {}
       : { purpose: event.data.purpose }),
@@ -861,6 +930,7 @@ function validateRunCreatedDataShape(
     "goalContinuationMode",
     "origin",
     "purpose",
+    "toolPermissionMode",
     "workflowVersionBinding",
   ]);
   if (
@@ -903,7 +973,9 @@ export function parseFrozenWorkflowVersionBinding(
     );
   } catch (error) {
     throw new RunLifecycleError(
-      error instanceof Error ? error.message : "workflow_version_binding_invalid",
+      error instanceof Error
+        ? error.message
+        : "workflow_version_binding_invalid",
     );
   }
   requireDigest(binding.contentDigest);

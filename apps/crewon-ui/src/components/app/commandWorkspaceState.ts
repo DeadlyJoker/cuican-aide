@@ -56,15 +56,79 @@ export type CommandHomeSlots = {
 
 const THREAD_EXECUTION_TARGET_STORAGE_KEY =
   "crewon.command.thread-execution-target.v1";
+const THREAD_SCENE_STORAGE_KEY = "crewon.command.thread-scene.v1";
 const MAX_STORED_THREAD_EXECUTION_TARGETS = 200;
+const MAX_STORED_THREAD_SCENES = 200;
 
 type ExecutionTargetStorage = Pick<Storage, "getItem" | "setItem">;
+type ThreadSceneStorage = Pick<Storage, "getItem" | "setItem">;
+
+export function readThreadScene(
+  storage: ThreadSceneStorage,
+  threadId: string,
+): CommandScene | null {
+  if (!validStoredThreadId(threadId)) {
+    return null;
+  }
+  try {
+    const entries = parseThreadScenes(storage.getItem(THREAD_SCENE_STORAGE_KEY));
+    return entries[threadId] ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function writeThreadScene(
+  storage: ThreadSceneStorage,
+  threadId: string,
+  scene: CommandScene,
+): void {
+  if (!validStoredThreadId(threadId) || !validStoredScene(scene)) {
+    return;
+  }
+  try {
+    const current = parseThreadScenes(storage.getItem(THREAD_SCENE_STORAGE_KEY));
+    const next = Object.fromEntries(
+      Object.entries({ ...current, [threadId]: scene }).slice(
+        -MAX_STORED_THREAD_SCENES,
+      ),
+    );
+    storage.setItem(THREAD_SCENE_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Storage can be unavailable in hardened browser contexts. The active
+    // scene still works; only restoration after leaving the thread is skipped.
+  }
+}
+
+function parseThreadScenes(
+  serialized: string | null,
+): Record<string, CommandScene> {
+  if (serialized === null) {
+    return {};
+  }
+  const value: unknown = JSON.parse(serialized);
+  if (typeof value !== "object" || value === null || Array.isArray(value)) {
+    return {};
+  }
+  return Object.fromEntries(
+    Object.entries(value)
+      .filter(
+        (entry): entry is [string, CommandScene] =>
+          validStoredThreadId(entry[0]) && validStoredScene(entry[1]),
+      )
+      .slice(-MAX_STORED_THREAD_SCENES),
+  );
+}
+
+export function validStoredScene(value: unknown): value is CommandScene {
+  return value === "office" || value === "code" || value === "design";
+}
 
 export function readThreadExecutionTarget(
   storage: ExecutionTargetStorage,
   threadId: string,
 ): string | null {
-  if (!validStoredExecutionTargetKey(threadId)) {
+  if (!validStoredThreadId(threadId)) {
     return null;
   }
   try {
@@ -83,7 +147,7 @@ export function writeThreadExecutionTarget(
   executionTarget: string,
 ): void {
   if (
-    !validStoredExecutionTargetKey(threadId) ||
+    !validStoredThreadId(threadId) ||
     !validStoredExecutionTarget(executionTarget)
   ) {
     return;
@@ -118,14 +182,14 @@ function parseThreadExecutionTargets(
     Object.entries(value)
       .filter(
         (entry): entry is [string, string] =>
-          validStoredExecutionTargetKey(entry[0]) &&
+          validStoredThreadId(entry[0]) &&
           validStoredExecutionTarget(entry[1]),
       )
       .slice(-MAX_STORED_THREAD_EXECUTION_TARGETS),
   );
 }
 
-function validStoredExecutionTargetKey(value: string): boolean {
+function validStoredThreadId(value: string): boolean {
   return value.length > 0 && value.length <= 128 && !/[\u0000-\u001f]/u.test(value);
 }
 

@@ -112,6 +112,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/threads/{threadId}/task-changes": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Returns a bounded exact mutation ledger for terminal Turn Runs referenced by the Thread's effective post-rollback Model History. The response is bound to both the Thread revision and Model History sequence; incomplete or oversized ledgers return canonical zero values with complete=false. */
+    get: operations["getThreadTaskChanges"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/threads/{threadId}:archive": {
     parameters: {
       query?: never;
@@ -408,6 +425,22 @@ export interface paths {
       cookie?: never;
     };
     get: operations["getRun"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/runs/{runId}/plan": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get: operations["getRunPlan"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1183,10 +1216,16 @@ export interface components {
         operation: components["schemas"]["WorkspaceOperationView"];
       };
     };
+    /**
+     * @description Per-Run Tool permission and host sandbox choice. requestApproval keeps durable user gates inside the workspace sandbox. approveForMe automatically approves Tools but retains workspace-only writes and blocks network access. fullAccess automatically approves Tools and permits unrestricted host-file and network access. Omission fails closed to requestApproval.
+     * @enum {string}
+     */
+    ToolPermissionMode: "requestApproval" | "approveForMe" | "fullAccess";
     CreateRunRequest: {
       threadId: string;
       /** @description Optional immutable AgentVersion selection. The server admits it before creating a Run; omission uses the configured default. */
       agentVersionId?: string | null;
+      toolPermissionMode?: components["schemas"]["ToolPermissionMode"];
     };
     /** @description Bounded JSON input. Runtime validation additionally limits UTF-8 serialization to 32768 bytes, nesting depth to 8, and total values to 1024. */
     WorkflowInput:
@@ -1213,6 +1252,7 @@ export interface components {
        * @enum {string}
        */
       executionIntent: "none" | "goal" | "plan" | "resumeGoal";
+      toolPermissionMode?: components["schemas"]["ToolPermissionMode"];
     };
     CompactThreadRequest: {
       expectedRevision: number;
@@ -1271,6 +1311,37 @@ export interface components {
       updatedAt: string;
       /** Format: date-time */
       terminalAt: string | null;
+    };
+    /** @enum {string} */
+    RunPlanStatus:
+      | "pending"
+      | "inProgress"
+      | "completed"
+      | "blocked"
+      | "canceled";
+    RunPlanItemView: {
+      itemId: string;
+      title: string;
+      status: components["schemas"]["RunPlanStatus"];
+    };
+    /** @description A complete bounded execution-plan snapshot. Item identifiers are unique and at most one item is inProgress. */
+    RunPlanView: {
+      /** @constant */
+      schemaVersion: "crewon.run-plan.v0";
+      planId: string;
+      revision: number;
+      explanation: string | null;
+      items: components["schemas"]["RunPlanItemView"][];
+      /** Format: date-time */
+      createdAt: string;
+      /** Format: date-time */
+      updatedAt: string;
+    };
+    GetRunPlanResponse: {
+      runId: string;
+      /** @description Global durable Run sequence from the same Store snapshot as plan. It is not the Plan revision. */
+      eventSequence: number;
+      plan: null | components["schemas"]["RunPlanView"];
     };
     RunMutationResponse: {
       /** @enum {string} */
@@ -1660,6 +1731,10 @@ export interface components {
         /** @enum {string} */
         kind: "function" | "custom";
         name: string;
+        /** @description A bounded Tool input preview emitted only by the transcript event view. */
+        inputPreview?: string;
+        /** @description Whether the transcript Tool input preview omits bytes from the durable input. */
+        inputTruncated?: boolean;
       };
     };
     ToolCompletedEventView: components["schemas"]["RunEventEnvelope"] & {
@@ -1674,7 +1749,32 @@ export interface components {
         isError: boolean;
         outputTruncated: boolean;
         artifactAvailable: boolean;
+        workspaceChanges?: components["schemas"]["WorkspaceChangeSummary"];
+        /** @description A bounded Tool output preview emitted only by the transcript event view. */
+        outputPreview?: string;
       };
+    };
+    WorkspaceChangeSummary: {
+      /** @constant */
+      schemaVersion: "crewon.workspace-change-summary.v0";
+      paths: string[];
+      additions: number;
+      deletions: number;
+      statsComplete: boolean;
+    };
+    ThreadTaskChangeLedgerResponse: {
+      /** @constant */
+      schemaVersion: "crewon.thread-task-change-ledger.v0";
+      threadId: string;
+      threadRevision: number;
+      historySequence: number;
+      /** @description Always equals summary.statsComplete. False responses use canonical zero values. */
+      complete: boolean;
+      summary: components["schemas"]["WorkspaceChangeSummary"];
+      /** @description Number of matched native workspace_run_command requested/completed events. */
+      eventCount: number;
+      /** @description Effective terminal Turn Runs, ordered by their first effective-history reference. */
+      includedRunIds: string[];
     };
     ContextCompactedEventView: components["schemas"]["RunEventEnvelope"] & {
       /** @constant */
@@ -1754,6 +1854,13 @@ export interface components {
       /** @constant */
       type: "run.goal.steering.consumed";
       data: Record<string, never>;
+    };
+    RunPlanUpdatedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "run.plan.updated";
+      data: {
+        plan: components["schemas"]["RunPlanView"];
+      };
     };
     SegmentCompletedEventView: components["schemas"]["RunEventEnvelope"] & {
       /** @constant */
@@ -1836,6 +1943,7 @@ export interface components {
       | components["schemas"]["UsageRecordedEventView"]
       | components["schemas"]["RunGoalAccountingUpdatedEventView"]
       | components["schemas"]["RunGoalSteeringConsumedEventView"]
+      | components["schemas"]["RunPlanUpdatedEventView"]
       | components["schemas"]["SegmentCheckpointedEventView"]
       | components["schemas"]["SegmentCompletedEventView"]
       | components["schemas"]["SegmentProviderContinuationEventView"]
@@ -1877,8 +1985,10 @@ export interface components {
     RequiredCsrfToken: string;
     /** @description Decimal durable event sequence last processed by the client; each event resource has an independent sequence. */
     LastEventId: string;
-    /** @description Client view hides bounded transient retry noise; audit preserves every durable event. */
-    RunEventView: "client" | "audit";
+    /** @description Client view hides bounded transient retry noise; audit preserves every durable event; transcript adds bounded Tool input and output previews for transcript rendering. */
+    RunEventView: "client" | "audit" | "transcript";
+    /** @description Opt-in Run event extension. run-plan-v1 enables bounded run.plan.updated snapshots; without it those durable events remain hidden while the server cursor still advances. */
+    RunEventExtensions: "run-plan-v1";
     /** @description Standard view hides deleted content and emits only its tombstone event; audit requires thread:audit:read and preserves durable history. */
     ThreadHistoryView: "standard" | "audit";
     /** @description Exclusive raw UTF-8 byte lexicographic recovery cursor. Omission is equivalent to null. */
@@ -2183,6 +2293,32 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["GetThreadResponse"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getThreadTaskChanges: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Revision-bound Thread task change ledger */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadTaskChangeLedgerResponse"];
         };
       };
       401: components["responses"]["Error"];
@@ -3035,6 +3171,32 @@ export interface operations {
       500: components["responses"]["Error"];
     };
   };
+  getRunPlan: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        runId: components["parameters"]["RunId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Authoritative Run execution-plan snapshot and its global Run event watermark */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetRunPlanResponse"];
+        };
+      };
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
   cancelRun: {
     parameters: {
       query?: never;
@@ -3074,8 +3236,10 @@ export interface operations {
   streamRunEvents: {
     parameters: {
       query?: {
-        /** @description Client view hides bounded transient retry noise; audit preserves every durable event. */
+        /** @description Client view hides bounded transient retry noise; audit preserves every durable event; transcript adds bounded Tool input and output previews for transcript rendering. */
         view?: components["parameters"]["RunEventView"];
+        /** @description Opt-in Run event extension. run-plan-v1 enables bounded run.plan.updated snapshots; without it those durable events remain hidden while the server cursor still advances. */
+        extensions?: components["parameters"]["RunEventExtensions"];
       };
       header?: {
         /** @description Decimal durable event sequence last processed by the client; each event resource has an independent sequence. */

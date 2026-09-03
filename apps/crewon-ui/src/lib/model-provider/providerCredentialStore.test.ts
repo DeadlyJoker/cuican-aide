@@ -134,4 +134,51 @@ describe("providerCredentialStore", () => {
 
     expect(invoke).toHaveBeenCalledTimes(1);
   });
+
+  it("sends the model catalog request through the native IPC bridge", async () => {
+    const invoke = vi.fn(async () => ({
+      models: ["gpt-5.6-sol", "claude-sonnet-4"],
+      status: "ok",
+    }));
+    const store = createProviderCredentialStore(invoke);
+
+    const result = await store.modelCatalog({
+      apiKey: "sk-test",
+      defaultModelId: "gpt-5.5",
+      endpoint: "https://api.example.com/v1",
+      environmentVariable: null,
+      providerId: "gateway",
+    });
+
+    expect(invoke).toHaveBeenCalledWith("provider_model_catalog", {
+      request: {
+        apiKey: "sk-test",
+        defaultModelId: "gpt-5.5",
+        endpoint: "https://api.example.com/v1",
+        environmentVariable: null,
+        providerId: "gateway",
+      },
+    });
+    expect(result).toEqual({
+      models: ["gpt-5.6-sol", "claude-sonnet-4"],
+      status: "ok",
+    });
+  });
+
+  it("rejects an invalid model catalog result from the host", async () => {
+    const store = createProviderCredentialStore(async () => ({
+      models: "not-an-array",
+      status: "ok",
+    }));
+
+    await expect(
+      store.modelCatalog({
+        apiKey: null,
+        defaultModelId: null,
+        endpoint: "https://api.example.com/v1",
+        environmentVariable: null,
+        providerId: "gateway",
+      }),
+    ).rejects.toThrow("provider_model_catalog_result_invalid");
+  });
 });

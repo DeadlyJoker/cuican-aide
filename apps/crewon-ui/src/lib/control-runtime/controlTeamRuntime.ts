@@ -3,10 +3,15 @@ import type {
   MessageView,
   OfficeContract,
   RunView,
+  ToolPermissionMode,
 } from "@crewon/contracts";
 import type { ControlApiClient } from "@crewon/control-client";
 
 import type { TeamMemberRuntimeProfile } from "../thread/threadRuntimeSettings";
+import {
+  controlTeamDelegatedMemberId,
+  controlTeamDelegationMarker,
+} from "./controlTeamDelegation";
 
 const MAX_TEAM_MEMBERS = 6;
 const MAX_MEMBER_REPORT_CHARACTERS = 1_600;
@@ -51,6 +56,8 @@ export type ControlTeamTurnResult = Readonly<{
   message: MessageView;
   run: RunView;
 }>;
+
+export type ControlTeamResponseMode = "manager" | "member";
 
 export async function resolveControlTeamPlan(input: {
   client: ControlTeamRuntimeClient;
@@ -140,14 +147,18 @@ export async function startControlTeamTurn(input: {
   expectedRevision: number;
   content: string;
   plan: ControlTeamPlan;
+  responseMode: ControlTeamResponseMode;
   idempotencyKey: (operation: string) => string;
   executionIntent?: "none" | "goal" | "plan";
+  toolPermissionMode?: ToolPermissionMode;
   onRunStarted?: (run: RunView) => void;
+  onFinalTurnStarted?: (started: ControlTeamTurnResult) => void;
   pollIntervalMs?: number;
   runDeadlineMs?: number;
 }): Promise<ControlTeamTurnResult> {
   const pollIntervalMs = input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const runDeadlineMs = input.runDeadlineMs ?? DEFAULT_RUN_DEADLINE_MS;
+  const toolPermissionMode = input.toolPermissionMode ?? "requestApproval";
   let goalPause = await pauseTeamGoalIfNeeded({
     ...input,
     pollIntervalMs,
@@ -223,6 +234,7 @@ export async function startControlTeamTurn(input: {
     {
       threadId: managerPlanningPrompt.thread.threadId,
       agentVersionId: input.plan.manager.agentVersionId,
+      toolPermissionMode,
     },
     input.idempotencyKey("team.manager.plan"),
   );
@@ -272,6 +284,7 @@ export async function startControlTeamTurn(input: {
       {
         threadId: assignment.thread.threadId,
         agentVersionId: worker.agentVersionId,
+        toolPermissionMode,
       },
       input.idempotencyKey(`team.worker.${worker.memberId}`),
     );
@@ -317,40 +330,110 @@ export async function startControlTeamTurn(input: {
   ) {
     throw new Error("control_team_manager_thread_invalid");
   }
-  const reportMessage = teamReportMessage(input.plan, reports);
-  const finalStarted = await input.client.startTurn(
+  const managerMessage =
+    input.responseMode === "manager"
+      ? teamManagerFinalResponseMessage(input.plan, reports)
+      : teamDelegationMessage(input.plan, reports);
+  const finalManagerStarted = await input.client.startTurn(
     input.threadId,
     {
       expectedRevision: current.thread.revision,
-      content: reportMessage,
+      content: managerMessage,
       agentVersionId: input.plan.manager.agentVersionId,
-      executionIntent: goalPause === null ? "none" : "resumeGoal",
+      executionIntent:
+        input.responseMode === "manager" && goalPause !== null
+          ? "resumeGoal"
+          : "none",
+      toolPermissionMode,
     },
-    input.idempotencyKey("team.manager.final"),
+    input.idempotencyKey(
+      input.responseMode === "manager"
+        ? "team.manager.final"
+        : "team.manager.delegate",
+    ),
   );
   if (
-    finalStarted.thread.threadId !== input.threadId ||
-    finalStarted.message.threadId !== input.threadId ||
-    finalStarted.message.content !== reportMessage
+    finalManagerStarted.thread.threadId !== input.threadId ||
+    finalManagerStarted.message.threadId !== input.threadId ||
+    finalManagerStarted.message.content !== managerMessage
   ) {
     throw new Error("control_team_report_response_invalid");
   }
-  validateStartedRun(finalStarted.run, input.threadId, {
-    allowGoalBinding: true,
+  validateStartedRun(finalManagerStarted.run, input.threadId, {
+    allowGoalBinding: input.responseMode === "manager",
   });
-  input.onRunStarted?.(finalStarted.run);
-  const terminal = await waitForTerminalRun({
+  if (input.responseMode === "manager") {
+    input.onFinalTurnStarted?.({
+      message: appended.message,
+      run: finalManagerStarted.run,
+    });
+    input.onRunStarted?.(finalManagerStarted.run);
+    return { message: appended.message, run: finalManagerStarted.run };
+  }
+  const finalManagerTerminal = await waitForTerminalRun({
     client: input.client,
-    run: finalStarted.run,
+    run: finalManagerStarted.run,
     pollIntervalMs,
     runDeadlineMs,
   });
-  if (terminal.status !== "completed") {
+  const delegation =
+    finalManagerTerminal.status === "completed"
+      ? await latestAssistantOutput(input.client, input.threadId)
+      : null;
+  if (finalManagerTerminal.status !== "completed" || delegation === null) {
     throw new Error(
-      `control_team_manager_final_failed:${terminal.failure?.code ?? terminal.status}`,
+      `control_team_manager_delegation_failed:${finalManagerTerminal.failure?.code ?? finalManagerTerminal.status}`,
     );
   }
-  return { message: finalStarted.message, run: terminal };
+  const delegatedMemberId = controlTeamDelegatedMemberId(delegation);
+  const delegatedMember = input.plan.workers.find(
+    (worker) => worker.memberId === delegatedMemberId,
+  );
+  if (delegatedMember === undefined) {
+    throw new Error("control_team_manager_delegation_invalid");
+  }
+
+  const memberThread = await input.client.getThread(input.threadId);
+  if (
+    memberThread.thread.threadId !== input.threadId ||
+    memberThread.thread.status !== "active"
+  ) {
+    throw new Error("control_team_manager_thread_invalid");
+  }
+  const memberMessage = teamMemberDirectResponsePrompt({
+    delegation,
+    member: delegatedMember,
+    originalTask: input.content,
+    plan: input.plan,
+    reports,
+  });
+  const memberStarted = await input.client.startTurn(
+    input.threadId,
+    {
+      expectedRevision: memberThread.thread.revision,
+      content: memberMessage,
+      agentVersionId: delegatedMember.agentVersionId,
+      executionIntent: goalPause === null ? "none" : "resumeGoal",
+      toolPermissionMode,
+    },
+    input.idempotencyKey(`team.member.final.${delegatedMember.memberId}`),
+  );
+  if (
+    memberStarted.thread.threadId !== input.threadId ||
+    memberStarted.message.threadId !== input.threadId ||
+    memberStarted.message.content !== memberMessage
+  ) {
+    throw new Error("control_team_member_response_invalid");
+  }
+  validateStartedRun(memberStarted.run, input.threadId, {
+    allowGoalBinding: true,
+  });
+  input.onFinalTurnStarted?.({
+    message: appended.message,
+    run: memberStarted.run,
+  });
+  input.onRunStarted?.(memberStarted.run);
+  return { message: appended.message, run: memberStarted.run };
 }
 
 async function pauseTeamGoalIfNeeded(input: {
@@ -466,6 +549,7 @@ async function recoverWorker(input: {
   workerThreadId: string;
   failedRun: RunView;
   idempotencyKey: (operation: string) => string;
+  toolPermissionMode?: ToolPermissionMode;
   pollIntervalMs: number;
   runDeadlineMs: number;
 }): Promise<MemberReport> {
@@ -490,6 +574,7 @@ async function recoverWorker(input: {
     {
       threadId: input.workerThreadId,
       agentVersionId: input.plan.manager.agentVersionId,
+      toolPermissionMode: input.toolPermissionMode ?? "requestApproval",
     },
     input.idempotencyKey(`team.recovery.run.${input.worker.memberId}`),
   );
@@ -529,14 +614,48 @@ function memberReport(
   };
 }
 
-function teamReportMessage(
+function teamDelegationMessage(
   plan: ControlTeamPlan,
   reports: readonly MemberReport[],
 ): string {
   const lines = [
     `[Team Runtime · ${plan.officeTitle} · 成员报告]`,
-    "以下内容由独立成员分支执行后回收；实际并发度由 Runtime 容量决定。请组长基于原始用户任务、既有长程上下文和这些报告给出统一结论；指出冲突、缺失证据、失败接管和下一步。不要重复生成团队计划。",
-    "若本次运行绑定了长期 Goal：请先检查原始目标与全部阶段是否确实完成；只有全部完成时才调用 update_goal 标记 complete，确有连续三轮且无法推进的同一阻塞时才标记 blocked。若仍有后续阶段，不要完成 Goal；本次运行结束后系统会保留 active 状态但不自动切换为单 Agent 续跑。",
+    "以下内容由独立成员分支执行后回收；实际并发度由 Runtime 容量决定。请组长选择最适合直接回答用户的一名成员，并在办公室群聊中把最终回答任务明确派发给该成员。不要代替成员给最终答复。",
+    "回复必须只有两部分：第一行以该成员的完整显示名写成“@成员名 任务说明”；最后一行原样输出该成员对应的 CrewON delegate 标记。不要选择组长自己，也不要输出多个标记。",
+    ...controlTeamMemberGuidance(plan.manager),
+    "",
+    "可派发成员与必须原样输出的标记：",
+    ...plan.workers.map(
+      (worker) =>
+        `- @${worker.displayName}：${controlTeamDelegationMarker(worker.memberId)}`,
+    ),
+  ];
+  for (const report of reports) {
+    lines.push(
+      "",
+      `## ${report.displayName}`,
+      `- memberId: ${report.memberId}`,
+      `- agentVersionId: ${report.agentVersionId}`,
+      `- runId: ${report.runId}`,
+      `- status: ${report.status}`,
+      `- recoveredBy: ${report.recoveredBy ?? "none"}`,
+      "",
+      report.output,
+    );
+  }
+  return lines.join("\n");
+}
+
+function teamManagerFinalResponseMessage(
+  plan: ControlTeamPlan,
+  reports: readonly MemberReport[],
+): string {
+  const lines = [
+    `[Team Runtime · ${plan.officeTitle} · 专家会诊报告]`,
+    "以下内容由后台专家分支独立执行后回收；实际并发度由 Runtime 容量决定。",
+    "你是专家团团长，也是唯一面向用户的对话入口。请综合报告后直接回答原始用户，给出可验证结论、证据缺口、风险和下一步。",
+    "不要 @ 任何专家，不要把最终回答转交给成员，也不要向用户暴露内部 CrewON 标记或后台分支细节。即使用户要求指定专家直接回复，也必须由你统一汇总答复。",
+    "若本次运行绑定了长期 Goal：请先检查原始目标与全部阶段是否确实完成；只有全部完成时才调用 update_goal 标记 complete，确有连续三轮且无法推进的同一阻塞时才标记 blocked。若仍有后续阶段，不要完成 Goal。",
     ...controlTeamMemberGuidance(plan.manager),
   ];
   for (const report of reports) {
@@ -549,6 +668,40 @@ function teamReportMessage(
       `- status: ${report.status}`,
       `- recoveredBy: ${report.recoveredBy ?? "none"}`,
       "",
+      report.output,
+    );
+  }
+  return lines.join("\n");
+}
+
+function teamMemberDirectResponsePrompt(input: {
+  plan: ControlTeamPlan;
+  member: ControlTeamMember;
+  originalTask: string;
+  delegation: string;
+  reports: readonly MemberReport[];
+}): string {
+  const lines = [
+    `[Team Runtime · ${input.plan.officeTitle} · 成员直答]`,
+    `你是办公室成员「${input.member.displayName}」，组长刚刚在群聊中 @ 你执行本轮任务。`,
+    "请以你自己的成员身份直接回答原始用户。给出可验证结论、证据缺口、风险和下一步；不要冒充组长，不要再把回答转交给组长，也不要复述内部 CrewON 标记。",
+    "若本次运行绑定了长期 Goal：请先检查原始目标与全部阶段是否确实完成；只有全部完成时才调用 update_goal 标记 complete，确有连续三轮且无法推进的同一阻塞时才标记 blocked。若仍有后续阶段，不要完成 Goal。",
+    ...controlTeamMemberGuidance(input.member),
+    "",
+    "原始用户任务：",
+    input.originalTask.slice(0, MAX_MEMBER_REPORT_CHARACTERS),
+    "",
+    "组长派发：",
+    input.delegation.slice(0, MAX_MEMBER_REPORT_CHARACTERS),
+    "",
+    "可参考的成员报告：",
+  ];
+  for (const report of input.reports) {
+    lines.push(
+      "",
+      `## ${report.displayName}`,
+      `- status: ${report.status}`,
+      `- recoveredBy: ${report.recoveredBy ?? "none"}`,
       report.output,
     );
   }

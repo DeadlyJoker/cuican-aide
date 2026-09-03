@@ -1,4 +1,5 @@
 import type { AskForApproval } from "@crewon/app-server-protocol/v2/AskForApproval";
+import type { ApprovalsReviewer } from "@crewon/app-server-protocol/v2/ApprovalsReviewer";
 import type { Model } from "@crewon/app-server-protocol/v2/Model";
 import type { SandboxMode } from "@crewon/app-server-protocol/v2/SandboxMode";
 
@@ -39,6 +40,7 @@ export type CommandModelOption = {
 
 export type ThreadRuntimeSettings = {
   approvalPolicy?: AskForApproval | null;
+  approvalsReviewer?: ApprovalsReviewer | null;
   config?: Record<string, unknown>;
   model?: string | null;
   personalization?: PersonalizationSettings;
@@ -48,6 +50,13 @@ export type ThreadRuntimeSettings = {
   executionIntent?: CommandExecutionIntent;
   dynamicTools?: RuntimeDynamicTool[];
   teamMemberProfiles?: TeamMemberRuntimeProfile[];
+  /**
+   * When set inside a Team scene, the turn is routed directly to this Office
+   * member instead of running full Team orchestration. Only one member is
+   * eligible per turn; the runtime validates the ID against the live Office
+   * definition before dispatching.
+   */
+  teamTargetMemberId?: string;
   threadSource?: string;
 };
 
@@ -148,14 +157,29 @@ export function mergeCommandModelOptions(
 
 export function commandPermissionRuntimeSettings(
   permission: CommandComposerPermission,
-): Pick<ThreadRuntimeSettings, "approvalPolicy" | "sandboxMode"> {
+): Pick<
+  ThreadRuntimeSettings,
+  "approvalPolicy" | "approvalsReviewer" | "sandboxMode"
+> {
   switch (permission) {
     case "approve-for-me":
-      return { approvalPolicy: "on-failure", sandboxMode: "workspace-write" };
+      return {
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
+        sandboxMode: "workspace-write",
+      };
     case "request-approval":
-      return { approvalPolicy: "on-request", sandboxMode: "workspace-write" };
+      return {
+        approvalPolicy: "on-request",
+        approvalsReviewer: "user",
+        sandboxMode: "workspace-write",
+      };
     case "full-access":
-      return { approvalPolicy: "never", sandboxMode: "danger-full-access" };
+      return {
+        approvalPolicy: "never",
+        approvalsReviewer: "user",
+        sandboxMode: "danger-full-access",
+      };
   }
 }
 

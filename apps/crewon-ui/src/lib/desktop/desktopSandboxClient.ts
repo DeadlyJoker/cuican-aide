@@ -1,3 +1,5 @@
+import { parseSandboxGitSummaryView } from "@crewon/control-client";
+
 import type { SandboxCapabilityClient } from "../control-runtime/useControlSandboxCapabilities";
 import { hasDesktopBridge } from "../platform";
 import { requireDesktopBridge } from "./desktopBridge";
@@ -10,6 +12,9 @@ type NativeFileView = Awaited<
 >;
 type NativeDiffView = Awaited<
   ReturnType<SandboxCapabilityClient["readSandboxDiff"]>
+>;
+type NativeGitSummaryView = Awaited<
+  ReturnType<SandboxCapabilityClient["readSandboxGitSummary"]>
 >;
 type NativeCommandView = Awaited<
   ReturnType<SandboxCapabilityClient["runSandboxCommand"]>
@@ -34,6 +39,13 @@ export function createDesktopSandboxClient(
       invokeNative<NativeFileView>(invokeDesktop, "desktop_sandbox_read_file", {
         path,
       }),
+    readSandboxGitSummary: () =>
+      invokeNative<unknown>(
+        invokeDesktop,
+        "desktop_sandbox_read_git_summary",
+      ).then(
+        (value): NativeGitSummaryView => parseSandboxGitSummaryView(value),
+      ),
     readSandboxDiff: () =>
       invokeNative<NativeDiffView>(invokeDesktop, "desktop_sandbox_read_diff"),
     runSandboxCommand: (_threadId, request) =>
@@ -52,6 +64,8 @@ const desktopSandbox = createDesktopSandboxClient(async (command, args) => {
       return bridge.listDirectory(args?.path as string | undefined);
     case "desktop_sandbox_read_file":
       return bridge.readFile(args?.path as string);
+    case "desktop_sandbox_read_git_summary":
+      return bridge.readGitSummary();
     case "desktop_sandbox_read_diff":
       return bridge.readDiff();
     case "desktop_sandbox_run_command":

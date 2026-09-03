@@ -31,7 +31,7 @@ import {
 
 import { shellNavItems } from "./commandWorkspaceData";
 import {
-  commandSidebarThreadNeedsAttention,
+  commandSidebarThreadHasUnreadSignal,
   type CommandSidebarThreadScope,
   type CommandSidebarThreadState,
 } from "./commandSidebarThreadPresentation";
@@ -70,6 +70,7 @@ export type PaletteItemWithCommand = CommandPaletteItem & {
     | "attach-folder"
     | "intent-goal"
     | "intent-plan"
+    | "mention-member"
     | "provider-resources";
   command?: ComposerSlashCommand;
 };
@@ -98,6 +99,7 @@ export type CommandWorkspaceAuthority = "control" | "legacy";
 export type CommandControlWorkspaceNav = {
   name: string | null;
   busy: boolean;
+  revisionKey?: string | null;
   error?: string | null;
   onClear?: () => void;
   onSelect?: () => void;
@@ -190,6 +192,7 @@ export function CommandSidebar({
   workspaceAuthority,
   onCreateWorkspace,
   onNewThread,
+  onArchiveThread,
   onOpenLinkedThread,
   onOpenSettings,
   onCloseSearch,
@@ -212,6 +215,7 @@ export function CommandSidebar({
   onCloseSearch: () => void;
   onCreateWorkspace?: (cwd: string) => void;
   onNewThread: (workspaceCwd: string | null) => void;
+  onArchiveThread?: (threadId: string) => void;
   onOpenLinkedThread: (threadId: string) => void;
   onOpenSettings?: () => void;
   onQueryChange: (query: string) => void;
@@ -230,6 +234,7 @@ export function CommandSidebar({
     locale === "zh"
       ? {
           addWorkspace: "新增空间",
+          archiveThread: "归档会话",
           cancel: "取消",
           collapseSidebar: "折叠侧栏",
           conversation: "对话",
@@ -268,6 +273,7 @@ export function CommandSidebar({
         }
       : {
           addWorkspace: "Add workspace",
+          archiveThread: "Archive conversation",
           cancel: "Cancel",
           collapseSidebar: "Collapse sidebar",
           conversation: "Conversation",
@@ -371,7 +377,7 @@ export function CommandSidebar({
   const taskAttentionCount = linkedThreads.filter(
     (thread) =>
       thread.state !== undefined &&
-      commandSidebarThreadNeedsAttention(thread.state),
+      commandSidebarThreadHasUnreadSignal(thread.state),
   ).length;
 
   function activateSearchResult(item: SidebarSearchResult) {
@@ -518,6 +524,7 @@ export function CommandSidebar({
         onNewThread={onNewThread}
         linkedThreads={linkedThreads}
         selectedLinkedThreadId={selectedLinkedThreadId}
+        onArchiveThread={onArchiveThread}
         onOpenLinkedThread={onOpenLinkedThread}
         nativeFolderPicker={nativeFolderPicker}
         workspaceFormOpen={workspaceFormOpen}

@@ -17,7 +17,11 @@ import {
 } from "@crewon/agent-kernel";
 import { DirectResponsesTransport } from "@crewon/agent-responses";
 import { compileAgentVersion } from "@crewon/agent-version";
-import { canonicalActionIntent } from "@crewon/contracts";
+import {
+  canonicalActionIntent,
+  parseCanonicalAgentEvent,
+  parseWorkspaceChangeSummary,
+} from "@crewon/contracts";
 import {
   ApplicationError,
   AutomationApplicationService,
@@ -70,6 +74,7 @@ import {
 import { Pool } from "pg";
 
 import {
+  fitToolCompletionOutputToEvent,
   RuntimeWorker,
   type RuntimeWorkerConfig,
   type RuntimeWorkerScheduler,
@@ -78,6 +83,8 @@ import { PinnedRunExecutionPolicy } from "./standalone-adapters.ts";
 import type { PriorModelCompactionResolverPort } from "./model-switch-compaction.ts";
 import type { AgentVersionRuntimeResolverPort } from "./agent-version-runtime.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
+import type { ThreadSandboxPort } from "../../control-api/src/pim-sandbox-client.ts";
+import { createPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
 
 const ROUTE: RunRoute = {
   authorityId: "standalone-1",
@@ -86,6 +93,186 @@ const ROUTE: RunRoute = {
   policySnapshotId: "policy-1",
   workspaceBindingId: "workspace-1",
 };
+
+test("fits escape-heavy Tool output and workspace metadata into one durable event", () => {
+  const workspaceChanges = parseWorkspaceChangeSummary({
+    schemaVersion: "crewon.workspace-change-summary.v0",
+    paths: Array.from(
+      { length: 100 },
+      (_, index) =>
+        `src/${String(index).padStart(3, "0")}-${"a".repeat(80)}.ts`,
+    ),
+    additions: 100,
+    deletions: 50,
+    statsComplete: true,
+  });
+  const fitted = fitToolCompletionOutputToEvent({
+    output: '\u0001\n\\"'.repeat(10_000),
+    runId: "run-1",
+    segmentId: "segment-1",
+    callId: "call-1",
+    kind: "function",
+    name: "workspace_run_command",
+    isError: false,
+    workspaceChanges,
+  });
+
+  assert.equal(fitted.truncated, true);
+  assert.doesNotThrow(() =>
+    parseCanonicalAgentEvent({
+      schemaVersion: "crewon.agent-event.v0",
+      runId: "run-1",
+      segmentId: "segment-1",
+      sequence: Number.MAX_SAFE_INTEGER,
+      type: "tool.completed",
+      data: {
+        callId: "call-1",
+        kind: "function",
+        name: "workspace_run_command",
+        output: fitted.output,
+        isError: false,
+        artifactRef: "x".repeat(512),
+        outputTruncated: true,
+        workspaceChanges,
+      },
+    }),
+  );
+});
+
+test("persists complete PIM output while committing exact workspace metadata", async (context) => {
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+  );
+  const workspaceChanges = parseWorkspaceChangeSummary({
+    schemaVersion: "crewon.workspace-change-summary.v0",
+    paths: Array.from(
+      { length: 100 },
+      (_, index) =>
+        `src/${String(index).padStart(3, "0")}-${"a".repeat(80)}.ts`,
+    ),
+    additions: 100,
+    deletions: 50,
+    statsComplete: true,
+  });
+  const sandbox: ThreadSandboxPort = {
+    listDirectory: async () => {
+      throw new Error("unexpected_list_directory");
+    },
+    readFile: async () => {
+      throw new Error("unexpected_read_file");
+    },
+    readDiff: async () => {
+      throw new Error("unexpected_read_diff");
+    },
+    readGitSummary: async () => {
+      throw new Error("unexpected_read_git_summary");
+    },
+    runCommand: async () => {
+      throw new Error("unexpected_untracked_command");
+    },
+    runTrackedCommand: async () => ({
+      command: {
+        cwd: "/workspace",
+        exitCode: 0,
+        stdout: "\u0000".repeat(24 * 1024),
+        stderr: "\u0001".repeat(24 * 1024),
+      },
+      workspaceChanges,
+    }),
+  };
+  const pimRuntime = createPimSandboxToolRuntime(sandbox);
+  let actionDigest: string | null = null;
+  const toolRuntime: ToolRuntimePort = {
+    definitions: () => pimRuntime.definitions(),
+    executionPolicy: (kind, name) => pimRuntime.executionPolicy(kind, name),
+    execute: (command, signal) => {
+      actionDigest = command.actionDigest;
+      return pimRuntime.execute(command, signal);
+    },
+    reconcile: (command, signal) => pimRuntime.reconcile(command, signal),
+    cancel: (command, signal) => pimRuntime.cancel(command, signal),
+  };
+  let persistedOutput: string | null = null;
+  const artifacts: ToolOutputArtifactPort = {
+    persistToolOutput: async (input) => {
+      const outputBytes = Buffer.byteLength(input.output);
+      assert.equal(input.maxArtifactBytes, 64 * 1024);
+      assert.ok(outputBytes > 40_000);
+      assert.ok(outputBytes <= input.maxArtifactBytes);
+      persistedOutput = input.output;
+      return toolOutputArtifactRecord(input, "artifact-pim-output");
+    },
+    requireToolOutputReference: async () => {
+      throw new Error("unexpected_artifact_reference");
+    },
+  };
+  let samples = 0;
+  const transport: ModelTransportPort = {
+    adapterName: "pim-artifact-worker-adapter",
+    adapterVersion: "1",
+    modelId: "pim-artifact-worker-model",
+    async *stream() {
+      samples += 1;
+      if (samples === 1) {
+        yield {
+          type: "tool.call",
+          kind: "function",
+          callId: "pim-large-output",
+          name: "workspace_run_command",
+          input: '{"command":"generate"}',
+        };
+        yield { type: "completed", checkpoint: null };
+        return;
+      }
+      yield { type: "output.delta", delta: "done" };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const worker = fixture.worker({ artifacts, toolRuntime, transport });
+
+  assert.deepEqual(await worker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  await worker.close();
+  assert.equal((await fixture.loadRun()).status, "completed");
+  assert.notEqual(persistedOutput, null);
+  const persistedCommand = JSON.parse(persistedOutput ?? "") as {
+    stdout: string;
+    stderr: string;
+  };
+  assert.equal(persistedCommand.stdout.startsWith("\u0000"), true);
+  assert.equal(persistedCommand.stderr.startsWith("\u0001"), true);
+  assert.match(persistedOutput ?? "", /characters truncated/u);
+
+  const completed = (await fixture.events()).find(
+    (event) => event.type === "tool.completed",
+  );
+  assert.ok(completed?.type === "tool.completed");
+  assert.equal(completed.data.outputTruncated, true);
+  assert.equal(completed.data.artifactRef, "artifact-pim-output");
+  assert.deepEqual(completed.data.workspaceChanges, workspaceChanges);
+  assert.notEqual(completed.data.output, persistedOutput);
+  assert.ok(
+    Buffer.byteLength(completed.data.output) <
+      Buffer.byteLength(persistedOutput ?? ""),
+  );
+  assert.ok(actionDigest !== null);
+  const receipt = await fixture.store.loadToolExecutionReceiptByAction({
+    tenantId: actor().tenantId,
+    runId: fixture.runId,
+    actionDigest,
+  });
+  assert.equal(receipt?.status, "completed");
+  assert.equal(receipt?.result?.artifactRef, "artifact-pim-output");
+  assert.equal(receipt?.result?.output, completed.data.output);
+  assert.deepEqual(receipt?.result?.workspaceChanges, workspaceChanges);
+  assert.deepEqual(
+    receipt?.result?.workspaceChanges,
+    completed.data.workspaceChanges,
+  );
+});
 
 registerRuntimeWorkerConformance(
   "RuntimeWorker + InMemoryRunStore",
@@ -1141,8 +1328,8 @@ test("reopens a durable provider checkpoint and sends only the next turn", async
       (request.tools as readonly { name: string }[]).map(({ name }) => name),
     ),
     [
-      ["get_goal", "create_goal"],
-      ["get_goal", "create_goal"],
+      ["get_goal", "create_goal", "update_plan"],
+      ["get_goal", "create_goal", "update_plan"],
     ],
   );
   assert.deepEqual(
@@ -4287,6 +4474,185 @@ test("holds a mutation before Provider dispatch and resumes it only after the bo
     ).map((attempt) => attempt.status),
     ["abandoned", "completed"],
   );
+});
+
+for (const toolPermissionMode of ["approveForMe", "fullAccess"] as const) {
+  test(`executes a per-action Tool without a user gate in ${toolPermissionMode} mode`, async (context) => {
+    const fixture = await createFixture(
+      context,
+      (clock) => new InMemoryRunStore({ clock }),
+      ROUTE,
+      "none",
+      toolPermissionMode,
+    );
+    let modelRequests = 0;
+    let providerInvocations = 0;
+    const transport: ModelTransportPort = {
+      adapterName: "permission-worker-adapter",
+      adapterVersion: "1",
+      modelId: "permission-worker-model",
+      async *stream() {
+        modelRequests += 1;
+        if (modelRequests === 1) {
+          yield {
+            type: "tool.call",
+            kind: "function",
+            callId: `permission-${toolPermissionMode}`,
+            name: "fixture_writer",
+            input: '{"value":"allowed"}',
+          };
+          yield { type: "completed", checkpoint: null };
+          return;
+        }
+        yield { type: "output.delta", delta: "done" };
+        yield { type: "completed", checkpoint: null };
+      },
+    };
+    const toolRuntime = new InMemoryToolBroker(
+      [
+        {
+          schemaVersion: "crewon.tool-definition.v0",
+          kind: "function",
+          name: "fixture_writer",
+          description: "Writes under the selected Run permission.",
+          execution: "serial",
+          inputSchema: { type: "object" },
+        },
+      ],
+      new Map([
+        [
+          "function:fixture_writer",
+          async () => {
+            providerInvocations += 1;
+            return { output: "allowed write" };
+          },
+        ],
+      ]),
+      new Map([
+        [
+          "function:fixture_writer",
+          toolPolicy("mutation", "reconcilable", "perAction"),
+        ],
+      ]),
+    );
+    const policySandboxModes: Array<string | undefined> = [];
+    const permissionAwareRuntime: ToolRuntimePort = {
+      definitions: () => toolRuntime.definitions(),
+      executionPolicy: (kind, name, context) => {
+        policySandboxModes.push(context?.sandboxMode);
+        return toolRuntime.executionPolicy(kind, name);
+      },
+      execute: (command, signal) => toolRuntime.execute(command, signal),
+      reconcile: (command, signal) => toolRuntime.reconcile(command, signal),
+      cancel: (command, signal) => toolRuntime.cancel(command, signal),
+    };
+    const worker = fixture.worker({
+      transport,
+      toolRuntime: permissionAwareRuntime,
+    });
+
+    assert.deepEqual(await worker.wake(), {
+      kind: "retried",
+      runId: fixture.runId,
+      code: "tool_approval_auto_approved",
+    });
+    assert.deepEqual(await worker.wake(), {
+      kind: "completed",
+      runId: fixture.runId,
+    });
+    assert.equal(providerInvocations, 1);
+    assert.equal((await fixture.loadRun()).waitingApproval, null);
+    const approval = await fixture.store.loadLatestToolApprovalForRun({
+      tenantId: actor().tenantId,
+      runId: fixture.runId,
+    });
+    assert.equal(approval?.status, "approved");
+    assert.equal(approval?.decision?.actorId, actor().actorId);
+    assert.deepEqual(
+      [...new Set(policySandboxModes)],
+      [
+        toolPermissionMode === "fullAccess"
+          ? "danger-full-access"
+          : "workspace-write",
+      ],
+    );
+    await worker.close();
+  });
+}
+
+test("auto-approves a durable gate recovered after Worker process loss", async (context) => {
+  const fixture = await createFixture(
+    context,
+    (clock) => new InMemoryRunStore({ clock }),
+    ROUTE,
+    "none",
+    "approveForMe",
+  );
+  const crashed = fixture.worker({
+    transport: successfulTransport(),
+    retryAfterMs: 0,
+    afterAttemptStarted: async () => {
+      throw new Error("simulated_process_loss_before_auto_approval");
+    },
+  });
+  assert.deepEqual(await crashed.wake(), {
+    kind: "retried",
+    runId: fixture.runId,
+    code: "simulated_process_loss_before_auto_approval",
+  });
+  await crashed.close();
+
+  const claim = await fixture.store.claimNextWorkItem({
+    ownerId: "auto-approval-recovery-worker",
+    leaseId: "auto-approval-recovery-lease",
+    leaseDurationMs: 10_000,
+  });
+  assert.ok(claim !== null);
+  const call = {
+    segmentId: "auto-approval-recovery-segment",
+    callId: "auto-approval-recovery-call",
+    kind: "function" as const,
+    name: "fixture_writer",
+    input: '{"value":"recover"}',
+  };
+  await fixture.execution.recordAgentEvent(claim, {
+    schemaVersion: "crewon.agent-event.v0",
+    runId: fixture.runId,
+    segmentId: call.segmentId,
+    sequence: 1,
+    type: "tool.requested",
+    data: {
+      callId: call.callId,
+      kind: call.kind,
+      name: call.name,
+      input: call.input,
+    },
+  });
+  const prepared = await fixture.execution.beginToolExecution(
+    claim,
+    call,
+    toolPolicy("mutation", "reconcilable", "perAction"),
+  );
+  const required = await fixture.execution.requireToolApproval(
+    claim,
+    prepared.receipt,
+    { expiresAfterMs: 60_000, retryAfterMs: 0 },
+  );
+  assert.equal(required.approval.status, "required");
+
+  const recovered = fixture.worker({ transport: successfulTransport() });
+  assert.deepEqual(await recovered.wake(), {
+    kind: "retried",
+    runId: fixture.runId,
+    code: "tool_approval_auto_approved",
+  });
+  assert.equal((await fixture.loadRun()).status, "running");
+  assert.equal(
+    (await fixture.approvals.getApproval(actor(), required.approval.approvalId))
+      .status,
+    "approved",
+  );
+  await recovered.close();
 });
 
 test("fails a rejected mutation without invoking the Tool Provider", async (context) => {
@@ -7542,6 +7908,163 @@ function registerRuntimeWorkerConformance(
       await worker.close();
     });
 
+    test("runs server-owned update_plan and persists the authoritative snapshot", async (context) => {
+      const fixture = await createFixture(context, createStore);
+      const requests: ModelRequest[] = [];
+      let sample = 0;
+      const transport: ModelTransportPort = {
+        adapterName: "run-plan-adapter",
+        adapterVersion: "1",
+        modelId: "run-plan-model",
+        async *stream(request) {
+          requests.push(structuredClone(request));
+          sample += 1;
+          if (sample === 1) {
+            yield {
+              type: "tool.call",
+              kind: "function",
+              callId: "run-plan-call",
+              name: "update_plan",
+              input: JSON.stringify({
+                explanation: "Ship the durable slice",
+                items: [
+                  {
+                    id: "design",
+                    title: "Finish design",
+                    status: "completed",
+                  },
+                  {
+                    id: "runtime",
+                    title: "Connect runtime",
+                    status: "in_progress",
+                  },
+                ],
+              }),
+            };
+          } else {
+            yield { type: "output.delta", delta: "plan complete" };
+          }
+          yield { type: "completed", checkpoint: null };
+        },
+      };
+      const worker = fixture.worker({ transport });
+
+      assert.deepEqual(await worker.wake(), {
+        kind: "completed",
+        runId: fixture.runId,
+      });
+      assert.deepEqual(
+        requests[0]?.tools.map(({ name }) => name),
+        ["get_goal", "create_goal", "update_plan"],
+      );
+      const run = await fixture.loadRun();
+      assert.equal(run.plan?.revision, 1);
+      assert.equal(run.plan?.planId, fixture.runId);
+      assert.deepEqual(
+        run.plan?.items.map(({ itemId, status }) => ({ itemId, status })),
+        [
+          { itemId: "design", status: "completed" },
+          { itemId: "runtime", status: "inProgress" },
+        ],
+      );
+      const planResult = requests[1]?.input.items.find(
+        (item): item is Extract<ModelInputItem, { type: "tool_result" }> =>
+          item.type === "tool_result" && item.callId === "run-plan-call",
+      );
+      assert.ok(planResult !== undefined);
+      assert.equal(
+        (JSON.parse(planResult.output) as { disposition: string }).disposition,
+        "updated",
+      );
+      const events = await fixture.events();
+      assert.equal(
+        events.filter((event) => event.type === "run.plan.updated").length,
+        1,
+      );
+      assert.equal(
+        events.filter((event) => event.type === "tool.completed").length,
+        1,
+      );
+      await worker.close();
+    });
+
+    test("recovers a committed update_plan after process loss without a duplicate revision", async (context) => {
+      const fixture = await createFixture(context, createStore);
+      let samples = 0;
+      const transport: ModelTransportPort = {
+        adapterName: "run-plan-recovery-adapter",
+        adapterVersion: "1",
+        modelId: "run-plan-recovery-model",
+        async *stream() {
+          samples += 1;
+          if (samples === 1) {
+            yield {
+              type: "tool.call",
+              kind: "function",
+              callId: "run-plan-crash-call",
+              name: "update_plan",
+              input: JSON.stringify({
+                items: [
+                  {
+                    id: "recover",
+                    title: "Recover the plan",
+                    status: "in_progress",
+                  },
+                ],
+              }),
+            };
+          } else {
+            yield { type: "output.delta", delta: "recovered" };
+          }
+          yield { type: "completed", checkpoint: null };
+        },
+      };
+      const crashed = fixture.worker({
+        transport,
+        retryAfterMs: 0,
+        afterRunPlanToolExecuted: async () => {
+          throw new Error("simulated_run_plan_process_loss");
+        },
+      });
+
+      assert.deepEqual(await crashed.wake(), {
+        kind: "retried",
+        runId: fixture.runId,
+        code: "simulated_run_plan_process_loss",
+      });
+      const afterCrash = await fixture.loadRun();
+      assert.equal(afterCrash.plan?.revision, 1);
+      assert.equal(
+        (await fixture.events()).some(
+          (event) => event.type === "tool.completed",
+        ),
+        false,
+      );
+      await crashed.close();
+
+      const recovered = fixture.worker({ transport });
+      assert.deepEqual(await recovered.wake(), {
+        kind: "completed",
+        runId: fixture.runId,
+      });
+      const afterRecovery = await fixture.loadRun();
+      assert.deepEqual(afterRecovery.plan, afterCrash.plan);
+      const events = await fixture.events();
+      assert.equal(
+        events.filter((event) => event.type === "run.plan.updated").length,
+        1,
+      );
+      assert.equal(
+        events.filter((event) => event.type === "tool.requested").length,
+        1,
+      );
+      assert.equal(
+        events.filter((event) => event.type === "tool.completed").length,
+        1,
+      );
+      await recovered.close();
+    });
+
     test("runs server-owned get_goal and update_goal before terminal text", async (context) => {
       const fixture = await createFixture(context, createStore, ROUTE, "goal");
       const requests: ModelRequest[] = [];
@@ -7590,7 +8113,7 @@ function registerRuntimeWorkerConformance(
       assert.equal(requests.length, 3);
       assert.deepEqual(
         requests[0]?.tools.map(({ name }) => name),
-        ["get_goal", "update_goal"],
+        ["get_goal", "update_goal", "update_plan"],
       );
       const finalInput = requests[2]?.input;
       assert.ok(finalInput?.strategy === "manual");
@@ -7750,10 +8273,10 @@ function registerRuntimeWorkerConformance(
       assert.deepEqual(
         requests.map((request) => request.tools.map(({ name }) => name)),
         [
-          ["get_goal", "create_goal"],
-          ["get_goal", "create_goal"],
-          ["get_goal", "update_goal"],
-          ["get_goal", "update_goal"],
+          ["get_goal", "create_goal", "update_plan"],
+          ["get_goal", "create_goal", "update_plan"],
+          ["get_goal", "update_goal", "update_plan"],
+          ["get_goal", "update_goal", "update_plan"],
         ],
       );
       assert.deepEqual(
@@ -8548,6 +9071,7 @@ async function createFixture(
   createStore: (clock: LeaseClock) => DomainStore | Promise<DomainStore>,
   route: RunRoute = ROUTE,
   executionIntent: "none" | "goal" | "plan" = "none",
+  toolPermissionMode: import("@crewon/domain").RunToolPermissionMode = "requestApproval",
 ) {
   const leaseClock = new ManualLeaseClock();
   const store = await createStore(leaseClock);
@@ -8624,6 +9148,7 @@ async function createFixture(
       idempotencyKey: "run-create-1",
       threadId: createdThread.state.threadId,
       route,
+      toolPermissionMode,
     });
     runId = createdRun.state.runId;
     workItemId = createdRun.workItems[0]?.workItemId;
@@ -8636,6 +9161,7 @@ async function createFixture(
       content: "hello",
       requestedAgentVersionId: route.agentVersionId,
       executionIntent,
+      toolPermissionMode,
       route,
     });
     runId = createdTurn.runState.runId;
@@ -8677,6 +9203,7 @@ async function createFixture(
       afterToolProviderResolved?: RuntimeWorkerConfig["afterToolProviderResolved"];
       afterToolReceiptCommitted?: RuntimeWorkerConfig["afterToolReceiptCommitted"];
       afterGoalToolExecuted?: RuntimeWorkerConfig["afterGoalToolExecuted"];
+      afterRunPlanToolExecuted?: RuntimeWorkerConfig["afterRunPlanToolExecuted"];
       cancellationScheduler?: RuntimeWorkerScheduler;
       maxContextItems?: number;
       autoCompactAtContextItems?: number | null;
@@ -8740,6 +9267,7 @@ async function createFixture(
           afterToolProviderResolved: options.afterToolProviderResolved,
           afterToolReceiptCommitted: options.afterToolReceiptCommitted,
           afterGoalToolExecuted: options.afterGoalToolExecuted,
+          afterRunPlanToolExecuted: options.afterRunPlanToolExecuted,
         },
       );
     },

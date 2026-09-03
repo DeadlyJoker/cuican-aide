@@ -1,13 +1,23 @@
 import { Settings2 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import type { Locale } from "../lib/i18n";
 import {
   filterSidebarThreads,
   groupSidebarThreads,
   sidebarNavLabels,
+  type ProjectSessionGroup,
 } from "./SidebarPresentation";
-import { SidebarPrimaryNav, type SidebarLibraryKind } from "./SidebarPrimaryNav";
+import {
+  SidebarPrimaryNav,
+  type SidebarLibraryKind,
+} from "./SidebarPrimaryNav";
 import { SidebarSearchBox } from "./SidebarSearchBox";
 import { SidebarThreadList } from "./SidebarThreadList";
 import { sidebarNavItemClass } from "./sidebarStyles";
@@ -30,6 +40,8 @@ type SidebarProps = {
   renameThreadLabel: string;
   archivedThreadsLabel: string;
   activeThreadsLabel: string;
+  archiveWorkspaceLabel: string;
+  deleteWorkspaceLabel: string;
   activeLibraryKind?: SidebarLibraryKind | null;
   showArchived: boolean;
   isLoading: boolean;
@@ -40,6 +52,8 @@ type SidebarProps = {
   onNewThread: () => void;
   onArchiveThread: (thread: Thread) => void;
   onDeleteThread: (thread: Thread) => void;
+  onArchiveWorkspaceThreads: (group: ProjectSessionGroup) => void;
+  onDeleteWorkspaceThreads: (group: ProjectSessionGroup) => void;
   onAgents: () => void;
   onAutomation: () => void;
   onPlugins: () => void;
@@ -69,6 +83,8 @@ export function Sidebar({
   renameThreadLabel,
   archivedThreadsLabel,
   activeThreadsLabel,
+  archiveWorkspaceLabel,
+  deleteWorkspaceLabel,
   activeLibraryKind = null,
   showArchived,
   isLoading,
@@ -79,6 +95,8 @@ export function Sidebar({
   onNewThread,
   onArchiveThread,
   onDeleteThread,
+  onArchiveWorkspaceThreads,
+  onDeleteWorkspaceThreads,
   onAgents,
   onAutomation,
   onPlugins,
@@ -195,7 +213,9 @@ export function Sidebar({
         activeThreadsLabel={activeThreadsLabel}
         archiveThreadLabel={archiveThreadLabel}
         archivedThreadsLabel={archivedThreadsLabel}
+        archiveWorkspaceLabel={archiveWorkspaceLabel}
         deleteThreadLabel={deleteThreadLabel}
+        deleteWorkspaceLabel={deleteWorkspaceLabel}
         emptyLabel={noThreadsFoundLabel}
         isLoading={isLoading}
         loadingLabel={loadingThreadsLabel}
@@ -210,7 +230,9 @@ export function Sidebar({
         threadsSectionLabel={threadsSectionLabel}
         untitledThreadLabel={untitledThreadLabel}
         onArchiveThread={onArchiveThread}
+        onArchiveWorkspaceThreads={onArchiveWorkspaceThreads}
         onDeleteThread={onDeleteThread}
+        onDeleteWorkspaceThreads={onDeleteWorkspaceThreads}
         onRenameThread={onRenameThread}
         onSelectThread={onSelectThread}
         onToggleArchived={onToggleArchived}

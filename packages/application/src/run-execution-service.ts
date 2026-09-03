@@ -5,6 +5,7 @@ import {
   parseProviderCheckpoint,
   type ActionIntent,
   type CanonicalAgentEvent,
+  type WorkspaceChangeSummary,
 } from "@crewon/contracts";
 import type {
   ModelHistoryItem,
@@ -52,6 +53,10 @@ import type {
 import type { DomainStore } from "./domain-store-port.ts";
 import type { GoalToolName } from "./goal-tool.ts";
 import type { GoalToolExecutionResult } from "./goal-tool-store-port.ts";
+import {
+  evaluateRunPlanToolCall,
+  UPDATE_PLAN_TOOL_NAME,
+} from "./run-plan-tool.ts";
 import type {
   BeginRunAttemptResult,
   CommitAssistantSampleContinuationResult,
@@ -138,6 +143,7 @@ export type ToolCompletedAgentEvent = Readonly<
       isError: boolean;
       artifactRef: string | null;
       outputTruncated: boolean;
+      workspaceChanges?: WorkspaceChangeSummary;
     }>;
   }
 >;
@@ -794,6 +800,94 @@ export class RunExecutionService {
     return { disposition: "required", approval };
   }
 
+  /** Satisfies a Tool gate only when the admitted Run captured explicit automatic consent. */
+  async approveToolForRun(
+    receipt: ToolExecutionReceiptState,
+    approval: ToolApprovalState,
+  ): Promise<ToolApprovalState> {
+    let state: RunState | null;
+    try {
+      state = await this.#store.loadRun({
+        tenantId: receipt.tenantId,
+        runId: receipt.runId,
+      });
+    } catch (error) {
+      throw mapExecutionError(error);
+    }
+    if (
+      state === null ||
+      (state.toolPermissionMode !== "approveForMe" &&
+        state.toolPermissionMode !== "fullAccess") ||
+      state.status !== "waitingApproval" ||
+      state.cancelRequested ||
+      state.waitingApproval?.approvalId !== approval.approvalId ||
+      state.waitingApproval.actionDigest !== approval.actionDigest ||
+      approval.status !== "required" ||
+      approval.tenantId !== state.tenantId ||
+      approval.spaceId !== state.spaceId ||
+      approval.runId !== state.runId ||
+      approval.receiptId !== receipt.receiptId ||
+      approval.workItemId !== receipt.workItemId ||
+      approval.actionDigest !== receipt.actionDigest ||
+      approval.policySnapshotId !== receipt.actionIntent?.policySnapshotId
+    ) {
+      throw new ApplicationError(
+        "conflict",
+        "tool_approval_auto_decision_invalid",
+      );
+    }
+    const decidedAt = this.#now();
+    const event: RunLifecycleEvent = {
+      schemaVersion: "crewon.run-event.v0",
+      identity: { runId: state.runId },
+      eventId: this.#nextId("runEvent"),
+      sequence: state.lastSequence + 1,
+      occurredAt: decidedAt,
+      type: "run.resumed",
+      data: { reasonCode: "tool_approval_approved" },
+    };
+    try {
+      const result = await this.#store.decideToolApproval({
+        tenantId: state.tenantId,
+        approvalId: approval.approvalId,
+        expectedRevision: approval.revision,
+        decision: {
+          outcome: "approved",
+          actorId: state.createdByActorId,
+          comment: `Approved by ${state.toolPermissionMode} Run permission`,
+          decidedAt,
+        },
+        commit: {
+          tenantId: state.tenantId,
+          idempotency: {
+            scope: canonicalJson({
+              schemaVersion: "crewon.idempotency-scope.v0",
+              tenantId: state.tenantId,
+              runId: state.runId,
+              workItemId: receipt.workItemId,
+              namespace: "run-tool-permission",
+            }),
+            key: `approve:${approval.actionDigest}`,
+            requestFingerprint: canonicalJson({
+              schemaVersion: "crewon.run-tool-permission-command.v0",
+              runId: state.runId,
+              approvalId: approval.approvalId,
+              actionDigest: approval.actionDigest,
+              toolPermissionMode: state.toolPermissionMode,
+            }),
+          },
+          expectedRevision: state.revision,
+          events: [event],
+          outbox: [this.#outbox(state.tenantId, event)],
+          workItems: [],
+        },
+      });
+      return result.approval;
+    } catch (error) {
+      throw mapExecutionError(error);
+    }
+  }
+
   async expireToolApproval(
     claim: WorkItemClaim,
     approval: ToolApprovalState,
@@ -1131,6 +1225,9 @@ export class RunExecutionService {
       outputDigest: this.#digest(canonicalEvent.data.output),
       isError: canonicalEvent.data.isError,
       artifactRef: canonicalEvent.data.artifactRef,
+      ...(canonicalEvent.data.workspaceChanges === undefined
+        ? {}
+        : { workspaceChanges: canonicalEvent.data.workspaceChanges }),
     };
     let currentGoal: ThreadGoal | null;
     try {
@@ -2021,6 +2118,88 @@ export class RunExecutionService {
     }
   }
 
+  async executeRunPlanTool(
+    claim: WorkItemClaim,
+    requested: CanonicalAgentEvent &
+      Readonly<{
+        type: "tool.requested";
+        data: Readonly<{
+          callId: string;
+          kind: "function";
+          name: typeof UPDATE_PLAN_TOOL_NAME;
+          input: string;
+        }>;
+      }>,
+  ): Promise<
+    Readonly<{
+      changed: boolean;
+      isError: boolean;
+      output: string;
+      plan: RunState["plan"];
+    }>
+  > {
+    parseCanonicalAgentEvent(requested);
+    const state = await this.loadRun(claim);
+    if (state.cancelRequested) {
+      throw new ApplicationError("conflict", "execution_cancel_pending");
+    }
+    if (state.status !== "running") {
+      throw new ApplicationError("conflict", "run_not_running");
+    }
+    if (
+      requested.runId !== state.runId ||
+      requested.data.kind !== "function" ||
+      requested.data.name !== UPDATE_PLAN_TOOL_NAME ||
+      state.collaborationMode !== "default" ||
+      (state.purpose ?? "turn") !== "turn"
+    ) {
+      throw new ApplicationError("validation", "run_plan_tool_request_invalid");
+    }
+    const occurredAt = this.#now();
+    const evaluation = evaluateRunPlanToolCall(
+      state.plan ?? null,
+      state.runId,
+      requested.data.input,
+      occurredAt,
+    );
+    if (evaluation.isError || !evaluation.changed) {
+      return evaluation;
+    }
+    if (evaluation.plan === null) {
+      throw new ApplicationError("internal", "run_plan_tool_result_invalid");
+    }
+    const event: Extract<RunLifecycleEvent, { type: "run.plan.updated" }> = {
+      schemaVersion: "crewon.run-event.v0",
+      identity: { runId: state.runId },
+      eventId: this.#nextId("runEvent"),
+      sequence: state.lastSequence + 1,
+      occurredAt,
+      type: "run.plan.updated",
+      data: {
+        callId: requested.data.callId,
+        plan: evaluation.plan,
+      },
+    };
+    const committed = await this.#commitLeasedEvent(
+      claim,
+      state,
+      `run-plan-tool:${requested.segmentId}:${requested.data.callId}`,
+      event,
+      {
+        kind: "run.plan.update",
+        request: {
+          segmentId: requested.segmentId,
+          callId: requested.data.callId,
+          input: requested.data.input,
+        },
+      },
+    );
+    return {
+      ...evaluation,
+      plan: committed.state.plan ?? evaluation.plan,
+    };
+  }
+
   async completeTextRun(
     claim: WorkItemClaim,
     attempt: RunAttemptIdentity,
@@ -2895,6 +3074,9 @@ export class RunExecutionService {
         policySnapshotId: previousRun.policySnapshotId,
         workspaceBindingId: previousRun.workspaceBindingId,
         collaborationMode: "default",
+        ...(previousRun.toolPermissionMode === undefined
+          ? {}
+          : { toolPermissionMode: previousRun.toolPermissionMode }),
         goalBinding: {
           goalId: goal.goalId,
           revision: goal.revision,

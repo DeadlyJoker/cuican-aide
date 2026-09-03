@@ -18,6 +18,11 @@ import {
   type ControlOfficeDefinitionRecordReference,
   type OfficeConfigRecordReference,
 } from "./officePanelFromRecord";
+import {
+  officeMemberAgentProfileId,
+  readOfficeMemberAgentProfile,
+  writeOfficeMemberAgentProfile,
+} from "./officeMemberAgentProfile";
 
 export type ControlOfficeClient = {
   createOffice(
@@ -133,4 +138,156 @@ export async function createControlOffice(input: {
     crypto.randomUUID(),
   );
   return controlOfficeRecord(response.office);
+}
+
+/**
+ * Rebinds stale desktop-local Office members after the immutable local runtime
+ * identity changes. Published or remote AgentVersions are never substituted.
+ */
+export async function refreshControlOfficeRuntimeRecord(input: {
+  client: ControlOfficeClient;
+  record: ControlOfficeDefinitionRecordReference;
+  model?: string | null;
+}): Promise<ControlOfficeDefinitionRecordReference> {
+  return controlOfficeRecord(
+    await refreshControlOfficeRuntime({
+      client: input.client,
+      officeVersionId: input.record.definition.officeVersionId,
+      model: input.model,
+    }),
+  );
+}
+
+/** Resolves an Office to its latest runnable immutable definition. */
+export async function refreshControlOfficeRuntime(input: {
+  client: ControlOfficeClient;
+  officeVersionId: string;
+  model?: string | null;
+}): Promise<OfficeContract> {
+  const [selected, catalog, listed] = await Promise.all([
+    input.client.getOffice(input.officeVersionId),
+    input.client.getActiveAgentVersionCatalog(),
+    input.client.listOffices({ limit: 100 }),
+  ]);
+  const office = listed.data
+    .filter((candidate) => candidate.officeId === selected.office.officeId)
+    .reduce(
+      (latest, candidate) =>
+        candidate.revision > latest.revision ? candidate : latest,
+      selected.office,
+    );
+  const activeIds = new Set(
+    catalog.data.map((version) => version.agentVersionId),
+  );
+  if (
+    office.members.length !== office.executionTargets.length ||
+    office.members.some(
+      (member, index) =>
+        member.agentVersionId !==
+        office.executionTargets[index]?.agentVersionId,
+    )
+  ) {
+    throw new Error("control_office_agent_version_not_active");
+  }
+  const reboundIds = office.members.map((member) =>
+    runnableAgentVersionId(
+      member.agentVersionId,
+      catalog,
+      activeIds,
+      input.model,
+    ),
+  );
+  if (
+    office.members.every(
+      (member, index) => member.agentVersionId === reboundIds[index],
+    )
+  ) {
+    return office;
+  }
+  const response = await input.client.createOffice(
+    {
+      officeId: office.officeId,
+      expectedRevision: office.revision,
+      title: office.title,
+      members: office.members.map((member, index) => ({
+        ...member,
+        agentVersionId: reboundIds[index]!,
+      })),
+      executionTargets: office.executionTargets.map((target, index) => ({
+        ...target,
+        agentVersionId: reboundIds[index]!,
+      })),
+    },
+    `office.runtime.rebind:${crypto.randomUUID()}`,
+  );
+  copyOfficeMemberProfiles(office, response.office);
+  return response.office;
+}
+
+function runnableAgentVersionId(
+  previousId: string,
+  catalog: ActiveAgentVersionCatalogResponse,
+  activeIds: ReadonlySet<string>,
+  model: string | null | undefined,
+): string {
+  const previousBaseId = modelVariantBaseId(previousId);
+  const isLocalDesktop = previousBaseId.startsWith("local-desktop-");
+  if (!isLocalDesktop) {
+    if (!activeIds.has(previousId)) {
+      throw new Error("control_office_agent_version_not_active");
+    }
+    return previousId;
+  }
+  const suffix = previousBaseId.endsWith("-planner")
+    ? "-planner"
+    : previousBaseId.endsWith("-verifier")
+      ? "-verifier"
+      : "";
+  const baseId = activeIds.has(previousBaseId)
+    ? previousBaseId
+    : suffix
+      ? `${catalog.defaultAgentVersionId}${suffix}`
+      : catalog.defaultAgentVersionId;
+  if (!baseId.startsWith("local-desktop-") || !activeIds.has(baseId)) {
+    throw new Error("control_office_agent_version_not_active");
+  }
+  if (!model) {
+    return activeIds.has(previousId) ? previousId : baseId;
+  }
+  const matches = catalog.data.filter(
+    (version) =>
+      version.model.modelId === model &&
+      (version.agentVersionId === baseId ||
+        modelVariantBaseId(version.agentVersionId) === baseId),
+  );
+  if (matches.length !== 1) {
+    throw new Error("control_model_selection_mismatch");
+  }
+  return matches[0]!.agentVersionId;
+}
+
+function modelVariantBaseId(agentVersionId: string): string {
+  return agentVersionId.replace(/:model-[a-f0-9]{24}$/u, "");
+}
+
+function copyOfficeMemberProfiles(
+  previous: OfficeContract,
+  current: OfficeContract,
+): void {
+  for (const member of current.members) {
+    const previousProfileId = officeMemberAgentProfileId(
+      previous.officeVersionId,
+      member.memberId,
+    );
+    const profile = readOfficeMemberAgentProfile(previousProfileId);
+    if (!profile) continue;
+    writeOfficeMemberAgentProfile({
+      ...profile,
+      agentId: officeMemberAgentProfileId(
+        current.officeVersionId,
+        member.memberId,
+      ),
+      name: member.displayName,
+    });
+  }
 }

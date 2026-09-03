@@ -2,8 +2,11 @@ import { useEffect, useState } from "react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 
 import type { Locale } from "../../lib/i18n";
+import type { CommandShellView } from "./commandWorkspaceState";
 
-const sidebarSeenUpdatesStorageKey = "crewon:sidebar-thread-seen-updates:v1";
+const sidebarSeenEventsStorageKey = "crewon:sidebar-thread-seen-events:v2";
+const legacySidebarSeenUpdatesStorageKey =
+  "crewon:sidebar-thread-seen-updates:v1";
 const maxStoredThreadCount = 256;
 
 export type CommandSidebarThreadState =
@@ -12,14 +15,36 @@ export type CommandSidebarThreadState =
   | "pendingViewed"
   | "completedUnread"
   | "completedViewed"
-  | "failed"
+  | "failedUnread"
+  | "failedViewed"
   | "neutral";
 
 export type CommandSidebarThreadScope = "personal" | "team";
 
-type SeenThreadUpdates = Record<string, number>;
+export type CommandSidebarSeenThreadEvents = Record<string, string>;
 
-function isSeenThreadUpdates(value: unknown): value is SeenThreadUpdates {
+type LegacySeenThreadUpdates = Record<string, number>;
+
+function isSeenThreadEvents(
+  value: unknown,
+): value is CommandSidebarSeenThreadEvents {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    Object.entries(value).every(
+      ([threadId, fingerprint]) =>
+        threadId.length > 0 &&
+        threadId.length <= 512 &&
+        typeof fingerprint === "string" &&
+        fingerprint.length > 0 &&
+        fingerprint.length <= 4096,
+    )
+  );
+}
+
+function isLegacySeenThreadUpdates(
+  value: unknown,
+): value is LegacySeenThreadUpdates {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -34,38 +59,63 @@ function isSeenThreadUpdates(value: unknown): value is SeenThreadUpdates {
   );
 }
 
-function readSeenThreadUpdates(): SeenThreadUpdates | null {
+function readSeenThreadEvents(): CommandSidebarSeenThreadEvents | null {
   try {
     if (typeof window === "undefined") {
       return null;
     }
-    const saved = window.localStorage.getItem(sidebarSeenUpdatesStorageKey);
+    const saved = window.localStorage.getItem(sidebarSeenEventsStorageKey);
     if (!saved) {
       return null;
     }
     const parsed: unknown = JSON.parse(saved);
-    return isSeenThreadUpdates(parsed) ? parsed : null;
+    return isSeenThreadEvents(parsed) ? parsed : null;
   } catch {
     return null;
   }
 }
 
-function boundedSeenThreadUpdates(
-  updates: SeenThreadUpdates,
-): SeenThreadUpdates {
+function readLegacySeenThreadUpdates(): LegacySeenThreadUpdates | null {
+  try {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    const saved = window.localStorage.getItem(
+      legacySidebarSeenUpdatesStorageKey,
+    );
+    if (!saved) {
+      return null;
+    }
+    const parsed: unknown = JSON.parse(saved);
+    return isLegacySeenThreadUpdates(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function boundedSeenThreadEvents(
+  events: CommandSidebarSeenThreadEvents,
+  threads: readonly Thread[],
+): CommandSidebarSeenThreadEvents {
+  const prioritizedThreadIds = [
+    ...threads.map((thread) => thread.id),
+    ...Object.keys(events),
+  ];
+  const uniqueThreadIds = [...new Set(prioritizedThreadIds)];
   return Object.fromEntries(
-    Object.entries(updates)
-      .sort(([, left], [, right]) => right - left)
-      .slice(0, maxStoredThreadCount),
+    uniqueThreadIds
+      .filter((threadId) => events[threadId] !== undefined)
+      .slice(0, maxStoredThreadCount)
+      .map((threadId) => [threadId, events[threadId]!]),
   );
 }
 
-function writeSeenThreadUpdates(updates: SeenThreadUpdates): void {
+function writeSeenThreadEvents(events: CommandSidebarSeenThreadEvents): void {
   try {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(
-        sidebarSeenUpdatesStorageKey,
-        JSON.stringify(boundedSeenThreadUpdates(updates)),
+        sidebarSeenEventsStorageKey,
+        JSON.stringify(events),
       );
     }
   } catch {
@@ -73,55 +123,133 @@ function writeSeenThreadUpdates(updates: SeenThreadUpdates): void {
   }
 }
 
-function initialSeenThreadUpdates(
+function initialSeenThreadEvents(
   threads: readonly Thread[],
-): SeenThreadUpdates {
-  return (
-    readSeenThreadUpdates() ??
-    Object.fromEntries(threads.map((thread) => [thread.id, thread.updatedAt]))
+): CommandSidebarSeenThreadEvents {
+  const currentEvents = Object.fromEntries(
+    threads.map((thread) => [
+      thread.id,
+      commandSidebarThreadEventFingerprint(thread),
+    ]),
   );
+  const savedEvents = readSeenThreadEvents();
+  if (savedEvents) {
+    return boundedSeenThreadEvents(
+      { ...currentEvents, ...savedEvents },
+      threads,
+    );
+  }
+
+  const legacyUpdates = readLegacySeenThreadUpdates();
+  if (!legacyUpdates) {
+    return boundedSeenThreadEvents(currentEvents, threads);
+  }
+
+  const migratedEvents = { ...currentEvents };
+  for (const thread of threads) {
+    const legacyUpdatedAt = legacyUpdates[thread.id];
+    if (
+      legacyUpdatedAt !== undefined &&
+      legacyUpdatedAt < thread.updatedAt
+    ) {
+      migratedEvents[thread.id] = `legacy-unseen:${legacyUpdatedAt}`;
+    }
+  }
+  return boundedSeenThreadEvents(migratedEvents, threads);
 }
 
-export function useCommandSidebarSeenThreadUpdates(
+export function commandSidebarThreadEventFingerprint(thread: Thread): string {
+  const status = thread.status ?? { type: "idle" as const };
+  const activeFlags =
+    status.type === "active" ? [...status.activeFlags].sort() : [];
+  const latestTurn = thread.turns?.at(-1);
+  return JSON.stringify([
+    thread.updatedAt,
+    status.type,
+    activeFlags,
+    latestTurn?.id ?? null,
+    latestTurn?.status ?? null,
+    latestTurn?.completedAt ?? null,
+  ]);
+}
+
+export function commandSidebarViewedThreadId({
+  activeView,
+  hasNewTaskDraft,
+  selectedThreadId,
+}: {
+  activeView: CommandShellView;
+  hasNewTaskDraft: boolean;
+  selectedThreadId: string | null;
+}): string | null {
+  return activeView === "command" && !hasNewTaskDraft
+    ? selectedThreadId
+    : null;
+}
+
+export function reconcileCommandSidebarSeenThreadEvents(
+  current: CommandSidebarSeenThreadEvents,
   threads: readonly Thread[],
-  selectedThreadId: string | null,
-): SeenThreadUpdates {
-  const [seenUpdates, setSeenUpdates] = useState<SeenThreadUpdates>(() =>
-    initialSeenThreadUpdates(threads),
-  );
-  const selectedUpdatedAt =
-    threads.find((thread) => thread.id === selectedThreadId)?.updatedAt ?? null;
+  viewedThreadId: string | null,
+): CommandSidebarSeenThreadEvents {
+  let next = current;
 
-  useEffect(() => {
-    writeSeenThreadUpdates(seenUpdates);
-  }, [seenUpdates]);
-
-  useEffect(() => {
-    if (selectedThreadId === null || selectedUpdatedAt === null) {
-      return;
+  for (const thread of threads) {
+    const fingerprint = commandSidebarThreadEventFingerprint(thread);
+    const previousFingerprint = current[thread.id];
+    const state = commandSidebarThreadState(thread, previousFingerprint);
+    const shouldAcknowledge =
+      thread.id === viewedThreadId ||
+      !commandSidebarThreadHasUnreadSignal(state);
+    if (!shouldAcknowledge || previousFingerprint === fingerprint) {
+      continue;
     }
-    setSeenUpdates((current) => {
-      if ((current[selectedThreadId] ?? 0) >= selectedUpdatedAt) {
-        return current;
-      }
-      return boundedSeenThreadUpdates({
-        ...current,
-        [selectedThreadId]: selectedUpdatedAt,
-      });
-    });
-  }, [selectedThreadId, selectedUpdatedAt]);
+    if (next === current) {
+      next = { ...current };
+    }
+    next[thread.id] = fingerprint;
+  }
 
-  return seenUpdates;
+  return next === current ? current : boundedSeenThreadEvents(next, threads);
+}
+
+export function useCommandSidebarSeenThreadEvents(
+  threads: readonly Thread[],
+  viewedThreadId: string | null,
+): CommandSidebarSeenThreadEvents {
+  const [seenEvents, setSeenEvents] =
+    useState<CommandSidebarSeenThreadEvents>(() =>
+      initialSeenThreadEvents(threads),
+    );
+
+  useEffect(() => {
+    writeSeenThreadEvents(seenEvents);
+  }, [seenEvents]);
+
+  useEffect(() => {
+    setSeenEvents((current) =>
+      reconcileCommandSidebarSeenThreadEvents(
+        current,
+        threads,
+        viewedThreadId,
+      ),
+    );
+  }, [threads, viewedThreadId]);
+
+  return seenEvents;
 }
 
 export function commandSidebarThreadState(
   thread: Thread,
-  seenUpdatedAt: number,
+  seenEventFingerprint: string | null | undefined,
 ): CommandSidebarThreadState {
   const status = thread.status ?? { type: "idle" as const };
+  const latestTurn = thread.turns?.at(-1);
+  const seen =
+    seenEventFingerprint === commandSidebarThreadEventFingerprint(thread);
 
   if (status.type === "systemError") {
-    return "failed";
+    return seen ? "failedViewed" : "failedUnread";
   }
 
   if (status.type === "active") {
@@ -131,9 +259,7 @@ export function commandSidebarThreadState(
     if (!waiting) {
       return "running";
     }
-    return seenUpdatedAt >= thread.updatedAt
-      ? "pendingViewed"
-      : "pendingUnread";
+    return seen ? "pendingViewed" : "pendingUnread";
   }
 
   const hasTaskContent = Boolean(
@@ -145,9 +271,18 @@ export function commandSidebarThreadState(
     return "neutral";
   }
 
-  return seenUpdatedAt >= thread.updatedAt
-    ? "completedViewed"
-    : "completedUnread";
+  if (
+    latestTurn?.status === "failed" ||
+    latestTurn?.status === "interrupted"
+  ) {
+    return seen ? "failedViewed" : "failedUnread";
+  }
+
+  if (status.type === "notLoaded" && latestTurn === undefined) {
+    return "neutral";
+  }
+
+  return seen ? "completedViewed" : "completedUnread";
 }
 
 export function commandSidebarThreadStateLabel(
@@ -166,8 +301,10 @@ export function commandSidebarThreadStateLabel(
       return zh ? "新完成，结果未查看" : "Completed, result not viewed";
     case "completedViewed":
       return zh ? "已完成" : "Completed";
-    case "failed":
-      return zh ? "执行遇到问题" : "Needs attention";
+    case "failedUnread":
+      return zh ? "异常结束，结果未查看" : "Stopped, result not viewed";
+    case "failedViewed":
+      return zh ? "异常结束，已查看" : "Stopped, viewed";
     case "neutral":
       return zh ? "最近更新" : "Recently updated";
   }
@@ -192,13 +329,12 @@ export function commandSidebarThreadScopeLabel(
   return locale === "zh" ? "个人任务" : "Personal task";
 }
 
-export function commandSidebarThreadNeedsAttention(
+export function commandSidebarThreadHasUnreadSignal(
   state: CommandSidebarThreadState,
 ): boolean {
   return (
     state === "pendingUnread" ||
-    state === "pendingViewed" ||
     state === "completedUnread" ||
-    state === "failed"
+    state === "failedUnread"
   );
 }

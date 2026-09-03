@@ -253,6 +253,42 @@ test("pins the one validated DNS result without a second resolution", async () =
   assert.equal(result.status, "ok");
 });
 
+test("fails over between policy-approved DNS addresses without resolving again", async () => {
+  let dnsCalls = 0;
+  const dns: ProviderProbeDnsResolver = {
+    resolveAll: async () => {
+      dnsCalls += 1;
+      return [address("93.184.216.34"), address("93.184.216.35")];
+    },
+  };
+  const attempts: string[] = [];
+  const http: ProviderProbeHttpPort = {
+    request: async ({ target }) => {
+      attempts.push(target.address);
+      if (target.address === "93.184.216.34") {
+        throw new Error("first_address_unreachable");
+      }
+      return jsonResponse({ data: [{ id: "model-1" }] });
+    },
+  };
+
+  const result = await new ResponsesProviderConnectivityProbe(
+    providerConfig("https://provider.example/v1"),
+    {
+      egress: new ProviderProbeEgressResolver({
+        dns,
+        policy: new DesktopProviderProbeEgressPolicy(),
+      }),
+      http,
+      now: monotonicNow(1_000, 7),
+    },
+  ).probe(new AbortController().signal);
+
+  assert.equal(dnsCalls, 1);
+  assert.deepEqual(attempts, ["93.184.216.34", "93.184.216.35"]);
+  assert.equal(result.status, "ok");
+});
+
 test("performs a real loopback request and projects bounded model metadata", async (t) => {
   const requests: Array<{
     authorization: string | undefined;

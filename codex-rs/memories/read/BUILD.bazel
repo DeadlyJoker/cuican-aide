@@ -1,6 +1,0 @@
-load("//:defs.bzl", "crewon_rust_crate")
-
-crewon_rust_crate(
-    name = "read",
-    crate_name = "crewon_memories_read",
-)

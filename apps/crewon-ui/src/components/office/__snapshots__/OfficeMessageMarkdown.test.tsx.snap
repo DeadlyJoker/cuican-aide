@@ -1,0 +1,12 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`OfficeMessageMarkdown > renders Markdown and highlights only visible Office members 1`] = `
+"<div class="markdown-content"><h2>回归结果</h2>
+<ul>
+<li><strong>已通过</strong>：<span class="office-mention" data-member-id="member-security">@安全审查</span></li>
+<li>未知成员：@不存在</li>
+<li>重名成员：@Alex 与 <span class="office-mention" data-member-id="member-alex-review">@Alex（成员 2）</span></li>
+</ul>
+<p>行内代码 <code>@安全审查</code> 不应高亮。</p>
+<p><a href="https://example.com" rel="noreferrer" target="_blank">@安全审查</a> 保持为普通链接。</p><figure class="markdown-code-block" data-complete="true" data-language="text"><figcaption><span>text</span><button aria-label="Copy code" class="markdown-code-copy" title="Copy code" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-copy" aria-hidden="true"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path></svg><span>Copy</span></button></figcaption><pre class="markdown-code-pre"><code class="language-text">@安全审查</code></pre></figure></div>"
+`;

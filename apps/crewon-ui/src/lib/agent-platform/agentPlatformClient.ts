@@ -286,6 +286,49 @@ export function agentPlatformBaseUrl(): string {
   return configured;
 }
 
+/** Resolves the Agent API path into the absolute URL required by the runtime worker. */
+export function agentPlatformInvocationUrl(value: string): string {
+  const invocation = value.trim();
+  if (!invocation || invocation.length > 2_048) {
+    throw new Error("agent_platform_invocation_url_invalid");
+  }
+
+  let resolved: URL;
+  try {
+    resolved = new URL(invocation);
+  } catch {
+    const base = agentPlatformBaseUrl();
+    if (base.startsWith("/")) {
+      if (typeof window === "undefined" || !window.location.origin) {
+        throw new Error("agent_platform_invocation_url_invalid");
+      }
+      const path = invocation.startsWith("/")
+        ? `${base}${invocation}`
+        : `${base}/${invocation}`;
+      resolved = new URL(path, window.location.origin);
+    } else {
+      const baseUrl = new URL(base);
+      resolved = invocation.startsWith("/")
+        ? new URL(invocation, baseUrl.origin)
+        : new URL(invocation, `${base}/`);
+    }
+  }
+
+  const loopback =
+    resolved.hostname === "localhost" ||
+    resolved.hostname === "127.0.0.1" ||
+    resolved.hostname === "[::1]";
+  if (
+    resolved.username ||
+    resolved.password ||
+    (resolved.protocol !== "https:" &&
+      !(resolved.protocol === "http:" && loopback))
+  ) {
+    throw new Error("agent_platform_invocation_url_invalid");
+  }
+  return resolved.toString();
+}
+
 export function crewonUnifiedSsoEnabled(): boolean {
   return envValue("VITE_CREWON_UNIFIED_SSO_ENABLED") === "true";
 }

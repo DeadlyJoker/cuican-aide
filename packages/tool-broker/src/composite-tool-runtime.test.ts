@@ -46,6 +46,27 @@ test("rejects definition collisions and unknown routes", async () => {
   );
 });
 
+test("forwards the Run sandbox context to the routed policy owner", () => {
+  let sandboxMode: string | undefined;
+  const child = runtime("command", []);
+  const contextual: ToolRuntimePort = {
+    ...child,
+    executionPolicy: (kind, name, context) => {
+      sandboxMode = context?.sandboxMode;
+      return child.executionPolicy(kind, name, context);
+    },
+  };
+  const composite = new CompositeToolRuntime([contextual]);
+
+  assert.deepEqual(
+    composite.executionPolicy("function", "command", {
+      sandboxMode: "danger-full-access",
+    }),
+    policy(),
+  );
+  assert.equal(sandboxMode, "danger-full-access");
+});
+
 function runtime(name: string, calls: string[]): ToolRuntimePort {
   const definition = toolDefinition(name);
   return {

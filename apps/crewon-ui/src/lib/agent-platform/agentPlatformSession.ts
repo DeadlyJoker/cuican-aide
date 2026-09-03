@@ -38,10 +38,17 @@ export type WeComLoginConfig = {
   reason?: string | null;
 };
 
+const AUTH_UNAVAILABLE_MESSAGE = "账号服务暂时不可用，请稍后重试。";
+const AUTH_TRANSIENT_RETRY_DELAY_MS = 250;
+const AUTH_TRANSIENT_STATUSES = new Set([502, 503, 504]);
+
 async function responseError(
   response: Response,
   fallback: string,
 ): Promise<Error> {
+  if (AUTH_TRANSIENT_STATUSES.has(response.status)) {
+    return new Error(AUTH_UNAVAILABLE_MESSAGE);
+  }
   try {
     const body = (await response.json()) as {
       detail?: string | Array<{ msg?: string }>;
@@ -56,6 +63,33 @@ async function responseError(
   } catch {
     return new Error(fallback);
   }
+}
+
+async function loginRequest(form: URLSearchParams): Promise<Response> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      const response = await fetch(
+        `${agentPlatformBaseUrl()}/api/v1/auth/login`,
+        {
+          method: "POST",
+          body: form,
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        },
+      );
+      if (!AUTH_TRANSIENT_STATUSES.has(response.status) || attempt === 1) {
+        return response;
+      }
+      await response.body?.cancel();
+    } catch (error) {
+      if (attempt === 1) {
+        throw new Error(AUTH_UNAVAILABLE_MESSAGE, { cause: error });
+      }
+    }
+    await new Promise((resolve) =>
+      setTimeout(resolve, AUTH_TRANSIENT_RETRY_DELAY_MS),
+    );
+  }
+  throw new Error(AUTH_UNAVAILABLE_MESSAGE);
 }
 
 export async function readAgentPlatformCurrentUser(): Promise<AgentPlatformUser | null> {
@@ -99,11 +133,7 @@ export async function loginAgentPlatform(
   password: string,
 ): Promise<AgentPlatformUser> {
   const form = new URLSearchParams({ username, password });
-  const response = await fetch(`${agentPlatformBaseUrl()}/api/v1/auth/login`, {
-    method: "POST",
-    body: form,
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-  });
+  const response = await loginRequest(form);
   if (!response.ok) {
     throw await responseError(response, "登录失败，请检查账号和密码");
   }

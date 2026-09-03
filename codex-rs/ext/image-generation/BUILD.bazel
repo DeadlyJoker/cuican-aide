@@ -1,9 +1,0 @@
-load("//:defs.bzl", "crewon_rust_crate")
-
-crewon_rust_crate(
-    name = "image-generation",
-    crate_name = "crewon_image_generation_extension",
-    compile_data = [
-        "imagegen_description.md",
-    ],
-)

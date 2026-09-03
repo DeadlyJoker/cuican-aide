@@ -5,6 +5,7 @@ import {
   controlOfficeRecord,
   createControlOffice,
   listControlOfficeCatalog,
+  refreshControlOfficeRuntimeRecord,
   type ControlOfficeClient,
 } from "./controlOfficeRuntime";
 
@@ -187,6 +188,198 @@ describe("Control Office runtime", () => {
       }),
       expect.any(String),
     );
+  });
+
+  it("rebinds stale desktop Office roles to the current local runtime", async () => {
+    const previous = {
+      ...office,
+      members: [
+        {
+          memberId: "member-1",
+          displayName: "Release lead",
+          agentVersionId: "local-desktop-old",
+        },
+        {
+          memberId: "member-2",
+          displayName: "Planning",
+          agentVersionId: "local-desktop-old-planner",
+        },
+      ],
+      executionTargets: [
+        { targetId: "target-1", agentVersionId: "local-desktop-old" },
+        {
+          targetId: "target-2",
+          agentVersionId: "local-desktop-old-planner",
+        },
+      ],
+    };
+    const rebound = {
+      ...previous,
+      officeVersionId: "office-version-2",
+      revision: 2,
+      members: previous.members.map((member, index) => ({
+        ...member,
+        agentVersionId:
+          index === 0
+            ? "local-desktop-current"
+            : "local-desktop-current-planner",
+      })),
+      executionTargets: previous.executionTargets.map((target, index) => ({
+        ...target,
+        agentVersionId:
+          index === 0
+            ? "local-desktop-current"
+            : "local-desktop-current-planner",
+      })),
+    };
+    const createOffice = vi
+      .fn()
+      .mockResolvedValue({ disposition: "created", office: rebound });
+
+    const result = await refreshControlOfficeRuntimeRecord({
+      client: {
+        createOffice,
+        getOffice: vi.fn().mockResolvedValue({ office: previous }),
+        listOffices: vi
+          .fn()
+          .mockResolvedValue({ data: [previous], nextCursor: null }),
+        getActiveAgentVersionCatalog: vi.fn().mockResolvedValue({
+          releaseId: "release-current",
+          activatedAt: "2026-08-31T00:00:00.000Z",
+          defaultAgentVersionId: "local-desktop-current",
+          data: [
+            { agentVersionId: "local-desktop-current" },
+            { agentVersionId: "local-desktop-current-planner" },
+          ],
+        }),
+      } as unknown as ControlOfficeClient,
+      record: controlOfficeRecord(previous),
+    });
+
+    expect(createOffice).toHaveBeenCalledWith(
+      {
+        officeId: "office-1",
+        expectedRevision: 1,
+        title: "Release office",
+        members: rebound.members,
+        executionTargets: rebound.executionTargets,
+      },
+      expect.stringMatching(/^office\.runtime\.rebind:/u),
+    );
+    expect(result).toEqual(controlOfficeRecord(rebound));
+  });
+
+  it("keeps historical expert roles while switching every local role to the selected model", async () => {
+    const previous = {
+      ...office,
+      members: [
+        {
+          memberId: "member-1",
+          displayName: "Expert lead",
+          agentVersionId: "local-desktop-old",
+        },
+        {
+          memberId: "member-2",
+          displayName: "Planning expert",
+          agentVersionId: "local-desktop-old-planner",
+        },
+        {
+          memberId: "member-3",
+          displayName: "Verification expert",
+          agentVersionId: "local-desktop-old-verifier",
+        },
+      ],
+      executionTargets: [
+        { targetId: "target-1", agentVersionId: "local-desktop-old" },
+        {
+          targetId: "target-2",
+          agentVersionId: "local-desktop-old-planner",
+        },
+        {
+          targetId: "target-3",
+          agentVersionId: "local-desktop-old-verifier",
+        },
+      ],
+    };
+    const selectedIds = [
+      "local-desktop-current:model-111111111111111111111111",
+      "local-desktop-current-planner:model-222222222222222222222222",
+      "local-desktop-current-verifier:model-333333333333333333333333",
+    ];
+    const rebound = {
+      ...previous,
+      officeVersionId: "office-version-2",
+      revision: 2,
+      members: previous.members.map((member, index) => ({
+        ...member,
+        agentVersionId: selectedIds[index]!,
+      })),
+      executionTargets: previous.executionTargets.map((target, index) => ({
+        ...target,
+        agentVersionId: selectedIds[index]!,
+      })),
+    };
+    const baseVersion = (agentVersionId: string, modelId = "gpt-5.5") => ({
+      agentVersionId,
+      model: { modelId },
+    });
+    const createOffice = vi.fn().mockResolvedValue({
+      disposition: "created",
+      office: rebound,
+    });
+
+    const result = await refreshControlOfficeRuntimeRecord({
+      client: {
+        createOffice,
+        getOffice: vi.fn().mockResolvedValue({ office: previous }),
+        listOffices: vi
+          .fn()
+          .mockResolvedValue({ data: [previous], nextCursor: null }),
+        getActiveAgentVersionCatalog: vi.fn().mockResolvedValue({
+          releaseId: "release-current",
+          activatedAt: "2026-09-01T00:00:00.000Z",
+          defaultAgentVersionId: "local-desktop-current",
+          data: [
+            baseVersion("local-desktop-current"),
+            baseVersion("local-desktop-current-planner"),
+            baseVersion("local-desktop-current-verifier"),
+            ...selectedIds.map((id) => baseVersion(id, "gpt-5.6-sol")),
+          ],
+        }),
+      } as unknown as ControlOfficeClient,
+      model: "gpt-5.6-sol",
+      record: controlOfficeRecord(previous),
+    });
+
+    expect(createOffice).toHaveBeenCalledWith(
+      expect.objectContaining({
+        members: rebound.members,
+        executionTargets: rebound.executionTargets,
+      }),
+      expect.stringMatching(/^office\.runtime\.rebind:/u),
+    );
+    expect(result).toEqual(controlOfficeRecord(rebound));
+  });
+
+  it("does not substitute inactive published AgentVersions", async () => {
+    await expect(
+      refreshControlOfficeRuntimeRecord({
+        client: {
+          createOffice: vi.fn(),
+          getOffice: vi.fn().mockResolvedValue({ office }),
+          listOffices: vi
+            .fn()
+            .mockResolvedValue({ data: [office], nextCursor: null }),
+          getActiveAgentVersionCatalog: vi.fn().mockResolvedValue({
+            releaseId: "release-current",
+            activatedAt: "2026-08-31T00:00:00.000Z",
+            defaultAgentVersionId: "local-desktop-current",
+            data: [{ agentVersionId: "local-desktop-current" }],
+          }),
+        } as unknown as ControlOfficeClient,
+        record: controlOfficeRecord(office),
+      }),
+    ).rejects.toThrow("control_office_agent_version_not_active");
   });
 
   it("passes connector presentation through while preserving AgentVersion identity", async () => {

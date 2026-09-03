@@ -1,0 +1,72 @@
+/*
+ * Route-level coordination only. Task details stay anchored to grid column 1;
+ * the workbench remains the independent right-hand surface in column 2.
+ */
+.command-shell-overlay-switch {
+  display: none;
+}
+
+@media (max-width: 880px) {
+  .command-shell-route
+    > .command-workbench:not([data-maximized="true"]):not([hidden]) {
+    position: fixed;
+    z-index: 30;
+    inset: 0 0 0 auto;
+    width: min(380px, calc(100vw - 32px)) !important;
+    height: 100dvh;
+    box-shadow: var(--shadow-drawer-left);
+  }
+
+  .command-shell-route[data-capability-sidebar-open="true"][data-active-overlay="workbench"]
+    > .task-detail-popover {
+    z-index: 29;
+  }
+
+  .command-shell-overlay-switch {
+    position: fixed;
+    z-index: 50;
+    inset-block-start: 50%;
+    inset-inline-end: min(380px, calc(100vw - 32px));
+    display: inline-grid;
+    width: 24px;
+    height: 42px;
+    transform: translate(50%, -50%);
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-pill);
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+    color: var(--text-muted);
+    cursor: pointer;
+  }
+
+  .command-shell-overlay-switch:hover {
+    background: var(--panel-subtle);
+    color: var(--text);
+  }
+
+  .command-shell-overlay-switch:focus-visible {
+    outline: 2px solid var(--focus);
+    outline-offset: 1px;
+  }
+
+  .command-shell-overlay-switch svg {
+    width: 15px;
+    height: 15px;
+  }
+}
+
+@media (max-width: 520px) {
+  .command-shell-route
+    > .command-workbench:not([data-maximized="true"]):not([hidden]) {
+    width: 100vw !important;
+  }
+
+  .command-shell-overlay-switch {
+    inset-inline: 0 auto;
+    transform: translateY(-50%);
+    border-left: 0;
+    border-radius: 0 var(--radius-pill) var(--radius-pill) 0;
+  }
+}

@@ -8,6 +8,7 @@ import {
   pickCommandSidebarWorkspaceFolder,
   readCommandSidebarWorkspaceRoster,
   SidebarAccount,
+  type CommandLinkedThread,
   writeCommandSidebarWorkspaceRoster,
 } from "./CommandWorkspaceChrome";
 import type { CommandHomeSlots } from "./commandWorkspaceState";
@@ -67,6 +68,23 @@ function renderSidebar() {
   );
 }
 
+function linkedThread(
+  id: string,
+  state: NonNullable<CommandLinkedThread["state"]>,
+): CommandLinkedThread {
+  return {
+    cwd: "/Users/me/projects/crewon",
+    id,
+    preview: id,
+    scope: "personal",
+    scopeLabel: "个人任务",
+    state,
+    stateLabel: state,
+    title: id,
+    updatedLabel: "刚刚",
+  };
+}
+
 describe("CommandSidebar", () => {
   it("keeps an explicit draft workspace visible beside conversation workspaces", () => {
     const markup = renderToStaticMarkup(
@@ -94,6 +112,7 @@ describe("CommandSidebar", () => {
         onCloseSearch={vi.fn()}
         onCreateWorkspace={vi.fn()}
         onNewThread={vi.fn()}
+        onArchiveThread={vi.fn()}
         onOpenLinkedThread={vi.fn()}
         onQueryChange={vi.fn()}
         onSwitchView={vi.fn()}
@@ -108,6 +127,43 @@ describe("CommandSidebar", () => {
     expect(markup).toContain("sidebar-task-attention");
     expect(markup).toContain('data-thread-state="pendingUnread"');
     expect(markup).toMatchSnapshot();
+  });
+
+  it("aggregates only unseen terminal and interaction signals", () => {
+    const markup = renderToStaticMarkup(
+      <CommandSidebar
+        activeView="projects"
+        cwd="/Users/me/projects/crewon"
+        isSearchOpen={false}
+        linkedThreads={[
+          linkedThread("pending-unread", "pendingUnread"),
+          linkedThread("completed-unread", "completedUnread"),
+          linkedThread("failed-unread", "failedUnread"),
+          linkedThread("pending-viewed", "pendingViewed"),
+          linkedThread("failed-viewed", "failedViewed"),
+          linkedThread("running", "running"),
+          linkedThread("completed-viewed", "completedViewed"),
+        ]}
+        query=""
+        selectedLinkedThreadId={null}
+        slots={sidebarSlots}
+        workspaceAuthority="legacy"
+        onCloseSearch={vi.fn()}
+        onCreateWorkspace={vi.fn()}
+        onNewThread={vi.fn()}
+        onOpenLinkedThread={vi.fn()}
+        onQueryChange={vi.fn()}
+        onSwitchView={vi.fn()}
+        onToggleCollapse={vi.fn()}
+        onToggleSearch={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('aria-label="3 个任务需要关注"');
+    expect(markup.match(/sidebar-task-attention/gu)).toHaveLength(1);
+    expect(markup.match(/command-thread-status is-/gu)).toHaveLength(3);
+    expect(markup).not.toContain("is-pending-viewed");
+    expect(markup).not.toContain("is-running");
   });
 
   it("offers a remove control for every workspace row", () => {
@@ -132,6 +188,7 @@ describe("CommandSidebar", () => {
         onCloseSearch={vi.fn()}
         onCreateWorkspace={vi.fn()}
         onNewThread={vi.fn()}
+        onArchiveThread={vi.fn()}
         onOpenLinkedThread={vi.fn()}
         onQueryChange={vi.fn()}
         onSwitchView={vi.fn()}
@@ -297,6 +354,7 @@ describe("CommandSidebar", () => {
         onCloseSearch={vi.fn()}
         onCreateWorkspace={vi.fn()}
         onNewThread={vi.fn()}
+        onArchiveThread={vi.fn()}
         onOpenLinkedThread={vi.fn()}
         onQueryChange={vi.fn()}
         onSwitchView={vi.fn()}
@@ -310,6 +368,8 @@ describe("CommandSidebar", () => {
     expect(markup).toContain("Control task");
     expect(markup).toContain('aria-label="更换工作空间"');
     expect(markup).toContain('aria-label="解除与「cuican-aide」的绑定"');
+    expect(markup).toContain('aria-label="归档会话"');
+    expect(markup).toContain('data-archive-thread-id="thread-control"');
     expect(markup).not.toContain("command-thread-operations-rail");
     expect(markup).toMatchSnapshot();
   });

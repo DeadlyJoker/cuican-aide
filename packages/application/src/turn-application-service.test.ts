@@ -36,6 +36,7 @@ test("authorizes and prepares one atomic Message, history item, Run and queue ha
   assert.equal(result.disposition, "committed");
   assert.equal(result.threadState.revision, 2);
   assert.equal(result.runState.status, "queued");
+  assert.equal(result.runState.toolPermissionMode, "approveForMe");
   assert.deepEqual(
     authorization.requests.map(({ action, resource }) => ({
       action,
@@ -249,6 +250,7 @@ function command() {
     content: "do the work",
     requestedAgentVersionId: null,
     executionIntent: "none" as const,
+    toolPermissionMode: "approveForMe" as const,
     route: {
       authorityId: "authority-1",
       runtimeGeneration: "ts-v0",

@@ -734,6 +734,87 @@ describe("app server Office message submit", () => {
 });
 
 describe("app server execution intent", () => {
+  it("forwards the automatic approval reviewer through thread and turn RPCs", async () => {
+    const client = new AppServerClient("ws://app-server", () => undefined);
+    const socket = await connectFakeClient(client);
+    const settings = {
+      approvalPolicy: "on-request" as const,
+      approvalsReviewer: "auto_review" as const,
+      sandboxMode: "workspace-write" as const,
+    };
+
+    const startedThread = client.startThread("/repo", "app_server", settings);
+    const threadRequest = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      method: string;
+      params: unknown;
+    };
+    expect(threadRequest).toMatchObject({
+      method: "thread/start",
+      params: {
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
+        sandbox: "workspace-write",
+      },
+    });
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({ id: threadRequest.id, result: { thread: {} } }),
+    );
+    await startedThread;
+
+    const updatedThread = client.updateThreadSettings("thread-1", settings);
+    const updateRequest = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      method: string;
+      params: unknown;
+    };
+    expect(updateRequest).toMatchObject({
+      method: "thread/settings/update",
+      params: {
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
+        sandboxPolicy: {
+          type: "workspaceWrite",
+        },
+      },
+    });
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(JSON.stringify({ id: updateRequest.id, result: {} }));
+    await updatedThread;
+
+    const startedTurn = client.startTurn("thread-1", "Continue", [], settings);
+    const turnRequest = JSON.parse(socket.sent.at(-1) ?? "{}") as {
+      id: number;
+      method: string;
+      params: unknown;
+    };
+    expect(turnRequest).toMatchObject({
+      method: "turn/start",
+      params: {
+        approvalPolicy: "on-request",
+        approvalsReviewer: "auto_review",
+        sandboxPolicy: {
+          type: "workspaceWrite",
+        },
+      },
+    });
+    (
+      client as unknown as {
+        handleMessage: (rawData: string) => void;
+      }
+    ).handleMessage(
+      JSON.stringify({ id: turnRequest.id, result: { turn: {} } }),
+    );
+    await startedTurn;
+  });
+
   it("sends plan collaboration mode for a plan turn", async () => {
     const client = new AppServerClient("ws://app-server", () => undefined);
     const socket = await connectFakeClient(client);

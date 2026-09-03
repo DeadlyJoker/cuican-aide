@@ -44,6 +44,8 @@ describe("CommandExpertsPanel", () => {
     expect(markup).toContain("团长：交付组长");
     expect(markup).toContain("探索专家：仓库探索专家");
     expect(markup).toContain("执行专家：实现验证专家");
+    expect(markup).toContain("团长唯一入口");
+    expect(markup).toContain("专家不支持 @ 直达");
     expect(markup).not.toContain("办公室");
     expect(markup).toMatchSnapshot();
   });
@@ -75,6 +77,18 @@ describe("CommandExpertsPanel", () => {
     expect(markup).toContain("暂时无法打开专家团");
     expect(markup).toContain("重新同步");
     expect(markup).not.toContain("工作空间已注册");
+    expect(markup).toMatchSnapshot();
+  });
+
+  it("hints at adding agents first when creation is unavailable", () => {
+    const markup = renderToStaticMarkup(
+      <CommandExpertsPanel records={[]} onSelect={vi.fn()} />,
+    );
+
+    expect(markup).toContain("需要先添加智能体");
+    expect(markup).toContain("需要先在团队页添加智能体");
+    // No create button when creation is unavailable.
+    expect(markup).not.toContain("primary");
     expect(markup).toMatchSnapshot();
   });
 });

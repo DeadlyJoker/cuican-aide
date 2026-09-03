@@ -3,9 +3,11 @@ import { describe, expect, it } from "vitest";
 
 import {
   MODEL_PROVIDER_FIELD_IDS,
+  applyModelOptionsToPanel,
   modelProviderFormPanel,
   modelProviderListPanel,
   modelProviderRowActionId,
+  modelFieldOptions,
   parseModelProviderRowActionId,
 } from "./modelProviderPanel";
 import { modelProviderEntry } from "./modelProviderConfig";
@@ -236,5 +238,57 @@ describe("modelProviderFormPanel", () => {
     });
 
     expect(panel.error).toBe("Base URL is required");
+  });
+});
+
+describe("modelFieldOptions", () => {
+  it("keeps the current value selectable when it is not advertised", () => {
+    const options = modelFieldOptions(["gpt-5.6-sol", "claude-sonnet-4"], "gateway-model");
+
+    expect(options.map((o) => o.value)).toEqual([
+      "gateway-model",
+      "gpt-5.6-sol",
+      "claude-sonnet-4",
+    ]);
+  });
+
+  it("does not duplicate the current value when it is already advertised", () => {
+    const options = modelFieldOptions(["gpt-5.6-sol", "claude-sonnet-4"], "gpt-5.6-sol");
+
+    expect(options.map((o) => o.value)).toEqual(["gpt-5.6-sol", "claude-sonnet-4"]);
+  });
+});
+
+describe("applyModelOptionsToPanel", () => {
+  it("converts the model text field into a select with advertised models", () => {
+    const panel = modelProviderFormPanel({
+      entry: null,
+      isSelected: false,
+      locale: "en",
+    });
+    const result = applyModelOptionsToPanel(panel, ["gpt-5.6-sol", "claude-sonnet-4"], "en");
+
+    const modelField = result?.fields?.find(
+      (f) => f.id === MODEL_PROVIDER_FIELD_IDS.modelId,
+    );
+    expect(modelField?.options?.map((o) => o.value)).toEqual([
+      "gpt-5.6-sol",
+      "claude-sonnet-4",
+    ]);
+    expect(modelField?.value).toBe("gpt-5.6-sol");
+    expect({ modelField, actions: result?.actions }).toMatchSnapshot();
+  });
+
+  it("returns the panel unchanged when the model list is empty", () => {
+    const panel = modelProviderFormPanel({
+      entry: null,
+      isSelected: false,
+      locale: "en",
+    });
+    expect(applyModelOptionsToPanel(panel, [], "en")).toBe(panel);
+  });
+
+  it("returns null when the panel is null", () => {
+    expect(applyModelOptionsToPanel(null, ["model-1"], "en")).toBeNull();
   });
 });

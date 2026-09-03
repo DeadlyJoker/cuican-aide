@@ -27,6 +27,12 @@ import {
   threadReadPreservedFailureNotice,
   threadRenameFailureNotice,
   threadRenamePromptLabel,
+  workspaceArchiveConfirmMessage,
+  workspaceArchiveFailureNotice,
+  workspaceArchivedNotice,
+  workspaceDeleteConfirmMessage,
+  workspaceDeleteFailureNotice,
+  workspaceDeletedNotice,
 } from "./threadActionPresentation";
 
 type ThreadListClient = {
@@ -84,7 +90,10 @@ export type ToggleArchivedThreadsActionParams = {
 
 export type ArchiveThreadActionParams = {
   client:
-    | Pick<ThreadListClient, "archiveThread" | "listThreads" | "unarchiveThread">
+    | Pick<
+        ThreadListClient,
+        "archiveThread" | "listThreads" | "unarchiveThread"
+      >
     | null
     | undefined;
   isConnected: boolean;
@@ -370,4 +379,136 @@ function removeThreadLocally(
   setSelectedThreadId((currentThreadId) =>
     selectedThreadIdAfterThreadRemoval(currentThreadId, threadId),
   );
+}
+
+export type ArchiveWorkspaceThreadsActionParams = {
+  client:
+    | Pick<
+        ThreadListClient,
+        "archiveThread" | "listThreads" | "unarchiveThread"
+      >
+    | null
+    | undefined;
+  confirm: ConfirmHandler;
+  isConnected: boolean;
+  locale: Locale;
+  setNotice: (notice: NoticeState | null) => void;
+  setSelectedThreadId: SelectedThreadSetter;
+  setThreads: ThreadListSetter;
+  showArchivedThreads: boolean;
+  threads: Thread[];
+  workspaceName: string;
+};
+
+export type DeleteWorkspaceThreadsActionParams = {
+  client:
+    | Pick<ThreadListClient, "deleteThread" | "listThreads">
+    | null
+    | undefined;
+  confirm: ConfirmHandler;
+  isConnected: boolean;
+  locale: Locale;
+  setNotice: (notice: NoticeState | null) => void;
+  setSelectedThreadId: SelectedThreadSetter;
+  setThreads: ThreadListSetter;
+  showArchivedThreads: boolean;
+  threads: Thread[];
+  workspaceName: string;
+};
+
+export async function archiveWorkspaceThreadsAction({
+  client,
+  confirm,
+  isConnected,
+  locale,
+  setNotice,
+  setSelectedThreadId,
+  setThreads,
+  showArchivedThreads,
+  threads,
+  workspaceName,
+}: ArchiveWorkspaceThreadsActionParams): Promise<void> {
+  const count = threads.length;
+  if (count === 0) {
+    return;
+  }
+
+  if (
+    !(await confirm(
+      workspaceArchiveConfirmMessage(workspaceName, count, locale),
+    ))
+  ) {
+    return;
+  }
+
+  if (!isConnected) {
+    for (const thread of threads) {
+      removeThreadLocally(thread.id, setSelectedThreadId, setThreads);
+    }
+    return;
+  }
+
+  try {
+    const archiveMethod = showArchivedThreads
+      ? "unarchiveThread"
+      : "archiveThread";
+    await Promise.all(
+      threads.map((thread) => client?.[archiveMethod]?.(thread.id)),
+    );
+
+    const serverThreads = await client?.listThreads(showArchivedThreads);
+    setThreads(() => serverThreads ?? []);
+    setSelectedThreadId((currentThreadId) =>
+      selectedThreadIdAfterThreadList(currentThreadId, serverThreads),
+    );
+    setNotice(workspaceArchivedNotice(workspaceName, count, locale));
+  } catch (error) {
+    setNotice(workspaceArchiveFailureNotice(error, locale));
+  }
+}
+
+export async function deleteWorkspaceThreadsAction({
+  client,
+  confirm,
+  isConnected,
+  locale,
+  setNotice,
+  setSelectedThreadId,
+  setThreads,
+  showArchivedThreads,
+  threads,
+  workspaceName,
+}: DeleteWorkspaceThreadsActionParams): Promise<void> {
+  const count = threads.length;
+  if (count === 0) {
+    return;
+  }
+
+  if (
+    !(await confirm(
+      workspaceDeleteConfirmMessage(workspaceName, count, locale),
+    ))
+  ) {
+    return;
+  }
+
+  if (!isConnected) {
+    for (const thread of threads) {
+      removeThreadLocally(thread.id, setSelectedThreadId, setThreads);
+    }
+    return;
+  }
+
+  try {
+    await Promise.all(threads.map((thread) => client?.deleteThread(thread.id)));
+
+    const serverThreads = await client?.listThreads(showArchivedThreads);
+    setThreads(() => serverThreads ?? []);
+    setSelectedThreadId((currentThreadId) =>
+      selectedThreadIdAfterThreadList(currentThreadId, serverThreads),
+    );
+    setNotice(workspaceDeletedNotice(workspaceName, count, locale));
+  } catch (error) {
+    setNotice(workspaceDeleteFailureNotice(error, locale));
+  }
 }

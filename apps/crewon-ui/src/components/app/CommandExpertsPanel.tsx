@@ -1,4 +1,4 @@
-import { ArrowUpRight, Sparkles } from "lucide-react";
+import { ArrowUpRight, LockKeyhole, Sparkles } from "lucide-react";
 
 import type {
   ExpertAgentType,
@@ -26,6 +26,7 @@ export function CommandExpertsPanel({
   if (records.length === 0) {
     const loading = status === "loading";
     const unavailable = status === "unavailable";
+    const readyButNoAgents = status === "ready" && !onCreate;
     return (
       <CommandTeamEmptyState
         action={
@@ -40,7 +41,9 @@ export function CommandExpertsPanel({
             ? "正在读取当前工作空间中的专家团。"
             : unavailable
               ? "暂时无法读取专家团，稍后可以重新同步。"
-              : "创建后由团长承接你的消息，其他专家在后台协作。"
+              : readyButNoAgents
+                ? "需要先在团队页添加智能体，才能创建专家团。"
+                : "创建后由团长承接你的消息，其他专家在后台协作。"
         }
         eyebrow="专家团"
         icon={Sparkles}
@@ -53,7 +56,9 @@ export function CommandExpertsPanel({
             ? "正在读取专家团"
             : unavailable
               ? "暂时无法打开专家团"
-              : "还没有专家团"
+              : readyButNoAgents
+                ? "需要先添加智能体"
+                : "还没有专家团"
         }
       />
     );
@@ -72,6 +77,10 @@ export function CommandExpertsPanel({
               <div className="catalog-card-head">
                 <span>团长单聊 · 后台协作</span>
                 <strong>{config.title}</strong>
+                <span className="expert-team-entry-policy">
+                  <LockKeyhole aria-hidden="true" />
+                  团长唯一入口
+                </span>
               </div>
             </div>
             <p className="expert-team-goal">{config.goal}</p>
@@ -101,13 +110,15 @@ export function CommandExpertsPanel({
               ))}
             </div>
             <footer className="expert-team-card-foot">
-              <span>{config.experts.length + 1} 名成员 · 1 个对话入口</span>
+              <span>
+                {config.experts.length + 1} 名成员 · 专家不支持 @ 直达
+              </span>
               <button
                 className="button primary compact"
                 type="button"
                 onClick={() => onSelect(record)}
               >
-                进入团长单聊
+                进入团长会话
                 <ArrowUpRight aria-hidden="true" />
               </button>
             </footer>

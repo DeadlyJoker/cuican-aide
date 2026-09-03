@@ -4,8 +4,45 @@ import type { Locale } from "../lib/i18n";
 
 type DynamicToolCall = Extract<ThreadItem, { type: "dynamicToolCall" }>;
 
+const LOCAL_WORKSPACE_TOOL_NAMES = new Set([
+  "git_status",
+  "list_files",
+  "read_file",
+  "run_ui_test",
+]);
+
 function normalizedDynamicToolName(item: DynamicToolCall): string {
   return [item.namespace, item.tool].filter(Boolean).join(" ").toLowerCase();
+}
+
+export function isLocalWorkspaceDynamicTool(item: DynamicToolCall): boolean {
+  if (
+    item.namespace === "workspace" &&
+    LOCAL_WORKSPACE_TOOL_NAMES.has(item.tool)
+  ) {
+    return true;
+  }
+  return item.tool.startsWith("mcp__workspace_checks__");
+}
+
+export function dynamicToolDisplayName(
+  item: DynamicToolCall,
+  locale: Locale,
+): string {
+  const rawName = item.tool.startsWith("mcp__workspace_checks__")
+    ? item.tool.slice("mcp__workspace_checks__".length)
+    : item.tool;
+  if (!isLocalWorkspaceDynamicTool(item)) {
+    return item.namespace ? `${item.namespace}.${item.tool}` : item.tool;
+  }
+  const labels: Record<string, readonly [zh: string, en: string]> = {
+    git_status: ["检查 Git 状态", "Check Git status"],
+    list_files: ["浏览工作区目录", "List workspace files"],
+    read_file: ["读取工作区文件", "Read workspace file"],
+    run_ui_test: ["运行界面回归", "Run UI regression"],
+  };
+  const label = labels[rawName];
+  return label?.[locale === "zh" ? 0 : 1] ?? rawName;
 }
 
 export function dynamicToolKindLabel(

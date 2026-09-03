@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { agentPlatformBaseUrl } from "./agentPlatformClient";
+import {
+  agentPlatformBaseUrl,
+  agentPlatformInvocationUrl,
+} from "./agentPlatformClient";
 
 /*
  * The packaged desktop build resolved `/agent-platform-api`, a Vite dev-server
@@ -70,5 +73,33 @@ describe("agent-platform base URL", () => {
     vi.stubEnv("VITE_AGENT_PLATFORM_BASE_URL", "https://platform.example/api/");
 
     expect(agentPlatformBaseUrl()).toBe("https://platform.example/api");
+  });
+
+  it("resolves a relative Agent invocation through the development proxy", () => {
+    stubLocation("http://127.0.0.1:5175/");
+
+    expect(
+      agentPlatformInvocationUrl("/api/v1/open/agent/93/chat"),
+    ).toBe(
+      "http://127.0.0.1:5175/agent-platform-api/api/v1/open/agent/93/chat",
+    );
+  });
+
+  it("resolves a relative Agent invocation against the packaged backend", () => {
+    stubLocation("file:///Applications/CrewON.app/Contents/Resources/index.html");
+
+    expect(
+      agentPlatformInvocationUrl("/api/v1/open/agent/93/chat"),
+    ).toBe("http://127.0.0.1:8000/api/v1/open/agent/93/chat");
+  });
+
+  it("keeps a hosted HTTPS Agent invocation URL", () => {
+    stubLocation("file:///Applications/CrewON.app/Contents/Resources/index.html");
+
+    expect(
+      agentPlatformInvocationUrl(
+        "https://platform.example/api/v1/open/agent/93/chat",
+      ),
+    ).toBe("https://platform.example/api/v1/open/agent/93/chat");
   });
 });

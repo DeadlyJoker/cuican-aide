@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   CommandSceneHeader,
   CommandSceneQuickRow,
+  CommandThreadSceneSwitcher,
 } from "./CommandSceneHeader";
 import { scenePresets } from "../../lib/scene/sceneCatalog";
 
@@ -74,6 +75,23 @@ describe("CommandSceneHeader", () => {
     );
 
     expect(markup).not.toContain("quick-row");
+  });
+
+  it("renders a compact scene switcher for an active conversation", () => {
+    const markup = renderToStaticMarkup(
+      <CommandThreadSceneSwitcher
+        locale="zh"
+        scene="code"
+        onSceneChange={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('data-od-id="thread-scene-tabs"');
+    expect(markup).toContain('aria-label="当前会话场景"');
+    expect(markup).toContain('data-scene-target="office"');
+    expect(markup).toContain('data-scene-target="code"');
+    expect(markup).toContain('data-scene-target="design"');
+    expect(markup).toContain('aria-selected="true"');
   });
 });
 

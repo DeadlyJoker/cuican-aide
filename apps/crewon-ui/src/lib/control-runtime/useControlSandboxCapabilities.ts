@@ -12,10 +12,98 @@ const SANDBOX_ROOT = "/workspace";
 export type SandboxCapabilityClient = Pick<
   ControlApiClient,
   | "listSandboxDirectory"
+  | "readSandboxGitSummary"
   | "readSandboxDiff"
   | "readSandboxFile"
   | "runSandboxCommand"
 >;
+
+export type SandboxDiffCapabilityView = Awaited<
+  ReturnType<SandboxCapabilityClient["readSandboxDiff"]>
+>;
+
+function exactGitStats(view: SandboxDiffCapabilityView) {
+  const values = [view.changedFiles, view.additions, view.deletions];
+  return view.isGitRepository === true &&
+    view.statsComplete === true &&
+    values.every(
+      (value) =>
+        typeof value === "number" && Number.isSafeInteger(value) && value >= 0,
+    )
+    ? {
+        additions: view.additions as number,
+        changedFiles: view.changedFiles as number,
+        deletions: view.deletions as number,
+      }
+    : null;
+}
+
+export function sandboxDiffCapabilityPanel(
+  view: SandboxDiffCapabilityView,
+  locale: Locale,
+): CapabilityPanel {
+  const zh = locale === "zh";
+  const title = zh ? "当前改动" : "Current changes";
+  if (view.isGitRepository === false) {
+    return {
+      title,
+      subtitle: view.cwd,
+      body: zh
+        ? "当前工作区不是 Git 仓库。"
+        : "The current workspace is not a Git repository.",
+    };
+  }
+
+  const stats = exactGitStats(view);
+  const truncated = view.diffTruncated === true;
+  const number = new Intl.NumberFormat(zh ? "zh-CN" : "en-US");
+  const previewNotice = truncated
+    ? zh
+      ? "以下仅为截断预览；上方统计来自完整 Git 统计。"
+      : "The content below is a truncated preview; the totals above are complete Git statistics."
+    : null;
+  if (stats) {
+    const subtitle = zh
+      ? `${number.format(stats.changedFiles)} 个文件 · +${number.format(stats.additions)} / -${number.format(stats.deletions)} · 工作区沙箱`
+      : `${number.format(stats.changedFiles)} files · +${number.format(stats.additions)} / -${number.format(stats.deletions)} · workspace sandbox`;
+    const clean =
+      stats.changedFiles === 0 &&
+      stats.additions === 0 &&
+      stats.deletions === 0 &&
+      view.diff.length === 0;
+    return {
+      title,
+      subtitle,
+      body: clean
+        ? zh
+          ? "当前沙箱没有未提交改动。"
+          : "The sandbox has no uncommitted changes."
+        : [
+            previewNotice,
+            view.diff ||
+              (zh ? "没有可显示的差异内容。" : "No diff content is available."),
+          ]
+            .filter(Boolean)
+            .join("\n\n"),
+    };
+  }
+
+  return {
+    title,
+    subtitle: [
+      zh ? "变更统计不可用" : "Change totals unavailable",
+      truncated ? (zh ? "预览已截断" : "preview truncated") : null,
+      zh ? "工作区沙箱" : "workspace sandbox",
+    ]
+      .filter(Boolean)
+      .join(" · "),
+    body:
+      view.diff ||
+      (zh
+        ? "当前没有可显示的差异内容。"
+        : "No diff content is currently available."),
+  };
+}
 
 type SetCapabilityPanel = (
   panel:
@@ -131,7 +219,7 @@ export function useControlSandboxCapabilities(params: {
   );
 
   const readWorkspaceDiff = useCallback(async () => {
-    const { client, threadId } = requireRuntime();
+    const { client } = requireRuntime();
     params.setBusyToolId("review");
     params.setCapabilityPanel({
       title: params.locale === "zh" ? "当前改动" : "Current changes",
@@ -142,22 +230,10 @@ export function useControlSandboxCapabilities(params: {
           : "Reading sandbox git diff…",
     });
     try {
-      const view = await client.readSandboxDiff(threadId);
-      const files = view.diff.match(/^diff --git /gmu)?.length ?? 0;
-      const added = view.diff.match(/^\+(?!\+\+)/gmu)?.length ?? 0;
-      const removed = view.diff.match(/^-(?!--)/gmu)?.length ?? 0;
-      params.setCapabilityPanel({
-        title: params.locale === "zh" ? "当前改动" : "Current changes",
-        subtitle:
-          params.locale === "zh"
-            ? `${files} 个文件 · +${added} / -${removed} · 工作区沙箱`
-            : `${files} files · +${added} / -${removed} · workspace sandbox`,
-        body:
-          view.diff ||
-          (params.locale === "zh"
-            ? "当前沙箱没有未提交改动。"
-            : "The sandbox has no uncommitted changes."),
-      });
+      const view = await client.readSandboxDiff(null);
+      params.setCapabilityPanel(
+        sandboxDiffCapabilityPanel(view, params.locale),
+      );
     } catch (error) {
       params.setCapabilityPanel({
         title: params.locale === "zh" ? "当前改动" : "Current changes",

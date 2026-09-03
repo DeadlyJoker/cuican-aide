@@ -163,6 +163,37 @@ test("preserves exact frozen WorkflowVersion provenance on Run reads", async () 
   assert.equal(JSON.stringify(response).includes("definitionJson"), false);
 });
 
+test("hydrates a Run Plan through its separate strict resource", async () => {
+  const requests: string[] = [];
+  const response = {
+    runId: "run/1",
+    eventSequence: 4,
+    plan: {
+      schemaVersion: "crewon.run-plan.v0" as const,
+      planId: "run/1",
+      revision: 1,
+      explanation: null,
+      items: [
+        { itemId: "design", title: "Design", status: "inProgress" as const },
+      ],
+      createdAt: "2026-09-02T00:00:00Z",
+      updatedAt: "2026-09-02T00:00:00Z",
+    },
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async (input) => {
+      requests.push(String(input));
+      return jsonResponse(200, response);
+    },
+  });
+
+  assert.deepEqual(await client.getRunPlan("run/1"), response);
+  assert.deepEqual(requests, [
+    "https://control.example/api/v1/runs/run%2F1/plan",
+  ]);
+});
+
 test("starts a Workflow Run without client-owned digest or root Agent identity", async () => {
   const requests: { input: string; init: RequestInit }[] = [];
   const client = new ControlApiClient({
@@ -319,6 +350,7 @@ test("starts a Turn through one atomic typed mutation", async () => {
         content: "hello atomically",
         agentVersionId: null,
         executionIntent: "plan",
+        toolPermissionMode: "fullAccess",
       },
       "turn-start-1",
     ),
@@ -337,6 +369,7 @@ test("starts a Turn through one atomic typed mutation", async () => {
     content: "hello atomically",
     agentVersionId: null,
     executionIntent: "plan",
+    toolPermissionMode: "fullAccess",
   });
 });
 
@@ -954,6 +987,55 @@ test("reads one exact Thread snapshot cursor and rejects mismatches", async () =
   }
 });
 
+test("reads a bounded exact Thread task-change ledger and rejects forged shapes", async () => {
+  const requests: string[] = [];
+  const ledger = {
+    schemaVersion: "crewon.thread-task-change-ledger.v0" as const,
+    threadId: "thread/1",
+    threadRevision: 4,
+    historySequence: 19,
+    complete: true,
+    summary: {
+      schemaVersion: "crewon.workspace-change-summary.v0" as const,
+      paths: ["src/task.ts"],
+      additions: 5,
+      deletions: 2,
+      statsComplete: true,
+    },
+    eventCount: 2,
+    includedRunIds: ["run-1"],
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async (input) => {
+      requests.push(String(input));
+      return jsonResponse(200, ledger);
+    },
+  });
+
+  assert.deepEqual(await client.getThreadTaskChanges("thread/1"), ledger);
+  assert.deepEqual(requests, [
+    "https://control.example/api/v1/threads/thread%2F1/task-changes",
+  ]);
+
+  for (const malformed of [
+    { ...ledger, privateRunCursor: 6 },
+    { ...ledger, threadId: "thread-other" },
+    { ...ledger, complete: false },
+    { ...ledger, eventCount: 1 },
+    { ...ledger, includedRunIds: ["run-1", "run-1"] },
+  ]) {
+    const malformedClient = new ControlApiClient({
+      baseUrl: "https://control.example/",
+      fetch: async () => jsonResponse(200, malformed),
+    });
+    await assert.rejects(
+      malformedClient.getThreadTaskChanges("thread/1"),
+      hasProtocolCode("control_client_thread_task_changes_invalid"),
+    );
+  }
+});
+
 test("fails closed before a Goal mutation when idempotency is unavailable", async () => {
   let fetchCalls = 0;
   const client = new ControlApiClient({
@@ -1185,7 +1267,18 @@ test("uses the draft and Thread-scoped PIM sandbox workbench routes", async () =
       byteLength: 27,
       truncated: false,
     },
-    { cwd: "/workspace", diff: "diff --git a/src/task.ts b/src/task.ts\n" },
+    {
+      cwd: "/workspace",
+      diff: "diff --git a/src/task.ts b/src/task.ts\n",
+      isGitRepository: true,
+      branch: "main",
+      head: "a".repeat(40),
+      changedFiles: 1,
+      additions: 2,
+      deletions: 1,
+      statsComplete: true,
+      diffTruncated: false,
+    },
     {
       cwd: "/workspace/src",
       exitCode: 0,
@@ -1211,7 +1304,7 @@ test("uses the draft and Thread-scoped PIM sandbox workbench routes", async () =
       .content,
     "export const ready = true;\n",
   );
-  assert.match((await client.readSandboxDiff(null)).diff, /^diff --git/u);
+  assert.deepEqual(await client.readSandboxDiff(null), responses[2]);
   assert.deepEqual(
     await client.runSandboxCommand(null, {
       command: "cd src && pwd",
@@ -1234,6 +1327,176 @@ test("uses the draft and Thread-scoped PIM sandbox workbench routes", async () =
     new Headers(requests[3]?.init.headers).get("x-csrf-token"),
     "csrf-token",
   );
+});
+
+test("normalizes legacy sandbox diff responses without inventing Git state", async () => {
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async () =>
+      jsonResponse(200, {
+        cwd: "/workspace",
+        diff: "diff --git a/legacy.ts b/legacy.ts\n",
+      }),
+  });
+
+  assert.deepEqual(await client.readSandboxDiff(null), {
+    cwd: "/workspace",
+    diff: "diff --git a/legacy.ts b/legacy.ts\n",
+    isGitRepository: "unknown",
+    branch: null,
+    head: null,
+    changedFiles: null,
+    additions: null,
+    deletions: null,
+    statsComplete: false,
+    diffTruncated: false,
+  });
+});
+
+test("reads the strict global workspace Git summary without a raw diff", async () => {
+  const requests: string[] = [];
+  const expected = {
+    cwd: "/workspace",
+    isGitRepository: true,
+    branch: "feature/task-detail",
+    head: "a".repeat(40),
+    changedFiles: 12,
+    additions: 727,
+    deletions: 86,
+    statsComplete: true,
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async (input) => {
+      requests.push(String(input));
+      return jsonResponse(200, expected);
+    },
+  });
+
+  assert.deepEqual(await client.readSandboxGitSummary(null), expected);
+  assert.deepEqual(requests, [
+    "https://control.example/api/v1/sandbox/git-summary",
+  ]);
+  assert.equal("diff" in expected, false);
+});
+
+test("rejects scoped or malformed workspace Git summaries", async () => {
+  const valid = {
+    cwd: "/workspace",
+    isGitRepository: true,
+    branch: "main",
+    head: "a".repeat(40),
+    changedFiles: 0,
+    additions: 0,
+    deletions: 0,
+    statsComplete: true,
+  };
+  const invalidResponses = [
+    { ...valid, diff: "diff --git a/private.ts b/private.ts\n" },
+    { ...valid, branch: "main\nforged" },
+    { ...valid, additions: -1 },
+    { ...valid, head: "not-a-commit" },
+    { ...valid, cwd: "/Users/private/project" },
+    { ...valid, statsComplete: "yes" },
+    {
+      ...valid,
+      isGitRepository: false,
+      branch: null,
+      head: null,
+      changedFiles: 1,
+      statsComplete: false,
+    },
+  ];
+
+  for (const response of invalidResponses) {
+    const client = new ControlApiClient({
+      baseUrl: "https://control.example/",
+      fetch: async () => jsonResponse(200, response),
+    });
+    await assert.rejects(
+      client.readSandboxGitSummary(null),
+      hasProtocolCode("control_client_sandbox_git_summary_invalid"),
+    );
+  }
+
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async () => jsonResponse(200, valid),
+  });
+  await assert.rejects(
+    client.readSandboxGitSummary("thread-1" as unknown as null),
+    hasProtocolCode("control_client_sandbox_git_summary_scope_invalid"),
+  );
+});
+
+test("rejects malformed sandbox Git metadata", async () => {
+  const invalidResponses = [
+    {
+      cwd: "/workspace",
+      diff: "",
+      isGitRepository: true,
+      branch: "main",
+    },
+    {
+      cwd: "/workspace",
+      diff: "",
+      isGitRepository: true,
+      branch: "main\nforged",
+      head: "a".repeat(40),
+      changedFiles: 0,
+      additions: 0,
+      deletions: 0,
+      statsComplete: true,
+      diffTruncated: false,
+    },
+    {
+      cwd: "/workspace",
+      diff: "",
+      isGitRepository: true,
+      branch: null,
+      head: "not-a-commit",
+      changedFiles: 0,
+      additions: 0,
+      deletions: 0,
+      statsComplete: true,
+      diffTruncated: false,
+    },
+    {
+      cwd: "/workspace",
+      diff: "unexpected",
+      isGitRepository: false,
+      branch: null,
+      head: null,
+      changedFiles: 0,
+      additions: 0,
+      deletions: 0,
+      statsComplete: false,
+      diffTruncated: false,
+    },
+    {
+      cwd: "/workspace",
+      diff: "",
+      isGitRepository: true,
+      branch: "main",
+      head: "a".repeat(40),
+      changedFiles: -1,
+      additions: 0,
+      deletions: 0,
+      statsComplete: true,
+      diffTruncated: false,
+    },
+  ];
+
+  for (const response of invalidResponses) {
+    const client = new ControlApiClient({
+      baseUrl: "https://control.example/",
+      fetch: async () => jsonResponse(200, response),
+    });
+    await assert.rejects(
+      client.readSandboxDiff(null),
+      hasProtocolCode("control_client_sandbox_diff_invalid"),
+    );
+  }
 });
 
 function jsonResponse(status: number, body: unknown): Response {

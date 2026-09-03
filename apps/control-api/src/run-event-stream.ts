@@ -1,7 +1,7 @@
 import type { ServerResponse } from "node:http";
 
 import type { ActorContext, RunApplicationService } from "@crewon/application";
-import type { RunEventViewMode } from "@crewon/contracts";
+import type { RunEventExtension, RunEventViewMode } from "@crewon/contracts";
 import type { RunLifecycleEvent } from "@crewon/domain";
 import type { FastifyReply, FastifyRequest } from "fastify";
 
@@ -19,9 +19,14 @@ export async function streamRunEvents(input: {
   runId: string;
   afterSequence: number;
   view: RunEventViewMode;
+  extensions: readonly RunEventExtension[];
   heartbeatIntervalMs: number | null;
 }): Promise<void> {
-  await input.application.getRun(input.actor, input.runId);
+  if (input.view === "transcript") {
+    await input.application.getRunTranscript(input.actor, input.runId);
+  } else {
+    await input.application.getRun(input.actor, input.runId);
+  }
   const subscription = input.eventHub.subscribe(input.runId);
   input.reply.hijack();
 
@@ -54,16 +59,20 @@ export async function streamRunEvents(input: {
     let cursor = input.afterSequence;
     let terminal = false;
     while (!closed) {
-      const events = await input.application.listRunEvents(input.actor, {
+      const query = {
         runId: input.runId,
         afterSequence: cursor,
         limit: EVENT_PAGE_SIZE,
-      });
+      };
+      const events =
+        input.view === "transcript"
+          ? await input.application.listRunTranscriptEvents(input.actor, query)
+          : await input.application.listRunEvents(input.actor, query);
       for (const event of events) {
         if (event.sequence <= cursor) {
           continue;
         }
-        if (!writeEvent(response, event, input.view)) {
+        if (!writeEvent(response, event, input.view, input.extensions)) {
           close();
           break;
         }
@@ -87,8 +96,12 @@ export async function streamRunEvents(input: {
       if (event.sequence <= cursor) {
         continue;
       }
-      await input.application.getRun(input.actor, input.runId);
-      if (!writeEvent(response, event, input.view)) {
+      if (input.view === "transcript") {
+        await input.application.getRunTranscript(input.actor, input.runId);
+      } else {
+        await input.application.getRun(input.actor, input.runId);
+      }
+      if (!writeEvent(response, event, input.view, input.extensions)) {
         close();
         break;
       }
@@ -113,8 +126,9 @@ function writeEvent(
   response: ServerResponse,
   event: RunLifecycleEvent,
   view: RunEventViewMode,
+  extensions: readonly RunEventExtension[],
 ): boolean {
-  const projected = projectRunEventForView(event, view);
+  const projected = projectRunEventForView(event, view, extensions);
   if (projected === null) {
     return true;
   }

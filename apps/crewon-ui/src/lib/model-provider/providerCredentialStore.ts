@@ -34,10 +34,29 @@ export type ProviderCredentialUpsert = Readonly<{
   secret: string | null;
 }>;
 
+export type ProviderModelCatalogRequest = Readonly<{
+  /** Raw key typed in the form; the host falls back to stored credentials. */
+  apiKey: string | null;
+  /** Current model field value, kept as the first choice when non-null. */
+  defaultModelId: string | null;
+  endpoint: string;
+  environmentVariable: string | null;
+  providerId: string;
+}>;
+
+export type ProviderModelCatalogResult = Readonly<{
+  models: readonly string[];
+  status: string;
+}>;
+
 export interface ProviderCredentialStorePort {
   activate(providerId: string): Promise<ProviderCredentialCatalog>;
   catalog(): Promise<ProviderCredentialCatalog>;
   delete(providerId: string): Promise<ProviderCredentialCatalog>;
+  /** Discovers the models an endpoint advertises via its /models API. */
+  modelCatalog(
+    request: ProviderModelCatalogRequest,
+  ): Promise<ProviderModelCatalogResult>;
   upsert(request: ProviderCredentialUpsert): Promise<ProviderCredentialCatalog>;
 }
 
@@ -64,6 +83,13 @@ export function createProviderCredentialStore(
       return parseCatalog(
         await invoke("provider_credential_delete", {
           request: { providerId: parseProviderId(providerId) },
+        }),
+      );
+    },
+    async modelCatalog(request) {
+      return parseModelCatalogResult(
+        await invoke("provider_model_catalog", {
+          request: parseModelCatalogRequest(request),
         }),
       );
     },
@@ -100,6 +126,15 @@ export function providerCredentialStore(): ProviderCredentialStorePort | null {
       case "provider_credential_upsert":
         result = await bridge.upsert(args?.request);
         break;
+      case "provider_model_catalog": {
+        const request = args?.request as
+          | ProviderModelCatalogRequest
+          | undefined;
+        if (request === undefined) {
+          throw new Error("provider_model_catalog_request_invalid");
+        }
+        return bridge.modelCatalog(request);
+      }
       default:
         throw new Error("provider_credential_command_unknown");
     }
@@ -136,6 +171,66 @@ function parseUpsert(
     providerId,
     secret,
   };
+}
+
+function parseModelCatalogRequest(
+  value: ProviderModelCatalogRequest,
+): ProviderModelCatalogRequest {
+  const providerId = parseProviderId(value.providerId);
+  const endpoint = parseEndpoint(value.endpoint);
+  const apiKey =
+    value.apiKey === null ? null : requiredModelText(value.apiKey, 32_768);
+  const defaultModelId =
+    value.defaultModelId === null
+      ? null
+      : requiredModelText(value.defaultModelId, 256);
+  const environmentVariable =
+    value.environmentVariable === null
+      ? null
+      : parseEnvironmentVariable(value.environmentVariable);
+  return {
+    apiKey,
+    defaultModelId,
+    endpoint,
+    environmentVariable,
+    providerId,
+  };
+}
+
+function parseModelCatalogResult(value: unknown): ProviderModelCatalogResult {
+  exactObject(value, ["models", "status"]);
+  if (
+    !Array.isArray(value.models) ||
+    value.models.length > 32 ||
+    !value.models.every((id) => parseModelCatalogText(id, 256) !== null) ||
+    typeof value.status !== "string" ||
+    value.status.length === 0 ||
+    value.status.length > 64
+  ) {
+    throw new Error("provider_model_catalog_result_invalid");
+  }
+  return { models: value.models as readonly string[], status: value.status };
+}
+
+function requiredModelText(value: unknown, maximum: number): string {
+  const parsed = parseModelCatalogText(value, maximum);
+  if (parsed === null) {
+    throw new Error("provider_model_catalog_request_invalid");
+  }
+  return parsed;
+}
+
+function parseModelCatalogText(value: unknown, maximum: number): string | null {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    new TextEncoder().encode(value).byteLength > maximum ||
+    value.trim() !== value ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  ) {
+    return null;
+  }
+  return value;
 }
 
 function parseCatalog(value: unknown): ProviderCredentialCatalog {

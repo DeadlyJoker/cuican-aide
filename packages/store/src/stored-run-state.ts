@@ -1,4 +1,5 @@
 import {
+  validateRunPlan,
   validateRunGoalAccountingCursor,
   validateRunGoalBinding,
   parseFrozenWorkflowVersionBinding,
@@ -19,12 +20,11 @@ export function normalizeStoredRunState(
   const hasMode = Object.hasOwn(value, "collaborationMode");
   const hasBinding = Object.hasOwn(value, "goalBinding");
   const hasGoalAccounting = Object.hasOwn(value, "goalAccounting");
-  const hasGoalContinuationMode = Object.hasOwn(
-    value,
-    "goalContinuationMode",
-  );
+  const hasGoalContinuationMode = Object.hasOwn(value, "goalContinuationMode");
   const hasUsage = Object.hasOwn(value, "usage");
+  const hasPlan = Object.hasOwn(value, "plan");
   const hasPurpose = Object.hasOwn(value, "purpose");
+  const hasToolPermissionMode = Object.hasOwn(value, "toolPermissionMode");
   const hasWorkflowBinding = Object.hasOwn(value, "workflowVersionBinding");
   let normalized = state;
   if (hasWorkflowBinding) {
@@ -43,10 +43,17 @@ export function normalizeStoredRunState(
   ) {
     throw new RunStoreError(code);
   }
+  if (
+    hasToolPermissionMode &&
+    value.toolPermissionMode !== "requestApproval" &&
+    value.toolPermissionMode !== "approveForMe" &&
+    value.toolPermissionMode !== "fullAccess"
+  ) {
+    throw new RunStoreError(code);
+  }
   const effectivePurpose = value.purpose ?? "turn";
   if (
-    (effectivePurpose === "workflow") !==
-      hasWorkflowBinding ||
+    (effectivePurpose === "workflow") !== hasWorkflowBinding ||
     (effectivePurpose === "workflow" && value.collaborationMode !== "default")
   ) {
     throw new RunStoreError(code);
@@ -118,6 +125,23 @@ export function normalizeStoredRunState(
       ...normalized,
       usage: normalizeStoredRunUsage(value.usage, code),
     };
+  }
+  if (hasPlan && value.plan !== null) {
+    try {
+      validateRunPlan(value.plan as NonNullable<RunState["plan"]>);
+    } catch (error) {
+      throw new RunStoreError(code, { cause: error });
+    }
+    const plan = value.plan as NonNullable<RunState["plan"]>;
+    if (
+      value.collaborationMode !== "default" ||
+      effectivePurpose !== "turn" ||
+      plan.planId !== value.runId ||
+      Date.parse(plan.createdAt) < Date.parse(value.createdAt) ||
+      Date.parse(plan.updatedAt) > Date.parse(value.updatedAt)
+    ) {
+      throw new RunStoreError(code);
+    }
   }
   return normalized;
 }

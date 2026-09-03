@@ -461,6 +461,10 @@ export function validateToolExecutionCompletionInput(
     input.receipt.result.output !== completed.data.output ||
     input.receipt.result.isError !== completed.data.isError ||
     input.receipt.result.artifactRef !== completed.data.artifactRef ||
+    !sameWorkspaceChanges(
+      input.receipt.result.workspaceChanges,
+      completed.data.workspaceChanges,
+    ) ||
     input.receipt.resolvedAt !== completed.occurredAt ||
     input.attempt.stepId.trim().length === 0 ||
     input.attempt.finishedAt !== completed.occurredAt
@@ -473,6 +477,26 @@ export function validateToolExecutionCompletionInput(
     checkpointDigest: null,
   });
   return runId;
+}
+
+function sameWorkspaceChanges(
+  left: NonNullable<ToolExecutionReceiptState["result"]>["workspaceChanges"],
+  right: Extract<
+    RunLifecycleEvent,
+    { type: "tool.completed" }
+  >["data"]["workspaceChanges"],
+): boolean {
+  if (left === undefined || right === undefined) {
+    return left === right;
+  }
+  return (
+    left.schemaVersion === right.schemaVersion &&
+    left.additions === right.additions &&
+    left.deletions === right.deletions &&
+    left.statsComplete === right.statsComplete &&
+    left.paths.length === right.paths.length &&
+    left.paths.every((path, index) => path === right.paths[index])
+  );
 }
 
 export function applyToolCompletionGoalMutation(
@@ -2468,6 +2492,7 @@ export function reduceGoalContinuationRun(
     event.data.agentVersionId !== previousRun.agentVersionId ||
     event.data.policySnapshotId !== previousRun.policySnapshotId ||
     event.data.workspaceBindingId !== previousRun.workspaceBindingId ||
+    event.data.toolPermissionMode !== previousRun.toolPermissionMode ||
     event.data.collaborationMode !== "default" ||
     !goalBindingMatchesGoal(event.data.goalBinding, goal) ||
     outbox.tenantId !== previousRun.tenantId ||

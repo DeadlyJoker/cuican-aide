@@ -1,5 +1,7 @@
 import {
   parseRateLimitSnapshot,
+  parseWorkspaceChangeSummary,
+  type RunEventExtension,
   type RunEventView,
   type RunEventViewMode,
 } from "@crewon/contracts";
@@ -8,37 +10,44 @@ import {
   ControlApiClient,
   ControlApiProtocolError,
 } from "./control-api-client.ts";
+import {
+  parseRunPlanView,
+  RunPlanViewValidationError,
+} from "./run-plan-view.ts";
 
 const MAX_FRAME_BYTES = 128 * 1024;
 const MAX_BUFFER_BYTES = 256 * 1024;
-const RUN_EVENT_TYPES = new Set([
-  "run.created",
-  "run.started",
-  "run.approval.required",
-  "run.resumed",
-  "run.suspended",
-  "run.reconciliation.required",
-  "run.cancel.requested",
-  "run.completed",
-  "run.failed",
-  "run.canceled",
-  "run.goal.accounting.updated",
-  "run.goal.steering.consumed",
-  "segment.started",
-  "model.sampling.retry",
-  "model.transport.fallback",
-  "model.output.delta",
-  "tool.requested",
-  "tool.completed",
-  "usage.recorded",
-  "rate_limit.updated",
-  "context.compacted",
-  "segment.checkpointed",
-  "segment.completed",
-  "segment.failed",
-  "message.completed",
-  "plan.proposed",
-]);
+const MAX_TOOL_PREVIEW_BYTES = 16 * 1024;
+const RUN_EVENT_TYPES = {
+  "context.compacted": true,
+  "message.completed": true,
+  "model.output.delta": true,
+  "model.sampling.retry": true,
+  "model.transport.fallback": true,
+  "plan.proposed": true,
+  "rate_limit.updated": true,
+  "run.approval.required": true,
+  "run.cancel.requested": true,
+  "run.canceled": true,
+  "run.completed": true,
+  "run.created": true,
+  "run.failed": true,
+  "run.goal.accounting.updated": true,
+  "run.goal.steering.consumed": true,
+  "run.plan.updated": true,
+  "run.reconciliation.required": true,
+  "run.resumed": true,
+  "run.started": true,
+  "run.suspended": true,
+  "segment.checkpointed": true,
+  "segment.completed": true,
+  "segment.failed": true,
+  "segment.provider_continuation": true,
+  "segment.started": true,
+  "tool.completed": true,
+  "tool.requested": true,
+  "usage.recorded": true,
+} satisfies Record<RunEventView["type"], true>;
 
 export async function* streamRunEvents(
   client: ControlApiClient,
@@ -46,6 +55,7 @@ export async function* streamRunEvents(
     runId: string;
     afterSequence?: number;
     view?: RunEventViewMode;
+    extensions?: readonly RunEventExtension[];
     signal?: AbortSignal;
   },
 ): AsyncIterable<RunEventView> {
@@ -54,15 +64,44 @@ export async function* streamRunEvents(
     throw new ControlApiProtocolError("control_client_event_cursor_invalid");
   }
   const view = input.view ?? "client";
-  if (view !== "client" && view !== "audit") {
+  if (view !== "client" && view !== "audit" && view !== "transcript") {
     throw new ControlApiProtocolError("control_client_event_view_invalid");
   }
-  const response = await client.openRunEventStream({
+  let responseExtensions = normalizeExtensions(input.extensions);
+  let responseView = view;
+  let response = await client.openRunEventStream({
     runId: input.runId,
     afterSequence,
     view,
+    extensions: responseExtensions,
     signal: input.signal,
   });
+  if (response.status === 400 && responseExtensions.length > 0) {
+    await response.body?.cancel().catch(() => {
+      // Older servers reject extensions before opening an SSE body.
+    });
+    responseExtensions = [];
+    response = await client.openRunEventStream({
+      runId: input.runId,
+      afterSequence,
+      view: responseView,
+      extensions: responseExtensions,
+      signal: input.signal,
+    });
+  }
+  if (view === "transcript" && response.status === 400) {
+    await response.body?.cancel().catch(() => {
+      // Older servers reject the transcript view before opening an SSE body.
+    });
+    responseView = "client";
+    response = await client.openRunEventStream({
+      runId: input.runId,
+      afterSequence,
+      view: responseView,
+      extensions: responseExtensions,
+      signal: input.signal,
+    });
+  }
   if (response.status !== 200) {
     throw new ControlApiProtocolError("control_client_event_stream_failed");
   }
@@ -96,7 +135,12 @@ export async function* streamRunEvents(
       while (boundary >= 0) {
         const frame = buffer.slice(0, boundary);
         buffer = buffer.slice(boundary + 2);
-        const event = parseFrame(frame, input.runId);
+        const event = parseFrame(
+          frame,
+          input.runId,
+          responseView,
+          responseExtensions,
+        );
         if (event !== null) {
           yield event;
         }
@@ -105,7 +149,12 @@ export async function* streamRunEvents(
     }
     buffer = normalizeNewlines(buffer, true);
     if (buffer.trim().length > 0) {
-      const event = parseFrame(buffer, input.runId);
+      const event = parseFrame(
+        buffer,
+        input.runId,
+        responseView,
+        responseExtensions,
+      );
       if (event !== null) {
         yield event;
       }
@@ -122,7 +171,12 @@ export async function* streamRunEvents(
   }
 }
 
-function parseFrame(frame: string, expectedRunId: string): RunEventView | null {
+function parseFrame(
+  frame: string,
+  expectedRunId: string,
+  view: RunEventViewMode,
+  extensions: readonly RunEventExtension[],
+): RunEventView | null {
   if (byteLength(frame) > MAX_FRAME_BYTES) {
     throw new ControlApiProtocolError("control_client_event_frame_too_large");
   }
@@ -162,7 +216,7 @@ function parseFrame(frame: string, expectedRunId: string): RunEventView | null {
   } catch {
     throw new ControlApiProtocolError("control_client_event_json_invalid");
   }
-  if (!isRunEvent(value, expectedRunId)) {
+  if (!isRunEvent(value, expectedRunId, view, extensions)) {
     throw new ControlApiProtocolError("control_client_event_invalid");
   }
   if (String(value.sequence) !== id || value.type !== eventType) {
@@ -174,6 +228,8 @@ function parseFrame(frame: string, expectedRunId: string): RunEventView | null {
 function isRunEvent(
   value: unknown,
   expectedRunId: string,
+  view: RunEventViewMode,
+  extensions: readonly RunEventExtension[],
 ): value is RunEventView {
   return (
     isPlainObject(value) &&
@@ -192,15 +248,20 @@ function isRunEvent(
     Number(value.sequence) >= 1 &&
     isTimestamp(value.occurredAt) &&
     typeof value.type === "string" &&
-    RUN_EVENT_TYPES.has(value.type) &&
+    Object.hasOwn(RUN_EVENT_TYPES, value.type) &&
     isPlainObject(value.data) &&
-    isRunEventData(value.type, value.data)
+    isRunEventData(value.type, value.data, view, extensions) &&
+    (value.type !== "run.plan.updated" ||
+      (isPlainObject(value.data.plan) &&
+        value.data.plan.planId === expectedRunId))
   );
 }
 
 function isRunEventData(
   type: string,
   data: Readonly<Record<string, unknown>>,
+  view: RunEventViewMode,
+  extensions: readonly RunEventExtension[],
 ): boolean {
   switch (type) {
     case "run.started":
@@ -235,6 +296,20 @@ function isRunEventData(
         (data.goalId === null) === (data.goalRevision === null) &&
         typeof data.steeringPending === "boolean"
       );
+    case "run.plan.updated":
+      if (
+        !extensions.includes("run-plan-v1") ||
+        !hasExactKeys(data, ["plan"])
+      ) {
+        return false;
+      }
+      try {
+        parseRunPlanView(data.plan);
+        return true;
+      } catch (error) {
+        if (error instanceof RunPlanViewValidationError) return false;
+        throw error;
+      }
     case "segment.started":
       return (
         hasExactKeys(data, ["attempt", "segmentId"]) &&
@@ -280,25 +355,60 @@ function isRunEventData(
         new TextEncoder().encode(data.delta).byteLength <= 16_384
       );
     case "tool.requested":
-      return (
-        hasExactKeys(data, ["callId", "kind", "name", "segmentId"]) &&
-        isToolIdentity(data)
-      );
-    case "tool.completed":
+      if (view !== "transcript") {
+        return (
+          hasExactKeys(data, ["callId", "kind", "name", "segmentId"]) &&
+          isToolIdentity(data)
+        );
+      }
       return (
         hasExactKeys(data, [
+          "callId",
+          "inputPreview",
+          "inputTruncated",
+          "kind",
+          "name",
+          "segmentId",
+        ]) &&
+        isToolIdentity(data) &&
+        isToolPreview(data.inputPreview) &&
+        typeof data.inputTruncated === "boolean"
+      );
+    case "tool.completed":
+      if (view !== "transcript") {
+        return (
+          hasExactKeys(data, [
+            "artifactAvailable",
+            "callId",
+            "isError",
+            "kind",
+            "name",
+            "outputTruncated",
+            "segmentId",
+          ]) &&
+          isToolIdentity(data) &&
+          typeof data.isError === "boolean" &&
+          typeof data.outputTruncated === "boolean" &&
+          typeof data.artifactAvailable === "boolean"
+        );
+      }
+      return (
+        hasExactOptionalWorkspaceChanges(data, [
           "artifactAvailable",
           "callId",
           "isError",
           "kind",
           "name",
+          "outputPreview",
           "outputTruncated",
           "segmentId",
         ]) &&
         isToolIdentity(data) &&
         typeof data.isError === "boolean" &&
+        isToolPreview(data.outputPreview) &&
         typeof data.outputTruncated === "boolean" &&
-        typeof data.artifactAvailable === "boolean"
+        typeof data.artifactAvailable === "boolean" &&
+        isWorkspaceChanges(data.workspaceChanges)
       );
     case "usage.recorded":
       return isUsageData(data, [
@@ -335,6 +445,17 @@ function isRunEventData(
     case "segment.checkpointed":
     case "segment.completed":
       return exactBoundedText(data, ["segmentId"], "segmentId", 128);
+    case "segment.provider_continuation":
+      return (
+        hasExactKeys(data, [
+          "sampleIndex",
+          "segmentId",
+          "throughHistorySequence",
+        ]) &&
+        isBoundedText(data.segmentId, 128) &&
+        isPositiveInteger(data.sampleIndex) &&
+        isPositiveInteger(data.throughHistorySequence)
+      );
     case "segment.failed":
       return (
         hasExactKeys(data, ["code", "retryable", "segmentId"]) &&
@@ -361,6 +482,28 @@ function isRunEventData(
   }
 }
 
+function hasExactOptionalWorkspaceChanges(
+  data: Readonly<Record<string, unknown>>,
+  required: readonly string[],
+): boolean {
+  return hasExactKeys(
+    data,
+    Object.hasOwn(data, "workspaceChanges")
+      ? [...required, "workspaceChanges"]
+      : required,
+  );
+}
+
+function isWorkspaceChanges(value: unknown): boolean {
+  if (value === undefined) return true;
+  try {
+    parseWorkspaceChangeSummary(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function isUsageData(
   data: Readonly<Record<string, unknown>>,
   keys: readonly string[],
@@ -382,6 +525,14 @@ function isToolIdentity(data: Readonly<Record<string, unknown>>): boolean {
     isBoundedText(data.callId, 128) &&
     (data.kind === "function" || data.kind === "custom") &&
     isBoundedText(data.name, 128)
+  );
+}
+
+function isToolPreview(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length <= MAX_TOOL_PREVIEW_BYTES &&
+    byteLength(value) <= MAX_TOOL_PREVIEW_BYTES
   );
 }
 
@@ -416,6 +567,26 @@ function isPositiveInteger(value: unknown): boolean {
 
 function isNonNegativeInteger(value: unknown): boolean {
   return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+
+function normalizeExtensions(
+  value: readonly RunEventExtension[] | undefined,
+): readonly RunEventExtension[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (!Array.isArray(value) || value.length > 1) {
+    throw new ControlApiProtocolError(
+      "control_client_event_extensions_invalid",
+    );
+  }
+  if (value.length === 0) return [];
+  if (value[0] !== "run-plan-v1") {
+    throw new ControlApiProtocolError(
+      "control_client_event_extensions_invalid",
+    );
+  }
+  return [value[0]];
 }
 
 function normalizeNewlines(value: string, final: boolean): string {

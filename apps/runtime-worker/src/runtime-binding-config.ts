@@ -7,6 +7,7 @@ import {
   DirectResponsesTransport,
   type DirectResponsesTransportConfig,
 } from "@crewon/agent-responses";
+import { CloudAgentTransport } from "./cloud-agent-transport.ts";
 import {
   createStdioMcpRuntimeGroup,
   parseMcpStdioConfig,
@@ -42,15 +43,28 @@ type RuntimeBindingConfig = Readonly<{
     contentDigest: string;
     authorityId: string;
     workspaceBindingId: string | null;
-    provider: Readonly<{
-      kind: "directResponses";
-      endpoint: string;
-      apiKeyEnvironment: string | null;
-      storeResponses: boolean;
-      requestProfile: "standard" | "responsesLite";
-      idleTimeoutMs: number;
-      sequencePolicy: "required" | "whenPresent";
-    }>;
+    provider: Readonly<
+      | {
+          kind: "directResponses";
+          endpoint: string;
+          apiKeyEnvironment: string | null;
+          storeResponses: boolean;
+          requestProfile: "standard" | "responsesLite";
+          idleTimeoutMs: number;
+          sequencePolicy: "required" | "whenPresent";
+        }
+      | {
+          kind: "cloudAgent";
+          invocationUrl: string;
+          modelId: string;
+          agentId: number;
+          apiKeyEnvironment: string | null;
+          storeResponses: boolean;
+          requestProfile: "standard" | "responsesLite";
+          idleTimeoutMs: number;
+          sequencePolicy: "required" | "whenPresent";
+        }
+    >;
     mcpStdioConfigPath: string | null;
     deviceToolConfigPath: string | null;
     remoteMcpConfigPath: string | null;
@@ -216,6 +230,24 @@ function parseBinding(
 function parseProvider(
   value: unknown,
 ): RuntimeBindingConfig["bindings"][number]["provider"] {
+  if (!isPlainObject(value) || typeof value.kind !== "string") {
+    throw new Error("agent_version_runtime_provider_invalid");
+  }
+  if (value.kind === "directResponses") {
+    return parseDirectResponsesProvider(value);
+  }
+  if (value.kind === "cloudAgent") {
+    return parseCloudAgentProvider(value);
+  }
+  throw new Error("agent_version_runtime_provider_invalid");
+}
+
+function parseDirectResponsesProvider(
+  value: Record<string, unknown>,
+): Extract<
+  RuntimeBindingConfig["bindings"][number]["provider"],
+  { kind: "directResponses" }
+> {
   if (
     !hasExactKeys(value, [
       "apiKeyEnvironment",
@@ -226,7 +258,6 @@ function parseProvider(
       "sequencePolicy",
       "storeResponses",
     ]) ||
-    value.kind !== "directResponses" ||
     typeof value.storeResponses !== "boolean" ||
     (value.requestProfile !== "standard" &&
       value.requestProfile !== "responsesLite") ||
@@ -249,8 +280,62 @@ function parseProvider(
     throw new Error("agent_version_runtime_provider_key_invalid");
   }
   return {
-    kind: value.kind,
+    kind: "directResponses",
     endpoint: bounded(value.endpoint, 2048),
+    apiKeyEnvironment,
+    storeResponses: value.storeResponses,
+    requestProfile: value.requestProfile,
+    idleTimeoutMs: Number(value.idleTimeoutMs),
+    sequencePolicy: value.sequencePolicy,
+  };
+}
+
+function parseCloudAgentProvider(
+  value: Record<string, unknown>,
+): Extract<
+  RuntimeBindingConfig["bindings"][number]["provider"],
+  { kind: "cloudAgent" }
+> {
+  if (
+    !hasExactKeys(value, [
+      "agentId",
+      "apiKeyEnvironment",
+      "idleTimeoutMs",
+      "invocationUrl",
+      "kind",
+      "modelId",
+      "requestProfile",
+      "sequencePolicy",
+      "storeResponses",
+    ]) ||
+    typeof value.storeResponses !== "boolean" ||
+    (value.requestProfile !== "standard" &&
+      value.requestProfile !== "responsesLite") ||
+    (value.sequencePolicy !== "required" &&
+      value.sequencePolicy !== "whenPresent") ||
+    !Number.isSafeInteger(value.idleTimeoutMs) ||
+    Number(value.idleTimeoutMs) < 1 ||
+    Number(value.idleTimeoutMs) > 300_000 ||
+    !Number.isSafeInteger(value.agentId) ||
+    Number(value.agentId) < 1
+  ) {
+    throw new Error("agent_version_runtime_provider_invalid");
+  }
+  const apiKeyEnvironment =
+    value.apiKeyEnvironment === null
+      ? null
+      : bounded(value.apiKeyEnvironment, 128);
+  if (
+    apiKeyEnvironment !== null &&
+    !/^[A-Z][A-Z0-9_]*$/u.test(apiKeyEnvironment)
+  ) {
+    throw new Error("agent_version_runtime_provider_key_invalid");
+  }
+  return {
+    kind: "cloudAgent",
+    invocationUrl: bounded(value.invocationUrl, 2048),
+    modelId: bounded(value.modelId, 256),
+    agentId: Number(value.agentId),
     apiKeyEnvironment,
     storeResponses: value.storeResponses,
     requestProfile: value.requestProfile,
@@ -273,6 +358,16 @@ function runtimeBindings(
           nativeProviderApiKey ||
           requiredEnvironment(environment, binding.provider.apiKeyEnvironment);
     const expectedMaterializationDigest = materializationDigest(binding);
+    const createTransport = (() => {
+      if (binding.provider.kind === "cloudAgent") {
+        const provider = binding.provider;
+        return (version: CompiledAgentVersion) =>
+          createCloudAgentTransport(provider, version, apiKey);
+      }
+      const provider = binding.provider;
+      return (version: CompiledAgentVersion) =>
+        directResponsesTransport(provider, version, apiKey);
+    })();
     return {
       tenantId: binding.tenantId,
       agentVersionId: binding.agentVersionId,
@@ -281,8 +376,7 @@ function runtimeBindings(
       workspaceBindingId: binding.workspaceBindingId,
       materializationDigest: expectedMaterializationDigest,
       toolRuntimeMode: binding.toolRuntimeMode,
-      createTransport: (version) =>
-        directResponsesTransport(binding.provider, version, apiKey),
+      createTransport,
       createToolRuntime: (version) =>
         createBoundToolRuntime(
           binding,
@@ -416,7 +510,10 @@ async function createBoundToolRuntime(
 }
 
 function directResponsesTransport(
-  provider: RuntimeBindingConfig["bindings"][number]["provider"],
+  provider: Extract<
+    RuntimeBindingConfig["bindings"][number]["provider"],
+    { kind: "directResponses" }
+  >,
   version: CompiledAgentVersion,
   apiKey: string | null,
 ): DirectResponsesTransport {
@@ -438,6 +535,42 @@ function directResponsesTransport(
       ),
     },
   });
+}
+
+/**
+ * Creates a transport that forwards requests to a cloud Agent's invocation URL.
+ *
+ * Cloud Agents expose a custom streaming endpoint that accepts a `message` /
+ * `history` payload and emits `message` / `done` / `error` SSE events. This
+ * uses the dedicated {@link CloudAgentTransport} rather than the standard
+ * Responses API transport.
+ */
+function createCloudAgentTransport(
+  provider: Extract<
+    RuntimeBindingConfig["bindings"][number]["provider"],
+    { kind: "cloudAgent" }
+  >,
+  version: CompiledAgentVersion,
+  apiKey: string | null,
+): CloudAgentTransport {
+  return new CloudAgentTransport(
+    {
+      invocationUrl: provider.invocationUrl,
+      apiKey: apiKey ?? "",
+      model: provider.modelId,
+      agentId: provider.agentId,
+      idleTimeoutMs: provider.idleTimeoutMs,
+    },
+    {
+      identity: {
+        adapterName: version.model.adapterName,
+        adapterVersion: baseAdapterVersion(
+          version.model.adapterVersion,
+          provider.requestProfile,
+        ),
+      },
+    },
+  );
 }
 
 async function createConnectedMcpRuntime(

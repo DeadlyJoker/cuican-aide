@@ -8,6 +8,55 @@ import type { Locale } from "../../lib/i18n";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { SceneQuickActionIconGlyph } from "./sceneQuickActionIcons";
 
+function CommandSceneTabs({
+  compact = false,
+  locale,
+  scene,
+  onSceneChange,
+}: {
+  compact?: boolean;
+  locale: Locale;
+  scene: CommandScene;
+  onSceneChange: (scene: CommandScene) => void;
+}) {
+  const localizedPresets = locale === "zh" ? scenePresets : scenePresetsEn;
+  const sceneOptions = Object.values(localizedPresets);
+
+  return (
+    <Tabs
+      className={compact ? "thread-scene-switcher" : "items-center"}
+      data-od-id={compact ? "thread-scene-tabs" : "scene-tabs"}
+      onValueChange={(value) => onSceneChange(value as CommandScene)}
+      value={scene}
+    >
+      <TabsList
+        aria-label={
+          locale === "zh"
+            ? compact
+              ? "当前会话场景"
+              : "场景"
+            : compact
+              ? "Current conversation scene"
+              : "Scene"
+        }
+        className={compact ? "thread-scene-switcher-list" : undefined}
+      >
+        {sceneOptions.map((option) => (
+          <TabsTrigger
+            className={compact ? "thread-scene-switcher-option" : undefined}
+            data-scene-target={option.scene}
+            key={option.scene}
+            title={option.subtitle}
+            value={option.scene}
+          >
+            {option.tabLabel}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+    </Tabs>
+  );
+}
+
 export function CommandSceneHeader({
   locale = "zh",
   scene,
@@ -21,7 +70,6 @@ export function CommandSceneHeader({
 }) {
   const localizedPresets = locale === "zh" ? scenePresets : scenePresetsEn;
   const preset = localizedPresets[scene];
-  const sceneOptions = Object.values(localizedPresets);
 
   return (
     <>
@@ -39,26 +87,31 @@ export function CommandSceneHeader({
        * navigation that moves focus, and aria-selected all come from the
        * primitive instead of hand-rolled handlers.
        */}
-      <Tabs
-        className="items-center"
-        data-od-id="scene-tabs"
-        onValueChange={(value) => onSceneChange(value as CommandScene)}
-        value={scene}
-      >
-        <TabsList aria-label={locale === "zh" ? "场景" : "Scene"}>
-          {sceneOptions.map((option) => (
-            <TabsTrigger
-              data-scene-target={option.scene}
-              key={option.scene}
-              title={option.subtitle}
-              value={option.scene}
-            >
-              {option.tabLabel}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
+      <CommandSceneTabs
+        locale={locale}
+        scene={scene}
+        onSceneChange={onSceneChange}
+      />
     </>
+  );
+}
+
+export function CommandThreadSceneSwitcher({
+  locale = "zh",
+  scene,
+  onSceneChange,
+}: {
+  locale?: Locale;
+  scene: CommandScene;
+  onSceneChange: (scene: CommandScene) => void;
+}) {
+  return (
+    <CommandSceneTabs
+      compact
+      locale={locale}
+      scene={scene}
+      onSceneChange={onSceneChange}
+    />
   );
 }
 

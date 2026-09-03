@@ -1,4 +1,10 @@
-import { useEffect, useRef, useState, type MutableRefObject } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MutableRefObject,
+} from "react";
 import { ArrowDown, Code2, ListTree, Sparkles, Terminal } from "lucide-react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import type { ThreadItem } from "@crewon/app-server-protocol/v2/ThreadItem";
@@ -278,15 +284,24 @@ export function transcriptActivityKey(
 }
 
 export function shouldFollowTranscriptUpdate({
-  isActive,
   isNearBottom,
   isThreadChange,
 }: {
-  isActive: boolean;
   isNearBottom: boolean;
   isThreadChange: boolean;
 }): boolean {
-  return isThreadChange || isNearBottom || isActive;
+  return isThreadChange || isNearBottom;
+}
+
+export function transcriptObserverStructureKey(
+  thread: Thread | null,
+  streamingText: string,
+): string {
+  return [
+    thread?.id ?? "no-thread",
+    thread?.turns.length ?? 0,
+    streamingText.length > 0 ? "streaming" : "settled",
+  ].join("|");
 }
 
 function transcriptScroller(anchor: HTMLDivElement): HTMLElement | null {
@@ -303,27 +318,25 @@ function scrollTranscriptToBottom(anchor: HTMLDivElement) {
   anchor.scrollIntoView({ block: "end" });
 }
 
-function cancelTranscriptFollowFrames(frameIds: MutableRefObject<number[]>) {
-  for (const frameId of frameIds.current) {
-    window.cancelAnimationFrame(frameId);
+function cancelTranscriptFollowFrame(frameId: MutableRefObject<number | null>) {
+  if (frameId.current !== null) {
+    window.cancelAnimationFrame(frameId.current);
+    frameId.current = null;
   }
-  frameIds.current = [];
 }
 
 function scheduleTranscriptFollow(
   anchor: HTMLDivElement,
-  frameIds: MutableRefObject<number[]>,
+  frameId: MutableRefObject<number | null>,
 ) {
-  cancelTranscriptFollowFrames(frameIds);
-  scrollTranscriptToBottom(anchor);
-  const firstFrame = window.requestAnimationFrame(() => {
+  if (frameId.current !== null) {
+    return;
+  }
+
+  frameId.current = window.requestAnimationFrame(() => {
+    frameId.current = null;
     scrollTranscriptToBottom(anchor);
-    const secondFrame = window.requestAnimationFrame(() => {
-      scrollTranscriptToBottom(anchor);
-    });
-    frameIds.current = [secondFrame];
   });
-  frameIds.current = [firstFrame];
 }
 
 function turnTimeLabel(turn: Turn, locale: Locale): string | null {
@@ -682,6 +695,7 @@ function TranscriptProcessGroup({
 }
 
 export function Transcript({
+  activeTurnId,
   commandLabel,
   crewonLabel,
   emptyDescription,
@@ -705,11 +719,14 @@ export function Transcript({
   youLabel,
 }: TranscriptProps) {
   const followAnchorRef = useRef<HTMLDivElement>(null);
-  const followFrameIdsRef = useRef<number[]>([]);
+  const followFrameRef = useRef<number | null>(null);
   const previousThreadIdRef = useRef<string | null>(null);
   const shouldFollowRef = useRef(true);
   const [isScrolledUp, setIsScrolledUp] = useState(false);
-  const items = thread?.turns.flatMap((turn) => turn.items) ?? [];
+  const items = useMemo(
+    () => thread?.turns.flatMap((turn) => turn.items) ?? [],
+    [thread],
+  );
   const lastTurn = thread?.turns[thread.turns.length - 1] ?? null;
   const hasVisibleProcessActivity = Boolean(
     lastTurn?.items.some((item) => {
@@ -734,23 +751,40 @@ export function Transcript({
     items.length === 0 &&
     !streamingText &&
     !shouldShowThinking;
-  const itemLabels: TranscriptItemLabels = {
-    commandLabel,
-    crewonLabel,
-    filesLabel,
-    planLabel,
-    reasoningLabel,
-    youLabel,
-  };
-  const activityKey = transcriptActivityKey(
+  const itemLabels = useMemo<TranscriptItemLabels>(
+    () => ({
+      commandLabel,
+      crewonLabel,
+      filesLabel,
+      planLabel,
+      reasoningLabel,
+      youLabel,
+    }),
+    [
+      commandLabel,
+      crewonLabel,
+      filesLabel,
+      planLabel,
+      reasoningLabel,
+      youLabel,
+    ],
+  );
+  const activityKey = useMemo(
+    () => transcriptActivityKey(thread, "", shouldShowThinking),
+    [shouldShowThinking, thread],
+  );
+  const observerStructureKey = transcriptObserverStructureKey(
     thread,
     streamingText,
-    shouldShowThinking,
   );
+  const streamingFollowKey =
+    typeof ResizeObserver === "undefined"
+      ? streamingText.length
+      : streamingText.length > 0;
 
   useEffect(
     () => () => {
-      cancelTranscriptFollowFrames(followFrameIdsRef);
+      cancelTranscriptFollowFrame(followFrameRef);
     },
     [],
   );
@@ -775,12 +809,7 @@ export function Transcript({
         scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
       isNearBottom = distanceFromBottom < 180;
     }
-    const isActive =
-      Boolean(streamingText) ||
-      shouldShowThinking ||
-      lastTurn?.status === "inProgress";
     const shouldFollow = shouldFollowTranscriptUpdate({
-      isActive,
       isNearBottom,
       isThreadChange,
     });
@@ -789,12 +818,12 @@ export function Transcript({
       return;
     }
 
-    scheduleTranscriptFollow(anchor, followFrameIdsRef);
+    scheduleTranscriptFollow(anchor, followFrameRef);
   }, [
     activityKey,
     lastTurn?.status,
     shouldShowThinking,
-    streamingText,
+    streamingFollowKey,
     thread?.id,
   ]);
 
@@ -809,24 +838,37 @@ export function Transcript({
       return;
     }
 
-    const updateFollowState = () => {
+    const commitFollowState = () => {
       const distanceFromBottom =
         scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight;
       shouldFollowRef.current = distanceFromBottom < 180;
       setIsScrolledUp(distanceFromBottom >= 180);
     };
+    let scrollFrame: number | null = null;
+    const updateFollowState = () => {
+      if (scrollFrame !== null) {
+        return;
+      }
+      scrollFrame = window.requestAnimationFrame(() => {
+        scrollFrame = null;
+        commitFollowState();
+      });
+    };
     scroller.addEventListener("scroll", updateFollowState, { passive: true });
-    updateFollowState();
+    commitFollowState();
 
     if (typeof ResizeObserver === "undefined") {
       return () => {
+        if (scrollFrame !== null) {
+          window.cancelAnimationFrame(scrollFrame);
+        }
         scroller.removeEventListener("scroll", updateFollowState);
       };
     }
 
     const observer = new ResizeObserver(() => {
       if (shouldFollowRef.current) {
-        scheduleTranscriptFollow(anchor, followFrameIdsRef);
+        scheduleTranscriptFollow(anchor, followFrameRef);
       }
     });
     for (const child of Array.from(scroller.children)) {
@@ -834,10 +876,13 @@ export function Transcript({
     }
 
     return () => {
+      if (scrollFrame !== null) {
+        window.cancelAnimationFrame(scrollFrame);
+      }
       observer.disconnect();
       scroller.removeEventListener("scroll", updateFollowState);
     };
-  }, [activityKey, thread?.id]);
+  }, [observerStructureKey, thread?.id]);
 
   if (!thread) {
     return (
@@ -899,6 +944,11 @@ export function Transcript({
             durationLabel ?? turnTimeLabel(turn, locale);
           const dividerLabel = turnLabel(turn, locale);
           const finalAgentMessage = finalAgentMessageForTurn(turn);
+          const hidesDurableFinalWhileStreaming =
+            Boolean(streamingText) &&
+            (activeTurnId
+              ? turn.id === activeTurnId
+              : turn.id === lastTurn?.id && turn.status === "inProgress");
           const finalAgentSourceIds =
             finalAgentMessage?.sourceIds ?? new Set<string>();
           const processRender = turnProcessRenderItems(
@@ -952,6 +1002,7 @@ export function Transcript({
 
                 if (item.type === "agentMessage") {
                   if (
+                    hidesDurableFinalWhileStreaming ||
                     !finalAgentMessage ||
                     !finalAgentMessage.sourceIds.has(item.id) ||
                     itemIndex !== finalAgentMessage.insertionIndex
@@ -1018,7 +1069,7 @@ export function Transcript({
             setIsScrolledUp(false);
             const anchor = followAnchorRef.current;
             if (anchor) {
-              scheduleTranscriptFollow(anchor, followFrameIdsRef);
+              scheduleTranscriptFollow(anchor, followFrameRef);
             }
           }}
           title={locale === "zh" ? "回到底部" : "Scroll to bottom"}

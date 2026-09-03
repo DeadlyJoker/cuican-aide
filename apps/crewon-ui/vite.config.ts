@@ -6,11 +6,8 @@ import { writeFile } from "node:fs/promises";
 
 const AGENT_PLATFORM_UNAVAILABLE_BODY = JSON.stringify({
   error: "agent-platform unavailable",
-  message:
-    "Local agent-platform is not running. CrewON app-server conversations are still available.",
+  message: "账号服务暂时不可用，请稍后重试。",
 });
-const AGENT_PLATFORM_REACHABILITY_TTL_MS = 2_000;
-const AGENT_PLATFORM_REACHABILITY_TIMEOUT_MS = 8_000;
 const MERMAID_CHUNK_PACKAGES = new Set([
   "@braintree/sanitize-url",
   "@iconify/utils",
@@ -105,93 +102,6 @@ function controlSessionPlugin(config: {
           response.end();
         });
       }
-    },
-  };
-}
-
-type ReachabilityCache = {
-  available: boolean;
-  checkedAt: number;
-  pending: Promise<boolean> | null;
-};
-
-function parseReachabilityUrl(target: string): string | null {
-  try {
-    const url = new URL(target);
-    if (url.protocol !== "http:" && url.protocol !== "https:") {
-      return null;
-    }
-    return `${url.origin}/__crewon_agent_platform_probe__`;
-  } catch {
-    return null;
-  }
-}
-
-function isAgentPlatformReachable(
-  reachabilityUrl: string,
-  cache: ReachabilityCache,
-): Promise<boolean> {
-  const now = Date.now();
-  if (
-    !cache.pending &&
-    now - cache.checkedAt < AGENT_PLATFORM_REACHABILITY_TTL_MS
-  ) {
-    return Promise.resolve(cache.available);
-  }
-
-  cache.pending ??= new Promise<boolean>((resolve) => {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(
-      () => controller.abort(),
-      AGENT_PLATFORM_REACHABILITY_TIMEOUT_MS,
-    );
-    const finish = (available: boolean) => {
-      clearTimeout(timeoutId);
-      cache.available = available;
-      cache.checkedAt = Date.now();
-      cache.pending = null;
-      resolve(available);
-    };
-
-    fetch(reachabilityUrl, {
-      method: "HEAD",
-      signal: controller.signal,
-    }).then(
-      () => finish(true),
-      () => finish(false),
-    );
-  });
-
-  return cache.pending;
-}
-
-function agentPlatformFallbackPlugin(target: string): Plugin {
-  const reachabilityUrl = parseReachabilityUrl(target);
-  const cache: ReachabilityCache = {
-    available: false,
-    checkedAt: 0,
-    pending: null,
-  };
-
-  return {
-    name: "crewon-agent-platform-fallback",
-    configureServer(server) {
-      server.middlewares.use(
-        "/agent-platform-api",
-        async (_request, response, next) => {
-          if (
-            !reachabilityUrl ||
-            (await isAgentPlatformReachable(reachabilityUrl, cache))
-          ) {
-            next();
-            return;
-          }
-
-          response.statusCode = 503;
-          response.setHeader("Content-Type", "application/json");
-          response.end(AGENT_PLATFORM_UNAVAILABLE_BODY);
-        },
-      );
     },
   };
 }
@@ -312,7 +222,6 @@ export default defineConfig(({ mode }) => {
         csrfToken: controlCsrfToken,
         sessionToken: controlSessionToken,
       }),
-      agentPlatformFallbackPlugin(agentPlatformTarget),
       tailwindcss(),
       react(),
     ],

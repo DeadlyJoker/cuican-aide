@@ -141,6 +141,9 @@ export class TurnApplicationService {
         workspaceBindingId: command.route.workspaceBindingId,
         collaborationMode:
           command.executionIntent === "plan" ? "plan" : "default",
+        ...(command.toolPermissionMode === undefined
+          ? {}
+          : { toolPermissionMode: command.toolPermissionMode }),
         goalBinding: goal.binding,
         ...(command.executionIntent === "resumeGoal"
           ? { goalContinuationMode: "deferred" as const }
@@ -460,6 +463,9 @@ function idempotencyDescriptor(
     content: command.content,
     requestedAgentVersionId: command.requestedAgentVersionId,
     executionIntent: command.executionIntent,
+    ...(command.toolPermissionMode === undefined
+      ? {}
+      : { toolPermissionMode: command.toolPermissionMode }),
   };
   return {
     scope: canonicalJson({
@@ -512,6 +518,14 @@ function validateRequestCommand(command: StartTurnRequestCommand): void {
     command.executionIntent !== "resumeGoal"
   ) {
     throw new ApplicationError("validation", "execution_intent_invalid");
+  }
+  if (
+    command.toolPermissionMode !== undefined &&
+    command.toolPermissionMode !== "requestApproval" &&
+    command.toolPermissionMode !== "approveForMe" &&
+    command.toolPermissionMode !== "fullAccess"
+  ) {
+    throw new ApplicationError("validation", "tool_permission_mode_invalid");
   }
 }
 

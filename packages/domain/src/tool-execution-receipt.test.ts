@@ -33,6 +33,13 @@ test("moves a reconcilable mutation through unknown outcome to completion", () =
       outputDigest: DIGEST_B,
       isError: false,
       artifactRef: null,
+      workspaceChanges: {
+        schemaVersion: "crewon.workspace-change-summary.v0",
+        paths: ["src/task.ts"],
+        additions: 3,
+        deletions: 1,
+        statsComplete: true,
+      },
     },
   });
 
@@ -46,11 +53,48 @@ test("moves a reconcilable mutation through unknown outcome to completion", () =
       outputDigest: DIGEST_B,
       isError: false,
       artifactRef: null,
+      workspaceChanges: {
+        schemaVersion: "crewon.workspace-change-summary.v0",
+        paths: ["src/task.ts"],
+        additions: 3,
+        deletions: 1,
+        statsComplete: true,
+      },
     },
     dispatchedAt: "2026-08-08T00:00:01Z",
     updatedAt: "2026-08-08T00:00:03Z",
     resolvedAt: "2026-08-08T00:00:03Z",
   });
+});
+
+test("rejects non-canonical workspace metadata before completing a receipt", () => {
+  const dispatched = dispatchToolExecutionReceipt(
+    receipt(),
+    "2026-08-08T00:00:01Z",
+  );
+
+  assert.throws(
+    () =>
+      resolveToolExecutionReceipt(dispatched, {
+        status: "completed",
+        resolvedAt: "2026-08-08T00:00:02Z",
+        providerReceiptId: "provider-receipt-1",
+        result: {
+          output: "done",
+          outputDigest: DIGEST_B,
+          isError: false,
+          artifactRef: null,
+          workspaceChanges: {
+            schemaVersion: "crewon.workspace-change-summary.v0",
+            paths: ["src/../secret"],
+            additions: 1,
+            deletions: 0,
+            statsComplete: true,
+          },
+        },
+      }),
+    hasCode("tool_workspace_changes_invalid"),
+  );
 });
 
 test("fails closed when a mutation cannot be reconciled", () => {

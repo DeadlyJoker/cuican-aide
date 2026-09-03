@@ -56,6 +56,9 @@ export function CommandWorkflowPanel({
   const [execution, setExecution] = useState<CrewonWorkflowExecution | null>(
     null,
   );
+  // No pendingExecutionId needed - progress is tracked via onReload
+  // polling during the busy state, and cancelExecutionId is derived
+  // from the persisted run data.
   const selected = available.find(
     (workflow) => workflow.config.workflowId === openedId,
   );
@@ -68,10 +71,15 @@ export function CommandWorkflowPanel({
     execution?.executedNodes ??
     []
   ).find((node) => node.status === "waitingForApproval");
-  const currentExecutionId = latestRun?.executionId ?? execution?.executionId;
-  const runActive = matchesActiveWorkflowStatus(
-    (persistedExecution ?? execution)?.status,
-  );
+  // Use the real executionId from the persisted run (via onReload)
+  // for cancel. During the initial blocking onRun call, the real
+  // executionId may not be available until the first reload picks it
+  // up. pendingExecutionId is only used for UI state tracking.
+  const cancelExecutionId = latestRun?.executionId ?? execution?.executionId;
+  const runActive =
+    matchesActiveWorkflowStatus(
+      (persistedExecution ?? execution)?.status,
+    ) || busy;
 
   useEffect(() => {
     if (openedId !== null && !selected) {
@@ -89,20 +97,28 @@ export function CommandWorkflowPanel({
     setError(null);
     setExecution(null);
     setSubmittedInput(prompt);
+    // Poll for progress updates while the blocking run call is in flight.
+    const progressInterval = setInterval(() => {
+      void onReload();
+    }, 2000);
     try {
-      setExecution(await onRun(selected, prompt));
+      const result = await onRun(selected, prompt);
+      setExecution(result);
       setInput("");
     } catch (runError) {
       setError(
         runError instanceof Error ? runError.message : "这次协作没有完成",
       );
     } finally {
+      clearInterval(progressInterval);
       setBusy(false);
+      // Final reload to pick up the settled state.
+      void onReload();
     }
   }
 
   async function resolveGate(decision: "approve" | "reject") {
-    if (!selected || !currentExecutionId || !pendingGate || controlBusy) {
+    if (!selected || !cancelExecutionId || !pendingGate || controlBusy) {
       return;
     }
     setControlBusy(true);
@@ -111,7 +127,7 @@ export function CommandWorkflowPanel({
       setExecution(
         await onResolveGate(
           selected,
-          currentExecutionId,
+          cancelExecutionId!,
           pendingGate.nodeId,
           decision,
           gateComment.trim() || null,
@@ -129,13 +145,13 @@ export function CommandWorkflowPanel({
   }
 
   async function cancelRun() {
-    if (!selected || !currentExecutionId || !runActive || controlBusy) {
+    if (!selected || !cancelExecutionId || !runActive || controlBusy) {
       return;
     }
     setControlBusy(true);
     setError(null);
     try {
-      setExecution(await onCancel(selected, currentExecutionId));
+      setExecution(await onCancel(selected, cancelExecutionId));
       await onReload();
     } catch (cancelError) {
       setError(
@@ -254,7 +270,7 @@ export function CommandWorkflowPanel({
             <RotateCw aria-hidden="true" />
             同步
           </button>
-          {runActive ? (
+            {runActive && cancelExecutionId ? (
             <button
               aria-label="取消当前协作流运行"
               className="button compact workflow-cancel-button"
@@ -344,7 +360,11 @@ export function CommandWorkflowPanel({
                 <span className="team-avatar">流</span>
                 <div>
                   <strong>协作团队</strong>
-                  <p>团队正在按步骤推进…</p>
+                  <p>
+                    {(persistedExecution ?? execution)?.status === "running"
+                      ? "团队正在推进，已完成部分节点…"
+                      : "团队正在按步骤推进…"}
+                  </p>
                 </div>
               </article>
             ) : null}
@@ -370,6 +390,10 @@ export function CommandWorkflowPanel({
               </span>
             }
             disabled={busy || runActive || controlBusy}
+            // Allow cancel even during the blocking onRun call.
+            // The button is hidden below when runActive is false.
+            // runActive now includes busy state, so the button shows during
+            // the entire run lifecycle.
             id="workflow-message-input"
             placeholder="继续推进这个协作流…"
             sendLabel="运行协作流"

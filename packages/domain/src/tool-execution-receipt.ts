@@ -1,3 +1,8 @@
+import {
+  validateWorkspaceChangeSummary,
+  type WorkspaceChangeSummary,
+} from "./workspace-change-summary.ts";
+
 export type ToolExecutionEffect = "readOnly" | "mutation";
 export type ToolExecutionRecovery = "replaySafe" | "reconcilable";
 export type ToolActionIntentState = Readonly<{
@@ -40,6 +45,7 @@ export type ToolExecutionResult = Readonly<{
   outputDigest: string;
   isError: boolean;
   artifactRef: string | null;
+  workspaceChanges?: WorkspaceChangeSummary;
 }>;
 
 export type ToolExecutionReceiptState = Readonly<{
@@ -412,6 +418,13 @@ function validateResult(result: ToolExecutionResult): void {
     512,
     "tool_artifact_ref_invalid",
   );
+  if (result.workspaceChanges !== undefined) {
+    try {
+      validateWorkspaceChangeSummary(result.workspaceChanges);
+    } catch {
+      throw new ToolExecutionReceiptError("tool_workspace_changes_invalid");
+    }
+  }
 }
 
 function requireStatus(

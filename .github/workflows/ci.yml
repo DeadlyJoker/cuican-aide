@@ -17,12 +17,6 @@ jobs:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
 
-      - name: Verify Crewon Rust Cargo manifests inherit workspace settings
-        run: python3 .github/scripts/verify_cargo_workspace_manifests.py
-
-      - name: Verify Bazel clippy flags match Cargo workspace lints
-        run: python3 .github/scripts/verify_bazel_clippy_lints.py
-
       - name: Setup pnpm
         uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
         with:
@@ -35,6 +29,12 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Verify the TypeScript product boundary
+        run: pnpm crewon:boundary:check
+
+      - name: Verify protocol closure
+        run: pnpm --filter @crewon/app-server-protocol check
 
       - name: Typecheck the architecture foundation
         run: pnpm --filter './packages/**' -r typecheck
@@ -60,23 +60,13 @@ jobs:
       - name: Test the Device Gateway
         run: pnpm --filter @crewon/device-gateway test
 
-      - name: Test desktop sidecar staging contract
-        run: node --test scripts/stage-app-server-sidecar.test.mjs
+      - name: Test desktop runtime staging contract
+        run: node --experimental-strip-types --test scripts/stage-desktop-runtime.test.ts
 
       - name: Ensure root README.md contains only ASCII and certain Unicode code points
         run: ./scripts/asciicheck.py README.md
       - name: Check root README ToC
         run: python3 scripts/readme_toc.py README.md
-
-      - uses: taiki-e/install-action@44c6d64aa62cd779e873306675c7a58e86d6d532 # v2.62.49
-        with:
-          tool: just@1.51.0
-      - name: Install uv
-        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b # v8.1.0
-        with:
-          version: "0.11.3"
-      - name: Check formatting (run `just fmt` to fix)
-        run: just fmt-check
 
       - name: Prettier (run `pnpm run format:fix` to fix)
         run: pnpm run format

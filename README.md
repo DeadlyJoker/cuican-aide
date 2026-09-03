@@ -1,33 +1,28 @@
-# Crewon
+# CrewON
 
-Crewon is the shared backend for PC, web, and mobile agent experiences.
+CrewON is the shared TypeScript platform for PC, web, and mobile agent experiences.
 
-This repository was renamed from its previous legacy product identity to Crewon. New
-product-facing surfaces and active crates should use `crewon`; remaining legacy names should be
-limited to compatibility boundaries or staged migration work.
+## Workspace
 
-## Direction
+Product applications live in `apps/`:
 
-The active product surfaces are:
+- `crewon-ui`: web UI and Electron desktop client
+- `control-api`: durable thread, message, run, approval, artifact, and settings APIs
+- `runtime-worker`: model execution, tools, context, and run settlement
+- `device-gateway`: authenticated device connections and fenced dispatch
+- `web-bff`: browser-facing identity and Control API boundary
 
-- PC client
-- Web client
-- Mobile client
-
-The terminal CLI/TUI shells are no longer product surfaces. New shared product logic lives in the
-TypeScript Domain, Application, Agent Kernel, Store, Control API, Runtime Worker, and protocol
-packages. The CrewON desktop client uses Electron, and neither its build nor its runtime requires
-Tauri or Rust.
+Reusable domain, application, storage, protocol, agent, and tool code lives in `packages/`.
 
 ## Development
 
-Run the complete local TypeScript stack with `pnpm crewon:dev`, or launch the packaged desktop
-runtime with `pnpm ui:desktop`. CrewON product code lives under `apps/` and `packages/`.
-Compatibility code used by other repository components remains under `codex-rs`, but it is not a
-CrewON build or runtime dependency. Follow [AGENTS.md](AGENTS.md) for repository conventions,
-formatting, and test commands.
+Use Node.js 24 and pnpm 10.
 
-See [ARCHITECTURE.md](ARCHITECTURE.md) for architecture navigation,
-[ARCHITECTURE_FINAL.md](ARCHITECTURE_FINAL.md) for the canonical target, and
-[artifacts/migration/ws1-implementation-status.md](artifacts/migration/ws1-implementation-status.md)
-for the current verified migration state.
+```bash
+pnpm install
+pnpm crewon:dev
+```
+
+Launch the Electron client with `pnpm ui:desktop`. Run `pnpm crewon:boundary:check` before submitting architecture or packaging changes.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the current runtime topology, [docs/contributing.md](docs/contributing.md) for development checks, and [docs/desktop-release.md](docs/desktop-release.md) for desktop release procedures.

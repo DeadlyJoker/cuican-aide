@@ -1,10 +1,30 @@
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
 import {
+  createConfiguredToolRuntime,
   createModelTransport,
   responsesCompatibilityProfile,
 } from "./runtime-process-environment.ts";
+
+test("composes the desktop workspace command into the released tool catalog", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-command-catalog-"));
+  try {
+    const runtime = await createConfiguredToolRuntime({
+      CREWON_DESKTOP_WORKSPACE_ROOT: directory,
+    });
+    assert.deepEqual(
+      runtime?.definitions().map(({ name }) => name),
+      ["workspace_run_command"],
+    );
+    await runtime?.close?.();
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
 
 test("uses the native Responses contract only for OpenAI endpoints", () => {
   assert.equal(responsesCompatibilityProfile("openai"), null);

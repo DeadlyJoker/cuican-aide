@@ -1,6 +1,0 @@
-load("//:defs.bzl", "crewon_rust_crate")
-
-crewon_rust_crate(
-    name = "chatgpt",
-    crate_name = "crewon_chatgpt",
-)

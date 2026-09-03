@@ -20,6 +20,7 @@ import {
 } from "@crewon/tool-broker";
 
 import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
+import { createConfiguredLocalWorkspaceCommandToolRuntime } from "./local-workspace-command-tool-runtime.ts";
 import { createConfiguredPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
 
 export function requiredEnvironment(name: string): string {
@@ -164,20 +165,25 @@ export function responsesCompatibilityProfile(
     : { requestProfile: "responsesLite", sequencePolicy: "whenPresent" };
 }
 
-export async function createConfiguredToolRuntime(): Promise<
-  ToolRuntimePort | undefined
-> {
+export async function createConfiguredToolRuntime(
+  environment: Readonly<Record<string, string | undefined>> = process.env,
+): Promise<ToolRuntimePort | undefined> {
   const runtimes: ToolRuntimePort[] = [];
   try {
-    const pimSandbox = createConfiguredPimSandboxToolRuntime(process.env);
+    const pimSandbox = createConfiguredPimSandboxToolRuntime(environment);
     if (pimSandbox !== undefined) {
       runtimes.push(pimSandbox);
     }
-    const mcp = await createConfiguredMcpRuntime();
+    const localWorkspace =
+      createConfiguredLocalWorkspaceCommandToolRuntime(environment);
+    if (localWorkspace !== undefined) {
+      runtimes.push(localWorkspace);
+    }
+    const mcp = await createConfiguredMcpRuntime(environment);
     if (mcp !== undefined) {
       runtimes.push(mcp);
     }
-    const deviceConfigPath = process.env.CREWON_DEVICE_TOOL_CONFIG_PATH?.trim();
+    const deviceConfigPath = environment.CREWON_DEVICE_TOOL_CONFIG_PATH?.trim();
     if (deviceConfigPath) {
       runtimes.push(loadDeviceToolRuntime(deviceConfigPath));
     }
@@ -193,10 +199,10 @@ export async function createConfiguredToolRuntime(): Promise<
   }
 }
 
-async function createConfiguredMcpRuntime(): Promise<
-  McpRuntimeGroup | undefined
-> {
-  const path = process.env.CREWON_MCP_STDIO_CONFIG_PATH?.trim();
+async function createConfiguredMcpRuntime(
+  environment: Readonly<Record<string, string | undefined>>,
+): Promise<McpRuntimeGroup | undefined> {
+  const path = environment.CREWON_MCP_STDIO_CONFIG_PATH?.trim();
   if (!path) {
     return undefined;
   }

@@ -154,7 +154,9 @@ function ComposerForm({
   const busy = disabled || submitting || pending;
   async function submitValue() {
     if (paletteOpen) return;
-    if (running) return onStop?.();
+    // When running with non-empty text, submit as a follow-up (steer) instead of stopping.
+    // Only when the input is empty does running fall back to stop.
+    if (running && !value.trim()) return onStop?.();
     setPending(true);
     try {
       await guardRef.current(
@@ -300,21 +302,27 @@ function ComposerTextarea({
 
 function ComposerSendButton({ sendLabel }: { sendLabel: string }) {
   const core = useCore();
-  const label = core.running ? core.stopLabel : sendLabel;
+  // When running with non-empty text, show the send button (follow-up / steer).
+  // When running with empty text, show the stop button.
+  const hasFollowUpText = core.running && core.value.trim().length > 0;
+  const shouldShowStop = core.running && !hasFollowUpText;
+  const label = shouldShowStop ? core.stopLabel : sendLabel;
   return (
     <button
       aria-busy={core.busy || undefined}
       aria-label={label}
       className="send-button"
-      data-action={core.running ? "stop" : "send"}
+      data-action={shouldShowStop ? "stop" : "send"}
       disabled={
-        !core.running && (core.busy || core.submitBlocked || !core.value.trim())
+        !shouldShowStop &&
+        !hasFollowUpText &&
+        (core.busy || core.submitBlocked || !core.value.trim())
       }
       title={label}
-      type={core.running ? "button" : "submit"}
-      onClick={core.running ? core.onStop : undefined}
+      type={shouldShowStop ? "button" : "submit"}
+      onClick={shouldShowStop ? core.onStop : undefined}
     >
-      {core.running ? (
+      {shouldShowStop ? (
         <Square aria-hidden="true" fill="currentColor" size={12} strokeWidth={0} />
       ) : (
         <ArrowUp aria-hidden="true" size={16} strokeWidth={2.2} />

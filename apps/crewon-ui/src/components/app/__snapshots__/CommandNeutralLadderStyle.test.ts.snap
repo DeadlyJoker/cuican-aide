@@ -45,9 +45,7 @@ exports[`command shell dark locals > snapshots the reference-matched sidebar mat
   color: var(--command-sidebar-muted);
 }
 
-:root[data-theme="dark"]
-  .screen-shell.command-screen
-  .sidebar-brand {
+:root[data-theme="dark"] .screen-shell.command-screen .sidebar-brand {
   color: var(--command-sidebar-fg);
 }
 

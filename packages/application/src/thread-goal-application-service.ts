@@ -432,6 +432,9 @@ export class ThreadGoalApplicationService {
         createdByActorId: actor.actorId,
         ...resolvedRoute,
         collaborationMode: "default",
+        ...(replacedRun?.toolPermissionMode === undefined
+          ? {}
+          : { toolPermissionMode: replacedRun.toolPermissionMode }),
         goalBinding: goalBinding(goal, this.#digester),
       },
     };

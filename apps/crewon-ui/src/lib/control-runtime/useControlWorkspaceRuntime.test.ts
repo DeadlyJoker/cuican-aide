@@ -47,6 +47,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
     expect(desktop.value.getSnapshot()).toEqual(
       expect.objectContaining({
         mutationAuthority: "desktop",
+        nativeWorkspaceRevision: "4:7",
         nativeWorkspace: {
           availability: "available",
           displayName: "cuican-aide",
@@ -78,6 +79,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
       availability: "available",
       displayName: "new",
     });
+    expect(test.value.getSnapshot().nativeWorkspaceRevision).toBe("8:7");
   });
 
   it("selects the Control Thread, freezes maxEntries, and reuses the selected scope for recovery actions", async () => {
@@ -156,6 +158,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
       expect.objectContaining({
         mutationAuthority: "desktop",
         nativeBusy: false,
+        nativeWorkspaceRevision: "6:9",
         nativeWorkspace: { availability: "available", displayName: null },
       }),
     );

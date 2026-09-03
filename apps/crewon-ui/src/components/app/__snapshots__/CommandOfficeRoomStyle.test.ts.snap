@@ -701,19 +701,91 @@ exports[`command Office room style > snapshots the canonical Office workspace em
 .team-office-room-error {
   color: oklch(48% 0.15 25);
 }
+/* Team conversations share the main transcript's 720px reading rail. */
+.control-office-chat-room .office-chat {
+  background: var(--n-50);
+}
 .control-office-chat-room .office-chat-stream {
   min-height: 0;
+  gap: 22px;
+  padding: 30px max(24px, calc((100% - 720px) / 2)) 24px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
 }
-.control-office-chat-room .office-bubble-body p {
-  white-space: pre-wrap;
+.control-office-chat-room .office-bubble {
+  width: 100%;
+  max-width: 720px;
+  align-self: center;
+  gap: 13px;
+}
+.control-office-chat-room
+  .office-bubble:not([data-self="true"])
+  .office-bubble-body {
+  padding: 1px 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.control-office-chat-room .office-bubble-head {
+  min-height: 20px;
+  margin-bottom: 2px;
+}
+.control-office-chat-room .office-bubble-body > .markdown-content {
+  gap: 0;
+  color: var(--n-900);
+  font-size: calc(14px + var(--user-ui-font-delta));
+  line-height: 1.65;
+}
+.control-office-chat-room
+  .office-bubble-body
+  > .markdown-content
+  > :is(p, ul, ol, blockquote, pre, figure, table) {
+  margin: 0 0 10px;
+}
+.control-office-chat-room
+  .office-bubble-body
+  > .markdown-content
+  > :is(h1, h2, h3, h4) {
+  margin: 18px 0 7px;
+  color: var(--n-950);
+  line-height: 1.35;
+}
+.control-office-chat-room .office-bubble[data-self="true"] .office-bubble-body {
+  flex: 0 1 auto;
+  max-width: calc(100% - 41px);
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: color-mix(in oklch, var(--accent) 5%, var(--n-0));
+  box-shadow: none;
+}
+.control-office-chat-room .office-system {
+  width: 100%;
+  max-width: 720px;
+  align-self: center;
+  justify-content: flex-start;
+  gap: 9px;
+  padding-left: 41px;
+  text-align: left;
+}
+.control-office-chat-room .office-system::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-pill);
+  background: var(--warn);
+}
+.control-office-chat-room .office-system::after {
+  display: none;
 }
 .screen-shell.command-screen
   .control-office-chat-room
   .control-office-chat-composer {
-  width: min(720px, 100%);
+  width: min(720px, calc(100% - 48px));
   max-width: 720px;
   min-height: 0;
-  margin: 0 auto 6px;
+  margin: 0 auto 20px;
 }
 .control-office-attachment-error {
   width: min(720px, 100%);
@@ -1451,6 +1523,78 @@ exports[`command Office room style > snapshots the canonical Office workspace em
 }"
 `;
 
+exports[`command Office room style > snapshots the design-aligned Team page polish 1`] = `
+"/* Team page polish stays inside the original catalog layout and neutral system. */
+.screen-shell.command-screen
+  .shell-page-view[data-shell-view="team"]
+  .team-mode-summary {
+  gap: 16px;
+}
+
+.screen-shell.command-screen
+  .shell-page-view[data-shell-view="team"]
+  .team-mode-summary
+  .catalog-context-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.screen-shell.command-screen .team-mode-summary-detail {
+  color: var(--n-700);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .expert-team-entry-policy {
+  display: inline-flex;
+  width: max-content;
+  min-height: 22px;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  padding: 0 7px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-pill);
+  background: var(--n-25);
+  color: var(--n-750);
+  font-size: calc(10px + var(--user-ui-font-delta));
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .expert-team-entry-policy svg {
+  width: 11px;
+  height: 11px;
+  stroke-width: 1.8;
+}
+
+@container page-stack (max-width: 680px) {
+  .screen-shell.command-screen
+    .shell-page-view[data-shell-view="team"]
+    .team-mode-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .screen-shell.command-screen
+    .shell-page-view[data-shell-view="team"]
+    .team-mode-summary
+    .catalog-context-note {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .screen-shell.command-screen .team-mode-summary-detail {
+    white-space: normal;
+  }
+}"
+`;
+
 exports[`command Office room style > snapshots the design-aligned Workflow list and room contract 1`] = `
 {
   "list": ".shell-page-view .workflow-list {
@@ -1882,37 +2026,52 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
 .workflow-room-thread {
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 22px;
   min-height: 0;
   overflow: auto;
-  padding: 24px max(24px, calc((100% - 840px) / 2)) 18px;
+  padding: 30px max(24px, calc((100% - 720px) / 2)) 24px;
   background: var(--n-50);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
 }
 .workflow-room-thread .office-room-message {
-  max-width: min(680px, 80%);
+  width: 100%;
+  max-width: 720px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  justify-self: center;
+  gap: 13px;
 }
 .workflow-room-thread .office-room-message > div {
-  border-color: var(--n-250);
-  box-shadow: var(--shadow-hairline);
+  min-width: 0;
+  padding: 1px 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.workflow-room-thread .office-room-message.is-user {
+  grid-template-columns: minmax(0, 1fr) 28px;
 }
 .workflow-room-thread .office-room-message.is-user > div {
-  border-color: color-mix(in oklch, var(--accent) 20%, var(--n-250));
+  width: fit-content;
+  max-width: 100%;
+  justify-self: end;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 14px;
   background: color-mix(in oklch, var(--accent) 5%, var(--n-0));
 }
 .workflow-room-thread .workflow-result-message {
-  width: min(820px, 100%);
-  max-width: min(820px, 100%);
+  width: 100%;
+  max-width: 720px;
 }
 .workflow-room-thread .workflow-result-message > div {
-  min-width: 0;
-  padding: 15px 17px;
-  border-color: var(--n-200);
-  background: var(--n-0);
-  box-shadow: var(--shadow-raised);
+  padding: 1px 0 10px;
 }
 .workflow-room-thread .workflow-result-message > div > strong {
   display: block;
-  margin-bottom: 10px;
+  min-height: 20px;
+  margin-bottom: 7px;
   color: var(--n-950);
   font-size: calc(13px + var(--user-ui-font-delta));
   font-weight: 600;
@@ -1920,9 +2079,9 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
 .workflow-room-thread .workflow-result-message .markdown-content {
   max-width: none;
   gap: 0;
-  color: var(--n-850);
-  font-size: calc(13px + var(--user-ui-font-delta));
-  line-height: 1.55;
+  color: var(--n-900);
+  font-size: calc(14px + var(--user-ui-font-delta));
+  line-height: 1.65;
 }
 .workflow-room-thread
   .workflow-result-message
@@ -1954,16 +2113,19 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
   font-size: calc(11px + var(--user-ui-font-delta));
 }
 .workflow-room-thread .office-room-message.is-pending > div {
-  background: var(--n-25);
+  color: var(--n-700);
 }
 .workflow-room-thread .office-room-message.is-error > div {
-  border-color: color-mix(in oklch, var(--danger) 22%, var(--n-250));
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--danger) 22%, var(--n-250));
+  border-radius: var(--radius-lg);
   background: color-mix(in oklch, var(--danger) 4%, var(--n-0));
 }
 .workflow-gate-card {
   display: grid;
   gap: 12px;
-  width: min(780px, 100%);
+  width: min(720px, 100%);
+  justify-self: center;
   padding: 14px;
   border: 1px solid color-mix(in oklch, var(--warn) 34%, var(--n-300));
   border-radius: var(--radius-xl);
@@ -2035,9 +2197,9 @@ exports[`command Office room style > snapshots the design-aligned Workflow list 
   line-height: 1.55;
 }
 .screen-shell.command-screen .workflow-global-composer.command-input {
-  width: min(800px, calc(100% - 48px));
-  max-width: 800px;
-  margin: 10px auto 16px;
+  width: min(720px, calc(100% - 48px));
+  max-width: 720px;
+  margin: 10px auto 20px;
   position: relative;
   min-height: 126px;
   border-color: var(--n-250);

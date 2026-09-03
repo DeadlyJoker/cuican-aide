@@ -55,9 +55,8 @@ authorize `wss://.../device/v1` for Devices,
 
 Every command carries a canonical Ed25519 authorization envelope. The Gateway
 checks the registered key, issued/expiry window, signature, lease and optional
-digest-bound Approval proof before forwarding. The Rust protocol boundary uses
-the same canonical payload digest and verifies post-signing mutation with
-`ed25519-dalek`.
+digest-bound Approval proof before forwarding. The TypeScript protocol contract
+uses one canonical payload digest and rejects any post-signing mutation.
 
 The production entrypoint exposes a role-authenticated TLS 1.3 Worker API and a
 separate mTLS Device WebSocket. Before sending a Device command, it persists a
@@ -98,25 +97,20 @@ session.
 
 After route claim, the Gateway sends a strict `crewon.device-welcome.v0` frame
 containing `gatewayId`, `connectionId`, `connectionEpoch` and lease expiry
-before accepting commands on the session. TypeScript and Rust parse this frame
-from the same conformance fixture. The new minimal `crewon-device` crate accepts
-bounded raw frames, verifies a rotating Ed25519 PEM key registry, persists
-strictly increasing epochs and exposes a linearization permit that rejects an
-older socket before native side-effect start. That component is not yet wired
-into a production WSS/UDS capability dispatcher.
+before accepting commands on the session. The shared TypeScript contract and
+Gateway parser consume the same bounded conformance fixture. A Device must
+persist strictly increasing epochs and reject an older socket before starting a
+native side effect.
 
 A local PostgreSQL fault-injection test starts two independent Gateway OS
 processes, kills the Device owner after `execution.accepted`, deterministically
 expires its route and proves takeover reconciliation and cancellation without a
 second side-effect start. It uses test transport identities, a fake command
 authorizer and a WebSocket Device simulator, so it does not prove the complete
-Native or production deployment. Until that wiring and three-platform
-execution land, the implementation is not claimed as complete multi-Gateway
-HA. The full invariant and evidence boundary is recorded in
-`artifacts/migration/device-gateway-ha.md`.
+native or production deployment. Until the production capability dispatcher
+and three-platform execution land, the implementation is not claimed as
+complete multi-Gateway HA.
 
-The wire shapes and fail-closed parser codes are shared with the narrow Rust
-`crewon-device-protocol` crate through
-`packages/test-contracts/fixtures/device-protocol.reference.json`. That crate is
-an execution-boundary dependency only; it must never import product domain,
-model, database, or orchestration logic.
+The active wire shapes and fail-closed parser codes are frozen by
+`packages/test-contracts/fixtures/device-protocol.reference.json` and exercised
+by the contracts, dispatch, store, Worker, and Gateway test suites.

@@ -35,6 +35,7 @@ import {
   type RunLocator,
   type RunStore,
 } from "./run-store-port.ts";
+import type { SpaceScopedThreadStore } from "./thread-store-port.ts";
 
 test("creates a scoped run with atomic notification and execution handoff", async () => {
   const store = new RecordingRunStore();
@@ -225,7 +226,7 @@ test("rejects malformed runtime input without calling authorization or storage",
   assert.deepEqual(store.commits, []);
 });
 
-class RecordingRunStore implements RunStore {
+class RecordingRunStore implements RunStore, SpaceScopedThreadStore {
   readonly commits: CommitRunInput[] = [];
   state: RunState | null;
   commitError: Error | null = null;
@@ -248,6 +249,10 @@ class RecordingRunStore implements RunStore {
   ): Promise<RunState | null> {
     const state = await this.loadRun(locator);
     return state?.spaceId === locator.spaceId ? state : null;
+  }
+
+  async loadThreadInSpace(): Promise<null> {
+    return null;
   }
 
   async listThreadRuns(
@@ -338,7 +343,7 @@ class RecordingAuthorization implements AuthorizationPort {
 }
 
 function serviceWith(
-  store: RunStore,
+  store: RunStore & SpaceScopedThreadStore,
   authorization: AuthorizationPort,
   ids: string[],
 ): RunApplicationService {

@@ -8,6 +8,8 @@ import {
   activateDesignPanelTab,
   applyDesignCardVisibility,
   cleanSlotTitle,
+  commandComposerModelDisabledForTarget,
+  commandComposerModelForTarget,
   commandComposerResourceSelection,
   commandComposerKeyIntent,
   CommandWorkspace,
@@ -319,6 +321,42 @@ describe("CommandWorkspace", () => {
     } as unknown as Thread;
   }
 
+  it("keeps the selected model for Control Teams and expert panels", () => {
+    expect(
+      commandComposerModelForTarget({
+        executionTarget: "experts:expert-team-1",
+        model: "gpt-5.5",
+        workspaceAuthority: "control",
+      }),
+    ).toBe("gpt-5.5");
+    expect(
+      commandComposerModelForTarget({
+        executionTarget: "team:office-version-1",
+        model: "gpt-5.6-sol",
+        workspaceAuthority: "control",
+      }),
+    ).toBe("gpt-5.6-sol");
+    expect(
+      commandComposerModelForTarget({
+        executionTarget: "agent:fixed-version",
+        model: "gpt-5.5",
+        workspaceAuthority: "control",
+      }),
+    ).toBeUndefined();
+    expect(
+      commandComposerModelDisabledForTarget({
+        executionTarget: "experts:expert-team-1",
+        workspaceAuthority: "control",
+      }),
+    ).toBe(false);
+    expect(
+      commandComposerModelDisabledForTarget({
+        executionTarget: "agent:fixed-version",
+        workspaceAuthority: "control",
+      }),
+    ).toBe(true);
+  });
+
   function renderControlWorkspaceThread(): string {
     const selectedThread = workspaceCommandThread();
     return renderToStaticMarkup(
@@ -334,6 +372,7 @@ describe("CommandWorkspace", () => {
         workMode="code"
         workspaceAuthority="control"
         onAttachContext={() => undefined}
+        onArchiveThread={() => undefined}
         onChangeComposerValue={() => undefined}
         onModeChange={() => undefined}
         onRetryConnection={() => undefined}
@@ -760,7 +799,7 @@ describe("CommandWorkspace", () => {
       "例如：整理今天的项目事项，安排会议、跟进阻塞，并把结论写入知识库",
     );
     expect(markup).toContain(">CrewON</span>");
-    expect(markup).toContain("本地自动");
+    expect(markup).toContain("帮我批准");
     expect(markup).toContain('aria-label="执行主体"');
     // The execution-target menu only renders while open; its empty state is
     // asserted on the option builder instead of the static markup.
@@ -804,6 +843,35 @@ describe("CommandWorkspace", () => {
       ),
       workspaceOptions: visibleText(
         /data-value="(?:__no_workspace__|C:\\Users\\admin\\Documents\\crewon)"[^>]*>\s*<span><strong>([^<]+)/g,
+      ),
+    }).toMatchSnapshot();
+  });
+
+  it("keeps the Team landing hierarchy inside the catalog shell", () => {
+    const markup = renderCommandWorkspace();
+    const teamStart = markup.indexOf('data-od-id="shell-view-team"');
+    const teamEnd = markup.indexOf('<div id="team-log"', teamStart);
+    const teamMarkup = markup.slice(teamStart, teamEnd);
+
+    expect(teamStart).toBeGreaterThanOrEqual(0);
+    expect(teamEnd).toBeGreaterThan(teamStart);
+    expect(teamMarkup).toContain(
+      'class="catalog-source-bar team-mode-summary"',
+    );
+    expect(teamMarkup).toContain("团队能力来自左侧智能体页");
+    expect(teamMarkup).toContain("办公室可 @ 指定成员");
+    expect(teamMarkup).toContain("专家团只由团长对外回复");
+    expect(teamMarkup).not.toContain("team-page-hero");
+    expect({
+      context: Array.from(
+        teamMarkup.matchAll(
+          /class="(?:catalog-context-note|team-mode-summary-detail)">([^<]+)/g,
+        ),
+        (match) => match[1].trim(),
+      ),
+      modes: Array.from(
+        teamMarkup.matchAll(/data-filter="(office|workflow|experts)"/g),
+        (match) => match[1],
       ),
     }).toMatchSnapshot();
   });
@@ -902,8 +970,8 @@ describe("CommandWorkspace", () => {
     for (const locale of ["zh", "en"] as const) {
       const options = commandComposerPermissionOptions(locale);
       expect(options.map((option) => option.value)).toEqual([
-        "approve-for-me",
         "request-approval",
+        "approve-for-me",
         "full-access",
       ]);
       expect(options.find((option) => option.value === "full-access")).toEqual(
@@ -913,12 +981,29 @@ describe("CommandWorkspace", () => {
         options.find((option) => option.value === "approve-for-me")?.tone,
       ).toBeUndefined();
     }
-    expect(
-      commandComposerPermissionOptions("zh").map((o) => o.label),
-    ).toContain("完全访问");
+    expect(commandComposerPermissionOptions("zh").map((o) => o.label)).toEqual([
+      "请求批准",
+      "帮我批准",
+      "完全访问权限",
+    ]);
+
+    expect({
+      en: commandComposerPermissionOptions("en"),
+      zh: commandComposerPermissionOptions("zh"),
+    }).toMatchSnapshot();
 
     const markup = renderCommandWorkspace();
     expect(markup).toContain('aria-label="权限选择"');
+  });
+
+  it("keeps the workspace permission selectable in Control mode", () => {
+    const markup = renderControlWorkspaceThread();
+
+    expect(markup).toContain('aria-label="权限选择"');
+    expect(markup).toContain('role="combobox"');
+    expect(markup).toContain("帮我批准");
+    expect(markup).not.toContain("只读工作区");
+    expect(markup).not.toContain('data-workspace-permission="read-only"');
   });
 
   it("pairs the model with its reasoning effort in one control", () => {
@@ -1002,7 +1087,7 @@ describe("CommandWorkspace", () => {
             {
               type: "fileChange",
               id: "change-1",
-              status: { type: "completed" },
+              status: "completed",
               changes: [
                 {
                   path: "a.ts",
@@ -1022,8 +1107,29 @@ describe("CommandWorkspace", () => {
         connectionState="connected"
         cwd="/repo/frontend"
         isSending={false}
+        runPlan={{
+          eventSequence: 12,
+          runId: "turn-1",
+          threadId: "thread-1",
+          plan: {
+            schemaVersion: "crewon.run-plan.v0",
+            planId: "turn-1",
+            revision: 3,
+            explanation: "正在完成当前任务",
+            items: [
+              { itemId: "one", title: "一", status: "completed" },
+              { itemId: "two", title: "二", status: "completed" },
+              { itemId: "three", title: "三", status: "inProgress" },
+              { itemId: "four", title: "四", status: "pending" },
+              { itemId: "five", title: "五", status: "pending" },
+            ],
+            createdAt: "2026-08-09T07:00:00.000Z",
+            updatedAt: "2026-08-09T07:02:00.000Z",
+          },
+        }}
         selectedThread={thread}
         selectedThreadId="thread-1"
+        taskChanges={{ additions: 2, deletions: 1, files: 1 }}
         threadGoal={{
           createdAt: "2026-08-09T07:00:00.000Z",
           goalId: "goal-1",
@@ -1050,6 +1156,7 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("1 个文件已更改");
     expect(markup).toContain("+2");
     expect(markup).toContain("-1");
+    expect(markup).toContain('aria-haspopup="dialog"');
     expect(markup).toContain('data-od-id="composer-goal-bar"');
     expect(markup).toContain("进行中的目标");
     expect(markup).toContain("看一下我们之前的设计");
@@ -1064,6 +1171,67 @@ describe("CommandWorkspace", () => {
 
     expect(markup).not.toContain('data-od-id="composer-progress-pill"');
     expect(markup).not.toContain('data-od-id="composer-goal-bar"');
+  });
+
+  it("renders a pending tool approval immediately above the thread composer", () => {
+    const thread = workspaceCommandThread();
+    const markup = renderToStaticMarkup(
+      commandWorkspaceElement({
+        connectionState: "connected",
+        selectedThread: thread,
+        selectedThreadId: thread.id,
+        toolApproval: {
+          approvalId: "approval-1",
+          busy: false,
+          runId: "run-1",
+          threadId: thread.id,
+          toolName: "workspace_run_command",
+        },
+        onToolApprovalDecision: () => undefined,
+      }),
+    );
+    const approvalIndex = markup.indexOf('data-od-id="composer-tool-approval"');
+    const composerIndex = markup.indexOf('data-od-id="ai-composer"');
+
+    expect(approvalIndex).toBeGreaterThan(-1);
+    expect(composerIndex).toBeGreaterThan(approvalIndex);
+    expect(markup).toContain("工具调用等待批准");
+    expect(markup).toContain("workspace_run_command 尚未开始执行");
+    expect(markup).toContain(">批准并继续</button>");
+    expect(markup).toContain(">拒绝</button>");
+  });
+
+  it("does not show the preceding Run Plan while a new Run has no Plan", () => {
+    const thread = {
+      cwd: "/repo/frontend",
+      id: "thread-1",
+      turns: [{ id: "run-old", items: [], status: "completed" }],
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      commandWorkspaceElement({
+        activeTurnId: "run-new",
+        connectionState: "connected",
+        selectedThread: thread,
+        selectedThreadId: thread.id,
+        runPlan: {
+          eventSequence: 8,
+          runId: "run-old",
+          threadId: thread.id,
+          plan: {
+            schemaVersion: "crewon.run-plan.v0",
+            planId: "run-old",
+            revision: 1,
+            explanation: null,
+            items: [{ itemId: "old", title: "旧步骤", status: "completed" }],
+            createdAt: "2026-08-09T07:00:00.000Z",
+            updatedAt: "2026-08-09T07:00:00.000Z",
+          },
+        },
+      }),
+    );
+
+    expect(markup).not.toContain('data-od-id="composer-progress-pill"');
+    expect(markup).not.toContain("旧步骤");
   });
 
   it("keeps only execution-relevant composer controls and hidden palette hooks", () => {
@@ -1608,6 +1776,7 @@ describe("CommandWorkspace", () => {
         selectedThread={selectedThread}
         selectedThreadId="thread-command-room"
         streamingText=""
+        taskDetailTrigger={<button data-task-detail-trigger>Details</button>}
         workMode="code"
         onAttachContext={() => undefined}
         onChangeComposerValue={() => undefined}
@@ -1622,6 +1791,16 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain('data-has-thread="true"');
     expect(markup).toContain('data-od-id="command-thread-room"');
     expect(markup).toContain('class="command-thread-identity"');
+    expect(markup).toContain('class="command-thread-actions"');
+    expect(markup).toContain('data-od-id="thread-scene-tabs"');
+    expect(markup).toContain('aria-label="当前会话场景"');
+    expect(markup).toContain("data-task-detail-trigger");
+    expect(markup.indexOf('class="command-thread-identity"')).toBeLessThan(
+      markup.indexOf('data-od-id="thread-scene-tabs"'),
+    );
+    expect(markup.indexOf('data-od-id="thread-scene-tabs"')).toBeLessThan(
+      markup.indexOf("data-task-detail-trigger"),
+    );
     expect(markup).toContain("Agent 对话");
     // The task bar carries the task name only; workspace and run state moved out.
     expect(markup).not.toContain('class="command-thread-cwd"');
@@ -1651,6 +1830,8 @@ describe("CommandWorkspace", () => {
     // The bound workspace lives in the sidebar tree instead.
     expect(markup).toContain('aria-label="工作空间和对话"');
     expect(markup).toContain("cuican-aide");
+    expect(markup).toContain('aria-label="归档会话"');
+    expect(markup).toContain('data-archive-thread-id="thread-command-room"');
     expect(markup).toContain('data-od-id="command-thread-room"');
   });
 
@@ -1773,7 +1954,9 @@ describe("CommandWorkspace", () => {
     expect(markup).toContain("<table>");
     expect(markup).toContain("<td>Pass</td>");
     expect(markup).toContain('data-renderer="mermaid"');
-    expect(markup).toContain("graph LR");
+    expect(markup).toContain('data-state="loading"');
+    expect(markup).toContain("mermaid-streaming-placeholder");
+    expect(markup).not.toContain("graph LR");
     expect(markup).not.toContain('class="app-shell"');
   });
 
@@ -1829,9 +2012,9 @@ describe("CommandWorkspace", () => {
 
     expect(markup).toContain("Agent 正在执行");
     expect(markup).toContain("继续补充指令");
-    expect(markup).toContain('data-action="stop"');
-    expect(markup).toContain('aria-label="停止"');
-    expect(markup).toContain('title="停止"');
+    // When running with follow-up text, the button enters steer (send) mode
+    // rather than stop mode — stop only appears when the input is empty.
+    expect(markup).toContain('data-action="send"');
   });
 
   it("renders live backend agent work in the command transcript", () => {

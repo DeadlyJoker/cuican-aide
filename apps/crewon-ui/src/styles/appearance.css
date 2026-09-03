@@ -246,13 +246,24 @@ samp,
 :root[data-theme]
   .command-shell-route
   .screen-shell.command-screen
-  .permission-dropdown[data-selected-tone="warning"]
-  .select-trigger,
+  .input-tools
+  button[data-selected-tone="warning"],
 :root[data-theme]
   .command-shell-route
   .screen-shell.command-screen
-  .permission-dropdown[data-selected-tone="warning"]
-  .select-trigger
+  .input-tools
+  [data-selected-tone="warning"],
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .input-tools
+  button[data-selected-tone="warning"]
+  svg,
+:root[data-theme]
+  .command-shell-route
+  .screen-shell.command-screen
+  .input-tools
+  [data-selected-tone="warning"]
   svg {
   color: var(--warning);
 }

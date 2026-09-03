@@ -10,8 +10,14 @@ import {
   refreshModelProvidersPanelAction,
   type ModelProviderActionParams,
 } from "./modelProviderActions";
-import { MODEL_PROVIDER_FIELD_IDS } from "./modelProviderPanel";
-import type { ProviderCredentialStorePort } from "./providerCredentialStore";
+import {
+  MODEL_PROVIDER_FIELD_IDS,
+  modelProviderFormPanel,
+} from "./modelProviderPanel";
+import type {
+  ProviderCredentialStorePort,
+  ProviderModelCatalogResult,
+} from "./providerCredentialStore";
 
 const settings: ModelProviderSettingsSnapshot = {
   revision: 2,
@@ -76,6 +82,7 @@ function fixture(
           activate: vi.fn(async () => catalog),
           catalog: vi.fn(async () => catalog),
           delete: vi.fn(async () => catalog),
+          modelCatalog: vi.fn(async () => ({ models: [], status: "ok" })),
           upsert: vi.fn(async () => catalog),
         }
       : input.store;
@@ -263,6 +270,7 @@ describe("final Provider control actions", () => {
         activate: vi.fn(async () => catalog),
         catalog: vi.fn(async () => catalog),
         delete: vi.fn(async () => catalog),
+        modelCatalog: vi.fn(async () => ({ models: [], status: "ok" })),
         upsert: vi.fn(async () => {
           throw new Error("native_switch_failed");
         }),
@@ -319,5 +327,116 @@ describe("final Provider control actions", () => {
         .slice(statesBeforeAction)
         .every((state) => !JSON.stringify(state).includes("new-secret")),
     ).toBe(true);
+  });
+});
+
+describe("fetch-models action", () => {
+  function formFixture(
+    overrides: {
+      modelCatalog?: Partial<ProviderModelCatalogResult>;
+      values?: Record<string, string>;
+    } = {},
+  ) {
+    const modelCatalogResult: ProviderModelCatalogResult = {
+      models: ["gpt-5.6-sol", "claude-sonnet-4"],
+      status: "ok",
+      ...overrides.modelCatalog,
+    };
+    const store: ProviderCredentialStorePort = {
+      activate: vi.fn(async () => catalog),
+      catalog: vi.fn(async () => catalog),
+      delete: vi.fn(async () => catalog),
+      modelCatalog: vi.fn(async () => modelCatalogResult),
+      upsert: vi.fn(async () => catalog),
+    };
+    const values: Record<string, string> = {
+      [MODEL_PROVIDER_FIELD_IDS.vendor]: "custom",
+      [MODEL_PROVIDER_FIELD_IDS.id]: "gateway",
+      [MODEL_PROVIDER_FIELD_IDS.name]: "Gateway",
+      [MODEL_PROVIDER_FIELD_IDS.modelId]: "gateway-model",
+      [MODEL_PROVIDER_FIELD_IDS.baseUrl]: "https://api.example.com/v1",
+      [MODEL_PROVIDER_FIELD_IDS.credentialKind]: "bearer-token",
+      [MODEL_PROVIDER_FIELD_IDS.envKey]: "",
+      [MODEL_PROVIDER_FIELD_IDS.apiKey]: "sk-test",
+      [MODEL_PROVIDER_FIELD_IDS.selected]: "true",
+      ...overrides.values,
+    };
+    let panel: CapabilityPanel | null = modelProviderFormPanel({
+      entry: {
+        id: values[MODEL_PROVIDER_FIELD_IDS.id],
+        name: values[MODEL_PROVIDER_FIELD_IDS.name],
+        modelId: values[MODEL_PROVIDER_FIELD_IDS.modelId],
+        baseUrl: values[MODEL_PROVIDER_FIELD_IDS.baseUrl],
+        credentialKind: "bearer-token",
+        envKey: "",
+        hasStoredToken: false,
+      },
+      isSelected: true,
+      locale: "en",
+    });
+    const states: CapabilityPanel[] = [];
+    const params: ModelProviderActionParams = {
+      client: null,
+      controlClient: null,
+      credentialStore: store,
+      fieldValue: (fieldId) => values[fieldId] ?? "",
+      locale: "en",
+      setCapabilityPanel: (next) => {
+        panel = typeof next === "function" ? next(panel) : next;
+        if (panel !== null) states.push(panel);
+      },
+    };
+    return { panel: () => panel, params, states, store };
+  }
+
+  it("fills the model field select with advertised models", async () => {
+    const test = formFixture();
+
+    handleModelProviderAction(test.params, "fetch-models", null);
+
+    await vi.waitFor(() =>
+      expect(test.store.modelCatalog).toHaveBeenCalledOnce(),
+    );
+    expect(test.store.modelCatalog).toHaveBeenCalledWith({
+      apiKey: "sk-test",
+      defaultModelId: "gateway-model",
+      endpoint: "https://api.example.com/v1",
+      environmentVariable: null,
+      providerId: "gateway",
+    });
+    const modelField = test
+      .panel()
+      ?.fields?.find((f) => f.id === MODEL_PROVIDER_FIELD_IDS.modelId);
+    expect(modelField?.options?.map((o) => o.value)).toEqual([
+      "gateway-model",
+      "gpt-5.6-sol",
+      "claude-sonnet-4",
+    ]);
+    expect(test.panel()?.body).toBeUndefined();
+    expect(test.panel()?.error).toBeUndefined();
+  });
+
+  it("surfaces a readable error when the probe fails", async () => {
+    const test = formFixture({
+      modelCatalog: { models: [], status: "unreachable" },
+    });
+
+    handleModelProviderAction(test.params, "fetch-models", null);
+
+    await vi.waitFor(() =>
+      expect(test.store.modelCatalog).toHaveBeenCalledOnce(),
+    );
+    expect(test.panel()?.error).toContain("Could not connect");
+  });
+
+  it("rejects an invalid base URL before calling the probe", async () => {
+    const test = formFixture({
+      values: { [MODEL_PROVIDER_FIELD_IDS.baseUrl]: "" },
+    });
+
+    handleModelProviderAction(test.params, "fetch-models", null);
+
+    await vi.waitFor(() => expect(test.panel()?.error).toBeTruthy());
+    expect(test.store.modelCatalog).not.toHaveBeenCalled();
   });
 });

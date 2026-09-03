@@ -1,6 +1,9 @@
 import { createInterface } from "node:readline";
 
-import type { ModelProviderProbeResult } from "@crewon/application";
+import type {
+  ModelProviderProbeResult,
+  ModelProviderProbeStatus,
+} from "@crewon/application";
 
 import { ResponsesProviderConnectivityProbe } from "./provider-connectivity-probe.ts";
 import {
@@ -25,7 +28,9 @@ type Probe = Readonly<{
 export async function providerModelCatalog(
   input: unknown,
   createProbe: (input: ProviderModelCatalogInput) => Probe = modelProbe,
-): Promise<Readonly<{ models: readonly string[] }>> {
+): Promise<
+  Readonly<{ models: readonly string[]; status: ModelProviderProbeStatus }>
+> {
   const parsed = parseInput(input);
   const result = await createProbe(parsed).probe(new AbortController().signal);
   const advertised =
@@ -37,6 +42,7 @@ export async function providerModelCatalog(
       JSON.stringify(advertised),
       parsed.defaultModelId,
     ),
+    status: result.status,
   };
 }
 
@@ -121,7 +127,11 @@ async function readInput(): Promise<unknown> {
   throw new Error("provider_model_catalog_input_invalid");
 }
 
-if (process.argv[1]?.endsWith("provider-model-catalog.mjs")) {
+const entry = process.argv[1] ?? "";
+if (
+  entry.endsWith("provider-model-catalog.mjs") ||
+  entry.endsWith("provider-model-catalog-main.ts")
+) {
   process.stdout.write(
     `${JSON.stringify(await providerModelCatalog(await readInput()))}\n`,
   );

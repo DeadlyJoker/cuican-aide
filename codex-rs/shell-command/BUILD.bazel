@@ -1,7 +1,0 @@
-load("//:defs.bzl", "crewon_rust_crate")
-
-crewon_rust_crate(
-    name = "shell-command",
-    crate_name = "crewon_shell_command",
-    compile_data = ["src/command_safety/powershell_parser.ps1"],
-)

@@ -1,5 +1,18 @@
 export const DESKTOP_BRIDGE_VERSION = 1 as const;
 
+/**
+ * A cloud Agent profile entry that the renderer sends to the main process so
+ * the runtime worker can target the agent's invocation URL with the correct
+ * model identifier.
+ */
+export type CloudAgentProfileEntry = Readonly<{
+  agentVersionId: string;
+  instructions: string;
+  invocationUrl: string;
+  modelId: string;
+  agentId: number;
+}>;
+
 export type DesktopRectangle = Readonly<{
   x: number;
   y: number;
@@ -8,6 +21,7 @@ export type DesktopRectangle = Readonly<{
 }>;
 
 export type DesktopHttpRequest = Readonly<{
+  requestId: string;
   url: string;
   method: string;
   headers: readonly (readonly [string, string])[];
@@ -19,8 +33,12 @@ export type DesktopHttpResponse = Readonly<{
   status: number;
   statusText: string;
   headers: readonly (readonly [string, string])[];
-  body: Uint8Array;
 }>;
+
+export type DesktopHttpBodyEvent =
+  | Readonly<{ type: "chunk"; chunk: Uint8Array }>
+  | Readonly<{ type: "end" }>
+  | Readonly<{ type: "error"; message: string }>;
 
 export type DesktopUpdateInfo = Readonly<{
   version: string;
@@ -41,13 +59,26 @@ export interface CrewonDesktopBridge {
   readonly runtime: {
     bootstrap(): Promise<unknown>;
     reloadProvider(): Promise<void>;
+    /**
+     * Pushes cloud Agent profiles into the runtime supervisor so the runtime
+     * worker can forward inference requests to each agent's invocation URL.
+     * Triggers a runtime restart so the new profiles take effect.
+     */
+    updateCloudAgentProfiles(
+      profiles: readonly CloudAgentProfileEntry[],
+    ): Promise<void>;
   };
   readonly http: {
-    fetch(request: DesktopHttpRequest): Promise<DesktopHttpResponse>;
+    fetch(
+      request: DesktopHttpRequest,
+      onBodyEvent: (event: DesktopHttpBodyEvent) => void,
+    ): Promise<DesktopHttpResponse>;
+    abort(requestId: string): Promise<void>;
   };
   readonly sandbox: {
     listDirectory(path?: string): Promise<unknown>;
     readFile(path: string): Promise<unknown>;
+    readGitSummary(): Promise<unknown>;
     readDiff(): Promise<unknown>;
     runCommand(request: unknown): Promise<unknown>;
   };
@@ -61,6 +92,8 @@ export interface CrewonDesktopBridge {
     catalog(): Promise<unknown>;
     activate(providerId: string): Promise<unknown>;
     delete(providerId: string): Promise<unknown>;
+    /** Asks the provider's /models endpoint which models it advertises. */
+    modelCatalog(request: unknown): Promise<unknown>;
     upsert(request: unknown): Promise<unknown>;
   };
   readonly window: {

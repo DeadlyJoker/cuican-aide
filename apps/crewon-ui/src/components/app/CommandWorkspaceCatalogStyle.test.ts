@@ -27,13 +27,13 @@ describe("command workspace catalog style", () => {
     expect(contract).toMatchSnapshot();
   });
 
-  it("snapshots the compact knowledge header and card density", () => {
+  it("snapshots the compact knowledge card density", () => {
     const styles = readFileSync(
       new URL("../../styles/app.css", import.meta.url),
       "utf8",
     );
     const start = styles.indexOf(
-      "/* Knowledge keeps its title, filters, search, and refresh action on one 64px row. */",
+      "/* Knowledge ownership badges share the pill shape with local/cloud badges. */",
     );
     const end = styles.indexOf(".catalog-resource-dialog {", start);
 
@@ -42,7 +42,6 @@ describe("command workspace catalog style", () => {
 
     const contract = styles.slice(start, end).trim();
 
-    expect(contract).toContain("min-height: 64px");
     expect(contract).toContain(
       "grid-template-columns: repeat(auto-fill, minmax(320px, 1fr))",
     );

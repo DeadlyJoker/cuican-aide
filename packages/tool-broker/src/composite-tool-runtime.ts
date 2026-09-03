@@ -3,6 +3,7 @@ import type {
   ToolDefinition,
   ToolExecutionCommand,
   ToolExecutionPolicy,
+  ToolExecutionPolicyContext,
   ToolExecutionResolution,
   ToolRuntimePort,
 } from "./tool-broker-port.ts";
@@ -49,8 +50,9 @@ export class CompositeToolRuntime implements ToolRuntimePort {
   executionPolicy(
     kind: ToolCallKind,
     name: string,
+    context?: ToolExecutionPolicyContext,
   ): ToolExecutionPolicy | null {
-    return this.#route(kind, name).executionPolicy(kind, name);
+    return this.#route(kind, name).executionPolicy(kind, name, context);
   }
 
   execute(

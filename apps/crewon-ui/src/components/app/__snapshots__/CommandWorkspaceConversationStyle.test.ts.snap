@@ -1659,7 +1659,11 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-items
-  .tool-card-header,
+  .tool-card-header {
+  min-height: 26px;
+  padding: 0 26px 0 0;
+}
+
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-items
@@ -1826,9 +1830,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   color: var(--command-sidebar-muted);
 }
 
-:root[data-theme="dark"]
-  .screen-shell.command-screen
-  .sidebar-brand {
+:root[data-theme="dark"] .screen-shell.command-screen .sidebar-brand {
   color: var(--command-sidebar-fg);
 }
 
@@ -2474,12 +2476,23 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   transform: scaleX(-1);
 }
 
-/* Shares the top row's centre line (y=27) with the sidebar tools. */
+/*
+ * Sits exactly where the tab bar's close control sits once tabs render, so the
+ * icon keeps one point and one size across open, empty and closed states.
+ */
 .command-workbench-close.is-floating {
   position: absolute;
   z-index: 5;
+  top: 5px;
+  right: 8px;
+}
+
+/*
+ * Mirrors the collapsed trigger's y=27 centre line (32px box at top:11px) so
+ * toggling the workbench never shifts the icon vertically.
+ */
+:root[data-surface="desktop"] .command-workbench-close.is-floating {
   top: 11px;
-  right: 10px;
 }
 
 .command-workbench-launcher-menu {
@@ -3498,14 +3511,19 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
  * command-screen sizing never applied to it and the box ended up smaller than
  * the glyph it contains -- clicks beside the icon missed the button entirely.
  * \`display: grid\` + \`place-items: center\` makes the whole box the target.
+ *
+ * The trigger mirrors the open workbench's close control exactly: same 32px box,
+ * same 15px glyph, same point (top: 5 / right: 8 centres it in the 42px tab
+ * bar's right slot). Toggling the workbench therefore swaps the icon's meaning
+ * without the icon ever moving or resizing.
  */
 .command-shell-route .command-workbench-trigger {
   position: absolute;
-  top: 16px;
-  right: 10px;
+  top: 5px;
+  right: 8px;
   z-index: 45;
   display: grid;
-  width: 34px;
+  width: 32px;
   height: 32px;
   place-items: center;
   padding: 0;
@@ -3518,12 +3536,22 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 }
 
 /*
+ * Desktop pushes the tab bar 16px clear of the window drag strip. The trigger
+ * is a 32px box, so top:11px centres its icon at y=27 -- the same centre line
+ * as the traffic lights (21+6), the sidebar-brand (13+14) and the sidebar
+ * tool row (14+13), keeping every top-row element on one horizontal axis.
+ */
+:root[data-surface="desktop"] .command-shell-route .command-workbench-trigger {
+  top: 11px;
+}
+
+/*
  * The trigger floats over the top-right corner whenever the workbench is
  * collapsed. Page headers with right-aligned actions (schedule, catalog pages,
  * the Office room header) run straight under it -- 新建日程, 创建办公室 and the
  * 成员 toggle all rendered beneath the button. Reserving the trigger's
  * footprint on the header row keeps the two from overlapping.
- * 48px = 34px trigger + 10px inset + 4px breathing room.
+ * 44px = 32px trigger + 8px inset + 4px breathing room.
  */
 .command-shell-route:has(> .command-workbench-trigger)
   .screen-shell.command-screen
@@ -3537,7 +3565,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 .command-shell-route:has(> .command-workbench-trigger)
   .control-office-definition-header,
 .command-shell-route:has(> .command-workbench-trigger) .workflow-room-top {
-  padding-right: 48px;
+  padding-right: 44px;
 }
 
 .command-shell-route .command-workbench-trigger:hover,
@@ -3547,11 +3575,11 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
   outline: 0;
 }
 
-/* Matches the sidebar collapse glyph, so the two rails read as a pair. */
+/* Matches the open workbench's close glyph, so toggling never resizes the icon. */
 .command-shell-route .command-workbench-trigger svg {
-  width: 18px;
-  height: 18px;
-  stroke-width: 1.75;
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.7;
 }
 
 @media (max-width: 1379px) {
@@ -3595,40 +3623,359 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
 }
 
 /*
- * Composer status stack: the progress pill and goal bar sit above the input
- * card, centered on it, so the card keeps one visual weight and the two rows
- * read as reporting on the run rather than as controls inside the composer.
+ * Composer status stack: progress and goal state sit above the input card, so
+ * the card keeps one visual weight and these rows read as run metadata.
  */
+.screen-shell.command-screen .command-composer-stack {
+  display: grid;
+  justify-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.screen-shell.command-screen .composer-tool-approval {
+  --tool-approval-accent: #b86400;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+  width: min(720px, 100%);
+  margin: 0 auto 8px;
+  padding: 12px 14px;
+  border: 1px solid
+    color-mix(in srgb, var(--tool-approval-accent) 36%, var(--border));
+  border-radius: 14px;
+  background: color-mix(
+    in srgb,
+    var(--tool-approval-accent) 7%,
+    var(--surface)
+  );
+  box-shadow: 0 8px 22px rgb(0 0 0 / 5%);
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .composer-tool-approval {
+  --tool-approval-accent: #e7a83b;
+}
+
+.screen-shell.command-screen .composer-tool-approval-copy {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 9px;
+}
+
+.screen-shell.command-screen .composer-tool-approval-copy > svg {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  color: var(--tool-approval-accent);
+}
+
+.screen-shell.command-screen .composer-tool-approval-copy > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.screen-shell.command-screen .composer-tool-approval-copy strong {
+  color: var(--text);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.25;
+}
+
+.screen-shell.command-screen .composer-tool-approval-copy span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  line-height: 1.45;
+}
+
+.screen-shell.command-screen .composer-tool-approval-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.screen-shell.command-screen .composer-tool-approval-actions button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.screen-shell.command-screen
+  .composer-tool-approval-actions
+  button:hover:not(:disabled) {
+  background: var(--surface-raised);
+}
+
+.screen-shell.command-screen
+  .composer-tool-approval-actions
+  .composer-tool-approval-approve {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--surface);
+}
+
+.screen-shell.command-screen
+  .composer-tool-approval-actions
+  .composer-tool-approval-approve:hover:not(:disabled) {
+  opacity: 0.88;
+  background: var(--accent-strong);
+}
+
+.screen-shell.command-screen .composer-tool-approval-actions button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.screen-shell.command-screen .composer-tool-approval-error {
+  grid-column: 1 / -1;
+  margin: -2px 0 0 26px;
+  color: var(--text-danger, #b42318);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .screen-shell.command-screen .composer-tool-approval {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .screen-shell.command-screen .composer-tool-approval-actions {
+    justify-content: flex-end;
+  }
+}
+
 .screen-shell.command-screen .composer-progress-pill {
   display: inline-flex;
   align-items: center;
   justify-self: center;
-  gap: 6px;
-  min-height: 26px;
-  margin: 0 auto 10px;
-  padding: 0 12px;
-  border: 1px solid var(--n-300);
-  border-radius: var(--radius-pill);
-  background: var(--n-0);
-  color: var(--n-700);
-  font-size: calc(12px + var(--user-ui-font-delta));
+  gap: 5px;
+  min-height: 24px;
+  margin: 0 auto 8px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--n-650);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  line-height: 1;
   white-space: nowrap;
 }
 
+.screen-shell.command-screen button.composer-progress-pill {
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: none;
+  transition:
+    color var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease);
+}
+
+.screen-shell.command-screen button.composer-progress-pill:hover,
+.screen-shell.command-screen button.composer-progress-pill[data-state="open"] {
+  background: transparent;
+  color: var(--n-950);
+}
+
+.screen-shell.command-screen button.composer-progress-pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .screen-shell.command-screen .composer-progress-spinner {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   color: var(--n-550);
 }
 
 .screen-shell.command-screen .composer-progress-step {
-  color: var(--n-850);
+  color: inherit;
   font-weight: 500;
+}
+
+.screen-shell.command-screen .composer-progress-disclosure {
+  width: 12px;
+  height: 12px;
+  color: var(--n-500);
+  stroke-width: 1.8;
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.screen-shell.command-screen
+  button.composer-progress-pill[data-state="open"]
+  .composer-progress-disclosure {
+  transform: translateY(-1px);
 }
 
 .screen-shell.command-screen .composer-progress-separator,
 .screen-shell.command-screen .composer-goal-separator {
   color: var(--n-450);
+}
+
+.screen-shell.command-screen .composer-progress-additions,
+.screen-shell.command-screen .composer-progress-deletions {
+  font-variant-numeric: tabular-nums;
+}
+
+.screen-shell.command-screen .composer-progress-additions {
+  color: var(--success);
+}
+
+.screen-shell.command-screen .composer-progress-deletions {
+  color: var(--danger);
+}
+
+/* Portaled by Radix so a low canvas cannot clip the checklist. */
+.composer-progress-popover {
+  z-index: 90;
+  display: grid;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(420px, var(--radix-popover-content-available-height));
+  gap: 10px;
+  overflow: hidden;
+  padding: 14px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised, var(--n-0));
+  color: var(--n-900);
+  box-shadow: var(--shadow-overlay);
+}
+
+.composer-progress-popover-header {
+  gap: 4px;
+}
+
+.composer-progress-popover-header [data-slot="popover-title"] {
+  margin: 0;
+  color: var(--n-950);
+  font-size: calc(13px + var(--user-ui-font-delta));
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.composer-progress-popover-header [data-slot="popover-description"] {
+  margin: 0;
+  color: var(--n-650);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.45;
+}
+
+.composer-progress-meter {
+  color: var(--n-600);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-variant-numeric: tabular-nums;
+}
+
+.composer-progress-checklist {
+  display: grid;
+  max-height: min(
+    300px,
+    calc(var(--radix-popover-content-available-height) - 100px)
+  );
+  gap: 3px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.composer-progress-checklist > li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 8px;
+  border-radius: var(--radius-md);
+  color: var(--n-800);
+}
+
+.composer-progress-checklist > li[aria-current="step"] {
+  background: var(--n-100);
+  color: var(--n-950);
+}
+
+.composer-progress-item-icon {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  color: var(--n-500);
+}
+
+.composer-progress-item-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
+.composer-progress-item-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.45;
+}
+
+.composer-progress-item-status {
+  color: var(--n-550);
+  font-size: calc(10px + var(--user-ui-font-delta));
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.composer-progress-checklist
+  > li[data-status="completed"]
+  .composer-progress-item-icon {
+  color: var(--success);
+}
+
+.composer-progress-checklist
+  > li[data-status="completed"]
+  .composer-progress-item-title {
+  color: var(--n-600);
+}
+
+.composer-progress-checklist
+  > li[data-status="inProgress"]
+  .composer-progress-item-icon {
+  color: var(--accent);
+}
+
+.composer-progress-checklist
+  > li[data-status="blocked"]
+  :is(.composer-progress-item-icon, .composer-progress-item-status) {
+  color: var(--warning);
+}
+
+.composer-progress-checklist
+  > li[data-status="canceled"]
+  :is(.composer-progress-item-icon, .composer-progress-item-status) {
+  color: var(--danger);
+}
+
+@media (max-width: 420px) {
+  .screen-shell.command-screen .composer-progress-files,
+  .screen-shell.command-screen
+    .composer-progress-separator:has(+ .composer-progress-files) {
+    display: none;
+  }
+
+  .composer-progress-popover {
+    width: calc(100vw - 16px);
+  }
 }
 
 /*

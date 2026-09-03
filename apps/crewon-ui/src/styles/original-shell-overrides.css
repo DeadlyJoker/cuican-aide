@@ -340,7 +340,7 @@
   background: var(--command-sidebar-hover);
 }
 .sidebar-nav a.active {
-  background: var(--command-sidebar-active);
+  background: transparent;
 }
 .nav-glyph {
   display: grid;
@@ -2835,19 +2835,91 @@
 .team-office-room-error {
   color: oklch(48% 0.15 25);
 }
+/* Team conversations share the main transcript's 720px reading rail. */
+.control-office-chat-room .office-chat {
+  background: var(--n-50);
+}
 .control-office-chat-room .office-chat-stream {
   min-height: 0;
+  gap: 22px;
+  padding: 30px max(24px, calc((100% - 720px) / 2)) 24px;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
 }
-.control-office-chat-room .office-bubble-body p {
-  white-space: pre-wrap;
+.control-office-chat-room .office-bubble {
+  width: 100%;
+  max-width: 720px;
+  align-self: center;
+  gap: 13px;
+}
+.control-office-chat-room
+  .office-bubble:not([data-self="true"])
+  .office-bubble-body {
+  padding: 1px 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.control-office-chat-room .office-bubble-head {
+  min-height: 20px;
+  margin-bottom: 2px;
+}
+.control-office-chat-room .office-bubble-body > .markdown-content {
+  gap: 0;
+  color: var(--n-900);
+  font-size: calc(14px + var(--user-ui-font-delta));
+  line-height: 1.65;
+}
+.control-office-chat-room
+  .office-bubble-body
+  > .markdown-content
+  > :is(p, ul, ol, blockquote, pre, figure, table) {
+  margin: 0 0 10px;
+}
+.control-office-chat-room
+  .office-bubble-body
+  > .markdown-content
+  > :is(h1, h2, h3, h4) {
+  margin: 18px 0 7px;
+  color: var(--n-950);
+  line-height: 1.35;
+}
+.control-office-chat-room .office-bubble[data-self="true"] .office-bubble-body {
+  flex: 0 1 auto;
+  max-width: calc(100% - 41px);
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 14px;
+  background: color-mix(in oklch, var(--accent) 5%, var(--n-0));
+  box-shadow: none;
+}
+.control-office-chat-room .office-system {
+  width: 100%;
+  max-width: 720px;
+  align-self: center;
+  justify-content: flex-start;
+  gap: 9px;
+  padding-left: 41px;
+  text-align: left;
+}
+.control-office-chat-room .office-system::before {
+  width: 6px;
+  height: 6px;
+  flex: 0 0 auto;
+  border-radius: var(--radius-pill);
+  background: var(--warn);
+}
+.control-office-chat-room .office-system::after {
+  display: none;
 }
 .screen-shell.command-screen
   .control-office-chat-room
   .control-office-chat-composer {
-  width: min(720px, 100%);
+  width: min(720px, calc(100% - 48px));
   max-width: 720px;
   min-height: 0;
-  margin: 0 auto 6px;
+  margin: 0 auto 20px;
 }
 .control-office-attachment-error {
   width: min(720px, 100%);
@@ -3903,37 +3975,52 @@
 .workflow-room-thread {
   display: grid;
   align-content: start;
-  gap: 16px;
+  gap: 22px;
   min-height: 0;
   overflow: auto;
-  padding: 24px max(24px, calc((100% - 840px) / 2)) 18px;
+  padding: 30px max(24px, calc((100% - 720px) / 2)) 24px;
   background: var(--n-50);
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable both-edges;
 }
 .workflow-room-thread .office-room-message {
-  max-width: min(680px, 80%);
+  width: 100%;
+  max-width: 720px;
+  grid-template-columns: 28px minmax(0, 1fr);
+  justify-self: center;
+  gap: 13px;
 }
 .workflow-room-thread .office-room-message > div {
-  border-color: var(--n-250);
-  box-shadow: var(--shadow-hairline);
+  min-width: 0;
+  padding: 1px 0 10px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+.workflow-room-thread .office-room-message.is-user {
+  grid-template-columns: minmax(0, 1fr) 28px;
 }
 .workflow-room-thread .office-room-message.is-user > div {
-  border-color: color-mix(in oklch, var(--accent) 20%, var(--n-250));
+  width: fit-content;
+  max-width: 100%;
+  justify-self: end;
+  padding: 10px 14px;
+  border: 0;
+  border-radius: 14px;
   background: color-mix(in oklch, var(--accent) 5%, var(--n-0));
 }
 .workflow-room-thread .workflow-result-message {
-  width: min(820px, 100%);
-  max-width: min(820px, 100%);
+  width: 100%;
+  max-width: 720px;
 }
 .workflow-room-thread .workflow-result-message > div {
-  min-width: 0;
-  padding: 15px 17px;
-  border-color: var(--n-200);
-  background: var(--n-0);
-  box-shadow: var(--shadow-raised);
+  padding: 1px 0 10px;
 }
 .workflow-room-thread .workflow-result-message > div > strong {
   display: block;
-  margin-bottom: 10px;
+  min-height: 20px;
+  margin-bottom: 7px;
   color: var(--n-950);
   font-size: calc(13px + var(--user-ui-font-delta));
   font-weight: 600;
@@ -3941,9 +4028,9 @@
 .workflow-room-thread .workflow-result-message .markdown-content {
   max-width: none;
   gap: 0;
-  color: var(--n-850);
-  font-size: calc(13px + var(--user-ui-font-delta));
-  line-height: 1.55;
+  color: var(--n-900);
+  font-size: calc(14px + var(--user-ui-font-delta));
+  line-height: 1.65;
 }
 .workflow-room-thread
   .workflow-result-message
@@ -3975,16 +4062,19 @@
   font-size: calc(11px + var(--user-ui-font-delta));
 }
 .workflow-room-thread .office-room-message.is-pending > div {
-  background: var(--n-25);
+  color: var(--n-700);
 }
 .workflow-room-thread .office-room-message.is-error > div {
-  border-color: color-mix(in oklch, var(--danger) 22%, var(--n-250));
+  padding: 10px 12px;
+  border: 1px solid color-mix(in oklch, var(--danger) 22%, var(--n-250));
+  border-radius: var(--radius-lg);
   background: color-mix(in oklch, var(--danger) 4%, var(--n-0));
 }
 .workflow-gate-card {
   display: grid;
   gap: 12px;
-  width: min(780px, 100%);
+  width: min(720px, 100%);
+  justify-self: center;
   padding: 14px;
   border: 1px solid color-mix(in oklch, var(--warn) 34%, var(--n-300));
   border-radius: var(--radius-xl);
@@ -4056,9 +4146,9 @@
   line-height: 1.55;
 }
 .screen-shell.command-screen .workflow-global-composer.command-input {
-  width: min(800px, calc(100% - 48px));
-  max-width: 800px;
-  margin: 10px auto 16px;
+  width: min(720px, calc(100% - 48px));
+  max-width: 720px;
+  margin: 10px auto 20px;
   position: relative;
   min-height: 126px;
   border-color: var(--n-250);
@@ -10050,7 +10140,11 @@ body.modal-open {
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-items
-  .tool-card-header,
+  .tool-card-header {
+  min-height: 26px;
+  padding: 0 26px 0 0;
+}
+
 .screen-shell.command-screen
   .command-thread-room
   .turn-process-items
@@ -10217,9 +10311,7 @@ body.modal-open {
   color: var(--command-sidebar-muted);
 }
 
-:root[data-theme="dark"]
-  .screen-shell.command-screen
-  .sidebar-brand {
+:root[data-theme="dark"] .screen-shell.command-screen .sidebar-brand {
   color: var(--command-sidebar-fg);
 }
 
@@ -10865,12 +10957,23 @@ body.modal-open {
   transform: scaleX(-1);
 }
 
-/* Shares the top row's centre line (y=27) with the sidebar tools. */
+/*
+ * Sits exactly where the tab bar's close control sits once tabs render, so the
+ * icon keeps one point and one size across open, empty and closed states.
+ */
 .command-workbench-close.is-floating {
   position: absolute;
   z-index: 5;
+  top: 5px;
+  right: 8px;
+}
+
+/*
+ * Mirrors the collapsed trigger's y=27 centre line (32px box at top:11px) so
+ * toggling the workbench never shifts the icon vertically.
+ */
+:root[data-surface="desktop"] .command-workbench-close.is-floating {
   top: 11px;
-  right: 10px;
 }
 
 .command-workbench-launcher-menu {
@@ -11889,14 +11992,19 @@ body.modal-open {
  * command-screen sizing never applied to it and the box ended up smaller than
  * the glyph it contains -- clicks beside the icon missed the button entirely.
  * `display: grid` + `place-items: center` makes the whole box the target.
+ *
+ * The trigger mirrors the open workbench's close control exactly: same 32px box,
+ * same 15px glyph, same point (top: 5 / right: 8 centres it in the 42px tab
+ * bar's right slot). Toggling the workbench therefore swaps the icon's meaning
+ * without the icon ever moving or resizing.
  */
 .command-shell-route .command-workbench-trigger {
   position: absolute;
-  top: 16px;
-  right: 10px;
+  top: 5px;
+  right: 8px;
   z-index: 45;
   display: grid;
-  width: 34px;
+  width: 32px;
   height: 32px;
   place-items: center;
   padding: 0;
@@ -11909,12 +12017,22 @@ body.modal-open {
 }
 
 /*
+ * Desktop pushes the tab bar 16px clear of the window drag strip. The trigger
+ * is a 32px box, so top:11px centres its icon at y=27 -- the same centre line
+ * as the traffic lights (21+6), the sidebar-brand (13+14) and the sidebar
+ * tool row (14+13), keeping every top-row element on one horizontal axis.
+ */
+:root[data-surface="desktop"] .command-shell-route .command-workbench-trigger {
+  top: 11px;
+}
+
+/*
  * The trigger floats over the top-right corner whenever the workbench is
  * collapsed. Page headers with right-aligned actions (schedule, catalog pages,
  * the Office room header) run straight under it -- 新建日程, 创建办公室 and the
  * 成员 toggle all rendered beneath the button. Reserving the trigger's
  * footprint on the header row keeps the two from overlapping.
- * 48px = 34px trigger + 10px inset + 4px breathing room.
+ * 44px = 32px trigger + 8px inset + 4px breathing room.
  */
 .command-shell-route:has(> .command-workbench-trigger)
   .screen-shell.command-screen
@@ -11928,7 +12046,7 @@ body.modal-open {
 .command-shell-route:has(> .command-workbench-trigger)
   .control-office-definition-header,
 .command-shell-route:has(> .command-workbench-trigger) .workflow-room-top {
-  padding-right: 48px;
+  padding-right: 44px;
 }
 
 .command-shell-route .command-workbench-trigger:hover,
@@ -11938,11 +12056,11 @@ body.modal-open {
   outline: 0;
 }
 
-/* Matches the sidebar collapse glyph, so the two rails read as a pair. */
+/* Matches the open workbench's close glyph, so toggling never resizes the icon. */
 .command-shell-route .command-workbench-trigger svg {
-  width: 18px;
-  height: 18px;
-  stroke-width: 1.75;
+  width: 15px;
+  height: 15px;
+  stroke-width: 1.7;
 }
 
 @media (max-width: 1379px) {
@@ -11986,40 +12104,359 @@ body.modal-open {
 }
 
 /*
- * Composer status stack: the progress pill and goal bar sit above the input
- * card, centered on it, so the card keeps one visual weight and the two rows
- * read as reporting on the run rather than as controls inside the composer.
+ * Composer status stack: progress and goal state sit above the input card, so
+ * the card keeps one visual weight and these rows read as run metadata.
  */
+.screen-shell.command-screen .command-composer-stack {
+  display: grid;
+  justify-items: center;
+  width: 100%;
+  min-width: 0;
+}
+
+.screen-shell.command-screen .composer-tool-approval {
+  --tool-approval-accent: #b86400;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px 16px;
+  width: min(720px, 100%);
+  margin: 0 auto 8px;
+  padding: 12px 14px;
+  border: 1px solid
+    color-mix(in srgb, var(--tool-approval-accent) 36%, var(--border));
+  border-radius: 14px;
+  background: color-mix(
+    in srgb,
+    var(--tool-approval-accent) 7%,
+    var(--surface)
+  );
+  box-shadow: 0 8px 22px rgb(0 0 0 / 5%);
+}
+
+:root:not([data-theme="light"])
+  .screen-shell.command-screen
+  .composer-tool-approval {
+  --tool-approval-accent: #e7a83b;
+}
+
+.screen-shell.command-screen .composer-tool-approval-copy {
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 9px;
+}
+
+.screen-shell.command-screen .composer-tool-approval-copy > svg {
+  flex: 0 0 auto;
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  color: var(--tool-approval-accent);
+}
+
+.screen-shell.command-screen .composer-tool-approval-copy > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.screen-shell.command-screen .composer-tool-approval-copy strong {
+  color: var(--text);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.25;
+}
+
+.screen-shell.command-screen .composer-tool-approval-copy span {
+  overflow-wrap: anywhere;
+  color: var(--muted);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  line-height: 1.45;
+}
+
+.screen-shell.command-screen .composer-tool-approval-actions {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.screen-shell.command-screen .composer-tool-approval-actions button {
+  min-height: 30px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.screen-shell.command-screen
+  .composer-tool-approval-actions
+  button:hover:not(:disabled) {
+  background: var(--surface-raised);
+}
+
+.screen-shell.command-screen
+  .composer-tool-approval-actions
+  .composer-tool-approval-approve {
+  border-color: var(--accent-strong);
+  background: var(--accent-strong);
+  color: var(--surface);
+}
+
+.screen-shell.command-screen
+  .composer-tool-approval-actions
+  .composer-tool-approval-approve:hover:not(:disabled) {
+  opacity: 0.88;
+  background: var(--accent-strong);
+}
+
+.screen-shell.command-screen .composer-tool-approval-actions button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.screen-shell.command-screen .composer-tool-approval-error {
+  grid-column: 1 / -1;
+  margin: -2px 0 0 26px;
+  color: var(--text-danger, #b42318);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  line-height: 1.4;
+}
+
+@media (max-width: 640px) {
+  .screen-shell.command-screen .composer-tool-approval {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .screen-shell.command-screen .composer-tool-approval-actions {
+    justify-content: flex-end;
+  }
+}
+
 .screen-shell.command-screen .composer-progress-pill {
   display: inline-flex;
   align-items: center;
   justify-self: center;
-  gap: 6px;
-  min-height: 26px;
-  margin: 0 auto 10px;
-  padding: 0 12px;
-  border: 1px solid var(--n-300);
-  border-radius: var(--radius-pill);
-  background: var(--n-0);
-  color: var(--n-700);
-  font-size: calc(12px + var(--user-ui-font-delta));
+  gap: 5px;
+  min-height: 24px;
+  margin: 0 auto 8px;
+  padding: 0 4px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--n-650);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  line-height: 1;
   white-space: nowrap;
 }
 
+.screen-shell.command-screen button.composer-progress-pill {
+  cursor: pointer;
+  font-family: inherit;
+  box-shadow: none;
+  transition:
+    color var(--dur-fast) var(--ease),
+    opacity var(--dur-fast) var(--ease);
+}
+
+.screen-shell.command-screen button.composer-progress-pill:hover,
+.screen-shell.command-screen button.composer-progress-pill[data-state="open"] {
+  background: transparent;
+  color: var(--n-950);
+}
+
+.screen-shell.command-screen button.composer-progress-pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .screen-shell.command-screen .composer-progress-spinner {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   color: var(--n-550);
 }
 
 .screen-shell.command-screen .composer-progress-step {
-  color: var(--n-850);
+  color: inherit;
   font-weight: 500;
+}
+
+.screen-shell.command-screen .composer-progress-disclosure {
+  width: 12px;
+  height: 12px;
+  color: var(--n-500);
+  stroke-width: 1.8;
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.screen-shell.command-screen
+  button.composer-progress-pill[data-state="open"]
+  .composer-progress-disclosure {
+  transform: translateY(-1px);
 }
 
 .screen-shell.command-screen .composer-progress-separator,
 .screen-shell.command-screen .composer-goal-separator {
   color: var(--n-450);
+}
+
+.screen-shell.command-screen .composer-progress-additions,
+.screen-shell.command-screen .composer-progress-deletions {
+  font-variant-numeric: tabular-nums;
+}
+
+.screen-shell.command-screen .composer-progress-additions {
+  color: var(--success);
+}
+
+.screen-shell.command-screen .composer-progress-deletions {
+  color: var(--danger);
+}
+
+/* Portaled by Radix so a low canvas cannot clip the checklist. */
+.composer-progress-popover {
+  z-index: 90;
+  display: grid;
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(420px, var(--radix-popover-content-available-height));
+  gap: 10px;
+  overflow: hidden;
+  padding: 14px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-xl);
+  background: var(--surface-raised, var(--n-0));
+  color: var(--n-900);
+  box-shadow: var(--shadow-overlay);
+}
+
+.composer-progress-popover-header {
+  gap: 4px;
+}
+
+.composer-progress-popover-header [data-slot="popover-title"] {
+  margin: 0;
+  color: var(--n-950);
+  font-size: calc(13px + var(--user-ui-font-delta));
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.composer-progress-popover-header [data-slot="popover-description"] {
+  margin: 0;
+  color: var(--n-650);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.45;
+}
+
+.composer-progress-meter {
+  color: var(--n-600);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-variant-numeric: tabular-nums;
+}
+
+.composer-progress-checklist {
+  display: grid;
+  max-height: min(
+    300px,
+    calc(var(--radix-popover-content-available-height) - 100px)
+  );
+  gap: 3px;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+
+.composer-progress-checklist > li {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  min-height: 34px;
+  padding: 7px 8px;
+  border-radius: var(--radius-md);
+  color: var(--n-800);
+}
+
+.composer-progress-checklist > li[aria-current="step"] {
+  background: var(--n-100);
+  color: var(--n-950);
+}
+
+.composer-progress-item-icon {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  color: var(--n-500);
+}
+
+.composer-progress-item-icon svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+}
+
+.composer-progress-item-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.45;
+}
+
+.composer-progress-item-status {
+  color: var(--n-550);
+  font-size: calc(10px + var(--user-ui-font-delta));
+  line-height: 1.7;
+  white-space: nowrap;
+}
+
+.composer-progress-checklist
+  > li[data-status="completed"]
+  .composer-progress-item-icon {
+  color: var(--success);
+}
+
+.composer-progress-checklist
+  > li[data-status="completed"]
+  .composer-progress-item-title {
+  color: var(--n-600);
+}
+
+.composer-progress-checklist
+  > li[data-status="inProgress"]
+  .composer-progress-item-icon {
+  color: var(--accent);
+}
+
+.composer-progress-checklist
+  > li[data-status="blocked"]
+  :is(.composer-progress-item-icon, .composer-progress-item-status) {
+  color: var(--warning);
+}
+
+.composer-progress-checklist
+  > li[data-status="canceled"]
+  :is(.composer-progress-item-icon, .composer-progress-item-status) {
+  color: var(--danger);
+}
+
+@media (max-width: 420px) {
+  .screen-shell.command-screen .composer-progress-files,
+  .screen-shell.command-screen
+    .composer-progress-separator:has(+ .composer-progress-files) {
+    display: none;
+  }
+
+  .composer-progress-popover {
+    width: calc(100vw - 16px);
+  }
 }
 
 /*
@@ -12125,14 +12562,84 @@ body.modal-open {
 /* Sidebar task signals keep full titles discoverable without widening the rail. */
 .screen-shell.command-screen .sidebar-task-attention {
   justify-self: end;
-  width: 7px;
-  height: 7px;
+  width: 5px;
+  height: 5px;
   border-radius: var(--radius-pill);
   background: var(--command-task-pending);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--command-task-pending) 13%, transparent),
+    0 0 6px color-mix(in srgb, var(--command-task-pending) 24%, transparent);
 }
 
 .screen-shell.command-screen .linked-conversation-item {
   grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.screen-shell.command-screen .command-sidebar-thread-row {
+  position: relative;
+  min-width: 0;
+}
+
+.screen-shell.command-screen .command-sidebar-thread-archive {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  z-index: 1;
+  display: grid;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--command-sidebar-active);
+  color: var(--n-700);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-50%);
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    opacity 0.14s ease;
+}
+
+.screen-shell.command-screen .command-sidebar-thread-archive svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 1.9;
+}
+
+.screen-shell.command-screen
+  .command-sidebar-thread-row:hover
+  .command-sidebar-thread-archive,
+.screen-shell.command-screen
+  .command-sidebar-thread-row:has(:focus-visible)
+  .command-sidebar-thread-archive {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.screen-shell.command-screen .command-sidebar-thread-archive:hover,
+.screen-shell.command-screen .command-sidebar-thread-archive:focus-visible {
+  background: var(--n-100);
+  color: var(--n-950);
+  outline: 0;
+}
+
+.screen-shell.command-screen
+  .command-sidebar-thread-row[data-has-archive="true"]:hover
+  .command-thread-status,
+.screen-shell.command-screen
+  .command-sidebar-thread-row[data-has-archive="true"]:hover
+  .command-thread-status-time,
+.screen-shell.command-screen
+  .command-sidebar-thread-row[data-has-archive="true"]:has(:focus-visible)
+  .command-thread-status,
+.screen-shell.command-screen
+  .command-sidebar-thread-row[data-has-archive="true"]:has(:focus-visible)
+  .command-thread-status-time {
+  opacity: 0;
 }
 
 .screen-shell.command-screen .command-sidebar-thread-title {
@@ -12152,72 +12659,29 @@ body.modal-open {
 }
 
 .screen-shell.command-screen
-  .command-thread-status:is(.is-pending-unread, .is-completed-unread) {
-  width: 8px;
-  height: 8px;
+  .command-thread-status:is(
+    .is-pending-unread,
+    .is-completed-unread,
+    .is-failed-unread
+  ) {
+  width: 6px;
+  height: 6px;
   border-radius: var(--radius-pill);
 }
 
-.screen-shell.command-screen .command-thread-status.is-pending-unread {
+.screen-shell.command-screen
+  .command-thread-status:is(.is-pending-unread, .is-failed-unread) {
   background: var(--command-task-pending);
-}
-
-.screen-shell.command-screen .command-thread-status.is-pending-viewed {
-  width: 9px;
-  height: 9px;
-  border: 1.5px solid var(--command-task-pending);
-  border-radius: var(--radius-pill);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--command-task-pending) 13%, transparent),
+    0 0 6px color-mix(in srgb, var(--command-task-pending) 24%, transparent);
 }
 
 .screen-shell.command-screen .command-thread-status.is-completed-unread {
   background: var(--command-task-complete);
-}
-
-.screen-shell.command-screen .command-thread-status.is-failed {
-  color: var(--command-task-error);
-}
-
-.screen-shell.command-screen .command-thread-status.is-failed svg {
-  width: 12px;
-  height: 12px;
-  stroke-width: 2;
-}
-
-.screen-shell.command-screen .command-thread-status.is-running {
-  width: 15px;
-  height: 12px;
-  gap: 2px;
-  color: var(--command-task-running);
-}
-
-.screen-shell.command-screen .command-thread-status.is-running i {
-  display: block;
-  width: 2px;
-  height: 5px;
-  border-radius: var(--radius-pill);
-  background: currentColor;
-  animation: command-sidebar-task-pulse 900ms ease-in-out infinite;
-}
-
-.screen-shell.command-screen .command-thread-status.is-running i:nth-child(2) {
-  animation-delay: 120ms;
-}
-
-.screen-shell.command-screen .command-thread-status.is-running i:nth-child(3) {
-  animation-delay: 240ms;
-}
-
-@keyframes command-sidebar-task-pulse {
-  0%,
-  100% {
-    height: 4px;
-    opacity: 0.45;
-  }
-
-  50% {
-    height: 10px;
-    opacity: 1;
-  }
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--command-task-complete) 13%, transparent),
+    0 0 6px color-mix(in srgb, var(--command-task-complete) 24%, transparent);
 }
 
 .screen-shell.command-screen .command-thread-status-time {
@@ -12278,8 +12742,6 @@ body.modal-open {
 :root[data-theme="light"] {
   --command-task-pending: #d49a18;
   --command-task-complete: #349263;
-  --command-task-error: #c65a4e;
-  --command-task-running: #4e5258;
   --command-task-tooltip-bg: #fffefa;
   --command-task-tooltip-border: #deddd7;
   --command-task-tooltip-fg: #272825;
@@ -12289,8 +12751,6 @@ body.modal-open {
 :root[data-theme="dark"] {
   --command-task-pending: #f1c24d;
   --command-task-complete: #68cb93;
-  --command-task-error: #ef8177;
-  --command-task-running: #d0d0d0;
   --command-task-tooltip-bg: #4b4b4c;
   --command-task-tooltip-border: #5a5a5b;
   --command-task-tooltip-fg: #e2e2e2;
@@ -12427,14 +12887,106 @@ body.modal-open {
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .screen-shell.command-screen .command-thread-status.is-running i {
-    height: 7px;
-    animation: none;
-  }
+/* End sidebar task signals. */
+
+.screen-shell.command-screen .command-thread-actions {
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
 }
 
-/* End sidebar task signals. */
+.screen-shell.command-screen .thread-scene-switcher {
+  display: flex;
+  flex-direction: row;
+  flex: 0 0 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 0;
+}
+
+.screen-shell.command-screen
+  .thread-scene-switcher
+  .thread-scene-switcher-list {
+  height: 26px;
+  gap: 1px;
+  padding: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--n-950) 5%, transparent);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.035);
+}
+
+.screen-shell.command-screen
+  .command-thread-toolbar
+  .thread-scene-switcher-option {
+  position: relative;
+  height: 22px;
+  min-height: 22px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--n-550);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.screen-shell.command-screen
+  .command-thread-toolbar
+  .thread-scene-switcher-option:hover {
+  background: color-mix(in srgb, var(--n-0) 52%, transparent);
+  color: var(--n-850);
+}
+
+.screen-shell.command-screen
+  .command-thread-toolbar
+  .thread-scene-switcher-option[data-state="active"] {
+  background: var(--n-0);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.07),
+    0 0 0 0.5px rgb(0 0 0 / 0.035);
+  color: var(--n-900);
+}
+
+.screen-shell.command-screen
+  .command-thread-toolbar
+  .thread-scene-switcher-option:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  outline-offset: 1px;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .thread-scene-switcher
+  .thread-scene-switcher-list {
+  background: rgb(255 255 255 / 0.065);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04);
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-toolbar
+  .thread-scene-switcher-option:hover {
+  background: rgb(255 255 255 / 0.055);
+  color: var(--n-850);
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-toolbar
+  .thread-scene-switcher-option[data-state="active"] {
+  background: rgb(255 255 255 / 0.12);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.055);
+  color: var(--n-950);
+}
 
 /* Team empty states share one compact rhythm across Office, Workflow, and Experts. */
 .screen-shell.command-screen
@@ -12584,5 +13136,75 @@ body.modal-open {
     .command-team-empty-state[data-team-empty-state="loading"]
     .command-team-empty-status::before {
     animation: none;
+  }
+}
+
+/* Team page polish stays inside the original catalog layout and neutral system. */
+.screen-shell.command-screen
+  .shell-page-view[data-shell-view="team"]
+  .team-mode-summary {
+  gap: 16px;
+}
+
+.screen-shell.command-screen
+  .shell-page-view[data-shell-view="team"]
+  .team-mode-summary
+  .catalog-context-note {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.screen-shell.command-screen .team-mode-summary-detail {
+  color: var(--n-700);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .expert-team-entry-policy {
+  display: inline-flex;
+  width: max-content;
+  min-height: 22px;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  padding: 0 7px;
+  border: 1px solid var(--n-300);
+  border-radius: var(--radius-pill);
+  background: var(--n-25);
+  color: var(--n-750);
+  font-size: calc(10px + var(--user-ui-font-delta));
+  font-weight: 500;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.screen-shell.command-screen .expert-team-entry-policy svg {
+  width: 11px;
+  height: 11px;
+  stroke-width: 1.8;
+}
+
+@container page-stack (max-width: 680px) {
+  .screen-shell.command-screen
+    .shell-page-view[data-shell-view="team"]
+    .team-mode-summary {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .screen-shell.command-screen
+    .shell-page-view[data-shell-view="team"]
+    .team-mode-summary
+    .catalog-context-note {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+  }
+
+  .screen-shell.command-screen .team-mode-summary-detail {
+    white-space: normal;
   }
 }

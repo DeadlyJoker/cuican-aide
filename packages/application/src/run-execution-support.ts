@@ -1,6 +1,7 @@
 import {
   parseProviderCheckpoint,
   parseRateLimitSnapshot,
+  parseWorkspaceChangeSummary,
   type CanonicalAgentEvent,
 } from "@crewon/contracts";
 import type { RunLifecycleEvent, RunState } from "@crewon/domain";
@@ -217,6 +218,13 @@ export function mapAgentEvent(
             event.data.outputTruncated,
             "tool_result_invalid",
           ),
+          ...(event.data.workspaceChanges === undefined
+            ? {}
+            : {
+                workspaceChanges: parseWorkspaceChangeSummary(
+                  event.data.workspaceChanges,
+                ),
+              }),
         },
       };
     case "segment.checkpointed": {

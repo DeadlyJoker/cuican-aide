@@ -42,3 +42,11 @@ export const sidebarThreadActionClass = cn(
   "group-data-[selected=true]/thread-row:opacity-100",
   "hover:bg-[var(--n-alpha-10)]",
 );
+
+/** Always-visible icon action for a workspace header. */
+export const sidebarWorkspaceActionClass = cn(
+  "grid size-[20px] place-items-center rounded-[var(--radius-sm)] border-0 bg-transparent p-0",
+  "cursor-pointer text-[var(--n-alpha-45)] opacity-70",
+  "transition-[opacity,background,color] duration-[var(--dur-fast)] ease-[var(--ease)]",
+  "hover:bg-[var(--n-alpha-10)] hover:opacity-100 focus-visible:opacity-100",
+);

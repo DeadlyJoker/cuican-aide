@@ -12,15 +12,16 @@ import electronUpdater from "electron-updater";
 
 import type {
   DesktopHttpRequest,
-  DesktopHttpResponse,
   DesktopUpdateProgress,
 } from "../src/lib/desktop/desktopBridge.ts";
 import { BrowserViewManager, openExternal } from "./browserViews.ts";
+import { desktopFetch } from "./desktopHttp.ts";
 import {
   LocalWorkspaceAuthority,
   LocalWorkspaceSandbox,
 } from "./localWorkspace.ts";
 import { loadLocalEnvironment } from "./localEnvironment.ts";
+import { providerModelCatalogForForm } from "./providerModelCatalog.ts";
 import { ProviderCredentialStore } from "./providerCredentials.ts";
 import { RuntimeSupervisor, runtimePaths } from "./runtimeSupervisor.ts";
 
@@ -72,6 +73,11 @@ async function launch(): Promise<void> {
   );
   const sandbox = new LocalWorkspaceSandbox(authority);
   let runtime: RuntimeSupervisor | null = null;
+  const paths = runtimePaths({
+    packaged: app.isPackaged,
+    repositoryRoot: repositoryRoot ?? process.resourcesPath,
+    resourcesPath: process.resourcesPath,
+  });
   const providers = new ProviderCredentialStore(
     runtimeDataDirectory,
     async () => {
@@ -80,13 +86,22 @@ async function launch(): Promise<void> {
   );
   runtime = new RuntimeSupervisor({
     dataDirectory: runtimeDataDirectory,
-    paths: runtimePaths({
-      packaged: app.isPackaged,
-      repositoryRoot: repositoryRoot ?? process.resourcesPath,
-      resourcesPath: process.resourcesPath,
-    }),
+    paths,
     repositoryRoot,
     provider: () => providers.active(),
+    providerModelCatalog: async (provider) => {
+      const result = await providerModelCatalogForForm(
+        {
+          apiKey: provider.apiKey,
+          defaultModelId: provider.modelId,
+          endpoint: provider.endpoint,
+          environmentVariable: null,
+          providerId: provider.providerId,
+        },
+        { paths, providers },
+      );
+      return result.status === "ok" ? result.models : null;
+    },
     workspaceRoot: () => {
       try {
         return authority.root();
@@ -105,7 +120,15 @@ async function launch(): Promise<void> {
   const window = createWindow();
   desktopLog("window created");
   const browserViews = new BrowserViewManager(window);
-  registerIpc({ authority, browserViews, providers, runtime, sandbox, window });
+  registerIpc({
+    authority,
+    browserViews,
+    paths,
+    providers,
+    runtime,
+    sandbox,
+    window,
+  });
   await loadRenderer(window);
   desktopLog("renderer loaded");
 
@@ -176,13 +199,22 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
 function registerIpc(options: {
   authority: LocalWorkspaceAuthority;
   browserViews: BrowserViewManager;
+  paths: ReturnType<typeof runtimePaths>;
   providers: ProviderCredentialStore;
   runtime: RuntimeSupervisor;
   sandbox: LocalWorkspaceSandbox;
   window: BrowserWindow;
 }): void {
-  const { authority, browserViews, providers, runtime, sandbox, window } =
-    options;
+  const {
+    authority,
+    browserViews,
+    paths,
+    providers,
+    runtime,
+    sandbox,
+    window,
+  } = options;
+  const activeHttpRequests = new Map<string, AbortController>();
   const handle = <T extends unknown[]>(
     channel: string,
     listener: (...args: T) => unknown,
@@ -195,13 +227,47 @@ function registerIpc(options: {
 
   handle("crewon:runtime:bootstrap", () => runtime.session());
   handle("crewon:runtime:reload-provider", () => runtime.restart());
-  handle("crewon:http:fetch", (request: DesktopHttpRequest) =>
-    desktopFetch(request),
+  handle(
+    "crewon:runtime:update-cloud-agent-profiles",
+    async (
+      profiles: readonly {
+        agentVersionId: string;
+        instructions: string;
+        invocationUrl: string;
+        modelId: string;
+        agentId: number;
+      }[],
+    ) => runtime.updateCloudAgentProfiles(profiles),
   );
+  handle("crewon:http:fetch", (request: DesktopHttpRequest) =>
+    desktopFetch(request, {
+      activeRequests: activeHttpRequests,
+      emit: (requestId, event) => {
+        if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
+          window.webContents.send("crewon:http:body", requestId, event);
+        }
+      },
+    }),
+  );
+  handle("crewon:http:abort", (requestId: string) => {
+    if (!/^[0-9a-f-]{36}$/iu.test(requestId)) {
+      throw new Error("desktop_http_request_id_invalid");
+    }
+    activeHttpRequests
+      .get(requestId)
+      ?.abort(new Error("desktop_http_request_aborted"));
+  });
+  window.once("closed", () => {
+    for (const controller of activeHttpRequests.values()) {
+      controller.abort(new Error("desktop_http_window_closed"));
+    }
+    activeHttpRequests.clear();
+  });
   handle("crewon:sandbox:list-directory", (path?: string) =>
     sandbox.listDirectory(path),
   );
   handle("crewon:sandbox:read-file", (path: string) => sandbox.readFile(path));
+  handle("crewon:sandbox:read-git-summary", () => sandbox.readGitSummary());
   handle("crewon:sandbox:read-diff", () => sandbox.readDiff());
   handle("crewon:sandbox:run-command", (request: unknown) =>
     sandbox.runCommand(request),
@@ -239,6 +305,9 @@ function registerIpc(options: {
   );
   handle("crewon:providers:upsert", (request: unknown) =>
     providers.upsert(request),
+  );
+  handle("crewon:providers:model-catalog", (request: unknown) =>
+    providerModelCatalogForForm(request, { paths, providers }),
   );
   handle("crewon:window:close", () => window.close());
   handle("crewon:window:minimize", () => window.minimize());
@@ -306,53 +375,6 @@ function registerUpdater(
     await autoUpdater.downloadUpdate();
   });
   handle("crewon:updater:relaunch", () => autoUpdater.quitAndInstall());
-}
-
-async function desktopFetch(
-  request: DesktopHttpRequest,
-): Promise<DesktopHttpResponse> {
-  if (
-    typeof request !== "object" ||
-    request === null ||
-    typeof request.url !== "string" ||
-    typeof request.method !== "string" ||
-    !Array.isArray(request.headers) ||
-    !(request.body === null || request.body instanceof Uint8Array)
-  ) {
-    throw new Error("desktop_http_request_invalid");
-  }
-  const url = new URL(request.url);
-  const loopback =
-    url.hostname === "localhost" ||
-    url.hostname === "[::1]" ||
-    /^127(?:\.\d{1,3}){3}$/u.test(url.hostname);
-  if ((url.protocol !== "http:" && url.protocol !== "https:") || !loopback) {
-    throw new Error("desktop_http_url_invalid");
-  }
-  const requestBody =
-    request.body === null
-      ? undefined
-      : (request.body.buffer.slice(
-          request.body.byteOffset,
-          request.body.byteOffset + request.body.byteLength,
-        ) as ArrayBuffer);
-  const response = await fetch(url, {
-    method: request.method,
-    headers: new Headers(request.headers as [string, string][]),
-    body: requestBody,
-    redirect: "error",
-    signal: AbortSignal.timeout(30_000),
-  });
-  const body = new Uint8Array(await response.arrayBuffer());
-  if (body.byteLength > 64 * 1024 * 1024)
-    throw new Error("desktop_http_response_too_large");
-  return {
-    url: response.url,
-    status: response.status,
-    statusText: response.statusText,
-    headers: [...response.headers.entries()],
-    body,
-  };
 }
 
 function requireMainRenderer(

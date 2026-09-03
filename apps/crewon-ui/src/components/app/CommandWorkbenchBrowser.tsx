@@ -6,8 +6,19 @@ import {
   MoreVertical,
   RotateCw,
 } from "lucide-react";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import {
+  FormEvent,
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 
+import {
+  allocateNativeBrowserViewId,
+  startNativeBrowserViewGeneration,
+  syncNativeBrowserViewForReveal,
+} from "./nativeBrowserViewLifecycle";
 import { getDesktopBridge } from "../../lib/desktop/desktopBridge";
 import type { Locale } from "../../lib/i18n";
 
@@ -75,6 +86,7 @@ function NativeBrowserViewport({
     x: number;
     y: number;
   } | null>(null);
+  const syncBoundsRef = useRef<(() => Promise<void>) | null>(null);
   const obscuredRef = useRef(obscured);
   obscuredRef.current = obscured;
   const [nativeError, setNativeError] = useState<string | null>(null);
@@ -83,23 +95,29 @@ function NativeBrowserViewport({
   const native = bridge !== null;
 
   useEffect(() => {
-    if (!active || !native || !viewportRef.current) {
+    if (!active || bridge === null || !viewportRef.current) {
       return;
     }
 
-    let disposed = false;
+    let generationActive = true;
     let resizeObserver: ResizeObserver | null = null;
-    const webviewLabel = `crewon-workbench-browser-${instanceId.replace(/[^a-zA-Z0-9-]/g, "-")}`;
+    const webviewLabel = allocateNativeBrowserViewId(instanceId);
+    const browser = bridge.browser;
     setNativeReady(false);
 
-    async function syncBounds() {
+    async function syncBounds(forceVisibilitySync = false) {
       const childView = childViewRef.current;
-      if (!childView || !viewportRef.current || disposed || bridge === null) {
+      if (
+        childView !== webviewLabel ||
+        !viewportRef.current ||
+        !generationActive
+      ) {
         return;
       }
       const rect = viewportRef.current.getBoundingClientRect();
       if (rect.width < 1 || rect.height < 1) {
-        await bridge.browser.setVisible(childView, false);
+        lastBoundsRef.current = null;
+        await browser.setVisible(childView, false);
         return;
       }
       const next = {
@@ -114,45 +132,64 @@ function NativeBrowserViewport({
         last.x === next.x &&
         last.y === next.y &&
         last.w === next.w &&
-        last.h === next.h
+        last.h === next.h &&
+        !forceVisibilitySync
       ) {
         return;
       }
-      lastBoundsRef.current = next;
-      await bridge.browser.updateBounds(childView, {
-        x: next.x,
-        y: next.y,
-        width: next.w,
-        height: next.h,
+      await syncNativeBrowserViewForReveal({
+        bounds: {
+          x: next.x,
+          y: next.y,
+          width: next.w,
+          height: next.h,
+        },
+        browser,
+        id: childView,
+        isCurrent: () =>
+          generationActive && childViewRef.current === webviewLabel,
+        isObscured: () => obscuredRef.current,
       });
-      if (!obscuredRef.current) {
-        await bridge.browser.setVisible(childView, true);
+      if (generationActive && childViewRef.current === webviewLabel) {
+        lastBoundsRef.current = next;
       }
     }
+    const syncVisibility = () => syncBounds(true);
+    syncBoundsRef.current = syncVisibility;
 
-    void (async () => {
-      try {
-        await bridge?.browser.destroy(webviewLabel);
-        if (disposed || !viewportRef.current) {
-          return;
-        }
+    const generation = startNativeBrowserViewGeneration({
+      browser,
+      getBounds: () => {
+        if (!viewportRef.current) return null;
         const rect = viewportRef.current.getBoundingClientRect();
-        await bridge?.browser.create(webviewLabel, url, {
+        return {
           x: Math.max(0, Math.round(rect.left)),
           y: Math.max(0, Math.round(rect.top)),
           width: Math.max(1, Math.round(rect.width)),
           height: Math.max(1, Math.round(rect.height)),
-        });
+        };
+      },
+      id: webviewLabel,
+      url,
+    });
+
+    void generation.completion
+      .then(async (result) => {
+        if (result !== "ready" || !generationActive) return;
         childViewRef.current = webviewLabel;
+        await syncBounds();
+        if (!generationActive || childViewRef.current !== webviewLabel) return;
         setNativeError(null);
         setNativeReady(true);
-        void syncBounds();
         resizeObserver = new ResizeObserver(() => void syncBounds());
-        resizeObserver.observe(viewportRef.current);
-      } catch (error) {
+        if (viewportRef.current) {
+          resizeObserver.observe(viewportRef.current);
+        }
+      })
+      .catch((error) => {
+        if (!generationActive) return;
         setNativeError(error instanceof Error ? error.message : String(error));
-      }
-    })();
+      });
 
     // ResizeObserver only fires on size changes. Sidebar toggles, window
     // moves, and layout shifts move the viewport without resizing it, so poll
@@ -160,16 +197,19 @@ function NativeBrowserViewport({
     const boundsPoll = window.setInterval(() => void syncBounds(), 400);
 
     return () => {
-      disposed = true;
+      generationActive = false;
       window.clearInterval(boundsPoll);
       resizeObserver?.disconnect();
       lastBoundsRef.current = null;
-      if (childViewRef.current) {
-        void bridge?.browser.destroy(childViewRef.current);
+      if (childViewRef.current === webviewLabel) {
         childViewRef.current = null;
       }
+      if (syncBoundsRef.current === syncVisibility) {
+        syncBoundsRef.current = null;
+      }
+      void generation.dispose();
     };
-  }, [active, instanceId, native, reloadKey, url]);
+  }, [active, bridge, instanceId, native, reloadKey, url]);
 
   // The native webview floats above every HTML overlay, so hide it while the
   // toolbar menu (or any layer above the viewport) is open.
@@ -178,7 +218,11 @@ function NativeBrowserViewport({
     if (!childView || bridge === null) {
       return;
     }
-    void bridge.browser.setVisible(childView, !obscured && active);
+    if (obscured || !active) {
+      void bridge.browser.setVisible(childView, false);
+    } else {
+      void syncBoundsRef.current?.();
+    }
   }, [obscured, active, reloadKey, url]);
 
   return (
@@ -212,6 +256,7 @@ function NativeBrowserViewport({
 export function CommandWorkbenchBrowser({
   active,
   instanceId,
+  interactive = active,
   locale,
   obscured = false,
   onNewTab,
@@ -219,6 +264,7 @@ export function CommandWorkbenchBrowser({
 }: {
   active: boolean;
   instanceId: string;
+  interactive?: boolean;
   locale: Locale;
   obscured?: boolean;
   onNewTab: () => void;
@@ -233,6 +279,7 @@ export function CommandWorkbenchBrowser({
   const [menuOpen, setMenuOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
   const addressInputRef = useRef<HTMLInputElement>(null);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const onNewTabRef = useRef(onNewTab);
   const onTitleChangeRef = useRef(onTitleChange);
@@ -248,29 +295,37 @@ export function CommandWorkbenchBrowser({
     if (!menuOpen) {
       return;
     }
-    function dismissMenu(event: KeyboardEvent | PointerEvent) {
-      if (event instanceof KeyboardEvent && event.key === "Escape") {
-        setMenuOpen(false);
-        return;
-      }
-      if (
-        event instanceof PointerEvent &&
-        menuRef.current &&
-        !menuRef.current.contains(event.target as Node)
-      ) {
+    function dismissMenu(event: PointerEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
         setMenuOpen(false);
       }
     }
-    document.addEventListener("keydown", dismissMenu);
     document.addEventListener("pointerdown", dismissMenu);
     return () => {
-      document.removeEventListener("keydown", dismissMenu);
       document.removeEventListener("pointerdown", dismissMenu);
     };
   }, [menuOpen]);
 
   useEffect(() => {
-    if (!active) {
+    if (!interactive) {
+      setMenuOpen(false);
+    }
+  }, [interactive]);
+
+  function handleMenuKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
+    if (!menuOpen || event.key !== "Escape") {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    setMenuOpen(false);
+    window.requestAnimationFrame(() => {
+      menuButtonRef.current?.focus();
+    });
+  }
+
+  useEffect(() => {
+    if (!interactive) {
       return;
     }
     function handleShortcut(event: KeyboardEvent) {
@@ -306,7 +361,7 @@ export function CommandWorkbenchBrowser({
     }
     document.addEventListener("keydown", handleShortcut);
     return () => document.removeEventListener("keydown", handleShortcut);
-  }, [active, currentUrl, history]);
+  }, [currentUrl, history, interactive]);
 
   function navigate(value: string) {
     const url = normalizeWorkbenchBrowserUrl(value);
@@ -401,8 +456,13 @@ export function CommandWorkbenchBrowser({
           </button>
           {addressError ? <span role="alert">{addressError}</span> : null}
         </form>
-        <div className="command-browser-menu-anchor" ref={menuRef}>
+        <div
+          className="command-browser-menu-anchor"
+          ref={menuRef}
+          onKeyDown={handleMenuKeyDown}
+        >
           <button
+            ref={menuButtonRef}
             aria-expanded={menuOpen}
             aria-label={locale === "zh" ? "浏览器菜单" : "Browser menu"}
             className="command-browser-more"

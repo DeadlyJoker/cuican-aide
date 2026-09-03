@@ -13,6 +13,7 @@ import {
   startControlTeamTurn,
   type ControlTeamRuntimeClient,
 } from "./controlTeamRuntime";
+import { controlTeamDelegationMarker } from "./controlTeamDelegation";
 
 describe("Control Team member settings", () => {
   it("adds the saved prompt and selected capabilities to a member assignment", () => {
@@ -302,10 +303,28 @@ function teamClient(
         goalRevision += 1;
         goalStatus = "active";
       }
-      const nextMessage = message(threadId, 3, "user", body.content);
+      const isManagerResponse =
+        body.agentVersionId === "agent-manager" &&
+        body.content.includes("· 成员报告]");
+      const isManagerFinal =
+        body.agentVersionId === "agent-manager" &&
+        body.content.includes("· 专家会诊报告]");
+      const nextMessage = message(
+        threadId,
+        isManagerResponse || isManagerFinal ? 3 : 5,
+        "user",
+        body.content,
+      );
       appendedMessages.push(nextMessage);
       const created = {
-        ...run("manager-final", threadId),
+        ...run(
+          isManagerFinal
+            ? "manager-final"
+            : isManagerResponse
+              ? "manager-delegate"
+              : "member-final-qa",
+          threadId,
+        ),
         goalBinding:
           body.executionIntent === "resumeGoal"
             ? {
@@ -340,14 +359,27 @@ function teamClient(
     }),
     getThread: vi.fn(async (threadId) => ({
       thread: thread(threadId, {
-        revision: threadId === "thread-main" ? 3 : 2,
+        revision:
+          threadId === "thread-main"
+            ? createdRuns.some((item) =>
+                ["manager-delegate", "manager-final"].includes(item.runId),
+              )
+              ? 4
+              : 3
+            : 2,
       }),
       eventSequence: threadId === "thread-main" ? 3 : 2,
     })),
-    listThreadMessages: vi.fn(async (threadId) => ({
-      data: [message(threadId, 3, "assistant", `${threadId} evidence report`)],
-      nextCursor: null,
-    })),
+    listThreadMessages: vi.fn(async (threadId) => {
+      const content =
+        threadId === "thread-main"
+          ? `@QA answer the user directly.\n${controlTeamDelegationMarker("qa")}`
+          : `${threadId} evidence report`;
+      return {
+        data: [message(threadId, 3, "assistant", content)],
+        nextCursor: null,
+      };
+    }),
   };
   return {
     createdRuns,
@@ -374,7 +406,7 @@ describe("Control TypeScript Team Runtime", () => {
     expect(state.client.authorizeOfficeRun).toHaveBeenCalledTimes(3);
   });
 
-  it("submits member forks together and completes final manager synthesis with bounded reports", async () => {
+  it("returns the assigned member Run before completion so its answer can stream", async () => {
     const state = teamClient();
     const plan = await resolveControlTeamPlan({
       client: state.client,
@@ -390,6 +422,7 @@ describe("Control TypeScript Team Runtime", () => {
       expectedRevision: 1,
       content: "Assess the release",
       plan,
+      responseMode: "member",
       idempotencyKey: (operation) => operation,
       onRunStarted: (current) => started.push(current.runId),
       pollIntervalMs: 0,
@@ -400,12 +433,17 @@ describe("Control TypeScript Team Runtime", () => {
       "manager-plan",
       "worker-thread-qa",
       "worker-thread-security",
-      "manager-final",
+      "manager-delegate",
+      "member-final-qa",
     ]);
-    expect(started).toEqual(["manager-final"]);
+    expect(started).toEqual(["member-final-qa"]);
     expect(result.run).toEqual(
-      expect.objectContaining({ runId: "manager-final", status: "completed" }),
+      expect.objectContaining({
+        runId: "member-final-qa",
+        status: "queued",
+      }),
     );
+    expect(state.client.getRun).not.toHaveBeenCalledWith("member-final-qa");
     expect(state.appendedMessages.at(-1)?.content).toContain(
       "thread-security evidence report",
     );
@@ -421,9 +459,72 @@ describe("Control TypeScript Team Runtime", () => {
     ).toContain("thread-manager-plan evidence report");
     expect(state.client.startTurn).toHaveBeenCalledWith(
       "thread-main",
-      expect.objectContaining({ executionIntent: "none" }),
+      expect.objectContaining({
+        agentVersionId: "agent-manager",
+        executionIntent: "none",
+      }),
+      "team.manager.delegate",
+    );
+    expect(state.client.startTurn).toHaveBeenCalledWith(
+      "thread-main",
+      expect.objectContaining({
+        agentVersionId: "agent-qa",
+        executionIntent: "none",
+      }),
+      "team.member.final.qa",
+    );
+  });
+
+  it("returns the expert-team manager Run before completion so its answer can stream", async () => {
+    const state = teamClient();
+    const plan = await resolveControlTeamPlan({
+      client: state.client,
+      threadId: "thread-main",
+      officeVersionId: office.officeVersionId,
+      catalog,
+    });
+    const started: string[] = [];
+
+    const result = await startControlTeamTurn({
+      client: state.client,
+      threadId: "thread-main",
+      expectedRevision: 1,
+      content: "Ask the expert panel for a release verdict",
+      plan,
+      responseMode: "manager",
+      idempotencyKey: (operation) => operation,
+      onRunStarted: (current) => started.push(current.runId),
+      pollIntervalMs: 0,
+      runDeadlineMs: 1_000,
+    });
+
+    expect(state.createdRuns.map((current) => current.runId)).toEqual([
+      "manager-plan",
+      "worker-thread-qa",
+      "worker-thread-security",
+      "manager-final",
+    ]);
+    expect(started).toEqual(["manager-final"]);
+    expect(result.run).toEqual(
+      expect.objectContaining({
+        runId: "manager-final",
+        status: "queued",
+      }),
+    );
+    expect(state.client.getRun).not.toHaveBeenCalledWith("manager-final");
+    expect(state.client.startTurn).toHaveBeenCalledTimes(1);
+    expect(state.client.startTurn).toHaveBeenCalledWith(
+      "thread-main",
+      expect.objectContaining({
+        agentVersionId: "agent-manager",
+        executionIntent: "none",
+      }),
       "team.manager.final",
     );
+    const finalPrompt = state.appendedMessages.at(-1)?.content ?? "";
+    expect(finalPrompt).toContain("唯一面向用户的对话入口");
+    expect(finalPrompt).toContain("不要 @ 任何专家");
+    expect(finalPrompt).not.toContain(controlTeamDelegationMarker("qa"));
   });
 
   it("survives a bounded transient Web proxy failure during a long Team run", async () => {
@@ -441,13 +542,17 @@ describe("Control TypeScript Team Runtime", () => {
       expectedRevision: 1,
       content: "Assess the release despite a brief proxy restart",
       plan,
+      responseMode: "member",
       idempotencyKey: (operation) => operation,
       pollIntervalMs: 0,
       runDeadlineMs: 1_000,
     });
 
     expect(result.run).toEqual(
-      expect.objectContaining({ runId: "manager-final", status: "completed" }),
+      expect.objectContaining({
+        runId: "member-final-qa",
+        status: "queued",
+      }),
     );
     expect(state.client.getRun).toHaveBeenCalledTimes(5);
   });
@@ -469,6 +574,7 @@ describe("Control TypeScript Team Runtime", () => {
         expectedRevision: 1,
         content: "Assess the release across a PIM rolling deployment",
         plan,
+        responseMode: "member",
         idempotencyKey: (operation) => operation,
         pollIntervalMs: 0,
         runDeadlineMs: 120_000,
@@ -478,8 +584,8 @@ describe("Control TypeScript Team Runtime", () => {
       await expect(pending).resolves.toEqual({
         message: expect.objectContaining({ threadId: "thread-main" }),
         run: expect.objectContaining({
-          runId: "manager-final",
-          status: "completed",
+          runId: "member-final-qa",
+          status: "queued",
         }),
       });
       expect(state.client.getRun).toHaveBeenCalledTimes(13);
@@ -503,6 +609,7 @@ describe("Control TypeScript Team Runtime", () => {
       expectedRevision: 1,
       content: "Continue the release goal",
       plan,
+      responseMode: "member",
       idempotencyKey: (operation) => operation,
       executionIntent: "goal",
       pollIntervalMs: 0,
@@ -510,12 +617,18 @@ describe("Control TypeScript Team Runtime", () => {
     });
 
     expect(result.run).toEqual(
-      expect.objectContaining({ runId: "manager-final", status: "completed" }),
+      expect.objectContaining({
+        runId: "member-final-qa",
+        status: "queued",
+      }),
     );
     expect(state.client.startTurn).toHaveBeenCalledWith(
       "thread-main",
-      expect.objectContaining({ executionIntent: "resumeGoal" }),
-      "team.manager.final",
+      expect.objectContaining({
+        agentVersionId: "agent-qa",
+        executionIntent: "resumeGoal",
+      }),
+      "team.member.final.qa",
     );
     expect(state.client.setThreadGoal).toHaveBeenCalledWith(
       "thread-main",
@@ -543,6 +656,7 @@ describe("Control TypeScript Team Runtime", () => {
       expectedRevision: 1,
       content: "Apply the stage-two evidence",
       plan,
+      responseMode: "member",
       idempotencyKey: (operation) => operation,
       executionIntent: "none",
       pollIntervalMs: 0,
@@ -561,7 +675,10 @@ describe("Control TypeScript Team Runtime", () => {
     );
     expect(state.client.setThreadGoal).toHaveBeenCalledTimes(1);
     expect(result.run).toEqual(
-      expect.objectContaining({ runId: "manager-final", status: "completed" }),
+      expect.objectContaining({
+        runId: "member-final-qa",
+        status: "queued",
+      }),
     );
   });
 
@@ -580,6 +697,7 @@ describe("Control TypeScript Team Runtime", () => {
       expectedRevision: 1,
       content: "Start a long-running release goal",
       plan,
+      responseMode: "member",
       idempotencyKey: (operation) => operation,
       pollIntervalMs: 0,
       runDeadlineMs: 1_000,
@@ -610,6 +728,7 @@ describe("Control TypeScript Team Runtime", () => {
       expectedRevision: 1,
       content: "Assess the release",
       plan,
+      responseMode: "member",
       idempotencyKey: (operation) => operation,
       pollIntervalMs: 0,
       runDeadlineMs: 1_000,

@@ -1744,6 +1744,26 @@ export function registerRunExecutionStoreConformance(
       const prepared = await prepareAtomicToolCompletion(fixture.store, claim);
       const input = atomicToolCompletionInput(claim, prepared.receipt.revision);
 
+      await assert.rejects(
+        fixture.store.commitToolExecutionCompletion({
+          ...input,
+          receipt: {
+            ...input.receipt,
+            result: {
+              ...input.receipt.result,
+              workspaceChanges: {
+                schemaVersion: "crewon.workspace-change-summary.v0",
+                paths: ["src/file.ts"],
+                additions: 3,
+                deletions: 1,
+                statsComplete: true,
+              },
+            },
+          },
+        }),
+        hasStoreCode("tool_completion_mismatch"),
+      );
+
       const completed =
         await fixture.store.commitToolExecutionCompletion(input);
       const replayed = await fixture.store.commitToolExecutionCompletion(input);
@@ -2413,6 +2433,13 @@ export function atomicToolCompletionInput(
       isError: false,
       artifactRef: null,
       outputTruncated: false,
+      workspaceChanges: {
+        schemaVersion: "crewon.workspace-change-summary.v0",
+        paths: ["src/file.ts"] as string[],
+        additions: 2,
+        deletions: 1,
+        statsComplete: true,
+      },
     },
   } as const;
   const result = {
@@ -2420,6 +2447,7 @@ export function atomicToolCompletionInput(
     outputDigest: `sha256:${"b".repeat(64)}`,
     isError: event.data.isError,
     artifactRef: event.data.artifactRef,
+    workspaceChanges: event.data.workspaceChanges,
   } as const;
   return {
     lease: leaseFor(claim),

@@ -32,6 +32,7 @@ import {
   parseProbeModelProviderRequest,
   parsePublishAgentVersionRequest,
   parseRunId,
+  parseRunEventExtensions,
   parseRunEventViewMode,
   parseRenameThreadRequest,
   parseRollbackThreadRequest,
@@ -80,6 +81,7 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/runs",
     "/api/v1/runs/{runId}",
     "/api/v1/runs/{runId}/events",
+    "/api/v1/runs/{runId}/plan",
     "/api/v1/runs/{runId}:cancel",
     "/api/v1/threads",
     "/api/v1/threads/{threadId}",
@@ -89,6 +91,7 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/threads/{threadId}/goal/events",
     "/api/v1/threads/{threadId}/messages",
     "/api/v1/threads/{threadId}/runs",
+    "/api/v1/threads/{threadId}/task-changes",
     "/api/v1/threads/{threadId}/turns",
     "/api/v1/threads/{threadId}/workspace-list",
     "/api/v1/threads/{threadId}/workspace-list/{executionId}",
@@ -109,9 +112,19 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
   ]);
   assert.deepEqual(
     Object.keys(openApi.components.schemas.CreateRunRequest.properties),
-    ["threadId", "agentVersionId"],
+    ["threadId", "agentVersionId", "toolPermissionMode"],
   );
   assert.deepEqual(openApi.components.schemas.RunStatus.enum, RUN_STATUSES);
+  assert.equal(
+    Object.hasOwn(openApi.components.schemas.RunView.properties, "plan"),
+    false,
+  );
+  assert.equal(
+    JSON.stringify(
+      openApi.components.schemas["RunPlanUpdatedEventView"],
+    ).includes("callId"),
+    false,
+  );
   assert.deepEqual(openApi.components.schemas.RunView.properties.purpose.enum, [
     "turn",
     "manualCompaction",
@@ -155,6 +168,78 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
       false,
     );
   }
+});
+
+test("publishes bounded workspace change metadata on Tool completions", () => {
+  const completed = openApi.components.schemas.ToolCompletedEventView as {
+    allOf: readonly [
+      unknown,
+      { properties: { data: { properties: Record<string, unknown> } } },
+    ];
+  };
+  const summary = openApi.components.schemas.WorkspaceChangeSummary as {
+    additionalProperties: boolean;
+    required: readonly string[];
+    properties: {
+      paths: { maxItems: number; items: { maxLength: number } };
+      additions: { minimum: number };
+      deletions: { minimum: number };
+      statsComplete: { type: string };
+    };
+  };
+
+  assert.deepEqual(
+    completed.allOf[1].properties.data.properties.workspaceChanges,
+    { $ref: "#/components/schemas/WorkspaceChangeSummary" },
+  );
+  assert.equal(summary.additionalProperties, false);
+  assert.deepEqual([...summary.required].sort(), [
+    "additions",
+    "deletions",
+    "paths",
+    "schemaVersion",
+    "statsComplete",
+  ]);
+  assert.equal(summary.properties.paths.maxItems, 256);
+  assert.equal(summary.properties.paths.items.maxLength, 4096);
+  assert.equal(summary.properties.additions.minimum, 0);
+  assert.equal(summary.properties.deletions.minimum, 0);
+  assert.equal(summary.properties.statsComplete.type, "boolean");
+});
+
+test("publishes the strict revision-bound Thread task-change read model", () => {
+  const endpoint = openApi.paths["/api/v1/threads/{threadId}/task-changes"] as {
+    get: {
+      responses: {
+        "200": { content: { "application/json": { schema: unknown } } };
+      };
+    };
+  };
+  const schema = openApi.components.schemas.ThreadTaskChangeLedgerResponse as {
+    additionalProperties: boolean;
+    required: string[];
+    properties: {
+      eventCount: { maximum: number };
+      includedRunIds: { maxItems: number };
+    };
+  };
+  assert.deepEqual(
+    endpoint.get.responses["200"].content["application/json"].schema,
+    { $ref: "#/components/schemas/ThreadTaskChangeLedgerResponse" },
+  );
+  assert.equal(schema.additionalProperties, false);
+  assert.deepEqual([...schema.required].sort(), [
+    "complete",
+    "eventCount",
+    "historySequence",
+    "includedRunIds",
+    "schemaVersion",
+    "summary",
+    "threadId",
+    "threadRevision",
+  ]);
+  assert.equal(schema.properties.eventCount.maximum, 100_000);
+  assert.equal(schema.properties.includedRunIds.maxItems, 1_000);
 });
 
 test("parses only bounded Workflow Run start authority", () => {
@@ -934,10 +1019,17 @@ test("defines sequence-based SSE resume and a bounded safe event projection", ()
     ),
     true,
   );
+  assert.equal(
+    operation.parameters.some(
+      (parameter) =>
+        parameter.$ref === "#/components/parameters/RunEventExtensions",
+    ),
+    true,
+  );
   assert.deepEqual(Object.keys(operation.responses["200"].content), [
     "text/event-stream",
   ]);
-  assert.equal(openApi.components.schemas.RunEventView.oneOf.length, 27);
+  assert.equal(openApi.components.schemas.RunEventView.oneOf.length, 28);
   assert.deepEqual(
     openApi.components.schemas.RunGoalAccountingUpdatedEventView.allOf[1]
       .properties.data.required,
@@ -992,6 +1084,26 @@ test("defines sequence-based SSE resume and a bounded safe event projection", ()
   for (const forbidden of ["input", "output", "artifactRef"]) {
     assert.equal(toolProjectionKeys.includes(forbidden), false);
   }
+  const requestedToolData =
+    openApi.components.schemas.ToolRequestedEventView.allOf[1].properties.data;
+  const completedToolData =
+    openApi.components.schemas.ToolCompletedEventView.allOf[1].properties.data;
+  assert.equal(requestedToolData.properties.inputPreview?.maxLength, 16_384);
+  assert.equal(requestedToolData.properties.inputTruncated?.type, "boolean");
+  assert.deepEqual(requestedToolData.dependentRequired, {
+    inputPreview: ["inputTruncated"],
+    inputTruncated: ["inputPreview"],
+  });
+  assert.equal(completedToolData.properties.outputPreview?.maxLength, 16_384);
+  assert.deepEqual(openApi.components.parameters.RunEventView.schema.enum, [
+    "client",
+    "audit",
+    "transcript",
+  ]);
+  assert.equal(
+    openApi.components.parameters.RunEventView.schema.default,
+    "client",
+  );
   const planProjectionKeys = Object.keys(
     openApi.components.schemas.PlanProposedEventView.allOf[1].properties.data
       .properties,
@@ -1006,12 +1118,21 @@ test("defines sequence-based SSE resume and a bounded safe event projection", ()
   }
 });
 
-test("parses the explicit client versus audit event view", () => {
+test("parses the explicit Run event views", () => {
   assert.equal(parseRunEventViewMode(undefined), "client");
   assert.equal(parseRunEventViewMode("client"), "client");
   assert.equal(parseRunEventViewMode("audit"), "audit");
-  for (const input of [null, "", "debug", ["audit"]]) {
+  assert.equal(parseRunEventViewMode("transcript"), "transcript");
+  for (const input of [null, "", "debug", ["audit"], ["transcript"]]) {
     assert.throws(() => parseRunEventViewMode(input), isContractError);
+  }
+});
+
+test("parses only the explicit Run event extension", () => {
+  assert.deepEqual(parseRunEventExtensions(undefined), []);
+  assert.deepEqual(parseRunEventExtensions("run-plan-v1"), ["run-plan-v1"]);
+  for (const input of [null, "", "future", ["run-plan-v1"]]) {
+    assert.throws(() => parseRunEventExtensions(input), isContractError);
   }
 });
 
@@ -1027,8 +1148,16 @@ test("parses strict Run requests and rejects authority injection", () => {
     { threadId: "thread-1", agentVersionId: "agent-version-1" },
   );
   assert.deepEqual(
-    parseCreateRunRequest({ threadId: "thread-1", agentVersionId: null }),
-    { threadId: "thread-1", agentVersionId: null },
+    parseCreateRunRequest({
+      threadId: "thread-1",
+      agentVersionId: null,
+      toolPermissionMode: "fullAccess",
+    }),
+    {
+      threadId: "thread-1",
+      agentVersionId: null,
+      toolPermissionMode: "fullAccess",
+    },
   );
   assert.deepEqual(parseCancelRunRequest({ expectedRevision: 2 }), {
     expectedRevision: 2,
@@ -1041,12 +1170,14 @@ test("parses strict Run requests and rejects authority injection", () => {
       content: "start atomically",
       agentVersionId: null,
       executionIntent: "goal",
+      toolPermissionMode: "approveForMe",
     }),
     {
       expectedRevision: 1,
       content: "start atomically",
       agentVersionId: null,
       executionIntent: "goal",
+      toolPermissionMode: "approveForMe",
     },
   );
   assert.deepEqual(
@@ -1061,6 +1192,7 @@ test("parses strict Run requests and rejects authority injection", () => {
     { threadId: "thread-1", tenantId: "tenant-attacker" },
     { threadId: "thread-1", authorityId: "cloud-attacker" },
     { threadId: "thread-1", agentVersionId: "" },
+    { threadId: "thread-1", toolPermissionMode: "alwaysAllow" },
     { threadId: "" },
     null,
   ]) {
@@ -1088,6 +1220,13 @@ test("parses strict Run requests and rejects authority injection", () => {
       agentVersionId: null,
       executionIntent: "none",
       authorityId: "attacker",
+    },
+    {
+      expectedRevision: 1,
+      content: "invalid permission",
+      agentVersionId: null,
+      executionIntent: "none",
+      toolPermissionMode: "alwaysAllow",
     },
   ]) {
     assert.throws(() => parseStartTurnRequest(input), isContractError);
@@ -1243,6 +1382,11 @@ type OpenApiDocument = Readonly<{
     };
   };
   components: {
+    parameters: {
+      RunEventView: {
+        schema: { enum: readonly string[]; default: string };
+      };
+    };
     schemas: Record<string, unknown> & {
       CreateRunRequest: { properties: Record<string, unknown> };
       RunStatus: { enum: readonly string[] };
@@ -1303,7 +1447,14 @@ type OpenApiDocument = Readonly<{
 type ToolEventSchema = Readonly<{
   allOf: readonly [
     unknown,
-    { properties: { data: { properties: Record<string, unknown> } } },
+    {
+      properties: {
+        data: {
+          properties: Record<string, { maxLength?: number; type?: string }>;
+          dependentRequired?: Record<string, readonly string[]>;
+        };
+      };
+    },
   ];
 }>;
 

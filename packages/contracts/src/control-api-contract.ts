@@ -65,6 +65,7 @@ export type ListThreadsResponse = components["schemas"]["ListThreadsResponse"];
 export type ListThreadMessagesResponse =
   components["schemas"]["ListThreadMessagesResponse"];
 export type CreateRunRequest = components["schemas"]["CreateRunRequest"];
+export type ToolPermissionMode = components["schemas"]["ToolPermissionMode"];
 export type StartWorkflowRunRequest =
   components["schemas"]["StartWorkflowRunRequest"];
 export type StartTurnRequest = components["schemas"]["StartTurnRequest"];
@@ -73,6 +74,10 @@ export type CompactThreadRequest =
 export type StartTurnResponse = components["schemas"]["StartTurnResponse"];
 export type CancelRunRequest = components["schemas"]["CancelRunRequest"];
 export type RunView = components["schemas"]["RunView"];
+export type RunPlanStatus = components["schemas"]["RunPlanStatus"];
+export type RunPlanItemView = components["schemas"]["RunPlanItemView"];
+export type RunPlanView = components["schemas"]["RunPlanView"];
+export type GetRunPlanResponse = components["schemas"]["GetRunPlanResponse"];
 export type RunMutationResponse = components["schemas"]["RunMutationResponse"];
 export type GetRunResponse = components["schemas"]["GetRunResponse"];
 export type ListThreadRunsResponse =
@@ -111,7 +116,9 @@ export type ArtifactView = components["schemas"]["ArtifactView"];
 export type GetArtifactResponse = components["schemas"]["GetArtifactResponse"];
 export type ErrorCategory = components["schemas"]["ErrorCategory"];
 export type ErrorEnvelope = components["schemas"]["ErrorEnvelope"];
-export type RunEventViewMode = "client" | "audit";
+export type RunEventViewMode = "client" | "audit" | "transcript";
+export const RUN_EVENT_EXTENSIONS = ["run-plan-v1"] as const;
+export type RunEventExtension = (typeof RUN_EVENT_EXTENSIONS)[number];
 export type ThreadHistoryViewMode = "standard" | "audit";
 
 const MAX_RESOURCE_ID_LENGTH = 128;
@@ -560,7 +567,7 @@ export function formatMessageCursor(sequence: number): string {
 export function parseCreateRunRequest(input: unknown): CreateRunRequest {
   if (
     !isPlainObject(input) ||
-    !hasOnlyKeys(input, ["agentVersionId", "threadId"]) ||
+    !hasOnlyKeys(input, ["agentVersionId", "threadId", "toolPermissionMode"]) ||
     !Object.hasOwn(input, "threadId")
   ) {
     throw new ContractValidationError("create_run_fields_invalid");
@@ -570,15 +577,21 @@ export function parseCreateRunRequest(input: unknown): CreateRunRequest {
     MAX_RESOURCE_ID_LENGTH,
     "thread_id_invalid",
   );
-  if (!Object.hasOwn(input, "agentVersionId")) {
-    return { threadId };
-  }
   return {
     threadId,
-    agentVersionId:
-      input.agentVersionId === null
-        ? null
-        : parseAgentVersionId(input.agentVersionId),
+    ...(Object.hasOwn(input, "agentVersionId")
+      ? {
+          agentVersionId:
+            input.agentVersionId === null
+              ? null
+              : parseAgentVersionId(input.agentVersionId),
+        }
+      : {}),
+    ...(Object.hasOwn(input, "toolPermissionMode")
+      ? {
+          toolPermissionMode: parseToolPermissionMode(input.toolPermissionMode),
+        }
+      : {}),
   };
 }
 
@@ -647,12 +660,17 @@ function parseWorkflowInput(input: unknown): StartWorkflowRunRequest["input"] {
 
 export function parseStartTurnRequest(input: unknown): StartTurnRequest {
   if (
-    !hasExactKeys(input, [
+    !isPlainObject(input) ||
+    !hasOnlyKeys(input, [
       "agentVersionId",
       "content",
       "executionIntent",
       "expectedRevision",
-    ])
+      "toolPermissionMode",
+    ]) ||
+    ["agentVersionId", "content", "executionIntent", "expectedRevision"].some(
+      (key) => !Object.hasOwn(input, key),
+    )
   ) {
     throw new ContractValidationError("start_turn_fields_invalid");
   }
@@ -686,7 +704,23 @@ export function parseStartTurnRequest(input: unknown): StartTurnRequest {
         ? null
         : parseAgentVersionId(input.agentVersionId),
     executionIntent: input.executionIntent,
+    ...(Object.hasOwn(input, "toolPermissionMode")
+      ? {
+          toolPermissionMode: parseToolPermissionMode(input.toolPermissionMode),
+        }
+      : {}),
   };
+}
+
+function parseToolPermissionMode(input: unknown): ToolPermissionMode {
+  if (
+    input !== "requestApproval" &&
+    input !== "approveForMe" &&
+    input !== "fullAccess"
+  ) {
+    throw new ContractValidationError("tool_permission_mode_invalid");
+  }
+  return input;
 }
 
 export function parseCompactThreadRequest(
@@ -947,10 +981,22 @@ export function parseRunEventViewMode(input: unknown): RunEventViewMode {
   if (input === undefined || input === "client") {
     return "client";
   }
-  if (input === "audit") {
-    return "audit";
+  if (input === "audit" || input === "transcript") {
+    return input;
   }
   throw new ContractValidationError("run_event_view_invalid");
+}
+
+export function parseRunEventExtensions(
+  input: unknown,
+): readonly RunEventExtension[] {
+  if (input === undefined) {
+    return [];
+  }
+  if (input === "run-plan-v1") {
+    return [input];
+  }
+  throw new ContractValidationError("run_event_extensions_invalid");
 }
 
 function parseUnsignedQueryInteger(

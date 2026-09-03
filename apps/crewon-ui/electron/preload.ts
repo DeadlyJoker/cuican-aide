@@ -2,7 +2,9 @@ import { contextBridge, ipcRenderer } from "electron";
 
 import {
   DESKTOP_BRIDGE_VERSION,
+  type CloudAgentProfileEntry,
   type CrewonDesktopBridge,
+  type DesktopHttpBodyEvent,
   type DesktopHttpResponse,
   type DesktopUpdateInfo,
   type DesktopUpdateProgress,
@@ -16,15 +18,37 @@ const bridge: CrewonDesktopBridge = {
   runtime: {
     bootstrap: () => invoke<unknown>("crewon:runtime:bootstrap"),
     reloadProvider: () => invoke<void>("crewon:runtime:reload-provider"),
+    updateCloudAgentProfiles: (profiles) =>
+      invoke<void>("crewon:runtime:update-cloud-agent-profiles", profiles),
   },
   http: {
-    fetch: (request) =>
-      invoke<DesktopHttpResponse>("crewon:http:fetch", request),
+    fetch: (request, onBodyEvent) => {
+      const handler = (
+        _event: unknown,
+        requestId: string,
+        bodyEvent: DesktopHttpBodyEvent,
+      ) => {
+        if (requestId !== request.requestId) return;
+        onBodyEvent(bodyEvent);
+        if (bodyEvent.type === "end" || bodyEvent.type === "error") {
+          ipcRenderer.removeListener("crewon:http:body", handler);
+        }
+      };
+      ipcRenderer.on("crewon:http:body", handler);
+      return invoke<DesktopHttpResponse>("crewon:http:fetch", request).catch(
+        (error: unknown) => {
+          ipcRenderer.removeListener("crewon:http:body", handler);
+          throw error;
+        },
+      );
+    },
+    abort: (requestId) => invoke<void>("crewon:http:abort", requestId),
   },
   sandbox: {
     listDirectory: (path) =>
       invoke<unknown>("crewon:sandbox:list-directory", path),
     readFile: (path) => invoke<unknown>("crewon:sandbox:read-file", path),
+    readGitSummary: () => invoke<unknown>("crewon:sandbox:read-git-summary"),
     readDiff: () => invoke<unknown>("crewon:sandbox:read-diff"),
     runCommand: (request) =>
       invoke<unknown>("crewon:sandbox:run-command", request),
@@ -43,6 +67,8 @@ const bridge: CrewonDesktopBridge = {
       invoke<unknown>("crewon:providers:activate", providerId),
     delete: (providerId) =>
       invoke<unknown>("crewon:providers:delete", providerId),
+    modelCatalog: (request) =>
+      invoke<unknown>("crewon:providers:model-catalog", request),
     upsert: (request) => invoke<unknown>("crewon:providers:upsert", request),
   },
   window: {

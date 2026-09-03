@@ -74,7 +74,7 @@ At least one real Skill, MCP, and knowledge resource relevant to the active Scen
 ## Implementation Rules
 
 - Rebuild the design as application components; do not paste the artifact HTML wholesale.
-- Prefer `apps/crewon-ui` components and styles over touching `codex-rs`.
+- Keep implementation work in `apps/crewon-ui` components and styles; backend changes are outside this visual reference's scope.
 - Keep active conversation behavior available for existing threads, but make the no-thread/new-task state a command workspace.
 - Preserve existing agent-platform integration and continue using local API proxy defaults.
 - The client requests an execution target ID; the server owns the resolved `single` or `team` strategy. Do not derive Team mode from Scene or a client-side boolean.

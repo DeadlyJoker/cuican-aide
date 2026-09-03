@@ -87,14 +87,17 @@ describe("command Office room style", () => {
       .trim();
 
     expect(contract).toContain(".control-office-chat-composer");
-    expect(contract).toContain("width: min(720px, 100%);");
+    expect(contract).toContain("width: min(720px, calc(100% - 48px));");
+    expect(contract).toContain("calc((100% - 720px) / 2)");
+    expect(contract).toContain(
+      '.office-bubble:not([data-self="true"])',
+    );
+    expect(contract).toContain("margin: 0 auto 20px;");
     expect(contract).not.toContain(
       ".control-office-chat-composer\n  .composer-state-row",
     );
     expect(contract).toContain("width: min(100%, 1000px);");
-    expect(contract).toContain(
-      "grid-template-columns: 40px minmax(0, 1fr);",
-    );
+    expect(contract).toContain("grid-template-columns: 40px minmax(0, 1fr);");
     expect(contract).toContain("background: transparent;");
     expect(contract).toMatchSnapshot();
   });
@@ -119,9 +122,33 @@ describe("command Office room style", () => {
     expect(roomStart).toBeGreaterThanOrEqual(0);
     expect(roomEnd).toBeGreaterThan(roomStart);
 
-    expect({
-      list: styles.slice(listStart, listEnd).trim(),
-      room: styles.slice(roomStart, roomEnd).trim(),
-    }).toMatchSnapshot();
+    const list = styles.slice(listStart, listEnd).trim();
+    const room = styles.slice(roomStart, roomEnd).trim();
+
+    expect(room).toContain("calc((100% - 720px) / 2)");
+    expect(room).toContain("width: min(720px, calc(100% - 48px));");
+    expect(room).toContain("margin: 10px auto 20px;");
+    expect(room).not.toContain("max-width: min(820px, 100%);");
+
+    expect({ list, room }).toMatchSnapshot();
+  });
+
+  it("snapshots the design-aligned Team page polish", () => {
+    const styles = readFileSync(
+      new URL("../../styles/original-shell-overrides.css", import.meta.url),
+      "utf8",
+    );
+    const marker =
+      "/* Team page polish stays inside the original catalog layout and neutral system. */";
+    const start = styles.indexOf(marker);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    const contract = styles.slice(start).trim();
+
+    expect(contract).toContain(".team-mode-summary");
+    expect(contract).toContain(".expert-team-entry-policy");
+    expect(contract).not.toContain(".team-page-hero");
+    expect(contract).not.toContain("linear-gradient");
+    expect(contract).toMatchSnapshot();
   });
 });

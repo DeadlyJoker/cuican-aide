@@ -1,7 +1,15 @@
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
+import type { ThreadItem } from "@crewon/app-server-protocol/v2/ThreadItem";
+import type { OfficeMemberContract } from "@crewon/contracts";
 
+import {
+  controlTeamDelegatedMemberId,
+  visibleControlTeamAssistantContent,
+} from "../../lib/control-runtime/controlTeamDelegation";
 import type { Locale } from "../../lib/i18n";
+import { controlOfficeMemberMentionsFromRenderedText } from "../../lib/office/controlOfficeMemberMentions";
 import type { ControlOfficeDefinitionRecordReference } from "../../lib/office/officePanelFromRecord";
+import { officeMemberDisplayName } from "../../lib/office/officePanelFromRecord";
 
 const OFFICE_THREAD_PREFIX = "CrewON Office Chat";
 
@@ -31,6 +39,7 @@ export function legacyControlOfficeThreadTitle(
 export function controlOfficeChatMessages(
   thread: Thread | null,
   leaderName: string,
+  members: readonly OfficeMemberContract[],
   locale: Locale,
 ): ControlOfficeChatMessage[] {
   if (!thread) {
@@ -53,9 +62,31 @@ export function controlOfficeChatMessages(
             .replace(/\n\n\[附件：[\s\S]*$/u, "")
             .trim()
         : "";
-    const assistant = [...turn.items]
-      .reverse()
-      .find((item) => item.type === "agentMessage" && item.text.trim());
+    const assistants = turn.items.filter(
+      (item): item is Extract<ThreadItem, { type: "agentMessage" }> =>
+        item.type === "agentMessage" && Boolean(item.text.trim()),
+    );
+    const directMentions = controlOfficeMemberMentionsFromRenderedText(
+      userText,
+      members,
+      locale,
+    );
+    const directMemberId =
+      directMentions.length === 1 ? directMentions[0]!.memberId : null;
+    const delegatedMemberId =
+      directMemberId === null && assistants[0]?.type === "agentMessage"
+        ? controlTeamDelegatedMemberId(assistants[0].text)
+        : null;
+    const memberName = (memberId: string | null) => {
+      if (memberId === null) return null;
+      const memberIndex = members.findIndex(
+        (member) => member.memberId === memberId,
+      );
+      const member = members[memberIndex];
+      return member === undefined
+        ? null
+        : officeMemberDisplayName(member.displayName, memberIndex, locale);
+    };
     return [
       ...(userText
         ? [
@@ -69,18 +100,20 @@ export function controlOfficeChatMessages(
             },
           ]
         : []),
-      ...(assistant?.type === "agentMessage"
-        ? [
-            {
-              author: leaderName,
-              glyph: Array.from(leaderName.trim())[0] || "组",
-              id: `${turn.id}:assistant`,
-              self: false,
-              text: assistant.text,
-              time,
-            },
-          ]
-        : []),
+      ...assistants.map((assistant, assistantIndex) => {
+        const routedMemberName = memberName(
+          directMemberId ?? (assistantIndex > 0 ? delegatedMemberId : null),
+        );
+        const author = routedMemberName ?? leaderName;
+        return {
+          author,
+          glyph: Array.from(author.trim())[0] || "组",
+          id: `${turn.id}:assistant:${assistant.id}`,
+          self: false,
+          text: visibleControlTeamAssistantContent(assistant.text),
+          time,
+        };
+      }),
     ];
   });
 }

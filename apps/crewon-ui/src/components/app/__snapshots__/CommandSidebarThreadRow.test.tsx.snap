@@ -1,0 +1,13 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`CommandTaskStatusIndicator > renders only unread completion, interaction, and failure as lights 1`] = `
+{
+  "completedUnread": "<span aria-label="completedUnread" class="command-thread-status is-completed-unread" role="img"></span>",
+  "completedViewed": "<em class="command-thread-status-time">刚刚</em>",
+  "failedUnread": "<span aria-label="failedUnread" class="command-thread-status is-failed-unread" role="img"></span>",
+  "failedViewed": "<em class="command-thread-status-time">刚刚</em>",
+  "pendingUnread": "<span aria-label="pendingUnread" class="command-thread-status is-pending-unread" role="img"></span>",
+  "pendingViewed": "<em class="command-thread-status-time">刚刚</em>",
+  "running": "<em class="command-thread-status-time">刚刚</em>",
+}
+`;

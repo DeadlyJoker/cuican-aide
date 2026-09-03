@@ -1,13 +1,47 @@
+import type { ChildProcess } from "node:child_process";
+import { EventEmitter } from "node:events";
+
 import { describe, expect, it } from "vitest";
 
-import { desktopRuntimeFingerprint } from "./runtimeSupervisor.ts";
+import {
+  bindDesktopWorkspaceEnvironment,
+  cloudAgentRuntimeVersionId,
+  desktopRuntimeFingerprint,
+  selectDesktopRuntimeModelCatalog,
+  terminateRuntimeChild,
+  watchRuntimeChildren,
+} from "./runtimeSupervisor.ts";
 
 describe("desktop runtime identity", () => {
+  it("binds the selected workspace independently from the read-only MCP", () => {
+    const environment: NodeJS.ProcessEnv = {
+      CREWON_DESKTOP_WORKSPACE_ROOT: "/stale/workspace",
+      CREWON_MCP_STDIO_CONFIG_PATH: "/stale/mcp.json",
+    };
+
+    bindDesktopWorkspaceEnvironment(environment, {
+      mcpConfig: null,
+      workspace: "/selected/workspace",
+    });
+
+    expect(environment.CREWON_DESKTOP_WORKSPACE_ROOT).toBe(
+      "/selected/workspace",
+    );
+    expect(environment.CREWON_MCP_STDIO_CONFIG_PATH).toBeUndefined();
+
+    bindDesktopWorkspaceEnvironment(environment, {
+      mcpConfig: null,
+      workspace: null,
+    });
+    expect(environment.CREWON_DESKTOP_WORKSPACE_ROOT).toBeUndefined();
+  });
+
   it("publishes a new immutable AgentVersion when local MCP materialization changes", () => {
     const input = {
       providerId: "provider-1",
       endpoint: "https://provider.example/v1",
       modelId: "model-1",
+      modelCatalog: ["model-1"],
       agentProfiles: [
         {
           agentVersionIdSuffix: "planner",
@@ -60,5 +94,155 @@ describe("desktop runtime identity", () => {
         },
       }),
     ).not.toBe(first);
+    expect(
+      desktopRuntimeFingerprint({
+        ...input,
+        modelCatalog: ["model-1", "model-2"],
+        localWorkspaceMcp: {
+          configPath: "/Applications/CrewON.app/runtime.json",
+          configDigest: "a".repeat(64),
+          serverDigest: "b".repeat(64),
+        },
+      }),
+    ).not.toBe(first);
+  });
+
+  it("versions cloud Agents when their profile or desktop runtime changes", () => {
+    const profile = {
+      agentVersionId: "agent-platform:93",
+      instructions: "Help with procurement.",
+      invocationUrl:
+        "http://127.0.0.1:5175/agent-platform-api/api/v1/open/agent/93/chat",
+      modelId: "gpt-5.5",
+      agentId: 93,
+    } as const;
+    const first = cloudAgentRuntimeVersionId(profile, "runtime-a");
+
+    expect(first).toMatch(/^agent-platform:93:[a-f0-9]{32}$/u);
+    expect(cloudAgentRuntimeVersionId(profile, "runtime-a")).toBe(first);
+    expect(
+      cloudAgentRuntimeVersionId(
+        { ...profile, instructions: "Updated procurement instructions." },
+        "runtime-a",
+      ),
+    ).not.toBe(first);
+    expect(cloudAgentRuntimeVersionId(profile, "runtime-b")).not.toBe(first);
+  });
+
+  it("keeps the last known catalog through transient discovery failures", () => {
+    expect(
+      selectDesktopRuntimeModelCatalog({
+        cached: ["gpt-5.5", "gpt-5.6-sol"],
+        defaultModelId: "gpt-5.5",
+        discovered: null,
+      }),
+    ).toEqual(["gpt-5.5", "gpt-5.6-sol"]);
+  });
+
+  it("keeps runtime identity for reordered or non-agent-only differences", () => {
+    expect(
+      selectDesktopRuntimeModelCatalog({
+        cached: ["gpt-5.5", "gpt-5.6-sol", "claude-opus", "gpt-image-2"],
+        defaultModelId: "gpt-5.5",
+        discovered: ["gpt-5.5", "dall-e-3", "claude-opus", "gpt-5.6-sol"],
+      }),
+    ).toEqual(["gpt-5.5", "gpt-5.6-sol", "claude-opus", "gpt-image-2"]);
+  });
+
+  it("accepts a discovered catalog when the runnable model set changes", () => {
+    expect(
+      selectDesktopRuntimeModelCatalog({
+        cached: ["gpt-5.5", "gpt-5.6-sol"],
+        defaultModelId: "gpt-5.5",
+        discovered: ["gpt-5.5", "gpt-5.6-sol", "claude-opus"],
+      }),
+    ).toEqual(["gpt-5.5", "gpt-5.6-sol", "claude-opus"]);
+  });
+
+  it("falls back to the configured model without a cached catalog", () => {
+    expect(
+      selectDesktopRuntimeModelCatalog({
+        cached: null,
+        defaultModelId: "gpt-5.5",
+        discovered: null,
+      }),
+    ).toEqual(["gpt-5.5"]);
+  });
+
+  it("reports only the first unexpected runtime child exit", () => {
+    const control = new EventEmitter() as ChildProcess;
+    const worker = new EventEmitter() as ChildProcess;
+    const exits: Array<{
+      code: number | null;
+      name: string;
+      signal: NodeJS.Signals | null;
+    }> = [];
+    watchRuntimeChildren(
+      [
+        { child: control, name: "Control API" },
+        { child: worker, name: "Runtime Worker" },
+      ],
+      (event) => exits.push(event),
+    );
+
+    control.emit("exit", 1, null);
+    worker.emit("exit", 0, "SIGTERM");
+
+    expect(exits).toEqual([{ code: 1, name: "Control API", signal: null }]);
+  });
+
+  it("ignores child exits after runtime shutdown starts", () => {
+    const control = new EventEmitter() as ChildProcess;
+    const exits: string[] = [];
+    const stopWatching = watchRuntimeChildren(
+      [{ child: control, name: "Control API" }],
+      (event) => exits.push(event.name),
+    );
+
+    stopWatching();
+    control.emit("exit", 0, "SIGTERM");
+
+    expect(exits).toEqual([]);
+  });
+
+  it("observes a child that exits synchronously on SIGTERM", async () => {
+    const child = new FakeRuntimeChild((signal) => signal === "SIGTERM");
+
+    await terminateRuntimeChild(child as unknown as ChildProcess, {
+      forcedExitMs: 5,
+      gracefulExitMs: 5,
+    });
+
+    expect(child.signals).toEqual(["SIGTERM"]);
+  });
+
+  it("force-kills a child that ignores graceful shutdown", async () => {
+    const child = new FakeRuntimeChild((signal) => signal === "SIGKILL");
+
+    await terminateRuntimeChild(child as unknown as ChildProcess, {
+      forcedExitMs: 20,
+      gracefulExitMs: 1,
+    });
+
+    expect(child.signals).toEqual(["SIGTERM", "SIGKILL"]);
   });
 });
+
+class FakeRuntimeChild extends EventEmitter {
+  exitCode: number | null = null;
+  signalCode: NodeJS.Signals | null = null;
+  readonly signals: NodeJS.Signals[] = [];
+
+  constructor(private readonly exitsOn: (signal: NodeJS.Signals) => boolean) {
+    super();
+  }
+
+  kill(signal: NodeJS.Signals = "SIGTERM"): boolean {
+    this.signals.push(signal);
+    if (this.exitsOn(signal)) {
+      this.signalCode = signal;
+      this.emit("exit", null, signal);
+    }
+    return true;
+  }
+}

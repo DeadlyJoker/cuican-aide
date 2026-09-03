@@ -1,6 +1,0 @@
-load("//:defs.bzl", "crewon_rust_crate")
-
-crewon_rust_crate(
-    name = "rmcp-client",
-    crate_name = "crewon_rmcp_client",
-)

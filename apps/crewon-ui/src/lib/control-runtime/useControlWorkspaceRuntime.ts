@@ -42,6 +42,7 @@ export type ControlWorkspaceCompositionSnapshot = Readonly<{
   nativeBusy: boolean;
   safeError: ControlWorkspaceSafeError | null;
   nativeWorkspace: SafeNativeWorkspaceSnapshot | null;
+  nativeWorkspaceRevision: string | null;
 }>;
 
 export interface ControlWorkspaceRuntimePort {
@@ -346,6 +347,10 @@ export class ControlWorkspaceRuntimeComposition {
       nativeBusy: this.#nativeBusy,
       safeError: this.#safeError,
       nativeWorkspace,
+      nativeWorkspaceRevision:
+        this.#nativeStatus === null
+          ? null
+          : `${this.#nativeStatus.revision}:${this.#nativeStatus.supervisorGeneration}`,
     };
   }
 
@@ -367,6 +372,7 @@ export function useControlWorkspaceRuntime(params: {
   nativeBusy: boolean;
   safeError: ControlWorkspaceSafeError | null;
   nativeWorkspace: SafeNativeWorkspaceSnapshot | null;
+  nativeWorkspaceRevision: string | null;
   create: () => Promise<void>;
   reconcile: (executionId: string) => Promise<void>;
   cancel: (executionId: string) => Promise<void>;
@@ -415,6 +421,7 @@ export function useControlWorkspaceRuntime(params: {
       nativeBusy: snapshot.nativeBusy,
       safeError: snapshot.safeError,
       nativeWorkspace: snapshot.nativeWorkspace,
+      nativeWorkspaceRevision: snapshot.nativeWorkspaceRevision,
       create: () => composition.create(),
       reconcile: (executionId: string) => composition.reconcile(executionId),
       cancel: (executionId: string) => composition.cancel(executionId),

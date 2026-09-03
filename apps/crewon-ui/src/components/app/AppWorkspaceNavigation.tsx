@@ -6,6 +6,7 @@ import type { AppView } from "../../lib/shared/appView";
 import type { LibraryKind } from "../../lib/domain/crewonDomain";
 import type { Locale } from "../../lib/i18n";
 import type { PlatformKind } from "../../lib/platform";
+import type { ProjectSessionGroup } from "../SidebarPresentation";
 import type { SettingsSection } from "../../lib/settings/settingsCatalog";
 
 type AppWorkspaceNavigationProps = {
@@ -16,6 +17,8 @@ type AppWorkspaceNavigationProps = {
   archiveThreadLabel: string;
   clearSearchLabel: string;
   deleteThreadLabel: string;
+  archiveWorkspaceLabel: string;
+  deleteWorkspaceLabel: string;
   isLoading: boolean;
   loadingThreadsLabel: string;
   locale: Locale;
@@ -38,6 +41,8 @@ type AppWorkspaceNavigationProps = {
   onArchiveThread: (thread: Thread) => void;
   onBackSettings: () => void;
   onDeleteThread: (thread: Thread) => void;
+  onArchiveWorkspaceThreads: (group: ProjectSessionGroup) => void;
+  onDeleteWorkspaceThreads: (group: ProjectSessionGroup) => void;
   onLibrary: (kind: LibraryKind) => void;
   onNewThread: () => void;
   onRenameThread: (thread: Thread) => void;
@@ -56,6 +61,8 @@ export function AppWorkspaceNavigation({
   archiveThreadLabel,
   clearSearchLabel,
   deleteThreadLabel,
+  archiveWorkspaceLabel,
+  deleteWorkspaceLabel,
   isLoading,
   loadingThreadsLabel,
   locale,
@@ -78,6 +85,8 @@ export function AppWorkspaceNavigation({
   onArchiveThread,
   onBackSettings,
   onDeleteThread,
+  onArchiveWorkspaceThreads,
+  onDeleteWorkspaceThreads,
   onLibrary,
   onNewThread,
   onRenameThread,
@@ -117,6 +126,8 @@ export function AppWorkspaceNavigation({
       renameThreadLabel={renameThreadLabel}
       archivedThreadsLabel={archivedThreadsLabel}
       activeThreadsLabel={activeThreadsLabel}
+      archiveWorkspaceLabel={archiveWorkspaceLabel}
+      deleteWorkspaceLabel={deleteWorkspaceLabel}
       activeLibraryKind={activeLibraryKind}
       showArchived={showArchived}
       isLoading={isLoading}
@@ -127,6 +138,8 @@ export function AppWorkspaceNavigation({
       onNewThread={onNewThread}
       onArchiveThread={onArchiveThread}
       onDeleteThread={onDeleteThread}
+      onArchiveWorkspaceThreads={onArchiveWorkspaceThreads}
+      onDeleteWorkspaceThreads={onDeleteWorkspaceThreads}
       onAgents={() => onLibrary("agents")}
       onAutomation={() => onLibrary("automation")}
       onPlugins={() => onLibrary("plugins")}

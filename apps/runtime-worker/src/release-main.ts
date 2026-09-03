@@ -51,8 +51,7 @@ try {
       "CREWON_POLICY_SNAPSHOT_ID",
       "standalone-policy-v0",
     ),
-    workspaceBindingId:
-      process.env.CREWON_WORKSPACE_BINDING_ID?.trim() || null,
+    workspaceBindingId: process.env.CREWON_WORKSPACE_BINDING_ID?.trim() || null,
   };
   const common = {
     actor,
@@ -94,25 +93,46 @@ try {
       agentInstructions: profile.instructions,
     }),
   );
-  const modelAgentVersions = runtimeModelCatalog(
+  const modelIds = runtimeModelCatalog(
     process.env.CREWON_MODEL_CATALOG_JSON,
     transport.modelId,
-  ).flatMap((modelId) => {
-    if (modelId === transport.modelId) return [];
-    const agentVersionId = modelVariantAgentVersionId(
-      route.agentVersionId,
-      modelId,
-    );
-    return agentVersionId === null
+  );
+  const modelVariantSources = [
+    {
+      agentVersionId: route.agentVersionId,
+      instructions: common.agentInstructions,
+    },
+    ...profiles.flatMap((profile) =>
+      profile.cloudAgent === undefined
+        ? [
+            {
+              agentVersionId: profile.agentVersionId,
+              instructions: profile.instructions,
+            },
+          ]
+        : [],
+    ),
+  ];
+  const modelAgentVersions = modelIds.flatMap((modelId) =>
+    modelId === transport.modelId
       ? []
-      : [
-          compileRuntimeAgentVersion({
-            ...common,
-            route: { ...route, agentVersionId },
+      : modelVariantSources.flatMap((source) => {
+          const agentVersionId = modelVariantAgentVersionId(
+            source.agentVersionId,
             modelId,
-          }),
-        ];
-  });
+          );
+          return agentVersionId === null
+            ? []
+            : [
+                compileRuntimeAgentVersion({
+                  ...common,
+                  route: { ...route, agentVersionId },
+                  agentInstructions: source.instructions,
+                  modelId,
+                }),
+              ];
+        }),
+  );
   const additionalAgentVersions = [
     ...profileAgentVersions,
     ...modelAgentVersions,
@@ -138,6 +158,11 @@ try {
       JSON.stringify(
         developmentAgentRuntimeBindings({
           versions: [bootstrapVersion, ...additionalAgentVersions],
+          profiles: [
+            undefined,
+            ...profiles,
+            ...modelAgentVersions.map(() => undefined),
+          ],
           tenantId: actor.tenantId,
           authorityId: route.authorityId,
           workspaceBindingId: route.workspaceBindingId,

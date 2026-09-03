@@ -35,13 +35,20 @@ export class BrowserViewManager {
         event.preventDefault();
       }
     });
+    // A WebContentsView floats above every HTML layer. Keep it hidden until the
+    // renderer has applied the latest active/obscured generation state.
+    view.setVisible(false);
     this.window.contentView.addChildView(view);
     view.setBounds(bounds);
     this.#views.set(key, view);
     try {
       await view.webContents.loadURL(url);
     } catch (error) {
-      this.destroy(key);
+      if (this.#views.get(key) === view) {
+        this.destroy(key);
+      } else if (!view.webContents.isDestroyed()) {
+        view.webContents.close();
+      }
       throw error;
     }
   }

@@ -111,6 +111,25 @@ test("normalizes a legacy missing Run origin to null", () => {
   assert.equal(state.purpose, undefined);
 });
 
+test("freezes one valid Tool permission mode and rejects unknown modes", () => {
+  const base = created();
+  assert.equal(base.type, "run.created");
+  const state = reduceRunLifecycleEvent(null, {
+    ...base,
+    data: { ...base.data, toolPermissionMode: "fullAccess" },
+  });
+  assert.equal(state.toolPermissionMode, "fullAccess");
+
+  assert.throws(
+    () =>
+      reduceRunLifecycleEvent(null, {
+        ...base,
+        data: { ...base.data, toolPermissionMode: "alwaysAllow" },
+      } as unknown as RunLifecycleEvent),
+    hasCode("tool_permission_mode_invalid"),
+  );
+});
+
 test("rejects forged, mismatched and injected Automation Run origins", () => {
   const origin = automationOrigin("run-automation");
   for (const invalid of [
@@ -310,6 +329,98 @@ test("reconciles an unknown side effect before confirming cancellation", () => {
   assert.equal(state.cancelRequested, true);
 });
 
+test("reduces a valid Run Plan snapshot with strict Run-local revisions", () => {
+  const running = replayRunLifecycle([created(), event(2, "run.started", {})]);
+  const plan = {
+    schemaVersion: "crewon.run-plan.v0" as const,
+    planId: running.runId,
+    revision: 1,
+    explanation: "Ship the durable slice",
+    items: [
+      {
+        itemId: "design",
+        title: "Finish design",
+        status: "completed" as const,
+      },
+      {
+        itemId: "runtime",
+        title: "Connect runtime",
+        status: "inProgress" as const,
+      },
+    ],
+    createdAt: timestamp(3),
+    updatedAt: timestamp(3),
+  };
+
+  const updated = reduceRunLifecycleEvent(
+    running,
+    event(3, "run.plan.updated", { callId: "call-1", plan }),
+  );
+
+  assert.deepEqual(updated.plan, plan);
+  assert.throws(
+    () =>
+      reduceRunLifecycleEvent(
+        updated,
+        event(4, "run.plan.updated", {
+          callId: "call-2",
+          plan: { ...plan, updatedAt: timestamp(4) },
+        }),
+      ),
+    hasCode("run_plan_revision_invalid"),
+  );
+});
+
+test("rejects Run Plan updates outside an active default turn", () => {
+  const plan = {
+    schemaVersion: "crewon.run-plan.v0" as const,
+    planId: "run-test",
+    revision: 1,
+    explanation: null,
+    items: [{ itemId: "one", title: "One", status: "pending" as const }],
+    createdAt: timestamp(3),
+    updatedAt: timestamp(3),
+  };
+  const running = replayRunLifecycle([created(), event(2, "run.started", {})]);
+  const cancelPending = reduceRunLifecycleEvent(
+    running,
+    event(3, "run.cancel.requested", { actorId: "actor-1" }),
+  );
+  assert.throws(
+    () =>
+      reduceRunLifecycleEvent(
+        cancelPending,
+        event(4, "run.plan.updated", {
+          callId: "call-canceled",
+          plan: {
+            ...plan,
+            createdAt: timestamp(4),
+            updatedAt: timestamp(4),
+          },
+        }),
+      ),
+    hasCode("cancel_pending"),
+  );
+
+  const planModeCreated = created();
+  assert.equal(planModeCreated.type, "run.created");
+  const planMode = replayRunLifecycle([
+    {
+      ...planModeCreated,
+      data: { ...planModeCreated.data, collaborationMode: "plan" },
+    },
+    event(2, "run.started", {}),
+  ]);
+  assert.throws(
+    () =>
+      reduceRunLifecycleEvent(
+        planMode,
+        event(3, "run.plan.updated", { callId: "call-plan-mode", plan }),
+      ),
+    hasCode("run_plan_mode_invalid"),
+  );
+});
+
 test("records bounded Agent stream and assistant Message events while running", () => {
   const digest = `sha256:${"a".repeat(64)}`;
   const state = replayRunLifecycle([
@@ -417,6 +528,58 @@ test("records bounded Agent stream and assistant Message events while running", 
   );
 });
 
+test("validates canonical workspace changes on Tool completion", () => {
+  const running = replayRunLifecycle([created(), event(2, "run.started", {})]);
+  const completed = reduceRunLifecycleEvent(
+    running,
+    event(3, "tool.completed", {
+      segmentId: "segment-1",
+      segmentSequence: 1,
+      callId: "call-1",
+      kind: "function",
+      name: "workspace_run_command",
+      output: "command failed after editing",
+      isError: true,
+      artifactRef: null,
+      outputTruncated: false,
+      workspaceChanges: {
+        schemaVersion: "crewon.workspace-change-summary.v0",
+        paths: ["src/task.ts"],
+        additions: 3,
+        deletions: 1,
+        statsComplete: true,
+      },
+    }),
+  );
+
+  assert.equal(completed.lastSequence, 3);
+  assert.throws(
+    () =>
+      reduceRunLifecycleEvent(
+        running,
+        event(3, "tool.completed", {
+          segmentId: "segment-1",
+          segmentSequence: 1,
+          callId: "call-1",
+          kind: "function",
+          name: "workspace_run_command",
+          output: "ok",
+          isError: false,
+          artifactRef: null,
+          outputTruncated: false,
+          workspaceChanges: {
+            schemaVersion: "crewon.workspace-change-summary.v0",
+            paths: ["src/../secret"],
+            additions: 1,
+            deletions: 0,
+            statsComplete: true,
+          },
+        }),
+      ),
+    hasCode("tool_workspace_changes_invalid"),
+  );
+});
+
 test("aggregates sampling and compaction usage without losing safe-integer bounds", () => {
   const running = replayRunLifecycle([
     created(),
@@ -517,7 +680,11 @@ test("binds Workflow purpose to one exact immutable version provenance", () => {
   };
   const state = reduceRunLifecycleEvent(null, {
     ...base,
-    data: { ...base.data, purpose: "workflow", workflowVersionBinding: binding },
+    data: {
+      ...base.data,
+      purpose: "workflow",
+      workflowVersionBinding: binding,
+    },
   });
   assert.deepEqual(state.workflowVersionBinding, binding);
   assert.equal(state.agentVersionId, "agent-version-1");

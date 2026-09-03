@@ -8,6 +8,7 @@ export type StartTurnRequestCommand = Readonly<{
   content: string;
   requestedAgentVersionId: string | null;
   executionIntent: "none" | "goal" | "plan" | "resumeGoal";
+  toolPermissionMode?: import("@crewon/domain").RunToolPermissionMode;
 }>;
 
 export type StartTurnCommand = StartTurnRequestCommand &

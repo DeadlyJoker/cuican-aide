@@ -433,6 +433,41 @@
         }
       }
     },
+    "/api/v1/threads/{threadId}/task-changes": {
+      "get": {
+        "operationId": "getThreadTaskChanges",
+        "description": "Returns a bounded exact mutation ledger for terminal Turn Runs referenced by the Thread's effective post-rollback Model History. The response is bound to both the Thread revision and Model History sequence; incomplete or oversized ledgers return canonical zero values with complete=false.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ThreadId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Revision-bound Thread task change ledger",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadTaskChangeLedgerResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/threads/{threadId}:archive": {
       "post": {
         "operationId": "archiveThread",
@@ -1662,6 +1697,40 @@
         }
       }
     },
+    "/api/v1/runs/{runId}/plan": {
+      "get": {
+        "operationId": "getRunPlan",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Authoritative Run execution-plan snapshot and its global Run event watermark",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GetRunPlanResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/runs/{runId}:cancel": {
       "post": {
         "operationId": "cancelRun",
@@ -1730,6 +1799,9 @@
           },
           {
             "$ref": "#/components/parameters/RunEventView"
+          },
+          {
+            "$ref": "#/components/parameters/RunEventExtensions"
           }
         ],
         "responses": {
@@ -2769,11 +2841,21 @@
         "name": "view",
         "in": "query",
         "required": false,
-        "description": "Client view hides bounded transient retry noise; audit preserves every durable event.",
+        "description": "Client view hides bounded transient retry noise; audit preserves every durable event; transcript adds bounded Tool input and output previews for transcript rendering.",
         "schema": {
           "type": "string",
-          "enum": ["client", "audit"],
+          "enum": ["client", "audit", "transcript"],
           "default": "client"
+        }
+      },
+      "RunEventExtensions": {
+        "name": "extensions",
+        "in": "query",
+        "required": false,
+        "description": "Opt-in Run event extension. run-plan-v1 enables bounded run.plan.updated snapshots; without it those durable events remain hidden while the server cursor still advances.",
+        "schema": {
+          "type": "string",
+          "enum": ["run-plan-v1"]
         }
       },
       "ThreadHistoryView": {
@@ -4570,6 +4652,11 @@
           }
         }
       },
+      "ToolPermissionMode": {
+        "type": "string",
+        "enum": ["requestApproval", "approveForMe", "fullAccess"],
+        "description": "Per-Run Tool permission and host sandbox choice. requestApproval keeps durable user gates inside the workspace sandbox. approveForMe automatically approves Tools but retains workspace-only writes and blocks network access. fullAccess automatically approves Tools and permits unrestricted host-file and network access. Omission fails closed to requestApproval."
+      },
       "CreateRunRequest": {
         "type": "object",
         "additionalProperties": false,
@@ -4585,6 +4672,9 @@
             "minLength": 1,
             "maxLength": 512,
             "description": "Optional immutable AgentVersion selection. The server admits it before creating a Run; omission uses the configured default."
+          },
+          "toolPermissionMode": {
+            "$ref": "#/components/schemas/ToolPermissionMode"
           }
         }
       },
@@ -4646,6 +4736,9 @@
             "type": "string",
             "enum": ["none", "goal", "plan", "resumeGoal"],
             "description": "Atomic Turn intent. Goal creates or updates the persistent Thread Goal; Plan clears it and pins this Run to Plan collaboration mode; ResumeGoal atomically resumes a paused Goal for one bound Run while deferring automatic continuation."
+          },
+          "toolPermissionMode": {
+            "$ref": "#/components/schemas/ToolPermissionMode"
           }
         }
       },
@@ -4851,6 +4944,107 @@
           "terminalAt": {
             "type": ["string", "null"],
             "format": "date-time"
+          }
+        }
+      },
+      "RunPlanStatus": {
+        "type": "string",
+        "enum": ["pending", "inProgress", "completed", "blocked", "canceled"]
+      },
+      "RunPlanItemView": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["itemId", "title", "status"],
+        "properties": {
+          "itemId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9._-]{0,63}$"
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 256
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunPlanStatus"
+          }
+        }
+      },
+      "RunPlanView": {
+        "type": "object",
+        "additionalProperties": false,
+        "description": "A complete bounded execution-plan snapshot. Item identifiers are unique and at most one item is inProgress.",
+        "required": [
+          "schemaVersion",
+          "planId",
+          "revision",
+          "explanation",
+          "items",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "crewon.run-plan.v0"
+          },
+          "planId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "explanation": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 1000
+          },
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 32,
+            "items": {
+              "$ref": "#/components/schemas/RunPlanItemView"
+            }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "GetRunPlanResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["runId", "eventSequence", "plan"],
+        "properties": {
+          "runId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "eventSequence": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Global durable Run sequence from the same Store snapshot as plan. It is not the Plan revision."
+          },
+          "plan": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RunPlanView"
+              }
+            ]
           }
         }
       },
@@ -6224,7 +6418,20 @@
                   "name": {
                     "type": "string",
                     "maxLength": 128
+                  },
+                  "inputPreview": {
+                    "type": "string",
+                    "maxLength": 16384,
+                    "description": "A bounded Tool input preview emitted only by the transcript event view."
+                  },
+                  "inputTruncated": {
+                    "type": "boolean",
+                    "description": "Whether the transcript Tool input preview omits bytes from the durable input."
                   }
+                },
+                "dependentRequired": {
+                  "inputPreview": ["inputTruncated"],
+                  "inputTruncated": ["inputPreview"]
                 }
               }
             }
@@ -6278,12 +6485,113 @@
                   },
                   "artifactAvailable": {
                     "type": "boolean"
+                  },
+                  "workspaceChanges": {
+                    "$ref": "#/components/schemas/WorkspaceChangeSummary"
+                  },
+                  "outputPreview": {
+                    "type": "string",
+                    "maxLength": 16384,
+                    "description": "A bounded Tool output preview emitted only by the transcript event view."
                   }
                 }
               }
             }
           }
         ]
+      },
+      "WorkspaceChangeSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "paths",
+          "additions",
+          "deletions",
+          "statsComplete"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "crewon.workspace-change-summary.v0"
+          },
+          "paths": {
+            "type": "array",
+            "maxItems": 256,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4096
+            }
+          },
+          "additions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "deletions": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "statsComplete": {
+            "type": "boolean"
+          }
+        }
+      },
+      "ThreadTaskChangeLedgerResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "threadId",
+          "threadRevision",
+          "historySequence",
+          "complete",
+          "summary",
+          "eventCount",
+          "includedRunIds"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "const": "crewon.thread-task-change-ledger.v0"
+          },
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "threadRevision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          },
+          "historySequence": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991
+          },
+          "complete": {
+            "type": "boolean",
+            "description": "Always equals summary.statsComplete. False responses use canonical zero values."
+          },
+          "summary": {
+            "$ref": "#/components/schemas/WorkspaceChangeSummary"
+          },
+          "eventCount": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 100000,
+            "description": "Number of matched native workspace_run_command requested/completed events."
+          },
+          "includedRunIds": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "description": "Effective terminal Turn Runs, ordered by their first effective-history reference."
+          }
+        }
       },
       "ContextCompactedEventView": {
         "allOf": [
@@ -6605,6 +6913,32 @@
           }
         ]
       },
+      "RunPlanUpdatedEventView": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RunEventEnvelope"
+          },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": {
+                "const": "run.plan.updated"
+              },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["plan"],
+                "properties": {
+                  "plan": {
+                    "$ref": "#/components/schemas/RunPlanView"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
       "SegmentCompletedEventView": {
         "allOf": [
           {
@@ -6883,6 +7217,9 @@
           },
           {
             "$ref": "#/components/schemas/RunGoalSteeringConsumedEventView"
+          },
+          {
+            "$ref": "#/components/schemas/RunPlanUpdatedEventView"
           },
           {
             "$ref": "#/components/schemas/SegmentCheckpointedEventView"

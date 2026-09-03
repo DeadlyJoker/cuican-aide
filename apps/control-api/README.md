@@ -140,6 +140,12 @@ idempotency key returns the original safe Thread projection with `200`. Active R
 History CAS conflicts return `409`; cross-tenant and cross-space Threads remain `404`. The response is the ordinary
 `ThreadMutationResponse` and never contains marker IDs, raw history boundaries, invalidated Message details or actor identity.
 
+`GET /api/v1/threads/{threadId}/task-changes` uses the same authorized Thread read boundary and returns only exact
+`workspace_run_command` completion metadata from terminal Turn Runs referenced by effective post-rollback Model History. The
+bounded response carries both `threadRevision` and `historySequence`; a sequence gap, missing completion, malformed metadata,
+unsafe aggregate, or any hard-budget overflow returns canonical zero values with `complete: false` instead of guessing from
+transcript previews or branch totals.
+
 Automation is exposed only as immutable `manualOnly` v0 definitions:
 
 - `POST /api/v1/automations` creates a definition against an exact active Thread revision; `GET /api/v1/automations` and
@@ -162,7 +168,7 @@ is live. The packaged standalone runtime supplies the fixed loopback Worker orig
 `CREWON_PROVIDER_PROBE_WORKER_ORIGIN` and `CREWON_PROVIDER_PROBE_WORKER_TOKEN`; neither value is a browser credential. Public
 Team probing remains unavailable until the production coordinator, tenant-approved egress policy, and authenticated Worker
 transport are deployed together. There is no public Provider mutation route: desktop credentials and two-phase switching stay
-behind typed native Tauri commands.
+behind the typed Electron main-process bridge.
 
 Production BFF-to-Control requests require the two independent bearer credentials described above. The BFF consumes browser
 CSRF; Control does not accept a browser Actor header or substitute the BFF service credential for the user Control token.

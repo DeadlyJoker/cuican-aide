@@ -68,10 +68,14 @@ export class PinnedNodeProviderProbeHttp implements ProviderProbeHttpPort {
         signal,
       )
       .catch((error: unknown) => {
-        if (error instanceof PinnedNodeHttpError) {
-          throw new ProviderProbeProtocolError(error.code);
+        if (!(error instanceof PinnedNodeHttpError)) throw error;
+        if (
+          error.code === "request_aborted" ||
+          error.code === "transport_failed"
+        ) {
+          throw new ProviderProbeTransportError();
         }
-        throw error;
+        throw new ProviderProbeProtocolError(error.code);
       });
   }
 }
@@ -146,7 +150,7 @@ export class ResponsesProviderConnectivityProbe {
     );
     const combined = AbortSignal.any([signal, deadline.signal]);
     try {
-      const target = await this.#egress.resolve(
+      const targets = await this.#egress.resolveAll(
         {
           tenantId: this.#tenantId,
           providerId: this.#providerId,
@@ -154,14 +158,7 @@ export class ResponsesProviderConnectivityProbe {
         },
         combined,
       );
-      const response = await this.#http.request(
-        {
-          target,
-          authorization:
-            this.#secret === null ? null : `Bearer ${this.#secret}`,
-        },
-        combined,
-      );
+      const response = await this.#requestWithAddressFailover(targets, combined);
       return projectResponse(
         this.#providerId,
         this.#catalogRevision,
@@ -202,6 +199,48 @@ export class ResponsesProviderConnectivityProbe {
     } finally {
       cancelTimer();
     }
+  }
+
+  async #requestWithAddressFailover(
+    targets: readonly PinnedProviderProbeEndpoint[],
+    signal: AbortSignal,
+  ): Promise<ProviderProbeHttpResponse> {
+    const failoverDelayMs = Math.min(
+      250,
+      Math.max(1, Math.floor(this.#deadlineMs / targets.length)),
+    );
+    let lastError: unknown = new ProviderProbeTransportError();
+    for (const [index, target] of targets.entries()) {
+      const isLastTarget = index === targets.length - 1;
+      const attempt = new AbortController();
+      const cancelTimer = isLastTarget
+        ? () => {}
+        : this.#schedule(
+            () =>
+              attempt.abort(
+                new Error("provider_probe_attempt_deadline_exceeded"),
+              ),
+            failoverDelayMs,
+          );
+      try {
+        return await this.#http.request(
+          {
+            target,
+            authorization:
+              this.#secret === null ? null : `Bearer ${this.#secret}`,
+          },
+          isLastTarget ? signal : AbortSignal.any([signal, attempt.signal]),
+        );
+      } catch (error) {
+        if (signal.aborted || error instanceof ProviderProbeProtocolError) {
+          throw error;
+        }
+        lastError = error;
+      } finally {
+        cancelTimer();
+      }
+    }
+    throw lastError;
   }
 }
 
@@ -443,3 +482,5 @@ function object(value: unknown): value is Record<string, unknown> {
 }
 
 class ProviderProbeProtocolError extends Error {}
+
+class ProviderProbeTransportError extends Error {}

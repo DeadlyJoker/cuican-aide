@@ -9,7 +9,10 @@ import {
   reasoningDisplayLines,
   reasoningProcessLines,
 } from "./transcriptReasoning";
-import { dynamicToolKindLabel } from "./transcriptToolPresentation";
+import {
+  dynamicToolDisplayName,
+  dynamicToolKindLabel,
+} from "./transcriptToolPresentation";
 
 function commandDurationLabel(
   durationMs: number | null,
@@ -55,7 +58,9 @@ function toolStatusLabel(
       return locale === "zh" ? "调用中" : "Running";
     case "completed":
       if (success === false) {
-        return locale === "zh" ? "已完成 · 失败结果" : "Completed · failed result";
+        return locale === "zh"
+          ? "已完成 · 失败结果"
+          : "Completed · failed result";
       }
       return locale === "zh" ? "已完成" : "Completed";
     case "failed":
@@ -151,15 +156,19 @@ function mcpContentText(content: JsonValue): string | null {
 function mcpTextContents(
   item: Extract<ThreadItem, { type: "mcpToolCall" }>,
 ): string[] {
-  return item.result?.content
-    .map(mcpContentText)
-    .filter((text): text is string => Boolean(text?.trim())) ?? [];
+  return (
+    item.result?.content
+      .map(mcpContentText)
+      .filter((text): text is string => Boolean(text?.trim())) ?? []
+  );
 }
 
 function mcpNonTextContents(
   item: Extract<ThreadItem, { type: "mcpToolCall" }>,
 ): JsonValue[] {
-  return item.result?.content.filter((content) => !mcpContentText(content)) ?? [];
+  return (
+    item.result?.content.filter((content) => !mcpContentText(content)) ?? []
+  );
 }
 
 function mcpStructuredContent(
@@ -246,11 +255,15 @@ function fileReadStatusLabel(
   const countLabel = fileChangeCountLabel(Math.max(1, count), locale);
   switch (status) {
     case "inProgress":
-      return locale === "zh" ? `正在读取 ${countLabel}` : `Reading ${countLabel}`;
+      return locale === "zh"
+        ? `正在读取 ${countLabel}`
+        : `Reading ${countLabel}`;
     case "completed":
       return locale === "zh" ? `已读取 ${countLabel}` : `Read ${countLabel}`;
     case "failed":
-      return locale === "zh" ? `读取失败 ${countLabel}` : `Failed to read ${countLabel}`;
+      return locale === "zh"
+        ? `读取失败 ${countLabel}`
+        : `Failed to read ${countLabel}`;
   }
 }
 
@@ -266,10 +279,35 @@ function dynamicToolTextOutput(
   );
 }
 
+function dynamicToolDisplayOutput(text: string): string {
+  const [primaryOutput, structuredOutput] = text.split(
+    /(?:^|\r?\n)\[structured\]\r?\n/u,
+    2,
+  );
+  return primaryOutput?.trim() || structuredOutput?.trim() || "";
+}
+
+function dynamicToolJsonOutput(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed.startsWith("{") && !trimmed.startsWith("[")) {
+    return null;
+  }
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2);
+  } catch {
+    return null;
+  }
+}
+
 function dynamicToolEmptyOutputLabel(
   item: Extract<ThreadItem, { type: "dynamicToolCall" }>,
   locale: Locale,
 ): string {
+  if (dynamicToolApproval(item)?.status === "required") {
+    return locale === "zh"
+      ? "等待批准，工具尚未开始执行"
+      : "Waiting for approval; the tool has not started";
+  }
   if (!item.contentItems || item.contentItems.length === 0) {
     if (item.status === "inProgress") {
       return locale === "zh" ? "等待工具输出" : "Waiting for tool output";
@@ -283,13 +321,33 @@ function dynamicToolEmptyOutputLabel(
   return locale === "zh" ? "无文本输出" : "No text output";
 }
 
+function dynamicToolApproval(
+  item: Extract<ThreadItem, { type: "dynamicToolCall" }>,
+): Readonly<{ approvalId: string; status: "required" }> | null {
+  const approval = (
+    item as typeof item & {
+      controlApproval?: Readonly<{
+        approvalId: string;
+        status: "required";
+      }>;
+    }
+  ).controlApproval;
+  return approval ?? null;
+}
+
 function dynamicToolImageItems(
   item: Extract<ThreadItem, { type: "dynamicToolCall" }>,
 ) {
-  return item.contentItems?.filter((content) => content.type === "inputImage") ?? [];
+  return (
+    item.contentItems?.filter((content) => content.type === "inputImage") ?? []
+  );
 }
 
-function imageOutputLabel(imageUrl: string, index: number, locale: Locale): string {
+function imageOutputLabel(
+  imageUrl: string,
+  index: number,
+  locale: Locale,
+): string {
   const path = imageUrl.split(/[?#]/)[0] ?? imageUrl;
   const name = path.split("/").filter(Boolean).pop();
   if (name) {
@@ -471,7 +529,10 @@ function renderFileDiffPreview({
   const rows = diffPreviewRows(change.diff);
 
   return (
-    <section className="file-diff-card" key={`${change.path}-${change.kind.type}`}>
+    <section
+      className="file-diff-card"
+      key={`${change.path}-${change.kind.type}`}
+    >
       <header className="file-diff-card-header">
         <span className="file-diff-path">{change.path}</span>
         <strong className="file-change-stat">
@@ -660,7 +721,9 @@ export function TranscriptFileChangeCard({
         </em>
       </summary>
       <div className="file-event-body">
-        <span className="file-event-section-title">{editedFilesLabel(locale)}</span>
+        <span className="file-event-section-title">
+          {editedFilesLabel(locale)}
+        </span>
         <div className="file-diff-stack">
           {item.changes
             .slice(0, 4)
@@ -753,7 +816,9 @@ export function TranscriptMcpToolCard({
           ? toolSectionLabel(
               resultLabel,
               jsonPreview(
-                nonTextContents.length > 0 ? nonTextContents : item.result.content,
+                nonTextContents.length > 0
+                  ? nonTextContents
+                  : item.result.content,
                 locale === "zh" ? "空结果" : "Empty result",
               ),
             )
@@ -817,7 +882,9 @@ function TranscriptFileReadCard({
         {!item.error && !item.result
           ? toolSectionLabel(
               resultLabel,
-              locale === "zh" ? "等待文件读取结果" : "Waiting for file read result",
+              locale === "zh"
+                ? "等待文件读取结果"
+                : "Waiting for file read result",
             )
           : null}
       </div>
@@ -833,13 +900,16 @@ export function TranscriptDynamicToolCard({
   locale: Locale;
 }) {
   const duration = toolDurationLabel(item.durationMs, locale);
-  const toolName = item.namespace ? `${item.namespace}.${item.tool}` : item.tool;
-  const textOutput = dynamicToolTextOutput(item);
+  const toolName = dynamicToolDisplayName(item, locale);
+  const textOutput = dynamicToolDisplayOutput(dynamicToolTextOutput(item));
+  const jsonOutput = dynamicToolJsonOutput(textOutput);
   const imageItems = dynamicToolImageItems(item);
+  const approval = dynamicToolApproval(item);
 
   return (
     <details
       className="tool-card tool-call-card dynamic-tool-card compact-tool-card"
+      data-approval={approval?.status}
       data-status={item.status}
       {...openIfDefault(defaultOpenToolStatus(item.status))}
     >
@@ -850,7 +920,11 @@ export function TranscriptDynamicToolCard({
         <code>{toolName}</code>
         <span className="tool-card-status">
           <span className="status-dot" aria-hidden="true" />
-          {toolStatusLabel(item.status, locale, item.success)}
+          {approval?.status === "required"
+            ? locale === "zh"
+              ? "等待批准"
+              : "Waiting for approval"
+            : toolStatusLabel(item.status, locale, item.success)}
         </span>
         {duration ? <em>{duration}</em> : null}
       </summary>
@@ -859,12 +933,17 @@ export function TranscriptDynamicToolCard({
           locale === "zh" ? "参数" : "Arguments",
           jsonPreview(item.arguments, "{}"),
         )}
-        {textOutput
-          ? toolMarkdownSection(locale === "zh" ? "输出" : "Output", textOutput)
-          : toolSectionLabel(
-              locale === "zh" ? "输出" : "Output",
-              dynamicToolEmptyOutputLabel(item, locale),
-            )}
+        {jsonOutput
+          ? toolSectionLabel(locale === "zh" ? "输出" : "Output", jsonOutput)
+          : textOutput
+            ? toolMarkdownSection(
+                locale === "zh" ? "输出" : "Output",
+                textOutput,
+              )
+            : toolSectionLabel(
+                locale === "zh" ? "输出" : "Output",
+                dynamicToolEmptyOutputLabel(item, locale),
+              )}
         {imageItems.length > 0 ? (
           <section className="tool-call-section tool-call-image-section">
             <span>{locale === "zh" ? "图片" : "Images"}</span>
@@ -882,7 +961,9 @@ export function TranscriptDynamicToolCard({
                     loading="lazy"
                     src={content.imageUrl}
                   />
-                  <small>{imageOutputLabel(content.imageUrl, index, locale)}</small>
+                  <small>
+                    {imageOutputLabel(content.imageUrl, index, locale)}
+                  </small>
                 </a>
               ))}
             </div>

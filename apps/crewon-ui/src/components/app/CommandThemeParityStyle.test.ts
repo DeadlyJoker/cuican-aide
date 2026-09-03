@@ -22,9 +22,7 @@ function isThemeScoped(source: string, offset: number): boolean {
 /** Code and scrollbar surfaces are dark in both themes, so their literals hold. */
 function isAlwaysDarkSurface(source: string, offset: number): boolean {
   const context = source.slice(Math.max(0, offset - 400), offset);
-  return ["markdown-code", "mermaid", "scrollbar"].some((hint) =>
-    context.includes(hint),
-  );
+  return ["markdown-code", "scrollbar"].some((hint) => context.includes(hint));
 }
 
 function offsetsOf(source: string, pattern: RegExp): number[] {

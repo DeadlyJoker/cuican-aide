@@ -1,6 +1,0 @@
-load("//:defs.bzl", "crewon_rust_crate")
-
-crewon_rust_crate(
-    name = "feedback",
-    crate_name = "crewon_feedback",
-)

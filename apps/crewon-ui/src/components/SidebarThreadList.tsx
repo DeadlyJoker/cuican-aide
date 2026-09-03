@@ -1,4 +1,4 @@
-import { FolderClosed } from "lucide-react";
+import { Archive, FolderClosed, RotateCcw, Trash2 } from "lucide-react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -6,6 +6,7 @@ import { cn } from "@/lib/cn";
 import type { Locale } from "../lib/i18n";
 import type { ProjectSessionGroup } from "./SidebarPresentation";
 import { SidebarThreadRow } from "./SidebarThreadRow";
+import { sidebarWorkspaceActionClass } from "./sidebarStyles";
 
 function SidebarThreadSectionLabel({
   actionLabel,
@@ -42,7 +43,11 @@ function SidebarThreadSectionLabel({
 
 function SidebarThreadListSkeleton({ label }: { label: string }) {
   return (
-    <div aria-label={label} aria-live="polite" className="grid gap-1 px-[7px] py-1">
+    <div
+      aria-label={label}
+      aria-live="polite"
+      className="grid gap-1 px-[7px] py-1"
+    >
       <span className="sr-only">{label}</span>
       {[0.92, 0.75, 0.6].map((width) => (
         <div key={width} className="flex h-6 items-center">
@@ -56,11 +61,57 @@ function SidebarThreadListSkeleton({ label }: { label: string }) {
   );
 }
 
+function SidebarWorkspaceActions({
+  archiveWorkspaceLabel,
+  deleteWorkspaceLabel,
+  group,
+  showArchived,
+  onArchiveWorkspaceThreads,
+  onDeleteWorkspaceThreads,
+}: {
+  archiveWorkspaceLabel: string;
+  deleteWorkspaceLabel: string;
+  group: ProjectSessionGroup;
+  showArchived: boolean;
+  onArchiveWorkspaceThreads: (group: ProjectSessionGroup) => void;
+  onDeleteWorkspaceThreads: (group: ProjectSessionGroup) => void;
+}) {
+  return (
+    <span className="inline-grid grid-flow-col gap-px">
+      <button
+        className={sidebarWorkspaceActionClass}
+        type="button"
+        aria-label={archiveWorkspaceLabel}
+        title={archiveWorkspaceLabel}
+        onClick={() => onArchiveWorkspaceThreads(group)}
+      >
+        {showArchived ? <RotateCcw size={13} /> : <Archive size={13} />}
+      </button>
+      {showArchived ? (
+        <button
+          className={cn(
+            sidebarWorkspaceActionClass,
+            "hover:bg-[var(--n-alpha-10)] hover:text-red-400",
+          )}
+          type="button"
+          aria-label={deleteWorkspaceLabel}
+          title={deleteWorkspaceLabel}
+          onClick={() => onDeleteWorkspaceThreads(group)}
+        >
+          <Trash2 size={13} />
+        </button>
+      ) : null}
+    </span>
+  );
+}
+
 export function SidebarThreadList({
   activeThreadsLabel,
   archiveThreadLabel,
   archivedThreadsLabel,
+  archiveWorkspaceLabel,
   deleteThreadLabel,
+  deleteWorkspaceLabel,
   emptyLabel,
   isLoading,
   loadingLabel,
@@ -75,7 +126,9 @@ export function SidebarThreadList({
   threadsSectionLabel,
   untitledThreadLabel,
   onArchiveThread,
+  onArchiveWorkspaceThreads,
   onDeleteThread,
+  onDeleteWorkspaceThreads,
   onRenameThread,
   onSelectThread,
   onToggleArchived,
@@ -83,7 +136,9 @@ export function SidebarThreadList({
   activeThreadsLabel: string;
   archiveThreadLabel: string;
   archivedThreadsLabel: string;
+  archiveWorkspaceLabel: string;
   deleteThreadLabel: string;
+  deleteWorkspaceLabel: string;
   emptyLabel: string;
   isLoading: boolean;
   loadingLabel: string;
@@ -102,15 +157,28 @@ export function SidebarThreadList({
   threadsSectionLabel: string;
   untitledThreadLabel: string;
   onArchiveThread: (thread: Thread) => void;
+  onArchiveWorkspaceThreads: (group: ProjectSessionGroup) => void;
   onDeleteThread: (thread: Thread) => void;
+  onDeleteWorkspaceThreads: (group: ProjectSessionGroup) => void;
   onRenameThread: (thread: Thread) => void;
   onSelectThread: (threadId: string) => void;
   onToggleArchived: () => void;
 }) {
   const hasVisibleThreads = projectGroups.length + standaloneThreads.length > 0;
-  const currentSectionLabel = showArchived ? archivedThreadsLabel : navLabels.project;
-  const currentSectionAction = showArchived ? activeThreadsLabel : archivedThreadsLabel;
-  const standaloneSectionLabel = showArchived ? navLabels.session : navLabels.conversations;
+  const currentSectionLabel = showArchived
+    ? archivedThreadsLabel
+    : navLabels.project;
+  const currentSectionAction = showArchived
+    ? activeThreadsLabel
+    : archivedThreadsLabel;
+  const standaloneSectionLabel = showArchived
+    ? navLabels.session
+    : navLabels.conversations;
+  const standaloneGroup: ProjectSessionGroup = {
+    cwd: "",
+    name: standaloneSectionLabel,
+    threads: standaloneThreads,
+  };
 
   function renderSessionRow(thread: Thread) {
     return (
@@ -152,11 +220,22 @@ export function SidebarThreadList({
             key={group.cwd}
           >
             <div
-              className="grid h-[30px] min-w-0 grid-cols-[auto_minmax(0,1fr)] items-center gap-[9px] px-[10px] text-[calc(13px_+_var(--user-ui-font-delta))] text-[var(--n-alpha-60)] [&>svg]:opacity-80"
+              className={cn(
+                "group/workspace grid h-[30px] min-w-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-[9px] px-[10px]",
+                "text-[calc(13px_+_var(--user-ui-font-delta))] text-[var(--n-alpha-60)] [&>svg]:opacity-80",
+              )}
               title={group.cwd}
             >
               <FolderClosed size={15} />
               <strong className="truncate font-medium">{group.name}</strong>
+              <SidebarWorkspaceActions
+                archiveWorkspaceLabel={archiveWorkspaceLabel}
+                deleteWorkspaceLabel={deleteWorkspaceLabel}
+                group={group}
+                showArchived={showArchived}
+                onArchiveWorkspaceThreads={onArchiveWorkspaceThreads}
+                onDeleteWorkspaceThreads={onDeleteWorkspaceThreads}
+              />
             </div>
             <div className="grid min-w-0 gap-0 pl-3.5">
               {group.threads.map(renderSessionRow)}
@@ -164,7 +243,24 @@ export function SidebarThreadList({
           </section>
         ))}
 
-        <SidebarThreadSectionLabel label={standaloneSectionLabel} subtle />
+        <div
+          className={cn(
+            "mt-[14px] flex h-5 items-center justify-between px-[10px]",
+            "text-[calc(11px_+_var(--user-ui-font-delta))] font-medium text-[var(--n-alpha-45)]",
+          )}
+        >
+          <span>{standaloneSectionLabel}</span>
+          {standaloneThreads.length > 0 ? (
+            <SidebarWorkspaceActions
+              archiveWorkspaceLabel={archiveWorkspaceLabel}
+              deleteWorkspaceLabel={deleteWorkspaceLabel}
+              group={standaloneGroup}
+              showArchived={showArchived}
+              onArchiveWorkspaceThreads={onArchiveWorkspaceThreads}
+              onDeleteWorkspaceThreads={onDeleteWorkspaceThreads}
+            />
+          ) : null}
+        </div>
         <div className="grid min-w-0 gap-0">
           {standaloneThreads.length > 0
             ? standaloneThreads.map(renderSessionRow)

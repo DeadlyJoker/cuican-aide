@@ -1277,6 +1277,7 @@ export class AppServerClient {
   ): Promise<PlatformThreadStartResponse> {
     return this.request<PlatformThreadStartResponse>("thread/start", {
       approvalPolicy: settings.approvalPolicy ?? undefined,
+      approvalsReviewer: settings.approvalsReviewer ?? undefined,
       config: settings.config,
       cwd: cwd || undefined,
       executionContext,
@@ -1380,6 +1381,7 @@ export class AppServerClient {
       model: settings.model || null,
       approvalPolicy: (settings.approvalPolicy ||
         null) as AskForApproval | null,
+      approvalsReviewer: settings.approvalsReviewer ?? null,
       collaborationMode: collaborationModeFromSettings(settings),
       sandboxPolicy,
     });
@@ -1438,6 +1440,7 @@ export class AppServerClient {
       "turn/start",
       {
         approvalPolicy: settings.approvalPolicy ?? undefined,
+        approvalsReviewer: settings.approvalsReviewer ?? undefined,
         collaborationMode: collaborationModeFromSettings(settings),
         effort: settings.reasoningEffort ?? undefined,
         input: turnInputFromComposer(text, mentions, images),

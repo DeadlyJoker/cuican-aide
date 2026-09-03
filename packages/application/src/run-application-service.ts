@@ -12,7 +12,9 @@ import type {
 } from "./application-runtime-ports.ts";
 import type {
   ActorContext,
+  AuthorizationAction,
   AuthorizationPort,
+  AuthorizationResource,
   RunAuthorizationAction,
   RunAuthorizationResource,
 } from "./authorization-port.ts";
@@ -28,15 +30,16 @@ import {
   type ThreadRunListCursor,
   type WorkItem,
 } from "./run-store-port.ts";
+import type { SpaceScopedThreadStore } from "./thread-store-port.ts";
 
 export class RunApplicationService {
-  readonly #store: RunStore;
+  readonly #store: RunStore & SpaceScopedThreadStore;
   readonly #authorization: AuthorizationPort;
   readonly #clock: ApplicationClock;
   readonly #ids: ApplicationIdGenerator;
 
   constructor(dependencies: {
-    store: RunStore;
+    store: RunStore & SpaceScopedThreadStore;
     authorization: AuthorizationPort;
     clock: ApplicationClock;
     ids: ApplicationIdGenerator;
@@ -82,6 +85,9 @@ export class RunApplicationService {
         policySnapshotId: command.route.policySnapshotId,
         workspaceBindingId: command.route.workspaceBindingId,
         collaborationMode: "default",
+        ...(command.toolPermissionMode === undefined
+          ? {}
+          : { toolPermissionMode: command.toolPermissionMode }),
         goalBinding: null,
       },
     };
@@ -135,6 +141,44 @@ export class RunApplicationService {
     return this.#loadAuthorizedRun(actor, runId, "run:read");
   }
 
+  /**
+   * Authorizes a Run together with the Thread content boundary required by
+   * transcript projections that expose bounded Tool inputs and outputs.
+   */
+  async getRunTranscript(
+    actor: ActorContext,
+    runId: string,
+  ): Promise<RunState> {
+    validateActor(actor);
+    requireNonEmpty(runId, "run_id_invalid");
+    const state = await this.#loadAuthorizedRun(actor, runId, "run:read");
+    let thread;
+    try {
+      thread = await this.#store.loadThreadInSpace({
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        threadId: state.threadId,
+      });
+    } catch (error) {
+      throw mapApplicationError(error);
+    }
+    if (
+      thread === null ||
+      thread.tenantId !== actor.tenantId ||
+      thread.spaceId !== actor.spaceId ||
+      thread.status === "deleted"
+    ) {
+      throw new ApplicationError("notFound", "thread_not_found");
+    }
+    await this.#authorize(actor, "thread:read", {
+      kind: "thread",
+      tenantId: thread.tenantId,
+      spaceId: thread.spaceId,
+      threadId: thread.threadId,
+    });
+    return state;
+  }
+
   async listThreadRuns(
     actor: ActorContext,
     query: {
@@ -170,12 +214,32 @@ export class RunApplicationService {
     actor: ActorContext,
     query: { runId: string; afterSequence: number; limit: number },
   ): Promise<readonly RunLifecycleEvent[]> {
+    return this.#listRunEvents(actor, query, "run");
+  }
+
+  /** Lists Run events only after the actor may also read the owning Thread. */
+  async listRunTranscriptEvents(
+    actor: ActorContext,
+    query: { runId: string; afterSequence: number; limit: number },
+  ): Promise<readonly RunLifecycleEvent[]> {
+    return this.#listRunEvents(actor, query, "transcript");
+  }
+
+  async #listRunEvents(
+    actor: ActorContext,
+    query: { runId: string; afterSequence: number; limit: number },
+    access: "run" | "transcript",
+  ): Promise<readonly RunLifecycleEvent[]> {
     validateActor(actor);
     if (!isPlainObject(query)) {
       throw new ApplicationError("validation", "run_event_query_invalid");
     }
     requireNonEmpty(query.runId, "run_id_invalid");
-    await this.#loadAuthorizedRun(actor, query.runId, "run:read");
+    if (access === "transcript") {
+      await this.getRunTranscript(actor, query.runId);
+    } else {
+      await this.#loadAuthorizedRun(actor, query.runId, "run:read");
+    }
     try {
       return await this.#store.listRunEvents(
         locator(actor, query.runId),
@@ -216,8 +280,8 @@ export class RunApplicationService {
 
   async #authorize(
     actor: ActorContext,
-    action: RunAuthorizationAction,
-    resource: RunAuthorizationResource,
+    action: AuthorizationAction,
+    resource: AuthorizationResource,
   ): Promise<void> {
     try {
       const decision = await this.#authorization.authorize({
@@ -432,11 +496,23 @@ function validateCreateCommand(command: CreateRunCommand): void {
   );
   requireNonEmpty(command.route.agentVersionId, "agent_version_id_invalid");
   requireNonEmpty(command.route.policySnapshotId, "policy_snapshot_id_invalid");
+  validateToolPermissionMode(command.toolPermissionMode);
   if (command.route.workspaceBindingId !== null) {
     requireNonEmpty(
       command.route.workspaceBindingId,
       "workspace_binding_id_invalid",
     );
+  }
+}
+
+function validateToolPermissionMode(value: unknown): void {
+  if (
+    value !== undefined &&
+    value !== "requestApproval" &&
+    value !== "approveForMe" &&
+    value !== "fullAccess"
+  ) {
+    throw new ApplicationError("validation", "tool_permission_mode_invalid");
   }
 }
 

@@ -5,6 +5,7 @@ import {
   AutomationApplicationService,
   RunApplicationService,
   ThreadApplicationService,
+  ThreadTaskChangeQueryService,
   ThreadGoalApplicationService,
   WorkspaceOperationQueryService,
   ThreadRollbackApplicationService,
@@ -121,6 +122,7 @@ async function composeProductionControlApi(
       ids,
       digester,
     });
+    const taskChanges = new ThreadTaskChangeQueryService({ store, threads });
     const turns = new TurnApplicationService({
       store,
       authorization: config.authorization,
@@ -223,6 +225,7 @@ async function composeProductionControlApi(
       application,
       offices,
       threads,
+      taskChanges,
       goals,
       turns,
       compactions,

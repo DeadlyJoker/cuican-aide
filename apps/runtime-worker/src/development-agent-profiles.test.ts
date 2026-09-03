@@ -13,12 +13,28 @@ test("parses bounded independent development profiles", () => {
     parseDevelopmentAgentProfiles(
       JSON.stringify([
         { agentVersionId: "local-planner", instructions: "Plan the work." },
-        { agentVersionId: "local-verifier", instructions: "Verify the work." },
+        {
+          agentVersionId: "cloud-verifier",
+          instructions: "Verify the work.",
+          cloudAgent: {
+            invocationUrl: "https://agents.example/invoke",
+            modelId: "model-cloud",
+            agentId: 42,
+          },
+        },
       ]),
     ),
     [
       { agentVersionId: "local-planner", instructions: "Plan the work." },
-      { agentVersionId: "local-verifier", instructions: "Verify the work." },
+      {
+        agentVersionId: "cloud-verifier",
+        instructions: "Verify the work.",
+        cloudAgent: {
+          invocationUrl: "https://agents.example/invoke",
+          modelId: "model-cloud",
+          agentId: 42,
+        },
+      },
     ],
   );
   assert.throws(
@@ -31,6 +47,36 @@ test("parses bounded independent development profiles", () => {
       ),
     /CREWON_DEV_AGENT_PROFILES_JSON_invalid/u,
   );
+  for (const invalidProfile of [
+    {
+      agentVersionId: "injected",
+      instructions: "one",
+      unexpected: true,
+    },
+    {
+      agentVersionId: "cloud",
+      instructions: "one",
+      cloudAgent: {
+        invocationUrl: "https://agents.example/invoke",
+        modelId: "",
+        agentId: 1,
+      },
+    },
+    {
+      agentVersionId: "cloud",
+      instructions: "one",
+      cloudAgent: {
+        invocationUrl: "https://agents.example/invoke",
+        modelId: "model-cloud",
+        agentId: 0,
+      },
+    },
+  ]) {
+    assert.throws(
+      () => parseDevelopmentAgentProfiles(JSON.stringify([invalidProfile])),
+      /CREWON_DEV_AGENT_PROFILES_JSON_invalid/u,
+    );
+  }
 });
 
 test("creates one digest-pinned runtime binding per compiled version", () => {
@@ -39,6 +85,7 @@ test("creates one digest-pinned runtime binding per compiled version", () => {
   );
   const manifest = developmentAgentRuntimeBindings({
     versions,
+    profiles: versions.map(() => undefined),
     tenantId: "tenant-1",
     authorityId: "authority-1",
     workspaceBindingId: null,
@@ -64,6 +111,7 @@ test("marks generated model bindings for the already-composed shared tools", () 
   const version = compileAgentVersion(source("model-variant"), { sha256 });
   const manifest = developmentAgentRuntimeBindings({
     versions: [version],
+    profiles: [undefined],
     tenantId: "tenant-1",
     authorityId: "authority-1",
     workspaceBindingId: null,
@@ -82,6 +130,7 @@ test("binds independent development profiles to the configured local MCP", () =>
   const version = compileAgentVersion(source("local-planner"), { sha256 });
   const manifest = developmentAgentRuntimeBindings({
     versions: [version],
+    profiles: [undefined],
     tenantId: "tenant-1",
     authorityId: "authority-1",
     workspaceBindingId: null,
@@ -95,6 +144,63 @@ test("binds independent development profiles to the configured local MCP", () =>
   assert.equal(
     manifest.bindings[0]?.mcpStdioConfigPath,
     "/tmp/local-workspace-mcp.json",
+  );
+});
+
+test("binds cloud development profiles to their configured Agent service", () => {
+  const version = compileAgentVersion(source("cloud-verifier"), { sha256 });
+  const manifest = developmentAgentRuntimeBindings({
+    versions: [version],
+    profiles: [
+      {
+        agentVersionId: "cloud-verifier",
+        instructions: "Verify the work.",
+        cloudAgent: {
+          invocationUrl: "https://agents.example/invoke",
+          modelId: "model-cloud",
+          agentId: 42,
+        },
+      },
+    ],
+    tenantId: "tenant-1",
+    authorityId: "authority-1",
+    workspaceBindingId: null,
+    endpoint: "https://provider.example/v1/responses",
+    requestProfile: "standard",
+    sequencePolicy: "required",
+    idleTimeoutMs: 60_000,
+  });
+
+  assert.deepEqual(manifest.bindings[0]?.provider, {
+    kind: "cloudAgent",
+    invocationUrl: "https://agents.example/invoke",
+    modelId: "model-cloud",
+    agentId: 42,
+    apiKeyEnvironment: "CREWON_AGENT_PLATFORM_API_KEY",
+    storeResponses: false,
+    requestProfile: "standard",
+    idleTimeoutMs: 60_000,
+    sequencePolicy: "required",
+  });
+});
+
+test("rejects profile arrays that do not align with compiled versions", () => {
+  const version = compileAgentVersion(source("local-planner"), { sha256 });
+
+  assert.throws(
+    () =>
+      developmentAgentRuntimeBindings({
+        versions: [version],
+        profiles: [],
+        tenantId: "tenant-1",
+        authorityId: "authority-1",
+        workspaceBindingId: null,
+        endpoint: "https://provider.example/v1/responses",
+        requestProfile: "standard",
+        sequencePolicy: "required",
+        idleTimeoutMs: 60_000,
+      }),
+    /development_agent_profiles_alignment_invalid/u,
   );
 });
 

@@ -1,14 +1,18 @@
 import {
   InMemoryToolBroker,
   ToolBrokerError,
+  ToolExecutionUnknownOutcomeError,
   type ToolDefinition,
   type ToolExecutionPolicy,
+  type ToolHandler,
   type ToolInvocation,
   type ToolRuntimePort,
 } from "@crewon/tool-broker";
 
 import {
+  PimSandboxMutationOutcomeUnknownError,
   PimThreadSandbox,
+  type SandboxCommandView,
   type ThreadSandboxPort,
 } from "../../control-api/src/pim-sandbox-client.ts";
 
@@ -83,7 +87,7 @@ const readPolicy: ToolExecutionPolicy = {
   limits: {
     timeoutMs: 35_000,
     maxOutputBytes: MAX_TOOL_OUTPUT_BYTES,
-    maxArtifactBytes: 1,
+    maxArtifactBytes: MAX_TOOL_OUTPUT_BYTES,
   },
 };
 
@@ -92,14 +96,14 @@ const commandPolicy: ToolExecutionPolicy = {
   effect: "mutation",
   recovery: "reconcilable",
   capability: "workspace.command.v0",
-  limits: { ...readPolicy.limits, timeoutMs: 125_000 },
+  limits: { ...readPolicy.limits, timeoutMs: 140_000 },
 };
 
 /** Adds the PIM-owned sandbox to the same durable Tool path as other Runs. */
 export function createPimSandboxToolRuntime(
   sandbox: ThreadSandboxPort,
 ): ToolRuntimePort {
-  const handlers = new Map([
+  const handlers = new Map<string, ToolHandler>([
     [
       key("workspace_list_directory"),
       async (invocation: ToolInvocation) => ({
@@ -131,30 +135,50 @@ export function createPimSandboxToolRuntime(
     ],
     [
       key("workspace_run_command"),
-      async (invocation: ToolInvocation) => {
+      async (invocation: ToolInvocation, signal: AbortSignal) => {
         const input = parseObject(invocation.input, [
           "command",
           "cwd",
           "timeoutSeconds",
         ]);
-        const command = requiredString(input.command, "workspace_command_invalid");
+        const command = requiredString(
+          input.command,
+          "workspace_command_invalid",
+        );
         const cwdInput = optionalString(
           input.cwd,
           "workspace_command_cwd_invalid",
         );
         const cwd = cwdInput === undefined ? undefined : sandboxPath(cwdInput);
         const timeoutSeconds = optionalTimeout(input.timeoutSeconds);
-        const view = await sandbox.runCommand({
+        const request = {
           command,
           ...(cwd === undefined ? {} : { cwd }),
           ...(timeoutSeconds === undefined ? {} : { timeoutSeconds }),
-        });
+        };
+        let tracked;
+        try {
+          tracked = sandbox.runTrackedCommand
+            ? await sandbox.runTrackedCommand(request, signal)
+            : {
+                command: await sandbox.runCommand(request, signal),
+                workspaceChanges: {
+                  schemaVersion: "crewon.workspace-change-summary.v0" as const,
+                  paths: [],
+                  additions: 0,
+                  deletions: 0,
+                  statsComplete: false,
+                },
+              };
+        } catch (cause) {
+          if (cause instanceof PimSandboxMutationOutcomeUnknownError) {
+            throw new ToolExecutionUnknownOutcomeError({ cause });
+          }
+          throw cause;
+        }
         return {
-          output: boundedJson({
-            ...view,
-            stdout: truncateUtf8(view.stdout, MAX_COMMAND_OUTPUT_BYTES),
-            stderr: truncateUtf8(view.stderr, MAX_COMMAND_OUTPUT_BYTES),
-          }),
+          output: boundedCommandJson(tracked.command),
+          workspaceChanges: tracked.workspaceChanges,
         };
       },
     ],
@@ -265,7 +289,11 @@ function optionalString(value: unknown, code: string): string | undefined {
 
 function optionalTimeout(value: unknown): number | undefined {
   if (value === undefined) return undefined;
-  if (!Number.isSafeInteger(value) || Number(value) < 1 || Number(value) > 120) {
+  if (
+    !Number.isSafeInteger(value) ||
+    Number(value) < 1 ||
+    Number(value) > 120
+  ) {
     throw new ToolBrokerError("workspace_command_timeout_invalid");
   }
   return Number(value);
@@ -281,6 +309,50 @@ function boundedJson(value: unknown): string {
     throw new ToolBrokerError("workspace_tool_output_too_large");
   }
   return output;
+}
+
+function boundedCommandJson(command: SandboxCommandView): string {
+  const stdout = [...truncateUtf8(command.stdout, MAX_COMMAND_OUTPUT_BYTES)];
+  const stderr = [...truncateUtf8(command.stderr, MAX_COMMAND_OUTPUT_BYTES)];
+  const totalCharacters = stdout.length + stderr.length;
+  const candidate = (retained: number): string => {
+    const stdoutRetained =
+      totalCharacters === 0
+        ? 0
+        : Math.min(
+            stdout.length,
+            Math.round((retained * stdout.length) / totalCharacters),
+          );
+    const stderrRetained = Math.min(stderr.length, retained - stdoutRetained);
+    return JSON.stringify({
+      ...command,
+      stdout: middleTruncated(stdout, stdoutRetained),
+      stderr: middleTruncated(stderr, stderrRetained),
+    });
+  };
+  const original = candidate(totalCharacters);
+  if (Buffer.byteLength(original) <= MAX_TOOL_OUTPUT_BYTES) return original;
+  let low = 0;
+  let high = totalCharacters;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (Buffer.byteLength(candidate(middle)) <= MAX_TOOL_OUTPUT_BYTES)
+      low = middle;
+    else high = middle - 1;
+  }
+  const output = candidate(low);
+  if (Buffer.byteLength(output) > MAX_TOOL_OUTPUT_BYTES) {
+    throw new ToolBrokerError("workspace_tool_output_too_large");
+  }
+  return output;
+}
+
+function middleTruncated(entries: readonly string[], retained: number): string {
+  if (retained >= entries.length) return entries.join("");
+  const headLength = Math.ceil(retained / 2);
+  const tailLength = Math.floor(retained / 2);
+  const omitted = entries.length - retained;
+  return `${entries.slice(0, headLength).join("")}\n…${omitted} characters truncated…\n${tailLength === 0 ? "" : entries.slice(-tailLength).join("")}`;
 }
 
 function truncateUtf8(value: string, maximum: number): string {

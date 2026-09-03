@@ -13,14 +13,17 @@ import {
   modelProviderEntries,
   modelProviderEntry,
   selectedModelProviderId,
+  type ModelProviderEntry,
 } from "./modelProviderConfig";
 import {
+  modelProviderBaseUrlError,
   modelProviderDraftError,
   type ModelProviderDraft,
 } from "./modelProviderEdits";
 import {
   MODEL_PROVIDER_ACTION_IDS,
   MODEL_PROVIDER_FIELD_IDS,
+  applyModelOptionsToPanel,
   modelProviderDisconnectedPanel,
   modelProviderErrorPanel,
   modelProviderFormPanel,
@@ -29,6 +32,7 @@ import {
   parseModelProviderRowActionId,
 } from "./modelProviderPanel";
 import {
+  modelProviderFetchErrorText,
   modelProviderProbeSucceeded,
   modelProviderProbeText,
 } from "./modelProviderProbeText";
@@ -44,6 +48,7 @@ export type ModelProviderAction =
   | "cancel"
   | "delete"
   | "edit"
+  | "fetch-models"
   | "save"
   | "select"
   | "test";
@@ -144,6 +149,8 @@ export function modelProviderActionForActionId(
       return { action: "add", providerId: null };
     case MODEL_PROVIDER_ACTION_IDS.cancel:
       return { action: "cancel", providerId: null };
+    case MODEL_PROVIDER_ACTION_IDS.fetchModels:
+      return { action: "fetch-models", providerId: null };
     case MODEL_PROVIDER_ACTION_IDS.save:
       return { action: "save", providerId: null };
     case MODEL_PROVIDER_ACTION_IDS.test:
@@ -233,21 +240,120 @@ async function openFormForProvider(
   }
   try {
     const { catalog, settings } = await readProviderState(params);
+    const entry =
+      providerId === null
+        ? null
+        : modelProviderEntry(settings, providerId, catalog);
     params.setCapabilityPanel(
       modelProviderFormPanel({
         allowAccountProvider: false,
-        entry:
-          providerId === null
-            ? null
-            : modelProviderEntry(settings, providerId, catalog),
+        entry,
         isSelected:
           providerId !== null &&
           selectedModelProviderId(settings, catalog) === providerId,
         locale: params.locale,
       }),
     );
+    // A provider is not one model: opening an existing provider proactively
+    // asks its /models API what it advertises. Failures stay silent so the
+    // form still opens; the explicit fetch action surfaces them.
+    if (entry !== null) void autoFetchModelOptions(params, entry);
   } catch (error) {
     params.setCapabilityPanel(modelProviderErrorPanel(error, params.locale));
+  }
+}
+
+/** Queries the endpoint of an already-saved provider without form input. */
+async function autoFetchModelOptions(
+  params: ModelProviderRefreshParams,
+  entry: ModelProviderEntry,
+): Promise<void> {
+  const store = credentialStoreFor(params);
+  if (store === null) return;
+  try {
+    const { models, status } = await store.modelCatalog({
+      apiKey: null,
+      defaultModelId: entry.modelId || null,
+      endpoint: entry.baseUrl,
+      environmentVariable:
+        entry.credentialKind === "env-key" ? entry.envKey : null,
+      providerId: entry.id,
+    });
+    if (status !== "ok") return;
+    params.setCapabilityPanel((panel) =>
+      applyModelOptionsToPanel(panel, models, params.locale),
+    );
+  } catch {
+    // Silent: the explicit fetch action is the surfaced path for failures.
+  }
+}
+
+/** Fetches the models the form's endpoint advertises and offers them as options. */
+async function fetchModelOptionsAction(
+  params: ModelProviderActionParams,
+): Promise<void> {
+  const store = credentialStoreFor(params);
+  if (store === null) {
+    params.setCapabilityPanel((panel) =>
+      actionError(panel, mutationUnavailable(params.locale)),
+    );
+    return;
+  }
+  const draft = modelProviderDraftFromFields(params.fieldValue);
+  const baseUrlError = modelProviderBaseUrlError(draft.baseUrl, params.locale);
+  if (baseUrlError !== null) {
+    params.setCapabilityPanel((panel) => actionError(panel, baseUrlError));
+    return;
+  }
+  params.setCapabilityPanel((panel) =>
+    panel === null
+      ? null
+      : {
+          ...panel,
+          error: undefined,
+          body:
+            params.locale === "zh"
+              ? "正在查询模型列表..."
+              : "Fetching the model list...",
+        },
+  );
+  try {
+    const { models, status } = await store.modelCatalog({
+      apiKey:
+        draft.credentialKind === "bearer-token" && draft.apiKey.trim()
+          ? draft.apiKey
+          : null,
+      defaultModelId: draft.modelId || null,
+      endpoint: draft.baseUrl.trim(),
+      environmentVariable:
+        draft.credentialKind === "env-key" && draft.envKey.trim()
+          ? draft.envKey.trim()
+          : null,
+      providerId: draft.id || "draft-provider",
+    });
+    if (status !== "ok" || models.length === 0) {
+      params.setCapabilityPanel((panel) =>
+        actionError(panel, modelProviderFetchErrorText(status, params.locale)),
+      );
+      return;
+    }
+    params.setCapabilityPanel((panel) => {
+      const withOptions = applyModelOptionsToPanel(
+        panel,
+        models,
+        params.locale,
+      );
+      return withOptions === null
+        ? null
+        : { ...withOptions, body: undefined, error: undefined };
+    });
+  } catch (error) {
+    params.setCapabilityPanel((panel) =>
+      actionError(
+        panel,
+        `${params.locale === "zh" ? "获取模型列表失败" : "Could not fetch the model list"}\n${safeError(error)}`,
+      ),
+    );
   }
 }
 
@@ -491,6 +597,9 @@ export function handleModelProviderAction(
     case "cancel":
       void refreshModelProvidersPanelAction(params);
       return;
+    case "fetch-models":
+      void fetchModelOptionsAction(params);
+      return;
     case "save":
       void saveDraft(params, { thenTest: false });
       return;
@@ -513,6 +622,7 @@ function formFromDraft(
   existing: ReturnType<typeof modelProviderEntry>,
   error: string,
   locale: Locale,
+  modelOptions: readonly string[] = [],
 ): CapabilityPanel {
   return modelProviderFormPanel({
     allowAccountProvider: false,
@@ -528,6 +638,7 @@ function formFromDraft(
     error,
     isSelected: draft.setAsDefault,
     locale,
+    modelOptions,
   });
 }
 

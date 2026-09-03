@@ -124,7 +124,7 @@ export class DesktopModelCatalogEgressPolicy
   }
 }
 
-/** Resolves once, validates every answer, then returns one approved pinned address. */
+/** Resolves once, validates every answer, then returns approved pinned addresses. */
 export class ProviderProbeEgressResolver {
   readonly #dns: ProviderProbeDnsResolver;
   readonly #policy: ProviderProbeEgressPolicy;
@@ -145,6 +145,21 @@ export class ProviderProbeEgressResolver {
     }>,
     signal: AbortSignal,
   ): Promise<PinnedProviderProbeEndpoint> {
+    const [selected] = await this.resolveAll(input, signal);
+    if (selected === undefined) {
+      throw new ProviderProbeEgressError("provider_probe_egress_denied");
+    }
+    return selected;
+  }
+
+  async resolveAll(
+    input: Readonly<{
+      tenantId: string;
+      providerId: string;
+      endpoint: URL;
+    }>,
+    signal: AbortSignal,
+  ): Promise<readonly PinnedProviderProbeEndpoint[]> {
     const addresses = validateDnsAddresses(
       await abortable(this.#dns.resolveAll(input.endpoint.hostname), signal),
     );
@@ -161,15 +176,13 @@ export class ProviderProbeEgressResolver {
       signal,
     );
     const approved = validateDecision(decision, addresses);
-    const selected = addresses.find(({ address }) => approved.has(address));
-    if (selected === undefined) {
-      throw new ProviderProbeEgressError("provider_probe_egress_denied");
-    }
-    return {
-      endpoint: new URL(input.endpoint),
-      address: selected.address,
-      family: selected.family,
-    };
+    return addresses
+      .filter(({ address }) => approved.has(address))
+      .map(({ address, family }) => ({
+        endpoint: new URL(input.endpoint),
+        address,
+        family,
+      }));
   }
 }
 

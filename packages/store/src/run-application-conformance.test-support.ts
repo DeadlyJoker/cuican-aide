@@ -14,7 +14,10 @@ import {
   type RunStore,
   type ThreadStore,
 } from "@crewon/application";
-import { seedThread } from "./thread-store-conformance.test-support.ts";
+import {
+  createDeleteThreadCommitFixture,
+  seedThread,
+} from "./thread-store-conformance.test-support.ts";
 
 /** Registers application behavior against every durable RunStore adapter. */
 export function registerRunApplicationConformance(
@@ -212,6 +215,145 @@ export function registerRunApplicationConformance(
       assert.equal((await store.listPendingOutbox(100)).length, 3);
     });
 
+    test("requires Thread content access for transcript Run events", async (context) => {
+      const store = await managedStore(context, createStore);
+      const authorization = new MutableAuthorization();
+      const service = new RunApplicationService({
+        store,
+        authorization,
+        ids: new ScriptedIds(["run-1", "event-1", "outbox-1", "work-1"]),
+        clock: new ScriptedClock(["2026-08-08T00:00:01Z"]),
+      });
+      await service.createRun(actor(), createCommand());
+
+      assert.equal(
+        (
+          await service.listRunTranscriptEvents(actor(), {
+            runId: "run-1",
+            afterSequence: 0,
+            limit: 100,
+          })
+        ).length,
+        1,
+      );
+      assert.deepEqual(
+        authorization.requests.slice(-2).map((request) => ({
+          action: request.action,
+          resource: request.resource,
+        })),
+        [
+          {
+            action: "run:read",
+            resource: {
+              kind: "run",
+              tenantId: "tenant-1",
+              spaceId: "space-1",
+              threadId: "thread-1",
+              runId: "run-1",
+            },
+          },
+          {
+            action: "thread:read",
+            resource: {
+              kind: "thread",
+              tenantId: "tenant-1",
+              spaceId: "space-1",
+              threadId: "thread-1",
+            },
+          },
+        ],
+      );
+
+      authorization.deniedActions.add("thread:read");
+      await assert.rejects(
+        service.listRunTranscriptEvents(actor(), {
+          runId: "run-1",
+          afterSequence: 0,
+          limit: 100,
+        }),
+        hasApplicationError("authorization", "authorization_denied"),
+      );
+      assert.equal(
+        (
+          await service.listRunEvents(actor(), {
+            runId: "run-1",
+            afterSequence: 0,
+            limit: 100,
+          })
+        ).length,
+        1,
+      );
+    });
+
+    test("hides transcript Run events after the owning Thread is deleted", async (context) => {
+      const store = await managedStore(context, createStore);
+      const service = new RunApplicationService({
+        store,
+        authorization: new MutableAuthorization(),
+        ids: new ScriptedIds([
+          "run-1",
+          "event-1",
+          "outbox-1",
+          "work-1",
+          "event-2",
+          "outbox-2",
+          "event-3",
+          "outbox-3",
+        ]),
+        clock: new ScriptedClock([
+          "2026-08-08T00:00:01Z",
+          "2026-08-08T00:00:02Z",
+          "2026-08-08T00:00:03Z",
+        ]),
+      });
+      await service.createRun(actor(), createCommand());
+      await service.transitionRun(actor(), {
+        kind: "run.start",
+        runId: "run-1",
+        expectedRevision: 1,
+        idempotencyKey: "start-1",
+      });
+      await service.transitionRun(actor(), {
+        kind: "run.complete",
+        runId: "run-1",
+        expectedRevision: 2,
+        idempotencyKey: "complete-1",
+        outputRef: null,
+      });
+      const work = await store.claimNextWorkItem({
+        ownerId: "worker-1",
+        leaseId: "work-lease-1",
+        leaseDurationMs: 1_000,
+      });
+      assert.ok(work !== null);
+      await store.completeWorkItem({
+        workItemId: work.workItem.workItemId,
+        ownerId: work.lease.ownerId,
+        leaseId: work.lease.leaseId,
+        leaseEpoch: work.lease.epoch,
+      });
+      await store.commitThread(createDeleteThreadCommitFixture(1, 2));
+
+      await assert.rejects(
+        service.listRunTranscriptEvents(actor(), {
+          runId: "run-1",
+          afterSequence: 0,
+          limit: 100,
+        }),
+        hasApplicationError("notFound", "thread_not_found"),
+      );
+      assert.equal(
+        (
+          await service.listRunEvents(actor(), {
+            runId: "run-1",
+            afterSequence: 0,
+            limit: 100,
+          })
+        ).length,
+        3,
+      );
+    });
+
     test("hides tenant and space existence and denies an unauthorized read", async (context) => {
       const store = await managedStore(context, createStore);
       const authorization = new MutableAuthorization();
@@ -226,6 +368,13 @@ export function registerRunApplicationConformance(
 
       await assert.rejects(
         service.getRun({ ...actor(), tenantId: "tenant-2" }, "run-1"),
+        hasApplicationError("notFound", "run_not_found"),
+      );
+      await assert.rejects(
+        service.listRunTranscriptEvents(
+          { ...actor(), tenantId: "tenant-2" },
+          { runId: "run-1", afterSequence: 0, limit: 100 },
+        ),
         hasApplicationError("notFound", "run_not_found"),
       );
       await assert.rejects(
@@ -249,12 +398,18 @@ export function registerRunApplicationConformance(
 
 class MutableAuthorization implements AuthorizationPort {
   readonly requests: Parameters<AuthorizationPort["authorize"]>[0][] = [];
+  readonly deniedActions = new Set<
+    Parameters<AuthorizationPort["authorize"]>[0]["action"]
+  >();
   decision: AuthorizationDecision = { outcome: "allow" };
 
   async authorize(
     request: Parameters<AuthorizationPort["authorize"]>[0],
   ): Promise<AuthorizationDecision> {
     this.requests.push(structuredClone(request));
+    if (this.deniedActions.has(request.action)) {
+      return { outcome: "deny", reasonCode: "action_denied" };
+    }
     return this.decision;
   }
 }

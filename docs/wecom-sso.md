@@ -21,14 +21,14 @@ CrewON 客户端只读取 `GET /api/v1/auth/wecom/config` 并据此把登录按�
 在 Agent Platform 的部署环境（生产为 `/opt/cuican/agent-platform/.env.deploy`）中设置。
 六项缺一不可：任何一项为空，后端都会返回上面的未配置响应。
 
-| 变量 | 说明 |
-| --- | --- |
-| `WECOM_SSO_ENABLED` | 总开关，取 `1` / `true` / `yes` / `on` 之一 |
-| `WECOM_CORP_ID` | 企业 ID（CorpId） |
-| `WECOM_AGENT_ID` | 自建应用的 AgentId |
-| `WECOM_APP_SECRET` | 应用 Secret（旧名 `WECOM_SECRET` 仍兼容） |
+| 变量                 | 说明                                         |
+| -------------------- | -------------------------------------------- |
+| `WECOM_SSO_ENABLED`  | 总开关，取 `1` / `true` / `yes` / `on` 之一  |
+| `WECOM_CORP_ID`      | 企业 ID（CorpId）                            |
+| `WECOM_AGENT_ID`     | 自建应用的 AgentId                           |
+| `WECOM_APP_SECRET`   | 应用 Secret（旧名 `WECOM_SECRET` 仍兼容）    |
 | `WECOM_REDIRECT_URI` | 企业微信回调地址，须与管理后台登记的完全一致 |
-| `WECOM_FRONTEND_URL` | 登录完成后跳回的 CrewON Web 地址 |
+| `WECOM_FRONTEND_URL` | 登录完成后跳回的 CrewON Web 地址             |
 
 `WECOM_API_URL` 与 `WECOM_LOGIN_URL` 有默认值，一般不用设。
 
@@ -58,5 +58,5 @@ CrewON 客户端只读取 `GET /api/v1/auth/wecom/config` 并据此把登录按�
 ## 与 principal session 的区别
 
 企业微信登录走 `/api/v1/auth/*`，与 `CREWON_PRINCIPAL_SESSION_ENABLED` 那套
-`identity/v1` 信任链是两件独立的事。后者是 app-server 的运行时凭证交换，需要一组
-被身份服务认可的签名密钥；关闭它不影响企业微信登录。
+`identity/v1` 信任链是两件独立的事。后者是服务端运行时凭证交换，需要一组被身份
+服务认可的签名密钥；关闭它不影响企业微信登录。

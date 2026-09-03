@@ -94,7 +94,8 @@ describe("thread runtime settings", () => {
         permission: "approve-for-me",
       }),
     ).toEqual({
-      approvalPolicy: "on-failure",
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
       executionIntent: "none",
       model: "gpt-5.6-sol",
       sandboxMode: "workspace-write",
@@ -106,6 +107,7 @@ describe("thread runtime settings", () => {
       }),
     ).toEqual({
       approvalPolicy: "on-request",
+      approvalsReviewer: "user",
       executionIntent: "none",
       model: "gpt-5.5",
       sandboxMode: "workspace-write",
@@ -117,6 +119,7 @@ describe("thread runtime settings", () => {
       }),
     ).toEqual({
       approvalPolicy: "never",
+      approvalsReviewer: "user",
       executionIntent: "none",
       model: "gpt-5",
       sandboxMode: "danger-full-access",
@@ -137,7 +140,8 @@ describe("thread runtime settings", () => {
     expect(
       commandComposerRuntimeSettings({ permission: "approve-for-me" }),
     ).toEqual({
-      approvalPolicy: "on-failure",
+      approvalPolicy: "on-request",
+      approvalsReviewer: "auto_review",
       executionIntent: "none",
       sandboxMode: "workspace-write",
     });

@@ -41,5 +41,12 @@ test("derives stable bounded model variant identities", () => {
     modelVariantAgentVersionId("agent-default", "gpt-5.6-sol"),
   );
   assert.match(first ?? "", /^agent-default:model-[a-f0-9]{24}$/u);
+  assert.match(
+    modelVariantAgentVersionId(
+      "local-desktop-current-planner",
+      "gpt-5.6-sol",
+    ) ?? "",
+    /^local-desktop-current-planner:model-[a-f0-9]{24}$/u,
+  );
   assert.equal(modelVariantAgentVersionId("a".repeat(481), "model"), null);
 });

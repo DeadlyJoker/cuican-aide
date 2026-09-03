@@ -10,7 +10,7 @@ function cssRule(styles: string, selector: string) {
 }
 
 describe("Office chat style", () => {
-  it("snapshots the quiet bubble and plain mention contract", () => {
+  it("snapshots the quiet bubble and highlighted mention contract", () => {
     const styles = readFileSync(
       new URL("../../styles/app.css", import.meta.url),
       "utf8",
@@ -24,6 +24,10 @@ describe("Office chat style", () => {
         styles,
         ".control-office-chat-room .office-top-title h1 {",
       ),
+      darkMention: cssRule(
+        styles,
+        ':root[data-theme="dark"] .office-mention {',
+      ),
       memberBubble: cssRule(styles, ".office-bubble-body {"),
       mention: cssRule(styles, ".office-mention {"),
       settingsButton: cssRule(
@@ -33,10 +37,6 @@ describe("Office chat style", () => {
       selfBubble: cssRule(
         styles,
         '.office-bubble[data-self="true"] .office-bubble-body {',
-      ),
-      selfMention: cssRule(
-        styles,
-        '.office-bubble[data-self="true"] .office-mention {',
       ),
     }).toMatchSnapshot();
   });

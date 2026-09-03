@@ -18,6 +18,7 @@ import { classNames } from "./commandWorkspaceUtils";
 
 type Copy = {
   addWorkspace: string;
+  archiveThread: string;
   cancel: string;
   chooseFolder: string;
   controlWorkspaceEmpty: string;
@@ -55,6 +56,7 @@ export function CommandSidebarWorkspaceTree(props: {
   onNewThread: (cwd: string | null) => void;
   linkedThreads: CommandLinkedThread[];
   selectedLinkedThreadId: string | null;
+  onArchiveThread?: (id: string) => void;
   onOpenLinkedThread: (id: string) => void;
   nativeFolderPicker: boolean;
   workspaceFormOpen: boolean;
@@ -86,6 +88,7 @@ export function CommandSidebarWorkspaceTree(props: {
     onNewThread,
     linkedThreads,
     selectedLinkedThreadId,
+    onArchiveThread,
     onOpenLinkedThread,
     nativeFolderPicker,
     workspaceFormOpen,
@@ -115,7 +118,9 @@ export function CommandSidebarWorkspaceTree(props: {
   ) =>
     threads.map((thread) => (
       <CommandSidebarThreadRow
+        archiveLabel={copy.archiveThread}
         key={thread.id}
+        onArchive={onArchiveThread}
         onOpen={onOpenLinkedThread}
         selected={selectedLinkedThreadId === thread.id}
         thread={thread}

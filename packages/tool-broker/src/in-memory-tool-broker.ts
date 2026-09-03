@@ -3,11 +3,14 @@ import { createHash } from "node:crypto";
 import {
   canonicalActionIntent,
   parseActionIntent,
+  parseWorkspaceChangeSummary,
   type ActionIntent,
+  type WorkspaceChangeSummary,
 } from "@crewon/contracts";
 
 import {
   ToolBrokerError,
+  ToolExecutionUnknownOutcomeError,
   type ToolCallKind,
   type ToolDefinition,
   type ToolExecutionCommand,
@@ -28,7 +31,12 @@ export type ToolHandler = (
   invocation: ToolInvocation,
   signal: AbortSignal,
 ) => Promise<
-  Readonly<{ output: string; isError?: boolean; artifactRef?: string | null }>
+  Readonly<{
+    output: string;
+    isError?: boolean;
+    artifactRef?: string | null;
+    workspaceChanges?: WorkspaceChangeSummary;
+  }>
 >;
 
 export class InMemoryToolBroker implements ToolRuntimePort {
@@ -112,7 +120,10 @@ export class InMemoryToolBroker implements ToolRuntimePort {
         result,
       }),
       (error): ToolExecutionResolution => {
-        if (!signal.aborted) {
+        if (
+          !signal.aborted &&
+          !(error instanceof ToolExecutionUnknownOutcomeError)
+        ) {
           throw error;
         }
         return {
@@ -205,6 +216,7 @@ export class InMemoryToolBroker implements ToolRuntimePort {
         result.output,
         result.isError ?? false,
         result.artifactRef ?? null,
+        result.workspaceChanges,
       );
     } catch (error) {
       throwIfAborted(signal);
@@ -226,6 +238,7 @@ function toolResult(
   output: string,
   isError: boolean,
   artifactRef: string | null,
+  workspaceChanges?: WorkspaceChangeSummary,
 ): ToolResult {
   if (typeof output !== "string" || typeof isError !== "boolean") {
     throw new ToolBrokerError("tool_output_invalid");
@@ -246,6 +259,9 @@ function toolResult(
     output,
     isError,
     artifactRef,
+    ...(workspaceChanges === undefined
+      ? {}
+      : { workspaceChanges: parseWorkspaceChangeSummary(workspaceChanges) }),
   };
 }
 

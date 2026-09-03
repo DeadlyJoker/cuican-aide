@@ -1,9 +1,15 @@
 import type {
+  GetRunPlanResponse,
+  RunEventExtension,
   RunEventView,
   RunEventViewMode,
+  RunPlanView,
   RunView,
 } from "@crewon/contracts";
-import type { RunLifecycleEvent, RunState } from "@crewon/domain";
+import type { RunLifecycleEvent, RunPlan, RunState } from "@crewon/domain";
+
+const MAX_TOOL_PREVIEW_BYTES = 16 * 1024;
+const TOOL_PREVIEW_TRUNCATION_MARKER = "\n… transcript preview truncated …\n";
 
 export function projectRun(state: RunState): RunView {
   return {
@@ -26,6 +32,33 @@ export function projectRun(state: RunState): RunView {
     createdAt: state.createdAt,
     updatedAt: state.updatedAt,
     terminalAt: state.terminalAt,
+  };
+}
+
+export function projectRunPlanSnapshot(state: RunState): GetRunPlanResponse {
+  return {
+    runId: state.runId,
+    eventSequence: state.lastSequence,
+    plan:
+      state.plan === undefined || state.plan === null
+        ? null
+        : projectRunPlan(state.plan),
+  };
+}
+
+function projectRunPlan(plan: RunPlan): RunPlanView {
+  return {
+    schemaVersion: plan.schemaVersion,
+    planId: plan.planId,
+    revision: plan.revision,
+    explanation: plan.explanation,
+    items: plan.items.map((item) => ({
+      itemId: item.itemId,
+      title: item.title,
+      status: item.status,
+    })),
+    createdAt: plan.createdAt,
+    updatedAt: plan.updatedAt,
   };
 }
 
@@ -89,6 +122,12 @@ export function projectRunEvent(event: RunLifecycleEvent): RunEventView {
       };
     case "run.goal.steering.consumed":
       return { ...envelope, type: event.type, data: {} };
+    case "run.plan.updated":
+      return {
+        ...envelope,
+        type: event.type,
+        data: { plan: projectRunPlan(event.data.plan) },
+      };
     case "segment.started":
       return {
         ...envelope,
@@ -245,7 +284,14 @@ export function projectRunEvent(event: RunLifecycleEvent): RunEventView {
 export function projectRunEventForView(
   event: RunLifecycleEvent,
   view: RunEventViewMode,
+  extensions: readonly RunEventExtension[] = [],
 ): RunEventView | null {
+  if (
+    event.type === "run.plan.updated" &&
+    !extensions.includes("run-plan-v1")
+  ) {
+    return null;
+  }
   if (
     view === "client" &&
     event.type === "model.sampling.retry" &&
@@ -254,5 +300,80 @@ export function projectRunEventForView(
   ) {
     return null;
   }
+  if (view === "transcript" && event.type === "tool.requested") {
+    const preview = boundedToolPreview(event.data.input);
+    return {
+      ...projectRunEvent(event),
+      type: event.type,
+      data: {
+        segmentId: event.data.segmentId,
+        callId: event.data.callId,
+        kind: event.data.kind,
+        name: event.data.name,
+        inputPreview: preview.text,
+        inputTruncated: preview.truncated,
+      },
+    };
+  }
+  if (view === "transcript" && event.type === "tool.completed") {
+    const preview = boundedToolPreview(event.data.output);
+    return {
+      ...projectRunEvent(event),
+      type: event.type,
+      data: {
+        segmentId: event.data.segmentId,
+        callId: event.data.callId,
+        kind: event.data.kind,
+        name: event.data.name,
+        isError: event.data.isError,
+        outputTruncated: event.data.outputTruncated || preview.truncated,
+        artifactAvailable: event.data.artifactRef !== null,
+        ...(event.data.workspaceChanges === undefined
+          ? {}
+          : { workspaceChanges: event.data.workspaceChanges }),
+        outputPreview: preview.text,
+      },
+    };
+  }
   return projectRunEvent(event);
+}
+
+function boundedToolPreview(value: string): {
+  text: string;
+  truncated: boolean;
+} {
+  if (byteLength(value) <= MAX_TOOL_PREVIEW_BYTES) {
+    return { text: value, truncated: false };
+  }
+  const entries = [...value].map((text) => ({ text, bytes: byteLength(text) }));
+  const contentBudget =
+    MAX_TOOL_PREVIEW_BYTES - byteLength(TOOL_PREVIEW_TRUNCATION_MARKER);
+  const headBudget = Math.floor(contentBudget / 2);
+  const head: string[] = [];
+  const tail: string[] = [];
+  let headBytes = 0;
+  let tailBytes = 0;
+  let start = 0;
+  let end = entries.length - 1;
+  while (start <= end && headBytes + entries[start]!.bytes <= headBudget) {
+    head.push(entries[start]!.text);
+    headBytes += entries[start]!.bytes;
+    start += 1;
+  }
+  while (
+    end >= start &&
+    tailBytes + entries[end]!.bytes <= contentBudget - headBytes
+  ) {
+    tail.unshift(entries[end]!.text);
+    tailBytes += entries[end]!.bytes;
+    end -= 1;
+  }
+  return {
+    text: `${head.join("")}${TOOL_PREVIEW_TRUNCATION_MARKER}${tail.join("")}`,
+    truncated: true,
+  };
+}
+
+function byteLength(value: string): number {
+  return new TextEncoder().encode(value).byteLength;
 }

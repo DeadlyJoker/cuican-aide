@@ -73,6 +73,26 @@ export class ProviderCredentialStore {
     };
   }
 
+  /**
+   * Resolves the usable secret for a provider without activating it.
+   *
+   * An explicit environment variable wins (the draft being edited may not be
+   * saved yet); otherwise a stored keychain/env binding for the provider id is
+   * decrypted. Returns null when no credential is available.
+   */
+  secretFor(
+    providerId: string,
+    environmentVariable: string | null,
+  ): string | null {
+    if (environmentVariable !== null) {
+      return process.env[environmentVariable]?.trim() || null;
+    }
+    const binding = this.#state.bindings.find(
+      (candidate) => candidate.providerId === providerId,
+    );
+    return binding === undefined ? null : this.#secret(binding);
+  }
+
   async activate(value: unknown) {
     const providerId = parseProviderId(value);
     const binding = this.#state.bindings.find(

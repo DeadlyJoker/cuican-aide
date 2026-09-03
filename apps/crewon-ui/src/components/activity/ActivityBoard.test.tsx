@@ -100,7 +100,7 @@ const activity: ActivityData = {
         {
           check: "Run office sync regression",
           status: "passed",
-          command: "just test -p crewon-app-server office_run",
+          command: "pnpm --filter @crewon/control-api test",
           evidence: "regression passed",
         },
       ],
@@ -334,7 +334,9 @@ describe("ActivityBoard", () => {
     expect(markup).toContain("followup_task:thread-reviewer");
     expect(markup).toContain("Dispatch");
     expect(markup).toContain("Dispatch next");
-    expect(markup).toContain("office · decision · accepted · high · importance high");
+    expect(markup).toContain(
+      "office · decision · accepted · high · importance high",
+    );
     expect(markup).toContain("turn turn-1");
     expect(markup).toContain("Keep Office run reducers in app-server.");
     expect(markup).toContain(
@@ -342,11 +344,13 @@ describe("ActivityBoard", () => {
     );
     expect(markup).toContain("Reviewer/agent-reviewer");
     expect(markup).toContain("turn turn-reviewer");
-    expect(markup).toContain("Reviewer prefers reducer evidence before approval.");
+    expect(markup).toContain(
+      "Reviewer prefers reducer evidence before approval.",
+    );
     expect(markup).toContain("Cancel");
     expect(markup).toContain("Retry");
     expect(markup).toMatchInlineSnapshot(
-      `"<div class="activity-board"><section class="activity-card activity-trace"><div class="activity-card-head"><h2>Execution trace</h2><span>Live</span></div><ol class="trace-timeline"><li class="trace-step" data-status="done"><span class="trace-glyph" data-accent="blue" aria-hidden="true">P</span><div class="trace-body"><div class="trace-top"><strong>Planner</strong><span class="trace-action">Planned</span><span class="trace-time">10:12</span></div><p class="trace-detail">Split the delivery work into implementation and review.</p><div class="trace-meta"><span class="trace-status" data-status="done">Done</span><span class="trace-tokens">4.2k tok</span></div></div></li></ol></section><div class="activity-rail"><section class="activity-card activity-runs"><div class="activity-card-head"><h2>Team runs</h2><span>1 active · 1 need attention</span></div><div class="office-run-list"><article class="office-run-row" data-status="running"><div class="office-run-top"><strong>Ship office backend</strong><span class="office-run-status" data-status="running">Running</span></div><p class="office-run-meta">turn turn-1 · 10:14</p><p class="office-run-goal"><span>Goal</span>Land a real Office Agent team execution loop.</p><p class="office-run-detail">Implement index, reducer, cancel, retry, and UI.</p><ol class="office-run-plan"><li data-status="completed"><span>Done</span><strong>Index every run</strong></li><li data-status="inProgress"><span>Running</span><strong>Wire cancel and retry</strong></li></ol><div class="office-run-loop-review" data-status="passed"><strong>Loop review</strong><span>Passed</span><span>Iteration 2/4</span><span>Phase Summarize</span><span>Criteria 1/1</span><span>Evidence 1/1</span><span>Checks 1/1</span><span>Ready to summarize</span></div><div class="office-run-signals"><span><strong>Criteria</strong> · passed · Office run sync is observable · turn sync assertions passed</span><span><strong>Check</strong> · passed · Run office sync regression · just test -p crewon-app-server office_run · regression passed</span><span><strong>Evidence</strong> · verified · Reducer wrote structured Office state · turn-1</span><span><strong>Risk</strong> · medium · Retry path can drift · Run retry regression</span></div><div class="office-run-delegations"><span class="office-run-delegation-row"><span class="office-run-delegation-text"><strong>Reviewer</strong> · agent-reviewer · Review reducer behavior · running · followup_task:thread-reviewer · Reducer behavior looks correct · Memory member · preference · accepted · high · importance high · Reviewer/agent-reviewer · turn turn-reviewer · Reviewer prefers reducer evidence before approval.</span></span><span class="office-run-delegation-row"><span class="office-run-delegation-text"><strong>Implementer</strong> · agent-impl · Implement dispatch action · queued · followup_task:thread-impl</span><button type="button">Dispatch</button></span></div><div class="office-run-memory-refs"><span><strong>Memory</strong> · office · decision · accepted · high · importance high · turn turn-1 · Keep Office run reducers in app-server.</span></div><div class="office-run-actions"><button type="button">Cancel</button><button type="button">Dispatch next</button></div></article><article class="office-run-row" data-status="failed"><div class="office-run-top"><strong>Previous attempt</strong><span class="office-run-status" data-status="failed">Failed</span></div><p class="office-run-meta">turn turn-0 · 10:05</p><p class="office-run-detail">Tool approval timed out</p><div class="office-run-actions"><button type="button">Retry</button></div></article></div></section><section class="activity-card activity-approvals"><div class="activity-card-head"><h2>Approvals inbox</h2><span class="approvals-count" data-empty="true">0</span></div><p class="activity-empty">No pending approvals.</p><div class="approval-list"></div></section><section class="activity-card activity-budget"><div class="activity-card-head"><h2>Usage &amp; budget</h2><span>$0.42 / $8</span></div><div class="budget-cap"><div class="budget-cap-bar"><span style="width:5%" data-warn="false"></span></div><span class="budget-cap-label">5% of daily budget used</span></div><div class="budget-list"><div class="budget-row"><span class="budget-glyph" data-accent="slate" aria-hidden="true">O</span><div class="budget-row-main"><div class="budget-row-top"><span class="budget-name">Office team</span><span class="budget-cost">$0.42</span></div><div class="budget-bar"><span style="width:24%" data-warn="false"></span></div><span class="budget-tokens">12.0k tok / 50.0k tok</span></div></div></div></section><section class="activity-card activity-artifacts"><div class="activity-card-head"><h2>Artifacts</h2><span>1</span></div><div class="artifact-list"><button type="button" class="artifact-row"><span class="artifact-glyph" data-accent="green" aria-hidden="true">D</span><div class="artifact-body"><div class="artifact-top"><strong>delivery-plan.md</strong><span class="artifact-kind">Doc</span></div><p class="artifact-meta">Updated by Reviewer</p></div></button></div></section></div></div>"`,
+      `"<div class="activity-board"><section class="activity-card activity-trace"><div class="activity-card-head"><h2>Execution trace</h2><span>Live</span></div><ol class="trace-timeline"><li class="trace-step" data-status="done"><span class="trace-glyph" data-accent="blue" aria-hidden="true">P</span><div class="trace-body"><div class="trace-top"><strong>Planner</strong><span class="trace-action">Planned</span><span class="trace-time">10:12</span></div><p class="trace-detail">Split the delivery work into implementation and review.</p><div class="trace-meta"><span class="trace-status" data-status="done">Done</span><span class="trace-tokens">4.2k tok</span></div></div></li></ol></section><div class="activity-rail"><section class="activity-card activity-runs"><div class="activity-card-head"><h2>Team runs</h2><span>1 active · 1 need attention</span></div><div class="office-run-list"><article class="office-run-row" data-status="running"><div class="office-run-top"><strong>Ship office backend</strong><span class="office-run-status" data-status="running">Running</span></div><p class="office-run-meta">turn turn-1 · 10:14</p><p class="office-run-goal"><span>Goal</span>Land a real Office Agent team execution loop.</p><p class="office-run-detail">Implement index, reducer, cancel, retry, and UI.</p><ol class="office-run-plan"><li data-status="completed"><span>Done</span><strong>Index every run</strong></li><li data-status="inProgress"><span>Running</span><strong>Wire cancel and retry</strong></li></ol><div class="office-run-loop-review" data-status="passed"><strong>Loop review</strong><span>Passed</span><span>Iteration 2/4</span><span>Phase Summarize</span><span>Criteria 1/1</span><span>Evidence 1/1</span><span>Checks 1/1</span><span>Ready to summarize</span></div><div class="office-run-signals"><span><strong>Criteria</strong> · passed · Office run sync is observable · turn sync assertions passed</span><span><strong>Check</strong> · passed · Run office sync regression · pnpm --filter @crewon/control-api test · regression passed</span><span><strong>Evidence</strong> · verified · Reducer wrote structured Office state · turn-1</span><span><strong>Risk</strong> · medium · Retry path can drift · Run retry regression</span></div><div class="office-run-delegations"><span class="office-run-delegation-row"><span class="office-run-delegation-text"><strong>Reviewer</strong> · agent-reviewer · Review reducer behavior · running · followup_task:thread-reviewer · Reducer behavior looks correct · Memory member · preference · accepted · high · importance high · Reviewer/agent-reviewer · turn turn-reviewer · Reviewer prefers reducer evidence before approval.</span></span><span class="office-run-delegation-row"><span class="office-run-delegation-text"><strong>Implementer</strong> · agent-impl · Implement dispatch action · queued · followup_task:thread-impl</span><button type="button">Dispatch</button></span></div><div class="office-run-memory-refs"><span><strong>Memory</strong> · office · decision · accepted · high · importance high · turn turn-1 · Keep Office run reducers in app-server.</span></div><div class="office-run-actions"><button type="button">Cancel</button><button type="button">Dispatch next</button></div></article><article class="office-run-row" data-status="failed"><div class="office-run-top"><strong>Previous attempt</strong><span class="office-run-status" data-status="failed">Failed</span></div><p class="office-run-meta">turn turn-0 · 10:05</p><p class="office-run-detail">Tool approval timed out</p><div class="office-run-actions"><button type="button">Retry</button></div></article></div></section><section class="activity-card activity-approvals"><div class="activity-card-head"><h2>Approvals inbox</h2><span class="approvals-count" data-empty="true">0</span></div><p class="activity-empty">No pending approvals.</p><div class="approval-list"></div></section><section class="activity-card activity-budget"><div class="activity-card-head"><h2>Usage &amp; budget</h2><span>$0.42 / $8</span></div><div class="budget-cap"><div class="budget-cap-bar"><span style="width:5%" data-warn="false"></span></div><span class="budget-cap-label">5% of daily budget used</span></div><div class="budget-list"><div class="budget-row"><span class="budget-glyph" data-accent="slate" aria-hidden="true">O</span><div class="budget-row-main"><div class="budget-row-top"><span class="budget-name">Office team</span><span class="budget-cost">$0.42</span></div><div class="budget-bar"><span style="width:24%" data-warn="false"></span></div><span class="budget-tokens">12.0k tok / 50.0k tok</span></div></div></div></section><section class="activity-card activity-artifacts"><div class="activity-card-head"><h2>Artifacts</h2><span>1</span></div><div class="artifact-list"><button type="button" class="artifact-row"><span class="artifact-glyph" data-accent="green" aria-hidden="true">D</span><div class="artifact-body"><div class="artifact-top"><strong>delivery-plan.md</strong><span class="artifact-kind">Doc</span></div><p class="artifact-meta">Updated by Reviewer</p></div></button></div></section></div></div>"`,
     );
   });
 
@@ -365,8 +369,8 @@ describe("ActivityBoard", () => {
                 {
                   check: "Run app-server tests",
                   status: "passed",
-                  command: "just test -p crewon-app-server",
-                  evidence: "Command completed: just test -p crewon-app-server",
+                  command: "pnpm --filter @crewon/control-api test",
+                  evidence: "Command completed: pnpm control-api tests",
                   itemId: "cmd-1",
                   exitCode: 0,
                   durationMs: 1234,
@@ -377,12 +381,12 @@ describe("ActivityBoard", () => {
               ],
               evidence: [
                 {
-                  summary: "Command completed: just test",
+                  summary: "Command completed: pnpm control-api tests",
                   status: "verified",
                   source: "commandExecution",
                   evidenceKind: "commandExecution",
                   itemId: "cmd-1",
-                  command: "just test -p crewon-app-server",
+                  command: "pnpm --filter @crewon/control-api test",
                   exitCode: 0,
                   durationMs: 1234,
                   outputPreview: "4 passed",
@@ -421,7 +425,7 @@ describe("ActivityBoard", () => {
 
     expect(markup).toContain("Command");
     expect(markup).toContain("Run app-server tests");
-    expect(markup).toContain("just test -p crewon-app-server");
+    expect(markup).toContain("pnpm --filter @crewon/control-api test");
     expect(markup).toContain("exit 0");
     expect(markup).toContain("1234ms");
     expect(markup).toContain("4 passed");
@@ -477,7 +481,7 @@ describe("ActivityBoard", () => {
                   criterion: "Release notes cover rollback behavior",
                   criterionId: "criteria-release-notes",
                   status: "passed",
-                  evidence: "Command completed: just test",
+                  evidence: "Command completed: pnpm control-api tests",
                   verifiedByCheck: "Run smoke automation",
                 },
               ],
@@ -767,9 +771,9 @@ describe("ActivityBoard", () => {
     expect(markup).toContain("Run smoke automation");
     expect(markup).toContain("Review runtime state");
     expect(markup).toContain("office-run-signal-row");
-    expect(markup.match(/<button type="button">Cancel<\/button>/g)).toHaveLength(
-      2,
-    );
+    expect(
+      markup.match(/<button type="button">Cancel<\/button>/g),
+    ).toHaveLength(2);
   });
 
   it("renders retry controls for failed office delegations", () => {

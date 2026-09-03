@@ -6,6 +6,11 @@ const MAX_PROFILE_JSON_BYTES = 32 * 1024;
 export type DevelopmentAgentProfile = Readonly<{
   agentVersionId: string;
   instructions: string;
+  cloudAgent?: Readonly<{
+    invocationUrl: string;
+    modelId: string;
+    agentId: number;
+  }>;
 }>;
 
 /** Parses the bounded, development-only multi-Agent catalog. */
@@ -27,9 +32,14 @@ export function parseDevelopmentAgentProfiles(
   }
   const ids = new Set<string>();
   return value.map((item) => {
+    const cloudAgent = isObject(item) ? item.cloudAgent : undefined;
     if (
-      !isObject(item) ||
-      !hasExactKeys(item, ["agentVersionId", "instructions"]) ||
+      !hasExactKeys(
+        item,
+        cloudAgent === undefined
+          ? ["agentVersionId", "instructions"]
+          : ["agentVersionId", "cloudAgent", "instructions"],
+      ) ||
       typeof item.agentVersionId !== "string" ||
       !item.agentVersionId.trim() ||
       item.agentVersionId.length > 512 ||
@@ -40,10 +50,33 @@ export function parseDevelopmentAgentProfiles(
     ) {
       throw new Error("CREWON_DEV_AGENT_PROFILES_JSON_invalid");
     }
+    if (
+      cloudAgent !== undefined &&
+      (!hasExactKeys(cloudAgent, ["agentId", "invocationUrl", "modelId"]) ||
+        typeof cloudAgent.invocationUrl !== "string" ||
+        !cloudAgent.invocationUrl.trim() ||
+        cloudAgent.invocationUrl.length > 2048 ||
+        typeof cloudAgent.modelId !== "string" ||
+        !cloudAgent.modelId.trim() ||
+        cloudAgent.modelId.length > 256 ||
+        !Number.isSafeInteger(cloudAgent.agentId) ||
+        Number(cloudAgent.agentId) < 1)
+    ) {
+      throw new Error("CREWON_DEV_AGENT_PROFILES_JSON_invalid");
+    }
     ids.add(item.agentVersionId);
     return {
       agentVersionId: item.agentVersionId,
       instructions: item.instructions,
+      ...(cloudAgent === undefined
+        ? {}
+        : {
+            cloudAgent: {
+              invocationUrl: cloudAgent.invocationUrl as string,
+              modelId: cloudAgent.modelId as string,
+              agentId: Number(cloudAgent.agentId),
+            },
+          }),
     };
   });
 }
@@ -51,6 +84,7 @@ export function parseDevelopmentAgentProfiles(
 /** Builds credential-free runtime bindings for local development versions. */
 export function developmentAgentRuntimeBindings(input: {
   versions: readonly CompiledAgentVersion[];
+  profiles: readonly (DevelopmentAgentProfile | undefined)[];
   tenantId: string;
   authorityId: string;
   workspaceBindingId: string | null;
@@ -62,51 +96,74 @@ export function developmentAgentRuntimeBindings(input: {
   mcpStdioConfigPath?: string | null;
   toolRuntimeMode?: "independent" | "shared";
 }) {
+  if (input.profiles.length !== input.versions.length) {
+    throw new Error("development_agent_profiles_alignment_invalid");
+  }
   return {
     schemaVersion: "crewon.agent-version-runtime-bindings.v0" as const,
-    bindings: input.versions.map((version) => ({
-      tenantId: input.tenantId,
-      agentVersionId: version.agentVersionId,
-      contentDigest: version.contentDigest,
-      authorityId: input.authorityId,
-      workspaceBindingId: input.workspaceBindingId,
-      provider: {
-        kind: "directResponses" as const,
-        endpoint: input.endpoint,
-        apiKeyEnvironment:
-          input.apiKeyEnvironment === undefined
-            ? "CREWON_MODEL_API_KEY"
-            : input.apiKeyEnvironment,
-        storeResponses: false,
-        requestProfile: input.requestProfile,
-        idleTimeoutMs: input.idleTimeoutMs,
-        sequencePolicy: input.sequencePolicy,
-      },
-      mcpStdioConfigPath:
-        input.toolRuntimeMode === "shared"
-          ? null
-          : (input.mcpStdioConfigPath ?? null),
-      deviceToolConfigPath: null,
-      remoteMcpConfigPath: null,
-      ...(input.toolRuntimeMode === undefined
-        ? {}
-        : { toolRuntimeMode: input.toolRuntimeMode }),
-    })),
+    bindings: input.versions.map((version, index) => {
+      const profile = input.profiles[index];
+      const isCloudAgent = profile?.cloudAgent !== undefined;
+      return {
+        tenantId: input.tenantId,
+        agentVersionId: version.agentVersionId,
+        contentDigest: version.contentDigest,
+        authorityId: input.authorityId,
+        workspaceBindingId: input.workspaceBindingId,
+        provider: isCloudAgent
+          ? {
+              kind: "cloudAgent" as const,
+              invocationUrl: profile.cloudAgent!.invocationUrl,
+              modelId: profile.cloudAgent!.modelId,
+              agentId: profile.cloudAgent!.agentId,
+              apiKeyEnvironment:
+                input.apiKeyEnvironment === undefined
+                  ? "CREWON_AGENT_PLATFORM_API_KEY"
+                  : input.apiKeyEnvironment,
+              storeResponses: false,
+              requestProfile: input.requestProfile,
+              idleTimeoutMs: input.idleTimeoutMs,
+              sequencePolicy: input.sequencePolicy,
+            }
+          : {
+              kind: "directResponses" as const,
+              endpoint: input.endpoint,
+              apiKeyEnvironment:
+                input.apiKeyEnvironment === undefined
+                  ? "CREWON_MODEL_API_KEY"
+                  : input.apiKeyEnvironment,
+              storeResponses: false,
+              requestProfile: input.requestProfile,
+              idleTimeoutMs: input.idleTimeoutMs,
+              sequencePolicy: input.sequencePolicy,
+            },
+        mcpStdioConfigPath:
+          input.toolRuntimeMode === "shared"
+            ? null
+            : (input.mcpStdioConfigPath ?? null),
+        deviceToolConfigPath: null,
+        remoteMcpConfigPath: null,
+        ...(input.toolRuntimeMode === undefined
+          ? {}
+          : { toolRuntimeMode: input.toolRuntimeMode }),
+      };
+    }),
   };
+}
+
+function hasExactKeys(
+  value: unknown,
+  keys: readonly string[],
+): value is Record<string, unknown> {
+  if (!isObject(value)) return false;
+  const actual = Object.keys(value).sort();
+  const expected = [...keys].sort();
+  return (
+    actual.length === expected.length &&
+    actual.every((key, index) => key === expected[index])
+  );
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function hasExactKeys(
-  value: Record<string, unknown>,
-  expected: readonly string[],
-): boolean {
-  const actual = Object.keys(value).sort();
-  const keys = [...expected].sort();
-  return (
-    actual.length === keys.length &&
-    actual.every((key, index) => key === keys[index])
-  );
 }

@@ -1,5 +1,4 @@
 import {
-  BookOpen,
   Bot,
   Check,
   Download,
@@ -21,7 +20,10 @@ import { CommandExpertsPanel } from "./CommandExpertsPanel";
 import { CommandWorkflowPanel } from "./CommandWorkflowPanel";
 import { CommandTaskStatusIndicator } from "./CommandSidebarThreadRow";
 import type { CommandLinkedThread } from "./CommandWorkspaceChrome";
-import type { CommandSidebarThreadScope } from "./commandSidebarThreadPresentation";
+import {
+  commandSidebarThreadHasUnreadSignal,
+  type CommandSidebarThreadScope,
+} from "./commandSidebarThreadPresentation";
 import { SegmentedTabs } from "./SegmentedTabs";
 import { classNames } from "./commandWorkspaceUtils";
 import type { Locale } from "../../lib/i18n";
@@ -46,6 +48,7 @@ import type {
   AgentPlatformResourceState,
   AgentPlatformResourceStates,
   AgentPlatformSnapshot,
+  PlatformAgent,
 } from "../../lib/agent-platform/agentPlatformClient";
 import type { ExpertTeamRecordReference } from "../../lib/experts/expertTeamRecord";
 import type { ControlAgentCatalogRecord } from "../../lib/office/controlAgentCatalog";
@@ -60,6 +63,14 @@ type FilterOption = {
   icon?: ReactNode;
 };
 
+/*
+ * Knowledge has no local runtime: what matters is whether a base is the
+ * account's own synced base (mine) or a shared one offered through the catalog
+ * (market). The location badge therefore widens beyond the cloud/local split
+ * the agents, skills, and services pages use.
+ */
+type KnowledgeLocation = "mine" | "market";
+
 type CatalogItem = {
   accent: string;
   action?: string;
@@ -68,7 +79,7 @@ type CatalogItem = {
   icon: ReactNode;
   id: string;
   label: string;
-  location?: CapabilityLocation;
+  location?: CapabilityLocation | KnowledgeLocation;
   logo?: string;
   meta: string[];
   preset?: { id: string; kind: "mcp" | "skill" };
@@ -163,6 +174,32 @@ function resourceLocation(
   source: CatalogResourceSummary["source"],
 ): CapabilityLocation {
   return source === "local" ? "local" : "cloud";
+}
+
+/*
+ * Knowledge has no local runtime, so its split is ownership: a base the account
+ * synced itself (online) reads as "mine", while a shared base offered through
+ * the catalog reads as "market".
+ */
+function knowledgeLocation(
+  source: CatalogResourceSummary["source"],
+): KnowledgeLocation {
+  return source === "catalog" ? "market" : "mine";
+}
+
+function locationLabel(
+  location: CapabilityLocation | KnowledgeLocation | undefined,
+): string {
+  if (location === "local") {
+    return "本地";
+  }
+  if (location === "market") {
+    return "市场";
+  }
+  if (location === "mine") {
+    return "我的";
+  }
+  return "云端";
 }
 
 /*
@@ -266,7 +303,7 @@ function CatalogCard({
                   `is-${item.location}`,
                 )}
               >
-                {item.location === "local" ? "本地" : "云端"}
+                {locationLabel(item.location)}
               </span>
             ) : null}
             <span
@@ -289,7 +326,7 @@ function CatalogCard({
                   `is-${item.location}`,
                 )}
               >
-                {item.location === "local" ? "本地" : "云端"}
+                {locationLabel(item.location)}
               </span>
             ) : null}
             {item.meta.map((meta) => (
@@ -389,39 +426,45 @@ function presetCapabilityCatalog(): CatalogItem[] {
   }));
 }
 
+function isUsableAgent(agent: PlatformAgent): boolean {
+  return Boolean(agent.is_active) && Boolean(agent.api_enabled);
+}
+
 function syncedAgentCatalog(snapshot: AgentPlatformSnapshot): CatalogItem[] {
-  const employees = snapshot.agents.map((agent): CatalogItem => {
-    const resource: CatalogResourceSummary = {
-      id: agent.id,
-      type: "agents",
-      name: agent.name,
-      description: agent.description || "",
-      owner_username: agent.owner_username,
-      model: agent.model_info?.model_name || agent.model_info?.name,
-      api_enabled: Boolean(agent.api_enabled),
-      invocation_url: agent.invocation_url,
-      enabled: agent.is_active,
-      download_available: false,
-      downloaded: agent.downloaded,
-      downloaded_at: agent.downloaded_at,
-      update_available: agent.update_available,
-      source_updated_at: agent.source_updated_at,
-      source: agent.resource_source,
-    };
-    return {
-      accent: "employee-card",
-      detail: resource.description,
-      filter: "employee",
-      icon: "A",
-      id: `agent-platform:agents:${agent.id}`,
-      label: "智能体",
-      location: resourceLocation(resource.source),
-      logo: "assistant",
-      meta: [],
-      resource,
-      title: agent.name,
-    };
-  });
+  const employees = snapshot.agents
+    .filter(isUsableAgent)
+    .map((agent): CatalogItem => {
+      const resource: CatalogResourceSummary = {
+        id: agent.id,
+        type: "agents",
+        name: agent.name,
+        description: agent.description || "",
+        owner_username: agent.owner_username,
+        model: agent.model_info?.model_name || agent.model_info?.name,
+        api_enabled: Boolean(agent.api_enabled),
+        invocation_url: agent.invocation_url,
+        enabled: agent.is_active,
+        download_available: false,
+        downloaded: agent.downloaded,
+        downloaded_at: agent.downloaded_at,
+        update_available: agent.update_available,
+        source_updated_at: agent.source_updated_at,
+        source: agent.resource_source,
+      };
+      return {
+        accent: "employee-card",
+        detail: resource.description,
+        filter: "employee",
+        icon: "A",
+        id: `agent-platform:agents:${agent.id}`,
+        label: "智能体",
+        location: resourceLocation(resource.source),
+        logo: "assistant",
+        meta: [],
+        resource,
+        title: agent.name,
+      };
+    });
   const skills = snapshot.skills.map((skill): CatalogItem => {
     const resource: CatalogResourceSummary = {
       id: skill.id,
@@ -535,7 +578,8 @@ export function ProjectsView({
               case "pendingUnread":
               case "pendingViewed":
               case "completedUnread":
-              case "failed":
+              case "failedUnread":
+              case "failedViewed":
                 return 0;
               case "running":
                 return 1;
@@ -601,7 +645,7 @@ export function ProjectsView({
             {visibleTasks.map((task) => {
               const state = task.state ?? "completedViewed";
               const showsStatus =
-                state !== "completedViewed" && state !== "neutral";
+                commandSidebarThreadHasUnreadSignal(state);
               return (
                 <button
                   className="capability-row command-task-page-row"
@@ -628,7 +672,7 @@ export function ProjectsView({
                         .join(" · ")}
                     </small>
                   </span>
-                  <time>{state === "running" ? "" : task.updatedLabel}</time>
+                  <time>{task.updatedLabel}</time>
                 </button>
               );
             })}
@@ -1077,9 +1121,9 @@ export function KnowledgeCatalogView({
     resource: CatalogResourceSummary;
   } | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [locationFilter, setLocationFilter] = useState<
-    "all" | CapabilityLocation
-  >("all");
+  const [sourceFilter, setSourceFilter] = useState<"all" | KnowledgeLocation>(
+    "all",
+  );
   const cards = snapshot.knowledgeBases.map((knowledgeBase): CatalogItem => {
     const resource: CatalogResourceSummary = {
       id: knowledgeBase.id,
@@ -1104,7 +1148,7 @@ export function KnowledgeCatalogView({
       icon: "KB",
       id: `agent-platform:knowledge_bases:${knowledgeBase.id}`,
       label: "知识库",
-      location: resourceLocation(resource.source),
+      location: knowledgeLocation(resource.source),
       logo: "knowledge",
       meta: [],
       resource,
@@ -1113,11 +1157,9 @@ export function KnowledgeCatalogView({
   });
   const visibleCards = cards.filter(
     (item) =>
-      (locationFilter === "all" || item.location === locationFilter) &&
+      (sourceFilter === "all" || item.location === sourceFilter) &&
       includesQuery(item, query),
   );
-  const localCount = cards.filter((item) => item.location === "local").length;
-  const cloudCount = cards.filter((item) => item.location === "cloud").length;
 
   async function refresh() {
     setRefreshing(true);
@@ -1135,45 +1177,20 @@ export function KnowledgeCatalogView({
       hidden={!active}
     >
       <div className="page-stack">
-        <header className="catalog-market-header knowledge-catalog-header">
-          <div className="knowledge-catalog-title">
-            <span className="knowledge-catalog-title-icon" aria-hidden="true">
-              <BookOpen aria-hidden="true" />
-            </span>
-            <div>
-              <h1>知识库</h1>
-              <p>
-                本地 {localCount} · 云端 {cloudCount}
-              </p>
-            </div>
-          </div>
-          <div
-            className="catalog-location-filter knowledge-catalog-location-filter"
-            role="group"
-            aria-label="运行位置筛选"
-          >
-            <span>运行位置</span>
-            {(
-              [
-                ["all", "全部"],
-                ["local", "本地"],
-                ["cloud", "云端"],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                aria-pressed={locationFilter === value}
-                className={classNames(
-                  "catalog-location-filter-button",
-                  locationFilter === value && "active",
-                )}
-                key={value}
-                type="button"
-                onClick={() => setLocationFilter(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        <header className="catalog-market-header">
+          <FilterTabs
+            active={sourceFilter}
+            group="knowledge-source"
+            label="知识库来源筛选"
+            options={[
+              { label: "全部", value: "all" },
+              { label: "我的", value: "mine" },
+              { label: "市场", value: "market" },
+            ]}
+            onChange={(value) =>
+              setSourceFilter(value as "all" | KnowledgeLocation)
+            }
+          />
           <div className="catalog-header-actions">
             <CatalogSearch
               label="搜索知识库"
@@ -1182,7 +1199,7 @@ export function KnowledgeCatalogView({
               onChange={setQuery}
             />
             <button
-              className="button"
+              className="button compact"
               disabled={refreshing}
               type="button"
               onClick={refresh}
@@ -1385,6 +1402,15 @@ export function TeamView({
           ) : null}
         </header>
 
+        {!officeRoomId && !workflowRoomOpen ? (
+          <TeamModeSummary
+            expertTeams={expertTeams}
+            mode={visibleTeamMode}
+            offices={officeRuntime?.records.length ?? 0}
+            workflows={workflows}
+          />
+        ) : null}
+
         {visibleTeamMode === "office" || officeRoomId ? (
           <section
             className={classNames(
@@ -1456,6 +1482,41 @@ export function TeamView({
 
         <div id="team-log" className="sr-log" aria-live="polite" />
       </div>
+    </section>
+  );
+}
+
+function TeamModeSummary({
+  expertTeams,
+  mode,
+  offices,
+  workflows,
+}: {
+  expertTeams: ExpertTeamRecordReference[];
+  mode: TeamMode;
+  offices: number;
+  workflows: CrewonWorkflowRecord[];
+}) {
+  const detail =
+    mode === "office"
+      ? `${offices} 个办公室 · 可 @ 指定成员`
+      : mode === "workflow"
+        ? `${workflows.length} 条协作流 · ${workflows.reduce(
+            (total, workflow) => total + workflow.config.nodes.length,
+            0,
+          )} 个节点`
+        : `${expertTeams.length} 个专家团 · 仅团长对外回复`;
+
+  return (
+    <section
+      className="catalog-source-bar team-mode-summary"
+      aria-label="团队协作说明"
+      data-team-mode={mode}
+    >
+      <span className="catalog-context-note">
+        团队能力来自左侧智能体页 · 办公室可 @ 指定成员 · 专家团只由团长对外回复
+      </span>
+      <span className="team-mode-summary-detail">{detail}</span>
     </section>
   );
 }

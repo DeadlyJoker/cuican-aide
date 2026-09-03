@@ -33,6 +33,35 @@ export function modelProviderProbeTone(
   }
 }
 
+/** Short copy when a /models list fetch did not return a usable list. */
+export function modelProviderFetchErrorText(
+  status: string,
+  locale: Locale,
+): string {
+  const known = isProbeStatus(status) ? status : null;
+  if (known === null) {
+    return locale === "zh" ? "获取模型列表失败" : "Could not fetch the model list";
+  }
+  return [headline(known, locale), remedy(known, locale)]
+    .filter((line): line is string => line !== null)
+    .join("\n");
+}
+
+function isProbeStatus(
+  status: string,
+): status is ProbeModelProviderResponse["status"] {
+  return (
+    status === "ok" ||
+    status === "credentialMissing" ||
+    status === "authenticationFailed" ||
+    status === "rateLimited" ||
+    status === "providerError" ||
+    status === "unreachable" ||
+    status === "invalidResponse" ||
+    status === "bindingMismatch"
+  );
+}
+
 function headline(
   status: ProbeModelProviderResponse["status"],
   locale: Locale,

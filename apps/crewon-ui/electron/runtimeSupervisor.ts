@@ -5,6 +5,7 @@ import {
   existsSync,
   mkdirSync,
   readFileSync,
+  renameSync,
   statSync,
   writeFileSync,
 } from "node:fs";
@@ -13,8 +14,28 @@ import { join, resolve } from "node:path";
 
 import type { ActiveProvider } from "./providerCredentials.ts";
 
-type RuntimePaths = Readonly<{
+const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
+const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
+const MAX_CACHED_MODELS = 32;
+const MAX_RUNTIME_MODELS = 24;
+const MAX_MODEL_ID_BYTES = 256;
+const RUNTIME_CHILD_GRACEFUL_EXIT_MS = 2_000;
+const RUNTIME_CHILD_FORCED_EXIT_MS = 1_000;
+const RUNTIME_ONCE_DEADLINE_MS = 60_000;
+const NON_AGENT_MODEL_MARKERS = [
+  "dall-e",
+  "embedding",
+  "gpt-image",
+  "moderation",
+  "speech",
+  "transcribe",
+  "tts",
+  "whisper",
+] as const;
+
+export type RuntimePaths = Readonly<{
   control: string;
+  modelCatalog: string;
   release: string;
   worker: string;
   workspaceMcp: string;
@@ -28,6 +49,14 @@ export type ControlRuntimeSession = Readonly<{
   sessionToken: string;
 }>;
 
+export type CloudAgentProfile = Readonly<{
+  agentVersionId: string;
+  instructions: string;
+  invocationUrl: string;
+  modelId: string;
+  agentId: number;
+}>;
+
 export class RuntimeSupervisor {
   readonly #dataDirectory: string;
   readonly #paths: RuntimePaths;
@@ -37,24 +66,33 @@ export class RuntimeSupervisor {
   readonly #csrfToken = randomBytes(32).toString("hex");
   readonly #probeToken = randomBytes(32).toString("hex");
   readonly #provider: () => ActiveProvider | null;
+  readonly #providerModelCatalog: (
+    provider: ActiveProvider,
+  ) => Promise<readonly string[] | null>;
   readonly #workspaceRoot: () => string | null;
   #controlPort = 0;
   #probePort = 0;
   #children: ChildProcess[] = [];
   #restart: Promise<void> = Promise.resolve();
   #ready = false;
+  #stopWatchingChildren: (() => void) | null = null;
+  #cloudAgentProfiles: readonly CloudAgentProfile[] = [];
 
   constructor(options: {
     dataDirectory: string;
     paths: RuntimePaths;
     repositoryRoot: string | null;
     provider: () => ActiveProvider | null;
+    providerModelCatalog: (
+      provider: ActiveProvider,
+    ) => Promise<readonly string[] | null>;
     workspaceRoot: () => string | null;
   }) {
     this.#dataDirectory = options.dataDirectory;
     this.#paths = options.paths;
     this.#repositoryRoot = options.repositoryRoot;
     this.#provider = options.provider;
+    this.#providerModelCatalog = options.providerModelCatalog;
     this.#workspaceRoot = options.workspaceRoot;
   }
 
@@ -68,7 +106,12 @@ export class RuntimeSupervisor {
     this.#controlPort ||= await freePort();
     this.#probePort ||= await freePort();
     ensureStorage(this.#dataDirectory);
-    const environment = this.#environment(provider);
+    const modelCatalog = await this.#resolveModelCatalog(provider);
+    const environment = this.#environment(
+      provider,
+      modelCatalog,
+      this.#cloudAgentProfiles,
+    );
     await this.#runOnce("Runtime release", this.#paths.release, environment);
     this.#children = [
       this.#spawn("Control API", this.#paths.control, environment),
@@ -80,6 +123,25 @@ export class RuntimeSupervisor {
         this.#children,
       );
       this.#ready = true;
+      this.#stopWatchingChildren = watchRuntimeChildren(
+        [
+          { child: this.#children[0]!, name: "Control API" },
+          { child: this.#children[1]!, name: "Runtime Worker" },
+        ],
+        ({ code, name, signal }) => {
+          this.#ready = false;
+          this.#stopWatchingChildren?.();
+          this.#stopWatchingChildren = null;
+          process.stderr.write(
+            `[${name}] exited unexpectedly (${signal ?? code ?? "unknown"}); restarting runtime\n`,
+          );
+          void this.restart().catch((error) => {
+            process.stderr.write(
+              `[Runtime restart] ${error instanceof Error ? error.message : String(error)}\n`,
+            );
+          });
+        },
+      );
     } catch (error) {
       await this.stop();
       throw error;
@@ -87,25 +149,44 @@ export class RuntimeSupervisor {
   }
 
   async restart(): Promise<void> {
-    this.#restart = this.#restart.then(async () => {
-      await this.stop();
-      await this.start();
-    });
+    this.#restart = this.#restart
+      .catch(() => {
+        // A later retry must not remain blocked by an earlier failed restart.
+      })
+      .then(async () => {
+        await this.stop();
+        await this.start();
+      });
     return this.#restart;
+  }
+
+  /** Updates cloud Agent profiles and restarts the runtime so they take effect. */
+  async updateCloudAgentProfiles(
+    profiles: readonly CloudAgentProfile[],
+  ): Promise<void> {
+    this.#cloudAgentProfiles = profiles;
+    await this.restart();
   }
 
   async stop(): Promise<void> {
     this.#ready = false;
+    this.#stopWatchingChildren?.();
+    this.#stopWatchingChildren = null;
     const children = this.#children.splice(0);
-    for (const child of children) {
-      if (child.exitCode === null && child.signalCode === null)
-        child.kill("SIGTERM");
-    }
-    await Promise.all(children.map(waitForExit));
+    await Promise.all(children.map((child) => terminateRuntimeChild(child)));
   }
 
   session(): ControlRuntimeSession {
-    if (!this.#ready) throw new Error("control_runtime_unavailable");
+    if (
+      !this.#ready ||
+      this.#children.length !== 2 ||
+      this.#children.some(
+        (child) => child.exitCode !== null || child.signalCode !== null,
+      )
+    ) {
+      this.#ready = false;
+      throw new Error("control_runtime_unavailable");
+    }
     return {
       baseUrl: `http://127.0.0.1:${this.#controlPort}/`,
       csrfToken: this.#csrfToken,
@@ -114,7 +195,37 @@ export class RuntimeSupervisor {
     };
   }
 
-  #environment(provider: ActiveProvider): NodeJS.ProcessEnv {
+  async #resolveModelCatalog(
+    provider: ActiveProvider,
+  ): Promise<readonly string[]> {
+    const cached = readModelCatalogCache(this.#dataDirectory, provider);
+    let discovered: readonly string[] | null = null;
+    try {
+      discovered = await this.#providerModelCatalog(provider);
+    } catch (error) {
+      process.stderr.write(
+        `[Model catalog] ${error instanceof Error ? error.message : String(error)}\n`,
+      );
+    }
+    const selected = selectDesktopRuntimeModelCatalog({
+      cached,
+      defaultModelId: provider.modelId,
+      discovered,
+    });
+    if (
+      discovered !== null &&
+      JSON.stringify(selected) !== JSON.stringify(cached)
+    ) {
+      writeModelCatalogCache(this.#dataDirectory, provider, selected);
+    }
+    return selected;
+  }
+
+  #environment(
+    provider: ActiveProvider,
+    modelCatalog: readonly string[],
+    cloudAgentProfiles: readonly CloudAgentProfile[],
+  ): NodeJS.ProcessEnv {
     const agentProfiles = [
       {
         agentVersionIdSuffix: "planner",
@@ -134,6 +245,7 @@ export class RuntimeSupervisor {
       providerId: provider.providerId,
       endpoint: provider.endpoint,
       modelId: provider.modelId,
+      modelCatalog,
       agentProfiles,
       localWorkspaceMcp:
         mcpConfig === null
@@ -145,12 +257,28 @@ export class RuntimeSupervisor {
             },
     });
     const agentVersionId = `local-desktop-${fingerprint.slice(0, 24)}`;
+    const devAgentProfiles = [
+      ...agentProfiles.map((profile) => ({
+        agentVersionId: `${agentVersionId}-${profile.agentVersionIdSuffix}`,
+        instructions: profile.instructions,
+      })),
+      ...cloudAgentProfiles.map((profile) => ({
+        agentVersionId: cloudAgentRuntimeVersionId(profile, fingerprint),
+        instructions: profile.instructions,
+        cloudAgent: {
+          invocationUrl: profile.invocationUrl,
+          modelId: profile.modelId,
+          agentId: profile.agentId,
+        },
+      })),
+    ];
     const environment: NodeJS.ProcessEnv = {
       ...process.env,
       ELECTRON_RUN_AS_NODE: "1",
       NODE_ENV: "production",
       CREWON_ACTOR_ID: "standalone-actor",
       CREWON_AGENT_VERSION_ID: agentVersionId,
+      CREWON_AGENT_PLATFORM_API_KEY: provider.apiKey ?? "",
       CREWON_ARTIFACT_DB_PATH: join(
         this.#dataDirectory,
         "artifact-metadata.sqlite",
@@ -172,13 +300,9 @@ export class RuntimeSupervisor {
       CREWON_CONTROL_TARGET: `http://127.0.0.1:${this.#controlPort}`,
       CREWON_MODEL_ADAPTER: "responses",
       CREWON_MODEL_API_KEY: provider.apiKey ?? "",
+      CREWON_MODEL_CATALOG_JSON: JSON.stringify(modelCatalog),
       CREWON_MODEL_ID: provider.modelId,
-      CREWON_DEV_AGENT_PROFILES_JSON: JSON.stringify([
-        ...agentProfiles.map((profile) => ({
-          agentVersionId: `${agentVersionId}-${profile.agentVersionIdSuffix}`,
-          instructions: profile.instructions,
-        })),
-      ]),
+      CREWON_DEV_AGENT_PROFILES_JSON: JSON.stringify(devAgentProfiles),
       CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH: join(
         this.#dataDirectory,
         "agent-version-runtime-bindings.json",
@@ -201,13 +325,16 @@ export class RuntimeSupervisor {
       CREWON_SPACE_ID: "standalone-space",
       CREWON_TENANT_ID: "standalone-tenant",
     };
-    if (mcpConfig !== null)
-      environment.CREWON_MCP_STDIO_CONFIG_PATH = mcpConfig;
+    bindDesktopWorkspaceEnvironment(environment, { mcpConfig, workspace });
     for (const name of [
       "CREWON_CONTROL_DATABASE_URL",
       "CREWON_CONTROL_DATABASE_SCHEMA",
       "CREWON_DEVICE_TOOL_CONFIG_PATH",
       "CREWON_NATIVE_WORKSPACE_BOOTSTRAP",
+      "CREWON_PIM_SANDBOX_AGENT_ID",
+      "CREWON_PIM_SANDBOX_BASE_URL",
+      "CREWON_PIM_SANDBOX_PASSWORD",
+      "CREWON_PIM_SANDBOX_USERNAME",
       "CREWON_WORKSPACE_RUNTIME_WORKER_ORIGIN",
       "CREWON_WORKSPACE_RUNTIME_WORKER_TOKEN",
     ]) {
@@ -304,9 +431,40 @@ export class RuntimeSupervisor {
     environment: NodeJS.ProcessEnv,
   ): Promise<void> {
     const child = this.#spawn(name, entry, environment);
-    const { code, signal } = await waitForExit(child);
+    const exit = await waitForExitBefore(child, RUNTIME_ONCE_DEADLINE_MS);
+    if (exit === null) {
+      await terminateRuntimeChild(child);
+      throw new Error(`${name} timed out`);
+    }
+    const { code, signal } = exit;
     if (code !== 0)
       throw new Error(`${name} failed (${signal ?? code ?? "unknown"})`);
+  }
+}
+
+/** Gracefully stops a runtime child, then force-kills it without waiting forever. */
+export async function terminateRuntimeChild(
+  child: ChildProcess,
+  options: Readonly<{
+    forcedExitMs?: number;
+    gracefulExitMs?: number;
+  }> = {},
+): Promise<void> {
+  if (child.exitCode !== null || child.signalCode !== null) return;
+  const gracefulExit = waitForExitBefore(
+    child,
+    options.gracefulExitMs ?? RUNTIME_CHILD_GRACEFUL_EXIT_MS,
+  );
+  child.kill("SIGTERM");
+  if ((await gracefulExit) !== null) return;
+
+  const forcedExit = waitForExitBefore(
+    child,
+    options.forcedExitMs ?? RUNTIME_CHILD_FORCED_EXIT_MS,
+  );
+  child.kill("SIGKILL");
+  if ((await forcedExit) === null) {
+    throw new Error("runtime_child_shutdown_timeout");
   }
 }
 
@@ -314,6 +472,7 @@ export function desktopRuntimeFingerprint(input: {
   providerId: string;
   endpoint: string;
   modelId: string;
+  modelCatalog: readonly string[];
   agentProfiles: readonly Readonly<{
     agentVersionIdSuffix: string;
     instructions: string;
@@ -328,10 +487,63 @@ export function desktopRuntimeFingerprint(input: {
     .update(
       JSON.stringify({
         ...input,
-        runtimeContract: "crewon.electron-typescript-runtime.v1",
+        runtimeContract: "crewon.electron-typescript-runtime.v2",
       }),
     )
     .digest("hex");
+}
+
+/** Binds only the workspace selected by the desktop, clearing ambient values. */
+export function bindDesktopWorkspaceEnvironment(
+  environment: NodeJS.ProcessEnv,
+  binding: Readonly<{
+    mcpConfig: string | null;
+    workspace: string | null;
+  }>,
+): void {
+  if (binding.mcpConfig === null) {
+    delete environment.CREWON_MCP_STDIO_CONFIG_PATH;
+  } else {
+    environment.CREWON_MCP_STDIO_CONFIG_PATH = binding.mcpConfig;
+  }
+  if (binding.workspace === null) {
+    delete environment.CREWON_DESKTOP_WORKSPACE_ROOT;
+  } else {
+    environment.CREWON_DESKTOP_WORKSPACE_ROOT = binding.workspace;
+  }
+}
+
+/**
+ * Derives an immutable runtime version ID for a logical cloud Agent profile.
+ * The source Agent ID stays readable while runtime/profile changes publish a
+ * new version instead of conflicting with an already registered asset.
+ */
+export function cloudAgentRuntimeVersionId(
+  profile: CloudAgentProfile,
+  runtimeFingerprint: string,
+): string {
+  const logicalId = profile.agentVersionId.trim();
+  if (
+    logicalId.length === 0 ||
+    new TextEncoder().encode(logicalId).byteLength > 470 ||
+    runtimeFingerprint.trim().length === 0
+  ) {
+    throw new Error("cloud_agent_profile_identity_invalid");
+  }
+  const digest = createHash("sha256")
+    .update(
+      JSON.stringify({
+        agentId: profile.agentId,
+        agentVersionId: logicalId,
+        instructions: profile.instructions,
+        invocationUrl: profile.invocationUrl,
+        modelId: profile.modelId,
+        runtimeFingerprint,
+      }),
+    )
+    .digest("hex")
+    .slice(0, 32);
+  return `${logicalId}:${digest}`;
 }
 
 export function runtimePaths(options: {
@@ -345,6 +557,7 @@ export function runtimePaths(options: {
   return options.packaged
     ? {
         control: join(root, "control-api.mjs"),
+        modelCatalog: join(root, "provider-model-catalog.mjs"),
         release: join(root, "runtime-release.mjs"),
         worker: join(root, "runtime-worker.mjs"),
         workspaceMcp: join(root, "local-workspace-checks-mcp.mjs"),
@@ -352,6 +565,13 @@ export function runtimePaths(options: {
       }
     : {
         control: join(root, "apps", "control-api", "src", "main.ts"),
+        modelCatalog: join(
+          root,
+          "apps",
+          "runtime-worker",
+          "src",
+          "provider-model-catalog-main.ts",
+        ),
         release: join(root, "apps", "runtime-worker", "src", "release-main.ts"),
         worker: join(root, "apps", "runtime-worker", "src", "main.ts"),
         workspaceMcp: join(root, "scripts", "local-workspace-checks-mcp.mjs"),
@@ -363,7 +583,148 @@ function fileDigest(path: string): string {
   return createHash("sha256").update(readFileSync(path)).digest("hex");
 }
 
-function nodeArguments(entry: string, source: boolean): string[] {
+/**
+ * Selects the catalog that owns the desktop runtime identity.
+ *
+ * Provider discovery is network-backed and can temporarily fail or reorder
+ * otherwise equivalent model IDs. Reusing the last known catalog prevents
+ * those transient differences from publishing and activating a different
+ * local AgentVersion, which would invalidate existing Office memberships.
+ */
+export function selectDesktopRuntimeModelCatalog(input: {
+  cached: readonly string[] | null;
+  defaultModelId: string;
+  discovered: readonly string[] | null;
+}): readonly string[] {
+  const fallback = validatedModelCatalog(input.cached, input.defaultModelId);
+  const discovered = validatedModelCatalog(
+    input.discovered,
+    input.defaultModelId,
+  );
+  if (discovered === null) return fallback ?? [input.defaultModelId];
+  if (
+    fallback !== null &&
+    runnableModelSet(fallback, input.defaultModelId) ===
+      runnableModelSet(discovered, input.defaultModelId)
+  ) {
+    return fallback;
+  }
+  return discovered;
+}
+
+function readModelCatalogCache(
+  dataDirectory: string,
+  provider: ActiveProvider,
+): readonly string[] | null {
+  const path = join(dataDirectory, MODEL_CATALOG_CACHE_FILE);
+  if (!existsSync(path)) return null;
+  try {
+    const metadata = statSync(path);
+    if (!metadata.isFile() || metadata.size > 32 * 1024) return null;
+    const value = JSON.parse(readFileSync(path, "utf8")) as unknown;
+    if (
+      !isPlainObject(value) ||
+      value.schemaVersion !== MODEL_CATALOG_CACHE_SCHEMA ||
+      value.providerKey !== modelCatalogProviderKey(provider) ||
+      !Array.isArray(value.models)
+    ) {
+      return null;
+    }
+    return validatedModelCatalog(value.models, provider.modelId);
+  } catch {
+    return null;
+  }
+}
+
+function writeModelCatalogCache(
+  dataDirectory: string,
+  provider: ActiveProvider,
+  models: readonly string[],
+): void {
+  const path = join(dataDirectory, MODEL_CATALOG_CACHE_FILE);
+  const temporary = `${path}.${process.pid}.tmp`;
+  writeFileSync(
+    temporary,
+    `${JSON.stringify({
+      schemaVersion: MODEL_CATALOG_CACHE_SCHEMA,
+      providerKey: modelCatalogProviderKey(provider),
+      models,
+    })}\n`,
+    { encoding: "utf8", mode: 0o600 },
+  );
+  chmodSync(temporary, 0o600);
+  renameSync(temporary, path);
+}
+
+function modelCatalogProviderKey(provider: ActiveProvider): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify({
+        providerId: provider.providerId,
+        endpoint: provider.endpoint,
+        modelId: provider.modelId,
+      }),
+    )
+    .digest("hex");
+}
+
+function validatedModelCatalog(
+  value: readonly unknown[] | null,
+  defaultModelId: string,
+): readonly string[] | null {
+  if (value === null) return null;
+  if (value.length > MAX_CACHED_MODELS) {
+    throw new Error("desktop_model_catalog_invalid");
+  }
+  const defaultModel = validatedModelId(defaultModelId);
+  const seen = new Set([defaultModel]);
+  const models = [defaultModel];
+  for (const candidate of value) {
+    const model = validatedModelId(candidate);
+    if (!seen.has(model)) {
+      seen.add(model);
+      models.push(model);
+    }
+  }
+  return models;
+}
+
+function runnableModelSet(
+  models: readonly string[],
+  defaultModelId: string,
+): string {
+  const defaultModel = validatedModelId(defaultModelId);
+  const runnable = models
+    .filter(
+      (model) =>
+        model !== defaultModel &&
+        !NON_AGENT_MODEL_MARKERS.some((marker) =>
+          model.toLowerCase().includes(marker),
+        ),
+    )
+    .slice(0, MAX_RUNTIME_MODELS - 1)
+    .sort();
+  return JSON.stringify([defaultModel, ...runnable]);
+}
+
+function validatedModelId(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    value.length === 0 ||
+    value.trim() !== value ||
+    Buffer.byteLength(value) > MAX_MODEL_ID_BYTES ||
+    /[\u0000-\u001f\u007f]/u.test(value)
+  ) {
+    throw new Error("desktop_model_catalog_invalid");
+  }
+  return value;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+export function nodeArguments(entry: string, source: boolean): string[] {
   return source ? ["--experimental-strip-types", entry] : [entry];
 }
 
@@ -421,14 +782,59 @@ async function waitForReady(
   throw new Error("control_runtime_readiness_timeout");
 }
 
-function waitForExit(
+export function watchRuntimeChildren(
+  children: readonly Readonly<{ child: ChildProcess; name: string }>[],
+  onUnexpectedExit: (event: {
+    code: number | null;
+    name: string;
+    signal: NodeJS.Signals | null;
+  }) => void,
+): () => void {
+  let watching = true;
+  for (const { child, name } of children) {
+    child.once("exit", (code, signal) => {
+      if (!watching) return;
+      watching = false;
+      onUnexpectedExit({ code, name, signal });
+    });
+  }
+  return () => {
+    watching = false;
+  };
+}
+
+function waitForExitBefore(
   child: ChildProcess,
-): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
+  timeoutMs: number,
+): Promise<{
+  code: number | null;
+  signal: NodeJS.Signals | null;
+} | null> {
   if (child.exitCode !== null || child.signalCode !== null) {
     return Promise.resolve({ code: child.exitCode, signal: child.signalCode });
   }
   return new Promise((resolveExit) => {
-    child.once("exit", (code, signal) => resolveExit({ code, signal }));
+    let settled = false;
+    const finish = (
+      result: {
+        code: number | null;
+        signal: NodeJS.Signals | null;
+      } | null,
+    ) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      child.off("exit", onExit);
+      child.off("error", onError);
+      resolveExit(result);
+    };
+    const onExit = (code: number | null, signal: NodeJS.Signals | null) =>
+      finish({ code, signal });
+    const onError = () =>
+      finish({ code: child.exitCode, signal: child.signalCode });
+    const timer = setTimeout(() => finish(null), timeoutMs);
+    child.once("exit", onExit);
+    child.once("error", onError);
   });
 }
 

@@ -6,6 +6,7 @@ import {
   Transcript,
   shouldFollowTranscriptUpdate,
   transcriptActivityKey,
+  transcriptObserverStructureKey,
 } from "./Transcript";
 import {
   isMermaidSyntaxErrorSvg,
@@ -445,31 +446,27 @@ describe("Transcript", () => {
     expect(markup).toMatchSnapshot();
   });
 
-  it("keeps refreshed or active transcript updates pinned to the bottom", () => {
+  it("follows thread changes and near-bottom updates without fighting manual scroll", () => {
     expect(
       shouldFollowTranscriptUpdate({
-        isActive: false,
         isNearBottom: false,
         isThreadChange: true,
       }),
     ).toBe(true);
     expect(
       shouldFollowTranscriptUpdate({
-        isActive: true,
         isNearBottom: false,
         isThreadChange: false,
       }),
-    ).toBe(true);
+    ).toBe(false);
     expect(
       shouldFollowTranscriptUpdate({
-        isActive: false,
         isNearBottom: true,
         isThreadChange: false,
       }),
     ).toBe(true);
     expect(
       shouldFollowTranscriptUpdate({
-        isActive: false,
         isNearBottom: false,
         isThreadChange: false,
       }),
@@ -532,6 +529,12 @@ describe("Transcript", () => {
     );
     expect(transcriptActivityKey(activeMcpThread, "partial", false)).not.toBe(
       transcriptActivityKey(activeMcpThread, "partial response", false),
+    );
+    expect(transcriptObserverStructureKey(activeMcpThread, "partial")).toBe(
+      transcriptObserverStructureKey(activeMcpThread, "partial response"),
+    );
+    expect(transcriptObserverStructureKey(activeMcpThread, "")).not.toBe(
+      transcriptObserverStructureKey(activeMcpThread, "partial"),
     );
   });
 
@@ -990,11 +993,50 @@ graph LR
     expect(markup).toContain('alt="homepage-check.png"');
     expect(markup).toContain('data-renderer="mermaid"');
     expect(markup).toContain('data-complete="true"');
-    expect(markup).toContain('data-state="source"');
-    expect(markup).toContain("language-mermaid");
-    expect(markup).toContain("graph TD");
-    expect(markup).toContain("graph LR");
+    expect(markup).toContain('data-complete="false"');
+    expect(markup).toContain('data-state="loading"');
+    expect(markup).toContain("mermaid-streaming-placeholder");
+    expect(markup.match(/data-renderer="mermaid"/g)).toHaveLength(2);
+    expect(markup).not.toContain("graph TD");
+    expect(markup).not.toContain("language-mermaid");
     expect(markup).not.toContain("mermaid-zoom-button");
+  });
+
+  it("does not duplicate the active turn final while its stream is visible", () => {
+    const activeToolThread = {
+      ...toolThread,
+      turns: toolThread.turns.map((turn) => ({
+        ...turn,
+        items: turn.items.map((item) =>
+          item.type === "agentMessage"
+            ? {
+                ...item,
+                phase: "final_answer",
+                text: `DURABLE FINAL\n\n${item.text}`,
+              }
+            : item,
+        ),
+        status: "inProgress",
+      })),
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <Transcript
+        {...labels}
+        activeTurnId="turn-tools"
+        locale="en"
+        mode="code"
+        streamingText={`\`\`\`mermaid
+graph LR
+  Start --> Done`}
+        thread={activeToolThread}
+        onModeChange={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('data-renderer="mermaid"');
+    expect(markup).toContain('data-complete="false"');
+    expect(markup).not.toContain("DURABLE FINAL");
   });
 
   it("snapshots durable Control tool history in the process timeline", () => {
@@ -1053,6 +1095,135 @@ graph LR
     expect(markup).toMatchSnapshot();
   });
 
+  it("presents workspace tool arguments and output without leaking MCP internals", () => {
+    const workspaceToolThread = {
+      id: "thread-workspace-tool-history",
+      name: "Workspace tool history",
+      turns: [
+        {
+          id: "run-workspace-tool-history",
+          status: "completed",
+          durationMs: 1_500,
+          items: [
+            {
+              id: "message-workspace-tool-user",
+              type: "userMessage",
+              clientId: null,
+              content: [{ type: "text", text: "读取项目文件。" }],
+            },
+            {
+              id: "call-workspace-tool",
+              type: "dynamicToolCall",
+              namespace: "workspace",
+              tool: "read_file",
+              arguments: { path: "apps/crewon-ui/src/App.tsx" },
+              status: "completed",
+              contentItems: [
+                {
+                  type: "inputText",
+                  text: '{"path":"apps/crewon-ui/src/App.tsx","content":"export function App() { return null; }","truncated":false}\n[structured]\n{"path":"apps/crewon-ui/src/App.tsx","truncated":false}',
+                },
+              ],
+              success: true,
+              durationMs: 1_000,
+            },
+            {
+              id: "call-workspace-tool-error",
+              type: "dynamicToolCall",
+              namespace: "workspace",
+              tool: "run_ui_test",
+              arguments: {
+                testFile: "components/app/CommandWorkspace.test.tsx",
+              },
+              status: "failed",
+              contentItems: [
+                {
+                  type: "inputText",
+                  text: 'ui_test_path_invalid\n[structured]\n{"error":"ui_test_path_invalid"}',
+                },
+              ],
+              success: false,
+              durationMs: 20,
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <Transcript
+        {...labels}
+        locale="zh"
+        mode="code"
+        streamingText=""
+        thread={workspaceToolThread}
+        onModeChange={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("读取工作区文件");
+    expect(markup).toContain("apps/crewon-ui/src/App.tsx");
+    expect(markup).toContain("export function App() { return null; }");
+    expect(markup).toContain("ui_test_path_invalid");
+    expect(markup).not.toContain("[structured]");
+    expect(markup).not.toContain("&quot;error&quot;:");
+    expect(markup).not.toContain("mcp__workspace_checks__read_file");
+    expect(markup).not.toContain("仅保存在运行日志中");
+    expect(markup).toMatchSnapshot();
+  });
+
+  it("distinguishes a tool waiting for approval from a running tool", () => {
+    const approvalThread = {
+      id: "thread-tool-approval",
+      name: "Tool approval",
+      turns: [
+        {
+          id: "run-tool-approval",
+          status: "inProgress",
+          items: [
+            {
+              id: "message-tool-approval-user",
+              type: "userMessage",
+              clientId: null,
+              content: [{ type: "text", text: "运行测试。" }],
+            },
+            {
+              id: "call-tool-approval",
+              type: "dynamicToolCall",
+              namespace: null,
+              tool: "workspace_run_command",
+              arguments: { command: "pnpm test" },
+              status: "inProgress",
+              contentItems: null,
+              success: null,
+              durationMs: null,
+              controlApproval: {
+                approvalId: "approval-tool",
+                status: "required",
+              },
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+    const markup = renderToStaticMarkup(
+      <Transcript
+        {...labels}
+        locale="zh"
+        mode="code"
+        streamingText=""
+        thread={approvalThread}
+        onModeChange={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain('data-approval="required"');
+    expect(markup).toContain("等待批准");
+    expect(markup).toContain("等待批准，工具尚未开始执行");
+    expect(markup).not.toContain("等待工具输出");
+  });
+
   it("adds an enlarge control to rendered Mermaid diagrams", () => {
     const markup = renderToStaticMarkup(
       <MermaidRenderedDiagram
@@ -1070,17 +1241,20 @@ graph LR
     expect(markup).not.toContain("mermaid-lightbox");
   });
 
-  it("keeps incomplete streaming Mermaid diagrams as source fallback", () => {
+  it("keeps incomplete streaming Mermaid diagrams on a stable preview canvas", () => {
     const markup = renderToStaticMarkup(
-      renderMarkdown("```mermaid\ngraph TD\n  A[Start] -->"),
+      renderMarkdown("```mermaid\ngraph TD\n  A[Start] -->", {
+        streaming: true,
+      }),
     );
 
     expect(markup).toContain('data-renderer="mermaid"');
     expect(markup).toContain('data-complete="false"');
-    expect(markup).toContain("Streaming source");
-    expect(markup).toContain("Mermaid diagram is still streaming.");
-    expect(markup).toContain("language-mermaid");
-    expect(markup).toContain("graph TD");
+    expect(markup).toContain('data-state="loading"');
+    expect(markup).toContain("Building diagram");
+    expect(markup).toContain("mermaid-streaming-placeholder");
+    expect(markup).not.toContain("language-mermaid");
+    expect(markup).not.toContain("graph TD");
     expect(markup).not.toContain("mermaid-diagram");
     expect(markup).not.toContain("mermaid-zoom-button");
     expect(markup).not.toContain("Syntax error in text");

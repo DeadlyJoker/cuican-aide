@@ -132,11 +132,11 @@ export function toggleCapabilityDockAction(params: {
 }
 
 export function closeChromeOnEscapeAction(params: {
-  event: { key: string };
+  event: { defaultPrevented?: boolean; key: string };
   setInspectorOpen: BooleanSetter;
   setSidebarOpen: BooleanSetter;
 }): boolean {
-  if (params.event.key !== "Escape") {
+  if (params.event.defaultPrevented || params.event.key !== "Escape") {
     return false;
   }
   params.setSidebarOpen(false);

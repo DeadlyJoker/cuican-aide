@@ -42,14 +42,20 @@ import {
   type AutomationCreateDraft,
 } from "./automationCreateDraft";
 import {
+  commandSidebarThreadEventFingerprint,
   commandSidebarThreadScope,
   commandSidebarThreadScopeLabel,
   commandSidebarThreadState,
   commandSidebarThreadStateLabel,
-  useCommandSidebarSeenThreadUpdates,
+  commandSidebarViewedThreadId,
+  useCommandSidebarSeenThreadEvents,
 } from "./commandSidebarThreadPresentation";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
-import { CommandSceneHeader, CommandSceneQuickRow } from "./CommandSceneHeader";
+import {
+  CommandSceneHeader,
+  CommandSceneQuickRow,
+  CommandThreadSceneSwitcher,
+} from "./CommandSceneHeader";
 import {
   AgentsView,
   KnowledgeCatalogView,
@@ -58,6 +64,11 @@ import {
 } from "./CommandWorkspaceViews";
 import { AutomationView } from "./CommandWorkspaceAutomations";
 import type { ControlAutomationRuntime } from "../../lib/control-runtime/controlAutomationRuntime";
+import type { ThreadRunPlanProjection } from "../../lib/control-runtime/controlRunPlanProjection";
+import type {
+  ControlToolApprovalPrompt,
+  ControlToolApprovalRequest,
+} from "../../lib/control-runtime/controlToolApprovalPresentation";
 import {
   ControlWorkflowRuntime,
   isInternalControlWorkflowThread,
@@ -77,9 +88,12 @@ import {
   emptyAgentPlatformSnapshot,
   insertTokenIntoComposerValue,
   readThreadExecutionTarget,
+  readThreadScene,
   selectCommandHomeSlots,
   shouldResetExecutionTarget,
+  validStoredScene,
   writeThreadExecutionTarget,
+  writeThreadScene,
   type AgentPlatformComposerResource,
   type CommandHomeSlots,
   type CommandShellView,
@@ -91,10 +105,16 @@ import {
   commandSceneSlashItems,
 } from "./commandWorkspaceSceneResources";
 import {
+  agentPlatformInvocationUrl,
   platformAgentToConfig,
   readAgentPlatformSnapshot,
   type AgentPlatformSnapshot,
 } from "../../lib/agent-platform/agentPlatformClient";
+import { agentPlatformControlAgentCatalogAdapter } from "../../lib/agent-platform/agentPlatformControlAgentCatalog";
+import {
+  getDesktopBridge,
+  type CloudAgentProfileEntry,
+} from "../../lib/desktop/desktopBridge";
 import {
   agentPlatformExecutionTargetOptions,
   platformAgentForExecutionTarget,
@@ -152,10 +172,7 @@ import {
   commandReasoningEffortOptions,
   resolveReasoningEffort,
 } from "../../lib/thread/threadReasoningEffort";
-import {
-  hasThreadProgress,
-  threadProgressSummary,
-} from "../../lib/thread/threadProgressSummary";
+import { threadProgressSummary } from "../../lib/thread/threadProgressSummary";
 import type { WorkMode } from "../../lib/workMode";
 import type {
   CrewonWorkflowExecution,
@@ -182,8 +199,17 @@ import {
   composerGoalBarState,
   goalPauseToggleStatus,
 } from "../composer/composerGoalBarState";
-import { ComposerProgressPill } from "../composer/ComposerProgressPill";
-import { commandComposerPermissionOptions } from "../composer/commandComposerPermissionOptions";
+import {
+  ComposerProgressPill,
+  type ComposerTaskChangeSummary,
+} from "../composer/ComposerProgressPill";
+import { ComposerToolApprovalBar } from "../composer/ComposerToolApprovalBar";
+import {
+  commandComposerPermissionLearnMoreLabel,
+  commandComposerPermissionLearnMoreUrl,
+  commandComposerPermissionMenuTitle,
+  commandComposerPermissionOptions,
+} from "../composer/commandComposerPermissionOptions";
 import {
   effortFromOptionValue,
   effortOptionValue,
@@ -318,8 +344,12 @@ type CommandWorkspaceProps = {
   pendingComposerMentions?: PendingComposerMention[];
   selectedThread?: Thread | null;
   selectedThreadId?: string | null;
+  runPlan?: ThreadRunPlanProjection | null;
+  toolApproval?: ControlToolApprovalPrompt | null;
   slashCommands?: ComposerSlashCommand[];
   streamingText?: string;
+  taskChanges?: ComposerTaskChangeSummary | null;
+  taskDetailTrigger?: ReactNode;
   /**
    * Goal steering the selected thread, when the backend reports one. The
    * composer renders it as an editable bar above the input.
@@ -337,9 +367,11 @@ type CommandWorkspaceProps = {
     kind: LocalResourceSelectionKind,
   ) => void | Promise<void>;
   onChangeComposerValue: (value: string) => void;
+  onArchiveThread?: (thread: Thread) => void | Promise<void>;
   onComposerResourceSelect?: (
     selection: CommandComposerResourceSelection,
   ) => void;
+  onTaskDetailAvailabilityChange?: (available: boolean) => void;
   onChangeWorkspaceCwd?: (cwd: string | null) => void;
   onClearAssistantThread?: () => void | Promise<void>;
   onEnsureAssistantThread?: () => Promise<Thread | null>;
@@ -368,6 +400,10 @@ type CommandWorkspaceProps = {
   onSelectLinkedThread?: (threadId: string | null) => void;
   onSlashCommandSelect?: (command: ComposerSlashCommand) => void;
   onStop?: () => void;
+  onToolApprovalDecision?: (
+    approval: ControlToolApprovalRequest,
+    decision: "approved" | "rejected",
+  ) => void;
   onClearThreadGoal?: (threadId: string) => void;
   onSetThreadGoalObjective?: (threadId: string, objective: string) => void;
   onSetThreadGoalStatus?: (threadId: string, status: ThreadGoalStatus) => void;
@@ -460,6 +496,29 @@ export function shouldCreateCommandThread({
   );
 }
 
+export function commandComposerModelForTarget(input: {
+  executionTarget: string;
+  model: string;
+  workspaceAuthority: CommandWorkspaceAuthority;
+}): string | undefined {
+  return input.workspaceAuthority === "legacy" ||
+    input.executionTarget === "crewon" ||
+    input.executionTarget.startsWith("team:") ||
+    input.executionTarget.startsWith("experts:")
+    ? input.model
+    : undefined;
+}
+
+export function commandComposerModelDisabledForTarget(input: {
+  executionTarget: string;
+  workspaceAuthority: CommandWorkspaceAuthority;
+}): boolean {
+  return (
+    input.workspaceAuthority === "control" &&
+    input.executionTarget.startsWith("agent:")
+  );
+}
+
 export type CommandOfficeRoomAdapter = {
   open: (record: OfficeConfigRecordReference) => void | Promise<void>;
   render: (
@@ -497,6 +556,49 @@ const shellViewIds: CommandShellView[] = [
 const noWorkspaceValue = "__no_workspace__";
 const executionTargetQueryKey = "executionTarget";
 const executionTargetThreadQueryKey = "executionTargetThread";
+const sceneQueryKey = "scene";
+const sceneThreadQueryKey = "sceneThread";
+
+function readPersistedThreadScene(threadId: string): CommandScene | null {
+  try {
+    if (typeof window === "undefined") {
+      return null;
+    }
+    const query = new URLSearchParams(window.location.search);
+    const queryScene = query.get(sceneQueryKey);
+    if (
+      query.get(sceneThreadQueryKey) === threadId &&
+      validStoredScene(queryScene)
+    ) {
+      return queryScene;
+    }
+    return readThreadScene(window.localStorage, threadId);
+  } catch {
+    return null;
+  }
+}
+
+function persistThreadScene(threadId: string, scene: CommandScene): void {
+  if (!threadId || !validStoredScene(scene)) {
+    return;
+  }
+  try {
+    if (typeof window !== "undefined") {
+      writeThreadScene(window.localStorage, threadId, scene);
+      const query = new URLSearchParams(window.location.search);
+      query.set(sceneThreadQueryKey, threadId);
+      query.set(sceneQueryKey, scene);
+      const search = query.toString();
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${search ? `?${search}` : ""}${window.location.hash}`,
+      );
+    }
+  } catch {
+    // Keep the active in-memory scene when persistence is unavailable.
+  }
+}
 
 function readPersistedThreadExecutionTarget(threadId: string): string | null {
   try {
@@ -644,13 +746,19 @@ export function CommandWorkspace({
   pendingComposerMentions = [],
   selectedThread = null,
   selectedThreadId = null,
+  runPlan = null,
+  toolApproval = null,
   slashCommands = [],
   streamingText = "",
+  taskChanges = null,
+  taskDetailTrigger = null,
+  onTaskDetailAvailabilityChange,
   threadGoal = null,
   threadGoalBusy = false,
   committedExecutionIntent = null,
   workMode,
   onAddLocalResources,
+  onArchiveThread,
   onChangeComposerValue,
   onComposerResourceSelect,
   onChangeWorkspaceCwd,
@@ -668,6 +776,7 @@ export function CommandWorkspace({
   onSelectLinkedThread,
   onSlashCommandSelect,
   onStop,
+  onToolApprovalDecision,
   onClearThreadGoal,
   onSetThreadGoalObjective,
   onSetThreadGoalStatus,
@@ -680,6 +789,8 @@ export function CommandWorkspace({
   const lastCommandThreadIdRef = useRef<string | null>(selectedThreadId);
   const executionTargetThreadIdRef = useRef<string | null>(null);
   const pendingThreadExecutionTargetRef = useRef<string | null>(null);
+  const sceneThreadIdRef = useRef<string | null>(null);
+  const pendingThreadSceneRef = useRef<CommandScene | null>(null);
   const [activeView, setActiveView] = useState<CommandShellView>(() =>
     shellViewFromHash(),
   );
@@ -697,11 +808,32 @@ export function CommandWorkspace({
   const [assistantImages, setAssistantImages] = useState<
     PendingComposerImage[]
   >([]);
-  const [scene, setScene] = useState<CommandScene>("office");
+  const [scene, setScene] = useState<CommandScene>(() =>
+    selectedThreadId
+      ? (readPersistedThreadScene(selectedThreadId) ?? "office")
+      : "office",
+  );
+  const [sceneMode, setSceneMode] = useState<SceneInteractionMode>("auto");
   useEffect(() => {
     onSceneChange?.(scene);
   }, [onSceneChange, scene]);
-  const [sceneMode, setSceneMode] = useState<SceneInteractionMode>("auto");
+  useEffect(() => {
+    if (newTaskDraft || selectedThreadId === null) {
+      sceneThreadIdRef.current = null;
+      return;
+    }
+    if (sceneThreadIdRef.current === selectedThreadId) {
+      return;
+    }
+    const pendingScene = pendingThreadSceneRef.current;
+    pendingThreadSceneRef.current = null;
+    const nextScene =
+      pendingScene ?? readPersistedThreadScene(selectedThreadId) ?? "office";
+    sceneThreadIdRef.current = selectedThreadId;
+    setScene(nextScene);
+    setSceneMode("auto");
+    persistThreadScene(selectedThreadId, nextScene);
+  }, [newTaskDraft, selectedThreadId]);
   const [model, setModel] = useState(fallbackCommandModelOptions[0].value);
   const [modelSelectionTouched, setModelSelectionTouched] = useState(false);
   const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<
@@ -738,6 +870,10 @@ export function CommandWorkspace({
     useState<PlatformLoadState>("loading");
   const [platformSnapshot, setPlatformSnapshot] =
     useState<AgentPlatformSnapshot>(emptyAgentPlatformSnapshot);
+  const platformControlAgentCatalogAdapter = useMemo(
+    () => agentPlatformControlAgentCatalogAdapter(platformSnapshot.agents),
+    [platformSnapshot.agents],
+  );
   const [catalogFilter, setCatalogFilter] = useState("skill");
   const [catalogSearch, setCatalogSearch] = useState("");
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
@@ -873,7 +1009,9 @@ export function CommandWorkspace({
         officeStatus: "loading",
         status: "loading",
       }));
-      void listControlOfficeCatalog(officeControlClient, locale).then(
+      void listControlOfficeCatalog(officeControlClient, locale, [
+        platformControlAgentCatalogAdapter,
+      ]).then(
         (catalog) => {
           if (!cancelled) {
             setExecutionTargetCatalog({
@@ -952,6 +1090,8 @@ export function CommandWorkspace({
     executionTargetClient,
     locale,
     officeControlClient,
+    platformControlAgentCatalogAdapter,
+    teamRefreshNonce,
     workspaceAuthority,
   ]);
 
@@ -974,7 +1114,9 @@ export function CommandWorkspace({
         officeStatus: "loading",
         status: "loading",
       });
-      void listControlOfficeCatalog(officeControlClient, locale).then(
+      void listControlOfficeCatalog(officeControlClient, locale, [
+        platformControlAgentCatalogAdapter,
+      ]).then(
         (catalog) => {
           if (!cancelled) {
             setTeamCatalog({
@@ -1055,6 +1197,7 @@ export function CommandWorkspace({
     executionTargetClient,
     locale,
     officeControlClient,
+    platformControlAgentCatalogAdapter,
     teamRefreshNonce,
     cwd,
     workspaceAuthority,
@@ -1596,8 +1739,19 @@ export function CommandWorkspace({
           : record,
       ),
     });
+    const expertTargets = expertTeams.map((record) => ({
+      detail:
+        locale === "zh"
+          ? `${record.config.experts.length} 名后台专家 · 团长 ${record.config.leader.name}`
+          : `${record.config.experts.length} background experts · lead ${record.config.leader.name}`,
+      group: "experts" as const,
+      kind: "experts" as const,
+      label: record.config.title,
+      strategy: "team" as const,
+      value: `experts:${record.config.expertsId}`,
+    }));
     if (workspaceAuthority === "control") {
-      return domainTargets;
+      return [...domainTargets, ...expertTargets];
     }
     const providerTargets = providerExecutionTargetsAvailable
       ? providerAgentExecutionTargetOptions(
@@ -1611,17 +1765,6 @@ export function CommandWorkspace({
             executionTargetCatalog.agents,
           )
         : [];
-    const expertTargets = expertTeams.map((record) => ({
-      detail:
-        locale === "zh"
-          ? `${record.config.experts.length} 名后台专家 · 团长 ${record.config.leader.name}`
-          : `${record.config.experts.length} background experts · lead ${record.config.leader.name}`,
-      group: "experts" as const,
-      kind: "experts" as const,
-      label: record.config.title,
-      strategy: "team" as const,
-      value: `experts:${record.config.expertsId}`,
-    }));
     // Natural order: the selector groups these into local, cloud, and expert
     // sections, so the concat order no longer has to interleave cloud targets
     // behind CrewON to keep them visible.
@@ -1689,6 +1832,21 @@ export function CommandWorkspace({
     }
   }, [selectedThreadId]);
   useEffect(() => {
+    const legacyExpertId = executionTarget.startsWith("team:")
+      ? executionTarget.slice("team:".length)
+      : null;
+    if (
+      workspaceAuthority === "control" &&
+      legacyExpertId !== null &&
+      expertTeams.some((record) => record.config.expertsId === legacyExpertId)
+    ) {
+      const expertTarget = `experts:${legacyExpertId}`;
+      setExecutionTarget(expertTarget);
+      if (selectedThreadId !== null) {
+        persistThreadExecutionTarget(selectedThreadId, expertTarget);
+      }
+      return;
+    }
     const targetProviderAgent = providerAgentResourceForTarget(
       providerResource?.executionAgents ?? [],
       executionTarget,
@@ -1720,10 +1878,12 @@ export function CommandWorkspace({
     executionTarget,
     executionTargetCatalog.status,
     executionTargets,
+    expertTeams,
     providerResource?.executionAgents,
     providerResource?.onExecutionAgentSelect,
     providerResource?.selectedExecutionAgent,
     selectedThreadId,
+    workspaceAuthority,
   ]);
 
   async function selectExecutionTarget(nextTarget: string) {
@@ -1762,9 +1922,14 @@ export function CommandWorkspace({
   const visibleContextItems = paletteFilter(contextPaletteItems, paletteQuery);
   const visibleSlashItems = paletteFilter(slashPaletteItems, paletteQuery);
   const visibleAddItems = paletteFilter(addPaletteItems, paletteQuery);
-  const sidebarSeenThreadUpdates = useCommandSidebarSeenThreadUpdates(
-    linkedThreads,
+  const viewedThreadId = commandSidebarViewedThreadId({
+    activeView,
+    hasNewTaskDraft: Boolean(newTaskDraft),
     selectedThreadId,
+  });
+  const sidebarSeenThreadEvents = useCommandSidebarSeenThreadEvents(
+    linkedThreads,
+    viewedThreadId,
   );
   const commandLinkedThreads: CommandLinkedThread[] = useMemo(
     () =>
@@ -1777,11 +1942,11 @@ export function CommandWorkspace({
             !isInternalControlExpertThread(thread),
         )
         .map((thread) => {
-          const seenUpdatedAt =
-            selectedThreadId === thread.id
-              ? thread.updatedAt
-              : (sidebarSeenThreadUpdates[thread.id] ?? 0);
-          const state = commandSidebarThreadState(thread, seenUpdatedAt);
+          const seenEventFingerprint =
+            viewedThreadId === thread.id
+              ? commandSidebarThreadEventFingerprint(thread)
+              : sidebarSeenThreadEvents[thread.id];
+          const state = commandSidebarThreadState(thread, seenEventFingerprint);
           const scope = commandSidebarThreadScope(thread);
           const workspacePath =
             workspaceAuthority === "control"
@@ -1814,8 +1979,8 @@ export function CommandWorkspace({
     [
       linkedThreads,
       locale,
-      selectedThreadId,
-      sidebarSeenThreadUpdates,
+      viewedThreadId,
+      sidebarSeenThreadEvents,
       controlWorkspaceNav?.name,
       workspaceAuthority,
     ],
@@ -1946,6 +2111,10 @@ export function CommandWorkspace({
   function switchScene(nextScene: CommandScene) {
     setScene(nextScene);
     setSceneMode("auto");
+    if (!newTaskDraft && selectedThreadId !== null) {
+      sceneThreadIdRef.current = selectedThreadId;
+      persistThreadScene(selectedThreadId, nextScene);
+    }
   }
 
   function prefillScenario(
@@ -1986,8 +2155,10 @@ export function CommandWorkspace({
     });
     if (shouldCreateNewThread) {
       pendingThreadExecutionTargetRef.current = executionTarget;
+      pendingThreadSceneRef.current = scene;
     } else if (selectedThreadId !== null) {
       persistThreadExecutionTarget(selectedThreadId, executionTarget);
+      persistThreadScene(selectedThreadId, scene);
     }
     submitCommandComposer({
       cwd: workspaceAuthority === "legacy" ? cwd || null : null,
@@ -1996,7 +2167,11 @@ export function CommandWorkspace({
       onSendNewThread,
       settings: commandComposerRuntimeSettings({
         executionTarget,
-        ...(workspaceAuthority === "legacy" || executionTarget === "crewon"
+        ...(commandComposerModelForTarget({
+          executionTarget,
+          model,
+          workspaceAuthority,
+        })
           ? { model }
           : {}),
         permission,
@@ -2345,11 +2520,7 @@ export function CommandWorkspace({
   }
 
   function openExpertTeam(record: ExpertTeamRecordReference) {
-    setExecutionTarget(
-      workspaceAuthority === "control"
-        ? `team:${record.config.expertsId}`
-        : `experts:${record.config.expertsId}`,
-    );
+    setExecutionTarget(`experts:${record.config.expertsId}`);
     setScene("office");
     setSceneMode("coordinate");
     setActiveLinkedThreadId(null);
@@ -2360,9 +2531,6 @@ export function CommandWorkspace({
   }
 
   async function addPlatformAgentToWorkspace(agentId: number) {
-    if (!executionTargetClient?.saveAgentConfig || !cwd) {
-      throw new Error("App Server 或当前工作区不可用，无法加入智能体");
-    }
     const index = platformSnapshot.agents.findIndex(
       (agent) => agent.id === agentId,
     );
@@ -2370,10 +2538,29 @@ export function CommandWorkspace({
     if (!agent) {
       throw new Error("云智能体已不存在，请刷新资源后重试");
     }
-    await executionTargetClient.saveAgentConfig(
-      cwd,
-      platformAgentToConfig(agent, platformSnapshot, index),
-    );
+
+    if (workspaceAuthority === "control") {
+      const bridge = getDesktopBridge();
+      if (!bridge) {
+        throw new Error("当前环境没有可用的桌面运行时，无法加入云智能体");
+      }
+      const profile: CloudAgentProfileEntry = {
+        agentVersionId: `agent-platform:${agent.id}`,
+        instructions: agent.system_prompt ?? "",
+        invocationUrl: agentPlatformInvocationUrl(agent.invocation_url ?? ""),
+        modelId: agent.model_info?.model_name ?? agent.model_info?.name ?? "",
+        agentId: agent.id,
+      };
+      await bridge.runtime.updateCloudAgentProfiles([profile]);
+    } else {
+      if (!executionTargetClient?.saveAgentConfig || !cwd) {
+        throw new Error("App Server 或当前工作区不可用，无法加入智能体");
+      }
+      await executionTargetClient.saveAgentConfig(
+        cwd,
+        platformAgentToConfig(agent, platformSnapshot, index),
+      );
+    }
     setTeamRefreshNonce((current) => current + 1);
   }
 
@@ -2591,6 +2778,10 @@ export function CommandWorkspace({
       : null;
   const showCommandThread =
     activeView === "command" && Boolean(selectedThread) && !newTaskDraft;
+  useEffect(() => {
+    onTaskDetailAvailabilityChange?.(showCommandThread);
+    return () => onTaskDetailAvailabilityChange?.(false);
+  }, [onTaskDetailAvailabilityChange, showCommandThread]);
   const commandThreadRunning =
     Boolean(activeTurnId) ||
     Boolean(selectedThread?.turns.some((turn) => turn.status === "inProgress"));
@@ -2627,10 +2818,24 @@ export function CommandWorkspace({
             ? "草稿未发送"
             : "Draft not sent"
           : null;
+  const progressRunId =
+    activeTurnId ?? selectedThread?.turns.at(-1)?.id ?? null;
+  const scopedRunPlan =
+    runPlan !== null &&
+    runPlan.threadId === selectedThread?.id &&
+    runPlan.runId === progressRunId
+      ? runPlan.plan
+      : null;
   const threadProgress = threadProgressSummary(
     showCommandThread ? selectedThread : null,
+    { runId: progressRunId, runPlan: scopedRunPlan },
   );
-  const showProgressPill = hasThreadProgress(threadProgress);
+  const showProgressPill = Boolean(
+    threadProgress.runPlan ||
+      threadProgress.hasProposedPlan ||
+      threadProgress.plan ||
+      taskChanges,
+  );
   const goalBar = showCommandThread
     ? composerGoalBarState(threadGoal, locale)
     : null;
@@ -2747,6 +2952,18 @@ export function CommandWorkspace({
             switchView("command");
             textareaRef.current?.focus();
           }}
+          onArchiveThread={
+            onArchiveThread
+              ? (threadId) => {
+                  const thread = linkedThreads.find(
+                    (candidate) => candidate.id === threadId,
+                  );
+                  if (thread) {
+                    void onArchiveThread(thread);
+                  }
+                }
+              : undefined
+          }
           onOpenLinkedThread={openLinkedThread}
           onOpenSettings={onOpenSettings}
           onQueryChange={setSidebarSearchQuery}
@@ -2793,6 +3010,14 @@ export function CommandWorkspace({
                     )}
                   </strong>
                 </div>
+                <div className="command-thread-actions">
+                  <CommandThreadSceneSwitcher
+                    locale={locale}
+                    scene={scene}
+                    onSceneChange={switchScene}
+                  />
+                  {taskDetailTrigger}
+                </div>
               </div>
             ) : null}
             <section
@@ -2817,326 +3042,349 @@ export function CommandWorkspace({
                 </>
               )}
 
-              <CommandComposer
-                actions={
-                  <>
-                    <CommandComposerSelect
-                      ariaLabel={locale === "zh" ? "执行主体" : "Run with"}
-                      className="max-w-[180px]"
-                      groups={executionTargetGroups(locale)}
-                      options={executionTargets}
-                      value={executionTarget}
-                      onChange={selectExecutionTarget}
-                    />
-                    <CommandComposerSelect
-                      activeValues={[
-                        model,
-                        ...(effectiveReasoningEffort
-                          ? [effortOptionValue(effectiveReasoningEffort)]
-                          : []),
-                      ]}
-                      ariaLabel={
-                        locale === "zh" ? "模型与推理档位" : "Model and effort"
-                      }
-                      className="max-w-[138px]"
-                      disabled={
-                        workspaceAuthority === "control" &&
-                        executionTarget !== "crewon"
-                      }
-                      groups={modelEffortGroups(locale)}
-                      options={modelEffortOptions}
-                      triggerLabel={modelTriggerLabel}
-                      value={model}
-                      onChange={selectModelOrEffort}
-                    />
-                  </>
-                }
-                beforeTextarea={
-                  <>
-                    {showProgressPill ? (
-                      <ComposerProgressPill
-                        locale={locale}
-                        running={commandThreadRunning}
-                        summary={threadProgress}
+              <div className="command-composer-stack">
+                {showProgressPill ? (
+                  <ComposerProgressPill
+                    key={`${threadProgress.runId ?? "none"}:${threadProgress.runPlan?.planId ?? "none"}`}
+                    locale={locale}
+                    running={commandThreadRunning}
+                    summary={threadProgress}
+                    taskChanges={taskChanges}
+                  />
+                ) : null}
+                {toolApproval && onToolApprovalDecision ? (
+                  <ComposerToolApprovalBar
+                    approval={toolApproval}
+                    locale={locale}
+                    onDecision={onToolApprovalDecision}
+                  />
+                ) : null}
+                <CommandComposer
+                  actions={
+                    <>
+                      <CommandComposerSelect
+                        ariaLabel={locale === "zh" ? "执行主体" : "Run with"}
+                        className="max-w-[180px]"
+                        groups={executionTargetGroups(locale)}
+                        options={executionTargets}
+                        value={executionTarget}
+                        onChange={selectExecutionTarget}
                       />
-                    ) : null}
-                    {goalBar && goalThreadId ? (
-                      <ComposerGoalBar
-                        busy={threadGoalBusy}
-                        goal={goalBar}
-                        locale={locale}
-                        onClear={() => onClearThreadGoal?.(goalThreadId)}
-                        onEdit={(objective: string) =>
-                          onSetThreadGoalObjective?.(goalThreadId, objective)
+                      <CommandComposerSelect
+                        activeValues={[
+                          model,
+                          ...(effectiveReasoningEffort
+                            ? [effortOptionValue(effectiveReasoningEffort)]
+                            : []),
+                        ]}
+                        ariaLabel={
+                          locale === "zh"
+                            ? "模型与推理档位"
+                            : "Model and effort"
                         }
-                        onTogglePause={() =>
-                          onSetThreadGoalStatus?.(
-                            goalThreadId,
-                            goalPauseToggleStatus(
-                              threadGoal?.status ?? "active",
-                            ),
-                          )
-                        }
+                        className="max-w-[138px]"
+                        disabled={commandComposerModelDisabledForTarget({
+                          executionTarget,
+                          workspaceAuthority,
+                        })}
+                        groups={modelEffortGroups(locale)}
+                        options={modelEffortOptions}
+                        triggerLabel={modelTriggerLabel}
+                        value={model}
+                        onChange={selectModelOrEffort}
                       />
-                    ) : null}
-                    <ComposerResourceTags
-                      resources={[
-                        ...pendingComposerResources,
-                        ...(providerComposerTag ? [providerComposerTag] : []),
-                        ...imageResources(commandImages),
-                      ]}
-                      onRemove={(resource) => {
-                        if (providerComposerTag?.id === resource.id) {
-                          if (providerResource?.snapshot.binding) {
-                            void providerResource.onUnbind();
-                          } else {
-                            providerResource?.onSelect(null);
+                    </>
+                  }
+                  beforeTextarea={
+                    <>
+                      {goalBar && goalThreadId ? (
+                        <ComposerGoalBar
+                          busy={threadGoalBusy}
+                          goal={goalBar}
+                          locale={locale}
+                          onClear={() => onClearThreadGoal?.(goalThreadId)}
+                          onEdit={(objective: string) =>
+                            onSetThreadGoalObjective?.(goalThreadId, objective)
                           }
-                          return;
-                        }
-                        if (resource.kind !== "image") {
-                          removePendingResource(resource, "command");
-                          return;
-                        }
-                        setCommandImages((current) =>
-                          current.filter((image) => image.id !== resource.id),
-                        );
-                      }}
-                    />
-                    <button
-                      aria-hidden="true"
-                      className="shortcut-proxy"
-                      data-context-open=""
-                      data-palette-trigger="context"
-                      hidden
-                      tabIndex={-1}
-                      type="button"
-                      onClick={() => openComposerPalette("context")}
-                    />
-                    <button
-                      aria-hidden="true"
-                      className="shortcut-proxy"
-                      data-slash-open=""
-                      data-palette-trigger="slash"
-                      hidden
-                      tabIndex={-1}
-                      type="button"
-                      onClick={() => openComposerPalette("slash")}
-                    />
-                  </>
-                }
-                ariaDescribedBy="composer-status composer-error"
-                ariaLabel={locale === "zh" ? "任务输入" : "Task input"}
-                className={classNames(
-                  "command-input",
-                  showCommandThread && "thread-command-input",
-                )}
-                controls={
-                  <>
-                    <button
-                      aria-label={
-                        locale === "zh" ? "添加上下文" : "Add context"
-                      }
-                      className="icon-action composer-plus-action"
-                      data-palette-trigger="add"
-                      type="button"
-                      onClick={() => toggleComposerPalette("add")}
-                    >
-                      <Plus aria-hidden="true" />
-                    </button>
-                    <CommandComposerSelect
-                      ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
-                      className="max-w-[180px]"
-                      icon={<ShieldCheck aria-hidden="true" />}
-                      options={localizedPermissionOptions}
-                      value={permission}
-                      onChange={setPermission}
-                    />
-                    {executionIntent !== "none" ? (
+                          onTogglePause={() =>
+                            onSetThreadGoalStatus?.(
+                              goalThreadId,
+                              goalPauseToggleStatus(
+                                threadGoal?.status ?? "active",
+                              ),
+                            )
+                          }
+                        />
+                      ) : null}
+                      <ComposerResourceTags
+                        resources={[
+                          ...pendingComposerResources,
+                          ...(providerComposerTag ? [providerComposerTag] : []),
+                          ...imageResources(commandImages),
+                        ]}
+                        onRemove={(resource) => {
+                          if (providerComposerTag?.id === resource.id) {
+                            if (providerResource?.snapshot.binding) {
+                              void providerResource.onUnbind();
+                            } else {
+                              providerResource?.onSelect(null);
+                            }
+                            return;
+                          }
+                          if (resource.kind !== "image") {
+                            removePendingResource(resource, "command");
+                            return;
+                          }
+                          setCommandImages((current) =>
+                            current.filter((image) => image.id !== resource.id),
+                          );
+                        }}
+                      />
+                      <button
+                        aria-hidden="true"
+                        className="shortcut-proxy"
+                        data-context-open=""
+                        data-palette-trigger="context"
+                        hidden
+                        tabIndex={-1}
+                        type="button"
+                        onClick={() => openComposerPalette("context")}
+                      />
+                      <button
+                        aria-hidden="true"
+                        className="shortcut-proxy"
+                        data-slash-open=""
+                        data-palette-trigger="slash"
+                        hidden
+                        tabIndex={-1}
+                        type="button"
+                        onClick={() => openComposerPalette("slash")}
+                      />
+                    </>
+                  }
+                  ariaDescribedBy="composer-status composer-error"
+                  ariaLabel={locale === "zh" ? "任务输入" : "Task input"}
+                  className={classNames(
+                    "command-input",
+                    showCommandThread && "thread-command-input",
+                  )}
+                  controls={
+                    <>
                       <button
                         aria-label={
-                          executionIntent === "goal"
-                            ? locale === "zh"
-                              ? "取消目标执行意图"
-                              : "Clear goal execution intent"
-                            : locale === "zh"
-                              ? "取消计划执行意图"
-                              : "Clear plan execution intent"
+                          locale === "zh" ? "添加上下文" : "Add context"
                         }
-                        className="execution-intent-chip"
-                        data-execution-intent={executionIntent}
-                        title={locale === "zh" ? "点击取消" : "Click to clear"}
+                        className="icon-action composer-plus-action"
+                        data-palette-trigger="add"
                         type="button"
-                        onClick={() => setExecutionIntent("none")}
+                        onClick={() => toggleComposerPalette("add")}
                       >
-                        {executionIntent === "goal" ? (
-                          <Target aria-hidden="true" />
-                        ) : (
-                          <ListChecks aria-hidden="true" />
-                        )}
-                        <span>
-                          {executionIntent === "goal"
-                            ? locale === "zh"
-                              ? "目标"
-                              : "Goal"
-                            : locale === "zh"
-                              ? "计划"
-                              : "Plan"}
-                        </span>
-                        <X aria-hidden="true" />
+                        <Plus aria-hidden="true" />
                       </button>
-                    ) : null}
-                  </>
-                }
-                dataOdId="ai-composer"
-                disabled={isSending}
-                id="desktop-task-input"
-                palettes={
-                  <>
-                    <Palette
-                      id="add-search-panel"
-                      inputId="add-search"
-                      items={visibleAddItems}
-                      kind="add"
-                      open={openPalette === "add"}
-                      placeholder={locale === "zh" ? "添加" : "Add"}
-                      query={paletteQuery}
-                      onClose={closeComposerPalette}
-                      onQueryChange={setPaletteQuery}
-                      onSelect={insertAddItem}
-                    />
-                    <Palette
-                      id="context-search-panel"
-                      inputId="context-search"
-                      items={visibleContextItems}
-                      kind="context"
-                      open={openPalette === "context"}
-                      placeholder={
-                        locale === "zh"
-                          ? "搜索文件、会话或工作空间"
-                          : "Search files, conversations, or workspaces"
-                      }
-                      query={paletteQuery}
-                      onClose={closeComposerPalette}
-                      onQueryChange={setPaletteQuery}
-                      onSelect={insertContextItem}
-                    />
-                    <Palette
-                      id="slash-search-panel"
-                      inputId="slash-search"
-                      items={visibleSlashItems}
-                      kind="slash"
-                      open={openPalette === "slash"}
-                      placeholder={
-                        locale === "zh"
-                          ? "搜索 Skill 或 MCP，例如 页面审阅、Filesystem"
-                          : "Search Skills or MCP, for example page review or Filesystem"
-                      }
-                      query={paletteQuery}
-                      onClose={closeComposerPalette}
-                      onQueryChange={setPaletteQuery}
-                      onSelect={insertSlashItem}
-                    />
-                    {providerResourceAvailable && providerResource ? (
-                      <ProviderResourceComposerPopover
-                        open={openPalette === "provider"}
-                        selectedResource={providerResource.selectedResource}
-                        selectedWorkspaceKey={
-                          providerResource.selectedWorkspaceKey
-                        }
-                        snapshot={providerResource.snapshot}
-                        onBind={(resource) => {
-                          providerResource.onSelect(resource);
-                          closeComposerPalette();
-                        }}
-                        onRetry={providerResource.onRefresh}
-                        onSelect={providerResource.onSelect}
-                        onUnbind={() => void providerResource.onUnbind()}
-                        onWorkspaceSelect={providerResource.onWorkspaceSelect}
-                      />
-                    ) : null}
-                  </>
-                }
-                paletteOpen={Boolean(openPalette)}
-                placeholder={scenePreset.placeholder}
-                sendLabel={
-                  showCommandThread
-                    ? composerSendLabel
-                    : locale === "zh"
-                      ? "开始任务"
-                      : "Start task"
-                }
-                state={
-                  <>
-                    {workspaceAuthority ===
-                    "control" ? null : showCommandThread ? (
-                      <span
-                        className="workspace-label"
-                        data-od-id="workspace-picker"
-                      >
-                        {currentWorkspace}
-                      </span>
-                    ) : (
                       <CommandComposerSelect
-                        ariaLabel={
-                          locale === "zh" ? "工作空间选择" : "Workspace"
-                        }
-                        className="workspace-dropdown"
-                        options={workspaceOptions}
-                        value={cwd || noWorkspaceValue}
-                        onChange={(nextWorkspace) =>
-                          onChangeWorkspaceCwd?.(
-                            nextWorkspace === noWorkspaceValue
-                              ? null
-                              : nextWorkspace,
-                          )
-                        }
+                        ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
+                        className="max-w-[180px]"
+                        contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
+                        icon={<ShieldCheck aria-hidden="true" />}
+                        menuHelp={{
+                          href: commandComposerPermissionLearnMoreUrl,
+                          label:
+                            commandComposerPermissionLearnMoreLabel(locale),
+                        }}
+                        menuTitle={commandComposerPermissionMenuTitle(locale)}
+                        options={localizedPermissionOptions}
+                        showChevron={false}
+                        value={permission}
+                        onChange={setPermission}
                       />
-                    )}
-                    {composerActivityLabel ? (
-                      <span className="composer-state">
-                        {composerActivityLabel}
-                      </span>
-                    ) : null}
-                    {connectionState === "disconnected" ? (
-                      <button
-                        className="button compact"
-                        type="button"
-                        onClick={onRetryConnection}
-                      >
-                        {locale === "zh" ? "重新连接" : "Reconnect"}
-                      </button>
-                    ) : null}
-                    <span
-                      aria-label={connectionStatusLabel}
-                      className="connection-indicator"
-                      data-state={connectionState}
-                      role="status"
-                      title={connectionStatusLabel}
-                    />
-                  </>
-                }
-                running={commandThreadRunning}
-                stateDataOdId="composer-state-row"
-                stateId="composer-status"
-                stopLabel={locale === "zh" ? "停止" : "Stop"}
-                submitBehavior="enter"
-                submitting={isSending}
-                textareaDataOdId="composer-input"
-                textareaRef={textareaRef}
-                value={composerValue}
-                onChange={onChangeComposerValue}
-                onClosePalette={closeComposerPalette}
-                onOpenPalette={openComposerPalette}
-                onPaste={(event) => void pasteImages(event, "command")}
-                onStop={onStop}
-                onSubmit={sendComposerValue}
-              />
-              {cloudAgentTargetError ? (
-                <div className="composer-inline-error" role="alert">
-                  {cloudAgentTargetError}
-                </div>
-              ) : null}
+                      {executionIntent !== "none" ? (
+                        <button
+                          aria-label={
+                            executionIntent === "goal"
+                              ? locale === "zh"
+                                ? "取消目标执行意图"
+                                : "Clear goal execution intent"
+                              : locale === "zh"
+                                ? "取消计划执行意图"
+                                : "Clear plan execution intent"
+                          }
+                          className="execution-intent-chip"
+                          data-execution-intent={executionIntent}
+                          title={
+                            locale === "zh" ? "点击取消" : "Click to clear"
+                          }
+                          type="button"
+                          onClick={() => setExecutionIntent("none")}
+                        >
+                          {executionIntent === "goal" ? (
+                            <Target aria-hidden="true" />
+                          ) : (
+                            <ListChecks aria-hidden="true" />
+                          )}
+                          <span>
+                            {executionIntent === "goal"
+                              ? locale === "zh"
+                                ? "目标"
+                                : "Goal"
+                              : locale === "zh"
+                                ? "计划"
+                                : "Plan"}
+                          </span>
+                          <X aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </>
+                  }
+                  dataOdId="ai-composer"
+                  disabled={isSending}
+                  id="desktop-task-input"
+                  palettes={
+                    <>
+                      <Palette
+                        id="add-search-panel"
+                        inputId="add-search"
+                        items={visibleAddItems}
+                        kind="add"
+                        open={openPalette === "add"}
+                        placeholder={locale === "zh" ? "添加" : "Add"}
+                        query={paletteQuery}
+                        onClose={closeComposerPalette}
+                        onQueryChange={setPaletteQuery}
+                        onSelect={insertAddItem}
+                      />
+                      <Palette
+                        id="context-search-panel"
+                        inputId="context-search"
+                        items={visibleContextItems}
+                        kind="context"
+                        open={openPalette === "context"}
+                        placeholder={
+                          locale === "zh"
+                            ? "搜索文件、会话或工作空间"
+                            : "Search files, conversations, or workspaces"
+                        }
+                        query={paletteQuery}
+                        onClose={closeComposerPalette}
+                        onQueryChange={setPaletteQuery}
+                        onSelect={insertContextItem}
+                      />
+                      <Palette
+                        id="slash-search-panel"
+                        inputId="slash-search"
+                        items={visibleSlashItems}
+                        kind="slash"
+                        open={openPalette === "slash"}
+                        placeholder={
+                          locale === "zh"
+                            ? "搜索 Skill 或 MCP，例如 页面审阅、Filesystem"
+                            : "Search Skills or MCP, for example page review or Filesystem"
+                        }
+                        query={paletteQuery}
+                        onClose={closeComposerPalette}
+                        onQueryChange={setPaletteQuery}
+                        onSelect={insertSlashItem}
+                      />
+                      {providerResourceAvailable && providerResource ? (
+                        <ProviderResourceComposerPopover
+                          open={openPalette === "provider"}
+                          selectedResource={providerResource.selectedResource}
+                          selectedWorkspaceKey={
+                            providerResource.selectedWorkspaceKey
+                          }
+                          snapshot={providerResource.snapshot}
+                          onBind={(resource) => {
+                            providerResource.onSelect(resource);
+                            closeComposerPalette();
+                          }}
+                          onRetry={providerResource.onRefresh}
+                          onSelect={providerResource.onSelect}
+                          onUnbind={() => void providerResource.onUnbind()}
+                          onWorkspaceSelect={providerResource.onWorkspaceSelect}
+                        />
+                      ) : null}
+                    </>
+                  }
+                  paletteOpen={Boolean(openPalette)}
+                  placeholder={scenePreset.placeholder}
+                  sendLabel={
+                    showCommandThread
+                      ? composerSendLabel
+                      : locale === "zh"
+                        ? "开始任务"
+                        : "Start task"
+                  }
+                  state={
+                    <>
+                      {workspaceAuthority ===
+                      "control" ? null : showCommandThread ? (
+                        <span
+                          className="workspace-label"
+                          data-od-id="workspace-picker"
+                        >
+                          {currentWorkspace}
+                        </span>
+                      ) : (
+                        <CommandComposerSelect
+                          ariaLabel={
+                            locale === "zh" ? "工作空间选择" : "Workspace"
+                          }
+                          className="workspace-dropdown"
+                          options={workspaceOptions}
+                          value={cwd || noWorkspaceValue}
+                          onChange={(nextWorkspace) =>
+                            onChangeWorkspaceCwd?.(
+                              nextWorkspace === noWorkspaceValue
+                                ? null
+                                : nextWorkspace,
+                            )
+                          }
+                        />
+                      )}
+                      {composerActivityLabel ? (
+                        <span className="composer-state">
+                          {composerActivityLabel}
+                        </span>
+                      ) : null}
+                      {connectionState === "disconnected" ? (
+                        <button
+                          className="button compact"
+                          type="button"
+                          onClick={onRetryConnection}
+                        >
+                          {locale === "zh" ? "重新连接" : "Reconnect"}
+                        </button>
+                      ) : null}
+                      <span
+                        aria-label={connectionStatusLabel}
+                        className="connection-indicator"
+                        data-state={connectionState}
+                        role="status"
+                        title={connectionStatusLabel}
+                      />
+                    </>
+                  }
+                  running={commandThreadRunning}
+                  stateDataOdId="composer-state-row"
+                  stateId="composer-status"
+                  stopLabel={locale === "zh" ? "停止" : "Stop"}
+                  submitBehavior="enter"
+                  submitting={isSending}
+                  textareaDataOdId="composer-input"
+                  textareaRef={textareaRef}
+                  value={composerValue}
+                  onChange={onChangeComposerValue}
+                  onClosePalette={closeComposerPalette}
+                  onOpenPalette={openComposerPalette}
+                  onPaste={(event) => void pasteImages(event, "command")}
+                  onStop={onStop}
+                  onSubmit={sendComposerValue}
+                />
+                {cloudAgentTargetError ? (
+                  <div className="composer-inline-error" role="alert">
+                    {cloudAgentTargetError}
+                  </div>
+                ) : null}
+              </div>
 
               {showCommandThread ? null : (
                 <CommandSceneQuickRow
@@ -3243,8 +3491,15 @@ export function CommandWorkspace({
                     <CommandComposerSelect
                       ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
                       className="max-w-[180px]"
+                      contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
                       icon={<ShieldCheck aria-hidden="true" />}
+                      menuHelp={{
+                        href: commandComposerPermissionLearnMoreUrl,
+                        label: commandComposerPermissionLearnMoreLabel(locale),
+                      }}
+                      menuTitle={commandComposerPermissionMenuTitle(locale)}
                       options={localizedPermissionOptions}
+                      showChevron={false}
                       value={permission}
                       onChange={setPermission}
                     />

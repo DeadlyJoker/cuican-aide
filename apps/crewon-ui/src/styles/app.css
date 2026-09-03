@@ -829,7 +829,7 @@ body {
  */
 .desktop-window-controls-slot {
   position: absolute;
-  top: 9px;
+  top: 21px;
   left: 14px;
   z-index: 41;
   display: flex;
@@ -4454,13 +4454,17 @@ textarea:focus-visible {
   background-clip: padding-box;
 }
 
+/* Mermaid live previews keep one stable canvas while streamed source evolves. */
 .markdown-content .mermaid-block {
   position: relative;
   display: grid;
+  width: min(100%, 720px);
   overflow: hidden;
-  border: 1px solid var(--n-300);
+  margin: 16px 0;
+  border: 1px solid var(--border);
   border-radius: var(--radius-lg);
-  background: var(--n-25);
+  background: var(--surface);
+  box-shadow: none;
 }
 
 .markdown-content .mermaid-block figcaption {
@@ -4468,19 +4472,51 @@ textarea:focus-visible {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  min-height: 32px;
-  padding: 0 12px;
-  border-bottom: 0;
-  background: var(--n-50);
-  color: var(--n-800);
-  font-size: calc(12px + var(--user-ui-font-delta));
+  min-height: 34px;
+  padding: 0 10px 0 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-size: calc(11px + var(--user-ui-font-delta));
   font-weight: 600;
 }
 
-.markdown-content .mermaid-block figcaption em {
+.markdown-content .mermaid-caption-title {
+  color: var(--n-800);
+  letter-spacing: 0.01em;
+}
+
+.markdown-content .mermaid-render-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   color: var(--text-muted);
+  font-size: calc(10px + var(--user-ui-font-delta));
   font-style: normal;
   font-weight: 500;
+}
+
+.markdown-content .mermaid-render-status > span {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--n-550);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--n-550) 10%, transparent);
+}
+
+.markdown-content
+  .mermaid-block:is([data-state="loading"], [data-state="live"])
+  .mermaid-render-status
+  > span {
+  animation: mermaid-status-pulse 1.6s var(--ease) infinite;
+}
+
+.markdown-content
+  .mermaid-block[data-state="error"]
+  .mermaid-render-status
+  > span {
+  background: var(--warning);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--warning) 11%, transparent);
 }
 
 .markdown-content .mermaid-zoom-button,
@@ -4501,8 +4537,8 @@ textarea:focus-visible {
 .markdown-content .mermaid-zoom-button {
   position: absolute;
   z-index: 2;
-  top: 3px;
-  right: 7px;
+  top: 4px;
+  right: 6px;
   width: 26px;
   height: 26px;
 }
@@ -4520,20 +4556,63 @@ textarea:focus-visible {
 .markdown-content .mermaid-diagram {
   display: flex;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
-  max-height: min(420px, 48vh);
+  max-height: min(440px, 52vh);
   overflow: auto;
-  padding: 24px;
-  background: var(--n-0);
+  padding: clamp(18px, 3vw, 26px);
+  background: var(--surface);
 }
 
 .markdown-content .mermaid-diagram svg {
-  width: min(720px, 100%);
+  display: block;
+  width: auto;
   max-width: 100%;
-  max-height: none;
   height: auto;
+  max-height: none;
   min-height: 0;
+  margin-inline: auto;
+}
+
+.markdown-content .mermaid-live-diagram {
+  min-height: 180px;
+  opacity: 0.92;
+  transition: opacity var(--dur-base) var(--ease);
+}
+
+.markdown-content .mermaid-streaming-placeholder {
+  display: grid;
+  grid-template-columns:
+    minmax(54px, 88px) minmax(18px, 62px) minmax(54px, 88px)
+    minmax(18px, 62px) minmax(54px, 88px);
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 34px clamp(18px, 5vw, 48px);
+  background: var(--surface);
+}
+
+.markdown-content .mermaid-placeholder-node {
+  height: 34px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: linear-gradient(
+    100deg,
+    var(--n-100) 20%,
+    var(--n-200) 42%,
+    var(--n-100) 64%
+  );
+  background-size: 240% 100%;
+  animation: mermaid-placeholder-shimmer 1.8s var(--ease) infinite;
+}
+
+.markdown-content .mermaid-placeholder-node.is-center {
+  height: 42px;
+}
+
+.markdown-content .mermaid-placeholder-link {
+  height: 1px;
+  background: linear-gradient(90deg, var(--n-350), var(--n-250));
 }
 
 .markdown-content .mermaid-source {
@@ -4541,11 +4620,15 @@ textarea:focus-visible {
 }
 
 .markdown-content .mermaid-source summary {
-  padding: 7px 10px;
+  padding: 8px 11px;
   color: var(--text-muted);
   cursor: pointer;
   font-size: calc(11px + var(--user-ui-font-delta));
   font-weight: 600;
+}
+
+.markdown-content .mermaid-source summary:hover {
+  color: var(--n-850);
 }
 
 .markdown-content .mermaid-block pre {
@@ -4557,6 +4640,7 @@ textarea:focus-visible {
 }
 
 .markdown-content .mermaid-error {
+  margin: 0;
   padding: 8px 12px 10px;
   border-top: 1px solid var(--n-250);
   color: var(--n-700);
@@ -4576,18 +4660,16 @@ body.mermaid-lightbox-open {
   align-items: center;
   justify-content: center;
   padding: 24px;
-  background: rgb(15 23 42 / 0.62);
-  backdrop-filter: blur(6px);
-  -webkit-backdrop-filter: blur(6px);
+  background: rgb(12 12 13 / 0.58);
 }
 
 .mermaid-lightbox-card {
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  width: min(1180px, calc(100vw - 48px));
-  height: min(860px, calc(100vh - 48px));
+  width: min(1040px, calc(100vw - 48px));
+  max-height: calc(100dvh - 48px);
   overflow: hidden;
-  border: 1px solid rgb(255 255 255 / 0.72);
+  border: 1px solid var(--border-strong);
   border-radius: var(--radius-xl);
   background: var(--n-0);
   box-shadow: var(--shadow-modal);
@@ -4618,20 +4700,70 @@ body.mermaid-lightbox-open {
 .mermaid-lightbox-diagram {
   display: flex;
   align-items: flex-start;
-  justify-content: center;
+  justify-content: flex-start;
   min-width: 0;
+  max-height: calc(100dvh - 93px);
   overflow: auto;
   padding: 28px;
-  background: var(--n-0);
+  background: var(--surface);
 }
 
 .mermaid-lightbox-diagram svg {
-  width: min(1120px, 100%);
-  min-width: min(920px, 100%);
+  display: block;
+  width: auto;
+  min-width: 0;
   max-width: none;
   height: auto;
   max-height: none;
+  margin-inline: auto;
 }
+
+@keyframes mermaid-status-pulse {
+  0%,
+  100% {
+    opacity: 0.48;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes mermaid-placeholder-shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -140% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .markdown-content .mermaid-render-status > span,
+  .markdown-content .mermaid-placeholder-node {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px), (max-height: 640px) {
+  .mermaid-lightbox {
+    align-items: stretch;
+    padding: max(12px, env(safe-area-inset-top))
+      max(12px, env(safe-area-inset-right))
+      max(12px, env(safe-area-inset-bottom))
+      max(12px, env(safe-area-inset-left));
+  }
+
+  .mermaid-lightbox-card {
+    width: 100%;
+    max-height: 100%;
+  }
+
+  .mermaid-lightbox-diagram {
+    max-height: calc(100dvh - 69px);
+    padding: 16px;
+  }
+}
+/* End Mermaid live previews. */
 
 :root:not([data-theme="dark"]) .message-body p {
   color: #3f3f46;
@@ -4726,7 +4858,7 @@ body.mermaid-lightbox-open {
 
 /*
  * Diagram cards join the same ladder as code blocks so content surfaces read
- * consistently: card on --surface, caption recessed onto --surface-strong.
+ * consistently: one continuous surface with a quiet caption divider.
  */
 :root:not([data-theme="dark"]) .markdown-content .mermaid-block {
   border-color: var(--border);
@@ -4734,12 +4866,12 @@ body.mermaid-lightbox-open {
 }
 
 :root:not([data-theme="dark"]) .markdown-content .mermaid-block figcaption {
-  background: var(--surface-strong);
+  background: var(--surface);
   color: var(--text-muted);
 }
 
 :root:not([data-theme="dark"]) .markdown-content .mermaid-diagram {
-  background: var(--surface-raised);
+  background: var(--surface);
 }
 
 .message[data-kind="plan"] .message-body p,
@@ -5175,7 +5307,8 @@ body.mermaid-lightbox-open {
 }
 
 .tool-call-markdown-section .mermaid-block {
-  background: rgba(99, 199, 232, 0.045);
+  background: transparent;
+  box-shadow: none;
 }
 
 .tool-call-image-list {
@@ -5488,6 +5621,11 @@ body.mermaid-lightbox-open {
   animation: status-dot-pulse 1.2s ease-in-out infinite;
 }
 
+.tool-card[data-approval="required"] .status-dot {
+  background: #f3c36a;
+  animation: none;
+}
+
 .tool-card[data-status="completed"] .status-dot {
   background: #7dd38f;
 }
@@ -5620,6 +5758,10 @@ body.mermaid-lightbox-open {
   color: #f3c36a;
 }
 
+.tool-card[data-approval="required"] .tool-card-status {
+  color: #f3c36a;
+}
+
 :root:not([data-theme="dark"])
   .tool-card[data-status="inProgress"]
   .tool-card-status,
@@ -5643,6 +5785,12 @@ body.mermaid-lightbox-open {
 
 :root:not([data-theme="dark"])
   .tool-card[data-status="declined"]
+  .tool-card-status {
+  color: #9a6700;
+}
+
+:root:not([data-theme="dark"])
+  .tool-card[data-approval="required"]
   .tool-card-status {
   color: #9a6700;
 }
@@ -7895,16 +8043,25 @@ button.library-item:hover .library-card-chevron {
   letter-spacing: 0.04em;
 }
 
-.office-bubble-body p {
-  margin: 0;
-  padding: 0;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
+.office-bubble-body > .markdown-content {
+  max-width: 100%;
+  gap: 6px;
   color: var(--text-muted);
   font-size: calc(13px + var(--user-ui-font-delta));
   line-height: 1.65;
-  box-shadow: none;
+}
+
+.office-bubble-body > .markdown-content :is(p, li) {
+  color: inherit;
+  line-height: inherit;
+}
+
+.office-bubble-body > .markdown-content > :first-child {
+  margin-top: 0;
+}
+
+.office-bubble-body > .markdown-content > :last-child {
+  margin-bottom: 0;
 }
 
 @keyframes office-message-in {
@@ -7931,11 +8088,15 @@ button.library-item:hover .library-card-chevron {
 }
 
 .office-mention {
-  color: var(--accent);
-  font-weight: 500;
+  color: #2563eb;
+  font-weight: 600;
   padding: 0;
   border-radius: 0;
   background: transparent;
+}
+
+:root[data-theme="dark"] .office-mention {
+  color: #60a5fa;
 }
 
 .office-bubble[data-kind="task"] .office-bubble-body {
@@ -7943,7 +8104,7 @@ button.library-item:hover .library-card-chevron {
   background: color-mix(in srgb, var(--success) 5%, var(--surface));
 }
 
-.office-bubble[data-kind="task"] .office-bubble-body p {
+.office-bubble[data-kind="task"] .office-bubble-body > .markdown-content {
   color: var(--text);
 }
 
@@ -8265,12 +8426,8 @@ button.library-item:hover .library-card-chevron {
   background: color-mix(in srgb, var(--accent) 5%, var(--surface));
 }
 
-.office-bubble[data-self="true"] .office-bubble-body p {
+.office-bubble[data-self="true"] .office-bubble-body > .markdown-content {
   color: var(--text);
-}
-
-.office-bubble[data-self="true"] .office-mention {
-  background: transparent;
 }
 
 .office-manager-member {
@@ -8968,13 +9125,17 @@ button.library-item:hover .library-card-chevron {
 }
 
 .screen-shell.command-screen .settings-actions button[data-icon-only="true"],
-.screen-shell.command-screen .settings-row-actions button[data-icon-only="true"] {
+.screen-shell.command-screen
+  .settings-row-actions
+  button[data-icon-only="true"] {
   width: 32px;
   min-width: 32px;
   padding: 0;
 }
 
-.screen-shell.command-screen .settings-row-actions button[data-icon-only="true"] {
+.screen-shell.command-screen
+  .settings-row-actions
+  button[data-icon-only="true"] {
   height: 30px;
   min-height: 30px;
   border: 0;
@@ -11359,16 +11520,18 @@ button.library-item:hover .library-card-chevron {
 }
 
 /*
- * Collapsed, the topbar is absolutely positioned at top: 18px, which put the top
- * 3px of the collapse button under the controls slot. The slot has the higher
- * z-index, so those 3px swallowed the button's clicks. Dropping it clear of the
- * lights' 21px bottom edge gives the whole 32px button box back.
+ * On desktop the traffic lights occupy the far-left slot, so the collapsed
+ * expand button parks in the next free slot beside them. The lights end around
+ * x=70 / y=21, and the expanded tool row centres at y=27 (14px rail padding +
+ * half the 26px topbar), so left: 76 / top: 15 keeps the button on the exact
+ * same centre line it occupies while the sidebar is open.
  */
 :root[data-surface="desktop"]
   .screen-shell.command-screen
   .command-window.sidebar-collapsed
   .sidebar-topbar {
-  top: 28px;
+  top: 15px;
+  left: 76px;
 }
 
 /*
@@ -11582,13 +11745,18 @@ button.library-item:hover .library-card-chevron {
   display: none;
 }
 
+/*
+ * The collapsed expand control keeps the expanded button's exact geometry (a
+ * 26px × 24px box centred on the tool row's y=27 line) so toggling the sidebar
+ * never resizes or shifts the icon; only its horizontal slot changes.
+ */
 .screen-shell.command-screen .command-window.sidebar-collapsed .sidebar-topbar {
   position: absolute;
-  top: 18px;
+  top: 15px;
   left: 18px;
   z-index: 36;
-  width: 34px;
-  min-height: 32px;
+  width: 26px;
+  min-height: 24px;
   justify-content: center;
   align-items: center;
   padding: 0;
@@ -11609,11 +11777,17 @@ button.library-item:hover .library-card-chevron {
   display: none;
 }
 
+/*
+ * Box stays on the expanded `.sidebar-tool` footprint so toggling never
+ * resizes the button. The size is stated outright because the floating-mockup
+ * rules in original-shell-overrides.css match at equal specificity and load
+ * later, so without this the collapsed button regrows to 34px × 32px.
+ */
 .screen-shell.command-screen
   .command-window.sidebar-collapsed
   [data-sidebar-collapse] {
-  width: 34px;
-  height: 32px;
+  width: 26px;
+  height: 24px;
   border-color: transparent;
   background: transparent;
   box-shadow: none;
@@ -11621,22 +11795,24 @@ button.library-item:hover .library-card-chevron {
   -webkit-backdrop-filter: none;
 }
 
+/* Same 15px glyph as the expanded state; the rotate alone signals direction. */
 .screen-shell.command-screen
   .command-window.sidebar-collapsed
   [data-sidebar-collapse]
   svg {
-  width: 18px;
-  height: 18px;
+  width: 15px;
+  height: 15px;
   transform: rotate(180deg);
 }
 
 .screen-shell.command-screen .sidebar-brand {
   position: absolute;
-  top: 15px;
+  top: 13px;
   left: 14px;
   z-index: 2;
   display: flex;
-  align-items: baseline;
+  height: 28px;
+  align-items: center;
   gap: 4px;
   padding: 0;
   color: var(--n-700);
@@ -12818,6 +12994,110 @@ button.library-item:hover .library-card-chevron {
   white-space: nowrap;
 }
 
+.screen-shell.command-screen .command-thread-actions {
+  display: flex;
+  flex: 0 0 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
+
+.screen-shell.command-screen .thread-scene-switcher {
+  display: flex;
+  flex-direction: row;
+  flex: 0 0 auto;
+  min-width: 0;
+  align-items: center;
+  gap: 0;
+}
+
+/*
+ * The in-thread Scene control should read as one quiet instrument, not three
+ * raised system buttons. The toolbar's generic button rule is intentionally
+ * neutralized here; Radix still owns keyboard navigation and selected state.
+ */
+.screen-shell.command-screen
+  .thread-scene-switcher
+  .thread-scene-switcher-list {
+  height: 26px;
+  gap: 1px;
+  padding: 2px;
+  border: 0;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--n-950) 5%, transparent);
+  box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.035);
+}
+
+.screen-shell.command-screen
+  .command-thread-toolbar
+  .thread-scene-switcher-option {
+  position: relative;
+  height: 22px;
+  min-height: 22px;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--n-550);
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease;
+}
+
+.screen-shell.command-screen
+  .command-thread-toolbar
+  .thread-scene-switcher-option:hover {
+  background: color-mix(in srgb, var(--n-0) 52%, transparent);
+  color: var(--n-850);
+}
+
+.screen-shell.command-screen
+  .command-thread-toolbar
+  .thread-scene-switcher-option[data-state="active"] {
+  background: var(--n-0);
+  box-shadow:
+    0 1px 2px rgb(0 0 0 / 0.07),
+    0 0 0 0.5px rgb(0 0 0 / 0.035);
+  color: var(--n-900);
+}
+
+.screen-shell.command-screen
+  .command-thread-toolbar
+  .thread-scene-switcher-option:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 58%, transparent);
+  outline-offset: 1px;
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .thread-scene-switcher
+  .thread-scene-switcher-list {
+  background: rgb(255 255 255 / 0.065);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.04);
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-toolbar
+  .thread-scene-switcher-option:hover {
+  background: rgb(255 255 255 / 0.055);
+  color: var(--n-850);
+}
+
+:root[data-theme="dark"]
+  .screen-shell.command-screen
+  .command-thread-toolbar
+  .thread-scene-switcher-option[data-state="active"] {
+  background: rgb(255 255 255 / 0.12);
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.055);
+  color: var(--n-950);
+}
+
 .screen-shell.command-screen .command-thread-cwd {
   display: inline-flex;
   flex: 0 1 auto;
@@ -13216,9 +13496,6 @@ button.library-item:hover .library-card-chevron {
   .message[data-kind="agentMessage"]
   .markdown-content
   .mermaid-block {
-  width: fit-content;
-  min-width: min(560px, 100%);
-  max-width: 100%;
   margin: 18px 0 20px;
   border-radius: var(--radius-lg);
   background: var(--surface);
@@ -13242,25 +13519,9 @@ button.library-item:hover .library-card-chevron {
   .markdown-content
   .mermaid-diagram {
   max-height: min(380px, 42vh);
-  padding: 22px;
+  padding: 16px;
 }
 
-.screen-shell.command-screen
-  .command-thread-room
-  .message[data-kind="agentMessage"]
-  .markdown-content
-  .mermaid-diagram
-  svg {
-  width: min(680px, 100%);
-  max-height: none;
-}
-
-.screen-shell.command-screen
-  .command-thread-room
-  .message[data-kind="agentMessage"]
-  .markdown-content
-  .mermaid-block[data-state="source"]
-  pre,
 .screen-shell.command-screen
   .command-thread-room
   .message[data-kind="agentMessage"]
@@ -13268,6 +13529,37 @@ button.library-item:hover .library-card-chevron {
   .mermaid-block[data-state="error"]
   pre {
   max-height: 210px;
+}
+
+@container command-canvas (max-width: 620px) {
+  .screen-shell.command-screen
+    .command-thread-room
+    .message[data-kind="agentMessage"]
+    .markdown-content
+    .mermaid-block {
+    width: 100%;
+    margin-block: 14px 16px;
+  }
+
+  .screen-shell.command-screen
+    .command-thread-room
+    .message[data-kind="agentMessage"]
+    .markdown-content
+    .mermaid-diagram {
+    padding: 12px;
+  }
+
+  .screen-shell.command-screen
+    .command-thread-room
+    .message[data-kind="agentMessage"]
+    .markdown-content
+    .mermaid-streaming-placeholder {
+    grid-template-columns:
+      minmax(44px, 72px) minmax(12px, 34px) minmax(44px, 72px)
+      minmax(12px, 34px) minmax(44px, 72px);
+    min-height: 150px;
+    padding-inline: 14px;
+  }
 }
 
 .screen-shell.command-screen .command-thread-room .turn-process-details {
@@ -15187,8 +15479,8 @@ button.library-item:hover .library-card-chevron {
   }
 
   .screen-shell.command-screen .command-thread-toolbar {
-    align-items: flex-start;
-    flex-wrap: wrap;
+    align-items: center;
+    flex-wrap: nowrap;
     gap: 6px 10px;
   }
 
@@ -15833,69 +16125,15 @@ button.library-item:hover .library-card-chevron {
   font-size: calc(12px + var(--user-ui-font-delta));
 }
 
-/* Knowledge keeps its title, filters, search, and refresh action on one 64px row. */
-.screen-shell.command-screen .knowledge-catalog-header {
-  grid-template-columns: auto auto minmax(240px, 1fr);
-  box-sizing: border-box;
-  min-height: 64px;
-  gap: 16px;
-  padding-block: 8px;
-  border-bottom: 1px solid var(--n-250);
+/* Knowledge ownership badges share the pill shape with local/cloud badges. */
+.screen-shell.command-screen .catalog-location-badge.is-mine {
+  background: var(--n-150);
+  color: oklch(40% 0.12 155);
 }
 
-.screen-shell.command-screen .knowledge-catalog-title {
-  display: flex;
-  min-width: 148px;
-  align-items: center;
-  gap: 9px;
-}
-
-.screen-shell.command-screen .knowledge-catalog-title-icon {
-  display: grid;
-  width: var(--control-h-md);
-  height: var(--control-h-md);
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: var(--radius-md);
-  background: var(--n-100);
-  color: var(--n-800);
-}
-
-.screen-shell.command-screen .knowledge-catalog-title-icon svg {
-  width: 16px;
-  height: 16px;
-}
-
-.screen-shell.command-screen .knowledge-catalog-title h1 {
-  margin: 0;
-  font-size: calc(16px + var(--user-ui-font-delta));
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.screen-shell.command-screen .knowledge-catalog-title p {
-  margin: 2px 0 0;
-  color: var(--n-650);
-  font-size: calc(11px + var(--user-ui-font-delta));
-  line-height: 1.3;
-  white-space: nowrap;
-}
-
-.screen-shell.command-screen .knowledge-catalog-location-filter {
-  min-height: var(--control-h-md);
-  margin: 0;
-  white-space: nowrap;
-}
-
-.screen-shell.command-screen .knowledge-catalog-header .catalog-header-actions {
-  flex-wrap: nowrap;
-}
-
-.screen-shell.command-screen
-  .knowledge-catalog-header
-  .catalog-header-actions
-  .catalog-search {
-  max-width: 460px;
+.screen-shell.command-screen .catalog-location-badge.is-market {
+  background: var(--n-150);
+  color: oklch(43% 0.13 248);
 }
 
 /* Wider tracks and clamped copy keep every knowledge card on one density rung. */
@@ -15952,47 +16190,6 @@ button.library-item:hover .library-card-chevron {
   .capability-catalog.knowledge-catalog[data-catalog-filter]
   .catalog-card-actions {
   min-width: var(--control-h-sm);
-}
-
-@container page-stack (max-width: 900px) {
-  .screen-shell.command-screen .knowledge-catalog-header {
-    grid-template-columns: auto minmax(0, 1fr);
-    min-height: auto;
-  }
-
-  .screen-shell.command-screen .knowledge-catalog-location-filter {
-    justify-self: end;
-  }
-
-  .screen-shell.command-screen
-    .knowledge-catalog-header
-    .catalog-header-actions {
-    grid-column: 1 / -1;
-  }
-}
-
-@container page-stack (max-width: 560px) {
-  .screen-shell.command-screen .knowledge-catalog-header {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .screen-shell.command-screen .knowledge-catalog-location-filter {
-    justify-self: start;
-  }
-
-  .screen-shell.command-screen
-    .knowledge-catalog-header
-    .catalog-header-actions {
-    grid-column: auto;
-    flex-wrap: wrap;
-  }
-
-  .screen-shell.command-screen
-    .knowledge-catalog-header
-    .catalog-header-actions
-    .catalog-search {
-    max-width: none;
-  }
 }
 
 .catalog-resource-dialog {

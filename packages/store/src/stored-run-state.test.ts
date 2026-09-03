@@ -138,6 +138,41 @@ test("normalizes legacy absence and fails closed on malformed Workflow binding",
   );
 });
 
+test("preserves legacy Run Plan absence and validates stored snapshots", () => {
+  assert.equal(
+    Object.hasOwn(normalizeStoredRunState(runState(), "corrupt"), "plan"),
+    false,
+  );
+
+  const plan = {
+    schemaVersion: "crewon.run-plan.v0" as const,
+    planId: "run-1",
+    revision: 1,
+    explanation: null,
+    items: [{ itemId: "one", title: "One", status: "pending" as const }],
+    createdAt: "2026-08-09T00:00:01Z",
+    updatedAt: "2026-08-09T00:00:01Z",
+  };
+  assert.deepEqual(
+    normalizeStoredRunState({ ...runState(), plan }, "corrupt").plan,
+    plan,
+  );
+  for (const invalid of [
+    { ...runState(), plan: { ...plan, planId: "run-other" } },
+    { ...runState(), collaborationMode: "plan" as const, plan },
+    { ...runState(), purpose: "manualCompaction" as const, plan },
+    {
+      ...runState(),
+      plan: { ...plan, updatedAt: "2026-08-09T00:00:02Z" },
+    },
+  ]) {
+    assert.throws(
+      () => normalizeStoredRunState(invalid, "corrupt"),
+      hasCode("corrupt"),
+    );
+  }
+});
+
 function runState(): RunState {
   return {
     runId: "run-1",

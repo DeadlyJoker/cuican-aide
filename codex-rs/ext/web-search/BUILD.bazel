@@ -1,9 +1,0 @@
-load("//:defs.bzl", "crewon_rust_crate")
-
-crewon_rust_crate(
-    name = "web-search",
-    crate_name = "crewon_web_search_extension",
-    compile_data = [
-        "web_run_description.md",
-    ],
-)

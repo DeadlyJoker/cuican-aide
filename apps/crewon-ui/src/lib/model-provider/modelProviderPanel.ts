@@ -44,6 +44,7 @@ export const MODEL_PROVIDER_ACTION_IDS = {
   cancel: "model-provider-cancel",
   delete: "model-provider-delete",
   edit: "model-provider-edit",
+  fetchModels: "model-provider-fetch-models",
   refresh: "refresh-model-providers",
   save: "model-provider-save",
   test: "model-provider-test",
@@ -369,12 +370,64 @@ function credentialKindOptions(locale: Locale) {
       ];
 }
 
+function modelListDescription(count: number, locale: Locale): string {
+  return locale === "zh"
+    ? `来自该 Provider /models 接口的 ${count} 个可用模型。列表之外的名字仍可手动保留。`
+    : `${count} models advertised by this provider's /models API. Names outside the list can still be kept.`;
+}
+
+/** Select options for the model field, keeping the current value selectable. */
+export function modelFieldOptions(
+  models: readonly string[],
+  currentValue: string,
+): Array<{ label: string; value: string }> {
+  const values =
+    currentValue.length > 0 && !models.includes(currentValue)
+      ? [currentValue, ...models]
+      : [...models];
+  return values.map((value) => ({ label: value, value }));
+}
+
+/**
+ * Merges fetched models into a rendered form panel's model field.
+ *
+ * Applies in place so concurrent edits in other fields survive; an empty list
+ * leaves the text input untouched (the caller surfaces the fetch failure).
+ */
+export function applyModelOptionsToPanel(
+  panel: CapabilityPanel | null,
+  models: readonly string[],
+  locale: Locale,
+): CapabilityPanel | null {
+  if (panel === null || models.length === 0) return panel;
+  return {
+    ...panel,
+    fields: panel.fields?.map((field) =>
+      field.id === MODEL_PROVIDER_FIELD_IDS.modelId
+        ? {
+            ...field,
+            description: modelListDescription(models.length, locale),
+            options: modelFieldOptions(
+              models,
+              field.value.trim().length > 0 ? field.value : models[0],
+            ),
+            value: field.value.trim().length > 0 ? field.value : models[0],
+          }
+        : field,
+    ),
+  };
+}
+
 /**
  * Form for adding or editing one provider.
  *
  * `entry` is null when adding. When editing, the id is shown but not editable:
  * renaming it would mean writing a new table entry and deleting the old one,
  * which is a move rather than an edit.
+ *
+ * A provider is not one model: when `modelOptions` is non-empty the model field
+ * becomes a select over the models the provider advertises, with the current
+ * value kept selectable even when it is not advertised.
  */
 export function modelProviderFormPanel(params: {
   allowAccountProvider?: boolean;
@@ -382,6 +435,7 @@ export function modelProviderFormPanel(params: {
   error?: string | null;
   isSelected: boolean;
   locale: Locale;
+  modelOptions?: readonly string[];
 }): CapabilityPanel {
   const {
     allowAccountProvider = true,
@@ -389,6 +443,7 @@ export function modelProviderFormPanel(params: {
     error = null,
     isSelected,
     locale,
+    modelOptions = [],
   } = params;
   const isEditing = entry !== null;
   const vendors = allowAccountProvider
@@ -458,11 +513,22 @@ export function modelProviderFormPanel(params: {
             ? "模型 ID / LiteLLM 模型别名"
             : "Model ID / LiteLLM model alias",
         description:
-          locale === "zh"
-            ? "发送给 Provider 的模型名。使用 LiteLLM 时填写 config.yaml 中的 model_name，例如 claude-sonnet 或 deepseek-coder。"
-            : "Model name sent to the provider. For LiteLLM, use the model_name from config.yaml, such as claude-sonnet or deepseek-coder.",
+          modelOptions.length > 0
+            ? modelListDescription(modelOptions.length, locale)
+            : locale === "zh"
+              ? "发送给 Provider 的模型名。可点击「获取模型列表」查询该 Provider 实际可用的模型；使用 LiteLLM 时也支持 config.yaml 中的 model_name。"
+              : "Model name sent to the provider. Use \u201cFetch model list\u201d to query the models this provider actually advertises; LiteLLM model_name aliases are also accepted.",
         placeholder: "claude-sonnet",
         value: entry?.modelId ?? "",
+        ...(modelOptions.length > 0
+          ? {
+              options: modelFieldOptions(
+                modelOptions,
+                entry?.modelId || modelOptions[0],
+              ),
+              value: entry?.modelId || modelOptions[0],
+            }
+          : {}),
       },
       {
         id: MODEL_PROVIDER_FIELD_IDS.credentialKind,
@@ -507,6 +573,10 @@ export function modelProviderFormPanel(params: {
       },
     ],
     actions: [
+      {
+        id: MODEL_PROVIDER_ACTION_IDS.fetchModels,
+        label: locale === "zh" ? "获取模型列表" : "Fetch model list",
+      },
       {
         id: MODEL_PROVIDER_ACTION_IDS.save,
         label: locale === "zh" ? "保存" : "Save",

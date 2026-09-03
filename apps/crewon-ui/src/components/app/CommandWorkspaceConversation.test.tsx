@@ -2,9 +2,85 @@ import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 
+import {
+  createStreamingTextBuffer,
+  type StreamingTextByThread,
+  type StreamingTextFrameScheduler,
+} from "../../lib/thread/threadStreamingTextBuffer";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
 
+function manualFrameScheduler() {
+  const callbacks = new Map<number, () => void>();
+  let nextHandle = 1;
+  const scheduler: StreamingTextFrameScheduler = {
+    cancelFrame: (handle) => {
+      callbacks.delete(handle);
+    },
+    requestFrame: (callback) => {
+      const handle = nextHandle;
+      nextHandle += 1;
+      callbacks.set(handle, callback);
+      return handle;
+    },
+  };
+
+  return {
+    callbacks,
+    flushNext: () => {
+      const [handle, callback] = callbacks.entries().next().value ?? [];
+      if (!handle || !callback) return;
+      callbacks.delete(handle);
+      callback();
+    },
+    scheduler,
+  };
+}
+
 describe("CommandThreadRoom", () => {
+  it("renders a bursty control reply as partial streaming text before the final frame", () => {
+    const thread = {
+      id: "control-thread-streaming",
+      cwd: "/repo/frontend",
+      turns: [
+        {
+          id: "control-run-streaming",
+          status: "inProgress",
+          items: [],
+        },
+      ],
+    } as unknown as Thread;
+    const frames = manualFrameScheduler();
+    let streamingTextByThread: StreamingTextByThread = {};
+    const buffer = createStreamingTextBuffer((updater) => {
+      streamingTextByThread = updater(streamingTextByThread);
+    }, frames.scheduler);
+    const burst = `${"答".repeat(395)}[VISIBLE-END]`;
+
+    buffer.append(thread.id, burst);
+    frames.flushNext();
+
+    const streamingText = streamingTextByThread[thread.id] ?? "";
+    const markup = renderToStaticMarkup(
+      <CommandThreadRoom
+        activeTurnId="control-run-streaming"
+        cwd="/repo/frontend"
+        locale="zh"
+        selectedThread={thread}
+        streamingText={streamingText}
+        workMode="code"
+        onModeChange={() => undefined}
+      />,
+    );
+
+    expect(markup).toMatchSnapshot();
+    expect(streamingText).toBe("答".repeat(12));
+    expect(markup).toContain("答".repeat(12));
+    expect(markup).not.toContain("VISIBLE-END");
+
+    while (frames.callbacks.size > 0) frames.flushNext();
+    expect(streamingTextByThread[thread.id]).toBe(burst);
+  });
+
   it("snapshots a durable Cloud Agent result as a standard conversation", () => {
     const thread = {
       id: "cloud-thread-1",

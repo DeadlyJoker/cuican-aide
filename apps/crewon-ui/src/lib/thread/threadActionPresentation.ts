@@ -52,12 +52,81 @@ export function threadDeleteArchivedConfirmMessage(
     : `Permanently delete archived session "${title}"? This cannot be undone.`;
 }
 
+export function workspaceArchiveConfirmMessage(
+  workspaceName: string,
+  count: number,
+  locale: Locale,
+): string {
+  return locale === "zh"
+    ? `归档工作空间「${workspaceName}」下的 ${count} 个会话？`
+    : `Archive ${count} session${count === 1 ? "" : "s"} in workspace "${workspaceName}"?`;
+}
+
+export function workspaceDeleteConfirmMessage(
+  workspaceName: string,
+  count: number,
+  locale: Locale,
+): string {
+  return locale === "zh"
+    ? `永久删除工作空间「${workspaceName}」下的 ${count} 个会话？此操作无法撤销。`
+    : `Permanently delete ${count} session${count === 1 ? "" : "s"} in workspace "${workspaceName}"? This cannot be undone.`;
+}
+
+export function workspaceArchivedNotice(
+  workspaceName: string,
+  count: number,
+  locale: Locale,
+): NoticeState {
+  return {
+    text:
+      locale === "zh"
+        ? `已归档工作空间「${workspaceName}」下的 ${count} 个会话`
+        : `Archived ${count} session${count === 1 ? "" : "s"} in workspace "${workspaceName}"`,
+    tone: "success",
+  };
+}
+
+export function workspaceDeletedNotice(
+  workspaceName: string,
+  count: number,
+  locale: Locale,
+): NoticeState {
+  return {
+    text:
+      locale === "zh"
+        ? `已删除工作空间「${workspaceName}」下的 ${count} 个会话`
+        : `Deleted ${count} session${count === 1 ? "" : "s"} in workspace "${workspaceName}"`,
+    tone: "success",
+  };
+}
+
+export function workspaceArchiveFailureNotice(
+  error: unknown,
+  locale: Locale,
+): NoticeState {
+  return warningNotice(
+    error,
+    locale === "zh" ? "批量归档会话失败" : "Unable to archive sessions",
+  );
+}
+
+export function workspaceDeleteFailureNotice(
+  error: unknown,
+  locale: Locale,
+): NoticeState {
+  return warningNotice(
+    error,
+    locale === "zh" ? "批量删除会话失败" : "Unable to delete sessions",
+  );
+}
+
 export function threadDeletedNotice(
   title: string,
   locale: Locale,
 ): NoticeState {
   return {
-    text: locale === "zh" ? `已删除会话：${title}` : `Deleted session: ${title}`,
+    text:
+      locale === "zh" ? `已删除会话：${title}` : `Deleted session: ${title}`,
     tone: "success",
   };
 }
@@ -80,10 +149,7 @@ export function assistantThreadClearConfirmMessage(locale: Locale): string {
 
 export function assistantThreadClearedNotice(locale: Locale): NoticeState {
   return {
-    text:
-      locale === "zh"
-        ? "助理会话已清理"
-        : "Assistant conversation cleared",
+    text: locale === "zh" ? "助理会话已清理" : "Assistant conversation cleared",
     tone: "success",
   };
 }
@@ -140,7 +206,10 @@ export function threadCreateFailureNotice(
 
 export function threadGuidanceAppendedNotice(locale: Locale): NoticeState {
   return {
-    text: locale === "zh" ? "已追加到当前任务" : "Added guidance to the current turn",
+    text:
+      locale === "zh"
+        ? "已追加到当前任务"
+        : "Added guidance to the current turn",
     tone: "success",
   };
 }

@@ -19,6 +19,7 @@ import {
   RunApplicationService,
   RunExecutionService,
   ThreadApplicationService,
+  ThreadTaskChangeQueryService,
   ThreadGoalApplicationService,
   ThreadRollbackApplicationService,
   ToolApprovalApplicationService,
@@ -46,8 +47,10 @@ import type {
   GetAutomationResponse,
   GetModelProviderSettingsResponse,
   GetOfficeResponse,
+  GetRunPlanResponse,
   GetThreadResponse,
   GetThreadGoalResponse,
+  ThreadTaskChangeLedgerResponse,
   ListThreadMessagesResponse,
   ListAgentVersionsResponse,
   ListAutomationsResponse,
@@ -85,6 +88,7 @@ import type { FastifyInstance } from "fastify";
 import { buildControlApi } from "./control-api.ts";
 import { AutomationScheduler } from "./automation-scheduler.ts";
 import { OutboxDispatcher } from "./outbox-dispatcher.ts";
+import type { ThreadSandboxPort } from "./pim-sandbox-client.ts";
 import { RunEventHub } from "./run-event-hub.ts";
 import type { ThreadEventPoller } from "./thread-event-stream.ts";
 import type { ThreadGoalEventPoller } from "./thread-goal-event-stream.ts";
@@ -106,6 +110,128 @@ import {
 const SESSION_TOKEN = "session-token-32-bytes-minimum-0001";
 const CSRF_TOKEN = "csrf-token-32-bytes-minimum-value-1";
 const ORIGIN = "http://127.0.0.1:5175";
+
+test("returns Git details from diff routes and the global summary", async (context) => {
+  const expected = {
+    cwd: "/workspace" as const,
+    diff: "diff --git a/src/task.ts b/src/task.ts\n",
+    isGitRepository: true,
+    branch: "feature/task-detail",
+    head: "a".repeat(40),
+    changedFiles: 1,
+    additions: 2,
+    deletions: 1,
+    statsComplete: true,
+    diffTruncated: false,
+  };
+  let reads = 0;
+  let summaryReads = 0;
+  const sandbox: ThreadSandboxPort = {
+    listDirectory: async () => {
+      throw new Error("unexpected_list_directory");
+    },
+    readFile: async () => {
+      throw new Error("unexpected_read_file");
+    },
+    readDiff: async () => {
+      reads += 1;
+      return expected;
+    },
+    readGitSummary: async () => {
+      summaryReads += 1;
+      return {
+        cwd: expected.cwd,
+        isGitRepository: expected.isGitRepository,
+        branch: expected.branch,
+        head: expected.head,
+        changedFiles: expected.changedFiles,
+        additions: expected.additions,
+        deletions: expected.deletions,
+        statsComplete: expected.statsComplete,
+        diff: "must-not-cross-the-http-boundary",
+      };
+    },
+    runCommand: async () => {
+      throw new Error("unexpected_run_command");
+    },
+  };
+  const runtime = await testRuntime(context, { sandbox });
+
+  const globalResponse = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/sandbox/diff",
+    headers: readHeaders(),
+  });
+  assert.equal(globalResponse.statusCode, 200, globalResponse.body);
+  assert.deepEqual(globalResponse.json(), expected);
+
+  const createdThread = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/threads",
+    headers: jsonMutationHeaders("sandbox-diff-thread"),
+    payload: { title: "Sandbox diff" },
+  });
+  assert.equal(createdThread.statusCode, 201, createdThread.body);
+  const threadId = createdThread.json<ThreadMutationResponse>().thread.threadId;
+  const threadResponse = await runtime.app.inject({
+    method: "GET",
+    url: `/api/v1/threads/${threadId}/sandbox/diff`,
+    headers: readHeaders(),
+  });
+  assert.equal(threadResponse.statusCode, 200, threadResponse.body);
+  assert.deepEqual(threadResponse.json(), expected);
+  assert.equal(reads, 2);
+
+  const threadScopedSummary = await runtime.app.inject({
+    method: "GET",
+    url: `/api/v1/threads/${threadId}/sandbox/git-summary`,
+    headers: readHeaders(),
+  });
+  assertError(threadScopedSummary, 404, "notFound", "route_not_found");
+  assert.equal(summaryReads, 0);
+
+  const unauthenticatedSummary = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/sandbox/git-summary",
+  });
+  assertError(unauthenticatedSummary, 401, "authentication", "session_invalid");
+  assert.equal(summaryReads, 0);
+
+  const summaryResponse = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/sandbox/git-summary",
+    headers: readHeaders(),
+  });
+  assert.equal(summaryResponse.statusCode, 200, summaryResponse.body);
+  assert.deepEqual(summaryResponse.json(), {
+    cwd: expected.cwd,
+    isGitRepository: expected.isGitRepository,
+    branch: expected.branch,
+    head: expected.head,
+    changedFiles: expected.changedFiles,
+    additions: expected.additions,
+    deletions: expected.deletions,
+    statsComplete: expected.statsComplete,
+  });
+  assert.equal(summaryReads, 1);
+});
+
+test("fails closed when the global workspace Git authority is unavailable", async (context) => {
+  const runtime = await testRuntime(context);
+
+  const response = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/sandbox/git-summary",
+    headers: readHeaders(),
+  });
+
+  assertError(
+    response,
+    503,
+    "deviceUnavailable",
+    "workspace_command_factory_unavailable",
+  );
+});
 
 test("creates, replays, lists, and reads a Control Office definition", async (context) => {
   const runtime = await testRuntime(context);
@@ -970,6 +1096,58 @@ test("streams durable Goal catch-up and polling across clear and reconnect witho
   await foreignApp.close();
 });
 
+test("serves an authorized revision-bound Thread task-change ledger", async (context) => {
+  const runtime = await testRuntime(context);
+  const created = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/threads",
+    headers: mutationHeaders("task-change-thread-1"),
+    payload: { title: "Task changes" },
+  });
+  assert.equal(created.statusCode, 201, created.body);
+
+  const response = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/threads/thread-1/task-changes",
+    headers: readHeaders(),
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  assert.deepEqual(response.json<ThreadTaskChangeLedgerResponse>(), {
+    schemaVersion: "crewon.thread-task-change-ledger.v0",
+    threadId: "thread-1",
+    threadRevision: 1,
+    historySequence: 0,
+    complete: true,
+    summary: {
+      schemaVersion: "crewon.workspace-change-summary.v0",
+      paths: [],
+      additions: 0,
+      deletions: 0,
+      statsComplete: true,
+    },
+    eventCount: 0,
+    includedRunIds: [],
+  });
+
+  const foreignApp = buildControlApi({
+    ...runtime.dependencies,
+    identity: {
+      resolveActor: async () => ({
+        principalId: "foreign-principal",
+        actorId: "foreign-actor",
+        tenantId: "foreign-tenant",
+        spaceId: "foreign-space",
+      }),
+    },
+  });
+  context.after(() => foreignApp.close());
+  const hidden = await foreignApp.inject({
+    method: "GET",
+    url: "/api/v1/threads/thread-1/task-changes",
+  });
+  assertError(hidden, 404, "notFound", "thread_not_found");
+});
+
 test("admits Plan as a one-Run mode without creating a persistent Goal", async (context) => {
   const runtime = await testRuntime(context);
   const createdThread = await runtime.app.inject({
@@ -1148,6 +1326,18 @@ test("serves health and strict authenticated Run create/get/cancel commands", as
   });
   assert.equal(read.statusCode, 200);
   assert.deepEqual(read.json(), { run: createdBody.run });
+
+  const plan = await runtime.app.inject({
+    method: "GET",
+    url: `/api/v1/runs/${createdBody.run.runId}/plan`,
+    headers: readHeaders(),
+  });
+  assert.equal(plan.statusCode, 200, plan.body);
+  assert.deepEqual(plan.json<GetRunPlanResponse>(), {
+    runId: createdBody.run.runId,
+    eventSequence: createdBody.run.lastSequence,
+    plan: null,
+  });
 
   const canceled = await runtime.app.inject({
     method: "POST",
@@ -1894,12 +2084,30 @@ test("fails closed on missing identity, origin, CSRF and injected authority fiel
   });
   assertError(unauthenticatedStream, 401, "authentication", "session_invalid");
 
+  const unauthenticatedPlan = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/runs/run-1/plan",
+  });
+  assertError(unauthenticatedPlan, 401, "authentication", "session_invalid");
+
   const invalidCursor = await runtime.app.inject({
     method: "GET",
     url: "/api/v1/runs/run-1/events",
     headers: { ...readHeaders(), "last-event-id": "not-a-sequence" },
   });
   assertError(invalidCursor, 400, "validation", "last_event_id_invalid");
+
+  const invalidEventExtension = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/runs/run-1/events?extensions=future",
+    headers: readHeaders(),
+  });
+  assertError(
+    invalidEventExtension,
+    400,
+    "validation",
+    "run_event_extensions_invalid",
+  );
 
   const missingRoute = await runtime.app.inject({
     method: "GET",
@@ -2048,7 +2256,11 @@ test("publishes, replays and discovers immutable tenant AgentVersions", async (c
     method: "POST",
     url: "/api/v1/runs",
     headers: mutationHeaders("selected-version-run"),
-    payload: { threadId, agentVersionId: "agent-version-api-1" },
+    payload: {
+      threadId,
+      agentVersionId: "agent-version-api-1",
+      toolPermissionMode: "fullAccess",
+    },
   });
   assert.equal(selected.statusCode, 201, selected.body);
   const selectedRunId = selected.json<RunMutationResponse>().run.runId;
@@ -2061,6 +2273,7 @@ test("publishes, replays and discovers immutable tenant AgentVersions", async (c
   assert.equal(storedRun?.runtimeGeneration, "ts-v0");
   assert.equal(storedRun?.policySnapshotId, "policy-api-1");
   assert.equal(storedRun?.workspaceBindingId, null);
+  assert.equal(storedRun?.toolPermissionMode, "fullAccess");
 
   const notAdmittedSource = {
     ...source,
@@ -2606,6 +2819,81 @@ test("disconnects a slow Run event subscriber at its hard queue limit", async ()
   hub.close();
 });
 
+test("filters unnegotiated Run Plan SSE while advancing to the next durable event", async (context) => {
+  const runtime = await testRuntime(context);
+  await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/threads",
+    headers: mutationHeaders("plan-stream-thread"),
+    payload: { title: null },
+  });
+  const created = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/runs",
+    headers: mutationHeaders("plan-stream-run"),
+    payload: { threadId: "thread-1" },
+  });
+  assert.equal(created.statusCode, 201, created.body);
+  const claim = await runtime.store.claimNextWorkItem({
+    ownerId: "plan-stream-worker",
+    leaseId: "plan-stream-lease",
+    leaseDurationMs: 10_000,
+  });
+  assert.ok(claim !== null);
+  await runtime.execution.startRun(claim);
+  const updated = await runtime.execution.executeRunPlanTool(claim, {
+    schemaVersion: "crewon.agent-event.v0",
+    runId: "run-1",
+    segmentId: "segment-1",
+    sequence: 1,
+    type: "tool.requested",
+    data: {
+      callId: "private-call-1",
+      kind: "function",
+      name: "update_plan",
+      input: JSON.stringify({
+        items: [{ id: "design", title: "Design", status: "in_progress" }],
+      }),
+    },
+  });
+  assert.equal(updated.changed, true);
+  await runtime.execution.failRun(
+    claim,
+    { code: "test_terminal", retryable: false },
+    null,
+  );
+
+  await runtime.app.listen({ host: "127.0.0.1", port: 0 });
+  const baseUrl = serverBaseUrl(runtime.app);
+  const legacy = await fetch(`${baseUrl}/api/v1/runs/run-1/events`, {
+    headers: { ...readHeaders(), "last-event-id": "2" },
+  });
+  assert.equal(legacy.status, 200);
+  const legacyBody = await legacy.text();
+  assert.doesNotMatch(legacyBody, /run\.plan\.updated/u);
+  assert.match(legacyBody, /id: 4\nevent: run\.failed/u);
+
+  const extended = await fetch(
+    `${baseUrl}/api/v1/runs/run-1/events?extensions=run-plan-v1`,
+    { headers: { ...readHeaders(), "last-event-id": "2" } },
+  );
+  assert.equal(extended.status, 200);
+  const extendedBody = await extended.text();
+  assert.match(extendedBody, /id: 3\nevent: run\.plan\.updated/u);
+  assert.match(extendedBody, /id: 4\nevent: run\.failed/u);
+  assert.doesNotMatch(extendedBody, /private-call-1/u);
+
+  const hydrated = await fetch(`${baseUrl}/api/v1/runs/run-1/plan`, {
+    headers: readHeaders(),
+  });
+  assert.equal(hydrated.status, 200);
+  assert.deepEqual(await hydrated.json(), {
+    runId: "run-1",
+    eventSequence: 4,
+    plan: updated.plan,
+  });
+});
+
 test("matches AR-006 client visibility while retaining the full durable audit", () => {
   const reference = JSON.parse(
     readFileSync(
@@ -2657,9 +2945,16 @@ test("matches AR-006 client visibility while retaining the full durable audit", 
       ? [projected.data.samplingAttempt]
       : [];
   });
+  const transcript = events.flatMap((event) => {
+    const projected = projectRunEventForView(event, "transcript");
+    return projected?.type === "model.sampling.retry"
+      ? [projected.data.samplingAttempt]
+      : [];
+  });
 
   assert.deepEqual(audit, reference.fallback.debugVisibleRetryAttempts);
   assert.deepEqual(client, reference.fallback.releaseVisibleRetryAttempts);
+  assert.deepEqual(transcript, reference.fallback.debugVisibleRetryAttempts);
 });
 
 test("projects provider continuation metadata in client and audit views", () => {
@@ -2697,9 +2992,174 @@ test("projects provider continuation metadata in client and audit views", () => 
   assert.deepEqual(projectRunEventForView(event, "audit"), expected);
 });
 
+test("publishes Run Plan snapshots only through the negotiated extension", () => {
+  const event: Extract<RunLifecycleEvent, { type: "run.plan.updated" }> = {
+    schemaVersion: "crewon.run-event.v0",
+    identity: { runId: "run-1" },
+    eventId: "event-plan-updated-1",
+    sequence: 4,
+    occurredAt: "2026-09-02T00:00:04Z",
+    type: "run.plan.updated",
+    data: {
+      callId: "internal-call-1",
+      plan: {
+        schemaVersion: "crewon.run-plan.v0",
+        planId: "run-1",
+        revision: 1,
+        explanation: null,
+        items: [{ itemId: "design", title: "Design", status: "inProgress" }],
+        createdAt: "2026-09-02T00:00:04Z",
+        updatedAt: "2026-09-02T00:00:04Z",
+      },
+    },
+  };
+
+  assert.equal(projectRunEventForView(event, "client"), null);
+  assert.equal(projectRunEventForView(event, "audit"), null);
+  const projected = projectRunEventForView(event, "client", ["run-plan-v1"]);
+  assert.deepEqual(projected, {
+    eventId: "event-plan-updated-1",
+    runId: "run-1",
+    sequence: 4,
+    occurredAt: "2026-09-02T00:00:04Z",
+    type: "run.plan.updated",
+    data: { plan: event.data.plan },
+  });
+  assert.equal(JSON.stringify(projected).includes("internal-call-1"), false);
+});
+
+test("projects bounded Tool previews only for the transcript event view", () => {
+  const requested: Extract<RunLifecycleEvent, { type: "tool.requested" }> = {
+    schemaVersion: "crewon.run-event.v0",
+    identity: { runId: "run-tool-preview" },
+    eventId: "event-tool-requested",
+    sequence: 1,
+    occurredAt: "2026-08-08T00:00:01Z",
+    type: "tool.requested",
+    data: {
+      segmentId: "segment-1",
+      segmentSequence: 1,
+      callId: "call-1",
+      kind: "function",
+      name: "read_file",
+      input: '{"path":"README.md"}',
+    },
+  };
+  const completed: Extract<RunLifecycleEvent, { type: "tool.completed" }> = {
+    schemaVersion: "crewon.run-event.v0",
+    identity: { runId: "run-tool-preview" },
+    eventId: "event-tool-completed",
+    sequence: 2,
+    occurredAt: "2026-08-08T00:00:02Z",
+    type: "tool.completed",
+    data: {
+      segmentId: "segment-1",
+      segmentSequence: 2,
+      callId: "call-1",
+      kind: "function",
+      name: "read_file",
+      output: "workspace result",
+      isError: false,
+      artifactRef: "artifact-secret",
+      outputTruncated: false,
+      workspaceChanges: {
+        schemaVersion: "crewon.workspace-change-summary.v0",
+        paths: ["src/task.ts"],
+        additions: 5,
+        deletions: 2,
+        statsComplete: true,
+      },
+    },
+  };
+
+  assert.deepEqual(
+    projectRunEventForView(requested, "client"),
+    projectRunEvent(requested),
+  );
+  assert.deepEqual(
+    projectRunEventForView(requested, "audit"),
+    projectRunEvent(requested),
+  );
+  assert.deepEqual(projectRunEventForView(requested, "transcript"), {
+    ...projectRunEvent(requested),
+    data: {
+      ...projectRunEvent(requested).data,
+      inputPreview: '{"path":"README.md"}',
+      inputTruncated: false,
+    },
+  });
+  assert.deepEqual(
+    projectRunEventForView(completed, "client"),
+    projectRunEvent(completed),
+  );
+  assert.deepEqual(
+    projectRunEventForView(completed, "audit"),
+    projectRunEvent(completed),
+  );
+  const transcriptCompleted = projectRunEventForView(completed, "transcript");
+  assert.deepEqual(transcriptCompleted, {
+    ...projectRunEvent(completed),
+    data: {
+      ...projectRunEvent(completed).data,
+      outputPreview: "workspace result",
+      workspaceChanges: completed.data.workspaceChanges,
+    },
+  });
+  assert.equal(
+    JSON.stringify(transcriptCompleted).includes("artifact-secret"),
+    false,
+  );
+  assert.deepEqual(
+    transcriptCompleted?.type === "tool.completed"
+      ? transcriptCompleted.data.workspaceChanges
+      : undefined,
+    completed.data.workspaceChanges,
+  );
+
+  const oversized = "x".repeat(20 * 1024);
+  const requestedPreview = projectRunEventForView(
+    { ...requested, data: { ...requested.data, input: oversized } },
+    "transcript",
+  );
+  assert.equal(requestedPreview?.type, "tool.requested");
+  if (requestedPreview?.type !== "tool.requested") {
+    assert.fail("expected transcript Tool request");
+  }
+  assert.equal(requestedPreview.data.inputTruncated, true);
+  const inputPreview = requestedPreview.data.inputPreview;
+  if (typeof inputPreview !== "string") {
+    assert.fail("expected transcript Tool input preview");
+  }
+  assert.equal(
+    new TextEncoder().encode(inputPreview).byteLength <= 16 * 1024,
+    true,
+  );
+  assert.match(inputPreview, /preview truncated/u);
+
+  const completedPreview = projectRunEventForView(
+    { ...completed, data: { ...completed.data, output: oversized } },
+    "transcript",
+  );
+  assert.equal(completedPreview?.type, "tool.completed");
+  if (completedPreview?.type !== "tool.completed") {
+    assert.fail("expected transcript Tool completion");
+  }
+  assert.equal(completedPreview.data.outputTruncated, true);
+  const outputPreview = completedPreview.data.outputPreview;
+  if (typeof outputPreview !== "string") {
+    assert.fail("expected transcript Tool output preview");
+  }
+  assert.equal(
+    new TextEncoder().encode(outputPreview).byteLength <= 16 * 1024,
+    true,
+  );
+  assert.match(outputPreview, /preview truncated/u);
+});
+
 async function testRuntime(
   context: TestContext,
   options: Readonly<{
+    sandbox?: ThreadSandboxPort | null;
     threadEventPoller?: ThreadEventPoller;
     threadGoalEventPoller?: ThreadGoalEventPoller;
   }> = {},
@@ -2876,6 +3336,7 @@ async function testRuntime(
     store,
     authorization,
   });
+  const taskChanges = new ThreadTaskChangeQueryService({ store, threads });
   const outboxDispatcher = new OutboxDispatcher(
     { store, eventHub },
     {
@@ -2889,6 +3350,7 @@ async function testRuntime(
     application,
     offices,
     threads,
+    taskChanges,
     goals,
     providerSettings,
     providerProbes,
@@ -2904,6 +3366,7 @@ async function testRuntime(
     automations,
     workspaceLists: null,
     workspaceQueries,
+    sandbox: options.sandbox,
     agentVersionDigester: digester,
     workflowVersionDigester: digester,
     clock,

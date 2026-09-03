@@ -1,69 +1,15 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`command workspace catalog style > snapshots the compact knowledge header and card density 1`] = `
-"/* Knowledge keeps its title, filters, search, and refresh action on one 64px row. */
-.screen-shell.command-screen .knowledge-catalog-header {
-  grid-template-columns: auto auto minmax(240px, 1fr);
-  box-sizing: border-box;
-  min-height: 64px;
-  gap: 16px;
-  padding-block: 8px;
-  border-bottom: 1px solid var(--n-250);
+exports[`command workspace catalog style > snapshots the compact knowledge card density 1`] = `
+"/* Knowledge ownership badges share the pill shape with local/cloud badges. */
+.screen-shell.command-screen .catalog-location-badge.is-mine {
+  background: var(--n-150);
+  color: oklch(40% 0.12 155);
 }
 
-.screen-shell.command-screen .knowledge-catalog-title {
-  display: flex;
-  min-width: 148px;
-  align-items: center;
-  gap: 9px;
-}
-
-.screen-shell.command-screen .knowledge-catalog-title-icon {
-  display: grid;
-  width: var(--control-h-md);
-  height: var(--control-h-md);
-  flex: 0 0 auto;
-  place-items: center;
-  border-radius: var(--radius-md);
-  background: var(--n-100);
-  color: var(--n-800);
-}
-
-.screen-shell.command-screen .knowledge-catalog-title-icon svg {
-  width: 16px;
-  height: 16px;
-}
-
-.screen-shell.command-screen .knowledge-catalog-title h1 {
-  margin: 0;
-  font-size: calc(16px + var(--user-ui-font-delta));
-  font-weight: 600;
-  line-height: 1.2;
-}
-
-.screen-shell.command-screen .knowledge-catalog-title p {
-  margin: 2px 0 0;
-  color: var(--n-650);
-  font-size: calc(11px + var(--user-ui-font-delta));
-  line-height: 1.3;
-  white-space: nowrap;
-}
-
-.screen-shell.command-screen .knowledge-catalog-location-filter {
-  min-height: var(--control-h-md);
-  margin: 0;
-  white-space: nowrap;
-}
-
-.screen-shell.command-screen .knowledge-catalog-header .catalog-header-actions {
-  flex-wrap: nowrap;
-}
-
-.screen-shell.command-screen
-  .knowledge-catalog-header
-  .catalog-header-actions
-  .catalog-search {
-  max-width: 460px;
+.screen-shell.command-screen .catalog-location-badge.is-market {
+  background: var(--n-150);
+  color: oklch(43% 0.13 248);
 }
 
 /* Wider tracks and clamped copy keep every knowledge card on one density rung. */
@@ -120,47 +66,6 @@ exports[`command workspace catalog style > snapshots the compact knowledge heade
   .capability-catalog.knowledge-catalog[data-catalog-filter]
   .catalog-card-actions {
   min-width: var(--control-h-sm);
-}
-
-@container page-stack (max-width: 900px) {
-  .screen-shell.command-screen .knowledge-catalog-header {
-    grid-template-columns: auto minmax(0, 1fr);
-    min-height: auto;
-  }
-
-  .screen-shell.command-screen .knowledge-catalog-location-filter {
-    justify-self: end;
-  }
-
-  .screen-shell.command-screen
-    .knowledge-catalog-header
-    .catalog-header-actions {
-    grid-column: 1 / -1;
-  }
-}
-
-@container page-stack (max-width: 560px) {
-  .screen-shell.command-screen .knowledge-catalog-header {
-    grid-template-columns: minmax(0, 1fr);
-  }
-
-  .screen-shell.command-screen .knowledge-catalog-location-filter {
-    justify-self: start;
-  }
-
-  .screen-shell.command-screen
-    .knowledge-catalog-header
-    .catalog-header-actions {
-    grid-column: auto;
-    flex-wrap: wrap;
-  }
-
-  .screen-shell.command-screen
-    .knowledge-catalog-header
-    .catalog-header-actions
-    .catalog-search {
-    max-width: none;
-  }
 }"
 `;
 

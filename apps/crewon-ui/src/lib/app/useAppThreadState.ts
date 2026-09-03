@@ -54,6 +54,12 @@ export function useAppThreadState() {
     [],
   );
 
+  const waitForStreamingTextDrain = useCallback((threadId: string) => {
+    return (
+      streamingTextBufferRef.current?.whenDrained(threadId) ?? Promise.resolve()
+    );
+  }, []);
+
   useEffect(
     () => () => {
       streamingTextBufferRef.current?.dispose();
@@ -83,5 +89,6 @@ export function useAppThreadState() {
     threadSearchTerm,
     threads,
     threadsRef,
+    waitForStreamingTextDrain,
   };
 }

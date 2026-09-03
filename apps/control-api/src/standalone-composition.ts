@@ -5,6 +5,7 @@ import {
   AutomationApplicationService,
   RunApplicationService,
   ThreadApplicationService,
+  ThreadTaskChangeQueryService,
   ThreadGoalApplicationService,
   ThreadRollbackApplicationService,
   ToolApprovalApplicationService,
@@ -152,6 +153,7 @@ function composeControlApi(
       ids,
       digester,
     });
+    const taskChanges = new ThreadTaskChangeQueryService({ store, threads });
     const turns = new TurnApplicationService({
       store,
       authorization,
@@ -271,6 +273,7 @@ function composeControlApi(
       application,
       offices,
       threads,
+      taskChanges,
       goals,
       turns,
       compactions,

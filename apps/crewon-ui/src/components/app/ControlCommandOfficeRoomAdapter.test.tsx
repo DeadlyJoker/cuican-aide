@@ -3,6 +3,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import type { ControlOfficeDefinitionRecordReference } from "../../lib/office/officePanelFromRecord";
+import { controlTeamDelegationMarker } from "../../lib/control-runtime/controlTeamDelegation";
 import {
   controlOfficeComposerRuntimeSettings,
   createControlCommandOfficeRoomAdapter,
@@ -57,29 +58,36 @@ describe("ControlCommandOfficeRoomAdapter", () => {
     expect(controlOfficeThreadTitle(record)).toBe("💬 产品交付办公室");
   });
 
-  it("keeps the Office target fixed while forwarding composer choices", () => {
-    expect(
-      controlOfficeComposerRuntimeSettings({
+  it("maps every Office permission choice into runtime settings", () => {
+    for (const [permission, approvalPolicy, approvalsReviewer, sandboxMode] of [
+      ["request-approval", "on-request", "user", "workspace-write"],
+      ["approve-for-me", "on-request", "auto_review", "workspace-write"],
+      ["full-access", "never", "user", "danger-full-access"],
+    ] as const) {
+      expect(
+        controlOfficeComposerRuntimeSettings({
+          executionIntent: "plan",
+          model: "gpt-5.6",
+          permission,
+          reasoningEffort: "high",
+          record,
+        }),
+      ).toEqual({
+        ...(approvalPolicy ? { approvalPolicy } : {}),
+        ...(approvalsReviewer ? { approvalsReviewer } : {}),
         executionIntent: "plan",
         model: "gpt-5.6",
-        permission: "full-access",
         reasoningEffort: "high",
-        record,
-      }),
-    ).toEqual({
-      approvalPolicy: "never",
-      executionIntent: "plan",
-      model: "gpt-5.6",
-      reasoningEffort: "high",
-      sandboxMode: "danger-full-access",
-      scene: {
-        executionTarget: { id: "office-version-1", kind: "team" },
-        mode: "coordinate",
-        sceneId: "office",
-      },
-      teamMemberProfiles: [],
-      threadSource: "office",
-    });
+        ...(sandboxMode ? { sandboxMode } : {}),
+        scene: {
+          executionTarget: { id: "office-version-1", kind: "team" },
+          mode: "coordinate",
+          sceneId: "office",
+        },
+        teamMemberProfiles: [],
+        threadSource: "office",
+      });
+    }
   });
 
   it("explains an inactive Office member instead of exposing a runtime code", () => {
@@ -122,9 +130,97 @@ describe("ControlCommandOfficeRoomAdapter", () => {
       ],
     } as unknown as Thread;
 
-    expect(controlOfficeChatMessages(thread, "交付组长", "zh")[0]?.text).toBe(
-      "帮我审阅这份方案",
+    expect(
+      controlOfficeChatMessages(
+        thread,
+        "交付组长",
+        record.definition.members,
+        "zh",
+      )[0]?.text,
+    ).toBe("帮我审阅这份方案");
+  });
+
+  it("attributes a directly mentioned reply to the selected member", () => {
+    const thread = {
+      turns: [
+        {
+          id: "turn-1",
+          startedAt: 1,
+          items: [
+            {
+              id: "message-1",
+              type: "userMessage",
+              content: [{ type: "text", text: "@审阅员工 检查风险" }],
+            },
+            {
+              id: "message-2",
+              type: "agentMessage",
+              text: "发现两个风险。",
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+
+    expect(
+      controlOfficeChatMessages(
+        thread,
+        "交付组长",
+        record.definition.members,
+        "zh",
+      ),
+    ).toEqual([
+      expect.objectContaining({ author: "你", text: "@审阅员工 检查风险" }),
+      expect.objectContaining({ author: "审阅员工", text: "发现两个风险。" }),
+    ]);
+  });
+
+  it("shows the manager delegation followed by the member's direct answer", () => {
+    const marker = controlTeamDelegationMarker("member-review");
+    const thread = {
+      turns: [
+        {
+          id: "turn-1",
+          startedAt: 1,
+          items: [
+            {
+              id: "message-1",
+              type: "userMessage",
+              content: [{ type: "text", text: "检查这次交付" }],
+            },
+            {
+              id: "message-2",
+              type: "agentMessage",
+              text: `@审阅员工 请检查交付风险。\n${marker}`,
+            },
+            {
+              id: "message-3",
+              type: "agentMessage",
+              text: "我检查后发现权限边界缺少验收证据。",
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+
+    const messages = controlOfficeChatMessages(
+      thread,
+      "交付组长",
+      record.definition.members,
+      "zh",
     );
+    expect(messages).toEqual([
+      expect.objectContaining({ author: "你", text: "检查这次交付" }),
+      expect.objectContaining({
+        author: "交付组长",
+        text: "@审阅员工 请检查交付风险。",
+      }),
+      expect.objectContaining({
+        author: "审阅员工",
+        text: "我检查后发现权限边界缺少验收证据。",
+      }),
+    ]);
+    expect(messages).toMatchSnapshot();
   });
 
   it("validates the Control Office before opening its chat", async () => {
@@ -133,7 +229,9 @@ describe("ControlCommandOfficeRoomAdapter", () => {
       client: {
         createOffice: vi.fn(),
         createThread: vi.fn(),
+        getActiveAgentVersionCatalog: vi.fn(),
         getOffice,
+        listOffices: vi.fn(),
       },
       locale: "zh",
       runtime: createRuntime(),
@@ -149,7 +247,9 @@ describe("ControlCommandOfficeRoomAdapter", () => {
       client: {
         createOffice: vi.fn(),
         createThread: vi.fn(),
+        getActiveAgentVersionCatalog: vi.fn(),
         getOffice: vi.fn(async () => null as never),
+        listOffices: vi.fn(),
       },
       locale: "zh",
       runtime: createRuntime(),
@@ -214,10 +314,17 @@ describe("ControlCommandOfficeRoomAdapter", () => {
     expect(markup).toContain('aria-label="选择文件"');
     expect(markup).toContain('aria-label="选择文件夹"');
     expect(markup).toContain('aria-label="权限选择"');
+    expect(markup).toContain("帮我批准");
+    expect(markup).not.toContain("只读工作区");
+    expect(markup).not.toContain('data-workspace-permission="read-only"');
     expect(markup).toContain('aria-label="模型与推理档位"');
     expect(markup).toContain("GPT-5.6 中");
     expect(markup).toContain("目标模式");
     expect(markup).toContain("计划模式");
+    expect(markup).toContain('placeholder="搜索办公室成员"');
+    expect(markup).toContain('data-kind="agent"');
+    expect(markup).toContain('data-label="交付组长"');
+    expect(markup).toContain('data-label="审阅员工"');
     expect(markup).toContain("交付知识库");
     expect(markup).toContain("页面审阅");
     expect(markup).toContain("Filesystem");

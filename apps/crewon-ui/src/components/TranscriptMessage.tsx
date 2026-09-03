@@ -1,3 +1,4 @@
+import { memo, useDeferredValue } from "react";
 import {
   AlertTriangle,
   BookOpen,
@@ -264,7 +265,7 @@ function itemStatus(item: ThreadItem): string | undefined {
   return undefined;
 }
 
-export function TranscriptMessage({
+export const TranscriptMessage = memo(function TranscriptMessage({
   item,
   itemLabels,
   locale,
@@ -303,7 +304,7 @@ export function TranscriptMessage({
       </div>
     </article>
   );
-}
+});
 
 export function combineAgentMessages({
   id,
@@ -340,6 +341,8 @@ export function TranscriptStreamingMessage({
   locale: Locale;
   streamingText: string;
 }) {
+  const deferredStreamingText = useDeferredValue(streamingText);
+
   return (
     <article
       className="message"
@@ -355,11 +358,19 @@ export function TranscriptStreamingMessage({
             {locale === "zh" ? "流式" : "Streaming"}
           </span>
         </div>
-        {renderMarkdown(streamingText)}
+        <TranscriptStreamingMarkdown text={deferredStreamingText} />
       </div>
     </article>
   );
 }
+
+const TranscriptStreamingMarkdown = memo(function TranscriptStreamingMarkdown({
+  text,
+}: {
+  text: string;
+}) {
+  return renderMarkdown(text, { streaming: true });
+});
 
 export function TranscriptThinkingMessage({
   crewonLabel,

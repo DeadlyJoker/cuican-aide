@@ -12,6 +12,7 @@ import type {
   ThreadCompactionApplicationService,
   ThreadGoalApplicationService,
   ThreadRollbackApplicationService,
+  ThreadTaskChangeQueryService,
   ToolApprovalApplicationService,
   TurnApplicationService,
   WorkspaceListApplicationService,
@@ -66,6 +67,7 @@ import {
   parseRollbackThreadRequest,
   parsePublishAgentVersionRequest,
   parseRunId,
+  parseRunEventExtensions,
   parseRunEventViewMode,
   parseRunAutomationNowRequest,
   parseSetThreadGoalRequest,
@@ -91,7 +93,9 @@ import {
   type GetArtifactResponse,
   type GetAutomationResponse,
   type GetRunResponse,
+  type GetRunPlanResponse,
   type GetThreadResponse,
+  type ThreadTaskChangeLedgerResponse,
   type GetThreadGoalResponse,
   type GetToolApprovalResponse,
   type ListThreadRunsResponse,
@@ -152,7 +156,7 @@ import {
   projectAutomationInvocation,
   projectAutomationMutation,
 } from "./automation-projection.ts";
-import { projectRun } from "./run-projection.ts";
+import { projectRun, projectRunPlanSnapshot } from "./run-projection.ts";
 import {
   projectMessage,
   projectThread,
@@ -186,12 +190,16 @@ import {
   projectWorkflowVersion,
   projectWorkflowVersionSummary,
 } from "./workflow-version-projection.ts";
-import type { ThreadSandboxPort } from "./pim-sandbox-client.ts";
+import type {
+  SandboxGitSummaryView,
+  ThreadSandboxPort,
+} from "./pim-sandbox-client.ts";
 
 export type ControlApiDependencies = Readonly<{
   application: RunApplicationService;
   offices?: OfficeApplicationService | null;
   threads: ThreadApplicationService;
+  taskChanges: ThreadTaskChangeQueryService;
   goals: ThreadGoalApplicationService;
   turns: TurnApplicationService;
   compactions: ThreadCompactionApplicationService;
@@ -510,6 +518,21 @@ export function buildControlApi(
         parseThreadId(request.params.threadId),
       );
       const response: GetThreadResponse = projectThreadSnapshot(state);
+      return response;
+    },
+  );
+
+  app.get<{ Params: { threadId: string } }>(
+    "/api/v1/threads/:threadId/task-changes",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const response: ThreadTaskChangeLedgerResponse =
+        await dependencies.taskChanges.getThreadTaskChanges(
+          actor,
+          parseThreadId(request.params.threadId),
+        );
       return response;
     },
   );
@@ -877,6 +900,14 @@ export function buildControlApi(
     return requireThreadSandbox(dependencies.sandbox).readDiff();
   });
 
+  app.get("/api/v1/sandbox/git-summary", async (request) => {
+    await dependencies.identity.resolveActor(requestContext(request));
+    const summary = await requireThreadSandbox(
+      dependencies.sandbox,
+    ).readGitSummary();
+    return projectSandboxGitSummary(summary);
+  });
+
   app.post<{ Body: unknown }>("/api/v1/sandbox/terminal", async (request) => {
     await dependencies.identity.resolveActor(requestContext(request));
     return requireThreadSandbox(dependencies.sandbox).runCommand(
@@ -1050,6 +1081,7 @@ export function buildControlApi(
         content: body.content,
         requestedAgentVersionId: body.agentVersionId,
         executionIntent: body.executionIntent,
+        toolPermissionMode: body.toolPermissionMode ?? "requestApproval",
       };
       const replay = await dependencies.turns.replayTurn(actor, command);
       if (replay !== null) {
@@ -1190,6 +1222,7 @@ export function buildControlApi(
       idempotencyKey,
       threadId: body.threadId,
       route,
+      toolPermissionMode: body.toolPermissionMode ?? "requestApproval",
     });
     wakeOutbox(dependencies.outboxWakeup);
     const response: RunMutationResponse = {
@@ -1521,6 +1554,19 @@ export function buildControlApi(
     },
   );
 
+  app.get<{ Params: { runId: string } }>(
+    "/api/v1/runs/:runId/plan",
+    async (request) => {
+      const actor = await dependencies.identity.resolveActor(
+        requestContext(request),
+      );
+      const runId = parseRunId(request.params.runId);
+      const state = await dependencies.application.getRun(actor, runId);
+      const response: GetRunPlanResponse = projectRunPlanSnapshot(state);
+      return response;
+    },
+  );
+
   app.get<{ Params: { artifactId: string } }>(
     "/api/v1/artifacts/:artifactId",
     async (request) => {
@@ -1640,6 +1686,7 @@ export function buildControlApi(
       runId: parseRunId(request.params.runId),
       afterSequence: parseLastEventSequence(request.headers["last-event-id"]),
       view: parseRunEventViewMode(request.query.view),
+      extensions: parseRunEventExtensions(request.query.extensions),
       heartbeatIntervalMs:
         dependencies.heartbeatIntervalMs === undefined
           ? 15_000
@@ -1722,6 +1769,19 @@ function requireThreadSandbox(
     throw new WorkspaceControlUnavailableError();
   }
   return sandbox;
+}
+
+function projectSandboxGitSummary(summary: SandboxGitSummaryView) {
+  return {
+    cwd: summary.cwd,
+    isGitRepository: summary.isGitRepository,
+    branch: summary.branch,
+    head: summary.head,
+    changedFiles: summary.changedFiles,
+    additions: summary.additions,
+    deletions: summary.deletions,
+    statsComplete: summary.statsComplete,
+  } as const;
 }
 
 function parseSandboxCommandRequest(input: unknown): {

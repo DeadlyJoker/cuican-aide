@@ -332,12 +332,12 @@ export function commandLocalWorkspaceSlashItems(
     {
       content:
         locale === "zh"
-          ? "可用能力：列出文件、读取文件、查看改动、运行界面测试。"
-          : "Available capabilities: list files, read files, inspect changes, and run UI tests.",
+          ? "可用能力：列出文件、读取文件、查看改动、运行界面测试，以及经批准后在工作区执行通用命令。"
+          : "Available capabilities: list files, read files, inspect changes, run UI tests, and execute general workspace commands after approval.",
       detail:
         locale === "zh"
-          ? "读取文件、查看改动并运行界面检查"
-          : "Read files, inspect changes, and run UI checks",
+          ? "读取文件、查看改动并执行工作区命令"
+          : "Read files, inspect changes, and run workspace commands",
       kind: "mcp",
       label: "MCP",
       platformResource: {

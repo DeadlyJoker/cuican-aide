@@ -26,6 +26,7 @@ import type {
   GetArtifactResponse,
   GetModelProviderSettingsResponse,
   GetOfficeResponse,
+  GetRunPlanResponse,
   GetRunResponse,
   GetThreadResponse,
   GetThreadGoalResponse,
@@ -53,6 +54,7 @@ import type {
   StartTurnResponse,
   StartOfficeRunRequest,
   RunEventViewMode,
+  RunEventExtension,
   SetThreadGoalRequest,
   ThreadMutationResponse,
   ThreadHistoryViewMode,
@@ -65,7 +67,16 @@ import type {
   WorkspaceOperationActionRequest,
   WorkspaceOperationMutationResponse,
 } from "@crewon/contracts";
+import {
+  MAX_THREAD_TASK_CHANGE_RESPONSE_BYTES,
+  parseThreadTaskChangeLedgerResponse,
+  type ThreadTaskChangeLedgerResponse,
+} from "@crewon/contracts";
 import { parseRunView, RunViewValidationError } from "./run-view.ts";
+import {
+  parseGetRunPlanResponse,
+  RunPlanViewValidationError,
+} from "./run-plan-view.ts";
 import { WorkspaceControlClient } from "./workspace-control-client.ts";
 import { readBoundedWorkspaceJson } from "./workspace-response-reader.ts";
 
@@ -108,7 +119,29 @@ export type SandboxFileView = Readonly<{
   truncated: boolean;
 }>;
 
-export type SandboxDiffView = Readonly<{ cwd: string; diff: string }>;
+export type SandboxDiffView = Readonly<{
+  cwd: string;
+  diff: string;
+  isGitRepository: boolean | "unknown";
+  branch: string | null;
+  head: string | null;
+  changedFiles: number | null;
+  additions: number | null;
+  deletions: number | null;
+  statsComplete: boolean;
+  diffTruncated: boolean;
+}>;
+
+export type SandboxGitSummaryView = Readonly<{
+  cwd: string;
+  isGitRepository: boolean;
+  branch: string | null;
+  head: string | null;
+  changedFiles: number;
+  additions: number;
+  deletions: number;
+  statsComplete: boolean;
+}>;
 
 export type SandboxCommandView = Readonly<{
   cwd: string;
@@ -118,6 +151,10 @@ export type SandboxCommandView = Readonly<{
 }>;
 
 const MAX_ARTIFACT_DOWNLOAD_BYTES = 1024 * 1024;
+const MAX_RUN_PLAN_RESPONSE_BYTES = 16 * 1024;
+const MAX_SANDBOX_DIFF_BYTES = 256 * 1024;
+const MAX_SANDBOX_GIT_SUMMARY_BYTES = 16 * 1024;
+const MAX_GIT_BRANCH_BYTES = 1_024;
 
 export class ControlApiClient {
   readonly #baseUrl: URL;
@@ -264,6 +301,31 @@ export class ControlApiClient {
     return parseGetThreadResponse(response, threadId);
   }
 
+  async getThreadTaskChanges(
+    threadId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<ThreadTaskChangeLedgerResponse> {
+    const response = await this.#json<unknown>(
+      "GET",
+      `/api/v1/threads/${resourceId(threadId)}/task-changes`,
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_THREAD_TASK_CHANGE_RESPONSE_BYTES,
+      },
+    );
+    try {
+      const parsed = parseThreadTaskChangeLedgerResponse(response);
+      if (parsed.threadId !== threadId) throw new Error("thread_id_mismatch");
+      return parsed;
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_thread_task_changes_invalid",
+      );
+    }
+  }
+
   async listSandboxDirectory(
     threadId: string | null,
     path = "/workspace",
@@ -303,10 +365,99 @@ export class ControlApiClient {
       { ...options, expectedStatuses: [200], maximumResponseBytes: 256 * 1024 },
     );
     const value = plainObject(response, "control_client_sandbox_diff_invalid");
-    if (typeof value.cwd !== "string" || typeof value.diff !== "string") {
+    if (
+      typeof value.cwd !== "string" ||
+      value.cwd.length < 1 ||
+      value.cwd.length > 4_096 ||
+      value.cwd.includes("\0") ||
+      typeof value.diff !== "string" ||
+      new TextEncoder().encode(value.diff).byteLength > MAX_SANDBOX_DIFF_BYTES
+    ) {
       throw new ControlApiProtocolError("control_client_sandbox_diff_invalid");
     }
-    return { cwd: value.cwd, diff: value.diff };
+    const gitKeys = [
+      "isGitRepository",
+      "branch",
+      "head",
+      "changedFiles",
+      "additions",
+      "deletions",
+      "statsComplete",
+      "diffTruncated",
+    ] as const;
+    const presentGitKeys = gitKeys.filter((key) =>
+      Object.prototype.hasOwnProperty.call(value, key),
+    );
+    if (presentGitKeys.length === 0) {
+      return {
+        cwd: value.cwd,
+        diff: value.diff,
+        isGitRepository: "unknown",
+        branch: null,
+        head: null,
+        changedFiles: null,
+        additions: null,
+        deletions: null,
+        statsComplete: false,
+        diffTruncated: false,
+      };
+    }
+    if (
+      presentGitKeys.length !== gitKeys.length ||
+      typeof value.isGitRepository !== "boolean" ||
+      !isGitBranch(value.branch) ||
+      !isGitHead(value.head) ||
+      !isNonNegativeSafeInteger(value.changedFiles) ||
+      !isNonNegativeSafeInteger(value.additions) ||
+      !isNonNegativeSafeInteger(value.deletions) ||
+      typeof value.statsComplete !== "boolean" ||
+      typeof value.diffTruncated !== "boolean" ||
+      (!value.isGitRepository &&
+        (value.branch !== null ||
+          value.head !== null ||
+          value.diff !== "" ||
+          value.changedFiles !== 0 ||
+          value.additions !== 0 ||
+          value.deletions !== 0 ||
+          value.statsComplete ||
+          value.diffTruncated))
+    ) {
+      throw new ControlApiProtocolError("control_client_sandbox_diff_invalid");
+    }
+    return {
+      cwd: value.cwd,
+      diff: value.diff,
+      isGitRepository: value.isGitRepository,
+      branch: value.branch,
+      head: value.head,
+      changedFiles: Number(value.changedFiles),
+      additions: Number(value.additions),
+      deletions: Number(value.deletions),
+      statsComplete: value.statsComplete,
+      diffTruncated: value.diffTruncated,
+    };
+  }
+
+  async readSandboxGitSummary(
+    threadId: null,
+    options: ControlApiRequestOptions = {},
+  ): Promise<SandboxGitSummaryView> {
+    if (threadId !== null) {
+      throw new ControlApiProtocolError(
+        "control_client_sandbox_git_summary_scope_invalid",
+      );
+    }
+    const response = await this.#json<unknown>(
+      "GET",
+      "/api/v1/sandbox/git-summary",
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_SANDBOX_GIT_SUMMARY_BYTES,
+      },
+    );
+    return parseSandboxGitSummaryView(response);
   }
 
   async runSandboxCommand(
@@ -731,6 +882,32 @@ export class ControlApiClient {
     });
   }
 
+  async getRunPlan(
+    runId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetRunPlanResponse> {
+    const response = await this.#json<unknown>(
+      "GET",
+      `/api/v1/runs/${resourceId(runId)}/plan`,
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_RUN_PLAN_RESPONSE_BYTES,
+      },
+    );
+    try {
+      return parseGetRunPlanResponse(response, runId);
+    } catch (error) {
+      if (error instanceof RunPlanViewValidationError) {
+        throw new ControlApiProtocolError(
+          "control_client_run_plan_response_invalid",
+        );
+      }
+      throw error;
+    }
+  }
+
   cancelRun(
     runId: string,
     body: CancelRunRequest,
@@ -909,21 +1086,31 @@ export class ControlApiClient {
     runId: string;
     afterSequence: number;
     view: RunEventViewMode;
+    extensions?: readonly RunEventExtension[];
     signal?: AbortSignal;
   }): Promise<Response> {
     if (!Number.isSafeInteger(input.afterSequence) || input.afterSequence < 0) {
       throw new ControlApiProtocolError("control_client_event_cursor_invalid");
     }
-    if (input.view !== "client" && input.view !== "audit") {
+    if (
+      input.view !== "client" &&
+      input.view !== "audit" &&
+      input.view !== "transcript"
+    ) {
       throw new ControlApiProtocolError("control_client_event_view_invalid");
     }
     const headers = this.#authenticatedHeaders("text/event-stream");
     if (input.afterSequence > 0) {
       headers.set("last-event-id", String(input.afterSequence));
     }
+    const extensions = normalizeRunEventExtensions(input.extensions);
+    const query = new URLSearchParams({ view: input.view });
+    if (extensions.length > 0) {
+      query.set("extensions", extensions.join(","));
+    }
     return this.#fetch(
       new URL(
-        `/api/v1/runs/${resourceId(input.runId)}/events?view=${input.view}`,
+        `/api/v1/runs/${resourceId(input.runId)}/events?${query.toString()}`,
         this.#baseUrl,
       ),
       {
@@ -1276,6 +1463,24 @@ function resourceId(value: string): string {
   return encodeURIComponent(value);
 }
 
+function normalizeRunEventExtensions(
+  value: readonly RunEventExtension[] | undefined,
+): readonly RunEventExtension[] {
+  if (value === undefined) {
+    return [];
+  }
+  if (
+    !Array.isArray(value) ||
+    value.length > 1 ||
+    (value.length === 1 && value[0] !== "run-plan-v1")
+  ) {
+    throw new ControlApiProtocolError(
+      "control_client_event_extensions_invalid",
+    );
+  }
+  return value.length === 0 ? [] : ["run-plan-v1"];
+}
+
 function sandboxResourcePath(
   threadId: string | null,
   resource: "diff" | "file" | "files" | "terminal",
@@ -1421,6 +1626,74 @@ function parseSandboxFileView(input: unknown): SandboxFileView {
     byteLength: Number(value.byteLength),
     truncated: value.truncated,
   };
+}
+
+export function parseSandboxGitSummaryView(
+  input: unknown,
+): SandboxGitSummaryView {
+  const code = "control_client_sandbox_git_summary_invalid";
+  if (
+    !hasExactKeys(input, [
+      "additions",
+      "branch",
+      "changedFiles",
+      "cwd",
+      "deletions",
+      "head",
+      "isGitRepository",
+      "statsComplete",
+    ]) ||
+    input.cwd !== "/workspace" ||
+    typeof input.isGitRepository !== "boolean" ||
+    !isGitBranch(input.branch) ||
+    !isGitHead(input.head) ||
+    !isNonNegativeSafeInteger(input.changedFiles) ||
+    !isNonNegativeSafeInteger(input.additions) ||
+    !isNonNegativeSafeInteger(input.deletions) ||
+    typeof input.statsComplete !== "boolean" ||
+    (!input.isGitRepository &&
+      (input.branch !== null ||
+        input.head !== null ||
+        input.changedFiles !== 0 ||
+        input.additions !== 0 ||
+        input.deletions !== 0 ||
+        input.statsComplete))
+  ) {
+    throw new ControlApiProtocolError(code);
+  }
+  return {
+    cwd: input.cwd,
+    isGitRepository: input.isGitRepository,
+    branch: input.branch,
+    head: input.head,
+    changedFiles: Number(input.changedFiles),
+    additions: Number(input.additions),
+    deletions: Number(input.deletions),
+    statsComplete: input.statsComplete,
+  };
+}
+
+function isGitBranch(value: unknown): value is string | null {
+  return (
+    value === null ||
+    (typeof value === "string" &&
+      value.length > 0 &&
+      new TextEncoder().encode(value).byteLength <= MAX_GIT_BRANCH_BYTES &&
+      value.trim() === value &&
+      !/[\0\r\n]/u.test(value))
+  );
+}
+
+function isGitHead(value: unknown): value is string | null {
+  return (
+    value === null ||
+    (typeof value === "string" &&
+      /^[0-9a-f]{40}(?:[0-9a-f]{24})?$/u.test(value))
+  );
+}
+
+function isNonNegativeSafeInteger(value: unknown): boolean {
+  return Number.isSafeInteger(value) && Number(value) >= 0;
 }
 
 function plainObject(input: unknown, code: string): Record<string, unknown> {

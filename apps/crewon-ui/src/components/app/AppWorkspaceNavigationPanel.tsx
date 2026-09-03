@@ -4,10 +4,8 @@ import { AppWorkspaceNavigation } from "./AppWorkspaceNavigation";
 import type { AppView } from "../../lib/shared/appView";
 import type { ConnectionState } from "../../lib/shared/connectionState";
 import type { LibraryKind } from "../../lib/domain/crewonDomain";
-import {
-  translate,
-  type Locale,
-} from "../../lib/i18n";
+import type { ProjectSessionGroup } from "../SidebarPresentation";
+import { translate, type Locale } from "../../lib/i18n";
 import type { PlatformKind } from "../../lib/platform";
 import type { SettingsSection } from "../../lib/settings/settingsCatalog";
 
@@ -24,8 +22,10 @@ type AppWorkspaceNavigationPanelProps = {
   showArchived: boolean;
   threads: Thread[];
   onArchiveThread: (thread: Thread) => void;
+  onArchiveWorkspaceThreads: (group: ProjectSessionGroup) => void;
   onBackSettings: () => void;
   onDeleteThread: (thread: Thread) => void;
+  onDeleteWorkspaceThreads: (group: ProjectSessionGroup) => void;
   onLibrary: (kind: LibraryKind) => void;
   onNewThread: () => void;
   onRenameThread: (thread: Thread) => void;
@@ -49,8 +49,10 @@ export function AppWorkspaceNavigationPanel({
   showArchived,
   threads,
   onArchiveThread,
+  onArchiveWorkspaceThreads,
   onBackSettings,
   onDeleteThread,
+  onDeleteWorkspaceThreads,
   onLibrary,
   onNewThread,
   onRenameThread,
@@ -73,6 +75,12 @@ export function AppWorkspaceNavigationPanel({
       archiveThreadLabel={locale === "zh" ? "归档会话" : "Archive session"}
       clearSearchLabel={t.clearSearch}
       deleteThreadLabel={locale === "zh" ? "删除会话" : "Delete session"}
+      archiveWorkspaceLabel={
+        locale === "zh" ? "归档工作空间会话" : "Archive workspace sessions"
+      }
+      deleteWorkspaceLabel={
+        locale === "zh" ? "删除工作空间会话" : "Delete workspace sessions"
+      }
       isLoading={connectionState === "connecting" || isSearchingThreads}
       loadingThreadsLabel={t.loadingThreads}
       locale={locale}
@@ -93,8 +101,10 @@ export function AppWorkspaceNavigationPanel({
       workspaceLabel={t.workspaceLabel}
       activeThreadsLabel={locale === "zh" ? "活跃会话" : "Active"}
       onArchiveThread={onArchiveThread}
+      onArchiveWorkspaceThreads={onArchiveWorkspaceThreads}
       onBackSettings={onBackSettings}
       onDeleteThread={onDeleteThread}
+      onDeleteWorkspaceThreads={onDeleteWorkspaceThreads}
       onLibrary={onLibrary}
       onNewThread={onNewThread}
       onRenameThread={onRenameThread}

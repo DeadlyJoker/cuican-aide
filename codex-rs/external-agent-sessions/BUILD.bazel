@@ -1,6 +1,0 @@
-load("//:defs.bzl", "crewon_rust_crate")
-
-crewon_rust_crate(
-    name = "external-agent-sessions",
-    crate_name = "crewon_external_agent_sessions",
-)

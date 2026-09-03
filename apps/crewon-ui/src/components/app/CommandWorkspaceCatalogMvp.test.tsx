@@ -181,13 +181,9 @@ describe("CrewON resource catalog MVP", () => {
     expect(markup).toContain("企业微信");
     expect(markup).toContain("飞书套件");
     expect(markup).toContain("运行位置");
-    expect(markup).toContain(
-      'class="catalog-market-header knowledge-catalog-header"',
-    );
-    expect(markup).toContain('class="knowledge-catalog-title"');
-    expect(markup).toContain("本地 0 · 云端 1");
-    expect(markup).toContain("本地");
-    expect(markup).toContain("云端");
+    expect(markup).toContain("我的");
+    expect(markup).toContain("市场");
+    expect(markup).toContain("知识库来源筛选");
     expect(markup).toContain('data-logo="wecom"');
     expect(markup).toContain('data-logo="excel"');
     expect(markup).toContain('data-logo="assistant"');

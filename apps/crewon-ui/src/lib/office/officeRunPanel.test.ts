@@ -130,14 +130,14 @@ describe("office run panel helpers", () => {
         {
           summary: "Integration test failed",
           status: "blocked",
-          source: "just test",
+          source: "pnpm control-api tests",
         },
       ],
       verificationChecks: [
         {
           check: "Run integration suite",
           status: "failed",
-          command: "just test -p crewon-app-server",
+          command: "pnpm --filter @crewon/control-api test",
           evidence: "suite failed",
         },
       ],
@@ -219,7 +219,9 @@ describe("office run panel helpers", () => {
     expect(
       officeRunRetryPendingActionLabel(
         run({
-          loop: { review: { status: "blocked", nextAction: "repairFailedCriteria" } },
+          loop: {
+            review: { status: "blocked", nextAction: "repairFailedCriteria" },
+          },
         }),
         "en",
       ),

@@ -21,6 +21,7 @@ import {
 import type {
   CanonicalAgentEvent,
   ProviderCheckpoint,
+  WorkspaceChangeSummary,
 } from "@crewon/contracts";
 import {
   ContextHistoryError,
@@ -67,6 +68,7 @@ import type {
 } from "./agent-version-runtime.ts";
 import { PlanOutputError, parseProposedPlan } from "./plan-output.ts";
 import { goalToolsForRun, isGoalToolCall } from "./goal-tools.ts";
+import { isRunPlanToolCall, runPlanToolsForRun } from "./run-plan-tools.ts";
 import { replaceChangedToolApproval } from "./tool-approval-replacement.ts";
 
 export type { RuntimeWorkerScheduler } from "./runtime-worker-watchers.ts";
@@ -85,6 +87,8 @@ const DEFAULT_AUTO_COMPACT_AT_TOKENS = 200_000;
 const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 273_000;
 const MAX_DURABLE_HISTORY_ITEMS = 10_000;
 const MAX_DURABLE_HISTORY_BYTES = 64 * 1024 * 1024;
+const MAX_CANONICAL_AGENT_EVENT_BYTES = 64 * 1024;
+const MAX_TOOL_ARTIFACT_REF_BYTES = 512;
 const MIN_MAX_CONTEXT_BYTES = 96 * 1024;
 const MIN_AUTO_COMPACT_AT_CONTEXT_BYTES = 72 * 1024;
 const HISTORY_PAGE_SIZE = 100;
@@ -144,6 +148,7 @@ export type RuntimeWorkerConfig = Readonly<{
   afterGoalToolExecuted?:
     | ((result: GoalToolExecutionResult) => Promise<void>)
     | undefined;
+  afterRunPlanToolExecuted?: (() => Promise<void>) | undefined;
 }>;
 
 export type RuntimeWorkerOutcome =
@@ -224,6 +229,7 @@ export class RuntimeWorker {
   readonly #afterGoalToolExecuted:
     | ((result: GoalToolExecutionResult) => Promise<void>)
     | undefined;
+  readonly #afterRunPlanToolExecuted: (() => Promise<void>) | undefined;
   #timer: ReturnType<typeof setInterval> | null = null;
   #drain: Promise<RuntimeWorkerOutcome> | null = null;
   #closed = false;
@@ -396,6 +402,7 @@ export class RuntimeWorker {
     this.#afterToolProviderResolved = config.afterToolProviderResolved;
     this.#afterToolReceiptCommitted = config.afterToolReceiptCommitted;
     this.#afterGoalToolExecuted = config.afterGoalToolExecuted;
+    this.#afterRunPlanToolExecuted = config.afterRunPlanToolExecuted;
   }
 
   start(): void {
@@ -598,6 +605,31 @@ export class RuntimeWorker {
         null
       ) {
         return this.#executeClaim(claim);
+      }
+      if (
+        storedApproval.status === "required" &&
+        (run.toolPermissionMode === "approveForMe" ||
+          run.toolPermissionMode === "fullAccess")
+      ) {
+        const receipt = await this.#store.loadToolExecutionReceipt({
+          tenantId: run.tenantId,
+          runId: run.runId,
+          receiptId: storedApproval.receiptId,
+        });
+        if (receipt === null) {
+          throw new PermanentWorkerError("tool_receipt_not_found");
+        }
+        await this.#store.retryWorkItem({
+          ...leaseInput(claim),
+          retryAfterMs: 0,
+          reasonCode: "tool_approval_auto_decision",
+        });
+        await this.#execution.approveToolForRun(receipt, storedApproval);
+        return {
+          kind: "retried",
+          runId: run.runId,
+          code: "tool_approval_auto_approved",
+        };
       }
       const runtime = await this.#resolveAgentVersionRuntime(
         run.tenantId,
@@ -896,7 +928,7 @@ export class RuntimeWorker {
           collaborationMode: run.collaborationMode,
           allowedTools:
             run.collaborationMode === "plan" ? planAllowedTools(runtime) : null,
-          runtimeTools: goalToolsForRun(run),
+          runtimeTools: [...goalToolsForRun(run), ...runPlanToolsForRun(run)],
           history: [...runtime.governedContextItems, ...context.items],
           continuation:
             continuation.kind === "providerCheckpoint"
@@ -1542,6 +1574,9 @@ export class RuntimeWorker {
           isError: resolution.result.isError,
           artifactRef: projected.artifactRef,
           outputTruncated: projected.truncated,
+          ...(resolution.result.workspaceChanges === undefined
+            ? {}
+            : { workspaceChanges: resolution.result.workspaceChanges }),
         },
       };
       if (receipt.status !== "completed") {
@@ -1740,13 +1775,20 @@ export class RuntimeWorker {
     signal: AbortSignal,
     runtime: WorkerAgentRuntime,
   ): Promise<RuntimeWorkerOutcome | null> {
-    const goalCalls =
-      goalToolsForRun(run).length === 0
-        ? []
-        : calls.filter((event) => isGoalToolCall(event.data));
-    if (goalCalls.length > 0) {
+    const serverOwnedDefinitions = [
+      ...goalToolsForRun(run),
+      ...runPlanToolsForRun(run),
+    ];
+    const serverOwnedCalls = calls.filter((event) =>
+      serverOwnedDefinitions.some(
+        (definition) =>
+          definition.kind === event.data.kind &&
+          definition.name === event.data.name,
+      ),
+    );
+    if (serverOwnedCalls.length > 0) {
       if (
-        goalCalls.some((event) =>
+        serverOwnedCalls.some((event) =>
           runtime.toolDefinitions.some(
             (definition) =>
               definition.kind === event.data.kind &&
@@ -1756,10 +1798,16 @@ export class RuntimeWorker {
       ) {
         throw new PermanentWorkerError("runtime_tool_identity_conflict");
       }
-      if (goalCalls.length !== calls.length) {
-        throw new PermanentWorkerError("goal_tool_mixed_batch_unsupported");
+      if (serverOwnedCalls.length !== calls.length) {
+        throw new PermanentWorkerError(
+          "server_owned_tool_mixed_batch_unsupported",
+        );
       }
-      return this.#executeGoalToolCalls(claim, goalCalls, startingSequence);
+      return this.#executeServerOwnedToolCalls(
+        claim,
+        serverOwnedCalls,
+        startingSequence,
+      );
     }
     let sequence = startingSequence;
     const definitions = runtime.toolDefinitions;
@@ -1778,6 +1826,12 @@ export class RuntimeWorker {
       const configuredPolicy = runtime.toolRuntime.executionPolicy(
         call.kind,
         call.name,
+        {
+          sandboxMode:
+            run.toolPermissionMode === "fullAccess"
+              ? "danger-full-access"
+              : "workspace-write",
+        },
       );
       if (defined && configuredPolicy === null) {
         throw new PermanentWorkerError("tool_execution_policy_missing");
@@ -1812,6 +1866,17 @@ export class RuntimeWorker {
           },
         );
         if (approval.approval.status === "required") {
+          if (
+            run.toolPermissionMode === "approveForMe" ||
+            run.toolPermissionMode === "fullAccess"
+          ) {
+            await this.#execution.approveToolForRun(receipt, approval.approval);
+            return {
+              kind: "retried",
+              runId: receipt.runId,
+              code: "tool_approval_auto_approved",
+            };
+          }
           return {
             kind: "waitingApproval",
             runId: receipt.runId,
@@ -1960,6 +2025,9 @@ export class RuntimeWorker {
           isError: resolution.result.isError,
           artifactRef: projected.artifactRef,
           outputTruncated: projected.truncated,
+          ...(resolution.result.workspaceChanges === undefined
+            ? {}
+            : { workspaceChanges: resolution.result.workspaceChanges }),
         },
       };
       if (receipt.status !== "completed") {
@@ -1987,15 +2055,27 @@ export class RuntimeWorker {
     return null;
   }
 
-  async #executeGoalToolCalls(
+  async #executeServerOwnedToolCalls(
     claim: WorkItemClaim,
     calls: readonly Extract<KernelAgentEvent, { type: "tool.requested" }>[],
     startingSequence: number,
   ): Promise<RuntimeWorkerOutcome | null> {
     let sequence = startingSequence;
     for (const event of calls) {
-      const result = await this.#execution.executeGoalTool(claim, event);
-      await this.#afterGoalToolExecuted?.(result);
+      let result: Readonly<{ output: string; isError: boolean }>;
+      if (isRunPlanToolCall(event.data)) {
+        result = await this.#execution.executeRunPlanTool(claim, {
+          ...event,
+          data: event.data,
+        });
+        await this.#afterRunPlanToolExecuted?.();
+      } else if (isGoalToolCall(event.data)) {
+        const goalResult = await this.#execution.executeGoalTool(claim, event);
+        await this.#afterGoalToolExecuted?.(goalResult);
+        result = goalResult;
+      } else {
+        throw new PermanentWorkerError("server_owned_tool_request_invalid");
+      }
       const run = await this.#execution.loadRun(claim);
       if (run.cancelRequested) {
         return this.#cancel(claim);
@@ -2028,7 +2108,21 @@ export class RuntimeWorker {
   ): Promise<
     Readonly<{ output: string; truncated: boolean; artifactRef: string | null }>
   > {
-    const visible = modelVisibleToolOutput(result.output);
+    const modelVisible = modelVisibleToolOutput(result.output);
+    const fitted = fitToolCompletionOutputToEvent({
+      output: modelVisible.output,
+      runId: run.runId,
+      segmentId: receipt.call.segmentId,
+      callId: receipt.call.callId,
+      kind: receipt.call.kind,
+      name: receipt.call.name,
+      isError: result.isError,
+      workspaceChanges: result.workspaceChanges,
+    });
+    const visible = {
+      output: fitted.output,
+      truncated: modelVisible.truncated || fitted.truncated,
+    };
     if (result.artifactRef !== null) {
       if (this.#artifacts === undefined) {
         throw new PermanentWorkerError("artifact_authority_required");
@@ -2440,6 +2534,74 @@ class PermanentWorkerError extends Error {
   }
 }
 
+export function fitToolCompletionOutputToEvent(
+  input: Readonly<{
+    output: string;
+    runId: string;
+    segmentId: string;
+    callId: string;
+    kind: "function" | "custom";
+    name: string;
+    isError: boolean;
+    workspaceChanges?: WorkspaceChangeSummary;
+  }>,
+): Readonly<{ output: string; truncated: boolean }> {
+  const fits = (output: string): boolean =>
+    utf8ByteLength(
+      JSON.stringify({
+        schemaVersion: "crewon.agent-event.v0",
+        runId: input.runId,
+        segmentId: input.segmentId,
+        sequence: Number.MAX_SAFE_INTEGER,
+        type: "tool.completed",
+        data: {
+          callId: input.callId,
+          kind: input.kind,
+          name: input.name,
+          output,
+          isError: input.isError,
+          artifactRef: "x".repeat(MAX_TOOL_ARTIFACT_REF_BYTES),
+          outputTruncated: true,
+          ...(input.workspaceChanges === undefined
+            ? {}
+            : { workspaceChanges: input.workspaceChanges }),
+        },
+      }),
+    ) <= MAX_CANONICAL_AGENT_EVENT_BYTES;
+
+  if (fits(input.output)) {
+    return { output: input.output, truncated: false };
+  }
+  const entries = [...input.output].map((value) => ({
+    value,
+    bytes: utf8ByteLength(value),
+  }));
+  const totalBytes = entries.reduce((total, entry) => total + entry.bytes, 0);
+  const candidate = (retained: number): string => {
+    const headLength = Math.ceil(retained / 2);
+    const tailLength = Math.floor(retained / 2);
+    const head = entries.slice(0, headLength);
+    const tail = tailLength === 0 ? [] : entries.slice(-tailLength);
+    const retainedBytes = [...head, ...tail].reduce(
+      (total, entry) => total + entry.bytes,
+      0,
+    );
+    return `${head.map((entry) => entry.value).join("")}\n…${totalBytes - retainedBytes} bytes truncated for durable event…\n${tail.map((entry) => entry.value).join("")}`;
+  };
+  let low = 0;
+  let high = entries.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (fits(candidate(middle))) low = middle;
+    else high = middle - 1;
+  }
+  const output = candidate(low);
+  if (!fits(output)) {
+    throw new PermanentWorkerError("tool_completed_event_budget_exhausted");
+  }
+  return { output, truncated: true };
+}
+
 function leaseInput(claim: WorkItemClaim) {
   return {
     workItemId: claim.workItem.workItemId,
@@ -2526,6 +2688,9 @@ function completedResolution(receipt: ToolExecutionReceiptState) {
       output: receipt.result.output,
       isError: receipt.result.isError,
       artifactRef: receipt.result.artifactRef,
+      ...(receipt.result.workspaceChanges === undefined
+        ? {}
+        : { workspaceChanges: receipt.result.workspaceChanges }),
     },
   };
 }

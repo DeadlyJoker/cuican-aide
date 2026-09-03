@@ -24,11 +24,21 @@ describe("command sidebar task styles", () => {
     const styles = taskSignalStyles();
 
     expect(styles).toContain("text-overflow: ellipsis");
-    expect(styles).toContain("@keyframes command-sidebar-task-pulse");
-    expect(styles).toContain("@media (prefers-reduced-motion: reduce)");
+    expect(styles).toContain(".command-sidebar-thread-archive");
+    expect(styles).toContain("pointer-events: auto");
+    expect(styles).toContain("width: 5px");
+    expect(styles).toContain("width: 6px");
+    expect(styles).toContain(".is-failed-unread");
+    expect(styles).toContain("box-shadow:");
+    expect(styles).toContain("var(--command-task-pending) 13%");
+    expect(styles).toContain("var(--command-task-complete) 13%");
+    expect(styles).not.toContain("command-sidebar-task-pulse");
+    expect(styles).not.toContain(".is-pending-viewed");
+    expect(styles).not.toContain(".is-running");
     expect(styles).toContain(':root[data-theme="light"]');
     expect(styles).toContain(':root[data-theme="dark"]');
     expect(styles).toContain("--command-task-tooltip-bg: #fffefa");
     expect(styles).toContain("--command-task-tooltip-bg: #4b4b4c");
+    expect(styles).toMatchSnapshot();
   });
 });

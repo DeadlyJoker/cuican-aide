@@ -13,15 +13,19 @@ import {
 } from "../../thread/threadRuntimeSettings";
 import {
   archiveThreadAction,
+  archiveWorkspaceThreadsAction,
   clearAssistantThreadAction,
   deleteArchivedThreadAction,
+  deleteWorkspaceThreadsAction,
   renameThreadAction,
   selectThreadAction,
   startDraftThreadAction,
   toggleArchivedThreadsAction,
   type ArchiveThreadActionParams,
+  type ArchiveWorkspaceThreadsActionParams,
   type ClearAssistantThreadActionParams,
   type DeleteArchivedThreadActionParams,
+  type DeleteWorkspaceThreadsActionParams,
   type RenameThreadActionParams,
   type SelectThreadActionParams,
   type ToggleArchivedThreadsActionParams,
@@ -55,9 +59,11 @@ type SetCapabilityPanel = (
 ) => void;
 
 type AppThreadRuntimeClient = NonNullable<ArchiveThreadActionParams["client"]> &
+  NonNullable<ArchiveWorkspaceThreadsActionParams["client"]> &
   NonNullable<ClearAssistantThreadActionParams["client"]> &
   NonNullable<CreateThreadActionParams["client"]> &
   NonNullable<DeleteArchivedThreadActionParams["client"]> &
+  NonNullable<DeleteWorkspaceThreadsActionParams["client"]> &
   NonNullable<InterruptActiveTurnActionParams["client"]> &
   NonNullable<RenameThreadActionParams["client"]> &
   NonNullable<SelectThreadActionParams["client"]> &
@@ -68,6 +74,10 @@ type AppThreadRuntimeClient = NonNullable<ArchiveThreadActionParams["client"]> &
 
 export type AppThreadRuntimeHandlers = {
   archiveThread: (thread: Thread) => Promise<void>;
+  archiveWorkspaceThreads: (
+    threads: Thread[],
+    workspaceName: string,
+  ) => Promise<void>;
   clearAssistantThread: (thread: Thread) => Promise<void>;
   createDemoThread: (initialPrompt?: string) => Thread;
   createThread: (
@@ -77,6 +87,10 @@ export type AppThreadRuntimeHandlers = {
     workspaceCwd?: string | null,
   ) => Promise<Thread | null>;
   deleteArchivedThread: (thread: Thread) => Promise<void>;
+  deleteWorkspaceThreads: (
+    threads: Thread[],
+    workspaceName: string,
+  ) => Promise<void>;
   interruptActiveTurn: () => Promise<void>;
   renameThread: (thread: Thread) => Promise<void>;
   selectThread: (threadId: string) => Promise<void>;
@@ -254,6 +268,19 @@ export function createAppThreadRuntimeHandlers(
         showArchivedThreads: params.getShowArchivedThreads(),
         thread,
       }),
+    archiveWorkspaceThreads: (threads, workspaceName) =>
+      archiveWorkspaceThreadsAction({
+        client: params.client,
+        confirm: params.confirm,
+        isConnected: params.isConnected,
+        locale: params.locale,
+        setNotice: params.setNotice,
+        setSelectedThreadId: params.setSelectedThreadId,
+        setThreads: params.setThreads,
+        showArchivedThreads: params.getShowArchivedThreads(),
+        threads,
+        workspaceName,
+      }),
     clearAssistantThread: (thread) =>
       clearAssistantThreadAction({
         client: params.client,
@@ -279,6 +306,19 @@ export function createAppThreadRuntimeHandlers(
         showArchivedThreads: params.getShowArchivedThreads(),
         thread,
         untitledThreadLabel: params.untitledThreadLabel,
+      }),
+    deleteWorkspaceThreads: (threads, workspaceName) =>
+      deleteWorkspaceThreadsAction({
+        client: params.client,
+        confirm: params.confirm,
+        isConnected: params.isConnected,
+        locale: params.locale,
+        setNotice: params.setNotice,
+        setSelectedThreadId: params.setSelectedThreadId,
+        setThreads: params.setThreads,
+        showArchivedThreads: params.getShowArchivedThreads(),
+        threads,
+        workspaceName,
       }),
     interruptActiveTurn: () =>
       interruptActiveTurnAction({

@@ -1,7 +1,0 @@
-load("//:defs.bzl", "crewon_rust_crate")
-
-crewon_rust_crate(
-    name = "test-binary-support",
-    crate_name = "crewon_test_binary_support",
-    crate_srcs = ["lib.rs"],
-)

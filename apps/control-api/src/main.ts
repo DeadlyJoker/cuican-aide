@@ -46,7 +46,11 @@ const workspaceWorker = resolveStandaloneWorkspaceWorkerEnvironment(
   process.env,
   securityMode,
 );
-const sandbox = configuredPimSandbox(process.env);
+// The PIM sandbox is a standalone authority. Production does not have a
+// tenant-bound workspace resolver yet, so keep the global sandbox route
+// explicitly unavailable there instead of constructing a shared instance.
+const sandbox =
+  securityMode === "standalone" ? configuredPimSandbox(process.env) : undefined;
 if (securityMode === "production" && connectionString === undefined) {
   throw new Error("CREWON_CONTROL_DATABASE_URL_required");
 }

@@ -83,6 +83,54 @@ test("executes a registered tool once for an idempotent invocation", async () =>
   ]);
 });
 
+test("preserves a validated workspace change ledger across idempotent replay", async () => {
+  let executions = 0;
+  const broker = new InMemoryToolBroker(
+    [definition("fixture_writer")],
+    new Map([
+      [
+        "function:fixture_writer",
+        async () => {
+          executions += 1;
+          return {
+            output: "written",
+            workspaceChanges: {
+              schemaVersion: "crewon.workspace-change-summary.v0" as const,
+              paths: ["src/task.ts"],
+              additions: 3,
+              deletions: 1,
+              statsComplete: true,
+            },
+          };
+        },
+      ],
+    ]),
+    new Map([["function:fixture_writer", policy("mutation", "reconcilable")]]),
+  );
+  const execution = command(
+    { name: "fixture_writer" },
+    policy("mutation", "reconcilable"),
+  );
+
+  const completed = await broker.execute(execution, signal());
+  const replay = await broker.reconcile(execution, signal());
+
+  assert.equal(executions, 1);
+  assert.deepEqual(replay, completed);
+  assert.deepEqual(
+    completed.status === "completed"
+      ? completed.result.workspaceChanges
+      : undefined,
+    {
+      schemaVersion: "crewon.workspace-change-summary.v0",
+      paths: ["src/task.ts"],
+      additions: 3,
+      deletions: 1,
+      statsComplete: true,
+    },
+  );
+});
+
 test("fails closed on idempotency reuse with a different invocation", async () => {
   const broker = new InMemoryToolBroker();
   const first = command({ name: "one" });

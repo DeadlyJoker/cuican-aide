@@ -2,9 +2,59 @@ import { describe, expect, it } from "vitest";
 
 import {
   readThreadExecutionTarget,
+  readThreadScene,
   shouldResetExecutionTarget,
+  validStoredScene,
   writeThreadExecutionTarget,
+  writeThreadScene,
 } from "./commandWorkspaceState";
+
+describe("command workspace scene state", () => {
+  it("restores the selected scene independently for each thread", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+
+    writeThreadScene(storage, "thread-office", "office");
+    writeThreadScene(storage, "thread-code", "code");
+    writeThreadScene(storage, "thread-design", "design");
+
+    expect({
+      code: readThreadScene(storage, "thread-code"),
+      design: readThreadScene(storage, "thread-design"),
+      missing: readThreadScene(storage, "thread-missing"),
+      office: readThreadScene(storage, "thread-office"),
+    }).toEqual({
+      code: "code",
+      design: "design",
+      missing: null,
+      office: "office",
+    });
+  });
+
+  it("ignores malformed and unknown persisted scenes", () => {
+    const values = new Map<string, string>([
+      [
+        "crewon.command.thread-scene.v1",
+        JSON.stringify({
+          "thread-code": "code",
+          "thread-unknown": "research",
+        }),
+      ],
+    ]);
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+
+    expect(readThreadScene(storage, "thread-code")).toBe("code");
+    expect(readThreadScene(storage, "thread-unknown")).toBeNull();
+    expect(["office", "code", "design"].every(validStoredScene)).toBe(true);
+    expect(validStoredScene("research")).toBe(false);
+  });
+});
 
 describe("command workspace execution target state", () => {
   it("restores the selected execution target for each thread", () => {

@@ -1,4 +1,4 @@
-import type { ReactNode, RefObject } from "react";
+import type { RefObject } from "react";
 
 import type {
   OfficeMessage,
@@ -11,7 +11,9 @@ import type {
 import type { ComposerSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { Locale } from "../../lib/i18n";
 import type { OfficeComposerRuntimeMode } from "../../lib/office/officeComposerRuntime";
+import { officeMessageDraftMentionForMember } from "../../lib/office/officeMessageMentions";
 import { OfficeComposer } from "./OfficeComposer";
+import { OfficeMessageMarkdown } from "./OfficeMessageMarkdown";
 
 export function isLegacyOfficeRuntimePrompt(message: OfficeMessage): boolean {
   if (
@@ -98,44 +100,6 @@ export function visibleOfficeMessages(
   });
 }
 
-function renderOfficeMessageText(
-  text: string,
-  memberNames: string[],
-): ReactNode {
-  const sorted = [...memberNames]
-    .filter(Boolean)
-    .sort((a, b) => b.length - a.length);
-  const escaped = sorted.map((name) =>
-    name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
-  );
-  const namePattern = escaped.length > 0 ? `(?:${escaped.join("|")})` : "";
-  const fallback = "[\\w\\u4e00-\\u9fa5]+";
-  const mentionRegex = new RegExp(
-    `@(${namePattern ? `${namePattern}|` : ""}${fallback})`,
-    "g",
-  );
-  const nodes: ReactNode[] = [];
-  let lastIndex = 0;
-  let match: RegExpExecArray | null;
-  let key = 0;
-  while ((match = mentionRegex.exec(text)) !== null) {
-    if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
-    }
-    nodes.push(
-      <span className="office-mention" key={`m${key}`}>
-        @{match[1]}
-      </span>,
-    );
-    key += 1;
-    lastIndex = match.index + match[0].length;
-  }
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
-  }
-  return nodes.length > 0 ? nodes : text;
-}
-
 export function OfficeChatPanel({
   workspace,
   locale,
@@ -168,7 +132,15 @@ export function OfficeChatPanel({
   runtimeMode: OfficeComposerRuntimeMode;
   slashCommands?: ComposerSlashCommand[];
 }) {
-  const memberNames = workspace.members.map((member) => member.name);
+  const memberMentions = workspace.members.flatMap((member) => {
+    const mention = officeMessageDraftMentionForMember(
+      member,
+      workspace.members,
+    );
+    return mention
+      ? [{ displayText: mention.displayText, id: mention.memberId }]
+      : [];
+  });
   const visibleMessages = visibleOfficeMessages(workspace.messages);
 
   return (
@@ -185,7 +157,9 @@ export function OfficeChatPanel({
       >
         {visibleMessages.length === 0 ? (
           <div className="office-chat-empty">
-            <strong>{locale === "zh" ? "还没有消息" : "No messages yet"}</strong>
+            <strong>
+              {locale === "zh" ? "还没有消息" : "No messages yet"}
+            </strong>
             <p>
               {locale === "zh"
                 ? "在下方告诉组长目标、背景或下一步，办公室会开始协作。"
@@ -221,7 +195,10 @@ export function OfficeChatPanel({
                   <strong>{message.author}</strong>
                   <span>{message.time}</span>
                 </div>
-                <p>{renderOfficeMessageText(message.text, memberNames)}</p>
+                <OfficeMessageMarkdown
+                  mentions={memberMentions}
+                  text={message.text}
+                />
               </div>
             </div>
           ),

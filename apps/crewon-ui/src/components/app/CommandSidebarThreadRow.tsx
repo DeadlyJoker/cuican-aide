@@ -1,4 +1,4 @@
-import { CircleAlert } from "lucide-react";
+import { Archive } from "lucide-react";
 
 import {
   Tooltip,
@@ -19,31 +19,11 @@ export function CommandTaskStatusIndicator({
   updatedLabel: string;
 }) {
   switch (state) {
-    case "running":
-      return (
-        <span
-          aria-label={label}
-          className="command-thread-status is-running"
-          role="img"
-        >
-          <i />
-          <i />
-          <i />
-        </span>
-      );
     case "pendingUnread":
       return (
         <span
           aria-label={label}
           className="command-thread-status is-pending-unread"
-          role="img"
-        />
-      );
-    case "pendingViewed":
-      return (
-        <span
-          aria-label={label}
-          className="command-thread-status is-pending-viewed"
           role="img"
         />
       );
@@ -55,28 +35,33 @@ export function CommandTaskStatusIndicator({
           role="img"
         />
       );
-    case "failed":
+    case "failedUnread":
       return (
         <span
           aria-label={label}
-          className="command-thread-status is-failed"
+          className="command-thread-status is-failed-unread"
           role="img"
-        >
-          <CircleAlert aria-hidden="true" />
-        </span>
+        />
       );
+    case "running":
+    case "pendingViewed":
     case "completedViewed":
+    case "failedViewed":
     case "neutral":
       return <em className="command-thread-status-time">{updatedLabel}</em>;
   }
 }
 
 export function CommandSidebarThreadRow({
+  archiveLabel,
+  onArchive,
   onOpen,
   selected,
   thread,
   workspaceLabel,
 }: {
+  archiveLabel: string;
+  onArchive?: (threadId: string) => void;
   onOpen: (threadId: string) => void;
   selected: boolean;
   thread: CommandLinkedThread;
@@ -87,41 +72,59 @@ export function CommandSidebarThreadRow({
   const scopeLabel = thread.scopeLabel ?? "";
 
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          className={classNames(
-            "conversation-item linked-conversation-item recent-thread-item",
-            selected && "active",
-          )}
-          data-linked-thread-id={thread.id}
-          data-thread-state={state}
-          type="button"
-          onClick={() => onOpen(thread.id)}
+    <div
+      className="command-sidebar-thread-row"
+      data-has-archive={onArchive ? "true" : undefined}
+      data-selected={selected}
+    >
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            className={classNames(
+              "conversation-item linked-conversation-item recent-thread-item",
+              selected && "active",
+            )}
+            data-linked-thread-id={thread.id}
+            data-thread-state={state}
+            type="button"
+            onClick={() => onOpen(thread.id)}
+          >
+            <span className="command-sidebar-thread-title">{thread.title}</span>
+            <CommandTaskStatusIndicator
+              label={stateLabel}
+              state={state}
+              updatedLabel={thread.updatedLabel}
+            />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent
+          className="command-sidebar-thread-tooltip"
+          side="right"
+          sideOffset={10}
         >
-          <span className="command-sidebar-thread-title">{thread.title}</span>
-          <CommandTaskStatusIndicator
-            label={stateLabel}
-            state={state}
-            updatedLabel={thread.updatedLabel}
-          />
+          <strong>{thread.title}</strong>
+          {thread.preview && thread.preview !== thread.title ? (
+            <span>{thread.preview}</span>
+          ) : null}
+          <small>
+            {[workspaceLabel, scopeLabel, stateLabel, thread.updatedLabel]
+              .filter(Boolean)
+              .join(" · ")}
+          </small>
+        </TooltipContent>
+      </Tooltip>
+      {onArchive ? (
+        <button
+          aria-label={archiveLabel}
+          className="command-sidebar-thread-archive"
+          data-archive-thread-id={thread.id}
+          title={archiveLabel}
+          type="button"
+          onClick={() => onArchive(thread.id)}
+        >
+          <Archive aria-hidden="true" />
         </button>
-      </TooltipTrigger>
-      <TooltipContent
-        className="command-sidebar-thread-tooltip"
-        side="right"
-        sideOffset={10}
-      >
-        <strong>{thread.title}</strong>
-        {thread.preview && thread.preview !== thread.title ? (
-          <span>{thread.preview}</span>
-        ) : null}
-        <small>
-          {[workspaceLabel, scopeLabel, stateLabel, thread.updatedLabel]
-            .filter(Boolean)
-            .join(" · ")}
-        </small>
-      </TooltipContent>
-    </Tooltip>
+      ) : null}
+    </div>
   );
 }

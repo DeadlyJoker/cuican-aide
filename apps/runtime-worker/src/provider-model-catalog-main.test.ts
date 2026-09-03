@@ -21,7 +21,10 @@ test("projects only bounded agent models and keeps the configured default", asyn
     }),
   }));
 
-  assert.deepEqual(result, { models: ["gpt-5.5", "gpt-5.6-sol"] });
+  assert.deepEqual(result, {
+    models: ["gpt-5.5", "gpt-5.6-sol"],
+    status: "ok",
+  });
 });
 
 test("falls back to the configured model when the Provider is unavailable", async () => {
@@ -39,7 +42,7 @@ test("falls back to the configured model when the Provider is unavailable", asyn
     }),
   }));
 
-  assert.deepEqual(result, { models: ["gpt-5.5"] });
+  assert.deepEqual(result, { models: ["gpt-5.5"], status: "unreachable" });
 });
 
 function input() {

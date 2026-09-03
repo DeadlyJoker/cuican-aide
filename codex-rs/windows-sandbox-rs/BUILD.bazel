@@ -1,9 +1,0 @@
-load("//:defs.bzl", "crewon_rust_crate")
-
-crewon_rust_crate(
-    name = "windows-sandbox-rs",
-    crate_name = "crewon_windows_sandbox",
-    build_script_data = [
-        "crewon-windows-sandbox-setup.manifest",
-    ],
-)

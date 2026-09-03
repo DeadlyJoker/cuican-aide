@@ -18,6 +18,10 @@ import {
 } from "react";
 
 import type { Locale } from "../../lib/i18n";
+import {
+  refreshControlOfficeRuntimeRecord,
+  type ControlOfficeClient,
+} from "../../lib/office/controlOfficeRuntime";
 import { mentionsWithSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { ControlThreadRuntime } from "../../lib/control-runtime/controlThreadRuntime";
 import {
@@ -31,6 +35,11 @@ import {
   officeRecordKey,
   type ControlOfficeDefinitionRecordReference,
 } from "../../lib/office/officePanelFromRecord";
+import {
+  controlOfficeMemberMentionForMember,
+  controlOfficeMemberMentionsFromRenderedText,
+  controlOfficeDirectMemberId,
+} from "../../lib/office/controlOfficeMemberMentions";
 import {
   officeMemberAgentProfileId,
   readOfficeMemberAgentProfile,
@@ -61,7 +70,13 @@ import {
   ComposerResourceTags,
   type ComposerResourceTag,
 } from "../composer/ComposerResourceTags";
-import { commandComposerPermissionOptions } from "../composer/commandComposerPermissionOptions";
+import { OfficeMessageMarkdown } from "../office/OfficeMessageMarkdown";
+import {
+  commandComposerPermissionLearnMoreLabel,
+  commandComposerPermissionLearnMoreUrl,
+  commandComposerPermissionMenuTitle,
+  commandComposerPermissionOptions,
+} from "../composer/commandComposerPermissionOptions";
 import {
   effortFromOptionValue,
   effortOptionValue,
@@ -86,10 +101,8 @@ import {
   legacyControlOfficeThreadTitle,
 } from "./controlOfficeChatPresentation";
 
-type ControlOfficeChatClient = Pick<
-  ControlApiClient,
-  "createOffice" | "createThread" | "getOffice"
->;
+type ControlOfficeChatClient = ControlOfficeClient &
+  Pick<ControlApiClient, "createThread">;
 type ControlOfficeThreadRuntime = Pick<
   ControlThreadRuntime,
   "interruptTurn" | "listThreads" | "readThread" | "renameThread" | "startTurn"
@@ -361,11 +374,34 @@ function ControlOfficeChatRoom({
     ],
     [composer.contextItems, composer.slashItems, executionIntent, locale],
   );
-  const visibleAddItems = paletteFilter(addPaletteItems, paletteQuery);
-  const visibleContextItems = paletteFilter(
-    composer.contextItems,
-    paletteQuery,
+  const memberContextItems = useMemo<PaletteItemWithCommand[]>(
+    () =>
+      activeRecord.definition.members.flatMap((member, index, members) => {
+        const mention = controlOfficeMemberMentionForMember(
+          member,
+          index,
+          members,
+          locale,
+        );
+        if (!mention) return [];
+        return [
+          {
+            action: "mention-member" as const,
+            detail:
+              locale === "zh"
+                ? "将这条消息直接发送给该成员"
+                : "Send this message directly to this member",
+            kind: "agent" as const,
+            label: locale === "zh" ? "成员" : "Member",
+            title: officeMemberDisplayName(member.displayName, index, locale),
+            token: mention.displayText,
+          },
+        ];
+      }),
+    [activeRecord.definition.members, locale],
   );
+  const visibleAddItems = paletteFilter(addPaletteItems, paletteQuery);
+  const visibleContextItems = paletteFilter(memberContextItems, paletteQuery);
   const visibleSlashItems = paletteFilter(composer.slashItems, paletteQuery);
 
   useEffect(() => {
@@ -509,17 +545,38 @@ function ControlOfficeChatRoom({
         activeThreadId = created.thread.threadId;
         setThreadId(activeThreadId);
       }
+      const runtimeRecord = await refreshControlOfficeRuntimeRecord({
+        client,
+        model,
+        record: activeRecord,
+      });
+      if (
+        runtimeRecord.definition.officeVersionId !==
+        activeRecord.definition.officeVersionId
+      ) {
+        setActiveRecord(runtimeRecord);
+      }
+      const members = runtimeRecord.definition.members;
+      const memberMentions = controlOfficeMemberMentionsFromRenderedText(
+        text,
+        members,
+        locale,
+      );
+      const directMemberId = controlOfficeDirectMemberId(memberMentions);
       await runtime.startTurn(
         activeThreadId,
         `${text}${attachmentContext(attachments)}`,
         pendingMentions,
-        controlOfficeComposerRuntimeSettings({
-          executionIntent,
-          model,
-          permission,
-          reasoningEffort: effectiveReasoningEffort,
-          record: activeRecord,
-        }),
+        {
+          ...controlOfficeComposerRuntimeSettings({
+            executionIntent,
+            model,
+            permission,
+            reasoningEffort: effectiveReasoningEffort,
+            record: runtimeRecord,
+          }),
+          ...(directMemberId ? { teamTargetMemberId: directMemberId } : {}),
+        },
       );
       await refreshThread(activeThreadId);
       setAttachmentFiles([]);
@@ -581,6 +638,14 @@ function ControlOfficeChatRoom({
   }
 
   function selectContextItem(item: PaletteItemWithCommand) {
+    if (item.action === "mention-member") {
+      setDraft((current) =>
+        insertComposerToken(current, "@", item.token ?? item.title),
+      );
+      closeComposerPalette();
+      textareaRef.current?.focus();
+      return;
+    }
     const selection = commandComposerResourceSelection(item);
     if (selection) {
       setPendingMentions((current) =>
@@ -700,6 +765,7 @@ function ControlOfficeChatRoom({
   const persistedMessages = controlOfficeChatMessages(
     thread,
     leaderName,
+    activeRecord.definition.members,
     locale,
   );
   const messages =
@@ -722,6 +788,19 @@ function ControlOfficeChatRoom({
   const isActive = submitting || thread?.status.type === "active";
   const chatMemberNames = activeRecord.definition.members.map((member, index) =>
     officeMemberDisplayName(member.displayName, index, locale),
+  );
+  const chatMemberMentions = activeRecord.definition.members.flatMap(
+    (member, index) => {
+      const mention = controlOfficeMemberMentionForMember(
+        member,
+        index,
+        activeRecord.definition.members,
+        locale,
+      );
+      return mention
+        ? [{ displayText: mention.displayText, id: mention.memberId }]
+        : [];
+    },
   );
   const visibleChatMembers = activeRecord.definition.members.slice(0, 4);
   const hiddenChatMemberCount = Math.max(
@@ -857,15 +936,18 @@ function ControlOfficeChatRoom({
                     <strong>{message.author}</strong>
                     <span>{message.time}</span>
                   </div>
-                  <p>{message.text}</p>
+                  <OfficeMessageMarkdown
+                    mentions={chatMemberMentions}
+                    text={message.text}
+                  />
                 </div>
               </div>
             ))}
             {isActive ? (
               <div className="office-system" role="status">
                 {locale === "zh"
-                  ? "办公室成员正在执行，组长会在这里统一回复。"
-                  : "Office members are working; the manager will reply here."}
+                  ? "办公室正在协作，执行成员会直接在这里回复。"
+                  : "The Office is collaborating; the assigned member will reply here directly."}
               </div>
             ) : null}
             {error ? (
@@ -969,8 +1051,15 @@ function ControlOfficeChatRoom({
                 <CommandComposerSelect
                   ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
                   className="max-w-[180px]"
+                  contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
                   icon={<ShieldCheck aria-hidden="true" />}
+                  menuHelp={{
+                    href: commandComposerPermissionLearnMoreUrl,
+                    label: commandComposerPermissionLearnMoreLabel(locale),
+                  }}
+                  menuTitle={commandComposerPermissionMenuTitle(locale)}
                   options={commandComposerPermissionOptions(locale)}
+                  showChevron={false}
                   value={permission}
                   onChange={setPermission}
                 />
@@ -1033,7 +1122,7 @@ function ControlOfficeChatRoom({
                   kind="context"
                   open={openPalette === "context"}
                   placeholder={
-                    locale === "zh" ? "搜索知识库或上下文" : "Search context"
+                    locale === "zh" ? "搜索办公室成员" : "Search Office members"
                   }
                   query={paletteQuery}
                   onClose={closeComposerPalette}

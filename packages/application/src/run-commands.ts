@@ -19,6 +19,7 @@ export type CreateRunCommand = Readonly<{
   idempotencyKey: string;
   threadId: string;
   route: RunRoute;
+  toolPermissionMode?: import("@crewon/domain").RunToolPermissionMode;
 }>;
 
 type RunTransitionCommandBase = Readonly<{

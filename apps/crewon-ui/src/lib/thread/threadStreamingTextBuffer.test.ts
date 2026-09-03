@@ -81,4 +81,42 @@ describe("streaming text buffer", () => {
     expect(updateCount).toBe(0);
     expect(streamingTextByThread).toEqual({ "thread-1": "old" });
   });
+
+  it("paces a gateway-sized burst long enough to remain visibly streaming", async () => {
+    const manualScheduler = createManualScheduler();
+    let streamingTextByThread: StreamingTextByThread = {};
+    let updateCount = 0;
+    const buffer = createStreamingTextBuffer((updater) => {
+      updateCount += 1;
+      streamingTextByThread = updater(streamingTextByThread);
+    }, manualScheduler.scheduler);
+    const burst = `${"答".repeat(395)}😀完成`;
+    let drained = false;
+
+    buffer.append("thread-1", burst);
+    void buffer.whenDrained("thread-1").then(() => {
+      drained = true;
+    });
+
+    manualScheduler.flushNext();
+    expect(streamingTextByThread["thread-1"]).toBe("答".repeat(12));
+    expect(drained).toBe(false);
+    expect(manualScheduler.callbacks.size).toBe(1);
+
+    for (let frame = 0; frame < 9; frame += 1) {
+      manualScheduler.flushNext();
+    }
+    expect(streamingTextByThread["thread-1"]).toBe("答".repeat(120));
+    expect(drained).toBe(false);
+
+    while (manualScheduler.callbacks.size > 0) {
+      manualScheduler.flushNext();
+    }
+    await Promise.resolve();
+
+    expect(streamingTextByThread["thread-1"]).toBe(burst);
+    expect(drained).toBe(true);
+    expect(updateCount).toBeLessThanOrEqual(36);
+    expect(manualScheduler.callbacks.size).toBe(0);
+  });
 });

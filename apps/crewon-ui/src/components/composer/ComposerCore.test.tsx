@@ -1,6 +1,8 @@
+import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import {
+  ComposerCore,
   composerSubmitBlocked,
   composerKeyIntent,
   createComposerSubmitGuard,
@@ -93,5 +95,31 @@ describe("ComposerCore", () => {
     expect(value).toBe("  保留草稿  ");
     release?.();
     await expect(first).resolves.toBe(true);
+  });
+
+  it("keeps the stop control enabled while a turn is running", () => {
+    const markup = renderToStaticMarkup(
+      <ComposerCore.Form
+        className="composer"
+        disabled={false}
+        running
+        stopLabel="停止"
+        submitBehavior="enter"
+        submitting
+        value=""
+        onChange={vi.fn()}
+        onStop={vi.fn()}
+        onSubmit={vi.fn()}
+      >
+        <ComposerCore.SendButton sendLabel="发送" />
+      </ComposerCore.Form>,
+    );
+
+    expect(markup).toContain('data-action="stop"');
+    expect(markup).toContain('aria-label="停止"');
+    expect(markup).not.toContain("disabled");
+    expect(markup).toMatchInlineSnapshot(
+      `"<form class=\"composer\"><button aria-busy=\"true\" aria-label=\"停止\" class=\"send-button\" data-action=\"stop\" title=\"停止\" type=\"button\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"12\" height=\"12\" viewBox=\"0 0 24 24\" fill=\"currentColor\" stroke=\"currentColor\" stroke-width=\"0\" stroke-linecap=\"round\" stroke-linejoin=\"round\" class=\"lucide lucide-square\" aria-hidden=\"true\"><rect width=\"18\" height=\"18\" x=\"3\" y=\"3\" rx=\"2\"></rect></svg></button></form>"`,
+    );
   });
 });
