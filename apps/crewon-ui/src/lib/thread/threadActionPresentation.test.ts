@@ -70,6 +70,27 @@ describe("thread action presentation", () => {
       text: "Unable to send to backend. The message was kept in the composer.",
       tone: "warning",
     });
+    expect(
+      threadSendFailureNotice(new Error("control_team_plan_unsupported"), "zh"),
+    ).toEqual({
+      text: "多成员团队暂不支持计划模式。请选择单个成员，或关闭计划模式后重试；消息和模式已保留。",
+      tone: "warning",
+    });
+    expect(
+      threadSendFailureNotice(
+        new Error("control_execution_intent_capability_unavailable"),
+        "zh",
+      ),
+    ).toEqual({
+      text: "当前后端版本还不支持目标或计划模式。请完成服务升级后重试；消息和模式已保留。",
+      tone: "warning",
+    });
+    expect(
+      threadSendFailureNotice(new Error("goal_budget_limited"), "en"),
+    ).toEqual({
+      text: "The current Goal reached its usage or budget limit. Adjust it before continuing; the message and mode were preserved.",
+      tone: "warning",
+    });
     expect(threadInterruptRequestedNotice("zh")).toEqual({
       text: "已请求停止当前任务",
       tone: "success",

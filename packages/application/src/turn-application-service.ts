@@ -276,7 +276,10 @@ export class TurnApplicationService {
     const expectedRevision = current?.revision ?? null;
     if (command.executionIntent === "plan") {
       return {
-        mutation: { kind: "clear", expectedRevision, occurredAt },
+        mutation:
+          current?.status === "active"
+            ? { kind: "clear", expectedRevision, occurredAt }
+            : { kind: "keep", expectedRevision },
         binding: null,
       };
     }
@@ -306,6 +309,13 @@ export class TurnApplicationService {
         mutation: { kind: "set", expectedRevision, goal: next },
         binding: goalBinding(next, this.#digest(next.objective)),
       };
+    }
+
+    if (current?.status === "budgetLimited") {
+      throw new ApplicationError("conflict", "goal_budget_limited");
+    }
+    if (current?.status === "usageLimited") {
+      throw new ApplicationError("conflict", "goal_usage_limited");
     }
 
     const replaceCompleted = current?.status === "complete";

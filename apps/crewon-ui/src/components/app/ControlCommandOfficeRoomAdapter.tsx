@@ -1,13 +1,6 @@
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import type { ControlApiClient } from "@crewon/control-client";
-import {
-  ListChecks,
-  Plus,
-  Settings2,
-  ShieldCheck,
-  Target,
-  X,
-} from "lucide-react";
+import { Plus, Settings2, ShieldCheck } from "lucide-react";
 import {
   type ChangeEvent,
   useCallback,
@@ -19,11 +12,16 @@ import {
 
 import type { Locale } from "../../lib/i18n";
 import {
-  refreshControlOfficeRuntimeRecord,
+  controlOfficeRecord,
+  readLatestControlOffice,
   type ControlOfficeClient,
 } from "../../lib/office/controlOfficeRuntime";
 import { mentionsWithSlashCommand } from "../../lib/composer/composerSlashCommands";
 import type { ControlThreadRuntime } from "../../lib/control-runtime/controlThreadRuntime";
+import {
+  CONTROL_TEAM_PLAN_UNSUPPORTED,
+  requireControlExecutionIntentCapability,
+} from "../../lib/control-runtime/controlTeamRuntime";
 import {
   attachmentContext,
   prepareComposerAttachments,
@@ -70,6 +68,10 @@ import {
   ComposerResourceTags,
   type ComposerResourceTag,
 } from "../composer/ComposerResourceTags";
+import {
+  ComposerExecutionIntentControl,
+  ComposerPlanReadonlyStatus,
+} from "../composer/ComposerExecutionIntentControl";
 import { OfficeMessageMarkdown } from "../office/OfficeMessageMarkdown";
 import {
   commandComposerPermissionLearnMoreLabel,
@@ -85,10 +87,10 @@ import {
 } from "../composer/composerModelEffortMenu";
 import {
   commandComposerResourceSelection,
-  nextExecutionIntent,
   type CommandOfficeComposerCapabilities,
   type CommandOfficeRoomAdapter,
 } from "./CommandWorkspace";
+import { nextExecutionIntent } from "../composer/composerExecutionIntentSelection";
 import { Palette, type PaletteItemWithCommand } from "./CommandWorkspaceChrome";
 import {
   ControlOfficeDefinitionRoom,
@@ -102,11 +104,29 @@ import {
 } from "./controlOfficeChatPresentation";
 
 type ControlOfficeChatClient = ControlOfficeClient &
-  Pick<ControlApiClient, "createThread">;
+  Pick<
+    ControlApiClient,
+    "createThread" | "getExecutionIntentCapability" | "getThreadGoal"
+  >;
 type ControlOfficeThreadRuntime = Pick<
   ControlThreadRuntime,
   "interruptTurn" | "listThreads" | "readThread" | "renameThread" | "startTurn"
 >;
+
+export async function readControlOfficeActiveGoal(
+  client: Pick<ControlApiClient, "getThreadGoal">,
+  threadId: string,
+  options?: Parameters<ControlApiClient["getThreadGoal"]>[1],
+): Promise<boolean | undefined> {
+  try {
+    const snapshot = await client.getThreadGoal(threadId, options);
+    return snapshot.goal?.status === "active";
+  } catch {
+    // Goal metadata decorates an already-authoritative Thread. Its read must
+    // never turn a successful send or Thread load into a retryable failure.
+    return undefined;
+  }
+}
 
 function createIdempotencyKey(operation: string) {
   const randomId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}`;
@@ -262,6 +282,7 @@ function ControlOfficeChatRoom({
   const [draft, setDraft] = useState("");
   const [executionIntent, setExecutionIntent] =
     useState<CommandExecutionIntent>("none");
+  const [hasActiveGoal, setHasActiveGoal] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
@@ -329,28 +350,6 @@ function ControlOfficeChatRoom({
   const addPaletteItems = useMemo<PaletteItemWithCommand[]>(
     () => [
       {
-        action: "intent-goal",
-        active: executionIntent === "goal",
-        detail:
-          locale === "zh"
-            ? "围绕一个目标持续推进"
-            : "Keep working toward one goal",
-        kind: "intent",
-        label: locale === "zh" ? "目标" : "Goal",
-        title: locale === "zh" ? "目标模式" : "Goal mode",
-      },
-      {
-        action: "intent-plan",
-        active: executionIntent === "plan",
-        detail:
-          locale === "zh"
-            ? "先给出计划，确认后再执行"
-            : "Draft a plan before execution",
-        kind: "intent",
-        label: locale === "zh" ? "计划" : "Plan",
-        title: locale === "zh" ? "计划模式" : "Plan mode",
-      },
-      {
         action: "attach-files",
         detail:
           locale === "zh"
@@ -372,7 +371,7 @@ function ControlOfficeChatRoom({
         (item) => item.kind === "skill" || item.kind === "mcp",
       ),
     ],
-    [composer.contextItems, composer.slashItems, executionIntent, locale],
+    [composer.contextItems, composer.slashItems, locale],
   );
   const memberContextItems = useMemo<PaletteItemWithCommand[]>(
     () =>
@@ -441,11 +440,17 @@ function ControlOfficeChatRoom({
 
   const refreshThread = useCallback(
     async (id: string) => {
-      const nextThread = await runtime.readThread(id);
+      const [nextThread, activeGoal] = await Promise.all([
+        runtime.readThread(id),
+        readControlOfficeActiveGoal(client, id),
+      ]);
       setThread(nextThread);
+      if (activeGoal !== undefined) {
+        setHasActiveGoal(activeGoal);
+      }
       return nextThread;
     },
-    [runtime],
+    [client, runtime],
   );
 
   useEffect(() => {
@@ -453,6 +458,7 @@ function ControlOfficeChatRoom({
     const controller = new AbortController();
     setLoading(true);
     setError(null);
+    setHasActiveGoal(false);
     void runtime
       .listThreads(false)
       .then(async (threads) => {
@@ -465,10 +471,13 @@ function ControlOfficeChatRoom({
         if (match.name === legacyTitle) {
           await runtime.renameThread(match.id, title).catch(() => undefined);
         }
-        const nextThread = await runtime.readThread(match.id, {
-          signal: controller.signal,
-        });
-        return { id: match.id, thread: nextThread };
+        const [nextThread, activeGoal] = await Promise.all([
+          runtime.readThread(match.id, { signal: controller.signal }),
+          readControlOfficeActiveGoal(client, match.id, {
+            signal: controller.signal,
+          }),
+        ]);
+        return { activeGoal, id: match.id, thread: nextThread };
       })
       .then((result) => {
         if (canceled) {
@@ -476,6 +485,9 @@ function ControlOfficeChatRoom({
         }
         setThreadId(result?.id ?? null);
         setThread(result?.thread ?? null);
+        if (result?.activeGoal !== undefined) {
+          setHasActiveGoal(result.activeGoal);
+        }
       })
       .catch((reason: unknown) => {
         if (!canceled) {
@@ -491,7 +503,7 @@ function ControlOfficeChatRoom({
       canceled = true;
       controller.abort();
     };
-  }, [legacyTitle, locale, runtime, title]);
+  }, [client, legacyTitle, locale, runtime, title]);
 
   useEffect(() => {
     if (!threadId || (!submitting && thread?.status.type !== "active")) {
@@ -501,11 +513,17 @@ function ControlOfficeChatRoom({
     let timeoutId: number | null = null;
     const refresh = async () => {
       try {
-        const nextThread = await runtime.readThread(threadId, {
-          signal: controller.signal,
-        });
+        const [nextThread, activeGoal] = await Promise.all([
+          runtime.readThread(threadId, { signal: controller.signal }),
+          readControlOfficeActiveGoal(client, threadId, {
+            signal: controller.signal,
+          }),
+        ]);
         if (!controller.signal.aborted) {
           setThread(nextThread);
+          if (activeGoal !== undefined) {
+            setHasActiveGoal(activeGoal);
+          }
         }
       } catch (reason) {
         if (!controller.signal.aborted) {
@@ -524,7 +542,7 @@ function ControlOfficeChatRoom({
         window.clearTimeout(timeoutId);
       }
     };
-  }, [locale, runtime, submitting, thread?.status.type, threadId]);
+  }, [client, locale, runtime, submitting, thread?.status.type, threadId]);
 
   async function submitMessage() {
     const text = draft.trim();
@@ -536,6 +554,32 @@ function ControlOfficeChatRoom({
     setError(null);
     setDraft("");
     try {
+      const runtimeRecord =
+        executionIntent === "plan"
+          ? controlOfficeRecord(
+              await readLatestControlOffice(
+                client,
+                activeRecord.definition.officeVersionId,
+              ),
+            )
+          : activeRecord;
+      const members = runtimeRecord.definition.members;
+      const memberMentions = controlOfficeMemberMentionsFromRenderedText(
+        text,
+        members,
+        locale,
+      );
+      const directMemberId = controlOfficeDirectMemberId(memberMentions);
+      if (
+        executionIntent === "plan" &&
+        members.length > 1 &&
+        directMemberId === null
+      ) {
+        throw new Error(CONTROL_TEAM_PLAN_UNSUPPORTED);
+      }
+      if (executionIntent !== "none") {
+        await requireControlExecutionIntentCapability(client);
+      }
       let activeThreadId = threadId;
       if (!activeThreadId) {
         const created = await client.createThread(
@@ -545,24 +589,12 @@ function ControlOfficeChatRoom({
         activeThreadId = created.thread.threadId;
         setThreadId(activeThreadId);
       }
-      const runtimeRecord = await refreshControlOfficeRuntimeRecord({
-        client,
-        model,
-        record: activeRecord,
-      });
       if (
         runtimeRecord.definition.officeVersionId !==
         activeRecord.definition.officeVersionId
       ) {
         setActiveRecord(runtimeRecord);
       }
-      const members = runtimeRecord.definition.members;
-      const memberMentions = controlOfficeMemberMentionsFromRenderedText(
-        text,
-        members,
-        locale,
-      );
-      const directMemberId = controlOfficeDirectMemberId(memberMentions);
       await runtime.startTurn(
         activeThreadId,
         `${text}${attachmentContext(attachments)}`,
@@ -694,13 +726,6 @@ function ControlOfficeChatRoom({
   }
 
   function selectAddItem(item: PaletteItemWithCommand) {
-    if (item.action === "intent-goal" || item.action === "intent-plan") {
-      const selected = item.action === "intent-goal" ? "goal" : "plan";
-      setExecutionIntent((current) => nextExecutionIntent(current, selected));
-      closeComposerPalette();
-      textareaRef.current?.focus();
-      return;
-    }
     if (item.action === "attach-files") {
       closeComposerPalette();
       fileInputRef.current?.click();
@@ -1048,55 +1073,36 @@ function ControlOfficeChatRoom({
                 >
                   <Plus aria-hidden="true" />
                 </button>
-                <CommandComposerSelect
-                  ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
-                  className="max-w-[180px]"
-                  contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
-                  icon={<ShieldCheck aria-hidden="true" />}
-                  menuHelp={{
-                    href: commandComposerPermissionLearnMoreUrl,
-                    label: commandComposerPermissionLearnMoreLabel(locale),
-                  }}
-                  menuTitle={commandComposerPermissionMenuTitle(locale)}
-                  options={commandComposerPermissionOptions(locale)}
-                  showChevron={false}
-                  value={permission}
-                  onChange={setPermission}
+                <ComposerExecutionIntentControl
+                  disabled={loading || submitting}
+                  hasActiveGoal={hasActiveGoal}
+                  locale={locale}
+                  value={executionIntent}
+                  onSelect={(selected) =>
+                    setExecutionIntent((current) =>
+                      nextExecutionIntent(current, selected),
+                    )
+                  }
                 />
-                {executionIntent !== "none" ? (
-                  <button
-                    aria-label={
-                      executionIntent === "goal"
-                        ? locale === "zh"
-                          ? "取消目标执行意图"
-                          : "Clear goal execution intent"
-                        : locale === "zh"
-                          ? "取消计划执行意图"
-                          : "Clear plan execution intent"
-                    }
-                    className="execution-intent-chip"
-                    data-execution-intent={executionIntent}
-                    title={locale === "zh" ? "点击取消" : "Click to clear"}
-                    type="button"
-                    onClick={() => setExecutionIntent("none")}
-                  >
-                    {executionIntent === "goal" ? (
-                      <Target aria-hidden="true" />
-                    ) : (
-                      <ListChecks aria-hidden="true" />
-                    )}
-                    <span>
-                      {executionIntent === "goal"
-                        ? locale === "zh"
-                          ? "目标"
-                          : "Goal"
-                        : locale === "zh"
-                          ? "计划"
-                          : "Plan"}
-                    </span>
-                    <X aria-hidden="true" />
-                  </button>
-                ) : null}
+                {executionIntent === "plan" ? (
+                  <ComposerPlanReadonlyStatus locale={locale} />
+                ) : (
+                  <CommandComposerSelect
+                    ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
+                    className="max-w-[180px]"
+                    contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
+                    icon={<ShieldCheck aria-hidden="true" />}
+                    menuHelp={{
+                      href: commandComposerPermissionLearnMoreUrl,
+                      label: commandComposerPermissionLearnMoreLabel(locale),
+                    }}
+                    menuTitle={commandComposerPermissionMenuTitle(locale)}
+                    options={commandComposerPermissionOptions(locale)}
+                    showChevron={false}
+                    value={permission}
+                    onChange={setPermission}
+                  />
+                )}
               </>
             }
             disabled={loading}

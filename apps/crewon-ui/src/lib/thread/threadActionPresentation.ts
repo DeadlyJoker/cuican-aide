@@ -218,12 +218,50 @@ export function threadSendFailureNotice(
   error: unknown,
   locale: Locale,
 ): NoticeState {
+  if (error instanceof Error) {
+    const executionIntentFailure = executionIntentFailureNotice(
+      error.message,
+      locale,
+    );
+    if (executionIntentFailure !== null) {
+      return executionIntentFailure;
+    }
+  }
   return warningNotice(
     error,
     locale === "zh"
       ? "发送到后端失败，消息已保留在输入框。"
       : "Unable to send to backend. The message was kept in the composer.",
   );
+}
+
+function executionIntentFailureNotice(
+  code: string,
+  locale: Locale,
+): NoticeState | null {
+  const text =
+    code === "control_execution_intent_capability_unavailable"
+      ? locale === "zh"
+        ? "当前后端版本还不支持目标或计划模式。请完成服务升级后重试；消息和模式已保留。"
+        : "The current backend does not support Goal or Plan mode yet. Finish the service upgrade and try again; the message and mode were preserved."
+      : code === "control_team_plan_unsupported"
+        ? locale === "zh"
+          ? "多成员团队暂不支持计划模式。请选择单个成员，或关闭计划模式后重试；消息和模式已保留。"
+          : "Plan mode is not yet supported for multi-member teams. Select one member or turn Plan off; the message and mode were preserved."
+        : code === "control_active_turn_execution_intent_unsupported"
+          ? locale === "zh"
+            ? "当前任务运行中，不能追加目标或计划模式。请等待完成或先停止任务；消息和模式已保留。"
+            : "Goal and Plan modes cannot be appended to an active turn. Wait for it to finish or stop it first; the message and mode were preserved."
+          : code === "control_review_execution_intent_unsupported"
+            ? locale === "zh"
+              ? "代码审查暂不支持目标或计划模式。请关闭该模式后重试；消息和模式已保留。"
+              : "Code review does not yet support Goal or Plan mode. Turn the mode off and retry; the message and mode were preserved."
+            : code === "goal_budget_limited" || code === "goal_usage_limited"
+              ? locale === "zh"
+                ? "当前目标已达到使用或预算限制，请先调整目标后再继续；消息和模式已保留。"
+                : "The current Goal reached its usage or budget limit. Adjust it before continuing; the message and mode were preserved."
+              : null;
+  return text === null ? null : { text, tone: "warning" };
 }
 
 export function threadInterruptRequestedNotice(locale: Locale): NoticeState {

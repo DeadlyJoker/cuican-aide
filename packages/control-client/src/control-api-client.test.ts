@@ -106,6 +106,31 @@ test("authorizes a pinned Control Office target before starting its Turn", async
   });
 });
 
+test("reads the execution-intent deployment capability through an authenticated route", async () => {
+  const requests: Array<{ input: string; init: RequestInit }> = [];
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    accessToken: "access-token",
+    fetch: async (input, init = {}) => {
+      requests.push({ input: String(input), init });
+      return jsonResponse(200, { version: "v1" });
+    },
+  });
+
+  assert.deepEqual(await client.getExecutionIntentCapability(), {
+    version: "v1",
+  });
+  assert.equal(
+    requests[0]?.input,
+    "https://control.example/api/v1/capabilities/execution-intent-v1",
+  );
+  assert.equal(requests[0]?.init.method, "GET");
+  assert.equal(
+    new Headers(requests[0]?.init.headers).get("authorization"),
+    "Bearer access-token",
+  );
+});
+
 test("sends a typed selected-version Run without client-owned route fields", async () => {
   const requests: { input: string; init: RequestInit }[] = [];
   const client = new ControlApiClient({
@@ -358,11 +383,15 @@ test("starts a Turn through one atomic typed mutation", async () => {
   );
   assert.equal(
     requests[0]?.input,
-    "https://control.example/api/v1/threads/thread%2Fwith%20separator/turns",
+    "https://control.example/api/v1/threads/thread%2Fwith%20separator/turns/execution-intent-v1",
   );
   assert.equal(
     new Headers(requests[0]?.init.headers).get("idempotency-key"),
     "turn-start-1",
+  );
+  assert.equal(
+    new Headers(requests[0]?.init.headers).get("accept"),
+    "application/json; crewon-execution-intent-ack=v1",
   );
   assert.deepEqual(JSON.parse(String(requests[0]?.init.body)), {
     expectedRevision: 1,
@@ -371,6 +400,73 @@ test("starts a Turn through one atomic typed mutation", async () => {
     executionIntent: "plan",
     toolPermissionMode: "fullAccess",
   });
+
+  await client.startTurn(
+    "thread/with separator",
+    {
+      expectedRevision: 2,
+      content: "continue normally",
+      agentVersionId: null,
+      executionIntent: "none",
+    },
+    "turn-start-2",
+  );
+  assert.equal(
+    requests[1]?.input,
+    "https://control.example/api/v1/threads/thread%2Fwith%20separator/turns",
+  );
+  assert.equal(
+    new Headers(requests[1]?.init.headers).get("accept"),
+    "application/json",
+  );
+});
+
+test("maps missing execution-intent routes to one rollout-safe capability error", async () => {
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async () =>
+      jsonResponse(404, {
+        error: {
+          category: "notFound",
+          code: "route_not_found",
+          message: "Not found",
+          requestId: "request-1",
+        },
+      }),
+  });
+
+  await assert.rejects(
+    client.getExecutionIntentCapability(),
+    hasProtocolCode("control_execution_intent_capability_unavailable"),
+  );
+  await assert.rejects(
+    client.startTurn(
+      "thread-1",
+      {
+        expectedRevision: 1,
+        content: "Plan safely",
+        agentVersionId: null,
+        executionIntent: "plan",
+      },
+      "plan-rollout-1",
+    ),
+    hasProtocolCode("control_execution_intent_capability_unavailable"),
+  );
+  await assert.rejects(
+    client.startTurn(
+      "thread-1",
+      {
+        expectedRevision: 1,
+        content: "Continue normally",
+        agentVersionId: null,
+        executionIntent: "none",
+      },
+      "normal-rollout-1",
+    ),
+    (error) =>
+      error instanceof ControlApiClientError &&
+      error.code === "route_not_found",
+  );
 });
 
 test("uses typed manual-only Automation routes with CSRF and idempotency", async () => {
@@ -1532,6 +1628,7 @@ function runResponse() {
 function startTurnResponse() {
   return {
     ...runResponse(),
+    acceptedExecutionIntent: "plan" as const,
     thread: {
       threadId: "thread/with separator",
       title: null,

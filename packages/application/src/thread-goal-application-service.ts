@@ -4,7 +4,6 @@ import {
   computeRunGoalAccountingDelta,
   DEFAULT_THREAD_GOAL_TOKEN_BUDGET,
   RunGoalAccountingError,
-  THREAD_GOAL_STATUSES,
   ThreadGoalError,
   threadGoalContinuationPrompt,
   validateThreadGoal,
@@ -46,13 +45,18 @@ export type ThreadGoalTokenBudgetUpdate =
   | Readonly<{ kind: "keep" }>
   | Readonly<{ kind: "set"; value: number | null }>;
 
+export type UserSettableThreadGoalStatus = Extract<
+  ThreadGoalStatus,
+  "active" | "paused"
+>;
+
 export type SetThreadGoalCommand = Readonly<{
   kind: "thread.goal.set";
   threadId: string;
   idempotencyKey: string;
   expectedRevision: number | null;
   objective: string | null;
-  status: ThreadGoalStatus | null;
+  status: UserSettableThreadGoalStatus | null;
   tokenBudget: ThreadGoalTokenBudgetUpdate;
 }>;
 
@@ -687,26 +691,36 @@ function setGoalMutation(
   if (current === null && objective === null) {
     throw new ApplicationError("validation", "goal_objective_required");
   }
+  const replaceCompleted = current?.status === "complete" && objective !== null;
   const tokenBudget =
     command.tokenBudget.kind === "set"
       ? command.tokenBudget.value
-      : current === null
+      : current === null || replaceCompleted
         ? DEFAULT_THREAD_GOAL_TOKEN_BUDGET
         : current.tokenBudget;
-  const requestedStatus = command.status ?? current?.status ?? "active";
-  const status = externalGoalStatus(current, requestedStatus, tokenBudget);
+  const requestedStatus =
+    command.status ??
+    (replaceCompleted ? "active" : current?.status) ??
+    "active";
+  const status = externalGoalStatus(
+    replaceCompleted ? null : current,
+    requestedStatus,
+    tokenBudget,
+  );
   const next: ThreadGoal = {
     schemaVersion: "crewon.thread-goal.v0",
     tenantId: actor.tenantId,
     threadId: command.threadId,
-    goalId: current?.goalId ?? nextId("goal"),
+    goalId:
+      current === null || replaceCompleted ? nextId("goal") : current.goalId,
     revision: (current?.revision ?? 0) + 1,
     objective: objective ?? current!.objective,
     status,
     tokenBudget,
-    tokensUsed: current?.tokensUsed ?? 0,
-    timeUsedSeconds: current?.timeUsedSeconds ?? 0,
-    createdAt: current?.createdAt ?? occurredAt,
+    tokensUsed: replaceCompleted ? 0 : (current?.tokensUsed ?? 0),
+    timeUsedSeconds: replaceCompleted ? 0 : (current?.timeUsedSeconds ?? 0),
+    createdAt:
+      current === null || replaceCompleted ? occurredAt : current.createdAt,
     updatedAt: occurredAt,
   };
   try {
@@ -744,6 +758,12 @@ function externalGoalStatus(
   requested: ThreadGoalStatus,
   tokenBudget: number | null,
 ): ThreadGoalStatus {
+  if (current?.status === "complete") {
+    return "complete";
+  }
+  if (current?.status === "usageLimited") {
+    return "usageLimited";
+  }
   if (
     current?.status === "budgetLimited" &&
     (requested === "paused" || requested === "blocked")
@@ -836,7 +856,8 @@ function validateSetCommand(command: SetThreadGoalCommand): void {
   }
   if (
     command.status !== null &&
-    !THREAD_GOAL_STATUSES.includes(command.status)
+    command.status !== "active" &&
+    command.status !== "paused"
   ) {
     throw new ApplicationError("validation", "goal_status_invalid");
   }

@@ -69,6 +69,10 @@ export type ToolPermissionMode = components["schemas"]["ToolPermissionMode"];
 export type StartWorkflowRunRequest =
   components["schemas"]["StartWorkflowRunRequest"];
 export type StartTurnRequest = components["schemas"]["StartTurnRequest"];
+export type ExecutionIntentCapabilityResponse =
+  components["schemas"]["ExecutionIntentCapabilityResponse"];
+export const START_TURN_EXECUTION_INTENT_ACK_ACCEPT =
+  "application/json; crewon-execution-intent-ack=v1" as const;
 export type CompactThreadRequest =
   components["schemas"]["CompactThreadRequest"];
 export type StartTurnResponse = components["schemas"]["StartTurnResponse"];
@@ -1261,10 +1265,6 @@ function parseNullableThreadGoalStatus(
     case null:
     case "active":
     case "paused":
-    case "blocked":
-    case "usageLimited":
-    case "budgetLimited":
-    case "complete":
       return input;
     default:
       throw new ContractValidationError("goal_status_invalid");

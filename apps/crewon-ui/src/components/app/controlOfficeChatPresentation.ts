@@ -124,6 +124,10 @@ export function controlOfficeChatErrorMessage(
 ): string {
   const code = reason instanceof Error ? reason.message : String(reason);
   switch (code) {
+    case "control_execution_intent_capability_unavailable":
+      return locale === "zh"
+        ? "当前后端版本还不支持目标或计划模式。请完成服务升级后重试；消息和模式已保留。"
+        : "The current backend does not support Goal or Plan mode yet. Finish the service upgrade and try again; the message and mode were preserved.";
     case "control_team_agent_version_unavailable":
     case "control_office_agent_version_not_active":
       return locale === "zh"
@@ -134,6 +138,15 @@ export function controlOfficeChatErrorMessage(
       return locale === "zh"
         ? "这个办公室暂时无法开始协作，请检查成员设置后再试。"
         : "This Office cannot start collaborating yet. Check the member settings and try again.";
+    case "control_team_plan_unsupported":
+      return locale === "zh"
+        ? "多成员办公室暂不支持计划模式。请直接 @ 一名成员，或关闭计划模式后重试。"
+        : "Plan mode is not yet supported for multi-member Offices. Mention one member directly or turn Plan off.";
+    case "goal_usage_limited":
+    case "goal_budget_limited":
+      return locale === "zh"
+        ? "当前目标已达到使用或预算限制，请先调整目标后再继续。"
+        : "The current Goal reached its usage or budget limit. Adjust it before continuing.";
     default:
       return locale === "zh"
         ? "操作没有完成，请稍后再试。"

@@ -18,6 +18,30 @@
     }
   ],
   "paths": {
+    "/api/v1/capabilities/execution-intent-v1": {
+      "get": {
+        "operationId": "getExecutionIntentCapabilityV1",
+        "description": "Read-only deployment gate for execution-intent semantics. Clients that require Goal or Plan v1 behavior must call this before any multi-step workflow mutation.",
+        "responses": {
+          "200": {
+            "description": "Execution-intent v1 semantics are available",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExecutionIntentCapabilityResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
     "/api/v1/model-provider-settings": {
       "get": {
         "operationId": "getModelProviderSettings",
@@ -1228,6 +1252,73 @@
           },
           "201": {
             "description": "A user Message and Run committed atomically",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartTurnResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/turns/execution-intent-v1": {
+      "post": {
+        "operationId": "startTurnWithExecutionIntentV1",
+        "description": "Capability-gated Turn admission for Goal, Plan, and ResumeGoal. Older servers do not expose this path and therefore fail before committing a Turn. Successful responses always include acceptedExecutionIntent.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ThreadId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/CsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartTurnRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotently replayed execution-intent Turn start with acceptedExecutionIntent",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StartTurnResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "An execution-intent user Message and Run committed atomically with acceptedExecutionIntent",
             "content": {
               "application/json": {
                 "schema": {
@@ -4004,6 +4095,11 @@
           "complete"
         ]
       },
+      "ThreadGoalUserStatus": {
+        "type": "string",
+        "description": "Goal states that a user-facing mutation may request. Runtime and system terminal/limit states are read-only through this API.",
+        "enum": ["active", "paused"]
+      },
       "ThreadGoalView": {
         "type": "object",
         "additionalProperties": false,
@@ -4130,7 +4226,7 @@
           "status": {
             "oneOf": [
               {
-                "$ref": "#/components/schemas/ThreadGoalStatus"
+                "$ref": "#/components/schemas/ThreadGoalUserStatus"
               },
               {
                 "type": "null"
@@ -4735,7 +4831,7 @@
           "executionIntent": {
             "type": "string",
             "enum": ["none", "goal", "plan", "resumeGoal"],
-            "description": "Atomic Turn intent. Goal creates or updates the persistent Thread Goal; Plan clears it and pins this Run to Plan collaboration mode; ResumeGoal atomically resumes a paused Goal for one bound Run while deferring automatic continuation."
+            "description": "Atomic Turn intent. Goal creates or updates the persistent Thread Goal; Plan clears an active Goal, retains inactive Goal history, and pins this Run to Plan collaboration mode; ResumeGoal atomically resumes a paused Goal for one bound Run while deferring automatic continuation."
           },
           "toolPermissionMode": {
             "$ref": "#/components/schemas/ToolPermissionMode"
@@ -5071,6 +5167,11 @@
             "type": "string",
             "enum": ["committed", "replayed"]
           },
+          "acceptedExecutionIntent": {
+            "type": "string",
+            "description": "Execution intent durably accepted for this turn. Always present on the execution-intent-v1 route and present on the legacy Turn route only when its Accept header includes the crewon-execution-intent-ack=v1 media parameter.",
+            "enum": ["none", "goal", "plan", "resumeGoal"]
+          },
           "thread": {
             "$ref": "#/components/schemas/ThreadView"
           },
@@ -5079,6 +5180,17 @@
           },
           "run": {
             "$ref": "#/components/schemas/RunView"
+          }
+        }
+      },
+      "ExecutionIntentCapabilityResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["version"],
+        "properties": {
+          "version": {
+            "type": "string",
+            "const": "v1"
           }
         }
       },

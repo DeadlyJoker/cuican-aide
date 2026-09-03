@@ -20,6 +20,7 @@ import type {
   DeleteThreadRequest,
   ErrorCategory,
   ErrorEnvelope,
+  ExecutionIntentCapabilityResponse,
   ForkThreadRequest,
   GetAgentVersionResponse,
   GetAutomationResponse,
@@ -70,6 +71,7 @@ import type {
 import {
   MAX_THREAD_TASK_CHANGE_RESPONSE_BYTES,
   parseThreadTaskChangeLedgerResponse,
+  START_TURN_EXECUTION_INTENT_ACK_ACCEPT,
   type ThreadTaskChangeLedgerResponse,
 } from "@crewon/contracts";
 import { parseRunView, RunViewValidationError } from "./run-view.ts";
@@ -175,6 +177,21 @@ export class ControlApiClient {
     );
     this.#origin = optionalOrigin(config.origin);
     this.#fetch = config.fetch ?? globalThis.fetch.bind(globalThis);
+  }
+
+  async getExecutionIntentCapability(
+    options: ControlApiRequestOptions = {},
+  ): Promise<ExecutionIntentCapabilityResponse> {
+    try {
+      return await this.#json(
+        "GET",
+        "/api/v1/capabilities/execution-intent-v1",
+        null,
+        { ...options, expectedStatuses: [200] },
+      );
+    } catch (error) {
+      throw normalizeExecutionIntentCapabilityError(error);
+    }
   }
 
   getModelProviderSettings(
@@ -771,18 +788,35 @@ export class ControlApiClient {
     return parseListThreadRunsResponse(response, threadId);
   }
 
-  startTurn(
+  async startTurn(
     threadId: string,
     body: StartTurnRequest,
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
   ): Promise<StartTurnResponse> {
-    return this.#json(
-      "POST",
-      `/api/v1/threads/${resourceId(threadId)}/turns`,
-      body,
-      { ...options, idempotencyKey, expectedStatuses: [200, 201] },
-    );
+    const requiresExecutionIntentCapability = body.executionIntent !== "none";
+    try {
+      return await this.#json(
+        "POST",
+        `/api/v1/threads/${resourceId(threadId)}/turns${
+          requiresExecutionIntentCapability ? "/execution-intent-v1" : ""
+        }`,
+        body,
+        {
+          ...options,
+          ...(requiresExecutionIntentCapability
+            ? { accept: START_TURN_EXECUTION_INTENT_ACK_ACCEPT }
+            : {}),
+          idempotencyKey,
+          expectedStatuses: [200, 201],
+        },
+      );
+    } catch (error) {
+      if (requiresExecutionIntentCapability) {
+        throw normalizeExecutionIntentCapabilityError(error);
+      }
+      throw error;
+    }
   }
 
   compactThread(
@@ -1211,9 +1245,12 @@ export class ControlApiClient {
       requireIdempotency?: boolean;
       expectedStatuses: readonly number[];
       maximumResponseBytes?: number;
+      accept?: string;
     },
   ): Promise<T> {
-    const headers = this.#authenticatedHeaders("application/json");
+    const headers = this.#authenticatedHeaders(
+      options.accept ?? "application/json",
+    );
     if (method !== "GET") {
       headers.set("content-type", "application/json");
       if (options.requireCsrf === true && this.#csrfToken === null) {
@@ -1288,6 +1325,16 @@ export class ControlApiProtocolError extends Error {
     this.name = "ControlApiProtocolError";
     this.code = code;
   }
+}
+
+function normalizeExecutionIntentCapabilityError(error: unknown): unknown {
+  return error instanceof ControlApiClientError &&
+    error.status === 404 &&
+    error.code === "route_not_found"
+    ? new ControlApiProtocolError(
+        "control_execution_intent_capability_unavailable",
+      )
+    : error;
 }
 
 const ERROR_CATEGORIES = new Set<ErrorCategory>([

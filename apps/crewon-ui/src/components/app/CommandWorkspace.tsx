@@ -1,4 +1,4 @@
-import { ListChecks, Plus, ShieldCheck, Target, X } from "lucide-react";
+import { Plus, ShieldCheck } from "lucide-react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
 import type { WorkflowRunUpdatedNotification } from "@crewon/app-server-protocol/v2/WorkflowRunUpdatedNotification";
@@ -194,6 +194,18 @@ import {
   ComposerResourceTags,
   type ComposerResourceTag,
 } from "../composer/ComposerResourceTags";
+import {
+  ComposerExecutionIntentControl,
+  ComposerPlanReadonlyStatus,
+} from "../composer/ComposerExecutionIntentControl";
+import {
+  commandExecutionIntentScopeKey,
+  executionIntentSelectionAfterCommit,
+  executionIntentSelectionForScopeChange,
+  nextExecutionIntent,
+  type CommandExecutionIntentSelection,
+  type PendingCommandExecutionIntent,
+} from "../composer/composerExecutionIntentSelection";
 import { ComposerGoalBar } from "../composer/ComposerGoalBar";
 import {
   composerGoalBarState,
@@ -689,20 +701,6 @@ function paletteFilter(items: PaletteItemWithCommand[], query: string) {
   );
 }
 
-export function nextExecutionIntent(
-  current: CommandExecutionIntent,
-  selected: Exclude<CommandExecutionIntent, "none">,
-): CommandExecutionIntent {
-  return current === selected ? "none" : selected;
-}
-
-export function executionIntentAfterCommit(
-  current: CommandExecutionIntent,
-  committed: Exclude<CommandExecutionIntent, "none">,
-): CommandExecutionIntent {
-  return current === committed ? "none" : current;
-}
-
 export function shouldCloseComposerPalette({
   paletteRoots,
   target,
@@ -852,14 +850,65 @@ export function CommandWorkspace({
     });
   const [permission, setPermission] =
     useState<CommandComposerPermission>("approve-for-me");
-  const [executionIntent, setExecutionIntent] =
-    useState<CommandExecutionIntent>("none");
+  const composerTargetProviderAgent = providerAgentResourceForTarget(
+    providerResource?.executionAgents ?? [],
+    executionTarget,
+  );
+  const composerSelectedProviderAgentMatches =
+    providerResource?.selectedExecutionAgent !== undefined &&
+    providerResource.selectedExecutionAgent !== null &&
+    providerAgentResourceForTarget(
+      [providerResource.selectedExecutionAgent],
+      executionTarget,
+    ) !== null;
+  const composerShouldCreateNewThread = shouldCreateCommandThread({
+    hasProviderAgentTarget: composerTargetProviderAgent !== null,
+    isProviderAgentBoundToSelectedThread:
+      composerSelectedProviderAgentMatches &&
+      providerResource?.snapshot.binding !== null,
+    newTaskDraft,
+    selectedThread,
+  });
+  const executionIntentScopeKey = commandExecutionIntentScopeKey({
+    shouldCreateNewThread: composerShouldCreateNewThread,
+    selectedThreadId,
+  });
+  const [executionIntentSelection, setExecutionIntentSelection] =
+    useState<CommandExecutionIntentSelection>(() => ({
+      intent: "none",
+      revision: 0,
+      scopeKey: executionIntentScopeKey,
+    }));
+  const executionIntent =
+    executionIntentSelection.scopeKey === executionIntentScopeKey
+      ? executionIntentSelection.intent
+      : "none";
+  const pendingExecutionIntentRef =
+    useRef<PendingCommandExecutionIntent | null>(null);
 
   useEffect(() => {
-    if (committedExecutionIntent !== null) {
-      setExecutionIntent((current) =>
-        executionIntentAfterCommit(current, committedExecutionIntent.intent),
+    const transition = executionIntentSelectionForScopeChange({
+      current: executionIntentSelection,
+      nextScopeKey: executionIntentScopeKey,
+      pending: pendingExecutionIntentRef.current,
+      submissionPending: isSending,
+    });
+    pendingExecutionIntentRef.current = transition.pending;
+    if (transition.selection !== executionIntentSelection) {
+      setExecutionIntentSelection(transition.selection);
+    }
+  }, [executionIntentScopeKey, executionIntentSelection, isSending]);
+
+  useEffect(() => {
+    const submittedSelection = pendingExecutionIntentRef.current;
+    if (
+      committedExecutionIntent !== null &&
+      submittedSelection?.intent === committedExecutionIntent.intent
+    ) {
+      setExecutionIntentSelection((current) =>
+        executionIntentSelectionAfterCommit(current, submittedSelection),
       );
+      pendingExecutionIntentRef.current = null;
     }
   }, [committedExecutionIntent]);
   const [openPalette, setOpenPalette] = useState<
@@ -1585,28 +1634,6 @@ export function CommandWorkspace({
   const addPaletteItems = useMemo<PaletteItemWithCommand[]>(
     () => [
       {
-        action: "intent-goal",
-        active: executionIntent === "goal",
-        detail:
-          locale === "zh"
-            ? "围绕一个可追踪的目标持续推进，进度显示在目标栏"
-            : "Keep working toward a trackable goal, with progress in the goal bar",
-        kind: "intent",
-        label: locale === "zh" ? "目标" : "Goal",
-        title: locale === "zh" ? "目标模式" : "Goal mode",
-      },
-      {
-        action: "intent-plan",
-        active: executionIntent === "plan",
-        detail:
-          locale === "zh"
-            ? "先给出执行计划，确认后再执行"
-            : "Draft an execution plan first, then run it after confirmation",
-        kind: "intent",
-        label: locale === "zh" ? "计划" : "Plan",
-        title: locale === "zh" ? "计划模式" : "Plan mode",
-      },
-      {
         action: "attach-files",
         detail: "从本地电脑选择一个或多个文件",
         kind: "file",
@@ -1636,13 +1663,7 @@ export function CommandWorkspace({
         (item) => item.kind === "skill" || item.kind === "mcp",
       ),
     ],
-    [
-      contextPaletteItems,
-      executionIntent,
-      locale,
-      providerResourceAvailable,
-      slashPaletteItems,
-    ],
+    [contextPaletteItems, providerResourceAvailable, slashPaletteItems],
   );
   const providerComposerTag =
     providerResourceAvailable && providerResource?.selectedResource
@@ -2134,25 +2155,7 @@ export function CommandWorkspace({
       return;
     }
     onChangeComposerValue("");
-    const targetProviderAgent = providerAgentResourceForTarget(
-      providerResource?.executionAgents ?? [],
-      executionTarget,
-    );
-    const selectedProviderAgentMatches =
-      providerResource?.selectedExecutionAgent !== undefined &&
-      providerResource.selectedExecutionAgent !== null &&
-      providerAgentResourceForTarget(
-        [providerResource.selectedExecutionAgent],
-        executionTarget,
-      ) !== null;
-    const shouldCreateNewThread = shouldCreateCommandThread({
-      hasProviderAgentTarget: targetProviderAgent !== null,
-      isProviderAgentBoundToSelectedThread:
-        selectedProviderAgentMatches &&
-        providerResource?.snapshot.binding !== null,
-      newTaskDraft,
-      selectedThread,
-    });
+    const shouldCreateNewThread = composerShouldCreateNewThread;
     if (shouldCreateNewThread) {
       pendingThreadExecutionTargetRef.current = executionTarget;
       pendingThreadSceneRef.current = scene;
@@ -2160,6 +2163,16 @@ export function CommandWorkspace({
       persistThreadExecutionTarget(selectedThreadId, executionTarget);
       persistThreadScene(selectedThreadId, scene);
     }
+    pendingExecutionIntentRef.current =
+      executionIntent === "goal" || executionIntent === "plan"
+        ? {
+            adoptCreatedThreadScope: shouldCreateNewThread,
+            intent: executionIntent,
+            revision: executionIntentSelection.revision,
+            scopeKey: executionIntentScopeKey,
+            sourceThreadId: selectedThreadId,
+          }
+        : null;
     submitCommandComposer({
       cwd: workspaceAuthority === "legacy" ? cwd || null : null,
       images: commandImages.map(({ detail, url }) => ({ detail, url })),
@@ -2380,13 +2393,6 @@ export function CommandWorkspace({
   }
 
   function insertAddItem(item: PaletteItemWithCommand) {
-    if (item.action === "intent-goal" || item.action === "intent-plan") {
-      const selected = item.action === "intent-goal" ? "goal" : "plan";
-      setExecutionIntent((current) => nextExecutionIntent(current, selected));
-      closeComposerPalette();
-      focusActiveComposer();
-      return;
-    }
     if (item.action === "attach-files") {
       closeComposerPalette();
       fileInputRef.current?.click();
@@ -2406,6 +2412,20 @@ export function CommandWorkspace({
       return;
     }
     insertContextItem(item);
+  }
+
+  function selectExecutionIntent(
+    selected: Exclude<CommandExecutionIntent, "none">,
+  ) {
+    pendingExecutionIntentRef.current = null;
+    setExecutionIntentSelection((current) => ({
+      intent: nextExecutionIntent(
+        current.scopeKey === executionIntentScopeKey ? current.intent : "none",
+        selected,
+      ),
+      revision: current.revision + 1,
+      scopeKey: executionIntentScopeKey,
+    }));
   }
 
   async function openRuntimeOffice(record: OfficeConfigRecordReference) {
@@ -3181,58 +3201,37 @@ export function CommandWorkspace({
                       >
                         <Plus aria-hidden="true" />
                       </button>
-                      <CommandComposerSelect
-                        ariaLabel={locale === "zh" ? "权限选择" : "Permissions"}
-                        className="max-w-[180px]"
-                        contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
-                        icon={<ShieldCheck aria-hidden="true" />}
-                        menuHelp={{
-                          href: commandComposerPermissionLearnMoreUrl,
-                          label:
-                            commandComposerPermissionLearnMoreLabel(locale),
-                        }}
-                        menuTitle={commandComposerPermissionMenuTitle(locale)}
-                        options={localizedPermissionOptions}
-                        showChevron={false}
-                        value={permission}
-                        onChange={setPermission}
+                      <ComposerExecutionIntentControl
+                        disabled={isSending}
+                        hasActiveGoal={
+                          showCommandThread && threadGoal?.status === "active"
+                        }
+                        locale={locale}
+                        value={executionIntent}
+                        onSelect={selectExecutionIntent}
                       />
-                      {executionIntent !== "none" ? (
-                        <button
-                          aria-label={
-                            executionIntent === "goal"
-                              ? locale === "zh"
-                                ? "取消目标执行意图"
-                                : "Clear goal execution intent"
-                              : locale === "zh"
-                                ? "取消计划执行意图"
-                                : "Clear plan execution intent"
+                      {executionIntent === "plan" ? (
+                        <ComposerPlanReadonlyStatus locale={locale} />
+                      ) : (
+                        <CommandComposerSelect
+                          ariaLabel={
+                            locale === "zh" ? "权限选择" : "Permissions"
                           }
-                          className="execution-intent-chip"
-                          data-execution-intent={executionIntent}
-                          title={
-                            locale === "zh" ? "点击取消" : "Click to clear"
-                          }
-                          type="button"
-                          onClick={() => setExecutionIntent("none")}
-                        >
-                          {executionIntent === "goal" ? (
-                            <Target aria-hidden="true" />
-                          ) : (
-                            <ListChecks aria-hidden="true" />
-                          )}
-                          <span>
-                            {executionIntent === "goal"
-                              ? locale === "zh"
-                                ? "目标"
-                                : "Goal"
-                              : locale === "zh"
-                                ? "计划"
-                                : "Plan"}
-                          </span>
-                          <X aria-hidden="true" />
-                        </button>
-                      ) : null}
+                          className="max-w-[180px]"
+                          contentClassName="w-[min(360px,var(--radix-select-content-available-width))] [&_[role=option]]:px-3 [&_[role=option]]:py-2.5"
+                          icon={<ShieldCheck aria-hidden="true" />}
+                          menuHelp={{
+                            href: commandComposerPermissionLearnMoreUrl,
+                            label:
+                              commandComposerPermissionLearnMoreLabel(locale),
+                          }}
+                          menuTitle={commandComposerPermissionMenuTitle(locale)}
+                          options={localizedPermissionOptions}
+                          showChevron={false}
+                          value={permission}
+                          onChange={setPermission}
+                        />
+                      )}
                     </>
                   }
                   dataOdId="ai-composer"

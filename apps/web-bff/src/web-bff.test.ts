@@ -129,7 +129,10 @@ test("uses separate browser and Control CSRF values for mutations", async () => 
     identity: fixedIdentity(SESSION),
     fetch: async (_input, init) => {
       upstream.push(init ?? {});
-      return new Response(null, { status: 204 });
+      return new Response(null, {
+        status: 204,
+        headers: { vary: "Accept" },
+      });
     },
   });
   const sessionResponse = await bff.handle(
@@ -151,6 +154,7 @@ test("uses separate browser and Control CSRF values for mutations", async () => 
   );
 
   assert.equal(response.status, 204);
+  assert.equal(response.headers.get("vary"), "Accept");
   assert.equal(upstream.length, 1);
   const headers = new Headers(upstream[0]?.headers);
   assert.equal(headers.get("x-csrf-token"), CONTROL_CSRF);

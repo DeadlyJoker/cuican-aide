@@ -268,8 +268,15 @@ function fakeClient({
     }),
     {
       getActiveAgentVersionCatalog: vi.fn(async () => activeCatalog),
+      getExecutionIntentCapability: vi.fn(async () => ({
+        version: "v1" as const,
+      })),
       getOffice: vi.fn(async () => ({ office })),
       listOffices: vi.fn(async () => ({ data: [office], nextCursor: null })),
+      getThreadGoal: vi.fn<ControlApiClient["getThreadGoal"]>(async () => ({
+        goal: null,
+        eventSequence: 0,
+      })),
       createOffice: vi.fn<ControlApiClient["createOffice"]>(async () => {
         throw new Error("unexpected Office revision");
       }),
@@ -279,13 +286,26 @@ function fakeClient({
       startTurn: vi.fn(
         async (
           _threadId: string,
-          _body: StartTurnRequest,
+          body: StartTurnRequest,
           _idempotencyKey: string,
         ) => ({
           disposition: "committed" as const,
+          acceptedExecutionIntent: body.executionIntent,
           thread,
           message: messages[0]!,
-          run: runView(),
+          run: runView({
+            collaborationMode:
+              body.executionIntent === "plan" ? "plan" : "default",
+            goalBinding:
+              body.executionIntent === "goal" ||
+              body.executionIntent === "resumeGoal"
+                ? {
+                    goalId: "goal-1",
+                    revision: 1,
+                    objectiveDigest: `sha256:${"d".repeat(64)}`,
+                  }
+                : null,
+          }),
         }),
       ),
       compactThread: vi.fn(async () => ({
@@ -406,6 +426,7 @@ function callbacks(onSettled: (runId: string) => void = () => {}) {
     onToolHistoryCoverage: vi.fn(),
     onTaskChangeHistoryCoverage: vi.fn(),
     onRunSettled: vi.fn((_threadId: string, runId: string) => onSettled(runId)),
+    onExecutionIntentMismatch: vi.fn(),
     onStreamError: vi.fn(),
     onThreadRolledBack: vi.fn(),
   };
@@ -1170,6 +1191,7 @@ describe("Control thread runtime", () => {
         }),
         startTurn: vi.fn(async () => ({
           disposition: "committed" as const,
+          acceptedExecutionIntent: "none" as const,
           thread: threadView({ revision: 2 }),
           message: messageView(2, "user", "Stage two evidence"),
           run: runView({ runId: "run-stage-2", status: "queued" }),
@@ -4439,6 +4461,111 @@ describe("Control thread runtime", () => {
     runtime.close();
   });
 
+  it.each([
+    {
+      submittedExecutionIntent: "plan" as const,
+      acceptedExecutionIntent: "none" as const,
+      collaborationMode: "plan" as const,
+      goalBinding: null,
+      mismatch: "accepted intent",
+    },
+    {
+      submittedExecutionIntent: "plan" as const,
+      acceptedExecutionIntent: "plan" as const,
+      collaborationMode: "default" as const,
+      goalBinding: null,
+      mismatch: "collaboration mode",
+    },
+    {
+      submittedExecutionIntent: "plan" as const,
+      acceptedExecutionIntent: "plan" as const,
+      collaborationMode: "plan" as const,
+      goalBinding: {
+        goalId: "goal-1",
+        revision: 1,
+        objectiveDigest: `sha256:${"d".repeat(64)}`,
+      },
+      mismatch: "Goal binding",
+    },
+    {
+      submittedExecutionIntent: "goal" as const,
+      acceptedExecutionIntent: "goal" as const,
+      collaborationMode: "default" as const,
+      goalBinding: null,
+      mismatch: "missing Goal binding",
+    },
+  ])(
+    "adopts a committed turn with mismatched $mismatch and warns without enabling a retry",
+    async ({
+      submittedExecutionIntent,
+      acceptedExecutionIntent,
+      collaborationMode,
+      goalBinding,
+    }) => {
+      const client = fakeClient({
+        messages: [messageView(1, "user", "Plan the release")],
+        runs: [runView()],
+      });
+      client.startTurn.mockResolvedValue({
+        disposition: "committed",
+        acceptedExecutionIntent,
+        thread: threadView({ revision: 2 }),
+        message: messageView(1, "user", "Plan the release"),
+        run: runView({ collaborationMode, goalBinding, status: "queued" }),
+      });
+      const runtimeCallbacks = callbacks();
+      const runtime = new ControlThreadRuntime(
+        { client, eventStream: idleRunEventStream },
+        runtimeCallbacks,
+      );
+
+      await expect(
+        runtime.startTurn("thread-1", "Plan the release", [], {
+          executionIntent: submittedExecutionIntent,
+        }),
+      ).resolves.toEqual({
+        turn: expect.objectContaining({ id: "run-1" }),
+      });
+
+      expect(runtimeCallbacks.onTurnStarted).toHaveBeenCalledOnce();
+      expect(runtimeCallbacks.onExecutionIntentMismatch).toHaveBeenCalledWith(
+        "thread-1",
+        "run-1",
+      );
+      runtime.close();
+    },
+  );
+
+  it("adopts an acknowledgement-less committed Plan response but warns", async () => {
+    const client = fakeClient({
+      messages: [messageView(1, "user", "Plan the release")],
+      runs: [runView()],
+    });
+    client.startTurn.mockResolvedValue({
+      disposition: "committed",
+      acceptedExecutionIntent: undefined as never,
+      thread: threadView({ revision: 2 }),
+      message: messageView(1, "user", "Plan the release"),
+      run: runView({ collaborationMode: "plan", status: "queued" }),
+    });
+    const runtimeCallbacks = callbacks();
+    const runtime = new ControlThreadRuntime(
+      { client, eventStream: idleRunEventStream },
+      runtimeCallbacks,
+    );
+
+    await runtime.startTurn("thread-1", "Plan the release", [], {
+      executionIntent: "plan",
+    });
+
+    expect(runtimeCallbacks.onTurnStarted).toHaveBeenCalledOnce();
+    expect(runtimeCallbacks.onExecutionIntentMismatch).toHaveBeenCalledWith(
+      "thread-1",
+      "run-1",
+    );
+    runtime.close();
+  });
+
   it("rejects direct member targeting for an expert team", async () => {
     const client = fakeClient({
       messages: [messageView(1, "user", "Question")],
@@ -4463,6 +4590,209 @@ describe("Control thread runtime", () => {
     runtime.close();
   });
 
+  it.each(["team", "experts"] as const)(
+    "rejects Plan for multi-member %s before authorization or execution",
+    async (targetKind) => {
+      const multiMemberOffice = {
+        ...office,
+        members: [
+          ...office.members,
+          {
+            memberId: "member-2",
+            displayName: "Reviewer",
+            agentVersionId: "agent-version-2",
+          },
+        ],
+        executionTargets: [
+          ...office.executionTargets,
+          { targetId: "target-2", agentVersionId: "agent-version-2" },
+        ],
+      };
+      const client = fakeClient({
+        messages: [messageView(1, "user", "Question")],
+        runs: [runView()],
+      });
+      client.getOffice.mockResolvedValue({ office: multiMemberOffice });
+      client.listOffices.mockResolvedValue({
+        data: [multiMemberOffice],
+        nextCursor: null,
+      });
+      const getThreadGoal = vi.spyOn(client, "getThreadGoal");
+      const setThreadGoal = vi.spyOn(client, "setThreadGoal");
+      const forkThread = vi.spyOn(client, "forkThread");
+      const createRun = vi.spyOn(client, "createRun");
+      const runtime = new ControlThreadRuntime(
+        { client, eventStream: idleRunEventStream },
+        callbacks(),
+      );
+
+      await expect(
+        runtime.startTurn("thread-1", "Plan the release", [], {
+          executionIntent: "plan",
+          scene: {
+            sceneId: "office",
+            mode: "coordinate",
+            executionTarget: {
+              kind: targetKind,
+              id: "office-version-1",
+            },
+          },
+        }),
+      ).rejects.toThrow("control_team_plan_unsupported");
+
+      expect(client.createOffice).not.toHaveBeenCalled();
+      expect(client.authorizeOfficeRun).not.toHaveBeenCalled();
+      expect(client.startTurn).not.toHaveBeenCalled();
+      expect(getThreadGoal).not.toHaveBeenCalled();
+      expect(setThreadGoal).not.toHaveBeenCalled();
+      expect(forkThread).not.toHaveBeenCalled();
+      expect(createRun).not.toHaveBeenCalled();
+      runtime.close();
+    },
+  );
+
+  it("rejects a stale multi-member Team Plan before Office runtime rebinding can write", async () => {
+    const staleOffice = {
+      ...office,
+      members: [
+        {
+          memberId: "member-1",
+          displayName: "Delivery agent",
+          agentVersionId: "local-desktop-old",
+        },
+        {
+          memberId: "member-2",
+          displayName: "Reviewer",
+          agentVersionId: "local-desktop-old",
+        },
+      ],
+      executionTargets: [
+        { targetId: "target-1", agentVersionId: "local-desktop-old" },
+        { targetId: "target-2", agentVersionId: "local-desktop-old" },
+      ],
+    };
+    const reboundOffice = {
+      ...staleOffice,
+      officeVersionId: "office-version-2",
+      revision: 2,
+      members: staleOffice.members.map((member) => ({
+        ...member,
+        agentVersionId: "local-desktop-current",
+      })),
+      executionTargets: staleOffice.executionTargets.map((target) => ({
+        ...target,
+        agentVersionId: "local-desktop-current",
+      })),
+    };
+    const client = fakeClient({
+      messages: [messageView(1, "user", "Plan the release")],
+      runs: [runView()],
+    });
+    client.getActiveAgentVersionCatalog.mockResolvedValue({
+      ...activeCatalog,
+      defaultAgentVersionId: "local-desktop-current",
+      data: [
+        {
+          ...activeCatalog.data[0]!,
+          agentVersionId: "local-desktop-current",
+        },
+      ],
+    });
+    client.getOffice.mockResolvedValue({ office: staleOffice });
+    client.listOffices.mockResolvedValue({
+      data: [staleOffice],
+      nextCursor: null,
+    });
+    client.createOffice.mockResolvedValue({
+      disposition: "created",
+      office: reboundOffice,
+    });
+    const runtime = new ControlThreadRuntime(
+      { client, eventStream: idleRunEventStream },
+      callbacks(),
+    );
+
+    await expect(
+      runtime.startTurn("thread-1", "Plan the release", [], {
+        executionIntent: "plan",
+        model: "model-1",
+        scene: {
+          sceneId: "office",
+          mode: "coordinate",
+          executionTarget: { kind: "team", id: "office-version-1" },
+        },
+      }),
+    ).rejects.toThrow("control_team_plan_unsupported");
+
+    expect(client.getActiveAgentVersionCatalog).toHaveBeenCalledOnce();
+    expect(client.createOffice).not.toHaveBeenCalled();
+    expect(client.authorizeOfficeRun).not.toHaveBeenCalled();
+    expect(client.startTurn).not.toHaveBeenCalled();
+    runtime.close();
+  });
+
+  it.each(["goal", "none"] as const)(
+    "checks execution-intent v1 before stale Team Office rebinding for %s",
+    async (executionIntent) => {
+      const staleOffice = {
+        ...office,
+        members: [
+          {
+            memberId: "member-1",
+            displayName: "Delivery agent",
+            agentVersionId: "local-desktop-old",
+          },
+          {
+            memberId: "member-2",
+            displayName: "Reviewer",
+            agentVersionId: "local-desktop-old",
+          },
+        ],
+        executionTargets: [
+          { targetId: "target-1", agentVersionId: "local-desktop-old" },
+          { targetId: "target-2", agentVersionId: "local-desktop-old" },
+        ],
+      };
+      const client = fakeClient({
+        messages: [messageView(1, "user", "Continue safely")],
+        runs: [runView()],
+      });
+      client.getOffice.mockResolvedValue({ office: staleOffice });
+      client.listOffices.mockResolvedValue({
+        data: [staleOffice],
+        nextCursor: null,
+      });
+      client.getThreadGoal.mockResolvedValue({
+        eventSequence: 1,
+        goal: goalView({ status: "active" }),
+      });
+      client.getExecutionIntentCapability.mockRejectedValue(
+        new Error("control_execution_intent_capability_unavailable"),
+      );
+      const runtime = new ControlThreadRuntime(
+        { client, eventStream: idleRunEventStream },
+        callbacks(),
+      );
+
+      await expect(
+        runtime.startTurn("thread-1", "Continue safely", [], {
+          executionIntent,
+          scene: {
+            sceneId: "office",
+            mode: "coordinate",
+            executionTarget: { kind: "team", id: "office-version-1" },
+          },
+        }),
+      ).rejects.toThrow("control_execution_intent_capability_unavailable");
+
+      expect(client.getExecutionIntentCapability).toHaveBeenCalledOnce();
+      expect(client.createOffice).not.toHaveBeenCalled();
+      expect(client.authorizeOfficeRun).not.toHaveBeenCalled();
+      expect(client.startTurn).not.toHaveBeenCalled();
+      runtime.close();
+    },
+  );
+
   it("authorizes and runs a single-member Control Office on its pinned AgentVersion", async () => {
     const client = fakeClient({
       messages: [messageView(1, "user", "Prepare the launch checklist")],
@@ -4474,6 +4804,7 @@ describe("Control thread runtime", () => {
     );
 
     await runtime.startTurn("thread-1", "Prepare the launch checklist", [], {
+      executionIntent: "plan",
       model: "model-1",
       scene: {
         sceneId: "office",
@@ -4492,6 +4823,7 @@ describe("Control thread runtime", () => {
       expect.objectContaining({
         agentVersionId: "agent-version-1",
         content: "Prepare the launch checklist",
+        executionIntent: "plan",
       }),
       expect.any(String),
     );
@@ -4628,6 +4960,7 @@ describe("Control thread runtime", () => {
     );
 
     await runtime.startTurn("thread-1", "@Reviewer review this", [], {
+      executionIntent: "plan",
       scene: {
         sceneId: "office",
         mode: "coordinate",
@@ -4654,7 +4987,7 @@ describe("Control thread runtime", () => {
       expect.objectContaining({
         expectedRevision: 1,
         agentVersionId: "agent-version-2",
-        executionIntent: "none",
+        executionIntent: "plan",
       }),
       expect.any(String),
     );

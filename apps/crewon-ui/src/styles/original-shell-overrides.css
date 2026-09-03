@@ -5345,45 +5345,97 @@ body.modal-open {
   flex-wrap: wrap;
   gap: 6px;
 }
-.screen-shell.command-screen .input-tools .execution-intent-chip {
+.screen-shell.command-screen .execution-intent-segmented {
   display: inline-flex;
   align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+.screen-shell.command-screen
+  .input-tools
+  .execution-intent-segmented
+  .execution-intent-option {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   gap: 5px;
   min-height: 30px;
-  padding: 0 8px 0 10px;
-  border: 1px solid color-mix(in oklch, var(--accent) 28%, transparent);
-  border-radius: var(--radius-pill);
-  background: color-mix(in oklch, var(--accent) 12%, var(--n-0));
-  color: color-mix(in oklch, var(--accent) 90%, var(--n-1000));
+  padding: 0 9px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--n-700);
   cursor: pointer;
   font: inherit;
   font-size: calc(12px + var(--user-ui-font-delta));
   font-weight: 500;
-  box-shadow: var(--shadow-raised);
+  box-shadow: none;
   transition:
     background 0.16s ease,
+    border-color 0.16s ease,
     color 0.16s ease,
-    box-shadow 0.16s ease;
+    opacity 0.16s ease;
 }
-.screen-shell.command-screen .input-tools .execution-intent-chip:hover,
-.screen-shell.command-screen .input-tools .execution-intent-chip:focus-visible {
-  background: color-mix(in oklch, var(--accent) 18%, var(--n-0));
-  outline: 0;
+.screen-shell.command-screen
+  .input-tools
+  .execution-intent-option:hover:not(:disabled) {
+  border-color: var(--n-250);
+  background: var(--n-100);
+  color: var(--n-950);
 }
-.screen-shell.command-screen .execution-intent-chip svg {
+.screen-shell.command-screen
+  .input-tools
+  .execution-intent-option:focus-visible {
+  outline: 2px solid color-mix(in oklch, var(--accent) 55%, transparent);
+  outline-offset: 1px;
+}
+.screen-shell.command-screen
+  .input-tools
+  .execution-intent-option[aria-pressed="true"] {
+  border-color: color-mix(in oklch, var(--accent) 34%, transparent);
+  background: color-mix(in oklch, var(--accent) 16%, var(--n-0));
+  color: color-mix(in oklch, var(--accent) 88%, var(--n-1000));
+  font-weight: 600;
+}
+.screen-shell.command-screen
+  .input-tools
+  .execution-intent-option[aria-pressed="true"]:hover:not(:disabled) {
+  border-color: color-mix(in oklch, var(--accent) 42%, transparent);
+  background: color-mix(in oklch, var(--accent) 21%, var(--n-0));
+}
+.screen-shell.command-screen .execution-intent-option:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.screen-shell.command-screen .execution-intent-option svg,
+.screen-shell.command-screen .plan-readonly-status svg {
   width: 14px;
   height: 14px;
   fill: none;
   stroke: currentColor;
   stroke-width: 1.8;
 }
-.screen-shell.command-screen .execution-intent-chip svg:last-child {
-  width: 12px;
-  height: 12px;
-  opacity: 0.65;
+.screen-shell.command-screen .plan-readonly-status {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid var(--n-250);
+  border-radius: var(--radius-md);
+  background: var(--n-75);
+  color: var(--n-700);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  font-weight: 500;
+  white-space: nowrap;
 }
-.screen-shell.command-screen .execution-intent-chip:hover svg:last-child {
-  opacity: 1;
+.screen-shell.command-screen .execution-intent-notice {
+  color: color-mix(in oklch, var(--warning) 82%, var(--n-800));
+  font-size: calc(11px + var(--user-ui-font-delta));
+  font-weight: 500;
+  white-space: nowrap;
 }
 .control-select {
   position: relative;

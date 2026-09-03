@@ -27,6 +27,7 @@ const RESPONSE_HEADER_ALLOWLIST = [
   "content-type",
   "etag",
   "retry-after",
+  "vary",
   "x-request-id",
 ] as const;
 

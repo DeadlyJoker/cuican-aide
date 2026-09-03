@@ -3,6 +3,7 @@ import type {
   MessageView,
   OfficeContract,
   RunView,
+  StartTurnResponse,
   ToolPermissionMode,
 } from "@crewon/contracts";
 import type { ControlApiClient } from "@crewon/control-client";
@@ -22,12 +23,35 @@ const DEFAULT_RUN_DEADLINE_MS = 15 * 60 * 1_000;
 // after that maintenance window instead of reporting a false Team failure.
 const MAX_CONSECUTIVE_RUN_READ_FAILURES = 20;
 
+export const CONTROL_TEAM_PLAN_UNSUPPORTED =
+  "control_team_plan_unsupported" as const;
+
+export function controlStartTurnExecutionIntentMatches(
+  response: Pick<StartTurnResponse, "acceptedExecutionIntent" | "run">,
+  expectedIntent: NonNullable<StartTurnResponse["acceptedExecutionIntent"]>,
+): boolean {
+  const expectedCollaborationMode =
+    expectedIntent === "plan" ? "plan" : "default";
+  const expectsGoalBinding =
+    expectedIntent === "goal" || expectedIntent === "resumeGoal";
+  return !(
+    (expectedIntent !== "none" &&
+      response.acceptedExecutionIntent === undefined) ||
+    (response.acceptedExecutionIntent !== undefined &&
+      response.acceptedExecutionIntent !== expectedIntent) ||
+    response.run.collaborationMode !== expectedCollaborationMode ||
+    (expectedIntent === "plan" && response.run.goalBinding !== null) ||
+    (expectsGoalBinding && response.run.goalBinding === null)
+  );
+}
+
 export type ControlTeamRuntimeClient = Pick<
   ControlApiClient,
   | "appendThreadMessage"
   | "authorizeOfficeRun"
   | "createRun"
   | "forkThread"
+  | "getExecutionIntentCapability"
   | "getOffice"
   | "getRun"
   | "getThread"
@@ -153,9 +177,13 @@ export async function startControlTeamTurn(input: {
   toolPermissionMode?: ToolPermissionMode;
   onRunStarted?: (run: RunView) => void;
   onFinalTurnStarted?: (started: ControlTeamTurnResult) => void;
+  onExecutionIntentMismatch?: (run: RunView) => void;
   pollIntervalMs?: number;
   runDeadlineMs?: number;
 }): Promise<ControlTeamTurnResult> {
+  if (input.executionIntent === "plan") {
+    throw new Error(CONTROL_TEAM_PLAN_UNSUPPORTED);
+  }
   const pollIntervalMs = input.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS;
   const runDeadlineMs = input.runDeadlineMs ?? DEFAULT_RUN_DEADLINE_MS;
   const toolPermissionMode = input.toolPermissionMode ?? "requestApproval";
@@ -334,16 +362,17 @@ export async function startControlTeamTurn(input: {
     input.responseMode === "manager"
       ? teamManagerFinalResponseMessage(input.plan, reports)
       : teamDelegationMessage(input.plan, reports);
+  const finalManagerExecutionIntent =
+    input.responseMode === "manager" && goalPause !== null
+      ? "resumeGoal"
+      : "none";
   const finalManagerStarted = await input.client.startTurn(
     input.threadId,
     {
       expectedRevision: current.thread.revision,
       content: managerMessage,
       agentVersionId: input.plan.manager.agentVersionId,
-      executionIntent:
-        input.responseMode === "manager" && goalPause !== null
-          ? "resumeGoal"
-          : "none",
+      executionIntent: finalManagerExecutionIntent,
       toolPermissionMode,
     },
     input.idempotencyKey(
@@ -351,6 +380,10 @@ export async function startControlTeamTurn(input: {
         ? "team.manager.final"
         : "team.manager.delegate",
     ),
+  );
+  const finalManagerIntentMatches = controlStartTurnExecutionIntentMatches(
+    finalManagerStarted,
+    finalManagerExecutionIntent,
   );
   if (
     finalManagerStarted.thread.threadId !== input.threadId ||
@@ -362,6 +395,9 @@ export async function startControlTeamTurn(input: {
   validateStartedRun(finalManagerStarted.run, input.threadId, {
     allowGoalBinding: input.responseMode === "manager",
   });
+  if (!finalManagerIntentMatches) {
+    input.onExecutionIntentMismatch?.(finalManagerStarted.run);
+  }
   if (input.responseMode === "manager") {
     input.onFinalTurnStarted?.({
       message: appended.message,
@@ -407,16 +443,21 @@ export async function startControlTeamTurn(input: {
     plan: input.plan,
     reports,
   });
+  const memberExecutionIntent = goalPause === null ? "none" : "resumeGoal";
   const memberStarted = await input.client.startTurn(
     input.threadId,
     {
       expectedRevision: memberThread.thread.revision,
       content: memberMessage,
       agentVersionId: delegatedMember.agentVersionId,
-      executionIntent: goalPause === null ? "none" : "resumeGoal",
+      executionIntent: memberExecutionIntent,
       toolPermissionMode,
     },
     input.idempotencyKey(`team.member.final.${delegatedMember.memberId}`),
+  );
+  const memberIntentMatches = controlStartTurnExecutionIntentMatches(
+    memberStarted,
+    memberExecutionIntent,
   );
   if (
     memberStarted.thread.threadId !== input.threadId ||
@@ -428,6 +469,9 @@ export async function startControlTeamTurn(input: {
   validateStartedRun(memberStarted.run, input.threadId, {
     allowGoalBinding: true,
   });
+  if (!memberIntentMatches) {
+    input.onExecutionIntentMismatch?.(memberStarted.run);
+  }
   input.onFinalTurnStarted?.({
     message: appended.message,
     run: memberStarted.run,
@@ -450,6 +494,18 @@ async function pauseTeamGoalIfNeeded(input: {
   if (!shouldCreateOrReplace && current.goal?.status !== "active") {
     return null;
   }
+  if (
+    shouldCreateOrReplace &&
+    (current.goal?.status === "budgetLimited" ||
+      current.goal?.status === "usageLimited")
+  ) {
+    throw new Error(
+      current.goal.status === "budgetLimited"
+        ? "goal_budget_limited"
+        : "goal_usage_limited",
+    );
+  }
+  await requireControlExecutionIntentCapability(input.client);
   const objective = shouldCreateOrReplace ? input.content : null;
   const response = await input.client.setThreadGoal(
     input.threadId,
@@ -469,7 +525,45 @@ async function pauseTeamGoalIfNeeded(input: {
   ) {
     throw new Error("control_team_goal_response_invalid");
   }
-  for (const run of [response.canceledRun, response.retainedRun]) {
+  await settleGoalMutationRuns({
+    client: input.client,
+    response,
+    pollIntervalMs: input.pollIntervalMs,
+    runDeadlineMs: input.runDeadlineMs,
+  });
+  const snapshot = await input.client.getThread(input.threadId);
+  if (
+    snapshot.thread.threadId !== input.threadId ||
+    snapshot.thread.status !== "active"
+  ) {
+    throw new Error("control_team_manager_thread_invalid");
+  }
+  return { threadRevision: snapshot.thread.revision };
+}
+
+export async function requireControlExecutionIntentCapability(
+  client: Pick<ControlTeamRuntimeClient, "getExecutionIntentCapability">,
+): Promise<void> {
+  const capability: unknown = await client.getExecutionIntentCapability();
+  if (
+    typeof capability !== "object" ||
+    capability === null ||
+    Array.isArray(capability) ||
+    Object.keys(capability).length !== 1 ||
+    !("version" in capability) ||
+    capability.version !== "v1"
+  ) {
+    throw new Error("control_execution_intent_capability_invalid");
+  }
+}
+
+async function settleGoalMutationRuns(input: {
+  client: ControlTeamRuntimeClient;
+  response: Awaited<ReturnType<ControlTeamRuntimeClient["setThreadGoal"]>>;
+  pollIntervalMs: number;
+  runDeadlineMs: number;
+}): Promise<void> {
+  for (const run of [input.response.canceledRun, input.response.retainedRun]) {
     if (run !== null && !isTerminalRun(run)) {
       await waitForTerminalRun({
         client: input.client,
@@ -479,14 +573,6 @@ async function pauseTeamGoalIfNeeded(input: {
       });
     }
   }
-  const snapshot = await input.client.getThread(input.threadId);
-  if (
-    snapshot.thread.threadId !== input.threadId ||
-    snapshot.thread.status !== "active"
-  ) {
-    throw new Error("control_team_manager_thread_invalid");
-  }
-  return { threadRevision: snapshot.thread.revision };
 }
 
 function teamMemberAssignment(

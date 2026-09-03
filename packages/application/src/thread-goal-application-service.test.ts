@@ -7,7 +7,10 @@ import type { RunState, ThreadGoal, ThreadState } from "@crewon/domain";
 import { ApplicationError } from "./application-error.ts";
 import type { AuthorizationPort } from "./authorization-port.ts";
 import type { CommitThreadGoalMutationInput } from "./thread-goal-store-port.ts";
-import { ThreadGoalApplicationService } from "./thread-goal-application-service.ts";
+import {
+  ThreadGoalApplicationService,
+  type SetThreadGoalCommand,
+} from "./thread-goal-application-service.ts";
 
 test("authorizes and returns one atomic Goal snapshot and event cursor", async () => {
   const requests: Parameters<AuthorizationPort["authorize"]>[0][] = [];
@@ -64,6 +67,52 @@ test("fails closed when Goal read authorization is denied", async () => {
     service.getGoal(actor(), "thread-1"),
     hasApplicationError("authorization", "authorization_denied"),
   );
+});
+
+test("rejects runtime-owned Goal statuses before authorization or Store access", async () => {
+  let authorizations = 0;
+  let threadReads = 0;
+  const base = storeFixture();
+  const service = new ThreadGoalApplicationService({
+    store: {
+      ...base,
+      loadThreadInSpace: async (locator) => {
+        threadReads += 1;
+        return base.loadThreadInSpace(locator);
+      },
+    },
+    ...runtimeDependencies(),
+    authorization: {
+      authorize: async () => {
+        authorizations += 1;
+        return { outcome: "allow" };
+      },
+    },
+  });
+
+  for (const expectedRevision of [null, 2]) {
+    for (const status of [
+      "blocked",
+      "usageLimited",
+      "budgetLimited",
+      "complete",
+    ] as const) {
+      await assert.rejects(
+        service.setGoal(actor(), {
+          kind: "thread.goal.set",
+          threadId: "thread-1",
+          idempotencyKey: `goal-forbidden-${expectedRevision ?? "new"}-${status}`,
+          expectedRevision,
+          objective: expectedRevision === null ? "forbidden new goal" : null,
+          status: status as unknown as SetThreadGoalCommand["status"],
+          tokenBudget: { kind: "keep" },
+        }),
+        hasApplicationError("validation", "goal_status_invalid"),
+      );
+    }
+  }
+  assert.equal(threadReads, 0);
+  assert.equal(authorizations, 0);
 });
 
 test("creates a safety-budgeted Goal and one exact idle activation", async () => {
@@ -132,6 +181,118 @@ test("creates a safety-budgeted Goal and one exact idle activation", async () =>
   });
 });
 
+test("atomically replaces a completed Goal when a new objective is supplied", async () => {
+  const current = {
+    ...goalFixture(),
+    status: "complete" as const,
+    tokenBudget: 500,
+    tokensUsed: 480,
+    timeUsedSeconds: 90,
+  };
+  const committed: CommitThreadGoalMutationInput[] = [];
+  const base = storeFixture();
+  const service = new ThreadGoalApplicationService({
+    store: {
+      ...base,
+      loadThreadGoal: async () => structuredClone(current),
+      commitThreadGoalMutation: async (input) => {
+        committed.push(structuredClone(input));
+        assert.equal(input.goal.kind, "set");
+        return {
+          disposition: "committed",
+          goalChanged: true,
+          goalState: input.goal.goal,
+          canceledRunState: null,
+          retainedRun: null,
+          continuation: null,
+        };
+      },
+    },
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    ...runtimeDependencies(),
+    ids: { nextId: (kind: string) => `${kind}-replacement` },
+  });
+
+  const result = await service.setGoal(actor(), {
+    kind: "thread.goal.set",
+    threadId: "thread-1",
+    idempotencyKey: "goal-replace-complete",
+    expectedRevision: current.revision,
+    objective: "start the next migration",
+    status: "paused",
+    tokenBudget: { kind: "keep" },
+  });
+
+  assert.notEqual(result.goalState?.goalId, current.goalId);
+  assert.deepEqual(
+    {
+      createdAt: result.goalState?.createdAt,
+      objective: result.goalState?.objective,
+      revision: result.goalState?.revision,
+      status: result.goalState?.status,
+      timeUsedSeconds: result.goalState?.timeUsedSeconds,
+      tokenBudget: result.goalState?.tokenBudget,
+      tokensUsed: result.goalState?.tokensUsed,
+    },
+    {
+      createdAt: "2026-08-09T00:00:04Z",
+      objective: "start the next migration",
+      revision: current.revision + 1,
+      status: "paused",
+      timeUsedSeconds: 0,
+      tokenBudget: 200_000,
+      tokensUsed: 0,
+    },
+  );
+  assert.equal(committed[0]?.goal.expectedRevision, current.revision);
+});
+
+test("keeps a completed Goal terminal until a new objective replaces it", async () => {
+  const current = {
+    ...goalFixture(),
+    status: "complete" as const,
+    tokenBudget: 500,
+    tokensUsed: 480,
+    timeUsedSeconds: 90,
+  };
+  const committed: CommitThreadGoalMutationInput[] = [];
+  const base = storeFixture();
+  const service = new ThreadGoalApplicationService({
+    store: {
+      ...base,
+      loadThreadGoal: async () => structuredClone(current),
+      commitThreadGoalMutation: async (input) => {
+        committed.push(structuredClone(input));
+        return {
+          disposition: "committed",
+          goalChanged: false,
+          goalState: structuredClone(current),
+          canceledRunState: null,
+          retainedRun: null,
+          continuation: null,
+        };
+      },
+    },
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    ...runtimeDependencies(),
+  });
+
+  const result = await service.setGoal(actor(), {
+    kind: "thread.goal.set",
+    threadId: "thread-1",
+    idempotencyKey: "goal-complete-no-revive",
+    expectedRevision: current.revision,
+    objective: null,
+    status: "active",
+    tokenBudget: { kind: "keep" },
+  });
+
+  assert.equal(committed[0]?.goal.kind, "keep");
+  assert.equal(result.goalState?.goalId, current.goalId);
+  assert.equal(result.goalState?.status, "complete");
+  assert.equal(result.continuation, null);
+});
+
 test("matches Rust budget-limited resume and stopped-status rules", async () => {
   const current = {
     ...goalFixture(),
@@ -197,6 +358,47 @@ test("matches Rust budget-limited resume and stopped-status rules", async () => 
   assert.equal(committedGoals[1]?.tokensUsed, 10);
   assert.equal(committedGoals[1]?.createdAt, current.createdAt);
   assert.equal(routeResolutions, 0);
+});
+
+test("does not let a user mutation reactivate a usage-limited Goal", async () => {
+  const current = {
+    ...goalFixture(),
+    status: "usageLimited" as const,
+  };
+  const committedGoals: ThreadGoal[] = [];
+  const base = storeFixture();
+  const service = new ThreadGoalApplicationService({
+    store: {
+      ...base,
+      loadThreadGoal: async () => structuredClone(current),
+      commitThreadGoalMutation: async (input) => {
+        assert.equal(input.goal.kind, "set");
+        committedGoals.push(input.goal.goal);
+        return {
+          disposition: "committed",
+          goalChanged: true,
+          goalState: input.goal.goal,
+          canceledRunState: null,
+          retainedRun: null,
+          continuation: null,
+        };
+      },
+    },
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    ...runtimeDependencies(),
+  });
+
+  await service.setGoal(actor(), {
+    kind: "thread.goal.set",
+    threadId: "thread-1",
+    idempotencyKey: "goal-usage-limit-resume",
+    expectedRevision: current.revision,
+    objective: null,
+    status: "active",
+    tokenBudget: { kind: "set", value: 400_000 },
+  });
+
+  assert.equal(committedGoals[0]?.status, "usageLimited");
 });
 
 test("returns an idempotent Goal replay before stale revision evaluation", async () => {

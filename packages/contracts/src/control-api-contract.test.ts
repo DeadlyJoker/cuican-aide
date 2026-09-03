@@ -71,6 +71,7 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/automations",
     "/api/v1/automations/{automationId}",
     "/api/v1/automations/{automationId}:run-now",
+    "/api/v1/capabilities/execution-intent-v1",
     "/api/v1/health/live",
     "/api/v1/health/ready",
     "/api/v1/model-provider-settings",
@@ -93,6 +94,7 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/threads/{threadId}/runs",
     "/api/v1/threads/{threadId}/task-changes",
     "/api/v1/threads/{threadId}/turns",
+    "/api/v1/threads/{threadId}/turns/execution-intent-v1",
     "/api/v1/threads/{threadId}/workspace-list",
     "/api/v1/threads/{threadId}/workspace-list/{executionId}",
     "/api/v1/threads/{threadId}/workspace-list/{executionId}/events",
@@ -728,6 +730,23 @@ test("freezes strict Thread and text Message authority without client scope fiel
   for (const forbidden of ["tenantId", "contentDigest", "authorityId"]) {
     assert.equal(proposedPlanProjection.includes(forbidden), false);
   }
+  const startTurnResponseSchema = openApi.components.schemas
+    .StartTurnResponse as {
+    required: readonly string[];
+    properties: {
+      acceptedExecutionIntent: { enum: readonly string[] };
+    };
+  };
+  assert.deepEqual(startTurnResponseSchema.required, [
+    "disposition",
+    "thread",
+    "message",
+    "run",
+  ]);
+  assert.deepEqual(
+    startTurnResponseSchema.properties.acceptedExecutionIntent.enum,
+    ["none", "goal", "plan", "resumeGoal"],
+  );
   const event: ThreadEventView = {
     schemaVersion: "crewon.thread-event.v0",
     threadId: "thread-1",
@@ -862,6 +881,19 @@ test("freezes strict Thread Goal mutations and the double-option token budget", 
       tokenBudget: { kind: "set", value: 50_000 },
     },
   );
+  for (const status of [
+    "blocked",
+    "usageLimited",
+    "budgetLimited",
+    "complete",
+  ]) {
+    assert.throws(
+      () => parseSetThreadGoalRequest({ ...create, status }),
+      (error) =>
+        error instanceof ContractValidationError &&
+        error.code === "goal_status_invalid",
+    );
+  }
   assert.deepEqual(parseClearThreadGoalRequest({ expectedRevision: 3 }), {
     expectedRevision: 3,
   });
@@ -910,6 +942,10 @@ test("freezes strict Thread Goal mutations and the double-option token budget", 
     "objective",
     "status",
     "tokenBudget",
+  ]);
+  assert.deepEqual(openApi.components.schemas.ThreadGoalUserStatus.enum, [
+    "active",
+    "paused",
   ]);
   assert.deepEqual(openApi.components.schemas.GetThreadGoalResponse.required, [
     "goal",
@@ -1401,6 +1437,7 @@ type OpenApiDocument = Readonly<{
         properties: { data: { items: unknown } };
       };
       ThreadGoalStatus: { enum: readonly string[] };
+      ThreadGoalUserStatus: { enum: readonly string[] };
       ThreadStatus: { enum: readonly string[] };
       ThreadView: { required: readonly string[] };
       ThreadEventView: unknown;

@@ -14,9 +14,7 @@ import {
   commandComposerKeyIntent,
   CommandWorkspace,
   type CommandWorkspaceControlNav,
-  executionIntentAfterCommit,
   insertTokenIntoComposerValue,
-  nextExecutionIntent,
   selectCommandHomeSlots,
   setDefaultTeamOfficePreview,
   setActiveFilter,
@@ -25,6 +23,12 @@ import {
   submitCommandComposer,
   syncDesignFilterState,
 } from "./CommandWorkspace";
+import {
+  commandExecutionIntentScopeKey,
+  executionIntentSelectionAfterCommit,
+  executionIntentSelectionForScopeChange,
+  nextExecutionIntent,
+} from "../composer/composerExecutionIntentSelection";
 import { Palette } from "./CommandWorkspaceChrome";
 import { commandComposerPermissionOptions } from "../composer/commandComposerPermissionOptions";
 import {
@@ -1246,9 +1250,15 @@ describe("CommandWorkspace", () => {
     );
     expect(commandHomeMarkup).toContain('aria-label="添加上下文"');
     expect(commandHomeMarkup).toContain('aria-label="权限选择"');
-    // Goal/plan intents live inside the + palette; the toolbar only shows an
-    // active-intent chip once one is selected.
-    expect(commandHomeMarkup).not.toContain('class="execution-intent-chip"');
+    expect(commandHomeMarkup).toContain(
+      'class="execution-intent-segmented" role="group"',
+    );
+    expect(commandHomeMarkup).toContain(
+      'aria-pressed="false" class="execution-intent-option" data-execution-intent="goal"',
+    );
+    expect(commandHomeMarkup).toContain(
+      'aria-pressed="false" class="execution-intent-option" data-execution-intent="plan"',
+    );
     expect(commandHomeMarkup).toContain('placeholder="添加"');
     expect(commandHomeMarkup).toContain("选择文件");
     expect(commandHomeMarkup).toContain("选择文件夹");
@@ -1260,10 +1270,10 @@ describe("CommandWorkspace", () => {
     );
     expect(addPanelMarkup).toContain('class="add-palette-group"');
     expect(addPanelMarkup).toContain('class="add-palette-item"');
-    expect(addPanelMarkup).toContain("执行方式");
-    expect(addPanelMarkup).toContain('data-kind="intent"');
-    expect(addPanelMarkup).toContain('data-label="目标模式"');
-    expect(addPanelMarkup).toContain('data-label="计划模式"');
+    expect(addPanelMarkup).not.toContain("执行方式");
+    expect(addPanelMarkup).not.toContain('data-kind="intent"');
+    expect(addPanelMarkup).not.toContain('data-label="目标模式"');
+    expect(addPanelMarkup).not.toContain('data-label="计划模式"');
     expect(addPanelMarkup).toContain("文件");
     expect(addPanelMarkup).not.toContain(">工作空间<");
     expect(commandHomeMarkup).toContain('aria-label="执行主体"');
@@ -1289,9 +1299,117 @@ describe("CommandWorkspace", () => {
     expect(nextExecutionIntent("goal", "plan")).toBe("plan");
     expect(nextExecutionIntent("plan", "goal")).toBe("goal");
     expect(nextExecutionIntent("plan", "plan")).toBe("none");
-    expect(executionIntentAfterCommit("goal", "goal")).toBe("none");
-    expect(executionIntentAfterCommit("plan", "goal")).toBe("plan");
-    expect(executionIntentAfterCommit("none", "plan")).toBe("none");
+  });
+
+  it("scopes intent to the draft or thread and ignores a stale commit", () => {
+    expect(
+      commandExecutionIntentScopeKey({
+        shouldCreateNewThread: false,
+        selectedThreadId: null,
+      }),
+    ).toBe("draft:new-task");
+    expect(
+      commandExecutionIntentScopeKey({
+        shouldCreateNewThread: true,
+        selectedThreadId: "thread-old",
+      }),
+    ).toBe("draft:new-task");
+    expect(
+      commandExecutionIntentScopeKey({
+        shouldCreateNewThread: false,
+        selectedThreadId: "thread-1",
+      }),
+    ).toBe("thread:thread-1");
+
+    const submitted = {
+      intent: "plan" as const,
+      revision: 3,
+      scopeKey: "thread:thread-1",
+    };
+    expect(executionIntentSelectionAfterCommit(submitted, submitted)).toEqual({
+      ...submitted,
+      intent: "none",
+      revision: 4,
+    });
+    expect(
+      executionIntentSelectionAfterCommit(
+        { ...submitted, revision: 4 },
+        submitted,
+      ),
+    ).toEqual({ ...submitted, revision: 4 });
+    expect(
+      executionIntentSelectionAfterCommit(
+        { ...submitted, scopeKey: "thread:thread-2" },
+        submitted,
+      ),
+    ).toEqual({ ...submitted, scopeKey: "thread:thread-2" });
+  });
+
+  it("carries a submitted draft intent only into its newly-created thread", () => {
+    const selection = {
+      intent: "goal" as const,
+      revision: 7,
+      scopeKey: "draft:new-task",
+    };
+    const pending = {
+      ...selection,
+      adoptCreatedThreadScope: true,
+      sourceThreadId: "thread-old",
+    };
+
+    expect(
+      executionIntentSelectionForScopeChange({
+        current: selection,
+        nextScopeKey: "thread:thread-old",
+        pending,
+        submissionPending: true,
+      }),
+    ).toEqual({ pending, selection });
+    expect(
+      executionIntentSelectionForScopeChange({
+        current: selection,
+        nextScopeKey: "thread:thread-new",
+        pending,
+        submissionPending: true,
+      }),
+    ).toEqual({
+      pending: {
+        ...pending,
+        adoptCreatedThreadScope: false,
+        scopeKey: "thread:thread-new",
+      },
+      selection: { ...selection, scopeKey: "thread:thread-new" },
+    });
+    expect(
+      executionIntentSelectionForScopeChange({
+        current: selection,
+        nextScopeKey: "thread:thread-other",
+        pending: null,
+        submissionPending: false,
+      }),
+    ).toEqual({
+      pending: null,
+      selection: {
+        intent: "none",
+        revision: 8,
+        scopeKey: "thread:thread-other",
+      },
+    });
+    expect(
+      executionIntentSelectionForScopeChange({
+        current: selection,
+        nextScopeKey: "thread:thread-old",
+        pending,
+        submissionPending: false,
+      }),
+    ).toEqual({
+      pending: {
+        ...pending,
+        adoptCreatedThreadScope: false,
+        scopeKey: "thread:thread-old",
+      },
+      selection: { ...selection, scopeKey: "thread:thread-old" },
+    });
   });
 
   it("closes composer palettes only for outside pointer targets", () => {

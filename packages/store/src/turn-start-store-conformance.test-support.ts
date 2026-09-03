@@ -364,6 +364,77 @@ export function registerTurnStartStoreConformance(
       );
     });
 
+    test("retains an inactive Goal without binding it to a Plan Run", async (context) => {
+      const store = await managedStore(context, createStore);
+      await seedThread(store);
+      const pausedGoal = { ...goalFixture(), status: "paused" as const };
+      await store.commitTurnStart(
+        turnStartCommit({
+          goal: { kind: "set", expectedRevision: null, goal: pausedGoal },
+          goalBinding: null,
+        }),
+      );
+      await store.commitRun({
+        tenantId: "tenant-1",
+        idempotency: {
+          scope: "turn-start-terminal",
+          key: "turn-start-terminal-inactive-goal",
+          requestFingerprint: "turn-start-terminal-inactive-goal-fingerprint",
+        },
+        expectedRevision: 1,
+        events: [
+          {
+            schemaVersion: "crewon.run-event.v0",
+            identity: { runId: "run-turn-1" },
+            eventId: "run-turn-terminal-inactive-goal",
+            sequence: 2,
+            occurredAt: "2026-08-08T00:00:03Z",
+            type: "run.failed",
+            data: { code: "test_terminal", retryable: false },
+          },
+        ],
+        outbox: [],
+        workItems: [],
+      });
+
+      const committed = await store.commitTurnStart(
+        turnStartCommit({
+          key: "turn-start-plan-retain-inactive",
+          fingerprint: "turn-start-plan-retain-inactive-fingerprint",
+          runId: "run-turn-plan-retain-inactive",
+          expectedThreadRevision: 2,
+          threadEventSequence: 3,
+          messageSequence: 2,
+          historySequence: 2,
+          occurredAt: "2026-08-08T00:00:04Z",
+          goal: { kind: "keep", expectedRevision: pausedGoal.revision },
+          collaborationMode: "plan",
+          goalBinding: null,
+        }),
+      );
+
+      assert.deepEqual(committed.goalState, pausedGoal);
+      assert.equal(committed.runState.collaborationMode, "plan");
+      assert.equal(committed.runState.goalBinding, null);
+      assert.deepEqual(
+        await store.loadThreadGoal({
+          tenantId: "tenant-1",
+          threadId: "thread-1",
+        }),
+        pausedGoal,
+      );
+      assert.deepEqual(
+        (
+          await store.listThreadGoalEvents(
+            { tenantId: "tenant-1", threadId: "thread-1" },
+            0,
+            10,
+          )
+        ).map((event) => [event.sequence, event.type]),
+        [[1, "goal.updated"]],
+      );
+    });
+
     test("serializes concurrent Turn starts to one durable winner", async (context) => {
       const store = await managedStore(context, createStore);
       await seedThread(store);

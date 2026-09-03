@@ -112,6 +112,105 @@ test("applies a finite server safety budget to a newly admitted Goal", async () 
   assert.equal(mutation.goal.tokenBudget, DEFAULT_THREAD_GOAL_TOKEN_BUDGET);
 });
 
+test("rejects Goal intent while the current Goal is limited", async () => {
+  for (const [status, code] of [
+    ["budgetLimited", "goal_budget_limited"],
+    ["usageLimited", "goal_usage_limited"],
+  ] as const) {
+    const store = new RecordingTurnStore(threadState(), threadGoal(status));
+
+    await assert.rejects(
+      createService(store).startTurn(actor(), {
+        ...command(),
+        executionIntent: "goal",
+      }),
+      hasApplicationError("conflict", code),
+    );
+    assert.deepEqual(store.commits, []);
+  }
+});
+
+test("Goal intent reactivates paused or blocked Goals without replacing accounting", async () => {
+  for (const status of ["paused", "blocked"] as const) {
+    const currentGoal = threadGoal(status);
+    const store = new RecordingTurnStore(threadState(), currentGoal);
+
+    const result = await createService(store).startTurn(actor(), {
+      ...command(),
+      executionIntent: "goal",
+    });
+
+    assert.equal(result.goalState?.status, "active");
+    assert.equal(result.goalState?.goalId, currentGoal.goalId);
+    assert.equal(result.goalState?.tokensUsed, currentGoal.tokensUsed);
+    assert.equal(
+      result.goalState?.timeUsedSeconds,
+      currentGoal.timeUsedSeconds,
+    );
+  }
+});
+
+test("Goal intent replaces a completed Goal and resets its accounting", async () => {
+  const currentGoal = {
+    ...threadGoal("complete"),
+    goalId: "completed-goal",
+  };
+  const store = new RecordingTurnStore(threadState(), currentGoal);
+
+  const result = await createService(store).startTurn(actor(), {
+    ...command(),
+    executionIntent: "goal",
+  });
+
+  assert.equal(result.goalState?.status, "active");
+  assert.notEqual(result.goalState?.goalId, currentGoal.goalId);
+  assert.equal(result.goalState?.tokensUsed, 0);
+  assert.equal(result.goalState?.timeUsedSeconds, 0);
+  assert.equal(result.goalState?.tokenBudget, DEFAULT_THREAD_GOAL_TOKEN_BUDGET);
+});
+
+test("Plan clears only an active Goal and never binds a retained inactive Goal", async () => {
+  for (const status of [
+    "active",
+    "paused",
+    "blocked",
+    "budgetLimited",
+    "usageLimited",
+    "complete",
+  ] as const) {
+    const currentGoal = threadGoal(status);
+    const store = new RecordingTurnStore(threadState(), currentGoal);
+
+    const result = await createService(store).startTurn(actor(), {
+      ...command(),
+      executionIntent: "plan",
+    });
+
+    assert.equal(result.runState.collaborationMode, "plan");
+    assert.equal(result.runState.goalBinding, null);
+    assert.deepEqual(
+      store.commits[0]?.goal,
+      status === "active"
+        ? {
+            kind: "clear",
+            expectedRevision: currentGoal.revision,
+            occurredAt: "2026-08-09T00:00:01Z",
+          }
+        : { kind: "keep", expectedRevision: currentGoal.revision },
+    );
+  }
+
+  const store = new RecordingTurnStore(threadState(), null);
+  await createService(store).startTurn(actor(), {
+    ...command(),
+    executionIntent: "plan",
+  });
+  assert.deepEqual(store.commits[0]?.goal, {
+    kind: "keep",
+    expectedRevision: null,
+  });
+});
+
 test("atomically resumes a paused Goal for one deferred-continuation Run", async () => {
   const currentGoal = threadGoal("paused");
   const store = new RecordingTurnStore(threadState(), currentGoal);

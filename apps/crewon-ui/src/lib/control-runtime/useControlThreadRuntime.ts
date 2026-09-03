@@ -34,6 +34,7 @@ export function useControlThreadRuntime(params: {
   appendStreamingTextDelta: (threadId: string, delta: string) => void;
   client: ControlApiClient | null;
   manageThreads: boolean;
+  onExecutionIntentMismatch?: (threadId: string, runId: string) => void;
   onToolApprovalRequired?: (request: ControlToolApprovalRequest) => void;
   onToolApprovalResolved?: (threadId: string, runId: string) => void;
   selectedThreadId: string | null;
@@ -65,6 +66,8 @@ export function useControlThreadRuntime(params: {
   onToolApprovalRequiredRef.current = params.onToolApprovalRequired;
   const onToolApprovalResolvedRef = useRef(params.onToolApprovalResolved);
   onToolApprovalResolvedRef.current = params.onToolApprovalResolved;
+  const onExecutionIntentMismatchRef = useRef(params.onExecutionIntentMismatch);
+  onExecutionIntentMismatchRef.current = params.onExecutionIntentMismatch;
   const [threadGoal, setThreadGoal] = useState<ThreadGoalView | null>(null);
   const [runPlanByRunId, setRunPlanByRunId] =
     useState<ControlRunPlanProjectionState>({});
@@ -279,6 +282,9 @@ export function useControlThreadRuntime(params: {
               params.setThreads((current) => upsertThread(current, thread));
             })
             .catch(() => undefined);
+        },
+        onExecutionIntentMismatch: (threadId, runId) => {
+          onExecutionIntentMismatchRef.current?.(threadId, runId);
         },
       },
     );

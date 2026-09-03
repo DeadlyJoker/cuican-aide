@@ -537,6 +537,47 @@ describe("thread message actions", () => {
     expect(state.isSending).toBe(false);
   });
 
+  it.each(["goal", "plan"] as const)(
+    "rejects %s before steering an active turn",
+    async (executionIntent) => {
+      const state = threadState();
+      const steerTurn = vi.fn(async () => ({ turnId: "turn-steered" }));
+      const startTurn = vi.fn(async () => turnStartResponse());
+      const committed = vi.fn();
+
+      await sendMessageAction(
+        baseSendParams({
+          activeTurnId: "turn-active",
+          client: {
+            async resumeThread(threadId) {
+              return thread({ id: threadId });
+            },
+            startTurn,
+            steerTurn,
+          },
+          onExecutionIntentCommitted: committed,
+          setComposerFocusSignal: state.setComposerFocusSignal,
+          setComposerValue: state.setComposerValue,
+          setIsSending: state.setIsSending,
+          setNotice: state.setNotice,
+          setPendingComposerMentions: state.setPendingComposerMentions,
+          text: "Keep this intent",
+          threadSettings: { executionIntent },
+        }),
+      );
+
+      expect(steerTurn).not.toHaveBeenCalled();
+      expect(startTurn).not.toHaveBeenCalled();
+      expect(committed).not.toHaveBeenCalled();
+      expect(state.composerValue).toBe("Keep this intent");
+      expect(state.notice).toEqual({
+        text: "Goal and Plan modes cannot be appended to an active turn. Wait for it to finish or stop it first; the message and mode were preserved.",
+        tone: "warning",
+      });
+      expect(state.isSending).toBe(false);
+    },
+  );
+
   it("filters removed slash mentions before steering an active turn", async () => {
     const state = threadState();
     const steerCalls: Array<{
@@ -691,6 +732,65 @@ describe("thread message actions", () => {
       { method: "start", settings: threadSettings, threadId: "thread-1" },
     ]);
   });
+
+  it.each(["goal", "plan"] as const)(
+    "rejects %s before starting a code review",
+    async (executionIntent) => {
+      const state = threadState();
+      const startReview = vi.fn(async () => {
+        throw new Error("should not start review");
+      });
+      const startTurn = vi.fn(async () => turnStartResponse());
+      const updateThreadSettings = vi.fn(async () => undefined);
+      const createThread = vi.fn(async () => thread());
+      const committed = vi.fn();
+
+      await sendMessageAction(
+        baseSendParams({
+          client: {
+            async resumeThread(threadId) {
+              return thread({ id: threadId });
+            },
+            startReview,
+            startTurn,
+            async steerTurn() {
+              throw new Error("should not steer");
+            },
+            updateThreadSettings,
+          },
+          createThread,
+          onExecutionIntentCommitted: committed,
+          setComposerFocusSignal: state.setComposerFocusSignal,
+          setComposerValue: state.setComposerValue,
+          setIsSending: state.setIsSending,
+          setNotice: state.setNotice,
+          setPendingComposerMentions: state.setPendingComposerMentions,
+          setThreads: state.setThreads,
+          text: "Review without losing intent",
+          threadSettings: {
+            executionIntent,
+            scene: {
+              sceneId: "code",
+              mode: "review",
+              executionTarget: { kind: "crewon" },
+            },
+          },
+        }),
+      );
+
+      expect(createThread).not.toHaveBeenCalled();
+      expect(updateThreadSettings).not.toHaveBeenCalled();
+      expect(startReview).not.toHaveBeenCalled();
+      expect(startTurn).not.toHaveBeenCalled();
+      expect(committed).not.toHaveBeenCalled();
+      expect(state.composerValue).toBe("Review without losing intent");
+      expect(state.notice).toEqual({
+        text: "Code review does not yet support Goal or Plan mode. Turn the mode off and retry; the message and mode were preserved.",
+        tone: "warning",
+      });
+      expect(state.isSending).toBe(false);
+    },
+  );
 
   it.each(["goal", "plan"] as const)(
     "submits %s only through atomic startTurn and acknowledges its visible reset",

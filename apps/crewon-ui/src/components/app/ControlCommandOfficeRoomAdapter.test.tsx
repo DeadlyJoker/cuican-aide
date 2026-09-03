@@ -7,6 +7,7 @@ import { controlTeamDelegationMarker } from "../../lib/control-runtime/controlTe
 import {
   controlOfficeComposerRuntimeSettings,
   createControlCommandOfficeRoomAdapter,
+  readControlOfficeActiveGoal,
 } from "./ControlCommandOfficeRoomAdapter";
 import {
   controlOfficeChatErrorMessage,
@@ -97,6 +98,21 @@ describe("ControlCommandOfficeRoomAdapter", () => {
         "zh",
       ),
     ).toBe("这个办公室里有成员暂时不可用，请在成员设置中更新后再试。");
+    expect(
+      controlOfficeChatErrorMessage(
+        new Error("control_team_plan_unsupported"),
+        "zh",
+      ),
+    ).toContain("多成员办公室暂不支持计划模式");
+    expect(
+      controlOfficeChatErrorMessage(
+        new Error("control_execution_intent_capability_unavailable"),
+        "zh",
+      ),
+    ).toContain("当前后端版本还不支持目标或计划模式");
+    expect(
+      controlOfficeChatErrorMessage(new Error("goal_usage_limited"), "en"),
+    ).toContain("reached its usage or budget limit");
   });
 
   it("never exposes an internal error code to the user", () => {
@@ -106,6 +122,24 @@ describe("ControlCommandOfficeRoomAdapter", () => {
         "zh",
       ),
     ).toBe("操作没有完成，请稍后再试。");
+  });
+
+  it("keeps optional Goal metadata failures out of the authoritative Office flow", async () => {
+    const getThreadGoal = vi
+      .fn()
+      .mockResolvedValueOnce({
+        eventSequence: 1,
+        goal: { status: "active" },
+      })
+      .mockRejectedValueOnce(new Error("goal metadata unavailable"));
+    const client = { getThreadGoal } as never;
+
+    await expect(readControlOfficeActiveGoal(client, "thread-1")).resolves.toBe(
+      true,
+    );
+    await expect(
+      readControlOfficeActiveGoal(client, "thread-1"),
+    ).resolves.toBeUndefined();
   });
 
   it("keeps attached file contents out of the visible user message", () => {
@@ -230,7 +264,9 @@ describe("ControlCommandOfficeRoomAdapter", () => {
         createOffice: vi.fn(),
         createThread: vi.fn(),
         getActiveAgentVersionCatalog: vi.fn(),
+        getExecutionIntentCapability: vi.fn(),
         getOffice,
+        getThreadGoal: vi.fn(),
         listOffices: vi.fn(),
       },
       locale: "zh",
@@ -248,7 +284,9 @@ describe("ControlCommandOfficeRoomAdapter", () => {
         createOffice: vi.fn(),
         createThread: vi.fn(),
         getActiveAgentVersionCatalog: vi.fn(),
+        getExecutionIntentCapability: vi.fn(),
         getOffice: vi.fn(async () => null as never),
+        getThreadGoal: vi.fn(),
         listOffices: vi.fn(),
       },
       locale: "zh",
@@ -319,8 +357,10 @@ describe("ControlCommandOfficeRoomAdapter", () => {
     expect(markup).not.toContain('data-workspace-permission="read-only"');
     expect(markup).toContain('aria-label="模型与推理档位"');
     expect(markup).toContain("GPT-5.6 中");
-    expect(markup).toContain("目标模式");
-    expect(markup).toContain("计划模式");
+    expect(markup).toContain('class="execution-intent-segmented" role="group"');
+    expect(markup).toContain('data-execution-intent="goal"');
+    expect(markup).toContain('data-execution-intent="plan"');
+    expect(markup).not.toContain('data-kind="intent"');
     expect(markup).toContain('placeholder="搜索办公室成员"');
     expect(markup).toContain('data-kind="agent"');
     expect(markup).toContain('data-label="交付组长"');

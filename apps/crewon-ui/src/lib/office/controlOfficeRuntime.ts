@@ -164,18 +164,10 @@ export async function refreshControlOfficeRuntime(input: {
   officeVersionId: string;
   model?: string | null;
 }): Promise<OfficeContract> {
-  const [selected, catalog, listed] = await Promise.all([
-    input.client.getOffice(input.officeVersionId),
+  const [office, catalog] = await Promise.all([
+    readLatestControlOffice(input.client, input.officeVersionId),
     input.client.getActiveAgentVersionCatalog(),
-    input.client.listOffices({ limit: 100 }),
   ]);
-  const office = listed.data
-    .filter((candidate) => candidate.officeId === selected.office.officeId)
-    .reduce(
-      (latest, candidate) =>
-        candidate.revision > latest.revision ? candidate : latest,
-      selected.office,
-    );
   const activeIds = new Set(
     catalog.data.map((version) => version.agentVersionId),
   );
@@ -222,6 +214,24 @@ export async function refreshControlOfficeRuntime(input: {
   );
   copyOfficeMemberProfiles(office, response.office);
   return response.office;
+}
+
+/** Resolves the latest immutable Office definition without publishing a rebind. */
+export async function readLatestControlOffice(
+  client: Pick<ControlOfficeClient, "getOffice" | "listOffices">,
+  officeVersionId: string,
+): Promise<OfficeContract> {
+  const [selected, listed] = await Promise.all([
+    client.getOffice(officeVersionId),
+    client.listOffices({ limit: 100 }),
+  ]);
+  return listed.data
+    .filter((candidate) => candidate.officeId === selected.office.officeId)
+    .reduce(
+      (latest, candidate) =>
+        candidate.revision > latest.revision ? candidate : latest,
+      selected.office,
+    );
 }
 
 function runnableAgentVersionId(

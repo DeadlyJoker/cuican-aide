@@ -163,7 +163,14 @@ function run(
 
 function teamClient(
   failedWorker: string | null = null,
-  initialGoalStatus: "active" | "paused" | null = null,
+  initialGoalStatus:
+    | "active"
+    | "paused"
+    | "blocked"
+    | "usageLimited"
+    | "budgetLimited"
+    | "complete"
+    | null = null,
   managerCreatesGoal = false,
   transientRunReadFailures = 0,
 ) {
@@ -171,12 +178,15 @@ function teamClient(
   const appendedMessages: MessageView[] = [];
   const forkIds = ["thread-manager-plan", "thread-qa", "thread-security"];
   let forkIndex = 0;
-  let goalStatus: "active" | "paused" | null = initialGoalStatus;
+  let goalStatus = initialGoalStatus;
   let goalRevision = initialGoalStatus === null ? 0 : 5;
   let goalObjective =
     initialGoalStatus === null ? "" : "Decide whether to launch the pilot";
   let sourceHasIncompleteUserBoundary = false;
   const client: ControlTeamRuntimeClient = {
+    getExecutionIntentCapability: vi.fn(async () => ({
+      version: "v1" as const,
+    })),
     getOffice: vi.fn(async () => ({ office })),
     authorizeOfficeRun: vi.fn(async (_officeVersionId, body) => ({
       target: office.executionTargets.find(
@@ -337,6 +347,7 @@ function teamClient(
       createdRuns.push(created);
       return {
         disposition: "committed" as const,
+        acceptedExecutionIntent: body.executionIntent,
         thread: thread(threadId, {
           revision: body.expectedRevision + 1,
           lastMessageSequence: 3,
@@ -389,6 +400,48 @@ function teamClient(
 }
 
 describe("Control TypeScript Team Runtime", () => {
+  it("rejects Plan before any Team or Goal side effect", async () => {
+    const state = teamClient(null, "active");
+    const plan = {
+      officeVersionId: office.officeVersionId,
+      officeTitle: office.title,
+      manager: {
+        ...office.members[0]!,
+        targetId: office.executionTargets[0]!.targetId,
+      },
+      workers: office.members.slice(1).map((member, index) => ({
+        ...member,
+        targetId: office.executionTargets[index + 1]!.targetId,
+      })),
+    };
+
+    await expect(
+      startControlTeamTurn({
+        client: state.client,
+        threadId: "thread-main",
+        expectedRevision: 1,
+        content: "Plan the release without executing it",
+        plan,
+        responseMode: "manager",
+        idempotencyKey: (operation) => operation,
+        executionIntent: "plan",
+        pollIntervalMs: 0,
+        runDeadlineMs: 1_000,
+      }),
+    ).rejects.toThrow("control_team_plan_unsupported");
+
+    expect(state.client.getThreadGoal).not.toHaveBeenCalled();
+    expect(state.client.setThreadGoal).not.toHaveBeenCalled();
+    expect(state.client.authorizeOfficeRun).not.toHaveBeenCalled();
+    expect(state.client.getThread).not.toHaveBeenCalled();
+    expect(state.client.forkThread).not.toHaveBeenCalled();
+    expect(state.client.appendThreadMessage).not.toHaveBeenCalled();
+    expect(state.client.createRun).not.toHaveBeenCalled();
+    expect(state.client.startTurn).not.toHaveBeenCalled();
+    expect(state.createdRuns).toEqual([]);
+    expect(state.appendedMessages).toEqual([]);
+  });
+
   it("authorizes every pinned member and preserves the first target as manager", async () => {
     const state = teamClient();
     const plan = await resolveControlTeamPlan({
@@ -527,6 +580,55 @@ describe("Control TypeScript Team Runtime", () => {
     expect(finalPrompt).not.toContain(controlTeamDelegationMarker("qa"));
   });
 
+  it("adopts a committed Team turn with a mismatched acknowledgement and warns", async () => {
+    const state = teamClient();
+    const plan = await resolveControlTeamPlan({
+      client: state.client,
+      threadId: "thread-main",
+      officeVersionId: office.officeVersionId,
+      catalog,
+    });
+    const startTurn = vi.mocked(state.client.startTurn);
+    const originalStartTurn = startTurn.getMockImplementation();
+    if (originalStartTurn === undefined) {
+      throw new Error("missing_test_start_turn_implementation");
+    }
+    startTurn.mockImplementationOnce(async (...args) => ({
+      ...(await originalStartTurn(...args)),
+      acceptedExecutionIntent: "plan",
+    }));
+    const onFinalTurnStarted = vi.fn();
+    const onExecutionIntentMismatch = vi.fn();
+    const onRunStarted = vi.fn();
+
+    await expect(
+      startControlTeamTurn({
+        client: state.client,
+        threadId: "thread-main",
+        expectedRevision: 1,
+        content: "Ask the expert panel for a release verdict",
+        plan,
+        responseMode: "manager",
+        idempotencyKey: (operation) => operation,
+        onFinalTurnStarted,
+        onExecutionIntentMismatch,
+        onRunStarted,
+        pollIntervalMs: 0,
+        runDeadlineMs: 1_000,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        run: expect.objectContaining({ runId: "manager-final" }),
+      }),
+    );
+
+    expect(onFinalTurnStarted).toHaveBeenCalledOnce();
+    expect(onRunStarted).toHaveBeenCalledOnce();
+    expect(onExecutionIntentMismatch).toHaveBeenCalledWith(
+      expect.objectContaining({ runId: "manager-final" }),
+    );
+  });
+
   it("survives a bounded transient Web proxy failure during a long Team run", async () => {
     const state = teamClient(null, null, false, 1);
     const plan = await resolveControlTeamPlan({
@@ -639,6 +741,114 @@ describe("Control TypeScript Team Runtime", () => {
       "team.goal.pause",
     );
     expect(state.client.setThreadGoal).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ["usageLimited", "goal_usage_limited"],
+    ["budgetLimited", "goal_budget_limited"],
+  ] as const)(
+    "rejects Goal for a %s Team Goal before any mutation",
+    async (goalStatus, expectedError) => {
+      const state = teamClient(null, goalStatus);
+      const plan = await resolveControlTeamPlan({
+        client: state.client,
+        threadId: "thread-main",
+        officeVersionId: office.officeVersionId,
+        catalog,
+      });
+      vi.clearAllMocks();
+
+      await expect(
+        startControlTeamTurn({
+          client: state.client,
+          threadId: "thread-main",
+          expectedRevision: 1,
+          content: "Continue the limited goal",
+          plan,
+          responseMode: "manager",
+          idempotencyKey: (operation) => operation,
+          executionIntent: "goal",
+          pollIntervalMs: 0,
+          runDeadlineMs: 1_000,
+        }),
+      ).rejects.toThrow(expectedError);
+
+      expect(state.client.setThreadGoal).not.toHaveBeenCalled();
+      expect(state.client.forkThread).not.toHaveBeenCalled();
+      expect(state.client.appendThreadMessage).not.toHaveBeenCalled();
+      expect(state.client.createRun).not.toHaveBeenCalled();
+      expect(state.client.startTurn).not.toHaveBeenCalled();
+    },
+  );
+
+  it("fails before the first Team Goal mutation when execution-intent v1 is unavailable", async () => {
+    const state = teamClient(null, "complete");
+    const plan = await resolveControlTeamPlan({
+      client: state.client,
+      threadId: "thread-main",
+      officeVersionId: office.officeVersionId,
+      catalog,
+    });
+    vi.clearAllMocks();
+    vi.mocked(state.client.getExecutionIntentCapability).mockRejectedValueOnce(
+      new Error("control_execution_intent_capability_unavailable"),
+    );
+
+    await expect(
+      startControlTeamTurn({
+        client: state.client,
+        threadId: "thread-main",
+        expectedRevision: 1,
+        content: "Start a fresh release goal",
+        plan,
+        responseMode: "manager",
+        idempotencyKey: (operation) => operation,
+        executionIntent: "goal",
+        pollIntervalMs: 0,
+        runDeadlineMs: 1_000,
+      }),
+    ).rejects.toThrow("control_execution_intent_capability_unavailable");
+
+    expect(state.client.getThreadGoal).toHaveBeenCalledTimes(1);
+    expect(state.client.getExecutionIntentCapability).toHaveBeenCalledTimes(1);
+    expect(state.client.setThreadGoal).not.toHaveBeenCalled();
+    expect(state.client.forkThread).not.toHaveBeenCalled();
+    expect(state.client.appendThreadMessage).not.toHaveBeenCalled();
+    expect(state.client.createRun).not.toHaveBeenCalled();
+    expect(state.client.startTurn).not.toHaveBeenCalled();
+  });
+
+  it("replaces a completed Team Goal before pausing the fresh objective", async () => {
+    const state = teamClient(null, "complete");
+    const plan = await resolveControlTeamPlan({
+      client: state.client,
+      threadId: "thread-main",
+      officeVersionId: office.officeVersionId,
+      catalog,
+    });
+
+    await startControlTeamTurn({
+      client: state.client,
+      threadId: "thread-main",
+      expectedRevision: 1,
+      content: "Start a fresh release goal",
+      plan,
+      responseMode: "manager",
+      idempotencyKey: (operation) => operation,
+      executionIntent: "goal",
+      pollIntervalMs: 0,
+      runDeadlineMs: 1_000,
+    });
+
+    expect(state.client.setThreadGoal).toHaveBeenCalledWith(
+      "thread-main",
+      expect.objectContaining({
+        expectedRevision: 5,
+        objective: "Start a fresh release goal",
+        status: "paused",
+      }),
+      "team.goal.pause",
+    );
   });
 
   it("pauses an existing active Goal around a follow-up Team turn", async () => {

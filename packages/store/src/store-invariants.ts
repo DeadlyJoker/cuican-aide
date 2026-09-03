@@ -1909,7 +1909,7 @@ export function validateTurnStartInput(input: CommitTurnStartInput): {
   if (
     (input.goal.kind === "clear" &&
       runEvent.data.collaborationMode !== "plan") ||
-    (input.goal.kind !== "clear" &&
+    (input.goal.kind === "set" &&
       runEvent.data.collaborationMode !== "default") ||
     (runEvent.data.goalContinuationMode === "deferred" &&
       input.goal.kind !== "set") ||
@@ -2555,9 +2555,11 @@ export function validateTurnStartGoalBinding(
     throw new RunStoreError("turn_start_shape_invalid");
   }
   const matches =
-    goal !== null && isGoalRunnable(goal.status)
-      ? goalBindingMatchesGoal(created.data.goalBinding, goal)
-      : created.data.goalBinding === null;
+    created.data.collaborationMode === "plan"
+      ? goal?.status !== "active" && created.data.goalBinding === null
+      : goal !== null && isGoalRunnable(goal.status)
+        ? goalBindingMatchesGoal(created.data.goalBinding, goal)
+        : created.data.goalBinding === null;
   if (!matches) {
     throw new RunStoreError("turn_start_goal_binding_mismatch");
   }

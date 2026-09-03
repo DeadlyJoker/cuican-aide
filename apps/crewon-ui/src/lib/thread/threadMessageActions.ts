@@ -340,6 +340,9 @@ export async function sendMessageAction({
 
   try {
     if (activeTurnId && selectedThreadId && isConnected) {
+      if (hasExecutionIntent(threadSettings)) {
+        throw new Error("control_active_turn_execution_intent_unsupported");
+      }
       const response = await client?.steerTurn(
         selectedThreadId,
         text,
@@ -357,6 +360,14 @@ export async function sendMessageAction({
       }
       setNotice(threadGuidanceAppendedNotice(locale));
       return;
+    }
+
+    if (
+      threadSettings?.scene?.sceneId === "code" &&
+      threadSettings.scene.mode === "review" &&
+      hasExecutionIntent(threadSettings)
+    ) {
+      throw new Error("control_review_execution_intent_unsupported");
     }
 
     if (!thread) {
@@ -503,6 +514,12 @@ export async function sendMessageAction({
   } finally {
     setIsSending(false);
   }
+}
+
+function hasExecutionIntent(settings: ThreadRuntimeSettings | undefined) {
+  return (
+    settings?.executionIntent === "goal" || settings?.executionIntent === "plan"
+  );
 }
 
 function isAppServerConnectionLoss(error: unknown): boolean {

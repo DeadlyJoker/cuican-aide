@@ -233,6 +233,15 @@ export function App({
     appendStreamingTextDelta: threadState.appendStreamingTextDelta,
     client: controlClient,
     manageThreads: true,
+    onExecutionIntentMismatch: () => {
+      setNotice({
+        text:
+          localeRef.current === "zh"
+            ? "任务已提交，但后端返回的执行模式与选择不一致；已按实际运行状态继续，请勿重复发送。"
+            : "The task was submitted, but the backend mode did not match your selection. CrewON is following the actual run state; do not resend it.",
+        tone: "warning",
+      });
+    },
     onToolApprovalRequired: (request) => {
       setControlToolApprovals((current) => {
         const next = new Map(current);

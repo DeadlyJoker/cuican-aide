@@ -36,7 +36,10 @@ import {
   personalizationContext,
   type PersonalizationSettings,
 } from "../settings/personalizationSettingsStore";
-import { refreshControlOfficeRuntime } from "../office/controlOfficeRuntime";
+import {
+  readLatestControlOffice,
+  refreshControlOfficeRuntime,
+} from "../office/controlOfficeRuntime";
 import { controlAgentVersionForModel } from "./controlModelCatalog";
 import {
   applyControlTaskChangeEvent,
@@ -64,7 +67,10 @@ import {
   type ThreadGoalEventStream,
 } from "./threadGoalControlState";
 import {
+  CONTROL_TEAM_PLAN_UNSUPPORTED,
+  controlStartTurnExecutionIntentMatches,
   controlTeamMemberGuidance,
+  requireControlExecutionIntentCapability,
   resolveControlTeamPlan,
   startControlTeamTurn,
 } from "./controlTeamRuntime";
@@ -138,6 +144,7 @@ export type ControlThreadRuntimeCallbacks = Readonly<{
   onThreadGoal?: (snapshot: ControlThreadGoalSnapshot) => void;
   onGoalStreamError?: (threadId: string, error: unknown) => void;
   onGoalMutation?: (signal: ControlThreadGoalMutationSignal) => void;
+  onExecutionIntentMismatch?: (threadId: string, runId: string) => void;
 }>;
 
 export type ControlThreadRuntimeConfig = Readonly<{
@@ -943,9 +950,49 @@ export class ControlThreadRuntime {
     ]);
     const target = settings?.scene?.executionTarget;
     if (target?.kind === "team" || target?.kind === "experts") {
+      const executionIntent = settings?.executionIntent ?? "none";
       const targetMemberId = settings?.teamTargetMemberId?.trim();
+      if (target.kind === "experts" && executionIntent === "plan") {
+        throw new Error(CONTROL_TEAM_PLAN_UNSUPPORTED);
+      }
       if (target.kind === "experts" && targetMemberId) {
         throw new Error("control_expert_member_target_unsupported");
+      }
+      const preflightOffice = await readLatestControlOffice(
+        this.#client,
+        target.id,
+      );
+      if (target.kind === "experts" && preflightOffice.members.length < 2) {
+        throw new Error("control_expert_member_count_unsupported");
+      }
+      const directMemberIndex =
+        target.kind === "team"
+          ? targetMemberId
+            ? preflightOffice.members.findIndex(
+                (candidate) => candidate.memberId === targetMemberId,
+              )
+            : preflightOffice.members.length === 1
+              ? 0
+              : -1
+          : -1;
+      if (target.kind === "team" && targetMemberId && directMemberIndex < 0) {
+        throw new Error("control_office_target_member_not_found");
+      }
+      if (
+        target.kind === "team" &&
+        executionIntent === "plan" &&
+        directMemberIndex < 0
+      ) {
+        throw new Error(CONTROL_TEAM_PLAN_UNSUPPORTED);
+      }
+      const runsTeamWorkflow = directMemberIndex < 0;
+      const activeGoalRequiresCapability =
+        executionIntent === "none" && runsTeamWorkflow
+          ? (await this.#client.getThreadGoal(threadId)).goal?.status ===
+            "active"
+          : false;
+      if (executionIntent !== "none" || activeGoalRequiresCapability) {
+        await requireControlExecutionIntentCapability(this.#client);
       }
       const office = await refreshControlOfficeRuntime({
         client: this.#client,
@@ -953,7 +1000,7 @@ export class ControlThreadRuntime {
         model: settings?.model,
       });
       const officeVersionId = office.officeVersionId;
-      const directMemberIndex =
+      const refreshedDirectMemberIndex =
         target.kind === "team"
           ? targetMemberId
             ? office.members.findIndex(
@@ -963,8 +1010,8 @@ export class ControlThreadRuntime {
               ? 0
               : -1
           : -1;
-      if (directMemberIndex >= 0) {
-        const memberIndex = directMemberIndex;
+      if (refreshedDirectMemberIndex >= 0) {
+        const memberIndex = refreshedDirectMemberIndex;
         const member = office.members[memberIndex];
         if (!member) {
           throw new Error("control_office_target_member_not_found");
@@ -1014,10 +1061,14 @@ export class ControlThreadRuntime {
                 })
               : content,
             agentVersionId: member.agentVersionId,
-            executionIntent: settings?.executionIntent ?? "none",
+            executionIntent,
             toolPermissionMode,
           },
           this.#idempotencyKey("turn.start"),
+        );
+        const executionIntentMatches = controlStartTurnExecutionIntentMatches(
+          started,
+          executionIntent,
         );
         const turn = projectedTurn(
           started.message,
@@ -1032,9 +1083,18 @@ export class ControlThreadRuntime {
           started.run.runId,
           started.run.collaborationMode,
         );
+        if (!executionIntentMatches) {
+          this.#callbacks.onExecutionIntentMismatch?.(
+            threadId,
+            started.run.runId,
+          );
+        }
         return { turn };
       }
       if (office.members.length > 1) {
+        if (settings?.executionIntent === "plan") {
+          throw new Error(CONTROL_TEAM_PLAN_UNSUPPORTED);
+        }
         const plan = await resolveControlTeamPlan({
           client: this.#client,
           threadId,
@@ -1068,6 +1128,9 @@ export class ControlThreadRuntime {
               finalStarted.run.collaborationMode,
             );
           },
+          onExecutionIntentMismatch: (run) => {
+            this.#callbacks.onExecutionIntentMismatch?.(threadId, run.runId);
+          },
         });
         if (isTerminalRun(started.run)) {
           this.#callbacks.onRunSettled(threadId, started.run.runId);
@@ -1096,16 +1159,21 @@ export class ControlThreadRuntime {
       catalog,
       settings,
     );
+    const executionIntent = settings?.executionIntent ?? "none";
     const started = await this.#client.startTurn(
       threadId,
       {
         expectedRevision: current.thread.revision,
         content,
         agentVersionId: agentVersion.agentVersionId,
-        executionIntent: settings?.executionIntent ?? "none",
+        executionIntent,
         toolPermissionMode,
       },
       this.#idempotencyKey("turn.start"),
+    );
+    const executionIntentMatches = controlStartTurnExecutionIntentMatches(
+      started,
+      executionIntent,
     );
     const turn = projectedTurn(started.message, null, started.run, [], false);
     this.#callbacks.onTurnStarted?.(threadId, turn);
@@ -1114,6 +1182,9 @@ export class ControlThreadRuntime {
       started.run.runId,
       started.run.collaborationMode,
     );
+    if (!executionIntentMatches) {
+      this.#callbacks.onExecutionIntentMismatch?.(threadId, started.run.runId);
+    }
     return { turn };
   }
 

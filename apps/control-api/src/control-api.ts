@@ -92,6 +92,7 @@ import {
   type GetAgentVersionResponse,
   type GetArtifactResponse,
   type GetAutomationResponse,
+  type ExecutionIntentCapabilityResponse,
   type GetRunResponse,
   type GetRunPlanResponse,
   type GetThreadResponse,
@@ -121,9 +122,14 @@ import {
   type GetWorkflowVersionResponse,
   type ListWorkflowVersionsResponse,
   type JsonValue,
+  START_TURN_EXECUTION_INTENT_ACK_ACCEPT,
 } from "@crewon/contracts";
 import type { OfficeDefinition } from "@crewon/domain";
-import Fastify, { type FastifyInstance } from "fastify";
+import Fastify, {
+  type FastifyInstance,
+  type FastifyReply,
+  type FastifyRequest,
+} from "fastify";
 
 import {
   errorResponse,
@@ -307,6 +313,12 @@ export function buildControlApi(
       const mapped = readinessErrorResponse(request.id);
       return reply.code(mapped.statusCode).send(mapped.body);
     }
+  });
+
+  app.get("/api/v1/capabilities/execution-intent-v1", async (request) => {
+    await dependencies.identity.resolveActor(requestContext(request));
+    const response: ExecutionIntentCapabilityResponse = { version: "v1" };
+    return response;
   });
 
   app.get("/api/v1/model-provider-settings", async (request) => {
@@ -1062,46 +1074,77 @@ export function buildControlApi(
     return response;
   });
 
-  app.post<{ Params: { threadId: string }; Body: unknown }>(
-    "/api/v1/threads/:threadId/turns",
-    async (request, reply) => {
-      const actor = await dependencies.identity.resolveActor(
-        requestContext(request),
-      );
-      const threadId = parseThreadId(request.params.threadId);
-      const body = parseStartTurnRequest(request.body);
-      const idempotencyKey = parseIdempotencyKey(
-        request.headers["idempotency-key"],
-      );
-      const command = {
-        kind: "turn.start" as const,
-        idempotencyKey,
-        threadId,
-        expectedThreadRevision: body.expectedRevision,
-        content: body.content,
-        requestedAgentVersionId: body.agentVersionId,
-        executionIntent: body.executionIntent,
-        toolPermissionMode: body.toolPermissionMode ?? "requestApproval",
-      };
-      const replay = await dependencies.turns.replayTurn(actor, command);
-      if (replay !== null) {
-        wakeOutbox(dependencies.outboxWakeup);
-        return reply.code(200).send(projectTurnStart(replay));
-      }
-      const route = await dependencies.routeResolver.resolveRoute({
-        actor,
-        threadId,
-        agentVersionId: body.agentVersionId,
-      });
-      const result = await dependencies.turns.startTurn(actor, {
-        ...command,
-        route,
-      });
+  const startTurn = async (
+    request: FastifyRequest<{
+      Params: { threadId: string };
+      Body: unknown;
+    }>,
+    reply: FastifyReply,
+    requireExecutionIntentAcknowledgement: boolean,
+  ) => {
+    reply.header("vary", "Accept");
+    const actor = await dependencies.identity.resolveActor(
+      requestContext(request),
+    );
+    const threadId = parseThreadId(request.params.threadId);
+    const body = parseStartTurnRequest(request.body);
+    const idempotencyKey = parseIdempotencyKey(
+      request.headers["idempotency-key"],
+    );
+    const command = {
+      kind: "turn.start" as const,
+      idempotencyKey,
+      threadId,
+      expectedThreadRevision: body.expectedRevision,
+      content: body.content,
+      requestedAgentVersionId: body.agentVersionId,
+      executionIntent: body.executionIntent,
+      toolPermissionMode: body.toolPermissionMode ?? "requestApproval",
+    };
+    const replay = await dependencies.turns.replayTurn(actor, command);
+    if (replay !== null) {
       wakeOutbox(dependencies.outboxWakeup);
       return reply
-        .code(result.disposition === "committed" ? 201 : 200)
-        .send(projectTurnStart(result));
-    },
+        .code(200)
+        .send(
+          projectTurnStart(
+            replay,
+            command.executionIntent,
+            requireExecutionIntentAcknowledgement ||
+              acceptsExecutionIntentAcknowledgement(request.headers.accept),
+          ),
+        );
+    }
+    const route = await dependencies.routeResolver.resolveRoute({
+      actor,
+      threadId,
+      agentVersionId: body.agentVersionId,
+    });
+    const result = await dependencies.turns.startTurn(actor, {
+      ...command,
+      route,
+    });
+    wakeOutbox(dependencies.outboxWakeup);
+    return reply
+      .code(result.disposition === "committed" ? 201 : 200)
+      .send(
+        projectTurnStart(
+          result,
+          command.executionIntent,
+          requireExecutionIntentAcknowledgement ||
+            acceptsExecutionIntentAcknowledgement(request.headers.accept),
+        ),
+      );
+  };
+
+  app.post<{ Params: { threadId: string }; Body: unknown }>(
+    "/api/v1/threads/:threadId/turns",
+    async (request, reply) => startTurn(request, reply, false),
+  );
+
+  app.post<{ Params: { threadId: string }; Body: unknown }>(
+    "/api/v1/threads/:threadId/turns/execution-intent-v1",
+    async (request, reply) => startTurn(request, reply, true),
   );
 
   app.post<{ Params: { threadId: string }; Body: unknown }>(
@@ -1734,17 +1777,47 @@ function threadMutationResponse(
   };
 }
 
-function projectTurnStart(result: CommitTurnStartResult): StartTurnResponse {
+function projectTurnStart(
+  result: CommitTurnStartResult,
+  acceptedExecutionIntent: NonNullable<
+    StartTurnResponse["acceptedExecutionIntent"]
+  >,
+  includeExecutionIntentAcknowledgement: boolean,
+): StartTurnResponse {
   const message = result.messages[0];
   if (message === undefined || result.messages.length !== 1) {
     throw new Error("turn_start_commit_invalid");
   }
   return {
     disposition: result.disposition,
+    ...(includeExecutionIntentAcknowledgement
+      ? { acceptedExecutionIntent }
+      : {}),
     thread: projectThread(result.threadState),
     message: projectMessage(message),
     run: projectRun(result.runState),
   };
+}
+
+function acceptsExecutionIntentAcknowledgement(
+  accept: string | string[] | undefined,
+): boolean {
+  const values = Array.isArray(accept) ? accept : accept ? [accept] : [];
+  const requiredParameter = START_TURN_EXECUTION_INTENT_ACK_ACCEPT.slice(
+    START_TURN_EXECUTION_INTENT_ACK_ACCEPT.indexOf(";") + 1,
+  )
+    .trim()
+    .toLowerCase();
+  return values.some((value) =>
+    value.split(",").some((range) =>
+      range
+        .split(";")
+        .slice(1)
+        .some(
+          (parameter) => parameter.trim().toLowerCase() === requiredParameter,
+        ),
+    ),
+  );
 }
 
 function wakeOutbox(outboxWakeup: OutboxWakeupPort): void {

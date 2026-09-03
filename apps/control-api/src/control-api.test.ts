@@ -76,6 +76,7 @@ import {
   formatMessageCursor,
   formatThreadCursor,
   formatThreadRunCursor,
+  START_TURN_EXECUTION_INTENT_ACK_ACCEPT,
 } from "@crewon/contracts";
 import {
   reduceRunLifecycleEvent,
@@ -651,10 +652,12 @@ test("atomically starts one Goal Turn and replays the original durable result", 
   });
   assert.equal(createdThread.statusCode, 201, createdThread.body);
 
-  const start = () =>
+  const start = (capabilityGated = true) =>
     runtime.app.inject({
       method: "POST",
-      url: "/api/v1/threads/thread-1/turns",
+      url: `/api/v1/threads/thread-1/turns${
+        capabilityGated ? "/execution-intent-v1" : ""
+      }`,
       headers: mutationHeaders("turn-start-1"),
       payload: {
         expectedRevision: 1,
@@ -665,8 +668,10 @@ test("atomically starts one Goal Turn and replays the original durable result", 
     });
   const started = await start();
   assert.equal(started.statusCode, 201, started.body);
+  assert.equal(started.headers.vary, "Accept");
   const body = started.json<StartTurnResponse>();
   assert.equal(body.disposition, "committed");
+  assert.equal(body.acceptedExecutionIntent, "goal");
   assert.equal(body.thread.revision, 2);
   assert.equal(body.message.sequence, 1);
   assert.equal(body.message.content, "hello atomically");
@@ -700,6 +705,14 @@ test("atomically starts one Goal Turn and replays the original durable result", 
   const replayed = await start();
   assert.equal(replayed.statusCode, 200, replayed.body);
   assert.deepEqual(replayed.json(), { ...body, disposition: "replayed" });
+
+  const legacyReplayed = await start(false);
+  assert.equal(legacyReplayed.statusCode, 200, legacyReplayed.body);
+  const { acceptedExecutionIntent: _acknowledgement, ...legacyBody } = body;
+  assert.deepEqual(legacyReplayed.json(), {
+    ...legacyBody,
+    disposition: "replayed",
+  });
 
   const concurrent = await runtime.app.inject({
     method: "POST",
@@ -914,6 +927,21 @@ test("requires CSRF and Idempotency-Key and rejects Goal authority injection", a
     payload: { ...body, tenantId: "tenant-attacker" },
   });
   assertError(injected, 400, "validation", "set_thread_goal_fields_invalid");
+
+  for (const status of [
+    "blocked",
+    "usageLimited",
+    "budgetLimited",
+    "complete",
+  ]) {
+    const forbiddenStatus = await runtime.app.inject({
+      method: "PUT",
+      url: "/api/v1/threads/thread-1/goal",
+      headers: mutationHeaders(`goal-forbidden-${status}`),
+      payload: { ...body, status },
+    });
+    assertError(forbiddenStatus, 400, "validation", "goal_status_invalid");
+  }
 
   const injectedClear = await runtime.app.inject({
     method: "DELETE",
@@ -1160,8 +1188,11 @@ test("admits Plan as a one-Run mode without creating a persistent Goal", async (
 
   const started = await runtime.app.inject({
     method: "POST",
-    url: "/api/v1/threads/thread-1/turns",
-    headers: mutationHeaders("plan-turn-1"),
+    url: "/api/v1/threads/thread-1/turns/execution-intent-v1",
+    headers: {
+      ...mutationHeaders("plan-turn-1"),
+      accept: START_TURN_EXECUTION_INTENT_ACK_ACCEPT,
+    },
     payload: {
       expectedRevision: 1,
       content: "plan the migration",
@@ -1172,6 +1203,7 @@ test("admits Plan as a one-Run mode without creating a persistent Goal", async (
 
   assert.equal(started.statusCode, 201, started.body);
   const body = started.json<StartTurnResponse>();
+  assert.equal(body.acceptedExecutionIntent, "plan");
   assert.equal(body.run.collaborationMode, "plan");
   assert.equal(body.run.goalBinding, null);
   assert.equal(
@@ -1358,6 +1390,23 @@ test("serves health and strict authenticated Run create/get/cancel commands", as
     payload: { expectedRevision: 1 },
   });
   assertError(stale, 409, "conflict", "revision_conflict");
+});
+
+test("advertises execution-intent v1 only to authenticated callers", async (context) => {
+  const runtime = await testRuntime(context);
+  const supported = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/capabilities/execution-intent-v1",
+    headers: readHeaders(),
+  });
+  assert.equal(supported.statusCode, 200, supported.body);
+  assert.deepEqual(supported.json(), { version: "v1" });
+
+  const unauthenticated = await runtime.app.inject({
+    method: "GET",
+    url: "/api/v1/capabilities/execution-intent-v1",
+  });
+  assertError(unauthenticated, 401, "authentication", "session_invalid");
 });
 
 test("admits and replays a manual compaction maintenance Run", async (context) => {

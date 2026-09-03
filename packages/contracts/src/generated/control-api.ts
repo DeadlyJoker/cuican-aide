@@ -1,5 +1,22 @@
 // This file is generated from openapi/control-api.v1.json. Do not edit.
 export interface paths {
+  "/api/v1/capabilities/execution-intent-v1": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read-only deployment gate for execution-intent semantics. Clients that require Goal or Plan v1 behavior must call this before any multi-step workflow mutation. */
+    get: operations["getExecutionIntentCapabilityV1"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/model-provider-settings": {
     parameters: {
       query?: never;
@@ -299,6 +316,23 @@ export interface paths {
     get?: never;
     put?: never;
     post: operations["startTurn"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/turns/execution-intent-v1": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** @description Capability-gated Turn admission for Goal, Plan, and ResumeGoal. Older servers do not expose this path and therefore fail before committing a Turn. Successful responses always include acceptedExecutionIntent. */
+    post: operations["startTurnWithExecutionIntentV1"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1050,6 +1084,11 @@ export interface components {
       | "usageLimited"
       | "budgetLimited"
       | "complete";
+    /**
+     * @description Goal states that a user-facing mutation may request. Runtime and system terminal/limit states are read-only through this API.
+     * @enum {string}
+     */
+    ThreadGoalUserStatus: "active" | "paused";
     ThreadGoalView: {
       threadId: string;
       goalId: string;
@@ -1083,7 +1122,7 @@ export interface components {
     SetThreadGoalRequest: {
       expectedRevision: number | null;
       objective: string | null;
-      status: components["schemas"]["ThreadGoalStatus"] | null;
+      status: components["schemas"]["ThreadGoalUserStatus"] | null;
       tokenBudget: components["schemas"]["ThreadGoalTokenBudgetUpdate"];
     };
     ClearThreadGoalRequest: {
@@ -1248,7 +1287,7 @@ export interface components {
       /** @description Requested immutable AgentVersion; null uses the active default. The resolved route is server-owned. */
       agentVersionId: string | null;
       /**
-       * @description Atomic Turn intent. Goal creates or updates the persistent Thread Goal; Plan clears it and pins this Run to Plan collaboration mode; ResumeGoal atomically resumes a paused Goal for one bound Run while deferring automatic continuation.
+       * @description Atomic Turn intent. Goal creates or updates the persistent Thread Goal; Plan clears an active Goal, retains inactive Goal history, and pins this Run to Plan collaboration mode; ResumeGoal atomically resumes a paused Goal for one bound Run while deferring automatic continuation.
        * @enum {string}
        */
       executionIntent: "none" | "goal" | "plan" | "resumeGoal";
@@ -1351,9 +1390,18 @@ export interface components {
     StartTurnResponse: {
       /** @enum {string} */
       disposition: "committed" | "replayed";
+      /**
+       * @description Execution intent durably accepted for this turn. Always present on the execution-intent-v1 route and present on the legacy Turn route only when its Accept header includes the crewon-execution-intent-ack=v1 media parameter.
+       * @enum {string}
+       */
+      acceptedExecutionIntent?: "none" | "goal" | "plan" | "resumeGoal";
       thread: components["schemas"]["ThreadView"];
       message: components["schemas"]["MessageView"];
       run: components["schemas"]["RunView"];
+    };
+    ExecutionIntentCapabilityResponse: {
+      /** @constant */
+      version: "v1";
     };
     GetRunResponse: {
       run: components["schemas"]["RunView"];
@@ -2005,6 +2053,28 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  getExecutionIntentCapabilityV1: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Execution-intent v1 semantics are available */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ExecutionIntentCapabilityResponse"];
+        };
+      };
+      401: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
   getModelProviderSettings: {
     parameters: {
       query?: never;
@@ -2839,6 +2909,51 @@ export interface operations {
         };
       };
       /** @description A user Message and Run committed atomically */
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StartTurnResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  startTurnWithExecutionIntentV1: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required by the identity adapter for cookie-authenticated mutations. */
+        "X-CSRF-Token"?: components["parameters"]["CsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StartTurnRequest"];
+      };
+    };
+    responses: {
+      /** @description An idempotently replayed execution-intent Turn start with acceptedExecutionIntent */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StartTurnResponse"];
+        };
+      };
+      /** @description An execution-intent user Message and Run committed atomically with acceptedExecutionIntent */
       201: {
         headers: {
           [name: string]: unknown;
