@@ -945,28 +945,38 @@ export function buildControlApi(
     },
   );
 
-  app.put<{ Params: { threadId: string }; Body: unknown }>(
-    "/api/v1/threads/:threadId/goal",
-    async (request, reply) => {
-      const actor = await dependencies.identity.resolveActor(
-        requestContext(request),
-      );
-      const body = parseSetThreadGoalRequest(request.body);
-      const result = await dependencies.goals.setGoal(actor, {
-        kind: "thread.goal.set",
-        threadId: parseThreadId(request.params.threadId),
-        idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
-        expectedRevision: body.expectedRevision,
-        objective: body.objective,
-        status: body.status,
-        tokenBudget: body.tokenBudget,
-      });
-      wakeOutbox(dependencies.outboxWakeup);
-      return reply
-        .code(result.disposition === "committed" ? 201 : 200)
-        .send(projectThreadGoalMutation(result));
-    },
-  );
+  for (const [path, executionIntentVersion] of [
+    ["/api/v1/threads/:threadId/goal", undefined],
+    ["/api/v1/threads/:threadId/goal/execution-intent-v1", "v1"],
+  ] as const) {
+    app.put<{ Params: { threadId: string }; Body: unknown }>(
+      path,
+      async (request, reply) => {
+        const actor = await dependencies.identity.resolveActor(
+          requestContext(request),
+        );
+        const body = parseSetThreadGoalRequest(request.body);
+        const result = await dependencies.goals.setGoal(actor, {
+          kind: "thread.goal.set",
+          threadId: parseThreadId(request.params.threadId),
+          idempotencyKey: parseIdempotencyKey(
+            request.headers["idempotency-key"],
+          ),
+          ...(executionIntentVersion === undefined
+            ? {}
+            : { executionIntentVersion }),
+          expectedRevision: body.expectedRevision,
+          objective: body.objective,
+          status: body.status,
+          tokenBudget: body.tokenBudget,
+        });
+        wakeOutbox(dependencies.outboxWakeup);
+        return reply
+          .code(result.disposition === "committed" ? 201 : 200)
+          .send(projectThreadGoalMutation(result));
+      },
+    );
+  }
 
   app.delete<{ Params: { threadId: string }; Body: unknown }>(
     "/api/v1/threads/:threadId/goal",
@@ -1094,6 +1104,9 @@ export function buildControlApi(
     const command = {
       kind: "turn.start" as const,
       idempotencyKey,
+      ...(requireExecutionIntentAcknowledgement
+        ? { executionIntentVersion: "v1" as const }
+        : {}),
       threadId,
       expectedThreadRevision: body.expectedRevision,
       content: body.content,

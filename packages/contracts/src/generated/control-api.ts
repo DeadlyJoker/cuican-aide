@@ -7,7 +7,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /** @description Read-only deployment gate for execution-intent semantics. Clients that require Goal or Plan v1 behavior must call this before any multi-step workflow mutation. */
+    /** @description Read-only hint that execution-intent v1 semantics are available on this server instance. Mutation safety is enforced by the dedicated versioned Goal and Turn paths; clients must not treat this response as proof that every node in a mixed fleet is upgraded. */
     get: operations["getExecutionIntentCapabilityV1"];
     put?: never;
     post?: never;
@@ -253,6 +253,23 @@ export interface paths {
     put: operations["setThreadGoal"];
     post?: never;
     delete: operations["clearThreadGoal"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/goal/execution-intent-v1": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /** @description Capability-gated Goal mutation used by multi-step execution-intent workflows. Older servers do not expose this path and therefore fail before applying legacy Goal semantics. The admission version participates in the idempotency fingerprint. */
+    put: operations["setThreadGoalWithExecutionIntentV1"];
+    post?: never;
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -2712,6 +2729,51 @@ export interface operations {
     responses: {
       /** @description Committed or idempotently replayed Thread Goal clear */
       200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadGoalMutationResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  setThreadGoalWithExecutionIntentV1: {
+    parameters: {
+      query?: never;
+      header: {
+        "Idempotency-Key": components["parameters"]["IdempotencyKey"];
+        /** @description Required for Control mutations that do not permit a credential-mode exception. */
+        "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+      };
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SetThreadGoalRequest"];
+      };
+    };
+    responses: {
+      /** @description An idempotently replayed execution-intent v1 Goal mutation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadGoalMutationResponse"];
+        };
+      };
+      /** @description A newly committed execution-intent v1 Goal mutation */
+      201: {
         headers: {
           [name: string]: unknown;
         };

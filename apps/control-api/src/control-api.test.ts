@@ -706,13 +706,8 @@ test("atomically starts one Goal Turn and replays the original durable result", 
   assert.equal(replayed.statusCode, 200, replayed.body);
   assert.deepEqual(replayed.json(), { ...body, disposition: "replayed" });
 
-  const legacyReplayed = await start(false);
-  assert.equal(legacyReplayed.statusCode, 200, legacyReplayed.body);
-  const { acceptedExecutionIntent: _acknowledgement, ...legacyBody } = body;
-  assert.deepEqual(legacyReplayed.json(), {
-    ...legacyBody,
-    disposition: "replayed",
-  });
+  const conflictingLegacyReplay = await start(false);
+  assertError(conflictingLegacyReplay, 409, "conflict", "idempotency_conflict");
 
   const concurrent = await runtime.app.inject({
     method: "POST",
@@ -741,6 +736,63 @@ test("atomically starts one Goal Turn and replays the original durable result", 
   });
   assert.equal(messages.length, 1);
   assert.equal(runs.length, 1);
+});
+
+test("fences versioned Turn admission from legacy idempotency receipts", async (context) => {
+  const runtime = await testRuntime(context);
+  for (const [key, title] of [
+    ["legacy-turn-thread", "Legacy Turn"],
+    ["versioned-turn-thread", "Versioned Turn"],
+  ] as const) {
+    const created = await runtime.app.inject({
+      method: "POST",
+      url: "/api/v1/threads",
+      headers: mutationHeaders(key),
+      payload: { title },
+    });
+    assert.equal(created.statusCode, 201, created.body);
+  }
+
+  const payload = {
+    expectedRevision: 1,
+    content: "Plan without mutating the retained Goal",
+    agentVersionId: null,
+    executionIntent: "plan",
+  };
+  const legacy = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/threads/thread-1/turns",
+    headers: mutationHeaders("shared-turn-admission"),
+    payload,
+  });
+  assert.equal(legacy.statusCode, 201, legacy.body);
+
+  const conflictingVersioned = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/threads/thread-1/turns/execution-intent-v1",
+    headers: mutationHeaders("shared-turn-admission"),
+    payload,
+  });
+  assertError(conflictingVersioned, 409, "conflict", "idempotency_conflict");
+
+  const versionedTurn = () =>
+    runtime.app.inject({
+      method: "POST",
+      url: "/api/v1/threads/thread-2/turns/execution-intent-v1",
+      headers: mutationHeaders("versioned-turn-admission"),
+      payload,
+    });
+  const versioned = await versionedTurn();
+  assert.equal(versioned.statusCode, 201, versioned.body);
+  const versionedBody = versioned.json<StartTurnResponse>();
+  assert.equal(versionedBody.acceptedExecutionIntent, "plan");
+
+  const replayed = await versionedTurn();
+  assert.equal(replayed.statusCode, 200, replayed.body);
+  assert.deepEqual(replayed.json(), {
+    ...versionedBody,
+    disposition: "replayed",
+  });
 });
 
 test("sets, replays and clears a persistent Goal with safe Run projections", async (context) => {
@@ -858,6 +910,63 @@ test("sets, replays and clears a persistent Goal with safe Run projections", asy
     disposition: "replayed",
   });
   assert.equal(runtime.outboxWakeups(), 5);
+});
+
+test("fences versioned Goal mutations from legacy idempotency receipts", async (context) => {
+  const runtime = await testRuntime(context);
+  const createdThread = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/threads",
+    headers: mutationHeaders("goal-version-thread"),
+    payload: { title: "Versioned Goal" },
+  });
+  assert.equal(createdThread.statusCode, 201, createdThread.body);
+  const initialPayload = {
+    expectedRevision: null,
+    objective: "legacy objective",
+    status: "paused",
+    tokenBudget: { kind: "keep" },
+  };
+  const legacy = await runtime.app.inject({
+    method: "PUT",
+    url: "/api/v1/threads/thread-1/goal",
+    headers: mutationHeaders("shared-goal-mutation"),
+    payload: initialPayload,
+  });
+  assert.equal(legacy.statusCode, 201, legacy.body);
+
+  const conflictingVersioned = await runtime.app.inject({
+    method: "PUT",
+    url: "/api/v1/threads/thread-1/goal/execution-intent-v1",
+    headers: mutationHeaders("shared-goal-mutation"),
+    payload: initialPayload,
+  });
+  assertError(conflictingVersioned, 409, "conflict", "idempotency_conflict");
+
+  const versionedMutation = () =>
+    runtime.app.inject({
+      method: "PUT",
+      url: "/api/v1/threads/thread-1/goal/execution-intent-v1",
+      headers: mutationHeaders("versioned-goal-mutation"),
+      payload: {
+        expectedRevision: 1,
+        objective: "versioned objective",
+        status: "paused",
+        tokenBudget: { kind: "keep" },
+      },
+    });
+  const versioned = await versionedMutation();
+  assert.equal(versioned.statusCode, 201, versioned.body);
+  const versionedBody = versioned.json<ThreadGoalMutationResponse>();
+  assert.equal(versionedBody.goal?.objective, "versioned objective");
+  assert.equal(versionedBody.goal?.status, "paused");
+
+  const replayed = await versionedMutation();
+  assert.equal(replayed.statusCode, 200, replayed.body);
+  assert.deepEqual(replayed.json(), {
+    ...versionedBody,
+    disposition: "replayed",
+  });
 });
 
 test("requires CSRF and Idempotency-Key and rejects Goal authority injection", async (context) => {

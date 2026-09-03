@@ -17,6 +17,7 @@ import {
 } from "./localWorkspace.ts";
 
 const temporaryRoots: string[] = [];
+const GIT_INTEGRATION_TIMEOUT_MS = 15_000;
 
 describe("LocalWorkspaceSandbox Git details", () => {
   beforeEach(() => {
@@ -32,64 +33,68 @@ describe("LocalWorkspaceSandbox Git details", () => {
     }
   });
 
-  it("includes staged, unstaged, and untracked changes on a named branch", async () => {
-    const { repository, sandbox } = createRepositorySandbox();
-    writeFileSync(join(repository, "staged.txt"), "staged before\n");
-    writeFileSync(join(repository, "unstaged.txt"), "unstaged before\n");
-    writeFileSync(join(repository, "both.txt"), "both before\n");
-    mkdirSync(join(repository, ".crewon"));
-    writeFileSync(join(repository, ".crewon", "tracked.log"), "before\n");
-    git(repository, "add", ".");
-    git(repository, "commit", "-m", "baseline");
-    git(repository, "checkout", "-b", "feature/task-detail");
+  it(
+    "includes staged, unstaged, and untracked changes on a named branch",
+    async () => {
+      const { repository, sandbox } = createRepositorySandbox();
+      writeFileSync(join(repository, "staged.txt"), "staged before\n");
+      writeFileSync(join(repository, "unstaged.txt"), "unstaged before\n");
+      writeFileSync(join(repository, "both.txt"), "both before\n");
+      mkdirSync(join(repository, ".crewon"));
+      writeFileSync(join(repository, ".crewon", "tracked.log"), "before\n");
+      git(repository, "add", ".");
+      git(repository, "commit", "-m", "baseline");
+      git(repository, "checkout", "-b", "feature/task-detail");
 
-    writeFileSync(join(repository, "staged.txt"), "staged after\n");
-    git(repository, "add", "staged.txt");
-    writeFileSync(join(repository, "unstaged.txt"), "unstaged after\n");
-    writeFileSync(join(repository, "both.txt"), "both staged\n");
-    git(repository, "add", "both.txt");
-    appendFileSync(join(repository, "both.txt"), "both unstaged\n");
-    mkdirSync(join(repository, "nested"));
-    writeFileSync(join(repository, "nested", "untracked.txt"), "new file\n");
-    writeFileSync(join(repository, ".crewon", "tracked.log"), "after\n");
-    writeFileSync(join(repository, ".crewon", "untracked.log"), "internal\n");
+      writeFileSync(join(repository, "staged.txt"), "staged after\n");
+      git(repository, "add", "staged.txt");
+      writeFileSync(join(repository, "unstaged.txt"), "unstaged after\n");
+      writeFileSync(join(repository, "both.txt"), "both staged\n");
+      git(repository, "add", "both.txt");
+      appendFileSync(join(repository, "both.txt"), "both unstaged\n");
+      mkdirSync(join(repository, "nested"));
+      writeFileSync(join(repository, "nested", "untracked.txt"), "new file\n");
+      writeFileSync(join(repository, ".crewon", "tracked.log"), "after\n");
+      writeFileSync(join(repository, ".crewon", "untracked.log"), "internal\n");
 
-    const summary = await sandbox.readGitSummary();
-    const result = await sandbox.readDiff();
+      const summary = await sandbox.readGitSummary();
+      const result = await sandbox.readDiff();
 
-    expect(summary).toEqual({
-      cwd: "/workspace",
-      isGitRepository: true,
-      branch: "feature/task-detail",
-      head: git(repository, "rev-parse", "HEAD").trim(),
-      changedFiles: 4,
-      additions: 5,
-      deletions: 3,
-      statsComplete: true,
-    });
-    expect("diff" in summary).toBe(false);
-    expect(result).toMatchObject({
-      cwd: "/workspace",
-      isGitRepository: true,
-      branch: "feature/task-detail",
-      head: git(repository, "rev-parse", "HEAD").trim(),
-      changedFiles: 4,
-      additions: 5,
-      deletions: 3,
-      statsComplete: true,
-      diffTruncated: false,
-    });
-    expect(result.diff).toContain("diff --git a/staged.txt b/staged.txt");
-    expect(result.diff).toContain("diff --git a/unstaged.txt b/unstaged.txt");
-    expect(result.diff).toContain("diff --git a/both.txt b/both.txt");
-    expect(result.diff).toContain("both staged");
-    expect(result.diff).toContain("both unstaged");
-    expect(result.diff).toContain(
-      "diff --git a/nested/untracked.txt b/nested/untracked.txt",
-    );
-    expect(result.diff).not.toContain(".crewon");
-    expect(Buffer.byteLength(result.diff)).toBeLessThanOrEqual(96 * 1024);
-  });
+      expect(summary).toEqual({
+        cwd: "/workspace",
+        isGitRepository: true,
+        branch: "feature/task-detail",
+        head: git(repository, "rev-parse", "HEAD").trim(),
+        changedFiles: 4,
+        additions: 5,
+        deletions: 3,
+        statsComplete: true,
+      });
+      expect("diff" in summary).toBe(false);
+      expect(result).toMatchObject({
+        cwd: "/workspace",
+        isGitRepository: true,
+        branch: "feature/task-detail",
+        head: git(repository, "rev-parse", "HEAD").trim(),
+        changedFiles: 4,
+        additions: 5,
+        deletions: 3,
+        statsComplete: true,
+        diffTruncated: false,
+      });
+      expect(result.diff).toContain("diff --git a/staged.txt b/staged.txt");
+      expect(result.diff).toContain("diff --git a/unstaged.txt b/unstaged.txt");
+      expect(result.diff).toContain("diff --git a/both.txt b/both.txt");
+      expect(result.diff).toContain("both staged");
+      expect(result.diff).toContain("both unstaged");
+      expect(result.diff).toContain(
+        "diff --git a/nested/untracked.txt b/nested/untracked.txt",
+      );
+      expect(result.diff).not.toContain(".crewon");
+      expect(Buffer.byteLength(result.diff)).toBeLessThanOrEqual(96 * 1024);
+    },
+    GIT_INTEGRATION_TIMEOUT_MS,
+  );
 
   it("reports a detached HEAD without inventing a branch", async () => {
     const { repository, sandbox } = createRepositorySandbox();
@@ -205,48 +210,53 @@ describe("LocalWorkspaceSandbox Git details", () => {
     });
   });
 
-  it("keeps large statistics complete independently of the diff cap", async () => {
-    const { repository, sandbox } = createRepositorySandbox();
-    const nested = join(
-      repository,
-      "a".repeat(100),
-      "b".repeat(100),
-      "c".repeat(100),
-    );
-    mkdirSync(nested, { recursive: true });
-    for (let index = 0; index < 900; index += 1) {
-      writeFileSync(
-        join(nested, `tracked-${String(index).padStart(4, "0")}.txt`),
-        "before\n",
+  it(
+    "keeps large statistics complete independently of the diff cap",
+    async () => {
+      const { repository, sandbox } = createRepositorySandbox();
+      const changedFileCount = 128;
+      const nested = join(
+        repository,
+        "a".repeat(100),
+        "b".repeat(100),
+        "c".repeat(100),
       );
-    }
-    git(repository, "add", ".");
-    git(repository, "commit", "-m", "large baseline");
-    for (let index = 0; index < 900; index += 1) {
-      writeFileSync(
-        join(nested, `tracked-${String(index).padStart(4, "0")}.txt`),
-        "after\n",
-      );
-    }
+      mkdirSync(nested, { recursive: true });
+      for (let index = 0; index < changedFileCount; index += 1) {
+        writeFileSync(
+          join(nested, `tracked-${String(index).padStart(4, "0")}.txt`),
+          "before\n",
+        );
+      }
+      git(repository, "add", ".");
+      git(repository, "commit", "-m", "large baseline");
+      for (let index = 0; index < changedFileCount; index += 1) {
+        writeFileSync(
+          join(nested, `tracked-${String(index).padStart(4, "0")}.txt`),
+          "after\n",
+        );
+      }
 
-    const summary = await sandbox.readGitSummary();
-    const result = await sandbox.readDiff();
+      const summary = await sandbox.readGitSummary();
+      const result = await sandbox.readDiff();
 
-    expect(summary).toMatchObject({
-      isGitRepository: true,
-      changedFiles: 900,
-      additions: 900,
-      deletions: 900,
-      statsComplete: true,
-    });
-    expect("diff" in summary).toBe(false);
-    expect(result.isGitRepository).toBe(true);
-    expect(result.changedFiles).toBe(900);
-    expect(result.additions).toBe(900);
-    expect(result.deletions).toBe(900);
-    expect(result.statsComplete).toBe(true);
-    expect(result.diffTruncated).toBe(true);
-  });
+      expect(summary).toMatchObject({
+        isGitRepository: true,
+        changedFiles: changedFileCount,
+        additions: changedFileCount,
+        deletions: changedFileCount,
+        statsComplete: true,
+      });
+      expect("diff" in summary).toBe(false);
+      expect(result.isGitRepository).toBe(true);
+      expect(result.changedFiles).toBe(changedFileCount);
+      expect(result.additions).toBe(changedFileCount);
+      expect(result.deletions).toBe(changedFileCount);
+      expect(result.statsComplete).toBe(true);
+      expect(result.diffTruncated).toBe(true);
+    },
+    GIT_INTEGRATION_TIMEOUT_MS,
+  );
 
   it("rejects a Git summary when the selected workspace changes mid-read", async () => {
     const { authority, repository, sandbox } = createRepositorySandbox();

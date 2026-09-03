@@ -247,6 +247,67 @@ test("atomically replaces a completed Goal when a new objective is supplied", as
   assert.equal(committed[0]?.goal.expectedRevision, current.revision);
 });
 
+test("binds versioned Goal admission into the idempotency fingerprint", async () => {
+  const current = { ...goalFixture(), status: "paused" as const };
+  const committed: CommitThreadGoalMutationInput[] = [];
+  const base = storeFixture();
+  const service = new ThreadGoalApplicationService({
+    store: {
+      ...base,
+      loadThreadGoal: async () => structuredClone(current),
+      commitThreadGoalMutation: async (input) => {
+        committed.push(structuredClone(input));
+        assert.equal(input.goal.kind, "set");
+        return {
+          disposition: "committed",
+          goalChanged: true,
+          goalState: input.goal.goal,
+          canceledRunState: null,
+          retainedRun: null,
+          continuation: null,
+        };
+      },
+    },
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+    ...runtimeDependencies(),
+  });
+  const command = {
+    kind: "thread.goal.set" as const,
+    threadId: "thread-1",
+    expectedRevision: current.revision,
+    objective: "continue safely",
+    status: "paused" as const,
+    tokenBudget: { kind: "keep" as const },
+  };
+
+  await service.setGoal(actor(), {
+    ...command,
+    idempotencyKey: "legacy-goal-admission",
+  });
+  await service.setGoal(actor(), {
+    ...command,
+    idempotencyKey: "versioned-goal-admission",
+    executionIntentVersion: "v1",
+  });
+
+  assert.notEqual(
+    committed[0]?.idempotency.requestFingerprint,
+    committed[1]?.idempotency.requestFingerprint,
+  );
+  assert.equal(
+    committed[0]?.idempotency.requestFingerprint.includes(
+      "executionIntentVersion",
+    ),
+    false,
+  );
+  assert.equal(
+    committed[1]?.idempotency.requestFingerprint.includes(
+      '"executionIntentVersion":"v1"',
+    ),
+    true,
+  );
+});
+
 test("keeps a completed Goal terminal until a new objective replaces it", async () => {
   const current = {
     ...goalFixture(),

@@ -3,6 +3,7 @@ import type {
   MessageView,
   OfficeContract,
   RunView,
+  StartTurnRequest,
   StartTurnResponse,
   ToolPermissionMode,
 } from "@crewon/contracts";
@@ -22,6 +23,9 @@ const DEFAULT_RUN_DEADLINE_MS = 15 * 60 * 1_000;
 // browser-side coordinator attached long enough to observe the durable Run
 // after that maintenance window instead of reporting a false Team failure.
 const MAX_CONSECUTIVE_RUN_READ_FAILURES = 20;
+const MAX_FINAL_EXECUTION_INTENT_RETRY_WINDOW_MS = 45_000;
+const EXECUTION_INTENT_CAPABILITY_UNAVAILABLE =
+  "control_execution_intent_capability_unavailable";
 
 export const CONTROL_TEAM_PLAN_UNSUPPORTED =
   "control_team_plan_unsupported" as const;
@@ -57,7 +61,7 @@ export type ControlTeamRuntimeClient = Pick<
   | "getThread"
   | "getThreadGoal"
   | "listThreadMessages"
-  | "setThreadGoal"
+  | "setThreadGoalWithExecutionIntentV1"
   | "startTurn"
 >;
 
@@ -366,21 +370,26 @@ export async function startControlTeamTurn(input: {
     input.responseMode === "manager" && goalPause !== null
       ? "resumeGoal"
       : "none";
-  const finalManagerStarted = await input.client.startTurn(
-    input.threadId,
-    {
-      expectedRevision: current.thread.revision,
-      content: managerMessage,
-      agentVersionId: input.plan.manager.agentVersionId,
-      executionIntent: finalManagerExecutionIntent,
-      toolPermissionMode,
-    },
-    input.idempotencyKey(
-      input.responseMode === "manager"
-        ? "team.manager.final"
-        : "team.manager.delegate",
-    ),
+  const finalManagerRequest = Object.freeze({
+    expectedRevision: current.thread.revision,
+    content: managerMessage,
+    agentVersionId: input.plan.manager.agentVersionId,
+    executionIntent: finalManagerExecutionIntent,
+    toolPermissionMode,
+  } satisfies StartTurnRequest);
+  const finalManagerIdempotencyKey = input.idempotencyKey(
+    input.responseMode === "manager"
+      ? "team.manager.final"
+      : "team.manager.delegate",
   );
+  const finalManagerStarted = await startFinalTeamTurn({
+    client: input.client,
+    threadId: input.threadId,
+    request: finalManagerRequest,
+    idempotencyKey: finalManagerIdempotencyKey,
+    pollIntervalMs,
+    runDeadlineMs,
+  });
   const finalManagerIntentMatches = controlStartTurnExecutionIntentMatches(
     finalManagerStarted,
     finalManagerExecutionIntent,
@@ -444,17 +453,24 @@ export async function startControlTeamTurn(input: {
     reports,
   });
   const memberExecutionIntent = goalPause === null ? "none" : "resumeGoal";
-  const memberStarted = await input.client.startTurn(
-    input.threadId,
-    {
-      expectedRevision: memberThread.thread.revision,
-      content: memberMessage,
-      agentVersionId: delegatedMember.agentVersionId,
-      executionIntent: memberExecutionIntent,
-      toolPermissionMode,
-    },
-    input.idempotencyKey(`team.member.final.${delegatedMember.memberId}`),
+  const memberRequest = Object.freeze({
+    expectedRevision: memberThread.thread.revision,
+    content: memberMessage,
+    agentVersionId: delegatedMember.agentVersionId,
+    executionIntent: memberExecutionIntent,
+    toolPermissionMode,
+  } satisfies StartTurnRequest);
+  const memberIdempotencyKey = input.idempotencyKey(
+    `team.member.final.${delegatedMember.memberId}`,
   );
+  const memberStarted = await startFinalTeamTurn({
+    client: input.client,
+    threadId: input.threadId,
+    request: memberRequest,
+    idempotencyKey: memberIdempotencyKey,
+    pollIntervalMs,
+    runDeadlineMs,
+  });
   const memberIntentMatches = controlStartTurnExecutionIntentMatches(
     memberStarted,
     memberExecutionIntent,
@@ -505,9 +521,10 @@ async function pauseTeamGoalIfNeeded(input: {
         : "goal_usage_limited",
     );
   }
-  await requireControlExecutionIntentCapability(input.client);
   const objective = shouldCreateOrReplace ? input.content : null;
-  const response = await input.client.setThreadGoal(
+  const replacesCompletedGoal =
+    shouldCreateOrReplace && current.goal?.status === "complete";
+  const response = await input.client.setThreadGoalWithExecutionIntentV1(
     input.threadId,
     {
       expectedRevision: current.goal?.revision ?? null,
@@ -521,6 +538,10 @@ async function pauseTeamGoalIfNeeded(input: {
     response.goal?.threadId !== input.threadId ||
     (objective !== null && response.goal.objective !== objective) ||
     response.goal.status !== "paused" ||
+    (replacesCompletedGoal &&
+      (response.goal.goalId === current.goal?.goalId ||
+        response.goal.tokensUsed !== 0 ||
+        response.goal.timeUsedSeconds !== 0)) ||
     response.continuationRun !== null
   ) {
     throw new Error("control_team_goal_response_invalid");
@@ -541,6 +562,53 @@ async function pauseTeamGoalIfNeeded(input: {
   return { threadRevision: snapshot.thread.revision };
 }
 
+async function startFinalTeamTurn(input: {
+  client: ControlTeamRuntimeClient;
+  threadId: string;
+  request: Readonly<StartTurnRequest>;
+  idempotencyKey: string;
+  pollIntervalMs: number;
+  runDeadlineMs: number;
+}): Promise<StartTurnResponse> {
+  const retryDeadline =
+    Date.now() +
+    Math.min(input.runDeadlineMs, MAX_FINAL_EXECUTION_INTENT_RETRY_WINDOW_MS);
+  let consecutiveRouteMisses = 0;
+  while (true) {
+    try {
+      return await input.client.startTurn(
+        input.threadId,
+        input.request,
+        input.idempotencyKey,
+      );
+    } catch (error) {
+      if (
+        input.request.executionIntent !== "resumeGoal" ||
+        !isExecutionIntentCapabilityUnavailable(error)
+      ) {
+        throw error;
+      }
+      const remainingMs = retryDeadline - Date.now();
+      if (remainingMs <= 0) throw error;
+      consecutiveRouteMisses += 1;
+      const retryDelayMs = Math.min(
+        remainingMs,
+        5_000,
+        Math.max(250, input.pollIntervalMs) *
+          2 ** Math.min(consecutiveRouteMisses - 1, 4),
+      );
+      await new Promise((resolve) => setTimeout(resolve, retryDelayMs));
+    }
+  }
+}
+
+function isExecutionIntentCapabilityUnavailable(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    error.message === EXECUTION_INTENT_CAPABILITY_UNAVAILABLE
+  );
+}
+
 export async function requireControlExecutionIntentCapability(
   client: Pick<ControlTeamRuntimeClient, "getExecutionIntentCapability">,
 ): Promise<void> {
@@ -559,7 +627,9 @@ export async function requireControlExecutionIntentCapability(
 
 async function settleGoalMutationRuns(input: {
   client: ControlTeamRuntimeClient;
-  response: Awaited<ReturnType<ControlTeamRuntimeClient["setThreadGoal"]>>;
+  response: Awaited<
+    ReturnType<ControlTeamRuntimeClient["setThreadGoalWithExecutionIntentV1"]>
+  >;
   pollIntervalMs: number;
   runDeadlineMs: number;
 }): Promise<void> {

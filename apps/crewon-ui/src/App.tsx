@@ -8,7 +8,6 @@ import {
   createAppCommandOfficeRoomAdapter,
   createControlCommandOfficeRoomAdapter,
 } from "./components/app";
-import { useState } from "react";
 import type { ControlApiClient } from "@crewon/control-client";
 import { CommandSettingsLazyRoute } from "./components/app/CommandSettingsLazyRoute";
 import {
@@ -31,6 +30,7 @@ import {
   shouldAutoCloseInspector,
   useAppChromeEffects,
   useAppConfirmDialog,
+  useAppControlToolApprovals,
   useAppConnectionEffects,
   useAppConnectionHandlerSet,
   useAppCoordinatorRefs,
@@ -102,10 +102,7 @@ import { useAgentPlatformAccount } from "./components/auth/AgentPlatformAuthGate
 import type { CapabilityEditorDraft } from "./lib/capability/capabilityCatalog";
 import { useControlThreadRuntime } from "./lib/control-runtime/useControlThreadRuntime";
 import { selectThreadRunPlanProjection } from "./lib/control-runtime/controlRunPlanProjection";
-import type {
-  ControlToolApprovalPrompt,
-  ControlToolApprovalRequest,
-} from "./lib/control-runtime/controlToolApprovalPresentation";
+import type { ControlToolApprovalRequest } from "./lib/control-runtime/controlToolApprovalPresentation";
 import { useControlWorkspaceRuntime } from "./lib/control-runtime/useControlWorkspaceRuntime";
 import { useControlSandboxCapabilities } from "./lib/control-runtime/useControlSandboxCapabilities";
 import { selectThreadRuntimeAuthority } from "./lib/control-runtime/threadRuntimeAuthority";
@@ -118,9 +115,7 @@ export function App({
 }: {
   controlClient?: ControlApiClient | null;
 }) {
-  const [controlToolApprovals, setControlToolApprovals] = useState<
-    ReadonlyMap<string, ControlToolApprovalPrompt>
-  >(() => new Map());
+  const controlToolApprovals = useAppControlToolApprovals();
   const automationAuthority = selectAutomationAuthority(controlClient !== null);
   const modelProviderSettingsAvailable =
     controlClient !== null || providerCredentialStore() !== null;
@@ -243,11 +238,7 @@ export function App({
       });
     },
     onToolApprovalRequired: (request) => {
-      setControlToolApprovals((current) => {
-        const next = new Map(current);
-        next.set(request.threadId, { ...request, busy: false });
-        return next;
-      });
+      controlToolApprovals.requireApproval(request);
       if (selectedThreadIdRef.current !== request.threadId) {
         setNotice({
           text:
@@ -258,14 +249,7 @@ export function App({
         });
       }
     },
-    onToolApprovalResolved: (threadId) => {
-      setControlToolApprovals((current) => {
-        if (!current.has(threadId)) return current;
-        const next = new Map(current);
-        next.delete(threadId);
-        return next;
-      });
-    },
+    onToolApprovalResolved: controlToolApprovals.resolveApproval,
     selectedThreadId,
     selectedThreadIdRef,
     setActiveTurnByThread: threadState.setActiveTurnByThread,
@@ -982,50 +966,19 @@ export function App({
     decision: "approved" | "rejected",
   ) => {
     if (controlThreadRuntime === null) return;
-    setControlToolApprovals((current) => {
-      if (current.get(request.threadId)?.approvalId !== request.approvalId) {
-        return current;
-      }
-      const next = new Map(current);
-      next.set(request.threadId, { ...request, busy: true });
-      return next;
-    });
-    void controlThreadRuntime
-      .decideToolApproval(request.approvalId, decision)
-      .then(() => {
-        setControlToolApprovals((current) => {
-          if (
-            current.get(request.threadId)?.approvalId !== request.approvalId
-          ) {
-            return current;
-          }
-          const next = new Map(current);
-          next.delete(request.threadId);
-          return next;
-        });
-      })
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? error.message : String(error);
-        setControlToolApprovals((current) => {
-          if (
-            current.get(request.threadId)?.approvalId !== request.approvalId
-          ) {
-            return current;
-          }
-          const next = new Map(current);
-          next.set(request.threadId, {
-            ...request,
-            busy: false,
-            error: message,
-          });
-          return next;
-        });
+    void controlToolApprovals.decideApproval({
+      decide: (approvalId, selectedDecision) =>
+        controlThreadRuntime.decideToolApproval(approvalId, selectedDecision),
+      decision,
+      onFailure: () => {
         setNotice({
           text:
             locale === "zh" ? "工具审批提交失败。" : "Tool approval failed.",
           tone: "warning",
         });
-      });
+      },
+      request,
+    });
   };
   const goalComposerHandlers = createThreadGoalComposerHandlers({
     client: controlRuntimeConnected ? controlThreadRuntime : null,
@@ -1279,7 +1232,7 @@ export function App({
         runPlan={commandRunPlan}
         toolApproval={
           commandShellRuntime.selectedThread?.id
-            ? (controlToolApprovals.get(
+            ? (controlToolApprovals.approvals.get(
                 commandShellRuntime.selectedThread.id,
               ) ?? null)
             : null

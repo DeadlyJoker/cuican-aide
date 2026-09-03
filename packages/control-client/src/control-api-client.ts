@@ -647,6 +647,30 @@ export class ControlApiClient {
     );
   }
 
+  async setThreadGoalWithExecutionIntentV1(
+    threadId: string,
+    body: SetThreadGoalRequest,
+    idempotencyKey: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<ThreadGoalMutationResponse> {
+    try {
+      return await this.#json(
+        "PUT",
+        `/api/v1/threads/${resourceId(threadId)}/goal/execution-intent-v1`,
+        body,
+        {
+          ...options,
+          idempotencyKey,
+          requireCsrf: true,
+          requireIdempotency: true,
+          expectedStatuses: [200, 201],
+        },
+      );
+    } catch (error) {
+      throw normalizeExecutionIntentCapabilityError(error);
+    }
+  }
+
   clearThreadGoal(
     threadId: string,
     body: ClearThreadGoalRequest,

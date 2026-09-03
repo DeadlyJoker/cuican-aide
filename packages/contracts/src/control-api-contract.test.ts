@@ -90,6 +90,7 @@ test("freezes the Run API as OpenAPI 3.1 without client-owned authority fields",
     "/api/v1/threads/{threadId}/forks",
     "/api/v1/threads/{threadId}/goal",
     "/api/v1/threads/{threadId}/goal/events",
+    "/api/v1/threads/{threadId}/goal/execution-intent-v1",
     "/api/v1/threads/{threadId}/messages",
     "/api/v1/threads/{threadId}/runs",
     "/api/v1/threads/{threadId}/task-changes",
@@ -919,9 +920,15 @@ test("freezes strict Thread Goal mutations and the double-option token budget", 
   }
 
   const path = openApi.paths["/api/v1/threads/{threadId}/goal"];
+  const versionedPath =
+    openApi.paths["/api/v1/threads/{threadId}/goal/execution-intent-v1"];
   assert.equal(path.put.operationId, "setThreadGoal");
+  assert.equal(
+    versionedPath.put.operationId,
+    "setThreadGoalWithExecutionIntentV1",
+  );
   assert.equal(path.delete.operationId, "clearThreadGoal");
-  for (const operation of [path.put, path.delete]) {
+  for (const operation of [path.put, path.delete, versionedPath.put]) {
     assert.equal(
       operation.parameters.some(
         (parameter) =>
@@ -1405,6 +1412,9 @@ type OpenApiDocument = Readonly<{
     "/api/v1/threads/{threadId}/events": unknown;
     "/api/v1/threads/{threadId}/messages": unknown;
     "/api/v1/threads/{threadId}/goal": GoalPathSchema;
+    "/api/v1/threads/{threadId}/goal/execution-intent-v1": {
+      put: GoalMutationOperationSchema;
+    };
     "/api/v1/threads/{threadId}/goal/events": GoalEventPathSchema;
     "/api/v1/runs": { post: unknown };
     "/api/v1/runs/{runId}/events": {

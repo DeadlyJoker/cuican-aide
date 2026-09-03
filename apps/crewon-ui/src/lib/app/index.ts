@@ -49,6 +49,7 @@ export {
 export { useAppCommandShellRoute } from "./useAppCommandShellRoute";
 export { useAppComposerState } from "./useAppComposerState";
 export { useAppConfirmDialog } from "./useAppConfirmDialog";
+export { useAppControlToolApprovals } from "./useAppControlToolApprovals";
 export { useAppConnectionHandlerSet } from "./useAppConnectionHandlerSet";
 export { useAppCoordinatorRefs } from "./useAppCoordinatorRefs";
 export { useAppDraftWorkspaceState } from "./useAppDraftWorkspaceState";

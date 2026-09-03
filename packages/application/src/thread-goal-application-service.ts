@@ -54,6 +54,7 @@ export type SetThreadGoalCommand = Readonly<{
   kind: "thread.goal.set";
   threadId: string;
   idempotencyKey: string;
+  executionIntentVersion?: "v1";
   expectedRevision: number | null;
   objective: string | null;
   status: UserSettableThreadGoalStatus | null;
@@ -851,6 +852,15 @@ function validateSetCommand(command: SetThreadGoalCommand): void {
     throw new ApplicationError("validation", "goal_command_invalid");
   }
   validateGoalCommandBase(command);
+  if (
+    command.executionIntentVersion !== undefined &&
+    command.executionIntentVersion !== "v1"
+  ) {
+    throw new ApplicationError(
+      "validation",
+      "goal_execution_intent_version_invalid",
+    );
+  }
   if (command.objective !== null) {
     requireNonEmpty(command.objective, "goal_objective_invalid");
   }

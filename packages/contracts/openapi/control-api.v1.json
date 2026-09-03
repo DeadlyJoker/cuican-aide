@@ -21,7 +21,7 @@
     "/api/v1/capabilities/execution-intent-v1": {
       "get": {
         "operationId": "getExecutionIntentCapabilityV1",
-        "description": "Read-only deployment gate for execution-intent semantics. Clients that require Goal or Plan v1 behavior must call this before any multi-step workflow mutation.",
+        "description": "Read-only hint that execution-intent v1 semantics are available on this server instance. Mutation safety is enforced by the dedicated versioned Goal and Turn paths; clients must not treat this response as proof that every node in a mixed fleet is upgraded.",
         "responses": {
           "200": {
             "description": "Execution-intent v1 semantics are available",
@@ -959,6 +959,73 @@
         "responses": {
           "200": {
             "description": "Committed or idempotently replayed Thread Goal clear",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadGoalMutationResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
+    },
+    "/api/v1/threads/{threadId}/goal/execution-intent-v1": {
+      "put": {
+        "operationId": "setThreadGoalWithExecutionIntentV1",
+        "description": "Capability-gated Goal mutation used by multi-step execution-intent workflows. Older servers do not expose this path and therefore fail before applying legacy Goal semantics. The admission version participates in the idempotency fingerprint.",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/ThreadId"
+          },
+          {
+            "$ref": "#/components/parameters/IdempotencyKey"
+          },
+          {
+            "$ref": "#/components/parameters/RequiredCsrfToken"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetThreadGoalRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "An idempotently replayed execution-intent v1 Goal mutation",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ThreadGoalMutationResponse"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A newly committed execution-intent v1 Goal mutation",
             "content": {
               "application/json": {
                 "schema": {

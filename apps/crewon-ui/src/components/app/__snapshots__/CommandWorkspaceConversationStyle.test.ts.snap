@@ -3650,7 +3650,7 @@ exports[`command workspace conversation style > snapshots the compact Codex-insp
     var(--tool-approval-accent) 7%,
     var(--surface)
   );
-  box-shadow: 0 8px 22px rgb(0 0 0 / 5%);
+  box-shadow: var(--shadow-composer);
 }
 
 :root:not([data-theme="light"])

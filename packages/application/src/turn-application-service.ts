@@ -468,6 +468,9 @@ function idempotencyDescriptor(
 ) {
   const semanticCommand = {
     kind: command.kind,
+    ...(command.executionIntentVersion === undefined
+      ? {}
+      : { executionIntentVersion: command.executionIntentVersion }),
     threadId: command.threadId,
     expectedThreadRevision: command.expectedThreadRevision,
     content: command.content,
@@ -500,6 +503,15 @@ function idempotencyDescriptor(
 function validateRequestCommand(command: StartTurnRequestCommand): void {
   if (!isPlainObject(command) || command.kind !== "turn.start") {
     throw new ApplicationError("validation", "turn_command_kind_unsupported");
+  }
+  if (
+    command.executionIntentVersion !== undefined &&
+    command.executionIntentVersion !== "v1"
+  ) {
+    throw new ApplicationError(
+      "validation",
+      "turn_execution_intent_version_invalid",
+    );
   }
   requireNonEmpty(command.idempotencyKey, "idempotency_key_invalid");
   requireNonEmpty(command.threadId, "thread_id_invalid");

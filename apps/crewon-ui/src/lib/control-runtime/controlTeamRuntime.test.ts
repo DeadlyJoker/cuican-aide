@@ -180,6 +180,9 @@ function teamClient(
   let forkIndex = 0;
   let goalStatus = initialGoalStatus;
   let goalRevision = initialGoalStatus === null ? 0 : 5;
+  let goalId = "goal-1";
+  let goalTokensUsed = initialGoalStatus === "complete" ? 80 : 0;
+  let goalTimeUsedSeconds = initialGoalStatus === "complete" ? 45 : 0;
   let goalObjective =
     initialGoalStatus === null ? "" : "Decide whether to launch the pilot";
   let sourceHasIncompleteUserBoundary = false;
@@ -208,21 +211,28 @@ function teamClient(
         goal: goalStatus
           ? {
               threadId: "thread-main",
-              goalId: "goal-1",
+              goalId,
               revision: goalRevision,
               objective: goalObjective,
               status: goalStatus,
               tokenBudget: 100_000,
-              tokensUsed: 0,
-              timeUsedSeconds: 0,
+              tokensUsed: goalTokensUsed,
+              timeUsedSeconds: goalTimeUsedSeconds,
               createdAt: occurredAt,
               updatedAt: occurredAt,
             }
           : null,
       };
     }),
-    setThreadGoal: vi.fn(async (threadId, body) => {
+    setThreadGoalWithExecutionIntentV1: vi.fn(async (threadId, body) => {
+      const replacesCompletedGoal =
+        goalStatus === "complete" && body.objective !== null;
       goalRevision += 1;
+      if (replacesCompletedGoal) {
+        goalId = "goal-2";
+        goalTokensUsed = 0;
+        goalTimeUsedSeconds = 0;
+      }
       goalObjective = body.objective ?? goalObjective;
       const nextStatus = body.status ?? goalStatus ?? "active";
       goalStatus = nextStatus;
@@ -231,7 +241,7 @@ function teamClient(
           ? {
               ...run("goal-continuation", threadId),
               goalBinding: {
-                goalId: "goal-1",
+                goalId,
                 revision: goalRevision,
                 objectiveDigest: `sha256:${"d".repeat(64)}`,
               },
@@ -241,13 +251,13 @@ function teamClient(
         disposition: "committed" as const,
         goal: {
           threadId,
-          goalId: "goal-1",
+          goalId,
           revision: goalRevision,
           objective: goalObjective,
           status: nextStatus,
           tokenBudget: 100_000,
-          tokensUsed: 0,
-          timeUsedSeconds: 0,
+          tokensUsed: goalTokensUsed,
+          timeUsedSeconds: goalTimeUsedSeconds,
           createdAt: occurredAt,
           updatedAt: occurredAt,
         },
@@ -338,7 +348,7 @@ function teamClient(
         goalBinding:
           body.executionIntent === "resumeGoal"
             ? {
-                goalId: "goal-1",
+                goalId,
                 revision: goalRevision,
                 objectiveDigest: `sha256:${"d".repeat(64)}`,
               }
@@ -431,7 +441,9 @@ describe("Control TypeScript Team Runtime", () => {
     ).rejects.toThrow("control_team_plan_unsupported");
 
     expect(state.client.getThreadGoal).not.toHaveBeenCalled();
-    expect(state.client.setThreadGoal).not.toHaveBeenCalled();
+    expect(
+      state.client.setThreadGoalWithExecutionIntentV1,
+    ).not.toHaveBeenCalled();
     expect(state.client.authorizeOfficeRun).not.toHaveBeenCalled();
     expect(state.client.getThread).not.toHaveBeenCalled();
     expect(state.client.forkThread).not.toHaveBeenCalled();
@@ -732,7 +744,9 @@ describe("Control TypeScript Team Runtime", () => {
       }),
       "team.member.final.qa",
     );
-    expect(state.client.setThreadGoal).toHaveBeenCalledWith(
+    expect(
+      state.client.setThreadGoalWithExecutionIntentV1,
+    ).toHaveBeenCalledWith(
       "thread-main",
       expect.objectContaining({
         objective: "Continue the release goal",
@@ -740,7 +754,113 @@ describe("Control TypeScript Team Runtime", () => {
       }),
       "team.goal.pause",
     );
-    expect(state.client.setThreadGoal).toHaveBeenCalledTimes(1);
+    expect(
+      state.client.setThreadGoalWithExecutionIntentV1,
+    ).toHaveBeenCalledTimes(1);
+  });
+
+  it("retries final Goal resume through the rolling-deployment window without duplicating work", async () => {
+    vi.useFakeTimers();
+    try {
+      const state = teamClient(null, "active");
+      const plan = await resolveControlTeamPlan({
+        client: state.client,
+        threadId: "thread-main",
+        officeVersionId: office.officeVersionId,
+        catalog,
+      });
+      const startTurn = vi.mocked(state.client.startTurn);
+      const routeMiss = new Error(
+        "control_execution_intent_capability_unavailable",
+      );
+      for (let miss = 0; miss < 9; miss += 1) {
+        startTurn.mockRejectedValueOnce(routeMiss);
+      }
+
+      const pending = startControlTeamTurn({
+        client: state.client,
+        threadId: "thread-main",
+        expectedRevision: 1,
+        content: "Continue the release goal across a rolling deployment",
+        plan,
+        responseMode: "manager",
+        idempotencyKey: (operation) => operation,
+        executionIntent: "goal",
+        pollIntervalMs: 1_000,
+        runDeadlineMs: 45_000,
+      });
+      await vi.runAllTimersAsync();
+      await expect(pending).resolves.toEqual(
+        expect.objectContaining({
+          run: expect.objectContaining({ runId: "manager-final" }),
+        }),
+      );
+
+      expect(startTurn).toHaveBeenCalledTimes(10);
+      for (const call of startTurn.mock.calls.slice(1)) {
+        expect(call).toEqual(startTurn.mock.calls[0]);
+      }
+      expect(state.client.forkThread).toHaveBeenCalledTimes(3);
+      expect(state.client.appendThreadMessage).toHaveBeenCalledTimes(4);
+      expect(state.client.createRun).toHaveBeenCalledTimes(3);
+      await expect(state.client.getThreadGoal("thread-main")).resolves.toEqual(
+        expect.objectContaining({
+          goal: expect.objectContaining({ status: "active" }),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("bounds final Goal resume retries and preserves the paused recovery state", async () => {
+    vi.useFakeTimers();
+    try {
+      const state = teamClient(null, "active");
+      const plan = await resolveControlTeamPlan({
+        client: state.client,
+        threadId: "thread-main",
+        officeVersionId: office.officeVersionId,
+        catalog,
+      });
+      const startTurn = vi.mocked(state.client.startTurn);
+      startTurn.mockRejectedValue(
+        new Error("control_execution_intent_capability_unavailable"),
+      );
+
+      const pending = startControlTeamTurn({
+        client: state.client,
+        threadId: "thread-main",
+        expectedRevision: 1,
+        content: "Continue the release goal while old nodes remain",
+        plan,
+        responseMode: "manager",
+        idempotencyKey: (operation) => operation,
+        executionIntent: "goal",
+        pollIntervalMs: 0,
+        runDeadlineMs: 1_000,
+      });
+      const rejected = expect(pending).rejects.toThrow(
+        "control_execution_intent_capability_unavailable",
+      );
+      await vi.runAllTimersAsync();
+      await rejected;
+
+      expect(startTurn).toHaveBeenCalledTimes(4);
+      for (const call of startTurn.mock.calls.slice(1)) {
+        expect(call).toEqual(startTurn.mock.calls[0]);
+      }
+      expect(state.client.forkThread).toHaveBeenCalledTimes(3);
+      expect(state.client.appendThreadMessage).toHaveBeenCalledTimes(4);
+      expect(state.client.createRun).toHaveBeenCalledTimes(3);
+      await expect(state.client.getThreadGoal("thread-main")).resolves.toEqual(
+        expect.objectContaining({
+          goal: expect.objectContaining({ status: "paused" }),
+        }),
+      );
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it.each([
@@ -773,7 +893,9 @@ describe("Control TypeScript Team Runtime", () => {
         }),
       ).rejects.toThrow(expectedError);
 
-      expect(state.client.setThreadGoal).not.toHaveBeenCalled();
+      expect(
+        state.client.setThreadGoalWithExecutionIntentV1,
+      ).not.toHaveBeenCalled();
       expect(state.client.forkThread).not.toHaveBeenCalled();
       expect(state.client.appendThreadMessage).not.toHaveBeenCalled();
       expect(state.client.createRun).not.toHaveBeenCalled();
@@ -781,7 +903,7 @@ describe("Control TypeScript Team Runtime", () => {
     },
   );
 
-  it("fails before the first Team Goal mutation when execution-intent v1 is unavailable", async () => {
+  it("stops before Team side effects when the versioned Goal route is unavailable", async () => {
     const state = teamClient(null, "complete");
     const plan = await resolveControlTeamPlan({
       client: state.client,
@@ -790,7 +912,9 @@ describe("Control TypeScript Team Runtime", () => {
       catalog,
     });
     vi.clearAllMocks();
-    vi.mocked(state.client.getExecutionIntentCapability).mockRejectedValueOnce(
+    vi.mocked(
+      state.client.setThreadGoalWithExecutionIntentV1,
+    ).mockRejectedValueOnce(
       new Error("control_execution_intent_capability_unavailable"),
     );
 
@@ -810,8 +934,10 @@ describe("Control TypeScript Team Runtime", () => {
     ).rejects.toThrow("control_execution_intent_capability_unavailable");
 
     expect(state.client.getThreadGoal).toHaveBeenCalledTimes(1);
-    expect(state.client.getExecutionIntentCapability).toHaveBeenCalledTimes(1);
-    expect(state.client.setThreadGoal).not.toHaveBeenCalled();
+    expect(state.client.getExecutionIntentCapability).not.toHaveBeenCalled();
+    expect(
+      state.client.setThreadGoalWithExecutionIntentV1,
+    ).toHaveBeenCalledTimes(1);
     expect(state.client.forkThread).not.toHaveBeenCalled();
     expect(state.client.appendThreadMessage).not.toHaveBeenCalled();
     expect(state.client.createRun).not.toHaveBeenCalled();
@@ -840,7 +966,9 @@ describe("Control TypeScript Team Runtime", () => {
       runDeadlineMs: 1_000,
     });
 
-    expect(state.client.setThreadGoal).toHaveBeenCalledWith(
+    expect(
+      state.client.setThreadGoalWithExecutionIntentV1,
+    ).toHaveBeenCalledWith(
       "thread-main",
       expect.objectContaining({
         expectedRevision: 5,
@@ -849,6 +977,14 @@ describe("Control TypeScript Team Runtime", () => {
       }),
       "team.goal.pause",
     );
+    const replacedGoal = await state.client.getThreadGoal("thread-main");
+    expect(replacedGoal.goal).toMatchObject({
+      goalId: "goal-2",
+      objective: "Start a fresh release goal",
+      status: "active",
+      tokensUsed: 0,
+      timeUsedSeconds: 0,
+    });
   });
 
   it("pauses an existing active Goal around a follow-up Team turn", async () => {
@@ -873,7 +1009,9 @@ describe("Control TypeScript Team Runtime", () => {
       runDeadlineMs: 1_000,
     });
 
-    expect(state.client.setThreadGoal).toHaveBeenNthCalledWith(
+    expect(
+      state.client.setThreadGoalWithExecutionIntentV1,
+    ).toHaveBeenNthCalledWith(
       1,
       "thread-main",
       expect.objectContaining({
@@ -883,7 +1021,9 @@ describe("Control TypeScript Team Runtime", () => {
       }),
       "team.goal.pause",
     );
-    expect(state.client.setThreadGoal).toHaveBeenCalledTimes(1);
+    expect(
+      state.client.setThreadGoalWithExecutionIntentV1,
+    ).toHaveBeenCalledTimes(1);
     expect(result.run).toEqual(
       expect.objectContaining({
         runId: "member-final-qa",
@@ -914,7 +1054,9 @@ describe("Control TypeScript Team Runtime", () => {
     });
 
     expect(state.client.getThreadGoal).toHaveBeenCalledTimes(1);
-    expect(state.client.setThreadGoal).not.toHaveBeenCalled();
+    expect(
+      state.client.setThreadGoalWithExecutionIntentV1,
+    ).not.toHaveBeenCalled();
     expect(state.createdRuns[0]).toEqual(
       expect.objectContaining({
         runId: "manager-plan",

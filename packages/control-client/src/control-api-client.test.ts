@@ -422,21 +422,38 @@ test("starts a Turn through one atomic typed mutation", async () => {
 });
 
 test("maps missing execution-intent routes to one rollout-safe capability error", async () => {
+  const requests: string[] = [];
   const client = new ControlApiClient({
     baseUrl: "https://control.example/",
-    fetch: async () =>
-      jsonResponse(404, {
+    csrfToken: "rollout-csrf",
+    fetch: async (input) => {
+      requests.push(String(input));
+      return jsonResponse(404, {
         error: {
           category: "notFound",
           code: "route_not_found",
           message: "Not found",
           requestId: "request-1",
         },
-      }),
+      });
+    },
   });
 
   await assert.rejects(
     client.getExecutionIntentCapability(),
+    hasProtocolCode("control_execution_intent_capability_unavailable"),
+  );
+  await assert.rejects(
+    client.setThreadGoalWithExecutionIntentV1(
+      "thread-1",
+      {
+        expectedRevision: 2,
+        objective: "Start a fresh Goal safely",
+        status: "paused",
+        tokenBudget: { kind: "keep" },
+      },
+      "goal-rollout-1",
+    ),
     hasProtocolCode("control_execution_intent_capability_unavailable"),
   );
   await assert.rejects(
@@ -467,6 +484,12 @@ test("maps missing execution-intent routes to one rollout-safe capability error"
       error instanceof ControlApiClientError &&
       error.code === "route_not_found",
   );
+  assert.deepEqual(requests, [
+    "https://control.example/api/v1/capabilities/execution-intent-v1",
+    "https://control.example/api/v1/threads/thread-1/goal/execution-intent-v1",
+    "https://control.example/api/v1/threads/thread-1/turns/execution-intent-v1",
+    "https://control.example/api/v1/threads/thread-1/turns",
+  ]);
 });
 
 test("uses typed manual-only Automation routes with CSRF and idempotency", async () => {
@@ -806,6 +829,18 @@ test("sets and clears a Goal with fixed concurrency and mutation headers", async
     tokenBudget: { kind: "keep" },
   });
 
+  const versionedSetResponse = await client.setThreadGoalWithExecutionIntentV1(
+    "thread/1",
+    {
+      expectedRevision: 4,
+      objective: "start a fresh Goal",
+      status: "paused",
+      tokenBudget: { kind: "keep" },
+    },
+    "goal-set-v1",
+  );
+  assert.equal(versionedSetResponse.goal?.goalId, "goal-1");
+
   assert.equal(
     (
       await client.clearThreadGoal(
@@ -834,6 +869,19 @@ test("sets and clears a Goal with fixed concurrency and mutation headers", async
           expectedRevision: 4,
           objective: null,
           status: null,
+          tokenBudget: { kind: "keep" },
+        },
+      },
+      {
+        input:
+          "https://control.example/api/v1/threads/thread%2F1/goal/execution-intent-v1",
+        method: "PUT",
+        csrf: "goal-csrf",
+        idempotencyKey: "goal-set-v1",
+        body: {
+          expectedRevision: 4,
+          objective: "start a fresh Goal",
+          status: "paused",
           tokenBudget: { kind: "keep" },
         },
       },

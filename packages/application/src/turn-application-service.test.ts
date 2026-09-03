@@ -99,6 +99,40 @@ test("keeps the idempotency fingerprint stable across a changed derived route", 
   );
 });
 
+test("binds versioned Turn admission into the idempotency fingerprint", async () => {
+  const legacyStore = new RecordingTurnStore();
+  const versionedStore = new RecordingTurnStore();
+  await createService(legacyStore).startTurn(actor(), command());
+  await createService(versionedStore).startTurn(actor(), {
+    ...command(),
+    executionIntentVersion: "v1",
+  });
+
+  const legacyFingerprint =
+    legacyStore.commits[0]?.idempotency.requestFingerprint;
+  const versionedFingerprint =
+    versionedStore.commits[0]?.idempotency.requestFingerprint;
+  assert.notEqual(legacyFingerprint, versionedFingerprint);
+  assert.equal(legacyFingerprint?.includes("executionIntentVersion"), false);
+  assert.equal(
+    versionedFingerprint?.includes('"executionIntentVersion":"v1"'),
+    true,
+  );
+});
+
+test("rejects an unsupported Turn execution-intent admission version", async () => {
+  const store = new RecordingTurnStore();
+
+  await assert.rejects(
+    createService(store).startTurn(actor(), {
+      ...command(),
+      executionIntentVersion: "v2" as never,
+    }),
+    hasApplicationError("validation", "turn_execution_intent_version_invalid"),
+  );
+  assert.deepEqual(store.commits, []);
+});
+
 test("applies a finite server safety budget to a newly admitted Goal", async () => {
   const store = new RecordingTurnStore();
   await createService(store).startTurn(actor(), {
