@@ -22,7 +22,7 @@ export function validateAutomationInvocationArtifacts(
   runState: NonNullable<ReturnType<typeof import("@crewon/domain").reduceRunLifecycleEvent>>,
 ): void {
   const definition = record.definition;
-  const instruction = renderAutomationInstruction(definition);
+  const instruction = renderAutomationInstruction(definition, input.binding.scheduledFor);
   const routeDigest = digest(stableJson({
     authorityId: input.runEvent.data.authorityId,
     runtimeGeneration: input.runEvent.data.runtimeGeneration,

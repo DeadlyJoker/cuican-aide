@@ -1,3 +1,9 @@
+import {
+  parseSkillInvocationSpec,
+  parseAutomationParameterBindings,
+  type SkillInvocationSpec,
+  type AutomationParameterBindings,
+} from "@crewon/domain";
 import type {
   AutomationDefinition,
   AutomationInvocationBinding,
@@ -81,6 +87,8 @@ export interface AutomationAuthorizationPort {
 }
 
 export type CreateAutomationCommand = Readonly<{
+  skillInvocation?: SkillInvocationSpec;
+  parameterBindings?: AutomationParameterBindings;
   kind: "automation.create";
   idempotencyKey: string;
   threadId: string;
@@ -93,6 +101,8 @@ export type CreateAutomationCommand = Readonly<{
 }>;
 
 export type RunAutomationNowCommand = Readonly<{
+  /** Internal scheduler occurrence; public run-now requests cannot set it. */
+  scheduledFor?: string;
   kind: "automation.runNow";
   idempotencyKey: string;
   automationId: string;
@@ -117,6 +127,7 @@ export type AutomationListCursor = Readonly<{
 }>;
 
 export type AutomationListQuery = Readonly<{
+  definitionSchemaVersion?: "crewon.automation.v0";
   tenantId: string;
   spaceId: string;
   before: AutomationListCursor | null;
@@ -289,6 +300,8 @@ export function validateAutomationCreateCommand(
   requireAutomationExactObject(
     command,
     [
+      ...(command.skillInvocation === undefined ? [] : ["skillInvocation"]),
+      ...(command.parameterBindings === undefined ? [] : ["parameterBindings"]),
       "expectedThreadRevision",
       ...(command.executionMode === undefined ? [] : ["executionMode"]),
       "idempotencyKey",
@@ -334,6 +347,16 @@ export function validateAutomationCreateCommand(
   }
   try {
     parseAutomationSchedule(command.schedule);
+    if (command.skillInvocation !== undefined)
+      parseSkillInvocationSpec(command.skillInvocation);
+    if (command.parameterBindings !== undefined) {
+      if (command.skillInvocation === undefined)
+        throw new ApplicationError(
+          "validation",
+          "automation_skill_binding_invalid",
+        );
+      parseAutomationParameterBindings(command.parameterBindings);
+    }
   } catch (error) {
     throw mapAutomationError(error);
   }
@@ -345,6 +368,7 @@ export function validateAutomationRunNowCommand(
   requireAutomationExactObject(
     command,
     [
+      ...(command.scheduledFor === undefined ? [] : ["scheduledFor"]),
       "automationId",
       "expectedAutomationRevision",
       "expectedThreadRevision",
@@ -359,6 +383,14 @@ export function validateAutomationRunNowCommand(
   ) {
     throw new ApplicationError("validation", "automation_run_command_invalid");
   }
+  if (
+    command.scheduledFor !== undefined &&
+    !isAutomationTimestamp(command.scheduledFor)
+  )
+    throw new ApplicationError(
+      "validation",
+      "automation_scheduled_for_invalid",
+    );
   requireAutomationIdempotencyKey(command.idempotencyKey);
   requireAutomationOpaqueId(command.automationId, "automation_id_invalid");
   requireAutomationRevision(command.expectedThreadRevision);
@@ -368,13 +400,25 @@ export function validateAutomationListQuery(
   query: Readonly<{
     before: AutomationListCursor | null;
     limit: number;
+    definitionSchemaVersion?: "crewon.automation.v0";
   }>,
 ): void {
   requireAutomationExactObject(
     query,
-    ["before", "limit"],
+    [
+      "before",
+      "limit",
+      ...(query.definitionSchemaVersion === undefined
+        ? []
+        : ["definitionSchemaVersion"]),
+    ],
     "automation_list_query_invalid",
   );
+  if (
+    query.definitionSchemaVersion !== undefined &&
+    query.definitionSchemaVersion !== "crewon.automation.v0"
+  )
+    throw new ApplicationError("validation", "automation_list_query_invalid");
   if (
     !Number.isSafeInteger(query.limit) ||
     query.limit < 1 ||

@@ -194,6 +194,7 @@ export class AutomationScheduler {
           if (this.#closed) return;
           await this.#automations.runAutomationNow(actor, {
             kind: "automation.runNow",
+            ...(definition.skillBinding === undefined ? {} : { scheduledFor }),
             idempotencyKey: scheduledIdempotencyKey(
               definition.automationId,
               scheduledFor,

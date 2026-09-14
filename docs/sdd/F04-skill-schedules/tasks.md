@@ -10,3 +10,5 @@
 - [ ] S2 R08 固定版本添加到现有日程 UI，组件覆盖与设计回归。
 - [ ] S3 真实 C02/C03 接线；记录真实模型 GUI、恢复或明确未覆盖项。
 - [ ] S3 窄检查、必要全检查、pnpm format；提交 feature 与 evidence，向协调任务报告。
+- [ ] S2 R02/R07 动态日期规则（运行日期、上一完整周起止）按 occurrence/timezone冻结，跨日/DST/重启重试测试。
+- [ ] S2 R01 新客户端能力头协商，旧客户端混合分页只读取 v0、v1 get/run-before-side-effects 明确升级错误。

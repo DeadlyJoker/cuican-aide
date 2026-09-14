@@ -243,6 +243,7 @@ export class SqliteAutomationAuthority {
           `SELECT tenant_id, space_id, automation_id, thread_id, revision,
         definition_digest, definition_json, updated_at FROM automations
         WHERE tenant_id = ? AND space_id = ? AND (? IS NULL OR updated_at < ? OR (updated_at = ? AND automation_id < ?))
+        AND (? IS NULL OR json_extract(definition_json, '$.schemaVersion') = ?)
         ORDER BY updated_at DESC, automation_id DESC LIMIT ?`,
         )
         .all(
@@ -252,6 +253,8 @@ export class SqliteAutomationAuthority {
           query.before?.updatedAt ?? null,
           query.before?.updatedAt ?? null,
           query.before?.automationId ?? null,
+          query.definitionSchemaVersion ?? null,
+          query.definitionSchemaVersion ?? null,
           query.limit,
         ) as unknown as SqliteAutomationRow[];
       return rows.map(decodeSqliteAutomationRecord);

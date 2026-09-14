@@ -25,16 +25,16 @@ HTTP 在现有 create 请求中新增可区分 Skill invocation 输入，客户�
 
 ## 失败与恢复
 
-| 失败 | 恢复动作 |
-| --- | --- |
-| 端口/Skill/版本缺失 | 恢复依赖或选择可用激活版本创建新日程 |
-| 未激活/撤权 | 确认激活或重新授权后重试 |
-| 摘要/执行快照变化 | 检查版本完整性，不能自动升级 |
-| 参数错误 | 按声明 schema 修正，创建新绑定 |
-| 工作空间/工具离线 | 重新连接后由既有 scheduler 补执行最新 occurrence |
-| 目标不可写 | 选择已授权交付目标 |
-| 预算不足 | 调整现有预算后重试 |
-| 执行结果未知/取消 | 查看原 Run 的工具效果与结果，不能盲目重跑 |
+| 失败                | 恢复动作                                         |
+| ------------------- | ------------------------------------------------ |
+| 端口/Skill/版本缺失 | 恢复依赖或选择可用激活版本创建新日程             |
+| 未激活/撤权         | 确认激活或重新授权后重试                         |
+| 摘要/执行快照变化   | 检查版本完整性，不能自动升级                     |
+| 参数错误            | 按声明 schema 修正，创建新绑定                   |
+| 工作空间/工具离线   | 重新连接后由既有 scheduler 补执行最新 occurrence |
+| 目标不可写          | 选择已授权交付目标                               |
+| 预算不足            | 调整现有预算后重试                               |
+| 执行结果未知/取消   | 查看原 Run 的工具效果与结果，不能盲目重跑        |
 
 错误 code 不包含正文、凭据或本地路径。保存失败通过现有 HTTP 错误返回；运行前状态应在原日程详情可解释。当前 scheduler 仅有全局 lastFailureCode；新增每日程状态的必要最小读接口设计须在实现前补充，不能用新轮询回路规避。
 
@@ -47,3 +47,15 @@ HTTP 在现有 create 请求中新增可区分 Skill invocation 输入，客户�
 R01 → 既有 domain/application/contracts/store/scheduler 兼容基线；R02–R04 → C02 合约夹具 + 域和 HTTP 拒绝测试；R05–R07 → 真实 in-memory/SQLite store + scheduler/Run 取消恢复回归；R08 → 表单组件/快照和浏览器；R09 → 边界/资源限制测试及 evidence 分级。实测未完成项目不标通过。
 
 自检：仅一条 scheduler 链；调用配置不藏 prompt；无客户端权威指令；v0 摘要不变；依赖 owner 不重造；不碰原始目录、可靠性维护或共享基线 worktree；不 push/发布/回合 main。
+
+## S1 补充：周期日期与客户端能力协商
+
+协调评审要求动态日期进入首版。C02 仍只接受具体标量。C04 在定义中保存固定版本快照、literal 参数以及显式 `parameterBindings`：参数名 → `runDate` / `previousWeekStart` / `previousWeekEnd`，仅 ISO 日期字符串；上一完整周按日程时区、周一至周日。无任意表达式或模型算日期。首次保存按 nextRunAt 解析校验；每次触发按 scheduler 的 occurrence 解析。内部 run command 带 scheduledFor；手动运行使用服务端 now。invocation binding 保存该时间，Store 从 definition+scheduledFor 确定性解析参数/渲染 instruction，receipt 重放复用同一值。固定 SkillVersion 内容不变，日期变更不视作方法漂移。未知回执重试先查 receipt，不能重算成另一日。
+
+新增客户端请求头 `x-crewon-automation-version: 1` 明确支持 Skill 日程。旧 list 请求仅返回 v0，在 Store 查询中先按 v0 过滤再 LIMIT，游标使用过滤后页末项；内存、SQLite、Postgres 保持相同排序和分页语义，避免中间 v1 页造成空页或丢失后续 v0。旧 get/run-now 若身份指向 v1，在执行前返回明确升级错误；旧客户端不接收新增字段，不让一条 v1 破坏整个列表。新客户端请求头获取混合列表。旧 create 原样；Skill create 必须携带支持声明。此能力头只影响表示/兼容，不能授予执行权限。
+
+## S2 补充：每日程可恢复状态
+
+v1 HTTP 表示增加 `skillReadiness: {state: "ready" | "blocked", code: string | null}`；它是当前执行前检查，不是一次已发生的失败 Run。list/get 在既有刷新请求内按有界页依次调用只读准入检查：重新加载绑定、授权、解析现时日期参数、解析现有 route、调用 C02 execute。准入无存储副作用，不另建 scheduler 或轮询。缺依赖/撤权/参数/目标/预算错误返回稳定 code，卡片据此展示具体恢复动作；运行仍再次准入，ready 不是持久权限票据。执行后结果和取消继续走原 Run/history；排队后撤权/未知外部结果属 runtime gate 和 F05 真实执行验收边界，不能由 readiness 冒称覆盖。
+
+能力头必须由 ControlApiClient 经 Web BFF 允许列表透传至 Control；测试分别验证新头保留与旧客户端无头兼容。skillReadiness 为动态读模型，不参与 definitionDigest 或 sameAutomation 固定绑定比较；Run identity 和历史摘要不变。

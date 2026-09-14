@@ -1,3 +1,7 @@
+import {
+  parseSkillInvocationSpec,
+  parseAutomationParameterBindings,
+} from "./skill-schedule-contract.ts";
 import type { components, operations, paths } from "./generated/control-api.ts";
 
 import { ContractValidationError } from "./contract-validation-error.ts";
@@ -192,6 +196,12 @@ export function parseCreateAutomationRequest(
 ): CreateAutomationRequest {
   if (
     !hasExactKeys(input, [
+      ...(isPlainObject(input) && input.skillInvocation !== undefined
+        ? ["skillInvocation"]
+        : []),
+      ...(isPlainObject(input) && input.parameterBindings !== undefined
+        ? ["parameterBindings"]
+        : []),
       "agentVersionId",
       "expectedThreadRevision",
       "prompt",
@@ -208,6 +218,12 @@ export function parseCreateAutomationRequest(
   ) {
     throw new ContractValidationError("expected_revision_invalid");
   }
+  if (
+    input.parameterBindings !== undefined &&
+    input.skillInvocation === undefined
+  ) {
+    throw new ContractValidationError("automation_skill_binding_invalid");
+  }
   const prompt = requireBoundedString(
     input.prompt,
     9_999,
@@ -217,6 +233,16 @@ export function parseCreateAutomationRequest(
     throw new ContractValidationError("automation_prompt_too_large");
   }
   return {
+    ...(input.skillInvocation === undefined
+      ? {}
+      : { skillInvocation: parseSkillInvocationSpec(input.skillInvocation) }),
+    ...(input.parameterBindings === undefined
+      ? {}
+      : {
+          parameterBindings: parseAutomationParameterBindings(
+            input.parameterBindings,
+          ),
+        }),
     threadId: parseThreadId(input.threadId),
     expectedThreadRevision: Number(input.expectedThreadRevision),
     title: requireBoundedString(

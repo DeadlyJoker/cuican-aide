@@ -34,3 +34,6 @@ export * from "./workflow-version.ts";
 export * from "./workflow-version-codec.ts";
 
 export * from "./demonstrated-skill.ts";
+
+export * from "./automation-skill-binding.ts";
+export * from "./automation-parameter-bindings.ts";
