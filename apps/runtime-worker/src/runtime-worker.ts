@@ -403,11 +403,13 @@ export class RuntimeWorker {
     ) {
       throw new Error("worker_auto_compact_token_limit_invalid");
     }
-    this.#maxToolRounds = positiveIntegerAtMost(
+    this.#maxToolRounds = nonNegativeInteger(
       config.maxToolRounds ?? DEFAULT_MAX_TOOL_ROUNDS,
-      MAX_TOOL_ROUNDS,
       "worker_tool_round_limit_invalid",
     );
+    if (this.#maxToolRounds > MAX_TOOL_ROUNDS) {
+      throw new Error("worker_tool_round_limit_invalid");
+    }
     this.#afterRunStarted = config.afterRunStarted;
     this.#afterAttemptStarted = config.afterAttemptStarted;
     this.#beforeAssistantSampleCommitted =
@@ -590,7 +592,8 @@ export class RuntimeWorker {
   ): WorkerAgentRuntime {
     if (
       runtime.executionAuthority === "providerAgent" &&
-      (runtime.version.instructions !== null ||
+      (runtime.version.execution.maxToolRounds === 0 ||
+        runtime.version.instructions !== null ||
         runtime.version.tools.length !== 0 ||
         runtime.version.resources.governedContextDigest !== null ||
         runtime.version.resources.workspaceRequired ||
@@ -651,6 +654,13 @@ export class RuntimeWorker {
       if (storedApproval === null) {
         throw new PermanentWorkerError("tool_approval_state_missing");
       }
+      const runtime = await this.#resolveAgentVersionRuntime(
+        run.tenantId,
+        run.agentVersionId,
+      );
+      if (runtime?.maxToolRounds === 0) {
+        throw new PermanentWorkerError("agent_tools_disabled");
+      }
       if (
         (await this.#execution.expireToolApproval(claim, storedApproval)) !==
         null
@@ -682,10 +692,6 @@ export class RuntimeWorker {
           code: "tool_approval_auto_approved",
         };
       }
-      const runtime = await this.#resolveAgentVersionRuntime(
-        run.tenantId,
-        run.agentVersionId,
-      );
       if (runtime !== null) {
         const pending = await this.#pendingToolEvents(run);
         const replacement = await replaceChangedToolApproval({
@@ -748,12 +754,23 @@ export class RuntimeWorker {
         code: "agent_version_runtime_unavailable",
       };
     }
-    await reconcileCommittedToolResults({
-      runtime: runtime.toolRuntime,
-      store: this.#store,
-      tenantId: run.tenantId,
-      runId: run.runId,
-    });
+    if (runtime.maxToolRounds === 0) {
+      const pending = await this.#pendingToolEvents(run);
+      if (
+        run.status === "reconciling" ||
+        pending.events.length > 0 ||
+        pending.completedToolRounds > 0
+      ) {
+        throw new PermanentWorkerError("agent_tools_disabled");
+      }
+    } else {
+      await reconcileCommittedToolResults({
+        runtime: runtime.toolRuntime,
+        store: this.#store,
+        tenantId: run.tenantId,
+        runId: run.runId,
+      });
+    }
     if (
       runtime.executionAuthority === "providerAgent" &&
       run.collaborationMode !== "default"
@@ -857,7 +874,10 @@ export class RuntimeWorker {
     }
     const completedToolRounds = pendingTools.completedToolRounds;
     const completedAssistantSamples = pendingTools.providerContinuationSamples;
-    if (completedToolRounds >= runtime.maxToolRounds) {
+    if (
+      runtime.maxToolRounds > 0 &&
+      completedToolRounds >= runtime.maxToolRounds
+    ) {
       throw new PermanentWorkerError("model_tool_round_limit_exceeded");
     }
     if ((await this.#execution.consumeGoalSteering(claim)) !== null) {
@@ -1008,10 +1028,13 @@ export class RuntimeWorker {
             policySnapshotId: run.policySnapshotId,
             collaborationMode: run.collaborationMode,
             allowedTools:
-              run.collaborationMode === "plan"
-                ? planAllowedTools(runtime)
-                : null,
+              runtime.maxToolRounds === 0
+                ? []
+                : run.collaborationMode === "plan"
+                  ? planAllowedTools(runtime)
+                  : null,
             runtimeTools:
+              runtime.maxToolRounds === 0 ||
               runtime.executionAuthority === "providerAgent"
                 ? []
                 : [...goalToolsForRun(run), ...runPlanToolsForRun(run)],
@@ -1069,6 +1092,10 @@ export class RuntimeWorker {
         }
         const event = batch.event;
         lastAgentSequence = event.sequence;
+        // Check before buffering or committing a Tool sample, including server-owned tools.
+        if (runtime.maxToolRounds === 0 && event.type === "tool.requested") {
+          throw new AgentKernelError("agent_tools_disabled", false);
+        }
         if (event.type === "segment.provider_response_created") {
           providerCheckpoint = event.data.checkpoint;
           await this.#execution.checkpointModelAttempt(
@@ -1961,6 +1988,9 @@ export class RuntimeWorker {
     signal: AbortSignal,
     runtime: WorkerAgentRuntime,
   ): Promise<RuntimeWorkerOutcome | null> {
+    if (runtime.maxToolRounds === 0 && calls.length > 0) {
+      throw new PermanentWorkerError("agent_tools_disabled");
+    }
     const serverOwnedDefinitions = [
       ...goalToolsForRun(run),
       ...runPlanToolsForRun(run),

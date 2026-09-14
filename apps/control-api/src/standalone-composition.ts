@@ -55,6 +55,7 @@ import type { ThreadSandboxPort } from "./pim-sandbox-client.ts";
 
 type ControlApiCompositionConfig = Readonly<{
   skillDatabasePath?: string;
+  generationAgentVersionId?: string;
   storageAdmission?: StorageAdmissionPort;
   localStoragePaths?: readonly string[];
   actor: ActorContext;
@@ -224,7 +225,7 @@ function composeControlApi(
       digester,
       admission: new StoreBackedAgentVersionAdmission(store),
     });
-    skillHost = config.skillDatabasePath === undefined ? null : createStandaloneSkillHost({databasePath:config.skillDatabasePath,actor:config.actor,store,turns,routes:routeResolver,application,digester,clock});
+    skillHost = config.skillDatabasePath === undefined ? null : createStandaloneSkillHost({databasePath:config.skillDatabasePath,actor:config.actor,store,turns,routes:routeResolver,application,digester,clock,generationAgentVersionId:config.generationAgentVersionId});
     const automations = new AutomationApplicationService({
       skills: skillHost?.skills,
       store,

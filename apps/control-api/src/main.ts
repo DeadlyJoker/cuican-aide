@@ -58,7 +58,9 @@ if (securityMode === "production" && connectionString === undefined) {
 const artifactEncryptionKeyId = requiredEnvironment(
   "CREWON_ARTIFACT_ENCRYPTION_KEY_ID",
 );
-const artifactRetention = configuredArtifactRetention(process.env.CREWON_ARTIFACT_RETENTION);
+const artifactRetention = configuredArtifactRetention(
+  process.env.CREWON_ARTIFACT_RETENTION,
+);
 const artifactStore = new FilesystemArtifactStore({
   rootDirectory: requiredEnvironment("CREWON_ARTIFACT_ROOT"),
   databasePath: requiredEnvironment("CREWON_ARTIFACT_DB_PATH"),
@@ -80,13 +82,17 @@ const sharedConfig = {
     process.env.CREWON_OUTBOX_SCAN_INTERVAL_MS ?? "1000",
     "CREWON_OUTBOX_SCAN_INTERVAL_MS_invalid",
   ),
-  outboxRetention: process.env.CREWON_OUTBOX_RETENTION_MS === "off" ? null : {
-    ...DEFAULT_OUTBOX_RETENTION,
-    retentionMs: parsePositiveInteger(
-      process.env.CREWON_OUTBOX_RETENTION_MS ?? String(DEFAULT_OUTBOX_RETENTION.retentionMs),
-      "CREWON_OUTBOX_RETENTION_MS_invalid",
-    ),
-  },
+  outboxRetention:
+    process.env.CREWON_OUTBOX_RETENTION_MS === "off"
+      ? null
+      : {
+          ...DEFAULT_OUTBOX_RETENTION,
+          retentionMs: parsePositiveInteger(
+            process.env.CREWON_OUTBOX_RETENTION_MS ??
+              String(DEFAULT_OUTBOX_RETENTION.retentionMs),
+            "CREWON_OUTBOX_RETENTION_MS_invalid",
+          ),
+        },
   automationScanIntervalMs: parsePositiveInteger(
     process.env.CREWON_AUTOMATION_SCAN_INTERVAL_MS ?? "1000",
     "CREWON_AUTOMATION_SCAN_INTERVAL_MS_invalid",
@@ -158,6 +164,9 @@ try {
         "CREWON_AGENT_VERSION_ID",
         "default-agent-v1",
       ),
+      generationAgentVersionId:
+        process.env.CREWON_SKILL_GENERATION_AGENT_VERSION_ID?.trim() ||
+        undefined,
       sessionToken: requiredEnvironment("CREWON_CONTROL_SESSION_TOKEN"),
       csrfToken: requiredEnvironment("CREWON_CONTROL_CSRF_TOKEN"),
       allowedOrigins: splitRequiredEnvironment(

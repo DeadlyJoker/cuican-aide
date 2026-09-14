@@ -225,6 +225,7 @@ async function fixture(t: import("node:test").TestContext) {
     skillsStore,
     runs,
     runService,
+    threads,
     skill,
     input,
     complete,
@@ -247,6 +248,65 @@ async function fixture(t: import("node:test").TestContext) {
     },
   };
 }
+
+test("collect binds the original Run output even when a later user message precedes completion", async (t) => {
+  const f = await fixture(t);
+  const started = await f.service().start(actor, f.skill.skillId, f.input);
+  const current = await f.runs.loadThreadInSpace({
+    ...actor,
+    threadId: f.input.threadId,
+  });
+  assert.ok(current);
+  await f.threads.appendMessage(actor, {
+    kind: "thread.message.append",
+    idempotencyKey: "later-user",
+    threadId: f.input.threadId,
+    expectedRevision: current.revision,
+    role: "user",
+    content: "A later unrelated message",
+  });
+  await f.complete(started.runId!, JSON.stringify(candidate));
+  const collected = await f
+    .service()
+    .collect(actor, f.skill.skillId, f.input.generationId);
+  assert.equal(collected.outcome, "candidate");
+  assert.deepEqual(collected.candidate, candidate);
+});
+
+test("a persisted generation without a Run revalidates its pinned route before Turn execution", async (t) => {
+  const f = await fixture(t);
+  await f.service().start(actor, f.skill.skillId, f.input);
+  const saved = await f
+    .generations()
+    .getGeneration(f.skill, f.input.generationId);
+  assert.ok(saved);
+  const generationId = "pending-generation";
+  await f.generations().putGeneration({
+    ...saved,
+    generationId,
+    runId: null,
+    startMessageId: null,
+    startMessageSequence: null,
+    command: {
+      ...saved.command,
+      idempotencyKey: `skill-generation:${f.skill.skillId}:${generationId}`,
+    },
+  });
+  const service = f.service();
+  service.dependencies.routes.resolveRoute = async (request) => {
+    assert.equal(request.agentVersionId, saved.command.route.agentVersionId);
+    return { ...route, policySnapshotId: "changed-release" };
+  };
+  await assert.rejects(
+    service.start(actor, f.skill.skillId, { ...f.input, generationId }),
+    { code: "skill_generation_route_changed" },
+  );
+  assert.equal(
+    (await f.generations().getGeneration(f.skill, generationId))!.runId,
+    null,
+  );
+  assert.equal((await f.runs.listPendingWorkItems(10)).length, 1);
+});
 
 test("generation uses one durable Turn across response loss, validates its exact assistant output, and applies only on confirmation", async (t) => {
   const f = await fixture(t);

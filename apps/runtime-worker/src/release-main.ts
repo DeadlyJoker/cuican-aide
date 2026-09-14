@@ -5,6 +5,7 @@ import {
   activatePostgresRuntimeAgentVersionRelease,
   activateStandaloneRuntimeAgentVersionRelease,
 } from "./agent-version-release-composition.ts";
+import { compileSkillGenerationAgentVersion } from "./skill-generation-agent-version.ts";
 import { compileRuntimeAgentVersion } from "./agent-version-release.ts";
 import {
   compileDevelopmentAgentProfileVersion,
@@ -130,13 +131,23 @@ try {
               ];
         }),
   );
+  const generationAgentVersionId =
+    process.env.CREWON_SKILL_GENERATION_AGENT_VERSION_ID?.trim();
+  const generationAgentVersions = generationAgentVersionId
+    ? [compileSkillGenerationAgentVersion(common, generationAgentVersionId)]
+    : [];
   const additionalAgentVersions = [
     ...profileAgentVersions,
     ...modelAgentVersions,
+    ...generationAgentVersions,
   ];
   const ownsBindingsManifest =
     process.env.CREWON_MODEL_CATALOG_JSON !== undefined;
-  if (profiles.length > 0 || ownsBindingsManifest) {
+  if (
+    profiles.length > 0 ||
+    generationAgentVersions.length > 0 ||
+    ownsBindingsManifest
+  ) {
     if (bindingsPath === undefined) {
       throw new Error("CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH_required");
     }
@@ -159,6 +170,7 @@ try {
             undefined,
             ...profiles,
             ...modelAgentVersions.map(() => undefined),
+            ...generationAgentVersions.map(() => undefined),
           ],
           tenantId: actor.tenantId,
           authorityId: route.authorityId,

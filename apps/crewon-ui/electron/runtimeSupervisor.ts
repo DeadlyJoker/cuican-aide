@@ -344,6 +344,7 @@ export class RuntimeSupervisor {
       NODE_ENV: "production",
       CREWON_ACTOR_ID: "standalone-actor",
       CREWON_AGENT_VERSION_ID: agentVersionId,
+      CREWON_SKILL_GENERATION_AGENT_VERSION_ID: `${agentVersionId}-skill-generator`,
       CREWON_ARTIFACT_DB_PATH: join(
         this.#dataDirectory,
         "artifact-metadata.sqlite",

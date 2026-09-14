@@ -125,6 +125,7 @@ export function createControlDevEnvironment(input) {
     NODE_ENV: "development",
     CREWON_ACTOR_ID: "standalone-actor",
     CREWON_AGENT_VERSION_ID: input.agentVersionId,
+    CREWON_SKILL_GENERATION_AGENT_VERSION_ID: `${input.agentVersionId}-skill-generator`,
     CREWON_ARTIFACT_DB_PATH: join(
       input.dataDirectory,
       "artifact-metadata.sqlite",

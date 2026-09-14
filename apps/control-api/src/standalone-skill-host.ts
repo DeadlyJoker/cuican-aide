@@ -20,6 +20,7 @@ import {
   SqliteSkillDraftGenerationStore,
   SqliteSkillRecordingStore,
 } from "@crewon/store";
+import { createConfiguredSkillGenerationRouteResolver } from "./skill-generation-route-resolver.ts";
 import { randomUUID } from "node:crypto";
 import {
   ConfiguredSkillExecutionAuthorization,
@@ -28,12 +29,14 @@ import {
 
 export function createStandaloneSkillHost(input: {
   databasePath: string;
+  generationAgentVersionId?: string;
+  deliveryTargets?: DemonstratedSkillService["dependencies"]["deliveryTargets"];
   actor: ActorContext;
   store: AgentVersionStore &
     ModelCallStore &
     AutomationStore &
     Pick<RunStore, "loadRun"> &
-    Pick<ThreadStore, "listMessages">;
+    Pick<ThreadStore, "loadThreadInSpace" | "messageWindows">;
   turns: TurnApplicationService;
   routes: RunRouteResolverPort;
   application: RunApplicationService;
@@ -62,6 +65,7 @@ export function createStandaloneSkillHost(input: {
         digester: input.digester,
       }),
       evidence,
+      deliveryTargets: input.deliveryTargets,
       scheduledInvocations: {
         resolveForRun: (actor, runId) =>
           resolveAutomationSkillForRun(
@@ -80,7 +84,12 @@ export function createStandaloneSkillHost(input: {
       store: generationStore,
       skills,
       turns: input.turns,
-      routes: input.routes,
+      routes: createConfiguredSkillGenerationRouteResolver({
+        routes: input.routes,
+        store: input.store,
+        digester: input.digester,
+        generationAgentVersionId: input.generationAgentVersionId,
+      }),
       threads: input.store,
       evidence,
       digester: input.digester,
