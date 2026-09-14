@@ -1,3 +1,4 @@
+import { RecordingHost } from "./recordingHost.ts";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -133,6 +134,12 @@ async function launch(): Promise<void> {
   const window = createWindow();
   desktopLog("window created");
   const browserViews = new BrowserViewManager(window);
+  new RecordingHost({
+    ownerWindow: window,
+    directory: join(runtimeDataDirectory, "recordings"),
+    moduleDirectory,
+    rendererUrl: process.env.CREWON_UI_DEV_URL?.trim(),
+  });
   registerIpc({
     agentPlatformCredentials,
     authority,
