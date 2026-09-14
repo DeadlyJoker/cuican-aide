@@ -18,7 +18,11 @@ import {
   skillJson,
   type SkillInvocationSpec,
 } from "@crewon/domain";
-import { InMemoryRunStore, SqliteRunStore } from "@crewon/store";
+import {
+  InMemoryRunStore,
+  SqliteRunStore,
+  SqliteDemonstratedSkillStore,
+} from "@crewon/store";
 import { AutomationScheduler } from "./automation-scheduler.ts";
 
 const actor = {
@@ -42,7 +46,7 @@ const version = createSkillVersion(
   {
     skillId: "skill-1",
     versionId: "version-1",
-    createdAt: "2026-09-14T00:00:00Z",
+    createdAt: "2026-09-14T00:00:00.000Z",
     source: {
       recordingId: "fixture-recording",
       revision: 1,
@@ -85,6 +89,33 @@ async function setup(
     await store.close();
     rmSync(directory, { recursive: true, force: true });
   });
+  if (backend === "sqlite") {
+    const authority = new SqliteDemonstratedSkillStore(
+      join(directory, "state.sqlite"),
+      digest,
+    );
+    const record = {
+      tenantId: actor.tenantId,
+      spaceId: actor.spaceId,
+      ownerActorId: actor.actorId,
+      skillId: version.ref.skillId,
+      revision: 1,
+      draft: version.method,
+      source: version.source,
+      disabled: false,
+      deleted: false,
+      activatedVersionIds: [] as string[],
+      createdAt: "2026-09-14T00:00:00.000Z",
+      updatedAt: "2026-09-14T00:00:00.000Z",
+    };
+    await authority.saveSkill(record, 0);
+    await authority.putVersion(record, version);
+    await authority.saveSkill(
+      { ...record, revision: 2, activatedVersionIds: [version.ref.versionId] },
+      1,
+    );
+    await authority.close();
+  }
   let now = "2026-09-13T16:05:00.000Z";
   let failure: string | null = null;
   let corrupt = false;

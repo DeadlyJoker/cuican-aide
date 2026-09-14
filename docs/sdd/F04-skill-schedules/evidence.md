@@ -33,6 +33,24 @@
 
 ## GUI 与真实集成限制
 
+### F03 standalone 宿主垂直验证补充
+
+`apps/control-api/src/automation-skill-host.test.ts` 使用真正 `createStandaloneControlApi`、认证 HTTP、SQLite Skill/Run Store、`ConfiguredSkillExecutionAuthorization`、已持久化 AgentVersion release 和现有 scheduler。前置的已激活 Skill 版本是明确标记的合成测试数据；不模拟 C02 准入、SkillService 或准入授权，也不声称此数据经过真实模型试跑。
+
+两项验证通过：保存固定版本日程；到时触发前禁用则没有 Run/消息/WorkItem 且 readiness 显示阻塞；恢复后触发，冻结发生日与时区解析值；修改未封存草稿不改变执行版本；认证 Run lookup 经 `ensureRunSkillAllowed` 返回绑定，匿名请求 401、禁用后 403；关闭并重开真实宿主后同 occurrence 回执不重复创建 Run，恢复权限后仍读到原参数；取消走现有 Run API；AgentVersion 缺工具时保存 403 且没有日程或 Run。
+
+最初相关六个测试文件共 25 项通过，0 跳过/失败，日志 `/tmp/f04-host-compatibility.log`；Control API typecheck 通过。生产宿主接线现已合入 F03 `eb5b211e3`（本工作树 cherry-pick 为 `34bcb1f7c`），已在该提交上复验。此前本地临时小补丁已替换为 F03 正式提交。不把前后准入检查称为执行中浏览器工具撤权验证。
+
+### 准入与提交之间的真实交错验证
+
+只读复查先在真实 SkillService/SQLite 复现：execute 准入后，另一连接禁用 Skill，再提交 Automation，旧实现仍返回 `committed`，留下 queued Run、一个 WorkItem 和一条消息。该证据只证明入队竞态，不表示工具已执行。
+
+修复后使用认证 HTTP 和真正宿主，在 `commitAutomationCreate` / `commitAutomationInvocation` 边界通过受控交错先执行另一连接的真实禁用，再进入原 SQL 事务。两者均 403、无日程/Run/消息/WorkItem；恢复后同幂等键正常提交；事后禁用再重启，既有 receipt 仍恢复同一 Run。
+
+补充四种提交前权威损坏：缺少版本表、固定版本替换、content_digest 索引列不一致、revision 索引列不一致，分别得到可恢复的 409 代码且没有部分 Run。复查发现的行解码差异已通过复用 F03 普通读的完整解码器消除。
+
+最终宿主文件 8 项通过；相关七个 Control 测试文件 32/32 通过（`/tmp/f04-fence-control-final.log`）；相关 Store/原始 SQLite Run/F03直接Skill/生成/自动化回归 182 通过、6 跳过、0 失败（`/tmp/f04-fence-store-final.log`）；Store、Control typecheck、boundary 通过；UI 恢复文案 24 项通过。新增 PostgreSQL 不支持 v1 新写入的行为测试因未配置 `CREWON_TEST_POSTGRES_URL` 跳过，不能视为 live PostgreSQL 验证。此轮没有重复整仓全量测试，前述全量失败/跳过记录继续保留。
+
 UI 子任务以真正 React 生产组件挂载显式 fixture：1440×900、1280×540、390×640 无横向溢出、提交控件可见；实际选择 previousWeekStart 并提交 version-1；交付目标不匹配时禁用。临时本地预览已清理。该检查不是真实 Skill 生命周期 GUI。
 
 真正 `/#view-schedule` 在当前环境停在登录页，后端 8000 未启动；未据此声称真实上游 UI 成功。Skill 面板「添加到日程」公共 shell 入口及 standalone `skills` 宿主注入由 F03 集成，F04 提供 `skillAutomationDraft` 和可选 `SkillInvocationPort`。无端口时拒绝保存/执行。

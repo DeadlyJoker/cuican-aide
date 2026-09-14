@@ -543,6 +543,15 @@ export function mapAutomationError(
   const code =
     error instanceof AutomationStoreError ? error.code : "automation_internal";
   if (error instanceof AutomationStoreError) {
+    if (["skill_disabled", "skill_not_active", "skill_scope_mismatch"].includes(code)) {
+      return new ApplicationError("authorization", code, { cause: error });
+    }
+    if (["skill_not_found", "skill_version_not_found"].includes(code)) {
+      return new ApplicationError("notFound", code, { cause: error });
+    }
+    if (["skill_authority_unavailable", "automation_skill_backend_unsupported", "skill_ref_mismatch", "skill_digest_mismatch", "skill_store_corrupt", "automation_skill_snapshot_mismatch"].includes(code)) {
+      return new ApplicationError("conflict", code, { cause: error });
+    }
     if (code === "automation_not_found") {
       return new ApplicationError("notFound", code, { cause: error });
     }

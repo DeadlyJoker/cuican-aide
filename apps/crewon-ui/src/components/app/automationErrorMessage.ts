@@ -9,6 +9,8 @@ const unknownOutcomeMessage =
 const skillErrors: Readonly<Record<string, string>> = {
   automation_skill_unavailable:
     "Skill 服务暂时不可用。请恢复连接后重试，原日程配置仍保留。",
+  automation_skill_backend_unsupported:
+    "当前服务不支持 Skill 日程。请连接支持此功能的本地服务后重试。",
   skill_not_found:
     "找不到绑定的 Skill 版本。请返回 Skill 重新选择可用版本，再添加到日程。",
   skill_not_active:
@@ -22,8 +24,7 @@ const skillErrors: Readonly<Record<string, string>> = {
     "Skill 所需工具或连接不可用。请恢复依赖和工具授权后重试。",
   skill_delivery_target_denied:
     "无法访问交付目标。请恢复该对话的权限，或返回 Skill 重新选择交付目标。",
-  skill_budget_exceeded:
-    "执行预算或额度不足。请检查可用预算，恢复后重试。",
+  skill_budget_exceeded: "执行预算或额度不足。请检查可用预算，恢复后重试。",
   skill_context_too_large:
     "Skill 参数或内容超过执行限制。请缩短参数内容，或返回 Skill 减少步骤后重试。",
   automation_delivery_target_mismatch:
@@ -80,13 +81,24 @@ function knownSkillError(code: string): string | undefined {
     "skill_tool_refs_mismatch",
     "skill_tool_refs_invalid",
   ];
-  const canonical = parameterErrors.includes(code)
-    ? "skill_parameters_invalid"
-    : sizeErrors.includes(code)
-      ? "skill_context_too_large"
-      : dependencyErrors.includes(code)
-        ? "skill_dependency_unavailable"
-        : code;
+  const aliases: Readonly<Record<string, string>> = {
+    skill_authority_unavailable: "automation_skill_unavailable",
+    skill_disabled: "skill_not_active",
+    skill_version_not_found: "skill_not_found",
+    skill_ref_mismatch: "skill_digest_mismatch",
+    skill_store_corrupt: "skill_digest_mismatch",
+    skill_scope_mismatch: "skill_access_denied",
+    skill_tool_unavailable: "skill_dependency_unavailable",
+  };
+  const canonical = Object.hasOwn(aliases, code)
+    ? aliases[code]!
+    : parameterErrors.includes(code)
+      ? "skill_parameters_invalid"
+      : sizeErrors.includes(code)
+        ? "skill_context_too_large"
+        : dependencyErrors.includes(code)
+          ? "skill_dependency_unavailable"
+          : code;
   return Object.hasOwn(skillErrors, canonical)
     ? skillErrors[canonical]
     : undefined;

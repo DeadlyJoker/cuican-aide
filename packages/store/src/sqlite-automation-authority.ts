@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { assertSqliteAutomationSkillAllowed } from "./sqlite-automation-skill-admission.ts";
 import { scheduledAutomationQuery } from "./scheduled-automation-query.ts";
 import type { ModelHistoryAppendState } from "./model-history-append-validation.ts";
 
@@ -172,6 +173,7 @@ export class SqliteAutomationAuthority {
         }),
       );
       const record = result.record;
+      assertSqliteAutomationSkillAllowed(this.#database, record.definition, record.definition.createdByActorId);
       this.#database
         .prepare(
           `INSERT INTO automations (
@@ -432,6 +434,7 @@ export class SqliteAutomationAuthority {
         outboxIdExists: this.#operations.outboxIdExists,
         workItemIdExists: this.#operations.workItemIdExists,
       });
+      assertSqliteAutomationSkillAllowed(this.#database, record.definition, result.runState.createdByActorId);
       this.#operations.writeThreadSnapshot(
         currentThread,
         result.threadState,

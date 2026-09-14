@@ -151,6 +151,8 @@ export async function commitPostgresAutomationCreate(
     }
     const result = prepareAutomationCreate(input, thread);
     const record = result.record;
+    if (record.definition.skillBinding)
+      throw new RunStoreError("automation_skill_backend_unsupported");
     await client.query(
       `INSERT INTO ${schema}.automations (
          tenant_id, space_id, automation_id, thread_id, revision,
@@ -238,6 +240,8 @@ export async function commitPostgresAutomationInvocation(
     if (record === null || record.definition.tenantId !== input.tenantId) {
       throw new RunStoreError("automation_not_found");
     }
+    if (record.definition.skillBinding)
+      throw new RunStoreError("automation_skill_backend_unsupported");
     const threadId = input.threadFence.threadId;
     const thread = await loadThread(
       client,
