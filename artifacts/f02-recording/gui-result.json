@@ -1,0 +1,105 @@
+{
+  "status": "passed",
+  "source": "real-electron-synthetic-site",
+  "focusEmulated": true,
+  "osSavePicker": "fixture",
+  "driver": "F05 BrowserViewAutomation / Puppeteer public ExtensionTransport",
+  "inputEvidence": "automation; sensitive-field negatives use synthetic native CDP input; no manual input claim",
+  "layouts": [
+    {
+      "width": 1180,
+      "height": 820,
+      "scrollWidth": 1180,
+      "footerBottom": 820,
+      "viewHeight": 565.5078125,
+      "reviewHeight": 598.0078125
+    },
+    {
+      "width": 680,
+      "height": 560,
+      "scrollWidth": 680,
+      "footerBottom": 560,
+      "viewHeight": 145.5078125,
+      "reviewHeight": 180
+    },
+    {
+      "width": 1024,
+      "height": 560,
+      "scrollWidth": 1024,
+      "footerBottom": 560,
+      "viewHeight": 325.5078125,
+      "reviewHeight": 358.0078125
+    }
+  ],
+  "steps": 15,
+  "evidence": [
+    {
+      "kind": "redacted-layout",
+      "byteLength": 218
+    },
+    {
+      "kind": "redacted-layout",
+      "byteLength": 217
+    },
+    {
+      "kind": "redacted-screenshot",
+      "byteLength": 3499
+    },
+    {
+      "kind": "redacted-screenshot",
+      "byteLength": 4111
+    },
+    {
+      "kind": "redacted-screenshot",
+      "byteLength": 4116
+    },
+    {
+      "kind": "redacted-layout",
+      "byteLength": 217
+    },
+    {
+      "kind": "redacted-layout",
+      "byteLength": 217
+    },
+    {
+      "kind": "redacted-layout",
+      "byteLength": 217
+    },
+    {
+      "kind": "redacted-layout",
+      "byteLength": 218
+    },
+    {
+      "kind": "redacted-layout",
+      "byteLength": 218
+    },
+    {
+      "kind": "redacted-layout",
+      "byteLength": 218
+    },
+    {
+      "kind": "redacted-layout",
+      "byteLength": 218
+    },
+    {
+      "kind": "redacted-layout",
+      "byteLength": 216
+    }
+  ],
+  "revision": 24,
+  "checks": [
+    "ordinary input",
+    "select/filter",
+    "pause excludes events",
+    "sensitive input omitted",
+    "download completed",
+    "delete revision",
+    "annotation",
+    "safe PNG evidence bytes and digests",
+    "download linked to triggering click",
+    "narrow and low-height layouts",
+    "C01 digest",
+    "export file"
+  ],
+  "dataDirectory": "/var/folders/1t/_zjjjy650xb76sl820snlssr0000gn/T/crewon-recording-gui-L2uE4I"
+}
