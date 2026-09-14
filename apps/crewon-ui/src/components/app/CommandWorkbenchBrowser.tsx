@@ -302,6 +302,7 @@ export function CommandWorkbenchBrowser({
   onNewTabRef.current = onNewTab;
   onTitleChangeRef.current = onTitleChange;
   const currentUrl = history.entries[history.index] ?? null;
+  const recording = getDesktopBridge()?.recording;
 
   useEffect(() => {
     onTitleChangeRef.current(browserTitle(currentUrl, locale));
@@ -492,6 +493,33 @@ export function CommandWorkbenchBrowser({
             <div className="command-browser-menu" role="menu">
               <button role="menuitem" type="button" onClick={openBlankTab}>
                 {locale === "zh" ? "新标签页" : "New tab"}
+              </button>
+              <button
+                disabled={!recording}
+                role="menuitem"
+                title={
+                  !recording
+                    ? locale === "zh"
+                      ? "需要 CrewON 桌面应用"
+                      : "Requires the CrewON desktop app"
+                    : undefined
+                }
+                type="button"
+                onClick={() => {
+                  setMenuOpen(false);
+                  void recording?.open().catch((error: unknown) => {
+                    setAddressError(
+                      error instanceof Error ? error.message : String(error),
+                    );
+                  });
+                }}
+              >
+                {locale === "zh" ? "浏览器教学" : "Browser teaching"}
+                {!recording
+                  ? locale === "zh"
+                    ? " · 仅桌面端"
+                    : " · Desktop only"
+                  : ""}
               </button>
               <button
                 disabled={!currentUrl}

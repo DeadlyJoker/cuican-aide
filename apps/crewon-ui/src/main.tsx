@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { App } from "./App";
 import { AgentPlatformAuthGate } from "./components/auth/AgentPlatformAuthGate";
 import { DesktopWindowFrame } from "./components/DesktopWindowFrame";
+import { RecordingWorkspace } from "./components/recording/RecordingWorkspace";
 import { Toaster } from "./components/ui/sonner";
 import { installDesktopFetch } from "./lib/desktop/desktopFetch";
 import { detectRuntimeSurface } from "./lib/platform";
@@ -36,7 +37,7 @@ document.documentElement.dataset.surface = detectRuntimeSurface();
  * mount, and a packaged build needs the desktop request bridge in place by then or
  * that request is blocked by the webview's CORS rules.
  */
-await installDesktopFetch();
+if (!window.crewonRecording) await installDesktopFetch();
 
 type ControlClient = Awaited<ReturnType<typeof loadControlApiClient>>;
 
@@ -94,6 +95,6 @@ function CrewonRoot() {
  */
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <CrewonRoot />
+    {window.crewonRecording ? <RecordingWorkspace /> : <CrewonRoot />}
   </StrictMode>,
 );

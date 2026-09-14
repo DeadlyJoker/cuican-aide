@@ -1,5 +1,9 @@
 import type { BrowserExecutionBridge } from "../browser-execution/browserExecutionGrant.ts";
 import type {
+  RecordingBridge,
+  RecordingSkillImportListener,
+} from "./recordingBridge.ts";
+import type {
   DesktopHttpReadResult,
   DESKTOP_HTTP_VERSION,
 } from "./desktopHttpProtocol.ts";
@@ -123,6 +127,9 @@ export interface CrewonDesktopBridge {
     onBoundsChanged(listener: () => void): () => void;
   };
   readonly browserExecution?: BrowserExecutionBridge;
+  readonly recording?: Pick<RecordingBridge, "open"> & {
+    onSkillImportRequest(listener: RecordingSkillImportListener): () => void;
+  };
   readonly browser: {
     create(id: string, url: string, bounds: DesktopRectangle): Promise<void>;
     updateBounds(id: string, bounds: DesktopRectangle): Promise<void>;
