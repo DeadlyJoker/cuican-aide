@@ -38,10 +38,10 @@ export class ProviderCredentialStore {
   #state: StoredCatalog;
   readonly #onChange: () => Promise<void>;
 
-  constructor(dataDirectory: string, onChange: () => Promise<void>) {
+  constructor(dataDirectory: string, onChange: () => Promise<void>, options: { allowEnvironmentBootstrap?: boolean } = {}) {
     mkdirSync(dataDirectory, { recursive: true, mode: 0o700 });
     this.#path = join(dataDirectory, "provider-credentials.json");
-    this.#state = this.#read();
+    this.#state = this.#read(options.allowEnvironmentBootstrap ?? true);
     this.#onChange = onChange;
   }
 
@@ -64,7 +64,7 @@ export class ProviderCredentialStore {
     const binding = this.#state.bindings.find(
       ({ providerId }) => providerId === this.#state.activeProviderId,
     );
-    if (binding === undefined) return null;
+    if (binding === undefined || !this.#available(binding)) return null;
     return {
       providerId: binding.providerId,
       endpoint: binding.endpoint,
@@ -179,9 +179,7 @@ export class ProviderCredentialStore {
     if (binding.credentialKind === "environment") {
       return Boolean(process.env[binding.environmentVariable!]?.trim());
     }
-    return (
-      binding.encryptedSecret !== null && safeStorage.isEncryptionAvailable()
-    );
+    return Boolean(this.#secret(binding));
   }
 
   #secret(binding: StoredBinding): string | null {
@@ -195,12 +193,18 @@ export class ProviderCredentialStore {
     ) {
       return null;
     }
-    return safeStorage.decryptString(
-      Buffer.from(binding.encryptedSecret, "base64"),
-    );
+    try {
+      return safeStorage.decryptString(
+        Buffer.from(binding.encryptedSecret, "base64"),
+      );
+    } catch {
+      // Migrated user data may contain a secret encrypted by another Mac.
+      // Preserve the binding so Settings can ask for a replacement credential.
+      return null;
+    }
   }
 
-  #read(): StoredCatalog {
+  #read(allowEnvironmentBootstrap: boolean): StoredCatalog {
     if (existsSync(this.#path)) {
       try {
         const metadata = statSync(this.#path);
@@ -219,7 +223,7 @@ export class ProviderCredentialStore {
         // Fall through to the environment bootstrap below.
       }
     }
-    const apiKey = process.env.AICUICAN_API_KEY?.trim();
+    const apiKey = allowEnvironmentBootstrap ? process.env.AICUICAN_API_KEY?.trim() : undefined;
     return {
       schemaVersion: "crewon.provider-credentials.v1",
       activeProviderId: apiKey ? "aicuican" : null,

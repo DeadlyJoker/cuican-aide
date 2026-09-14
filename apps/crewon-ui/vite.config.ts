@@ -216,6 +216,10 @@ export default defineConfig(({ mode }) => {
   return {
     base: "./",
     define: {
+      ...(mode === "desktop" ? {
+        "import.meta.env.VITE_AGENT_PLATFORM_DEV_USERNAME": JSON.stringify(""),
+        "import.meta.env.VITE_AGENT_PLATFORM_DEV_PASSWORD": JSON.stringify(""),
+      } : {}),
       "import.meta.env.VITE_AGENT_PLATFORM_RUNTIME_BASE_URL": JSON.stringify(
         agentPlatformRuntimeBaseUrl.replace(/\/+$/, ""),
       ),

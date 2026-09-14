@@ -1,3 +1,4 @@
+import { useAgentPlatformResources } from "./useAgentPlatformResources";
 import type { ThreadCatalogNavigation } from "../../lib/thread/threadCatalogNavigation";
 import { Plus, ShieldCheck } from "lucide-react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
@@ -98,7 +99,6 @@ import { classNames } from "./commandWorkspaceUtils";
 type ThreadGoalStatus = ThreadGoalView["status"];
 import {
   agentPlatformResourceStates as selectAgentPlatformResourceStates,
-  emptyAgentPlatformSnapshot,
   executionTargetCatalogStatus,
   insertTokenIntoComposerValue,
   readThreadExecutionTarget,
@@ -121,8 +121,6 @@ import {
 import {
   agentPlatformInvocationUrl,
   platformAgentToConfig,
-  readAgentPlatformSnapshot,
-  type AgentPlatformSnapshot,
 } from "../../lib/agent-platform/agentPlatformClient";
 import { agentPlatformControlAgentCatalogAdapter } from "../../lib/agent-platform/agentPlatformControlAgentCatalog";
 import {
@@ -630,7 +628,6 @@ export type CommandOfficeComposerCapabilities = {
   slashItems: PaletteItemWithCommand[];
 };
 
-type PlatformLoadState = "loading" | "ready" | "fallback";
 type PendingAgentPlatformCredential = Readonly<{
   agentId: number | null;
   origin: string;
@@ -1019,10 +1016,7 @@ export function CommandWorkspace({
     "add" | "context" | "provider" | "slash" | null
   >(null);
   const [paletteQuery, setPaletteQuery] = useState("");
-  const [platformState, setPlatformState] =
-    useState<PlatformLoadState>("loading");
-  const [platformSnapshot, setPlatformSnapshot] =
-    useState<AgentPlatformSnapshot>(emptyAgentPlatformSnapshot);
+  const { platformState, platformSnapshot, reloadPlatformResources } = useAgentPlatformResources();
   const platformControlAgentCatalogAdapter = useMemo(
     () => agentPlatformControlAgentCatalogAdapter(platformSnapshot.agents),
     [platformSnapshot.agents],
@@ -1628,28 +1622,6 @@ export function CommandWorkspace({
     });
   }, [cwd, executionTargetClient, workspaceAuthority]);
 
-  useEffect(() => {
-    let cancelled = false;
-    setPlatformState("loading");
-    readAgentPlatformSnapshot()
-      .then((snapshot) => {
-        if (cancelled) {
-          return;
-        }
-        setPlatformSnapshot(snapshot);
-        setPlatformState("ready");
-      })
-      .catch(() => {
-        if (cancelled) {
-          return;
-        }
-        setPlatformSnapshot(emptyAgentPlatformSnapshot);
-        setPlatformState("fallback");
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     setActiveLinkedThreadId(selectedThreadId);
@@ -2192,21 +2164,11 @@ export function CommandWorkspace({
     platformState === "loading"
       ? "正在读取当前账号的资源。"
       : platformState === "fallback"
-        ? "本地 agent-platform 未连接，对话后端不受影响。"
+        ? "账号资源服务暂时不可用，恢复网络后会自动重试。"
         : platformHasResources
           ? "Agent-platform 资源已同步。"
           : "当前账号暂无已创建或已授权的资源。";
 
-  async function reloadPlatformResources() {
-    setPlatformState("loading");
-    try {
-      setPlatformSnapshot(await readAgentPlatformSnapshot());
-      setPlatformState("ready");
-    } catch {
-      setPlatformSnapshot(emptyAgentPlatformSnapshot);
-      setPlatformState("fallback");
-    }
-  }
 
   function openLinkedThread(threadId: string) {
     setActiveLinkedThreadId(threadId);
@@ -4040,6 +4002,7 @@ export function CommandWorkspace({
             onOpenThread={onSelectLinkedThread}
           />
           <TeamView
+            onConfigureModel={onConfigureModel}
             active={activeView === "team"}
             officeRuntime={officeRuntime}
             officeRoomId={officeRoomId}

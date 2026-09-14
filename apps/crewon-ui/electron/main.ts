@@ -35,6 +35,7 @@ import {
 import { loadLocalEnvironment } from "./localEnvironment.ts";
 import { providerModelCatalogForForm } from "./providerModelCatalog.ts";
 import { ProviderCredentialStore } from "./providerCredentials.ts";
+import { provisionPackagedDefaultModel } from "./packagedDefaultModel.ts";
 import { RuntimeSupervisor, runtimePaths } from "./runtimeSupervisor.ts";
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url));
@@ -102,7 +103,11 @@ async function launch(): Promise<void> {
     async () => {
       await runtime?.restart();
     },
+    { allowEnvironmentBootstrap: !app.isPackaged },
   );
+  if (app.isPackaged) {
+    await provisionPackagedDefaultModel({ resourcesPath: process.resourcesPath, providers });
+  }
   runtime = new RuntimeSupervisor({
     browserExecution: () => browserExecution?.connection ?? null,
     revokeBrowserExecutions: () => browserExecution?.host.revokeAll(),

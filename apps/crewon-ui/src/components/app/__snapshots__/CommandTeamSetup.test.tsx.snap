@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`replaces a dead retry action with model setup on a new desktop 1`] = `"<section class="workspace-view team-view"><div class="filter-empty-state" role="status"><h2>配置 AI 模型，开始团队协作</h2><p>这台电脑尚无可用的模型凭据。请在模型设置中填写 API Key 并选择模型，保存后会自动连接团队服务。</p><button class="button" type="button">配置 AI 模型</button></div></section>"`;

@@ -27,7 +27,6 @@ const runtime = new RuntimeSupervisor({
   dataDirectory,
   paths,
   repositoryRoot: null,
-  workspaceRoot: () => null,
   provider: () => ({
     providerId: "packaged-smoke",
     endpoint: "http://127.0.0.1:9/v1",
@@ -51,6 +50,10 @@ try {
     new URL("api/v1/health/ready", runtime.session().baseUrl),
   );
   assert.equal(health.status, 200);
+  const offices = await api.listOffices();
+  assert.ok(Array.isArray(offices.data));
+  const agents = await api.getActiveAgentVersionCatalog();
+  assert.ok(agents);
   const { thread } = await api.createThread(
     { title: "Installed DMG runtime smoke" },
     "dmg-smoke-thread",
@@ -127,6 +130,8 @@ try {
     dataDirectory,
     runtimeSource: paths.source,
     healthStatus: health.status,
+    teamCatalogReadable: true,
+    activeAgentCatalogReadable: true,
     threadId: thread.threadId,
     versionId: version.versionId,
     bytes: original.length,

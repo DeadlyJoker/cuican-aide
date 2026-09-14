@@ -30,7 +30,7 @@ describe("local packaged environment", () => {
     ).toBeNull();
   });
 
-  it("keeps local secrets outside the package and returns only repository env paths", () => {
+  it("never loads developer environment files for a packaged app", () => {
     const root = resolve("/workspace/crewon");
     const resourcesPath = join(
       root,
@@ -47,6 +47,13 @@ describe("local packaged environment", () => {
         repositoryRoot: null,
         resourcesPath,
         pathExists: (path) => existing.has(path),
+      }),
+    ).toEqual([]);
+    expect(
+      localEnvironmentPaths({
+        packaged: false,
+        repositoryRoot: root,
+        resourcesPath,
       }),
     ).toEqual([
       join(root, ".crewon", ".env"),

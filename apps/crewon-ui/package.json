@@ -1,7 +1,7 @@
 {
   "name": "@crewon/ui",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.1.7",
   "description": "CrewON multi-agent collaboration workspace",
   "author": "CrewON",
   "type": "module",
@@ -19,7 +19,9 @@
     "lint": "tsc -b --noEmit && pnpm desktop:host:lint",
     "desktop:host:lint": "tsc -p electron/tsconfig.json --noEmit",
     "test": "vitest run",
-    "test:agent-platform-multiturn": "node scripts/agent-platform-multiturn-eval.mjs"
+    "test:agent-platform-multiturn": "node scripts/agent-platform-multiturn-eval.mjs",
+    "desktop:build:internal": "node --experimental-strip-types scripts/build-desktop-internal.ts",
+    "desktop:verify": "node --experimental-strip-types scripts/verify-desktop-package.ts"
   },
   "dependencies": {
     "@crewon/capability-packs": "workspace:*",

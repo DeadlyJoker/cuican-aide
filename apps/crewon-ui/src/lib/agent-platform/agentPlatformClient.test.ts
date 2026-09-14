@@ -915,3 +915,47 @@ function storage(values: Map<string, string>): Storage {
 function jwt(payload: Record<string, unknown>): string {
   return ["header", btoa(JSON.stringify(payload)), "signature"].join(".");
 }
+
+describe("catalog session recovery", () => {
+  afterEach(() => { clearAgentPlatformSession(); vi.restoreAllMocks(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
+  it("refreshes a rejected catalog request and releases its first response body", async () => {
+    vi.spyOn(Date, "now").mockReturnValue(Date.now() + 60_000);
+    vi.stubGlobal("localStorage", storage(new Map()));
+    storeAgentPlatformSession(jwt({ exp: 4102444800 }), "refresh-old");
+    const rejected = new Response("expired", { status: 401 });
+    const cancel = vi.spyOn(rejected.body!, "cancel");
+    const fresh = jwt({ exp: 4102444900 });
+    const fetchMock = vi.fn(async (url: string) => {
+      if (url.endsWith("/health")) return Response.json({ ok: true });
+      if (url.endsWith("/auth/refresh")) return Response.json({ access_token: fresh, refresh_token: "refresh-new" });
+      if (url.endsWith("/auth/me")) {
+        if (!cancel.mock.calls.length) return rejected;
+        return Response.json({ id: 1, username: "owner" });
+      }
+      return Response.json([]);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const result = await readAgentPlatformSnapshot();
+    expect(result.agents).toEqual([]);
+    expect(cancel).toHaveBeenCalledOnce();
+    expect(fetchMock.mock.calls.filter(([url]) => url.endsWith("/auth/refresh"))).toHaveLength(1);
+  });
+  it("preserves refresh credentials through a temporary service outage", async () => {
+    const values = new Map<string, string>(); vi.stubGlobal("localStorage", storage(values));
+    storeAgentPlatformSession(jwt({ exp: 1 }), "recoverable-refresh");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(null, { status: 503 })));
+    await expect(getAgentPlatformAccessToken()).rejects.toThrow("503");
+    expect(values.get(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY)).toBe("recoverable-refresh");
+  });
+  it("does not restore credentials when logout happens during refresh", async () => {
+    const values = new Map<string, string>(); vi.stubGlobal("localStorage", storage(values));
+    storeAgentPlatformSession(jwt({ exp: 1 }), "old-refresh");
+    let finish!: (value: Response) => void;
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(resolve => { finish = resolve; })));
+    const pending = getAgentPlatformAccessToken();
+    clearAgentPlatformSession();
+    finish(Response.json({ access_token: jwt({ exp: 4102444800 }), refresh_token: "new-refresh" }));
+    await expect(pending).resolves.toBeNull();
+    expect(values.size).toBe(0);
+  });
+});

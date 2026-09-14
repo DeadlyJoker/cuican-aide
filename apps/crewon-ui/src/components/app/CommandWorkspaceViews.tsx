@@ -1,3 +1,4 @@
+import { useDesktopModelSetup } from "./useDesktopModelSetup";
 import {
   Bot,
   Check,
@@ -1272,6 +1273,7 @@ export function KnowledgeCatalogView({
 
 export function TeamView({
   active,
+  onConfigureModel,
   officeRuntime,
   officeRoomId,
   teamMode,
@@ -1291,6 +1293,7 @@ export function TeamView({
   onTeamModeChange,
 }: {
   active: boolean;
+  onConfigureModel?: () => void;
   officeRuntime: Omit<CommandOfficeRoomProps, "isOpen"> | null;
   officeRoomId: string | null;
   teamMode: TeamMode;
@@ -1324,6 +1327,7 @@ export function TeamView({
   const [searchQuery, setSearchQuery] = useState("");
   const [workflowRoomOpen, setWorkflowRoomOpen] = useState(false);
   const officeStatus = officeRuntime?.status ?? "unavailable";
+  const needsModel = useDesktopModelSetup(active);
   const visibleTeamMode = teamMode;
   const hasOfficeRecords = Boolean(officeRuntime?.records.length);
   const hasWorkflowRecords = workflows.length > 0;
@@ -1334,6 +1338,17 @@ export function TeamView({
       hasWorkflowRecords &&
       Boolean(onCreateWorkflow)) ||
     (visibleTeamMode === "experts" && hasExpertRecords);
+  if (needsModel && onConfigureModel && officeStatus === "unavailable") {
+    return (
+      <section className="workspace-view team-view" hidden={!active}>
+        <div className="filter-empty-state" role="status">
+          <h2>配置 AI 模型，开始团队协作</h2>
+          <p>这台电脑尚无可用的模型凭据。请在模型设置中填写 API Key 并选择模型，保存后会自动连接团队服务。</p>
+          <button className="button" type="button" onClick={onConfigureModel}>配置 AI 模型</button>
+        </div>
+      </section>
+    );
+  }
   return (
     <section
       className={classNames(

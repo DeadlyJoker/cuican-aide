@@ -35,9 +35,8 @@ export function localEnvironmentPaths(options: {
   resourcesPath: string;
   pathExists?: PathExists;
 }): string[] {
-  const root = options.packaged
-    ? findLocalPackagedRepositoryRoot(options.resourcesPath, options.pathExists)
-    : options.repositoryRoot;
+  // A release must behave identically inside the repository and in /Applications.
+  const root = options.packaged ? null : options.repositoryRoot;
   if (root === null) return [];
   return [join(root, ".crewon", ".env"), join(root, ".crewon", "dev-ui.env")];
 }

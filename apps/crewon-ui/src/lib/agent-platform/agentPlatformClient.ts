@@ -219,7 +219,7 @@ const DEFAULT_BASE_URL = "/agent-platform-api";
  * Legacy fallback for builds without Vite's embedded runtime endpoint.
  * Desktop packaging embeds the public account origin or an explicit override.
  */
-const PACKAGED_BASE_URL = "http://127.0.0.1:8000";
+const PACKAGED_BASE_URL = "https://pim.aicuican.com";
 const PLATFORM_AVAILABILITY_PROBE_PATH = "/api/v1/health";
 export const AGENT_PLATFORM_TOKEN_STORAGE_KEY = "crewon-agent-platform-token";
 export const AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY =
@@ -270,8 +270,8 @@ function configuredAgentPlatformBaseUrl(): string {
 
 function packagedAgentPlatformBaseUrl(): string {
   return (
-    envValue("VITE_AGENT_PLATFORM_RUNTIME_BASE_URL") ??
-    import.meta.env.VITE_AGENT_PLATFORM_RUNTIME_BASE_URL?.trim() ??
+    envValue("VITE_AGENT_PLATFORM_RUNTIME_BASE_URL") ||
+    import.meta.env.VITE_AGENT_PLATFORM_RUNTIME_BASE_URL?.trim() ||
     PACKAGED_BASE_URL
   ).replace(/\/+$/, "");
 }
@@ -423,12 +423,16 @@ async function request<T>(
     }
   }
 
-  const response = await fetch(`${agentPlatformBaseUrl()}${path}`, {
+  const init = {
     ...options.init,
     headers,
     credentials: options.init?.credentials ?? "same-origin",
-  });
+  } satisfies RequestInit;
+  const response = options.auth
+    ? await agentPlatformAuthorizedFetch(path, init)
+    : await fetch(`${agentPlatformBaseUrl()}${path}`, init);
   if (!response.ok) {
+    await response.body?.cancel();
     throw new Error(
       `agent-platform ${path} failed: ${response.status} ${response.statusText}`,
     );
@@ -630,6 +634,7 @@ export function getAgentPlatformBffUserSnapshot(): Record<
 }
 
 async function loginWithConfiguredDevAccount(): Promise<string | null> {
+  if (import.meta.env.PROD) return null;
   const username = envValue("VITE_AGENT_PLATFORM_DEV_USERNAME");
   const password = envValue("VITE_AGENT_PLATFORM_DEV_PASSWORD");
   if (!username || !password) {
@@ -688,9 +693,17 @@ async function refreshStoredAgentPlatformSession(): Promise<string | null> {
       cache: "no-store",
     },
   );
-  if (!response.ok) {
-    clearAgentPlatformSession();
+  if (localStorage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY) !== refreshToken) {
+    await response.body?.cancel();
     return null;
+  }
+  if (!response.ok) {
+    await response.body?.cancel();
+    if (response.status === 401 || response.status === 403) {
+      clearAgentPlatformSession();
+      return null;
+    }
+    throw new Error(`agent-platform session refresh failed: ${response.status}`);
   }
   const body = (await response.json()) as {
     access_token?: string;
@@ -703,6 +716,7 @@ async function refreshStoredAgentPlatformSession(): Promise<string | null> {
     clearAgentPlatformSession();
     return null;
   }
+  if (localStorage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY) !== refreshToken) return null;
   storeAgentPlatformSession(body.access_token, body.refresh_token);
   return body.access_token;
 }
@@ -796,6 +810,7 @@ export async function agentPlatformAuthorizedFetch(
   init: RequestInit = {},
 ): Promise<Response> {
   const token = await getAgentPlatformToken();
+  const refreshToken = localStorage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY);
   const requestWithToken = (accessToken: string | null) => {
     const headers = new Headers(init.headers);
     headers.set("Accept", headers.get("Accept") ?? "application/json");
@@ -819,15 +834,27 @@ export async function agentPlatformAuthorizedFetch(
   if (
     response.status !== 401 ||
     crewonUnifiedSsoEnabled() ||
-    !localStorage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY)
+    !refreshToken ||
+    localStorage.getItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY) !== refreshToken
   ) {
     return response;
   }
-  cachedToken = null;
-  cachedTokenExpiresAt = 0;
-  localStorage.removeItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
-  const refreshedToken = await getAgentPlatformToken();
-  return refreshedToken ? requestWithToken(refreshedToken) : response;
+  // A late 401 from a parallel catalog request must not erase a newer token.
+  if (cachedToken === token) {
+    cachedToken = null;
+    cachedTokenExpiresAt = 0;
+    localStorage.removeItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY);
+  }
+  let refreshedToken: string | null;
+  try {
+    refreshedToken = await getAgentPlatformToken();
+  } catch (error) {
+    await response.body?.cancel();
+    throw error;
+  }
+  if (!refreshedToken) return response;
+  await response.body?.cancel();
+  return requestWithToken(refreshedToken);
 }
 
 function jwtExpiryMilliseconds(token: string): number {

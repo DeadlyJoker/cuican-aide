@@ -1,10 +1,6 @@
-import { useEffect, useState } from "react";
 import type { Locale } from "../../lib/i18n";
 import type { ConnectionState } from "../../lib/shared/connectionState";
-import {
-  DESKTOP_PROVIDER_CHANGED_EVENT,
-  providerCredentialStore,
-} from "../../lib/model-provider/providerCredentialStore";
+import { useDesktopModelSetup } from "./useDesktopModelSetup";
 
 /** An unconfigured desktop needs setup, not repeated connection attempts. */
 export function CommandRuntimeConnectionStatus({
@@ -18,32 +14,7 @@ export function CommandRuntimeConnectionStatus({
   onConfigureModel?: () => void;
   onReconnect?: () => void;
 }) {
-  const [needsModel, setNeedsModel] = useState(false);
-  useEffect(() => {
-    const store = providerCredentialStore();
-    if (!store || connectionState !== "disconnected") return;
-    let active = true;
-    let generation = 0;
-    const refresh = () => {
-      const request = ++generation;
-      void store
-        .catalog()
-        .then((catalog) => {
-          if (!active || request !== generation) return;
-          const binding = catalog.bindings.find((item) => item.isActive);
-          setNeedsModel(!binding?.credentialAvailable || !binding.modelId);
-        })
-        .catch(() => {
-          if (active && request === generation) setNeedsModel(false);
-        });
-    };
-    refresh();
-    globalThis.addEventListener(DESKTOP_PROVIDER_CHANGED_EVENT, refresh);
-    return () => {
-      active = false;
-      globalThis.removeEventListener(DESKTOP_PROVIDER_CHANGED_EVENT, refresh);
-    };
-  }, [connectionState]);
+  const needsModel = useDesktopModelSetup(connectionState === "disconnected");
 
   if (connectionState === "disconnected" && needsModel && onConfigureModel) {
     return (

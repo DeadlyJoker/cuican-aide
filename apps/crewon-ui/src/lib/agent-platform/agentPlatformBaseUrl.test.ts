@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   agentPlatformBaseUrl,
@@ -30,6 +30,8 @@ function stubLocation(href: string, options: { desktop?: boolean } = {}) {
   });
 }
 
+beforeEach(() => vi.stubEnv("VITE_AGENT_PLATFORM_RUNTIME_BASE_URL", ""));
+
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
@@ -47,13 +49,13 @@ describe("agent-platform base URL", () => {
       "file:///Applications/CrewON.app/Contents/Resources/index.html",
     );
 
-    expect(agentPlatformBaseUrl()).toBe("http://127.0.0.1:8000");
+    expect(agentPlatformBaseUrl()).toBe("https://pim.aicuican.com");
   });
 
   it("dials the backend directly from the Windows packaged webview", () => {
     stubLocation("file:///C:/Program%20Files/CrewON/resources/index.html");
 
-    expect(agentPlatformBaseUrl()).toBe("http://127.0.0.1:8000");
+    expect(agentPlatformBaseUrl()).toBe("https://pim.aicuican.com");
   });
 
   it("leaves an absolute override alone in a packaged build", () => {
@@ -91,7 +93,7 @@ describe("agent-platform base URL", () => {
     );
     vi.stubEnv("VITE_AGENT_PLATFORM_BASE_URL", "/some-other-proxy");
 
-    expect(agentPlatformBaseUrl()).toBe("http://127.0.0.1:8000");
+    expect(agentPlatformBaseUrl()).toBe("https://pim.aicuican.com");
   });
 
   it("strips a trailing slash so paths do not double up", () => {
