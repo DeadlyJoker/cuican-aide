@@ -10,6 +10,19 @@ const outputRoot = resolve(uiRoot, "dist-electron");
 await mkdir(outputRoot, { recursive: true });
 
 await Promise.all([
+  ...["recordingPreload", "recordingPagePreload"].map((name) =>
+    build({
+      entryPoints: [resolve(uiRoot, `electron/${name}.ts`)],
+      outfile: resolve(outputRoot, `${name}.cjs`),
+      bundle: true,
+      platform: "node",
+      format: "cjs",
+      target: "node24",
+      external: ["electron"],
+      sourcemap: true,
+      legalComments: "none",
+    }),
+  ),
   build({
     entryPoints: [resolve(uiRoot, "electron/browserExecutionInspection.ts")],
     outfile: resolve(outputRoot, "browser-execution-inspection.js"),
