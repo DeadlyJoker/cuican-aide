@@ -459,7 +459,11 @@ function requireInstructionWithinLimit(definition: AutomationDefinition): void {
     utf8ByteLength(
       renderAutomationInstructionUnchecked(
         definition,
-        definition.skillBinding ? definition.schedule.nextRunAt : undefined,
+        definition.skillBinding
+          ? definition.executionMode === "manualOnly"
+            ? definition.createdAt
+            : definition.schedule.nextRunAt
+          : undefined,
       ),
     ) > MAX_AUTOMATION_INSTRUCTION_BYTES
   ) {

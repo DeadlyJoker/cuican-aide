@@ -126,7 +126,13 @@ export class AutomationApplicationService {
       { skills: this.#skills, digester: this.#digester },
       actor,
       command,
-      route,
+      {
+        route,
+        validationOccurrence:
+          command.executionMode === "scheduled"
+            ? command.schedule.nextRunAt
+            : this.#now(),
+      },
     );
     const definition = this.#createDefinition(
       actor,

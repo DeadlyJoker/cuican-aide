@@ -21,7 +21,7 @@ export async function prepareAutomationSkillBinding(
   deps: Dependencies,
   actor: ActorContext,
   command: CreateAutomationCommand,
-  route: RunRoute,
+  options: { route: RunRoute; validationOccurrence: string },
 ): Promise<AutomationSkillBinding | undefined> {
   const template = command.skillInvocation;
   if (template === undefined) return undefined;
@@ -33,18 +33,18 @@ export async function prepareAutomationSkillBinding(
       parameters: resolveAutomationParameters(
         template.parameters,
         command.parameterBindings ?? {},
-        command.schedule.nextRunAt,
+        options.validationOccurrence,
         command.schedule.timezone,
       ),
     };
     const admission = await port.admitInvocation(actor, invocation, {
       purpose: "schedule",
-      route,
+      route: options.route,
     });
     const version = parseSkillVersion(admission.version, deps.digester);
     const context = renderSkillInvocationContext(version, invocation);
     if (
-      admission.agentVersionId !== route.agentVersionId ||
+      admission.agentVersionId !== options.route.agentVersionId ||
       skillJson(admission.invocation) !== skillJson(invocation) ||
       admission.context !== context
     ) {
