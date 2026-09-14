@@ -31,14 +31,14 @@ describe("desktop runtime identity", () => {
     });
     const correctedVersion = desktopRuntimeFingerprint({
       ...input,
-      browserExecutionContract: "crewon.browser-execution.v1.1",
+      browserExecutionContract: "crewon.browser-execution.v1.2",
     });
     expect(correctedVersion).not.toBe(oldVersion);
     expect(correctedVersion).not.toBe(desktopRuntimeFingerprint(input));
     expect(correctedVersion).toBe(
       desktopRuntimeFingerprint({
         ...input,
-        browserExecutionContract: "crewon.browser-execution.v1.1",
+        browserExecutionContract: "crewon.browser-execution.v1.2",
       }),
     );
   });

@@ -324,7 +324,7 @@ export class RuntimeSupervisor {
       agentProfiles,
       ...(browserExecution === null
         ? {}
-        : { browserExecutionContract: "crewon.browser-execution.v1.1" }),
+        : { browserExecutionContract: "crewon.browser-execution.v1.2" }),
       localWorkspaceMcp:
         mcpConfig === null
           ? null
