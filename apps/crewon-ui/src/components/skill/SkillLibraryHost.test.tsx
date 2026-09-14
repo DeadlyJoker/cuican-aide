@@ -162,6 +162,89 @@ describe("Skill library host integration", () => {
     });
   }
 
+  it("removes all prior account Skill data when the next account list fails", async () => {
+    await render();
+    expect(container.textContent).toContain("销售汇总");
+    const nextControl = {
+      ...control,
+      requestSkill: vi.fn(async () => {
+        throw new Error("account_b_unavailable");
+      }),
+    };
+    await act(async () =>
+      root.render(<SkillLibraryHost controlClient={nextControl} />),
+    );
+    expect(container.textContent).not.toContain("销售汇总");
+    expect(container.textContent).not.toContain("汇总指定日期销售额");
+    expect(container.textContent).toContain("暂时无法读取示教 Skill");
+    expect(
+      container.querySelector(".demonstrated-skill-library-card"),
+    ).toBeNull();
+  });
+
+  it("does not continue an old account thread preparation into a Skill execution after switching accounts", async () => {
+    let resolve!: (value: {
+      thread: { threadId: string; revision: number };
+    }) => void;
+    control.createThread = vi.fn(
+      () =>
+        new Promise<{ thread: { threadId: string; revision: number } }>(
+          (done) => {
+            resolve = done;
+          },
+        ),
+    );
+    await prepareTrial();
+    await click("开始试跑");
+    const nextControl = {
+      ...control,
+      requestSkill: vi.fn(async () => Response.json({ skills: [] })),
+    };
+    await act(async () =>
+      root.render(<SkillLibraryHost controlClient={nextControl} />),
+    );
+    await act(async () =>
+      resolve({ thread: { threadId: "real-thread-1", revision: 1 } }),
+    );
+    expect(control.getThread).not.toHaveBeenCalled();
+    expect(posts).toHaveLength(0);
+    expect(
+      nextControl.requestSkill.mock.calls.every(
+        (call) =>
+          (call as unknown as [string, RequestInit])[1]?.method !== "POST",
+      ),
+    ).toBe(true);
+  });
+
+  it("does not open an old account Run after its delayed lookup resolves in another account", async () => {
+    await prepareTrial();
+    await click("开始试跑");
+    let resolve!: (value: { run: { runId: string; threadId: string } }) => void;
+    control.getRun = vi.fn(
+      () =>
+        new Promise<{ run: { runId: string; threadId: string } }>((done) => {
+          resolve = done;
+        }),
+    );
+    await click("查看运行结果");
+    const nextControl = {
+      ...control,
+      requestSkill: vi.fn(async () => Response.json({ skills: [] })),
+    };
+    await act(async () =>
+      root.render(
+        <SkillLibraryHost
+          controlClient={nextControl}
+          onSelectThread={onSelectThread}
+        />,
+      ),
+    );
+    await act(async () =>
+      resolve({ run: { runId: "run-1", threadId: "old-private-thread" } }),
+    );
+    expect(onSelectThread).not.toHaveBeenCalled();
+  });
+
   it("opens an imported Skill by authoritative id even when it is outside the current catalog page or search", async () => {
     const onOpenRequestHandled = vi.fn();
     const requestSkill = control.requestSkill;

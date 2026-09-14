@@ -7,6 +7,7 @@ import type {
   SkillGenerationView,
 } from "../../lib/skill/demonstratedSkillClient";
 import { SkillMethodSummary } from "./SkillMethodSummary";
+import { skillClientKey, useSkillOperationScope } from "./skillClientScope";
 
 type Props = {
   skillId: string;
@@ -33,7 +34,16 @@ function generationError(error: unknown) {
   return "模型整理请求未完成，请更新状态或重试原请求。";
 }
 
-export function SkillDraftGeneration({
+export function SkillDraftGeneration(props: Props) {
+  return (
+    <SkillDraftGenerationContent
+      key={`${skillClientKey(props.client)}:${props.skillId}`}
+      {...props}
+    />
+  );
+}
+
+function SkillDraftGenerationContent({
   skillId,
   expectedSkillRevision,
   draftDirty,
@@ -46,6 +56,7 @@ export function SkillDraftGeneration({
   onApplyingChange,
   onOpenRun,
 }: Props) {
+  const captureScope = useSkillOperationScope(client);
   const attempt = useRef<SkillGenerationAttempt | null>(
     attemptStore?.get() ?? null,
   );
@@ -57,14 +68,12 @@ export function SkillDraftGeneration({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [revisionConflict, setRevisionConflict] = useState(false);
-  const active = useRef(true);
   const busyRef = useRef(false);
   const reads = useRef(0);
 
   function accept(next: SkillGenerationView) {
     if (next.skillId !== skillId)
       throw new Error("skill_generation_identity_invalid");
-    if (!active.current) return;
     setGeneration(next);
     if (next.runId && next.generationId === attempt.current?.generationId) {
       attempt.current = null;
@@ -74,12 +83,12 @@ export function SkillDraftGeneration({
   }
 
   useEffect(() => {
-    active.current = true;
+    const isCurrent = captureScope();
     const sequence = ++reads.current;
     void client
       .listGenerations(skillId)
       .then((items) => {
-        if (!active.current || reads.current !== sequence) return;
+        if (!isCurrent() || reads.current !== sequence) return;
         const pending = attempt.current;
         const selected = pending
           ? items.find((item) => item.generationId === pending.generationId)
@@ -89,42 +98,43 @@ export function SkillDraftGeneration({
         if (selected) accept(selected);
       })
       .catch((failure: unknown) => {
-        if (active.current && reads.current === sequence)
+        if (isCurrent() && reads.current === sequence)
           setError(generationError(failure));
       })
       .finally(() => {
-        if (active.current && reads.current === sequence) setLoading(false);
+        if (isCurrent() && reads.current === sequence) setLoading(false);
       });
     return () => {
-      active.current = false;
       reads.current += 1;
     };
   }, [client, skillId]);
 
   async function update() {
-    if (!generation) return;
+    const isCurrent = captureScope();
+    if (!generation || !isCurrent()) return;
     const id = generation.generationId;
     const sequence = ++reads.current;
     let next = await client.readGeneration(skillId, id);
     if (next.generationId !== id)
       throw new Error("skill_generation_identity_invalid");
-    if (!active.current || sequence !== reads.current) return;
+    if (!isCurrent() || sequence !== reads.current) return;
     accept(next);
     if (next.status === "completed" && next.outcome === "pending") {
       next = await client.collectGeneration(skillId, id);
-      if (active.current && sequence === reads.current) accept(next);
+      if (isCurrent() && sequence === reads.current) accept(next);
     }
   }
 
   async function operate(action: () => Promise<void>) {
-    if (busyRef.current) return;
+    const isCurrent = captureScope();
+    if (busyRef.current || !isCurrent()) return;
     busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
       await action();
     } catch (failure) {
-      if (active.current) {
+      if (isCurrent()) {
         setError(generationError(failure));
         if (
           failure instanceof Error &&
@@ -133,8 +143,10 @@ export function SkillDraftGeneration({
           setRevisionConflict(true);
       }
     } finally {
-      busyRef.current = false;
-      if (active.current) setBusy(false);
+      if (isCurrent()) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   }
 
@@ -155,6 +167,8 @@ export function SkillDraftGeneration({
   ]);
 
   async function begin() {
+    const isCurrent = captureScope();
+    if (!isCurrent()) return;
     const pending = attempt.current ?? {
       generationId: crypto.randomUUID(),
       expectedSkillRevision,
@@ -168,6 +182,7 @@ export function SkillDraftGeneration({
         const target = prepareExecutionTarget
           ? await prepareExecutionTarget(pending.generationId)
           : executionTarget;
+        if (!isCurrent()) return;
         if (!target) throw new Error("skill_execution_target_required");
         pending.command = {
           ...target,
@@ -175,7 +190,9 @@ export function SkillDraftGeneration({
           expectedSkillRevision: pending.expectedSkillRevision,
         };
       }
-      accept(await client.startGeneration(skillId, pending.command));
+      if (!isCurrent()) return;
+      const next = await client.startGeneration(skillId, pending.command);
+      if (isCurrent()) accept(next);
     });
   }
 
@@ -293,6 +310,8 @@ export function SkillDraftGeneration({
                   disabled={!canApply}
                   onClick={() =>
                     void operate(async () => {
+                      const isCurrent = captureScope();
+                      if (!isCurrent()) return;
                       onApplyingChange?.(true);
                       try {
                         const next = await client.applyGeneration(
@@ -300,10 +319,11 @@ export function SkillDraftGeneration({
                           generation.generationId,
                           generation.expectedSkillRevision,
                         );
+                        if (!isCurrent()) return;
                         accept(next);
                         await onApplied();
                       } finally {
-                        onApplyingChange?.(false);
+                        if (isCurrent()) onApplyingChange?.(false);
                       }
                     })
                   }

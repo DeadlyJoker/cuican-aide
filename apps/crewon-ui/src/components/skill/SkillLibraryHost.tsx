@@ -9,6 +9,7 @@ import {
 } from "../../lib/skill/demonstratedSkillClient";
 import { DemonstratedSkillPanel } from "./DemonstratedSkillPanel";
 import type { SkillLibraryOpenRequest } from "./useRecordingSkillImport";
+import { skillClientKey, useSkillOperationScope } from "./skillClientScope";
 import "./demonstrated-skill.css";
 
 /** Narrow Control port; all identities and revisions originate at the host. */
@@ -48,7 +49,13 @@ const pendingGenerations = new WeakMap<
   Map<string, SkillGenerationAttempt>
 >();
 
-export function SkillLibraryHost({
+export function SkillLibraryHost(props: SkillLibraryHostProps) {
+  return (
+    <SkillLibraryContent key={skillClientKey(props.controlClient)} {...props} />
+  );
+}
+
+function SkillLibraryContent({
   controlClient,
   query = "",
   openRequest = null,
@@ -57,6 +64,7 @@ export function SkillLibraryHost({
   scheduleNotice,
   onAddToSchedule,
 }: SkillLibraryHostProps) {
+  const captureScope = useSkillOperationScope(controlClient);
   const client = useMemo(
     () =>
       createDemonstratedSkillClient((path, init) =>
@@ -83,7 +91,6 @@ export function SkillLibraryHost({
   const [busy, setBusy] = useState(true);
   const [hasMore, setHasMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const active = useRef(true);
   const sequence = useRef(0);
   const selectionSequence = useRef(0);
   const [openingImported, setOpeningImported] = useState(false);
@@ -92,6 +99,8 @@ export function SkillLibraryHost({
   handledRef.current = onOpenRequestHandled;
 
   async function load(after?: string) {
+    const isCurrent = captureScope();
+    if (!isCurrent()) return;
     const current = ++sequence.current;
     setBusy(true);
     setError(null);
@@ -100,7 +109,7 @@ export function SkillLibraryHost({
         ...(after ? { after } : {}),
         limit: 50,
       });
-      if (!active.current || current !== sequence.current) return;
+      if (!isCurrent() || current !== sequence.current) return;
       setSkills((previous) =>
         after
           ? [
@@ -116,41 +125,40 @@ export function SkillLibraryHost({
       );
       setHasMore(page.length === 50);
     } catch {
-      if (active.current && current === sequence.current)
+      if (isCurrent() && current === sequence.current)
         setError("暂时无法读取示教 Skill，请刷新重试。");
     } finally {
-      if (active.current && current === sequence.current) setBusy(false);
+      if (isCurrent() && current === sequence.current) setBusy(false);
     }
   }
 
   useEffect(() => {
-    active.current = true;
     setSelected(null);
     void load();
     return () => {
-      active.current = false;
       sequence.current += 1;
       selectionSequence.current += 1;
     };
   }, [client]);
 
   async function openImportedSkill() {
-    if (!openRequest) return;
+    const isCurrent = captureScope();
+    if (!openRequest || !isCurrent()) return;
     const current = ++selectionSequence.current;
     setOpeningImported(true);
     setImportOpenError(false);
     try {
       const detail = await client.read(openRequest.skillId);
-      if (!active.current || current !== selectionSequence.current) return;
+      if (!isCurrent() || current !== selectionSequence.current) return;
       if (detail.skill.skillId !== openRequest.skillId || detail.skill.deleted)
         throw new Error("skill_import_selection_invalid");
       setSelected(detail.skill);
       handledRef.current?.(openRequest.requestId);
     } catch {
-      if (active.current && current === selectionSequence.current)
+      if (isCurrent() && current === selectionSequence.current)
         setImportOpenError(true);
     } finally {
-      if (active.current && current === selectionSequence.current)
+      if (isCurrent() && current === selectionSequence.current)
         setOpeningImported(false);
     }
   }
@@ -164,12 +172,16 @@ export function SkillLibraryHost({
   async function prepareExecutionTarget(
     executionId: string,
   ): Promise<SkillExecutionTarget> {
+    const isCurrent = captureScope();
+    if (!isCurrent()) throw new Error("skill_client_scope_changed");
     if (!selected) throw new Error("skill_selection_required");
     const created = await controlClient.createThread(
       { title: `Skill · ${selected.draft.name}` },
       `skill-thread:${executionId}`,
     );
+    if (!isCurrent()) throw new Error("skill_client_scope_changed");
     const { thread } = await controlClient.getThread(created.thread.threadId);
+    if (!isCurrent()) throw new Error("skill_client_scope_changed");
     if (
       thread.threadId !== created.thread.threadId ||
       !thread.threadId ||
@@ -187,14 +199,17 @@ export function SkillLibraryHost({
   }
 
   async function openRun(runId: string) {
+    const isCurrent = captureScope();
+    if (!isCurrent()) return;
     setError(null);
     try {
       const { run } = await controlClient.getRun(runId);
+      if (!isCurrent()) return;
       if (run.runId !== runId || !run.threadId)
         throw new Error("skill_run_identity_invalid");
-      if (active.current) onSelectThread?.(run.threadId);
+      onSelectThread?.(run.threadId);
     } catch {
-      if (active.current) setError("暂时无法打开运行结果，请重试。");
+      if (isCurrent()) setError("暂时无法打开运行结果，请重试。");
     }
   }
 

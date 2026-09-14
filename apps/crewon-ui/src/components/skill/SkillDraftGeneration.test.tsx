@@ -140,6 +140,123 @@ describe("model-generated Skill draft", () => {
     await act(async () => button(label).click());
   }
 
+  it.each(["unmount", "replace-client"] as const)(
+    "does not start model generation after target preparation and %s",
+    async (change) => {
+      let resolve!: (value: {
+        threadId: string;
+        expectedThreadRevision: number;
+        agentVersionId: null;
+      }) => void;
+      prepareExecutionTarget.mockImplementationOnce(
+        () =>
+          new Promise((done) => {
+            resolve = done;
+          }),
+      );
+      await render();
+      await click("让模型整理草稿");
+      const nextClient = createDemonstratedSkillClient(async () =>
+        Response.json({ generations: [] }),
+      );
+      await act(async () =>
+        root.render(
+          change === "unmount" ? null : (
+            <SkillDraftGeneration
+              skillId="skill-1"
+              expectedSkillRevision={7}
+              draftDirty={false}
+              disabled={false}
+              client={nextClient}
+              executionTarget={null}
+              onApplied={onApplied}
+            />
+          ),
+        ),
+      );
+      await act(async () =>
+        resolve({
+          threadId: "old-model-thread",
+          expectedThreadRevision: 3,
+          agentVersionId: null,
+        }),
+      );
+      expect(posts).toHaveLength(0);
+      expect(onApplied).not.toHaveBeenCalled();
+    },
+  );
+
+  it("does not notify or replace the next account draft when an earlier apply response arrives", async () => {
+    server = projection();
+    let resolve!: (value: Response) => void;
+    const previousRequest = request.getMockImplementation()!;
+    request.mockImplementation((path, init) =>
+      path.endsWith("/apply")
+        ? new Promise((done) => {
+            resolve = done;
+          })
+        : previousRequest(path, init),
+    );
+    await render();
+    await click("采用候选草稿");
+    const nextClient = createDemonstratedSkillClient(async () =>
+      Response.json({ generations: [] }),
+    );
+    await act(async () =>
+      root.render(
+        <SkillDraftGeneration
+          skillId="skill-1"
+          expectedSkillRevision={7}
+          draftDirty={false}
+          disabled={false}
+          client={nextClient}
+          executionTarget={null}
+          onApplied={onApplied}
+        />,
+      ),
+    );
+    await act(async () =>
+      resolve(Response.json({ ...projection(), appliedRevision: 8 })),
+    );
+    expect(onApplied).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain(candidate.purpose);
+    expect(container.textContent).not.toContain("候选已采用");
+  });
+
+  it("ignores a submitted generation result after switching accounts", async () => {
+    let resolve!: (value: Response) => void;
+    const previousRequest = request.getMockImplementation()!;
+    request.mockImplementation((path, init) =>
+      path.endsWith("/generations") && init?.method === "POST"
+        ? new Promise((done) => {
+            resolve = done;
+          })
+        : previousRequest(path, init),
+    );
+    await render();
+    await click("让模型整理草稿");
+    const nextClient = createDemonstratedSkillClient(async () =>
+      Response.json({ generations: [] }),
+    );
+    await act(async () =>
+      root.render(
+        <SkillDraftGeneration
+          skillId="skill-1"
+          expectedSkillRevision={7}
+          draftDirty={false}
+          disabled={false}
+          client={nextClient}
+          executionTarget={null}
+          onApplied={onApplied}
+        />,
+      ),
+    );
+    await act(async () => resolve(Response.json(projection())));
+    expect(container.textContent).not.toContain(candidate.purpose);
+    expect(container.textContent).not.toContain("候选草稿待审阅");
+    expect(onApplied).not.toHaveBeenCalled();
+  });
+
   it("uses a real model Run, validates its completed output, and only changes the draft after explicit adoption", async () => {
     await render();
     expect(container.textContent).toContain("预处理草稿");

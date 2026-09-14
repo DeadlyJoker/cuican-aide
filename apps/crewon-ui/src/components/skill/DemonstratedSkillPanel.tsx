@@ -26,6 +26,7 @@ import type {
   BrowserGrantScope,
 } from "../../lib/browser-execution/browserExecutionGrant";
 import { isReviewedRealTrial, SkillTrialReview } from "./SkillTrialReview";
+import { skillClientKey, useSkillOperationScope } from "./skillClientScope";
 import "./demonstrated-skill.css";
 
 export type DemonstratedSkillPanelProps = {
@@ -48,7 +49,12 @@ export type DemonstratedSkillPanelProps = {
 };
 
 export function DemonstratedSkillPanel(props: DemonstratedSkillPanelProps) {
-  return <SkillPanelContent key={props.skillId} {...props} />;
+  return (
+    <SkillPanelContent
+      key={`${skillClientKey(props.client)}:${props.skillId}`}
+      {...props}
+    />
+  );
 }
 
 function errorText(error: unknown): string {
@@ -105,6 +111,7 @@ function SkillPanelContent({
   onAddToSchedule,
   onOpenRun,
 }: DemonstratedSkillPanelProps) {
+  const captureScope = useSkillOperationScope(client);
   const [detail, setDetail] = useState<DemonstratedSkillDetail | null>(null);
   const [draft, setDraft] = useState<SkillMethod | null>(null);
   const executionAttempt = useRef<SkillExecutionAttempt | null>(
@@ -135,7 +142,6 @@ function SkillPanelContent({
   const [retryPurpose, setRetryPurpose] = useState<"trial" | "execute" | null>(
     executionAttempt.current?.purpose ?? null,
   );
-  const active = useRef(true);
   const busyRef = useRef(false);
   const readSequence = useRef(0);
 
@@ -143,9 +149,11 @@ function SkillPanelContent({
     replaceDraft?: boolean;
     selectNewest?: boolean;
   }) {
+    const isCurrent = captureScope();
+    if (!isCurrent()) return;
     const sequence = ++readSequence.current;
     const next = await client.read(skillId);
-    if (!active.current || sequence !== readSequence.current) return;
+    if (!isCurrent() || sequence !== readSequence.current) return;
     setDetail(next);
     if (options?.selectNewest) setBrowserCommand(null);
     if (
@@ -174,12 +182,11 @@ function SkillPanelContent({
     );
   }
   useEffect(() => {
-    active.current = true;
+    const isCurrent = captureScope();
     void refresh().catch((failure: unknown) => {
-      if (active.current) setError(errorText(failure));
+      if (isCurrent()) setError(errorText(failure));
     });
     return () => {
-      active.current = false;
       readSequence.current += 1;
     };
   }, [client, skillId]);
@@ -189,10 +196,11 @@ function SkillPanelContent({
   );
   useEffect(() => {
     if (!pending) return;
+    const isCurrent = captureScope();
     const interval = window.setInterval(() => {
       if (!busyRef.current)
         void refresh().catch(() => {
-          if (active.current) setError("试跑状态暂未更新，请刷新重试。");
+          if (isCurrent()) setError("试跑状态暂未更新，请刷新重试。");
         });
     }, 3000);
     return () => window.clearInterval(interval);
@@ -203,21 +211,25 @@ function SkillPanelContent({
     success: string | (() => string),
     options?: { replaceDraft?: boolean; selectNewest?: boolean },
   ) {
-    if (busyRef.current) return;
+    const isCurrent = captureScope();
+    if (busyRef.current || !isCurrent()) return;
     busyRef.current = true;
     setBusy(true);
     setError(null);
     setNotice(null);
     try {
       await action();
+      if (!isCurrent()) return;
       await refresh(options);
-      if (active.current)
+      if (isCurrent())
         setNotice(typeof success === "function" ? success() : success);
     } catch (failure) {
-      if (active.current) setError(errorText(failure));
+      if (isCurrent()) setError(errorText(failure));
     } finally {
-      busyRef.current = false;
-      if (active.current) setBusy(false);
+      if (isCurrent()) {
+        busyRef.current = false;
+        setBusy(false);
+      }
     }
   }
 
@@ -225,6 +237,8 @@ function SkillPanelContent({
     purpose: "trial" | "execute",
     invocation: SkillInvocationSpec,
   ) {
+    const isCurrent = captureScope();
+    if (!isCurrent()) return;
     if (
       executionAttempt.current &&
       executionAttempt.current.purpose !== purpose
@@ -246,6 +260,7 @@ function SkillPanelContent({
           const target = prepareExecutionTarget
             ? await prepareExecutionTarget(attempt.executionId)
             : executionTarget;
+          if (!isCurrent()) return;
           if (!target) throw new Error("skill_execution_target_required");
           attempt.command = {
             ...target,
@@ -254,6 +269,7 @@ function SkillPanelContent({
             invocation: attempt.invocation,
           };
         }
+        if (!isCurrent()) return;
         if (
           needsSkillBrowserAuthorization(attempt.invocation.requiredToolRefs)
         ) {

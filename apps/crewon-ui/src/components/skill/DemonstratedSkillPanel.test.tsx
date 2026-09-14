@@ -151,6 +151,68 @@ describe("DemonstratedSkillPanel", () => {
     expect(container.innerHTML).toMatchSnapshot();
   });
 
+  it.each(["unmount", "replace-client"] as const)(
+    "does not submit a prepared trial after %s",
+    async (change) => {
+      let resolve!: (value: {
+        threadId: string;
+        expectedThreadRevision: number;
+        agentVersionId: null;
+      }) => void;
+      const prepareExecutionTarget = vi.fn(
+        () =>
+          new Promise<{
+            threadId: string;
+            expectedThreadRevision: number;
+            agentVersionId: null;
+          }>((done) => {
+            resolve = done;
+          }),
+      );
+      await act(async () =>
+        root.render(
+          <DemonstratedSkillPanel
+            skillId="skill-1"
+            client={client}
+            executionTarget={null}
+            prepareExecutionTarget={prepareExecutionTarget}
+          />,
+        ),
+      );
+      await fill("试跑参数：报表日期", "2026-09-21");
+      await click("开始试跑");
+      const nextClient = {
+        ...client,
+        read: vi.fn(async () => {
+          throw new Error("new_account_offline");
+        }),
+        startExecution: vi.fn(),
+      };
+      await act(async () =>
+        root.render(
+          change === "unmount" ? null : (
+            <DemonstratedSkillPanel
+              skillId="skill-1"
+              client={nextClient}
+              executionTarget={null}
+            />
+          ),
+        ),
+      );
+      await act(async () =>
+        resolve({
+          threadId: "old-thread",
+          expectedThreadRevision: 9,
+          agentVersionId: null,
+        }),
+      );
+      expect(client.startExecution).not.toHaveBeenCalled();
+      expect(nextClient.startExecution).not.toHaveBeenCalled();
+      expect(container.textContent).not.toContain(method.name);
+      expect(client.read).toHaveBeenCalledTimes(1);
+    },
+  );
+
   it("edits a draft with revision checking and never writes an immutable version", async () => {
     await render();
     await fill("用途", "按部门汇总指定日期的销售数据");
