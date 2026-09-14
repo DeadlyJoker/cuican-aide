@@ -1,6 +1,6 @@
 # F04 验收证据
 
-状态：S2 消费端实现与兼容检查完成；S3 真实产品闭环待 F03/F05 集成。基线 `79bf09d88`；S1 `09b51b49c`；首个实现 `ae3d3c285`。所有工作在本任务工作树，无 push/发布/合回原始 main。
+状态：F04 消费端实现、真实宿主与公共 UI 入口接入完成；完整 E05 真实产品闭环仍由协调任务组织 F03/F05 联合验收。基线 `79bf09d88`；S1 `09b51b49c`；核心 `ae3d3c285`；UI/Run 映射 `3e3200d47`；真实宿主测试 `90b9da1a2`；SQLite 事务竞态修复 `ff84a9e80`；手动日期修复 `9d241ee3d`。所有工作在本任务工作树，无 push/发布/合回原始 main。
 
 ## 需求与可重复行为证据
 
@@ -55,6 +55,12 @@
 
 UI 子任务以真正 React 生产组件挂载显式 fixture：1440×900、1280×540、390×640 无横向溢出、提交控件可见；实际选择 previousWeekStart 并提交 version-1；交付目标不匹配时禁用。临时本地预览已清理。该检查不是真实 Skill 生命周期 GUI。
 
-真正 `/#view-schedule` 在当前环境停在登录页，后端 8000 未启动；未据此声称真实上游 UI 成功。Skill 面板「添加到日程」公共 shell 入口及 standalone `skills` 宿主注入由 F03 集成，F04 提供 `skillAutomationDraft` 和可选 `SkillInvocationPort`。无端口时拒绝保存/执行。
+早期真正 `/#view-schedule` 在当前环境停在登录页，后端 8000 未启动；未据此声称 GUI 操作成功。随后已合入 F03 公共 shell 入口 `ee79f42c8`（本地 `a1811453f`）及必要 F02/F05 组件和 `505cbeeb9` 无工具生成依赖；没有复制上游未提交代码。
+
+公共入口源码与行为已窄验：Skill 选定固定版本后，`useSkillScheduleEntry` 优先选交付对话、否则选当前对话，无对话时调用现有 Control 创建/读取对话；未知创建回执用同一幂等键重试，切换认证 client 后丢弃旧结果。成功回调通过 `skillAutomationDraft` 设置目标对话并打开原日程表单，保留原日期规则/恢复/手动 Run 路径。入口组件测试使用明确的 client fixture；真实宿主授权与 SQLite 行为另由上述 HTTP 测试证明，不声称完成真人录制或真实 GUI E05。
+
+合入后的 9 文件/79 UI 测试通过，原 ControlAutomationRuntime 与 Skill 日程 DOM 路径另 2 文件/31 项通过，共 11 文件/110 项；UI lint（含 Electron 类型检查）和 build 通过，build 保留既有大 chunk 提示；真实宿主/Skill日程/v0 三文件 21/21 通过。日志分别为 `/tmp/f04-public-ui-tests.log`、`/tmp/f04-public-ui-runtime.log`、`/tmp/f04-public-ui-lint.log`、`/tmp/f04-public-ui-build.log`、`/tmp/f04-public-host-tests.log`。没有重复前述全量检查，也未把早期全量 UI 超时改记为绿。
+
+最后合入上游后，Control typecheck、boundary、format 再次通过；F04 真正 Worker 的流式/参数篡改用例 1 项再验通过（`/tmp/f04-public-worker.log`），模型端口仍是明确的 deterministic fixture。
 
 未覆盖：真实模型生成/试跑/激活 → 真实浏览器取数 → 真正 XLSX → 到时执行的 E05；真实 C03 目标授权/文件交付；C05 独立显式重复授权以及在途工具撤权；真实 GUI 刷新/进程恢复。F03/F05 owner 已接到可验证 Run 映射端口，resolver 只证明身份、不授予权限。当前不把组件夹具、固定假模型输出或 SQLite 恢复当作这些上游验收。
