@@ -860,6 +860,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/runs/{runId}/browser-execution-authority": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read authenticated current Run facts for the browser host; this response is not an execution grant */
+    get: operations["getBrowserExecutionAuthority"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -2131,6 +2148,16 @@ export interface components {
         /** @enum {string} */
         source: "turnStartReceipt" | "messageCompletedEvent" | "unassociated";
       }[];
+    };
+    BrowserExecutionAuthorityResponse: {
+      /** @constant */
+      schemaVersion: "crewon.browser-execution-authority.v1";
+      runId: string;
+      threadId: string;
+      workspaceBindingId: string | null;
+      status: components["schemas"]["RunStatus"];
+      cancelRequested: boolean;
+      revision: number;
     };
   };
   responses: {
@@ -4260,6 +4287,34 @@ export interface operations {
       403: components["responses"]["Error"];
       404: components["responses"]["Error"];
       409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getBrowserExecutionAuthority: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        runId: components["parameters"]["RunId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current identity, workspace binding and cancellation state. Never cached. */
+      200: {
+        headers: {
+          "Cache-Control"?: "no-store";
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BrowserExecutionAuthorityResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
       500: components["responses"]["Error"];
     };
   };

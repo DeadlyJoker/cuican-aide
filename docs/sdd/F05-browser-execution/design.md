@@ -53,3 +53,7 @@ B01/B02：真实工具配置与认证桥网络测试、跨 thread/撤权反例�
 官方来源：[Puppeteer ConnectionTransport](https://pptr.dev/api/puppeteer.connectiontransport)、[公开 ExtensionTransport](https://pptr.dev/api/puppeteer.extensiontransport)、[Electron Debugger](https://www.electronjs.org/docs/latest/api/debugger)、[Playwright Electron](https://playwright.dev/docs/api/class-electron)。Playwright Electron接口仍experimental且launch路径会要求另行启动宿主；普通connectOverCDP需要endpoint。本次私有Debugger直接ConnectionTransport探针在Target.getBrowserContexts得到Not allowed；官方ExtensionTransport已经适配这种单tab受限能力，因此复用其公开接口而不重写Target代理。该ExtensionTransport本身标记experimental，固定版本并用真实Electron回归覆盖升级风险。
 
 探针 scripts/browser-execution/puppeteer-probe.mjs：使用隔离临时userData与同一个WebContentsView，无F02集成/真实模型证据。普通fill='2026-09'、button click使document.title='clicked'，实际WebContentsId=2。Electron message sessionId空串映射为undefined才能匹配官方单tabtransport。CDP click触发before-mouse-event，生产适配通过单命令Input计数识别自发事件；显式接管/撤权仍独立中止。select/下载/导航/取消/重附着继续验证，未先验声称完成。
+
+## C05 权威事实读取
+
+新增认证只读 GET `/api/v1/runs/:runId/browser-execution-authority`，独立route模块，经application.getRun复用run:read鉴权；返回版本化schemaVersion/runId/threadId/workspaceBindingId/status/cancelRequested/revision并严格parser/OpenAPI覆盖，未知query拒绝、响应no-store。RunState中workspaceBindingId是扁平真实字段，null明确返回。该GET不授予执行权；宿主仍核验grant、真实ToolRuntime lease和Skill准入。cancelRequested即使status仍running也立即使active=false。

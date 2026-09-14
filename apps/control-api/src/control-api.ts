@@ -1,4 +1,5 @@
 import { registerThreadActiveRunRoute } from "./thread-active-run-route.ts";
+import { registerBrowserExecutionAuthorityRoute } from "./browser-execution-authority-route.ts";
 import { registerThreadCatalogRoute } from "./thread-catalog-route.ts";
 import type { StorageAdmissionPort } from "@crewon/application";
 import { installStorageAdmission } from "./storage-admission.ts";
@@ -1257,6 +1258,7 @@ export function buildControlApi(
   registerThreadTranscriptWindowRoute(app, dependencies);
   registerThreadCatalogRoute(app, dependencies);
   registerThreadActiveRunRoute(app, dependencies);
+  registerBrowserExecutionAuthorityRoute(app, dependencies);
 
   app.post<{ Params: { threadId: string }; Body: unknown }>(
     "/api/v1/threads/:threadId/forks",

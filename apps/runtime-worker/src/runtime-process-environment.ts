@@ -20,6 +20,10 @@ import {
 } from "@crewon/tool-broker";
 
 import { loadDeviceToolRuntime } from "./device-tool-runtime-config.ts";
+import {
+  createConfiguredBrowserExecutionToolRuntime,
+  type BrowserExecutionToolRuntime,
+} from "./browser-execution-tool-runtime.ts";
 import { createConfiguredLocalWorkspaceCommandToolRuntime } from "./local-workspace-command-tool-runtime.ts";
 import { createConfiguredPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
 
@@ -167,9 +171,17 @@ export function responsesCompatibilityProfile(
 
 export async function createConfiguredToolRuntime(
   environment: Readonly<Record<string, string | undefined>> = process.env,
+  options: {
+    onBrowserRuntime?: (runtime: BrowserExecutionToolRuntime) => void;
+  } = {},
 ): Promise<ToolRuntimePort | undefined> {
   const runtimes: ToolRuntimePort[] = [];
   try {
+    const browser = createConfiguredBrowserExecutionToolRuntime(environment);
+    if (browser !== undefined) {
+      runtimes.push(browser);
+      options.onBrowserRuntime?.(browser);
+    }
     const pimSandbox = createConfiguredPimSandboxToolRuntime(environment);
     if (pimSandbox !== undefined) {
       runtimes.push(pimSandbox);
