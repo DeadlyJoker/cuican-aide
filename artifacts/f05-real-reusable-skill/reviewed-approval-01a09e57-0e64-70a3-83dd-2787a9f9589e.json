@@ -1,0 +1,107 @@
+{
+  "approval": {
+    "approvalId": "01a09e57-0e64-70a3-83dd-2787a9f9589e",
+    "runId": "01a09e55-ef4a-764a-8642-3931fa9c21b9",
+    "status": "required",
+    "revision": 1,
+    "requiredAt": "2026-09-14T05:15:00.580Z",
+    "expiresAt": "2026-09-15T05:15:00.580Z",
+    "decision": null,
+    "comment": null,
+    "decidedAt": null
+  },
+  "modelInput": {
+    "name": "second-period-orders.xlsx",
+    "templateInputId": "a0c35f98-611a-42dc-b3f9-a1aa79c794f5",
+    "sources": [
+      {
+        "inputId": "e42cdde8-e391-4262-87b5-500bbe6067b5",
+        "sheet": "CSV",
+        "headerRow": 1
+      }
+    ],
+    "targetSheet": "明细",
+    "startRow": 2,
+    "columns": [
+      {
+        "sourceHeader": "order_id",
+        "targetColumn": "A"
+      },
+      {
+        "sourceHeader": "channel",
+        "targetColumn": "B"
+      },
+      {
+        "sourceHeader": "currency",
+        "targetColumn": "C"
+      },
+      {
+        "sourceHeader": "amount",
+        "targetColumn": "D"
+      },
+      {
+        "sourceHeader": "status",
+        "targetColumn": "E"
+      }
+    ],
+    "rules": {
+      "exclude": [
+        {
+          "header": "status",
+          "equals": "canceled"
+        },
+        {
+          "header": "channel",
+          "equals": "partner"
+        },
+        {
+          "header": "currency",
+          "equals": "USD"
+        }
+      ],
+      "requiredHeaders": [
+        "amount"
+      ],
+      "exceptionSheet": "异常",
+      "lineageSheet": "来源",
+      "summary": {
+        "sheet": "汇总",
+        "startRow": 2,
+        "groupBy": [
+          "channel",
+          "currency"
+        ],
+        "valueHeader": "amount"
+      }
+    }
+  },
+  "source": {
+    "sourceRunId": "01a09e55-ef4a-764a-8642-3931fa9c21b9",
+    "inputId": "e42cdde8-e391-4262-87b5-500bbe6067b5",
+    "target": {
+      "schemaVersion": "crewon.delivery-target.v1",
+      "tenantId": "standalone-tenant",
+      "spaceId": "standalone-space",
+      "threadId": "01a09e55-ee52-70b2-a280-2f22f0ccbc10",
+      "targetId": "thread-deliveries"
+    },
+    "ownerActorId": "standalone-actor",
+    "name": "orders.csv",
+    "role": "data",
+    "mediaType": "text/csv",
+    "byteLength": 167,
+    "contentDigest": "sha256:f08a1997f69f54d2c2550015b0cb07f434da59c7b5eb91f53b657de0bd1a5a06",
+    "inspection": {
+      "sheets": [
+        {
+          "name": "CSV",
+          "rows": 6,
+          "columns": 5
+        }
+      ],
+      "formulaCount": 0
+    },
+    "createdAt": "2026-09-14T05:14:38.978Z"
+  },
+  "reviewer": "Codex delegated concrete-request review; no blanket fullAccess"
+}

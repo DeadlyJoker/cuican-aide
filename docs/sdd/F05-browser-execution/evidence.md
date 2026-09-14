@@ -64,3 +64,11 @@ node_modules/electron/dist/Electron.app/Contents/MacOS/Electron apps/crewon-ui/d
 第二次试跑还暴露 Worker 的续租快照问题：heartbeat 更新了存储，却未更新随后构造 Tool command 的旧 `expiresAt`。`5a912c9b2` 在每次实际工具调用的容量预约和派发登记前，从权威存储续租并使用返回的新 claim；过期或被别的 owner 接管时仍不派发。SQLite/真实 Worker/Responses SSE/浏览器 HTTP adapter 回归覆盖两轮执行跨过原截止时间，以及过期、接管两种拒绝。相关 30 项通过、22 项 PostgreSQL 因未配置跳过，既有 Worker tool/lease 检查和 F01 10 MiB 崩溃恢复检查通过，类型与边界检查通过。
 
 为满足模型自动交付，新增明确审阅的 v4（`sha256:088c42233a749115c364dfa2a5b8f5b21ca4d6b1af66adc1075dd7b5c9e6329e`），加入 `delivery_assemble` 和汇总/明细读取。原始 C01、真实 generation、v3 及失败证据保留。既有 XLSX 模板通过 F01 预置为输入；验收脚本不调用 assemble，只在实际模型工具请求与模板、下载输入、映射和规则完全一致后，按既有明确授权通过正常单次审批接口决定。该审批不作为无人值守日程能力证据。
+
+## 可复用方法修订与再次真实试跑
+
+v4 的方法包含测试期订单号及预期金额，因此保留其通过记录，但不把它当作最终可复用方法。v5 `sha256:3a64fab98a1cfa135d58c8e094d0412f419e3f3830e93144baa55e1e871673ea` 移除这些具体答案，要求根据当次真实 CSV 筛选、逐条追溯并求和；业务排除规则、映射和模板保持一致。方法 JSON 不包含固定订单号、金额或日期，日期只在调用参数中提供，200.00 只在独立验收中断言。
+
+`artifacts/f05-real-reusable-skill/` 保留 v5 真实试跑：Run `01a09e55-ef4a-764a-8642-3931fa9c21b9` completed，24 个模型调用和 16 个浏览器/文件回执；模型实际下载 input `e42cdde8-e391-4262-87b5-500bbe6067b5` 并生成 XLSX version `bf8160cb-2e66-476b-8a84-0c007aebc1d0`，8531 字节，摘要 `sha256:3f3c14cb0febdfb7fb4803ffab88688fc280c5d3ad889208ce82812e63a304ac`。独立读取汇总为 200.00，重启后 CSV/XLSX 字节相同，F03 review 已保存；仍明确记录首次具体文件审批。后续真实 E05 使用该 v5。
+
+`ea7c1faa8` 补齐自动批准与 scoped grant 的组合边界：所有浏览器动作入口都遵守已选 scope，不能换为普通 act 绕过；缺少固定 Skill、错版本、参数/目标/导航越界和撤权均拒绝，匹配范围及既有无 scope perAction 路径保留。8 个新增 Host 用例中 5 个在原实现真实失败；修复后 Host+grant 48/48、Electron 类型和 boundary 检查通过。界面也明确自动批准仍受范围约束，组件既有快照已更新验证。

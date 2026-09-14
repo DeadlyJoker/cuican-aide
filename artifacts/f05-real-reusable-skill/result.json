@@ -1,0 +1,708 @@
+{
+  "checkedAt": "2026-09-14T05:15:36.883Z",
+  "provider": "https://api.aicuican.com/v1",
+  "model": "gpt-5.5",
+  "source": {
+    "contentDigest": "sha256:4e3b4cb1fdb476fe52281cb85feae9d2caf933f08f0441e93bf04f2c136b7a15",
+    "provenance": "recording",
+    "recordingId": "rec-43652ed4-46ea-466d-af61-2983259a1158",
+    "revision": 24
+  },
+  "generationRun": {
+    "runId": "01a09e36-d6b8-75f6-8cf1-0e79a27339b2",
+    "threadId": "01a09e36-d6b0-7578-88ee-d89bb0e888f4",
+    "status": "completed",
+    "revision": 1164,
+    "lastSequence": 1164,
+    "cancelRequested": false,
+    "waitingApproval": null,
+    "collaborationMode": "default",
+    "purpose": "turn",
+    "workflowVersionBinding": null,
+    "goalBinding": null,
+    "outputRef": "message:01a09e37-3da7-72f8-802e-b4ef3fb63f90",
+    "failure": null,
+    "createdAt": "2026-09-14T04:39:49.176Z",
+    "updatedAt": "2026-09-14T04:40:15.527Z",
+    "terminalAt": "2026-09-14T04:40:15.527Z"
+  },
+  "generationToolReceipts": 0,
+  "trialRun": {
+    "runId": "01a09e55-ef4a-764a-8642-3931fa9c21b9",
+    "threadId": "01a09e55-ee52-70b2-a280-2f22f0ccbc10",
+    "status": "completed",
+    "revision": 133,
+    "lastSequence": 133,
+    "cancelRequested": false,
+    "waitingApproval": null,
+    "collaborationMode": "default",
+    "purpose": "turn",
+    "workflowVersionBinding": null,
+    "goalBinding": null,
+    "outputRef": "message:01a09e57-97c1-715e-9296-3ec0cf5ead42",
+    "failure": null,
+    "createdAt": "2026-09-14T05:13:47.082Z",
+    "updatedAt": "2026-09-14T05:15:35.745Z",
+    "terminalAt": "2026-09-14T05:15:35.745Z"
+  },
+  "toolReceipts": [
+    {
+      "executionId": "01a09e56-19b9-77f8-b875-af56fd8198ed",
+      "name": "crewon_browser_observe",
+      "status": "completed",
+      "actionDigest": "sha256:8018ad214f6202c74ff809362b6788492cb64f20c3ffe39d1f8a51e977b13503"
+    },
+    {
+      "executionId": "01a09e56-3b76-7029-91ed-41b3db740f7a",
+      "name": "crewon_browser_act_scoped",
+      "status": "completed",
+      "actionDigest": "sha256:627b4687fb150d2d4bfc800e9324d58eff70d2c9301e2f446fed4c07d157b3fe"
+    },
+    {
+      "executionId": "01a09e56-4a8d-77e6-bc33-fbf5531ed6e2",
+      "name": "crewon_browser_observe",
+      "status": "completed",
+      "actionDigest": "sha256:7869e8d2741775f3611d43ad2114dabf9f71ce63a3645bb50626f494a7aab501"
+    },
+    {
+      "executionId": "01a09e56-592a-70ea-a4e9-d9de370b6f1c",
+      "name": "crewon_browser_act_scoped",
+      "status": "completed",
+      "actionDigest": "sha256:640dd7ff9476bea1fc1d3e2c6ff1f5b8a22a39c1cd4c4c60eecb926674f583dc"
+    },
+    {
+      "executionId": "01a09e56-63d6-73ec-9b11-a6f6e9e5e9fc",
+      "name": "crewon_browser_observe",
+      "status": "completed",
+      "actionDigest": "sha256:6de441760b7ff7428beba666c37de4b43eeaa46d924a4e8c070ffc20596a79ca"
+    },
+    {
+      "executionId": "01a09e56-748f-76cd-8159-1359686e618c",
+      "name": "crewon_browser_act_scoped",
+      "status": "completed",
+      "actionDigest": "sha256:412d89ac38c05066d95812247b6247a288243663f4ab86f463c5c4a6799b8883"
+    },
+    {
+      "executionId": "01a09e56-8117-739d-8a52-f0a1e0bd9a93",
+      "name": "crewon_browser_observe",
+      "status": "completed",
+      "actionDigest": "sha256:822838735034e85b8365ea2725fdd9bb30294506067d5f1e351870e45e40a458"
+    },
+    {
+      "executionId": "01a09e56-8eb0-713f-b545-96e029251120",
+      "name": "crewon_browser_act_scoped",
+      "status": "completed",
+      "actionDigest": "sha256:ed6b64eb8a64b03487f83ab5c4fad8e8fd8d51c0d888734cccea765f67094624"
+    },
+    {
+      "executionId": "01a09e56-aad7-70de-8ddc-910e178dd4fb",
+      "name": "crewon_browser_observe",
+      "status": "completed",
+      "actionDigest": "sha256:b7430e1604c712205ff1452796dbed90f098e67d7819794495dfe290ce65679e"
+    },
+    {
+      "executionId": "01a09e56-b979-71ef-a4d6-54cc41b19b4c",
+      "name": "crewon_browser_act_scoped",
+      "status": "completed",
+      "actionDigest": "sha256:fb4ea9f57e5fa43873b4e435c80b9bd0f88a9af588fcb9cf8423741a4b734ee6"
+    },
+    {
+      "executionId": "01a09e56-d56f-71ef-92ac-c5cae7ebedf3",
+      "name": "delivery_catalog",
+      "status": "completed",
+      "actionDigest": "sha256:bff1a0e8fc5a9dde14be78823691e32414d9f5eaf3af8d749ab15688f1ec4389"
+    },
+    {
+      "executionId": "01a09e56-e080-76dd-916a-3eb2f550427c",
+      "name": "delivery_read",
+      "status": "completed",
+      "actionDigest": "sha256:7232f2c99d896fedd6e50401b9021db73e3ebdf2a5c198a64e3cd15f0d88fd3a"
+    },
+    {
+      "executionId": "01a09e57-0e63-742d-8447-669a9f982288",
+      "name": "delivery_assemble",
+      "status": "completed",
+      "actionDigest": "sha256:ec70936ec4b3aeae4a890614713410579d3b228dc56e0c0b709b135205719297"
+    },
+    {
+      "executionId": "01a09e57-3475-7484-9f66-ce04afc1bb95",
+      "name": "delivery_read",
+      "status": "completed",
+      "actionDigest": "sha256:ed2dfe4250bd075b8c2f5f345fe3550afd682d6aa0b8f250f74b0511c04fd4d7"
+    },
+    {
+      "executionId": "01a09e57-4345-7119-a8de-6d00b833a62f",
+      "name": "delivery_read",
+      "status": "completed",
+      "actionDigest": "sha256:a8a206c8679c2a15720c51019c17d81ea4026c9823af62c019ab447589ed4f55"
+    },
+    {
+      "executionId": "01a09e57-5328-7791-932e-ee9860be7d8f",
+      "name": "delivery_read",
+      "status": "completed",
+      "actionDigest": "sha256:4b653d491b992d8fce12290d46dd38cc8f670e11a3e4348165aa6a57d38d674b"
+    }
+  ],
+  "modelCalls": [
+    {
+      "callId": "797a3d18-c1eb-4b93-bd3b-f053eeea1fe9",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "466b2ff7-574f-4005-85b9-d2c677e41e9f",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "7aed0245-cabd-429f-81eb-ef50faa3ac78",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "fed0be48-0c93-4628-ac61-f14c3a85d1ed",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "4fa282f1-543e-481b-b133-a93d287ffb09",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "0b631c66-8c70-4486-95c7-4d5503a3b51a",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "65bc790f-f3b4-4978-9e4d-802e9319016b",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "75d4adc2-5e6d-4851-8f75-1d8d74a7adcd",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "9d9bc88d-738f-461c-a16e-fca0d9a01b67",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "3ce3c1e7-cfaa-40a0-97a9-910068c771a0",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "12abc38c-14da-41b6-b665-d2d2146268be",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "82e90924-1441-4a79-aedf-3675965762ec",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "28c1064a-2ba4-4782-bcdb-5e536c7d5d12",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "12b1554d-a662-45fe-aac4-29f5f2662e9c",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "e541a61c-c599-4fcc-b1d2-185223dd649b",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "c753ee0c-f22d-436c-bd35-f1e796c05f9b",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "fb965709-bf54-4cb0-87f5-9210ee107603",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "a2c02d8e-2c7c-4353-890c-0c025bfba8dd",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "6b6f6a8f-7ffa-4af9-913f-d702d80860dd",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "03d4f521-3a44-45eb-84c9-db17c4a1592f",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "65e5e101-9230-4413-a408-27e11fb1aff6",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "05dc4e11-b7e7-444c-a98c-a38054765fbf",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "a3cbe80f-e04d-4ade-bd37-aa382c2eb5d8",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    },
+    {
+      "callId": "e4b75e04-68d8-4ca6-b940-932202bec537",
+      "adapterName": "direct-responses",
+      "transport": "http",
+      "outcome": "completed"
+    }
+  ],
+  "version": {
+    "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+    "versionId": "v5",
+    "contentDigest": "sha256:3a64fab98a1cfa135d58c8e094d0412f419e3f3830e93144baa55e1e871673ea"
+  },
+  "executionId": "trial-011468af-db47-4bf4-b340-04055870b830",
+  "parameters": {
+    "date": "2026-10-01",
+    "channel": "直营",
+    "reportNote": "2026-10 monthly report"
+  },
+  "pageState": {
+    "date": "2026-10-01",
+    "channel": "直营",
+    "result": "已筛选：直营 · 2026-10"
+  },
+  "file": {
+    "sourceRunId": "01a09e55-ef4a-764a-8642-3931fa9c21b9",
+    "inputId": "e42cdde8-e391-4262-87b5-500bbe6067b5",
+    "target": {
+      "schemaVersion": "crewon.delivery-target.v1",
+      "tenantId": "standalone-tenant",
+      "spaceId": "standalone-space",
+      "threadId": "01a09e55-ee52-70b2-a280-2f22f0ccbc10",
+      "targetId": "thread-deliveries"
+    },
+    "ownerActorId": "standalone-actor",
+    "name": "orders.csv",
+    "role": "data",
+    "mediaType": "text/csv",
+    "byteLength": 167,
+    "contentDigest": "sha256:f08a1997f69f54d2c2550015b0cb07f434da59c7b5eb91f53b657de0bd1a5a06",
+    "inspection": {
+      "sheets": [
+        {
+          "name": "CSV",
+          "rows": 6,
+          "columns": 5
+        }
+      ],
+      "formulaCount": 0
+    },
+    "createdAt": "2026-09-14T05:14:38.978Z"
+  },
+  "deliveryVersion": {
+    "schemaVersion": "crewon.delivery-result.v1",
+    "target": {
+      "schemaVersion": "crewon.delivery-target.v1",
+      "tenantId": "standalone-tenant",
+      "spaceId": "standalone-space",
+      "threadId": "01a09e55-ee52-70b2-a280-2f22f0ccbc10",
+      "targetId": "thread-deliveries"
+    },
+    "deliveryId": "2558f12a-84ab-41e5-a30a-68eeb32277c0",
+    "versionId": "bf8160cb-2e66-476b-8a84-0c007aebc1d0",
+    "contentDigest": "sha256:3f3c14cb0febdfb7fb4803ffab88688fc280c5d3ad889208ce82812e63a304ac",
+    "mediaType": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "sourceRunId": "01a09e55-ef4a-764a-8642-3931fa9c21b9",
+    "availability": "ready",
+    "ownerActorId": "standalone-actor",
+    "name": "second-period-orders.xlsx",
+    "byteLength": 8531,
+    "createdAt": "2026-09-14T05:15:02.896Z",
+    "parentVersionId": null,
+    "inputIds": [
+      "a0c35f98-611a-42dc-b3f9-a1aa79c794f5",
+      "e42cdde8-e391-4262-87b5-500bbe6067b5"
+    ],
+    "inspection": {
+      "sheets": [
+        {
+          "name": "明细",
+          "rows": 3,
+          "columns": 9
+        },
+        {
+          "name": "汇总",
+          "rows": 2,
+          "columns": 4
+        },
+        {
+          "name": "异常",
+          "rows": 1,
+          "columns": 9
+        },
+        {
+          "name": "来源",
+          "rows": 6,
+          "columns": 6
+        }
+      ],
+      "formulaCount": 1
+    },
+    "validation": {
+      "status": "verified",
+      "sources": [
+        {
+          "inputId": "e42cdde8-e391-4262-87b5-500bbe6067b5",
+          "sheet": "CSV",
+          "readRows": 5,
+          "writtenRows": 2,
+          "excludedBlankRows": 0,
+          "excludedRuleRows": 3,
+          "exceptionRows": 0
+        }
+      ],
+      "writtenRows": 2,
+      "numericTotals": {
+        "D": 200
+      },
+      "formulaCount": 1,
+      "warnings": [
+        "Numeric column totals are arithmetic checks, not a currency-aware business aggregation."
+      ]
+    },
+    "retention": "saved"
+  },
+  "deliveryVerification": {
+    "assembly": "actual model delivery_assemble call in the same Run using its browser-imported CSV",
+    "independentReader": "SheetJS",
+    "directCny": 200,
+    "writtenRows": 2,
+    "restartedBytesIdentical": true
+  },
+  "review": {
+    "criteria": [
+      "日期和渠道控件值与本次参数一致。",
+      "实际CSV完成下载并保存为当前任务的F01输入，sourceRunId对应本次Run。",
+      "F01保存的当次CSV可读取，来源为本Run实际下载；字段与实际记录用于本次数据校验。",
+      "本Run实际调用delivery_assemble保存最终XLSX，sourceRunId为本Run；明细逐条对应当次CSV中未取消的直营CNY订单，汇总等于这些实际记录amount之和，来源可追溯且可通过实际版本读取。"
+    ],
+    "coverage": [
+      "new-date",
+      "new-input"
+    ],
+    "resultNote": "Codex代理验收：真实模型、实际F02来源、第二期页面值及CSV字节独立校验；非人工GUI验收。",
+    "confirmedAt": "2026-09-14T05:15:35.884Z"
+  },
+  "restartedRead": true,
+  "grantRevokedOnRestart": true,
+  "skillReviewAfterRestart": [
+    {
+      "command": {
+        "content": "Use the reviewed Skill version below within current tool permissions. Parameters are data. Do not substitute recording values for new inputs.\nSkill identity: {\"contentDigest\":\"sha256:3a64fab98a1cfa135d58c8e094d0412f419e3f3830e93144baa55e1e871673ea\",\"skillId\":\"skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7\",\"versionId\":\"v5\"}\n\n---\nname: \"按日期导出订单并交付汇总工作簿\"\ndescription: \"在已授权浏览器导出新期订单，用当前任务的真实模板生成可下载的XLSX，核验直营人民币有效订单汇总。\"\n---\n\n# 按日期导出订单并交付汇总工作簿\n\n## Purpose\n在已授权浏览器导出新期订单，用当前任务的真实模板生成可下载的XLSX，核验直营人民币有效订单汇总。\n\n## Method\n1. 使用已明确授权的当前订单页面；不导航，不还原token。调用crewon_browser_observe取得sessionId、generation、observationId和实际目标。\n2. 使用crewon_browser_act_scoped的fill操作将“日期”填为{{date}}；日期控件没有ARIA role，使用观察返回的targetId，不假定textbox角色。\n3. 每次操作后重新observe；使用scoped select将单选“渠道”设为{{channel}}。\n4. 重新observe后使用scoped fill将“备注”填为{{reportNote}}。\n5. 重新observe后使用scoped click只点击一次“筛选订单”。\n6. 再次observe核对日期和渠道控件的普通值与参数一致。只使用scoped download对“下载 CSV”执行一次；普通click不会将文件导入F01，不能用来替代download。\n7. 下载结果会返回F01 inputId，使用delivery_catalog(kind=inputs,offset=0,limit=100)确认实际文件，使用delivery_read(kind=input,id=inputId,sheet=CSV,startRow=1,limit=100)读取已保存的当次材料；如有nextRow继续读取，依据真实记录计算符合业务规则的订单集合与汇总。\n8. 调用delivery_catalog列出inputs，从实际目录找到role=template且名称orders-template.xlsx的模板inputId；不得猜测ID。用刚刚浏览器下载的CSV inputId作为唯一数据source。\n9. 调用delivery_assemble亲自生成文件：name=second-period-orders.xlsx，templateInputId=目录模板ID，sources=[{inputId:下载CSV的ID,sheet:CSV,headerRow:1}]，targetSheet=明细，startRow=2，columns按顺序映射order_id→A、channel→B、currency→C、amount→D、status→E。\n10. assemble的rules明确为：exclude按顺序[{header:status,equals:canceled},{header:channel,equals:partner},{header:currency,equals:USD}]；requiredHeaders=[amount]；exceptionSheet=异常；lineageSheet=来源；summary={sheet:汇总,startRow:2,groupBy:[channel,currency],valueHeader:amount}。只调用一次成功的assemble；工具可能要求已授权的具体动作审批，不得绕过或代称成功。\n11. 用delivery_read(kind=version,id=实际返回的versionId,sheet=汇总,startRow=1,limit=100)读取真实汇总，再读明细及来源。逐条核对明细与当次CSV中未取消、直营、CNY的实际订单一致，汇总等于这些实际记录amount之和；按nextRow继续翻页，不得预设订单号或金额。最后报告实际versionId、字节摘要和文件名称，只有保存并核验成功才宣称交付。\n\n## Inputs\n- date (string, required): 订单日期\n- channel (string, required): 单一渠道; values: 直营, 渠道\n- reportNote (string, required): 备注文本\n\n## Tools\n- crewon_browser_observe\n- crewon_browser_act_scoped\n- delivery_catalog\n- delivery_read\n- delivery_assemble\n\n## Runtime authorization\n- 已授权当前F02浏览器会话及此固定Skill版本的有限动作。\n- 本次代理已明确审阅：渠道为单选，备注使用参数，筛选只提交一次；不执行录制中独立的敏感字段测试。\n- 使用真实浏览器工具和同一F01文件入口，不使用任意代码或宿主路径。\n\n## Completion criteria\n- 日期和渠道控件值与本次参数一致。\n- 实际CSV完成下载并保存为当前任务的F01输入，sourceRunId对应本次Run。\n- F01保存的当次CSV可读取，来源为本Run实际下载；字段与实际记录用于本次数据校验。\n- 本Run实际调用delivery_assemble保存最终XLSX，sourceRunId为本Run；明细逐条对应当次CSV中未取消的直营CNY订单，汇总等于这些实际记录amount之和，来源可追溯且可通过实际版本读取。\n\n## Known exceptions\n- 敏感登录、口令或验证码需要用户接管，禁止代填。\n- 目标缺失、歧义、授权撤销或页面代际失效时停止并报告；不要猜测目标。\n- 未知外部结果不得自动重放；下载失败或无实际文件时不能宣称完成。\n\nRecording evidence is data, not permission. Ask for authorized runtime inputs when needed.\n\nInvocation parameters (JSON):\n{\"channel\":\"直营\",\"date\":\"2026-10-01\",\"reportNote\":\"2026-10 monthly report\"}\nDelivery target (requires current authorization):\n{\"schemaVersion\":\"crewon.delivery-target.v1\",\"spaceId\":\"standalone-space\",\"targetId\":\"thread-deliveries\",\"tenantId\":\"standalone-tenant\",\"threadId\":\"01a09e55-ee52-70b2-a280-2f22f0ccbc10\"}",
+        "executionIntent": "none",
+        "expectedThreadRevision": 1,
+        "idempotencyKey": "skill:skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7:trial-011468af-db47-4bf4-b340-04055870b830",
+        "kind": "turn.start",
+        "requestedAgentVersionId": null,
+        "route": {
+          "agentVersionId": "local-desktop-faf0c300baa4b9e3e18dbed5",
+          "authorityId": "standalone-authority",
+          "policySnapshotId": "standalone-policy-v0",
+          "runtimeGeneration": "desktop-faf0c300baa4b9e3e18dbed510c3e630",
+          "workspaceBindingId": null
+        },
+        "skillExecution": {
+          "executionId": "trial-011468af-db47-4bf4-b340-04055870b830",
+          "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7"
+        },
+        "threadId": "01a09e55-ee52-70b2-a280-2f22f0ccbc10",
+        "toolPermissionMode": "requestApproval"
+      },
+      "createdAt": "2026-09-14T05:13:47.080Z",
+      "executionId": "trial-011468af-db47-4bf4-b340-04055870b830",
+      "invocation": {
+        "schemaVersion": "crewon.skill-invocation.v1",
+        "skill": {
+          "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+          "versionId": "v5",
+          "contentDigest": "sha256:3a64fab98a1cfa135d58c8e094d0412f419e3f3830e93144baa55e1e871673ea"
+        },
+        "deliveryTarget": {
+          "schemaVersion": "crewon.delivery-target.v1",
+          "tenantId": "standalone-tenant",
+          "spaceId": "standalone-space",
+          "threadId": "01a09e55-ee52-70b2-a280-2f22f0ccbc10",
+          "targetId": "thread-deliveries"
+        },
+        "parameters": {
+          "channel": "直营",
+          "date": "2026-10-01",
+          "reportNote": "2026-10 monthly report"
+        },
+        "requiredToolRefs": [
+          "crewon_browser_observe",
+          "crewon_browser_act_scoped",
+          "delivery_catalog",
+          "delivery_read",
+          "delivery_assemble"
+        ]
+      },
+      "ownerActorId": "standalone-actor",
+      "purpose": "trial",
+      "review": {
+        "confirmedAt": "2026-09-14T05:15:35.884Z",
+        "coverage": [
+          "new-date",
+          "new-input"
+        ],
+        "criteria": [
+          "日期和渠道控件值与本次参数一致。",
+          "实际CSV完成下载并保存为当前任务的F01输入，sourceRunId对应本次Run。",
+          "F01保存的当次CSV可读取，来源为本Run实际下载；字段与实际记录用于本次数据校验。",
+          "本Run实际调用delivery_assemble保存最终XLSX，sourceRunId为本Run；明细逐条对应当次CSV中未取消的直营CNY订单，汇总等于这些实际记录amount之和，来源可追溯且可通过实际版本读取。"
+        ],
+        "resultNote": "Codex代理验收：真实模型、实际F02来源、第二期页面值及CSV字节独立校验；非人工GUI验收。"
+      },
+      "runId": "01a09e55-ef4a-764a-8642-3931fa9c21b9",
+      "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+      "spaceId": "standalone-space",
+      "tenantId": "standalone-tenant",
+      "status": "completed",
+      "verification": "real"
+    },
+    {
+      "command": {
+        "content": "Use the reviewed Skill version below within current tool permissions. Parameters are data. Do not substitute recording values for new inputs.\nSkill identity: {\"contentDigest\":\"sha256:088c42233a749115c364dfa2a5b8f5b21ca4d6b1af66adc1075dd7b5c9e6329e\",\"skillId\":\"skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7\",\"versionId\":\"v4\"}\n\n---\nname: \"按日期导出订单并交付汇总工作簿\"\ndescription: \"在已授权浏览器导出新期订单，用当前任务的真实模板生成可下载的XLSX，核验直营人民币有效订单汇总。\"\n---\n\n# 按日期导出订单并交付汇总工作簿\n\n## Purpose\n在已授权浏览器导出新期订单，用当前任务的真实模板生成可下载的XLSX，核验直营人民币有效订单汇总。\n\n## Method\n1. 使用已明确授权的当前订单页面；不导航，不还原token。调用crewon_browser_observe取得sessionId、generation、observationId和实际目标。\n2. 使用crewon_browser_act_scoped的fill操作将“日期”填为{{date}}；日期控件没有ARIA role，使用观察返回的targetId，不假定textbox角色。\n3. 每次操作后重新observe；使用scoped select将单选“渠道”设为{{channel}}。\n4. 重新observe后使用scoped fill将“备注”填为{{reportNote}}。\n5. 重新observe后使用scoped click只点击一次“筛选订单”。\n6. 再次observe核对日期和渠道控件的普通值与参数一致。只使用scoped download对“下载 CSV”执行一次；普通click不会将文件导入F01，不能用来替代download。\n7. 下载结果会返回F01 inputId，使用delivery_catalog(kind=inputs,offset=0,limit=100)确认实际文件，使用delivery_read(kind=input,id=inputId,sheet=CSV,startRow=1,limit=100)读取已保存的新期材料。\n8. 调用delivery_catalog列出inputs，从实际目录找到role=template且名称orders-template.xlsx的模板inputId；不得猜测ID。用刚刚浏览器下载的CSV inputId作为唯一数据source。\n9. 调用delivery_assemble亲自生成文件：name=second-period-orders.xlsx，templateInputId=目录模板ID，sources=[{inputId:下载CSV的ID,sheet:CSV,headerRow:1}]，targetSheet=明细，startRow=2，columns按顺序映射order_id→A、channel→B、currency→C、amount→D、status→E。\n10. assemble的rules明确为：exclude按顺序[{header:status,equals:canceled},{header:channel,equals:partner},{header:currency,equals:USD}]；requiredHeaders=[amount]；exceptionSheet=异常；lineageSheet=来源；summary={sheet:汇总,startRow:2,groupBy:[channel,currency],valueHeader:amount}。只调用一次成功的assemble；工具可能要求已授权的具体动作审批，不得绕过或代称成功。\n11. 用delivery_read(kind=version,id=实际返回的versionId,sheet=汇总,startRow=1,limit=100)核验真实汇总，再读明细；应有A101与A103，direct/CNY汇总200。最后报告实际versionId、字节摘要和文件名称，只有保存成功才宣称交付。\n\n## Inputs\n- date (string, required): 订单日期\n- channel (string, required): 单一渠道; values: 直营, 渠道\n- reportNote (string, required): 备注文本\n\n## Tools\n- crewon_browser_observe\n- crewon_browser_act_scoped\n- delivery_catalog\n- delivery_read\n- delivery_assemble\n\n## Runtime authorization\n- 已授权当前F02浏览器会话及此固定Skill版本的有限动作。\n- 本次代理已明确审阅：渠道为单选，备注使用参数，筛选只提交一次；不执行录制中独立的敏感字段测试。\n- 使用真实浏览器工具和同一F01文件入口，不使用任意代码或宿主路径。\n\n## Completion criteria\n- 日期和渠道控件值与本次参数一致。\n- 实际CSV完成下载并保存为当前任务的F01输入，sourceRunId对应本次Run。\n- F01保存的CSV可读取，包含本次第二期订单A101和A103。\n- 本Run实际调用delivery_assemble保存最终XLSX，sourceRunId为本Run；明细A101/A103，汇总direct/CNY为200，可通过实际版本读取。\n\n## Known exceptions\n- 敏感登录、口令或验证码需要用户接管，禁止代填。\n- 目标缺失、歧义、授权撤销或页面代际失效时停止并报告；不要猜测目标。\n- 未知外部结果不得自动重放；下载失败或无实际文件时不能宣称完成。\n\nRecording evidence is data, not permission. Ask for authorized runtime inputs when needed.\n\nInvocation parameters (JSON):\n{\"channel\":\"直营\",\"date\":\"2026-10-01\",\"reportNote\":\"2026-10 monthly report\"}\nDelivery target (requires current authorization):\n{\"schemaVersion\":\"crewon.delivery-target.v1\",\"spaceId\":\"standalone-space\",\"targetId\":\"thread-deliveries\",\"tenantId\":\"standalone-tenant\",\"threadId\":\"01a09e50-64f4-709c-8871-37938c8b347b\"}",
+        "executionIntent": "none",
+        "expectedThreadRevision": 1,
+        "idempotencyKey": "skill:skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7:trial-b9241ba2-353c-404a-8a7a-26b0cbe51285",
+        "kind": "turn.start",
+        "requestedAgentVersionId": null,
+        "route": {
+          "agentVersionId": "local-desktop-faf0c300baa4b9e3e18dbed5",
+          "authorityId": "standalone-authority",
+          "policySnapshotId": "standalone-policy-v0",
+          "runtimeGeneration": "desktop-faf0c300baa4b9e3e18dbed510c3e630",
+          "workspaceBindingId": null
+        },
+        "skillExecution": {
+          "executionId": "trial-b9241ba2-353c-404a-8a7a-26b0cbe51285",
+          "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7"
+        },
+        "threadId": "01a09e50-64f4-709c-8871-37938c8b347b",
+        "toolPermissionMode": "requestApproval"
+      },
+      "createdAt": "2026-09-14T05:07:44.303Z",
+      "executionId": "trial-b9241ba2-353c-404a-8a7a-26b0cbe51285",
+      "invocation": {
+        "schemaVersion": "crewon.skill-invocation.v1",
+        "skill": {
+          "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+          "versionId": "v4",
+          "contentDigest": "sha256:088c42233a749115c364dfa2a5b8f5b21ca4d6b1af66adc1075dd7b5c9e6329e"
+        },
+        "deliveryTarget": {
+          "schemaVersion": "crewon.delivery-target.v1",
+          "tenantId": "standalone-tenant",
+          "spaceId": "standalone-space",
+          "threadId": "01a09e50-64f4-709c-8871-37938c8b347b",
+          "targetId": "thread-deliveries"
+        },
+        "parameters": {
+          "channel": "直营",
+          "date": "2026-10-01",
+          "reportNote": "2026-10 monthly report"
+        },
+        "requiredToolRefs": [
+          "crewon_browser_observe",
+          "crewon_browser_act_scoped",
+          "delivery_catalog",
+          "delivery_read",
+          "delivery_assemble"
+        ]
+      },
+      "ownerActorId": "standalone-actor",
+      "purpose": "trial",
+      "review": {
+        "confirmedAt": "2026-09-14T05:09:27.044Z",
+        "coverage": [
+          "new-date",
+          "new-input"
+        ],
+        "criteria": [
+          "日期和渠道控件值与本次参数一致。",
+          "实际CSV完成下载并保存为当前任务的F01输入，sourceRunId对应本次Run。",
+          "F01保存的CSV可读取，包含本次第二期订单A101和A103。",
+          "本Run实际调用delivery_assemble保存最终XLSX，sourceRunId为本Run；明细A101/A103，汇总direct/CNY为200，可通过实际版本读取。"
+        ],
+        "resultNote": "Codex代理验收：真实模型、实际F02来源、第二期页面值及CSV字节独立校验；非人工GUI验收。"
+      },
+      "runId": "01a09e50-6630-7286-bac0-ca27ff229539",
+      "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+      "spaceId": "standalone-space",
+      "tenantId": "standalone-tenant",
+      "status": "completed",
+      "verification": "real"
+    },
+    {
+      "command": {
+        "content": "Use the reviewed Skill version below within current tool permissions. Parameters are data. Do not substitute recording values for new inputs.\nSkill identity: {\"contentDigest\":\"sha256:b6cad0a7bf5c6ee84ee1322ed553e4c4588f246359efecdb37be2c4fa77b8453\",\"skillId\":\"skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7\",\"versionId\":\"v3\"}\n\n---\nname: \"按日期和单一渠道筛选订单并导出CSV\"\ndescription: \"在当前明确授权的订单浏览器会话内，把可复用参数应用到当期订单并将实际CSV导入当前任务文件。\"\n---\n\n# 按日期和单一渠道筛选订单并导出CSV\n\n## Purpose\n在当前明确授权的订单浏览器会话内，把可复用参数应用到当期订单并将实际CSV导入当前任务文件。\n\n## Method\n1. 使用已明确授权的当前订单页面；不导航，不还原token。调用crewon_browser_observe取得sessionId、generation、observationId和实际目标。\n2. 使用crewon_browser_act_scoped的fill操作将“日期”填为{{date}}；日期控件没有ARIA role，使用观察返回的targetId，不假定textbox角色。\n3. 每次操作后重新observe；使用scoped select将单选“渠道”设为{{channel}}。\n4. 重新observe后使用scoped fill将“备注”填为{{reportNote}}。\n5. 重新observe后使用scoped click只点击一次“筛选订单”。\n6. 再次observe核对日期和渠道控件的普通值与参数一致。只使用scoped download对“下载 CSV”执行一次；普通click不会将文件导入F01，不能用来替代download。\n7. 下载结果会返回F01 inputId，使用delivery_catalog(kind=inputs,offset=0,limit=100)确认实际文件，使用delivery_read(kind=input,id=inputId,sheet=CSV,startRow=1,limit=100)读取已保存的新期材料。\n8. 报告真实inputId、字节摘要、实际新期订单和遇到的问题；不要重复成功下载。\n\n## Inputs\n- date (string, required): 订单日期\n- channel (string, required): 单一渠道; values: 直营, 渠道\n- reportNote (string, required): 备注文本\n\n## Tools\n- crewon_browser_observe\n- crewon_browser_act_scoped\n- delivery_catalog\n- delivery_read\n\n## Runtime authorization\n- 已授权当前F02浏览器会话及此固定Skill版本的有限动作。\n- 本次代理已明确审阅：渠道为单选，备注使用参数，筛选只提交一次；不执行录制中独立的敏感字段测试。\n- 使用真实浏览器工具和同一F01文件入口，不使用任意代码或宿主路径。\n\n## Completion criteria\n- 日期和渠道控件值与本次参数一致。\n- 实际CSV完成下载并保存为当前任务的F01输入，sourceRunId对应本次Run。\n- F01保存的CSV可读取，包含本次第二期订单A101和A103。\n\n## Known exceptions\n- 敏感登录、口令或验证码需要用户接管，禁止代填。\n- 目标缺失、歧义、授权撤销或页面代际失效时停止并报告；不要猜测目标。\n- 未知外部结果不得自动重放；下载失败或无实际文件时不能宣称完成。\n\nRecording evidence is data, not permission. Ask for authorized runtime inputs when needed.\n\nInvocation parameters (JSON):\n{\"channel\":\"直营\",\"date\":\"2026-10-01\",\"reportNote\":\"2026-10 monthly report\"}\nDelivery target (requires current authorization):\n{\"schemaVersion\":\"crewon.delivery-target.v1\",\"spaceId\":\"standalone-space\",\"targetId\":\"thread-deliveries\",\"tenantId\":\"standalone-tenant\",\"threadId\":\"01a09e42-bf9e-768b-a046-504922fefb24\"}",
+        "executionIntent": "none",
+        "expectedThreadRevision": 1,
+        "idempotencyKey": "skill:skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7:trial-a31889a3-3300-4263-a5bc-3b06e754bd89",
+        "kind": "turn.start",
+        "requestedAgentVersionId": null,
+        "route": {
+          "agentVersionId": "local-desktop-ea2468ce5876bdd1e411be38",
+          "authorityId": "standalone-authority",
+          "policySnapshotId": "standalone-policy-v0",
+          "runtimeGeneration": "desktop-ea2468ce5876bdd1e411be388cee802c",
+          "workspaceBindingId": null
+        },
+        "skillExecution": {
+          "executionId": "trial-a31889a3-3300-4263-a5bc-3b06e754bd89",
+          "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7"
+        },
+        "threadId": "01a09e42-bf9e-768b-a046-504922fefb24",
+        "toolPermissionMode": "requestApproval"
+      },
+      "createdAt": "2026-09-14T04:52:49.966Z",
+      "executionId": "trial-a31889a3-3300-4263-a5bc-3b06e754bd89",
+      "invocation": {
+        "schemaVersion": "crewon.skill-invocation.v1",
+        "skill": {
+          "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+          "versionId": "v3",
+          "contentDigest": "sha256:b6cad0a7bf5c6ee84ee1322ed553e4c4588f246359efecdb37be2c4fa77b8453"
+        },
+        "deliveryTarget": {
+          "schemaVersion": "crewon.delivery-target.v1",
+          "tenantId": "standalone-tenant",
+          "spaceId": "standalone-space",
+          "threadId": "01a09e42-bf9e-768b-a046-504922fefb24",
+          "targetId": "thread-deliveries"
+        },
+        "parameters": {
+          "channel": "直营",
+          "date": "2026-10-01",
+          "reportNote": "2026-10 monthly report"
+        },
+        "requiredToolRefs": [
+          "crewon_browser_observe",
+          "crewon_browser_act_scoped",
+          "delivery_catalog",
+          "delivery_read"
+        ]
+      },
+      "ownerActorId": "standalone-actor",
+      "purpose": "trial",
+      "review": null,
+      "runId": "01a09e42-c0b0-71c9-b0c2-ca24e9d1c74d",
+      "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+      "spaceId": "standalone-space",
+      "tenantId": "standalone-tenant",
+      "status": "reconciling",
+      "verification": "real"
+    },
+    {
+      "command": {
+        "content": "Use the reviewed Skill version below within current tool permissions. Parameters are data. Do not substitute recording values for new inputs.\nSkill identity: {\"contentDigest\":\"sha256:b6cad0a7bf5c6ee84ee1322ed553e4c4588f246359efecdb37be2c4fa77b8453\",\"skillId\":\"skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7\",\"versionId\":\"v3\"}\n\n---\nname: \"按日期和单一渠道筛选订单并导出CSV\"\ndescription: \"在当前明确授权的订单浏览器会话内，把可复用参数应用到当期订单并将实际CSV导入当前任务文件。\"\n---\n\n# 按日期和单一渠道筛选订单并导出CSV\n\n## Purpose\n在当前明确授权的订单浏览器会话内，把可复用参数应用到当期订单并将实际CSV导入当前任务文件。\n\n## Method\n1. 使用已明确授权的当前订单页面；不导航，不还原token。调用crewon_browser_observe取得sessionId、generation、observationId和实际目标。\n2. 使用crewon_browser_act_scoped的fill操作将“日期”填为{{date}}；日期控件没有ARIA role，使用观察返回的targetId，不假定textbox角色。\n3. 每次操作后重新observe；使用scoped select将单选“渠道”设为{{channel}}。\n4. 重新observe后使用scoped fill将“备注”填为{{reportNote}}。\n5. 重新observe后使用scoped click只点击一次“筛选订单”。\n6. 再次observe核对日期和渠道控件的普通值与参数一致。只使用scoped download对“下载 CSV”执行一次；普通click不会将文件导入F01，不能用来替代download。\n7. 下载结果会返回F01 inputId，使用delivery_catalog(kind=inputs,offset=0,limit=100)确认实际文件，使用delivery_read(kind=input,id=inputId,sheet=CSV,startRow=1,limit=100)读取已保存的新期材料。\n8. 报告真实inputId、字节摘要、实际新期订单和遇到的问题；不要重复成功下载。\n\n## Inputs\n- date (string, required): 订单日期\n- channel (string, required): 单一渠道; values: 直营, 渠道\n- reportNote (string, required): 备注文本\n\n## Tools\n- crewon_browser_observe\n- crewon_browser_act_scoped\n- delivery_catalog\n- delivery_read\n\n## Runtime authorization\n- 已授权当前F02浏览器会话及此固定Skill版本的有限动作。\n- 本次代理已明确审阅：渠道为单选，备注使用参数，筛选只提交一次；不执行录制中独立的敏感字段测试。\n- 使用真实浏览器工具和同一F01文件入口，不使用任意代码或宿主路径。\n\n## Completion criteria\n- 日期和渠道控件值与本次参数一致。\n- 实际CSV完成下载并保存为当前任务的F01输入，sourceRunId对应本次Run。\n- F01保存的CSV可读取，包含本次第二期订单A101和A103。\n\n## Known exceptions\n- 敏感登录、口令或验证码需要用户接管，禁止代填。\n- 目标缺失、歧义、授权撤销或页面代际失效时停止并报告；不要猜测目标。\n- 未知外部结果不得自动重放；下载失败或无实际文件时不能宣称完成。\n\nRecording evidence is data, not permission. Ask for authorized runtime inputs when needed.\n\nInvocation parameters (JSON):\n{\"channel\":\"直营\",\"date\":\"2026-10-01\",\"reportNote\":\"2026-10 monthly report\"}\nDelivery target (requires current authorization):\n{\"schemaVersion\":\"crewon.delivery-target.v1\",\"spaceId\":\"standalone-space\",\"targetId\":\"thread-deliveries\",\"tenantId\":\"standalone-tenant\",\"threadId\":\"01a09e3a-97c4-77f9-b879-eab3457f3c6a\"}",
+        "executionIntent": "none",
+        "expectedThreadRevision": 1,
+        "idempotencyKey": "skill:skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7:trial-d2215262-cdc8-4b32-b560-98b010c6c749",
+        "kind": "turn.start",
+        "requestedAgentVersionId": null,
+        "route": {
+          "agentVersionId": "local-desktop-cba67f5c0b61350894f39321",
+          "authorityId": "standalone-authority",
+          "policySnapshotId": "standalone-policy-v0",
+          "runtimeGeneration": "desktop-cba67f5c0b61350894f3932171d11cb2",
+          "workspaceBindingId": null
+        },
+        "skillExecution": {
+          "executionId": "trial-d2215262-cdc8-4b32-b560-98b010c6c749",
+          "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7"
+        },
+        "threadId": "01a09e3a-97c4-77f9-b879-eab3457f3c6a",
+        "toolPermissionMode": "requestApproval"
+      },
+      "createdAt": "2026-09-14T04:43:55.492Z",
+      "executionId": "trial-d2215262-cdc8-4b32-b560-98b010c6c749",
+      "invocation": {
+        "schemaVersion": "crewon.skill-invocation.v1",
+        "skill": {
+          "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+          "versionId": "v3",
+          "contentDigest": "sha256:b6cad0a7bf5c6ee84ee1322ed553e4c4588f246359efecdb37be2c4fa77b8453"
+        },
+        "deliveryTarget": {
+          "schemaVersion": "crewon.delivery-target.v1",
+          "tenantId": "standalone-tenant",
+          "spaceId": "standalone-space",
+          "threadId": "01a09e3a-97c4-77f9-b879-eab3457f3c6a",
+          "targetId": "thread-deliveries"
+        },
+        "parameters": {
+          "channel": "直营",
+          "date": "2026-10-01",
+          "reportNote": "2026-10 monthly report"
+        },
+        "requiredToolRefs": [
+          "crewon_browser_observe",
+          "crewon_browser_act_scoped",
+          "delivery_catalog",
+          "delivery_read"
+        ]
+      },
+      "ownerActorId": "standalone-actor",
+      "purpose": "trial",
+      "review": null,
+      "runId": "01a09e3a-98e7-7278-9370-45d10b3d8a17",
+      "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+      "spaceId": "standalone-space",
+      "tenantId": "standalone-tenant",
+      "status": "running",
+      "verification": "real"
+    }
+  ],
+  "limitations": [
+    "synthetic business material",
+    "agent-reviewed, not human/CUA GUI",
+    "no enterprise login",
+    "no scheduled occurrence tested in this script"
+  ]
+}

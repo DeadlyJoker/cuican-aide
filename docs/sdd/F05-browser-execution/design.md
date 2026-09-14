@@ -10,7 +10,7 @@
 
 ## C05 v1
 
-注册 function `crewon_browser_observe` 与 `crewon_browser_act`。observe 为 readOnly/replaySafe；act 为 mutation/reconcilable、perAction。所有执行限时 30 秒，工具输出 ≤9KiB UTF8，下载 ≤10MiB。缺省 sessionId 由已授权 thread 的唯一浏览器解析，用户不手填身份。
+注册 function `crewon_browser_observe`、`crewon_browser_act` 与 `crewon_browser_act_scoped`。observe 为 readOnly/replaySafe；act 为 mutation/reconcilable、perAction；scoped act 只有明确的固定 Skill 授权才可执行。所有执行限时 30 秒，工具输出 ≤9KiB UTF8，下载 ≤10MiB。缺省 sessionId 由已授权 thread 的唯一浏览器解析，用户不手填身份。
 
 observe 输入 `{sessionId?: string}`。返回 `{schemaVersion,sessionId,generation,observationId,url,targets,truncated,unsupported}`；URL 保留经敏感过滤的普通业务 query/hash 模板（敏感值标为省略），target 包含 opaque targetId、role/name、控件类型及安全的普通当前值/选中项，禁止回传密码/令牌/页面全文。
 
@@ -40,7 +40,9 @@ B01/B02：真实工具配置与认证桥网络测试、跨 thread/撤权反例�
 
 ## S1 评审补充
 
-首版共机 Electron/Worker，远程或 Team 未绑定宿主时不注册浏览器能力。act 的 perAction 默认先保留。周期执行的受限预授权拟新增独立 scoped 工具：用户批准固定 SkillVersionRef、thread/session、页面 origin 与具体动作/目标，宿主每次从权威 Run 映射验证；录制或激活不赋权。该契约仍在协调评审，未实现不能声称 E05 自动执行。F01 下载统一 10MiB，由 Worker 同一 DeliveryApplicationService.importFromRun 导入真实字节，禁止再造文件 store 或公开 sourceRunId HTTP。
+首版共机 Electron/Worker，远程或 Team 未绑定宿主时不注册浏览器能力。act 的 perAction 默认保留。独立 scoped 工具已经实现：用户批准固定 SkillVersionRef、thread/session、页面 origin 与具体动作/目标，宿主每次从权威 Run 映射验证；录制或激活不赋权。参数值只由可信 Run 的固定 Skill invocation 解析，不从模型声称的身份取值。F01 下载统一 10MiB，由 Worker 同一 DeliveryApplicationService.importFromRun 导入真实字节，禁止再造文件 store 或公开 sourceRunId HTTP。真实日程 E05 还需独立记录显式执行权限模式与实际 occurrence，不以一次交互式文件审批代替。
+
+真实模型联验后，Responses function 序列化显式发送 `strict:false` 以保留可选字段和互斥参数，本地 parser/授权不变；纯解析错误形成有界可恢复错误。Worker 每次派发前使用权威存储续租返回的新 claim 构造 command，避免模型多轮执行继续携带旧截止时间。生成步骤不执行工具，真实执行阶段才使用已审阅的固定方法；方法只保留业务规则，特定测试日期、订单号和预期金额仅作为调用参数或独立验收断言。
 
 ## 复用与自研边界（2026-09-14 修订）
 
