@@ -99,6 +99,11 @@ const bridge: CrewonDesktopBridge = {
         ipcRenderer.removeListener("crewon:window:bounds-changed", handler);
     },
   },
+  browserExecution: {
+    authorize: (input) => invoke("crewon:browser-execution:authorize", input),
+    revoke: (threadId) => invoke("crewon:browser-execution:revoke", threadId),
+    status: (threadId) => invoke("crewon:browser-execution:status", threadId),
+  },
   browser: {
     create: (id, url, bounds) =>
       invoke<void>("crewon:browser:create", id, url, bounds),
