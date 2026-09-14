@@ -75,3 +75,13 @@ type RecordingExport = {
 ## S1 契约修订（协调评审）
 
 初稿只保留摘要与几何图会丢失示教语义。根据协调任务评审，在 schema v1 首次实现前补充 routeTemplate、role、accessibleName 和受控局部截图。敏感 query 值保留运行时参数位置；普通业务语义可保留，捕获不安全的截图明确不可用。共享来源身份策略已获协调确认。
+
+## 复用与自研边界（用户新增约束）
+
+本轮通用可访问名称/角色算法改用固定版本 `dom-accessibility-api@0.7.1`（MIT），复用 `computeAccessibleName`、`getRole`，删除手写名称与角色映射主体。该库实现标准可访问名称算法，仓库维护 changelog 与标准测试；本轮在 pnpm registry 核对版本/许可，锁定 lockfile，打包进隔离 preload，不从 CDN 加载。其 DOM 计算结果仍经本地敏感过滤和字节预算，库不承担 CrewON 授权策略。密码等已识别敏感控件在调用库之前排除。实际 Electron 隔离上下文与 CSP 合成页面验证记入 evidence。
+
+评估 rrweb（MIT）事件采集和 maskAllInputs/blockSelector：它以 DOM snapshot/replay 为主要数据面，首发无需重建整站；完整 DOM、属性和增量序列会扩大捕获范围，并仍需页面特定的敏感过滤。此次不引入完整 rrweb recorder；采用成熟语义模块 + Electron 原生导航、下载事件与 capturePage 局部图能力，实现有限的标准 HTML click/change 语义适配。不会继续扩展自研可访问性算法、DOM 重放、浏览器协议或新 runtime。aria-query 是角色元数据候选，dom-accessibility-api 已封装本轮所需语义，无须再次手工拼装角色解析。
+
+复用仓库 canonicalJsonValue、ContractValidationError、React、Electron/esbuild/vitest 构建测试、桌面桥与当前设计主题。必要自有代码仅为 C01 业务形状、输入和目标过滤、授权/会话隔离、预算、revision、持久化、下载关联与UI控制。执行定位交由 F05 的成熟浏览器执行能力评审，不从录制 selector 推演新执行引擎。
+
+参考：[dom-accessibility-api 官方仓库](https://github.com/eps1lon/dom-accessibility-api)、[rrweb 隐私配置](https://github.com/rrweb-io/rrweb/blob/main/docs/recipes/privacy.md)。开源语义支持不代表任意网站、跨源框架或任意敏感内容均已验证。
