@@ -218,6 +218,8 @@ export class ControlApiClient {
       headers.set("x-csrf-token", this.#csrfToken);
       headers.set("content-type", "application/json");
     }
+    const suppliedId = new Headers(init.headers).get("idempotency-key");
+    if (suppliedId !== null) headers.set("idempotency-key", idempotencyKey(suppliedId));
     return this.#fetch(new URL(path, this.#baseUrl), {method, headers, credentials: "include", body: init.body, signal: init.signal});
   }
 
