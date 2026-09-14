@@ -10,7 +10,7 @@ import {
   UserPlus,
   Wrench,
 } from "lucide-react";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 
 import {
   CommandOfficeRoom,
@@ -698,6 +698,8 @@ export function AgentsView({
   active,
   catalogFilter,
   catalogSearch,
+  skillLibrary,
+  skillLibraryRequestKey,
   platformState,
   resourceStates,
   snapshot,
@@ -712,6 +714,8 @@ export function AgentsView({
   active: boolean;
   catalogFilter: string;
   catalogSearch: string;
+  skillLibrary?: ReactNode;
+  skillLibraryRequestKey?: string;
   platformState: "loading" | "ready" | "fallback";
   resourceStates: AgentPlatformResourceStates;
   snapshot: AgentPlatformSnapshot;
@@ -746,6 +750,9 @@ export function AgentsView({
   const [locationFilter, setLocationFilter] = useState<
     "all" | CapabilityLocation
   >("all");
+  useEffect(() => {
+    if (skillLibraryRequestKey) setLocationFilter("local");
+  }, [skillLibraryRequestKey]);
   const syncedCards = useMemo(() => syncedAgentCatalog(snapshot), [snapshot]);
   const localAgentCards = useMemo(
     () => localControlAgentCatalog(localAgents),
@@ -1040,6 +1047,10 @@ export function AgentsView({
             {downloadError}
           </p>
         ) : null}
+        {locationFilter !== "cloud" &&
+        (catalogFilter === "skill" || catalogFilter === "all")
+          ? skillLibrary
+          : null}
         {stateCategories.length > 0 ? (
           <div className="catalog-category-states">
             {stateCategories.map((category) => (

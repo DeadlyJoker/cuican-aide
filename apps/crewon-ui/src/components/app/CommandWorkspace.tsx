@@ -16,6 +16,13 @@ import {
 import { CommandOfficeCreateDialog } from "./CommandOfficeCreateDialog";
 import { AgentPlatformApiKeyDialog } from "./AgentPlatformApiKeyDialog";
 import {
+  SkillLibraryHost,
+  type SkillLibraryControlClient,
+  type SkillLibraryHostProps,
+} from "../skill/SkillLibraryHost";
+import type { SkillLibraryOpenRequest } from "../skill/useRecordingSkillImport";
+import { useSkillScheduleEntry } from "../skill/useSkillScheduleEntry";
+import {
   CommandTeamCapabilityCreateDialog,
   type CommandTeamCapabilityCreateInput,
 } from "./CommandTeamCapabilityCreateDialog";
@@ -359,6 +366,10 @@ type CommandWorkspaceProps = {
     ) => Promise<{ record: ExpertTeamRecordReference }>;
   } | null;
   officeControlClient?: ControlOfficeClient | null;
+  skillControlClient?: SkillLibraryControlClient | null;
+  skillOpenRequest?: SkillLibraryOpenRequest | null;
+  onSkillOpenRequestHandled?: (requestId: string) => void;
+  onAddSkillToSchedule?: SkillLibraryHostProps["onAddToSchedule"];
   controlOfficeRoomAdapter?: CommandOfficeRoomAdapter | null;
   workflowControlClient?:
     | (ControlWorkflowRuntimeClient & ControlExpertRuntimeClient)
@@ -804,6 +815,10 @@ export function CommandWorkspace({
   cwd,
   executionTargetClient = null,
   officeControlClient = null,
+  skillControlClient = null,
+  skillOpenRequest = null,
+  onSkillOpenRequestHandled,
+  onAddSkillToSchedule,
   controlOfficeRoomAdapter = null,
   workflowControlClient = null,
   automationRuntime = null,
@@ -1010,12 +1025,28 @@ export function CommandWorkspace({
   );
   const [catalogFilter, setCatalogFilter] = useState("skill");
   const [catalogSearch, setCatalogSearch] = useState("");
+  useEffect(() => {
+    if (!skillOpenRequest) return;
+    setCatalogFilter("skill");
+    setCatalogSearch("");
+    switchView("agents");
+  }, [skillOpenRequest?.requestId]);
   const [scheduleModalOpen, setScheduleModalOpen] = useState(false);
   const [scheduleCreateDraft, setScheduleCreateDraft] =
     useState<AutomationCreateDraft | null>(null);
   const [scheduleTargetThreadId, setScheduleTargetThreadId] = useState<
     string | null
   >(null);
+  const skillScheduleEntry = useSkillScheduleEntry({
+    controlClient: skillControlClient,
+    selectedThreadId,
+    onReady: (draft, threadId) => {
+      setScheduleCreateDraft(draft);
+      setScheduleTargetThreadId(threadId);
+      setScheduleModalOpen(true);
+      switchView("schedule");
+    },
+  });
   const scheduleDraftRequestIdRef = useRef(0);
   const [teamMode, setTeamMode] = useState<TeamMode>("office");
   const [teamCatalog, setTeamCatalog] = useState<CommandDomainCatalog>({
@@ -3956,6 +3987,34 @@ export function CommandWorkspace({
             active={activeView === "agents"}
             catalogFilter={catalogFilter}
             catalogSearch={catalogSearch}
+            skillLibraryRequestKey={skillOpenRequest?.requestId}
+            skillLibrary={
+              skillControlClient && activeView === "agents" &&
+              (catalogFilter === "skill" || catalogFilter === "all") ? (
+                <SkillLibraryHost
+                  controlClient={skillControlClient}
+                  query={catalogSearch}
+                  openRequest={skillOpenRequest}
+                  onOpenRequestHandled={onSkillOpenRequestHandled}
+                  onSelectThread={openLinkedThread}
+                  onAddToSchedule={
+                    onAddSkillToSchedule ?? (automationControlConfigured
+                      ? (input) => { void skillScheduleEntry.request(input); }
+                      : undefined)
+                  }
+                  scheduleNotice={skillScheduleEntry.busy ? (
+                    <p role="status">正在准备 Skill 日程任务…</p>
+                  ) : skillScheduleEntry.error ? (
+                    <div role="alert">
+                      <p>{skillScheduleEntry.error}</p>
+                      <button className="button compact" type="button" onClick={skillScheduleEntry.retry}>
+                        重试日程准备
+                      </button>
+                    </div>
+                  ) : undefined}
+                />
+              ) : undefined
+            }
             platformState={platformState}
             resourceStates={platformResourceStates}
             snapshot={platformSnapshot}
