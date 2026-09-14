@@ -66,6 +66,25 @@ describe("agent-platform base URL", () => {
     expect(agentPlatformBaseUrl()).toBe("https://platform.example/api");
   });
 
+  it.each([
+    "file:///Applications/CrewON.app/Contents/Resources/index.html",
+    "file:///C:/Program%20Files/CrewON/resources/index.html",
+  ])(
+    "uses the embedded endpoint for both account and Agent requests at %s",
+    (href) => {
+      stubLocation(href, { desktop: true });
+      vi.stubEnv(
+        "VITE_AGENT_PLATFORM_RUNTIME_BASE_URL",
+        "https://pim.aicuican.com/",
+      );
+
+      expect(agentPlatformBaseUrl()).toBe("https://pim.aicuican.com");
+      expect(agentPlatformInvocationUrl("/api/v1/open/agent/93/chat")).toBe(
+        "https://pim.aicuican.com/api/v1/open/agent/93/chat",
+      );
+    },
+  );
+
   it("rewrites a custom proxy path too, not just the default", () => {
     stubLocation(
       "file:///Applications/CrewON.app/Contents/Resources/index.html",

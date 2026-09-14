@@ -1,6 +1,7 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
+import { agentPlatformBuildConfig } from "./agent-platform-build-config";
 // @ts-expect-error Vite runs this file in Node while the browser tsconfig excludes Node globals.
 import { writeFile } from "node:fs/promises";
 
@@ -196,10 +197,11 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "");
   const appServerTarget = env.CREWON_APP_SERVER_TARGET ?? "ws://127.0.0.1:6176";
   const appServerDisabled = env.CREWON_APP_SERVER_DISABLED === "1";
-  const agentPlatformTarget =
-    env.CREWON_AGENT_PLATFORM_TARGET ?? "http://127.0.0.1:8000";
-  const agentPlatformRuntimeBaseUrl =
-    env.VITE_AGENT_PLATFORM_RUNTIME_BASE_URL ?? agentPlatformTarget;
+  const {
+    proxyTarget: agentPlatformTarget,
+    runtimeBaseUrl: agentPlatformRuntimeBaseUrl,
+    accountBaseUrl: agentPlatformAccountBaseUrl,
+  } = agentPlatformBuildConfig(mode, env);
   const controlTarget = env.CREWON_CONTROL_TARGET ?? "http://127.0.0.1:3210";
   const controlSessionToken = env.CREWON_CONTROL_SESSION_TOKEN;
   const controlCsrfToken = env.CREWON_CONTROL_CSRF_TOKEN;
@@ -224,6 +226,20 @@ export default defineConfig(({ mode }) => {
       },
     },
     plugins: [
+      {
+        name: "crewon-desktop-account-endpoint",
+        generateBundle() {
+          if (mode !== "desktop") return;
+          this.emitFile({
+            type: "asset",
+            fileName: "desktop-account-endpoint.json",
+            source: JSON.stringify({
+              schemaVersion: 1,
+              accountOrigin: new URL(agentPlatformAccountBaseUrl).origin,
+            }),
+          });
+        },
+      },
       localBackendRecoveryPlugin(backendRestartRequestFile),
       controlSessionPlugin({
         csrfToken: controlCsrfToken,

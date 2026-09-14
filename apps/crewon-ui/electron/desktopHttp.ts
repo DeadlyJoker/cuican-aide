@@ -1,4 +1,5 @@
 import { deliveryRequestBodyLimit } from "@crewon/domain/delivery-http-policy";
+import { parseAgentPlatformOrigin } from "./agentPlatformCredentials.ts";
 import type {
   DesktopHttpRequest,
   DesktopHttpResponse,
@@ -31,7 +32,14 @@ export class DesktopHttpTransport {
   readonly #requests = new Map<string, RequestState>();
   #requestBytes = 0;
   readonly #consumerIdleMs: number;
-  constructor(options: { consumerIdleMs?: number } = {}) {
+  readonly #accountOrigin: string | null;
+  constructor(
+    options: { consumerIdleMs?: number; accountOrigin?: string } = {},
+  ) {
+    this.#accountOrigin =
+      options.accountOrigin === undefined
+        ? null
+        : parseAgentPlatformOrigin(options.accountOrigin);
     this.#consumerIdleMs = options.consumerIdleMs ?? limits.consumerIdleMs;
     if (
       !Number.isSafeInteger(this.#consumerIdleMs) ||
@@ -51,7 +59,7 @@ export class DesktopHttpTransport {
   }
 
   async fetch(request: DesktopHttpRequest): Promise<DesktopHttpResponse> {
-    validateRequest(request);
+    validateRequest(request, this.#accountOrigin);
     if (this.#requests.has(request.requestId))
       throw new Error("desktop_http_request_id_conflict");
     const bytes = request.body?.byteLength ?? 0;
@@ -240,7 +248,10 @@ function validateHeaders(
       throw new Error("desktop_http_headers_too_large");
   }
 }
-function validateRequest(request: DesktopHttpRequest): void {
+function validateRequest(
+  request: DesktopHttpRequest,
+  accountOrigin: string | null,
+): void {
   if (typeof request !== "object" || request === null)
     throw new Error("desktop_http_request_invalid");
   validateId(request.requestId);
@@ -269,7 +280,7 @@ function validateRequest(request: DesktopHttpRequest): void {
     /^127(?:\.\d{1,3}){3}$/u.test(url.hostname);
   if (
     (url.protocol !== "http:" && url.protocol !== "https:") ||
-    !loopback ||
+    (!loopback && url.origin !== accountOrigin) ||
     url.username ||
     url.password
   )

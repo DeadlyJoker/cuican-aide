@@ -78,6 +78,47 @@ function byteResponse(
 }
 
 describe("desktop HTTP pull transport", () => {
+  it("sends login form data only to the configured account origin using bounded transport", async () => {
+    const fetchMock = vi.fn(async () => byteResponse(20));
+    vi.stubGlobal("fetch", fetchMock);
+    const transport = owner({ accountOrigin: "https://pim.aicuican.com" });
+    const input = request({
+      url: "https://pim.aicuican.com/api/v1/auth/login",
+      method: "POST",
+      headers: [["content-type", "application/x-www-form-urlencoded"]],
+      body: new TextEncoder().encode("username=fixture&password=fixture"),
+    });
+    expect((await transport.fetch(input)).status).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      input.url,
+      expect.objectContaining({
+        method: "POST",
+        body: input.body,
+        redirect: "error",
+      }),
+    );
+    expect((await transport.read(input.requestId)).type).toBe("chunk");
+    expect(await transport.read(input.requestId)).toEqual({ type: "end" });
+  });
+
+  it.each([
+    "https://other.example.com/api/v1/auth/login",
+    "https://pim.aicuican.com.evil.example/api/v1/auth/login",
+    "https://sub.pim.aicuican.com/api/v1/auth/login",
+    "http://pim.aicuican.com/api/v1/auth/login",
+    "https://pim.aicuican.com:8443/api/v1/auth/login",
+    "https://user:secret@pim.aicuican.com/api/v1/auth/login",
+  ])("rejects unapproved origin or embedded credentials: %s", async (url) => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(
+      owner({ accountOrigin: "https://pim.aicuican.com" }).fetch(
+        request({ url }),
+      ),
+    ).rejects.toThrow("desktop_http_url_invalid");
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("returns bounded wire errors for expected cancellation without exposing native diagnostics", async () => {
     expect(
       await desktopHttpReply(() => {

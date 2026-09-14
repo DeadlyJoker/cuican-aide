@@ -213,14 +213,11 @@ type RequestOptions = {
   init?: RequestInit;
 };
 
-/** Dev-server proxy route. Rewritten to `PACKAGED_BASE_URL` outside dev. */
+/** Dev-server proxy route. Rewritten to the embedded backend outside dev. */
 const DEFAULT_BASE_URL = "/agent-platform-api";
 /**
- * Where a packaged build looks for the backend.
- *
- * Matches the proxy target in `vite.config.ts`, so a desktop build talks to the
- * same backend a developer runs. A deployment that hosts it elsewhere sets
- * `VITE_AGENT_PLATFORM_BASE_URL` to an absolute URL, which is left alone.
+ * Legacy fallback for builds without Vite's embedded runtime endpoint.
+ * Desktop packaging embeds the public account origin or an explicit override.
  */
 const PACKAGED_BASE_URL = "http://127.0.0.1:8000";
 const PLATFORM_AVAILABILITY_PROBE_PATH = "/api/v1/health";
@@ -271,6 +268,14 @@ function configuredAgentPlatformBaseUrl(): string {
   ).replace(/\/+$/, "");
 }
 
+function packagedAgentPlatformBaseUrl(): string {
+  return (
+    envValue("VITE_AGENT_PLATFORM_RUNTIME_BASE_URL") ??
+    import.meta.env.VITE_AGENT_PLATFORM_RUNTIME_BASE_URL?.trim() ??
+    PACKAGED_BASE_URL
+  ).replace(/\/+$/, "");
+}
+
 export function agentPlatformBaseUrl(): string {
   const configured = configuredAgentPlatformBaseUrl();
 
@@ -285,7 +290,7 @@ export function agentPlatformBaseUrl(): string {
   // Only bare paths are rewritten: an absolute URL is a deliberate choice about
   // which backend to talk to and must survive packaging.
   if (configured.startsWith("/") && !hasDevServerProxy()) {
-    return PACKAGED_BASE_URL;
+    return packagedAgentPlatformBaseUrl();
   }
   return configured;
 }
@@ -300,9 +305,7 @@ export function agentPlatformInvocationUrl(value: string): string {
   const configuredBase = configuredAgentPlatformBaseUrl();
   const base =
     configuredBase.startsWith("/") && hasDesktopBridge()
-      ? (envValue("VITE_AGENT_PLATFORM_RUNTIME_BASE_URL") ??
-        import.meta.env.VITE_AGENT_PLATFORM_RUNTIME_BASE_URL?.trim() ??
-        PACKAGED_BASE_URL)
+      ? packagedAgentPlatformBaseUrl()
       : agentPlatformBaseUrl();
   let platformBaseUrl: URL;
   try {

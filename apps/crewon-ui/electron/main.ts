@@ -25,6 +25,7 @@ import {
   parseAgentPlatformOrigin,
 } from "./agentPlatformCredentials.ts";
 import { DesktopHttpTransport } from "./desktopHttp.ts";
+import { readPackagedAccountOrigin } from "./desktopAccountEndpoint.ts";
 import { bindDesktopHttpLifetime } from "./desktopHttpLifetime.ts";
 import { desktopHttpReply } from "./desktopHttpReply.ts";
 import {
@@ -269,7 +270,13 @@ function registerIpc(options: {
     sandbox,
     window,
   } = options;
-  const desktopHttp = new DesktopHttpTransport();
+  const desktopHttp = new DesktopHttpTransport({
+    accountOrigin: app.isPackaged
+      ? readPackagedAccountOrigin(
+          join(moduleDirectory, "../dist/desktop-account-endpoint.json"),
+        )
+      : undefined,
+  });
   const handle = <T extends unknown[]>(
     channel: string,
     listener: (...args: T) => unknown,

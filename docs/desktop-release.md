@@ -70,6 +70,27 @@ coordinator, device gateway, and local workspace MCP into
 `apps/crewon-ui/desktop-resources/runtime`, then bundles them with the Electron
 host and React renderer. No native backend is built or shipped.
 
+Desktop packaging uses Vite's `desktop` mode. From a clean checkout it embeds
+`https://pim.aicuican.com` as the account service, so installed apps can sign in
+without a local backend or a developer's `.env` file. Account requests and
+relative Agent invocations resolve against the embedded backend. Web builds
+and the development server retain their existing proxy defaults.
+
+For another deployment, set `CREWON_AGENT_PLATFORM_TARGET` before packaging,
+or use an absolute `VITE_AGENT_PLATFORM_BASE_URL` (the legacy
+`VITE_AGENT_PLATFORM_API_BASE_URL` alias remains supported). A root-relative
+proxy route is replaced by `VITE_AGENT_PLATFORM_RUNTIME_BASE_URL`, which
+defaults to the configured backend. Remote base URLs require HTTPS and must
+not contain credentials, query strings, or fragments. An explicit HTTP loopback URL is supported for local
+deployments. Do not include account passwords, tokens, or model keys in Vite
+variables or copy local environment files into release artifacts.
+
+The renderer build also emits `desktop-account-endpoint.json`. The packaged
+host reads this manifest to allow the exact configured account origin through
+the desktop HTTP transport. Arbitrary remote origins, subdomains, different
+ports, embedded credentials, and redirects remain blocked; the renderer cannot
+change this allowance over IPC. Existing loopback transport behavior is retained.
+
 ## Updating
 
 `electron-updater` reads the GitHub release metadata configured in

@@ -42,30 +42,25 @@ describe("agent-platform WeCom session", () => {
     vi.stubEnv("VITE_CREWON_UNIFIED_SSO_ENABLED", "true");
     const storage = memoryStorage();
     storage.setItem(AGENT_PLATFORM_TOKEN_STORAGE_KEY, "legacy-access");
-    storage.setItem(
-      AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY,
-      "legacy-refresh",
-    );
+    storage.setItem(AGENT_PLATFORM_REFRESH_TOKEN_STORAGE_KEY, "legacy-refresh");
     vi.stubGlobal("localStorage", storage);
     vi.stubGlobal("window", {
       location: { pathname: "/workspace", search: "?thread=7" },
     });
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        Response.json({
-          access_token: "mediated-access",
-          expires_in: 600,
-          user: {
-            id: 7,
-            username: "sso-user",
-            display_name: "企微用户",
-            wecom_display_name: "企微用户",
-            email: "sso@example.com",
-            role: "user",
-          },
-        }),
-      );
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      Response.json({
+        access_token: "mediated-access",
+        expires_in: 600,
+        user: {
+          id: 7,
+          username: "sso-user",
+          display_name: "企微用户",
+          wecom_display_name: "企微用户",
+          email: "sso@example.com",
+          role: "user",
+        },
+      }),
+    );
     vi.stubGlobal("fetch", fetchMock);
 
     expect(await readWeComLoginConfig()).toMatchObject({
@@ -122,9 +117,9 @@ describe("agent-platform WeCom session", () => {
   it("uses global logout so the next login requires a fresh enterprise sign-in", async () => {
     vi.stubEnv("VITE_CREWON_UNIFIED_SSO_ENABLED", "true");
     vi.stubGlobal("localStorage", memoryStorage());
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(null, { status: 204 }),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(new Response(null, { status: 204 }));
     vi.stubGlobal("fetch", fetchMock);
 
     await logoutAgentPlatform();
@@ -201,10 +196,7 @@ describe("agent-platform WeCom session", () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(
-        Response.json(
-          { error: "agent-platform unavailable" },
-          { status: 503 },
-        ),
+        Response.json({ error: "agent-platform unavailable" }, { status: 503 }),
       )
       .mockResolvedValueOnce(
         Response.json({
@@ -262,6 +254,59 @@ describe("agent-platform WeCom session", () => {
     await expect(
       loginAgentPlatform("regression-user", "CrewON123"),
     ).rejects.toThrow("账号服务暂时不可用，请稍后重试。");
+  });
+
+  it("logs in and loads the current user through the packaged account endpoint", async () => {
+    vi.stubGlobal("localStorage", memoryStorage());
+    vi.stubGlobal("window", {
+      crewonDesktop: { version: 1 },
+      location: new URL(
+        "file:///Applications/CrewON.app/Contents/Resources/index.html",
+      ),
+    });
+    vi.stubEnv(
+      "VITE_AGENT_PLATFORM_RUNTIME_BASE_URL",
+      "https://pim.aicuican.com",
+    );
+    const user = {
+      id: 7,
+      username: "regression-user",
+      email: "regression@example.com",
+      role: "user",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.json({
+          access_token: "access-token",
+          refresh_token: "refresh-token",
+        }),
+      )
+      .mockResolvedValueOnce(Response.json(user));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await expect(
+      loginAgentPlatform("regression-user", "Fixture123"),
+    ).resolves.toEqual(user);
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "https://pim.aicuican.com/api/v1/auth/login",
+      expect.objectContaining({ method: "POST" }),
+    );
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "https://pim.aicuican.com/api/v1/auth/me",
+      expect.objectContaining({
+        headers: expect.any(Headers),
+      }),
+    );
+    const meRequest = fetchMock.mock.calls[1] as unknown as [
+      string,
+      RequestInit,
+    ];
+    expect(new Headers(meRequest[1].headers).get("Authorization")).toBe(
+      "Bearer access-token",
+    );
   });
 
   it("surfaces registration field validation messages", async () => {

@@ -1,0 +1,78 @@
+{
+  "checkedAt": "2026-09-14T09:11:43.041Z",
+  "appVersion": "0.1.1",
+  "dmg": {
+    "path": "release/CrewON-0.1.1-arm64.dmg",
+    "bytes": 175806662,
+    "sha256": "fbf9375c07d1f996d7718ed562bc0674ffca20af2718fb89828b71f882cc7787",
+    "hdiutilVerify": "passed"
+  },
+  "installedPath": "/Applications/CrewON.app",
+  "installedAsarSha256": "0f581c42b9bb10ef540c22530af519d6674edb7722a51fd51161887cf6e3d76b",
+  "accountEndpoint": {
+    "schemaVersion": 1,
+    "accountOrigin": "https://pim.aicuican.com"
+  },
+  "prohibitedPackageFiles": [],
+  "runtime": [
+    {
+      "name": "control-api.mjs",
+      "sha256": "0f1ab357af207790f4cf81ac963cc32310e84c06bf89cc1734dd1beb77bd0953",
+      "unchangedFrom010": true
+    },
+    {
+      "name": "device-gateway.mjs",
+      "sha256": "a05d1f53a3edb0c3291580b56cea0ba94f56409aaaa033dc8b83a201cf05dffc",
+      "unchangedFrom010": true
+    },
+    {
+      "name": "local-workspace-checks-mcp.mjs",
+      "sha256": "7999e307e24765b3cabf8f778d03e27be8c7269ae97046745c2af5d5d60e0d68",
+      "unchangedFrom010": true
+    },
+    {
+      "name": "provider-model-catalog.mjs",
+      "sha256": "a58b34033e6418c382e24eb0763c331eda0ed4447bd38270c665f876d243e775",
+      "unchangedFrom010": true
+    },
+    {
+      "name": "provider-settings-coordinator.mjs",
+      "sha256": "ff4586bcb8b00149a4f1210181d424482ce9109c3cc0f270e1cbac2ed69d2751",
+      "unchangedFrom010": true
+    },
+    {
+      "name": "runtime-release.mjs",
+      "sha256": "5b411ca2af3ff5ac34a97713a50375333f44903c83b6c2d8ea4f9791bcd25965",
+      "unchangedFrom010": true
+    },
+    {
+      "name": "runtime-worker.mjs",
+      "sha256": "700d1747128c3978e742926c910a0bb439c56b626c22901a43d1914d09efd3e1",
+      "unchangedFrom010": true
+    }
+  ],
+  "checks": {
+    "relatedTests": {
+      "files": 12,
+      "passed": 131
+    },
+    "uiAndHostTypecheck": "passed",
+    "desktopBuild": "passed",
+    "boundary": "passed"
+  },
+  "ui": {
+    "loadedInstalledFileUrl": true,
+    "wecomConfigReturnedBackendReason": true,
+    "passwordLogin": "passed_authenticated_workspace_observed",
+    "restartSession": "passed_quit_confirmed_then_relaunched_without_reentering_password",
+    "cloudCatalog": "loaded",
+    "modelTaskExecution": "not_retested"
+  },
+  "notes": [
+    "0.1.0 targeted loopback; the first 0.1.1 diagnostic build fixed URL but still had loopback-only transport.",
+    "Final build embeds exact account origin and the host admits it through existing bounded transport.",
+    "User data preserved; previous app bundles retained under release/installed-backups.",
+    "No signing/notarization or public release performed.",
+    "Mac locked during the automated login attempt. After user unlocked it, the authenticated installed workspace and cloud catalog were visible; no password/token is recorded."
+  ]
+}
