@@ -36,13 +36,13 @@ Control API、Store、Control Client 类型检查、OpenAPI 生成一致性和 T
 
 本树新增实际验证：生成路由、生成 SQLite 恢复、严格 schema、standalone 宿主、真实 Skill 日程宿主及兼容性八个文件共 32 项通过、0 失败、0 跳过；Control API 类型检查通过。日志位于 `/tmp/crewon-integration-generation-host-tests.log`。真实宿主测试的已激活 Skill 是合成前置数据；生成生命周期测试的提供方输出是显式夹具，这些不证明真实模型生成成功。
 
-F03 仍在补充固定无工具生成 AgentVersion 的执行硬门禁和 UI。F04 正在修复日程保存/新 Run 提交与 Skill 禁用之间的 SQLite 原子性窗口；完成前不将前后两次准入检查称为事务内一致性保证。
+F03 仍在补充固定无工具生成 AgentVersion 的执行硬门禁和 UI。F04 的 SQLite 原子性修复 `ff84a9e80` 已取入本树 `7ec329c4f`：保存日程和创建新 Run 时，在同一事务内复用完整 Skill 行校验；旧 v0 和既有 receipt 早返回行为保留，Postgres 新 v1 明确拒绝。根协调运行真实宿主交错禁用/损坏、旧客户端、Skill Store/直接 Turn/生成恢复七个测试文件，40 项通过、0 失败、0 跳过；Store/Control API 类型检查、OpenAPI 生成一致性通过。日志 `/tmp/crewon-integration-skill-fence-tests.log`。它不替代执行中每次浏览器动作的撤权检查。
 
 第三批已合并 F01 `3745d6a797a2eb9f560aefe4dd1f91797da1154a`：ExcelJS/csv-parse/xlsx-calc 表格处理、加密文件与版本 CAS、Worker 工具与下载导入、Control/客户端接口、BFF/桌面/代理上传预算。C03 沿用 owner 新增的可选数字格式和输入 Run 来源字段，同时保留 F03/F04 的契约入口。BFF 保留 `x-crewon-automation-version` 转发。
 
 本树实际运行文件/表格/客户端/HTTP/BFF/日程兼容/Worker 恢复十五个测试文件，共 63 项通过、0 失败、0 跳过，日志 `/tmp/crewon-integration-delivery-tests.log`。其中 E01/E02 读取真实生成的 XLSX，属于合成业务材料的实际文件验证。Control API、Runtime Worker、Web BFF、Control Client、Store、Artifacts 六个包类型检查通过。尚未用真实模型把这些文件操作与录制流程贯通。
 
-第四批已合并 F02 `4cdadfa09bb8fa6954bd4030615cd10994d90d45`，包含 C01、成熟可访问语义模块、Electron 录制宿主/持久化/受控截图、录制回看界面和向主窗口交接端口。desktopBridge 同时保留录制与浏览器执行授权接口。根协调在本树运行五个匹配的录制宿主/来源/存储/导航/界面测试文件，98 项通过；UI 与 Electron 类型检查通过，日志 `/tmp/crewon-integration-recording-tests.log`。这些是自动化测试，尚未证明真实模型消费或实际用户 GUI 操作。
+第四批已合并 F02 `4cdadfa09bb8fa6954bd4030615cd10994d90d45`，包含 C01、成熟可访问语义模块、Electron 录制宿主/持久化/受控截图、录制回看界面和向主窗口交接端口。desktopBridge 同时保留录制与浏览器执行授权接口。根协调在本树运行五个匹配的录制宿主/来源/存储/导航/界面测试文件，98 项通过；UI 与 Electron 类型检查通过，日志 `/tmp/crewon-integration-recording-tests.log`。追加 `001a2799c` 保护标记/下载关联修复后，录制宿主 10 项通过，Electron host 构建通过。这些是自动化测试，尚未证明真实模型消费或实际用户 GUI 操作。
 
 第五批已合并 F01 UI 与最终 feature 证据 `14b8fc895e36abd2faa762fd01634a8b4fb2a5e8`。复用 App 的 Control 客户端，在任务工作台接入文件交付。根协调在本树运行交付面板、任务工作台、Skill 日程与浏览器授权四个组件文件，24 项通过；UI 与 Electron 类型检查通过，日志 `/tmp/crewon-integration-delivery-ui-tests.log`。feature 中的文件/GUI 证据保留其原始验证范围，不等同于根协调重新完成整体验收。
 
