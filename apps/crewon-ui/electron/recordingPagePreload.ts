@@ -15,12 +15,22 @@ const source = installRecordingSource({
 });
 
 ipcRenderer.on("crewon:recording:arm", (_event, payload: unknown) => {
+  const next =
+    payload && typeof payload === "object" && "generation" in payload
+      ? payload.generation
+      : null;
+  if (typeof next !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(next)) {
+    generation = null;
+    source.setEnabled(false);
+    return;
+  }
+  // Repeated readiness events must not reset mutation-bound screenshot candidates.
+  if (next === generation) {
+    ipcRenderer.send("crewon:recording:armed", generation);
+    return;
+  }
   generation = null;
   source.setEnabled(false);
-  if (!payload || typeof payload !== "object" || !("generation" in payload))
-    return;
-  const next = payload.generation;
-  if (typeof next !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(next)) return;
   generation = next;
   source.setEnabled(true);
   ipcRenderer.send("crewon:recording:armed", generation);
