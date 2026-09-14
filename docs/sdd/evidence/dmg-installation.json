@@ -1,0 +1,52 @@
+{
+  "schemaVersion": "crewon.dmg-installation.v1",
+  "buildCommit": "4fb63a196",
+  "applicationVersion": "0.1.0",
+  "arch": "arm64",
+  "platform": "macOS 15.4.1",
+  "dmgPath": "/Users/cheneywang/project/wqc/cuican-aide-sdd-integration-20260914/apps/crewon-ui/release/CrewON-0.1.0-arm64.dmg",
+  "dmgBytes": 175807227,
+  "dmgSha256": "1ebb5af83e988f65414b7320a4aafd9ea5b3f7cb9e5da48bea0c816ad18bbea6",
+  "dmgChecksumVerified": true,
+  "installedFromDmg": true,
+  "installedPath": "/Applications/CrewON.app",
+  "mountedImageDetached": true,
+  "sourceAndInstalledAsarSha256": "11a4bae7c4f5ad0058389452251c737d202bb7bd019f81a2014e5467ba821a3f",
+  "applicationId": "ai.crewon.desktop",
+  "developerIdSigned": false,
+  "notarized": false,
+  "binarySignature": "adhoc linker signature",
+  "installedRuntimeSha256": {
+    "control-api.mjs": "0f1ab357af207790f4cf81ac963cc32310e84c06bf89cc1734dd1beb77bd0953",
+    "runtime-worker.mjs": "700d1747128c3978e742926c910a0bb439c56b626c22901a43d1914d09efd3e1",
+    "runtime-release.mjs": "5b411ca2af3ff5ac34a97713a50375333f44903c83b6c2d8ea4f9791bcd25965",
+    "provider-model-catalog.mjs": "a58b34033e6418c382e24eb0763c331eda0ed4447bd38270c665f876d243e775",
+    "provider-settings-coordinator.mjs": "ff4586bcb8b00149a4f1210181d424482ce9109c3cc0f270e1cbac2ed69d2751",
+    "device-gateway.mjs": "a05d1f53a3edb0c3291580b56cea0ba94f56409aaaa033dc8b83a201cf05dffc",
+    "local-workspace-checks-mcp.mjs": "7999e307e24765b3cabf8f778d03e27be8c7269ae97046745c2af5d5d60e0d68"
+  },
+  "asarExcludedLocalEnvironmentAndCredentials": true,
+  "uiVerification": {
+    "tool": "CUA native application",
+    "url": "file:///Applications/CrewON.app/Contents/Resources/app.asar/dist/index.html",
+    "visibleState": "CrewON account login page",
+    "remainsOpen": true,
+    "enterpriseWeComState": "unavailable",
+    "authenticatedUserFlow": false,
+    "quitAndRelaunchPassed": true
+  },
+  "runtimeEvidence": "packaged-runtime-smoke.json",
+  "runtimeFirstAttempt": "Synthetic fixture credential shorter than required 32 bytes; fixed fixture without modifying product validation",
+  "logFiles": [
+    "/tmp/crewon-dmg-build.log",
+    "/tmp/crewon-packaged-runtime-smoke.log",
+    "/tmp/crewon-packaged-runtime-smoke-first.log"
+  ],
+  "userDataOverwritten": false,
+  "runtimeChildrenStopped": true,
+  "logSha256": {
+    "/tmp/crewon-dmg-build.log": "80e86d08a748065a89a47584a42b72dcf323bc3a0c451fe5d7d46367c6ec2879",
+    "/tmp/crewon-packaged-runtime-smoke.log": "c43b87221bd8b3ff3275c5a83963e526f253a219e84ac561e350450fd4183a45",
+    "/tmp/crewon-packaged-runtime-smoke-first.log": "6f0c0169800a2c108812a22d15401b345cd03d0b188833221055865800d61090"
+  }
+}

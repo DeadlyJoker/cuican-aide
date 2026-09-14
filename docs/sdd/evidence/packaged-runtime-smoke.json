@@ -1,0 +1,50 @@
+{
+  "schemaVersion": "crewon.packaged-runtime-smoke.v1",
+  "executable": "/Applications/CrewON.app/Contents/MacOS/CrewON",
+  "node": "24.18.1",
+  "electron": "43.4.1",
+  "resourcesPath": "/Applications/CrewON.app/Contents/Resources",
+  "dataDirectory": "/var/folders/1t/_zjjjy650xb76sl820snlssr0000gn/T/crewon-installed-runtime-DLRQAm",
+  "runtimeSource": false,
+  "healthStatus": 200,
+  "threadId": "01a09f14-8ce0-767d-ba78-8b2d5cddb96b",
+  "versionId": "ccc2aaf7-953f-4cee-b196-5d77eb93b73c",
+  "bytes": 8831,
+  "contentDigest": "sha256:d298e4a59c6727903db7043f120d55d335ed5e0432b3ed9382d374fd14a9f608",
+  "writtenRows": 5,
+  "sourceChecks": [
+    {
+      "inputId": "3bc5197a-2053-425e-9206-b81cdb157c6d",
+      "sheet": "CSV",
+      "readRows": 4,
+      "writtenRows": 3,
+      "excludedBlankRows": 0,
+      "excludedRuleRows": 1,
+      "exceptionRows": 0
+    },
+    {
+      "inputId": "b4dbb15c-6b97-465e-b4aa-ce1dc89ef46e",
+      "sheet": "CSV",
+      "readRows": 3,
+      "writtenRows": 2,
+      "excludedBlankRows": 0,
+      "excludedRuleRows": 0,
+      "exceptionRows": 1
+    }
+  ],
+  "restartBytesIdentical": true,
+  "idempotentReplaySameVersion": true,
+  "modelCalls": 0,
+  "accountLoginTested": false,
+  "userDataUsed": false,
+  "independentSpreadsheetReview": {
+    "reader": "SheetJS",
+    "sheetNames": ["明细", "汇总", "异常", "来源"],
+    "detailRows": 5,
+    "summary": [
+      ["直营", "CNY", 180],
+      ["直营", "USD", 10],
+      ["渠道", "CNY", 150]
+    ]
+  }
+}

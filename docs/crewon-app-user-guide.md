@@ -1,8 +1,10 @@
 # CrewON App 使用说明
 
-适用范围：2026-09-14 本地集成版，分支 `codex/sdd-integration-20260914`。本文介绍日常任务、表格交付、浏览器示教、Skill 试跑及日程执行。实现仍在独立集成工作区，尚未合回主分支或发布安装包；已安装的旧版 App 不一定包含这些功能。
+适用范围：2026-09-14 本地集成版，分支 `codex/sdd-integration-20260914`。本文介绍日常任务、表格交付、浏览器示教、Skill 试跑及日程执行。已生成并安装本地 arm64 DMG，见 [安装包及验收记录](sdd/dmg-installation.md)；尚未合回主分支或公开发布。
 
 ## 1. 启动与准备
+
+本机已安装到 `/Applications/CrewON.app`，可从“应用程序”打开。也可挂载上述 DMG，将 CrewON 拖入 Applications。当前包未经过 Apple 发布签名和公证；本机首次安装与再次启动已经通过。
 
 从本次集成工作区启动开发版，需要 Node.js 24、pnpm 10：
 
@@ -159,4 +161,4 @@ CREWON_UI_PORT=5186 pnpm ui:desktop
 
 已有合成业务站点上的真实模型、真实浏览器与真实 XLSX 验证，包含日程触发及同请求恢复去重；[查看已生成的样例 XLSX](../artifacts/f05-real-schedule/second-period-orders.xlsx)。这些证据不等于所有网站通用、人工桌面全流程或企业登录验收通过。
 
-本轮界面复核与检查结果见 [App 可用性复核](sdd/app-readiness-review.md)。安装包安装/升级、企业站点登录、人工桌面完整流程仍待验收，不能把当前集成版当作已发布稳定版。
+本轮界面复核与检查结果见 [App 可用性复核](sdd/app-readiness-review.md)。本机 DMG 安装、再次启动、包内文件处理与服务重启已通过；升级安装、企业站点登录、人工桌面完整流程仍待验收，不能把当前集成版当作已发布稳定版。
