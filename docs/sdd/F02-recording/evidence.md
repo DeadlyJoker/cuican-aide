@@ -69,3 +69,9 @@ node --experimental-strip-types apps/crewon-ui/scripts/serve-recording-fixture.t
 ```
 
 脚本读取当前样本并占用同一 loopback 端口；端口冲突会明确报错，不偷偷换端口。已实际验证页面 `/orders` 与下载 `/export.csv` 均返回 200。站点进程须在 F03/F05 浏览器验收期间保持运行，结束后终止。样本 JSON 与 `evidence/` 配套提供；远程环境不能访问本机 loopback，需在执行桌面机器启动该脚本。需要补齐导航参数时使用合成值，仍经 F03/F05 的实际确认与授权路径。
+
+## 第二周期合成材料补充
+
+为 F05 E04 增加 2026 年 10 月材料：用户在实际日期控件输入 `2026-10-01` 并点击“筛选订单”后，页面表格切换到 A101–A105，下载链接变为 `/export.csv?period=2026-10`。只改日期、尚未点击筛选时不会切换已应用的下载周期。十月包含 A101 direct/CNY/paid 110、A103 direct/CNY/paid 90，以及取消、其他渠道、USD 行；有效直营 CNY 合计为 200.00。未知周期明确不可下载，不能悄悄返回九月数据。
+
+九月默认 `/export.csv` 与 `period=2026-09` 返回原 CSV 字节；已保存的 C01 JSON、摘要、配套证据和九月下载文件未修改。新增两项 DOM+真实 HTTP 行为回归验证实际页面脚本、周期切换及原始材料兼容。另以 F05 driver 在独立真实 Electron view 上执行日期 fill → 筛选 click → 真实下载，结果 completed、5 行原始数据、有效合计 200.00，见 `period-fixture-result.json`；该次使用焦点仿真自动化输入，不是人工操作或新 C01 录制。测试使用临时端口，不占用已有样本的 60279 端口。

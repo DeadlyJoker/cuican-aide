@@ -1,0 +1,17 @@
+{
+  "status": "passed",
+  "source": "real Electron synthetic fixture",
+  "driver": "F05 BrowserViewAutomation",
+  "focusEmulated": true,
+  "manualInput": false,
+  "date": "2026-10-01",
+  "downloadPath": "/export.csv?period=2026-10",
+  "downloadOutcome": "completed",
+  "directCnyPaid": "200.00",
+  "includedOrderIds": [
+    "A101",
+    "A103"
+  ],
+  "rawRows": 5,
+  "originalRecordingSampleModified": false
+}
