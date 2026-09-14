@@ -10,9 +10,9 @@ import type {
 import {
   SkillLibraryHost,
   type SkillLibraryControlClient,
-} from "./SkillLibraryHost";
-import { CommandWorkspace } from "../app/CommandWorkspace";
-import { emptyAgentPlatformSnapshot } from "../app/commandWorkspaceState";
+} from "../skill/SkillLibraryHost";
+import { CommandWorkspace } from "./CommandWorkspace";
+import { emptyAgentPlatformSnapshot } from "./commandWorkspaceState";
 import * as platformClient from "../../lib/agent-platform/agentPlatformClient";
 
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
