@@ -1,0 +1,18 @@
+{
+  "runId": "01a09e42-c0b0-71c9-b0c2-ca24e9d1c74d",
+  "threadId": "01a09e42-bf9e-768b-a046-504922fefb24",
+  "status": "reconciling",
+  "revision": 48,
+  "lastSequence": 48,
+  "cancelRequested": false,
+  "waitingApproval": null,
+  "collaborationMode": "default",
+  "purpose": "turn",
+  "workflowVersionBinding": null,
+  "goalBinding": null,
+  "outputRef": null,
+  "failure": null,
+  "createdAt": "2026-09-14T04:52:49.968Z",
+  "updatedAt": "2026-09-14T04:53:28.673Z",
+  "terminalAt": null
+}

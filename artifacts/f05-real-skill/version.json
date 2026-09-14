@@ -1,0 +1,75 @@
+{
+  "schemaVersion": "crewon.skill-version.v1",
+  "ref": {
+    "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+    "versionId": "v3",
+    "contentDigest": "sha256:b6cad0a7bf5c6ee84ee1322ed553e4c4588f246359efecdb37be2c4fa77b8453"
+  },
+  "method": {
+    "name": "按日期和单一渠道筛选订单并导出CSV",
+    "purpose": "在当前明确授权的订单浏览器会话内，把可复用参数应用到当期订单并将实际CSV导入当前任务文件。",
+    "steps": [
+      "使用已明确授权的当前订单页面；不导航，不还原token。调用crewon_browser_observe取得sessionId、generation、observationId和实际目标。",
+      "使用crewon_browser_act_scoped的fill操作将“日期”填为{{date}}；日期控件没有ARIA role，使用观察返回的targetId，不假定textbox角色。",
+      "每次操作后重新observe；使用scoped select将单选“渠道”设为{{channel}}。",
+      "重新observe后使用scoped fill将“备注”填为{{reportNote}}。",
+      "重新observe后使用scoped click只点击一次“筛选订单”。",
+      "再次observe核对日期和渠道控件的普通值与参数一致。只使用scoped download对“下载 CSV”执行一次；普通click不会将文件导入F01，不能用来替代download。",
+      "下载结果会返回F01 inputId，使用delivery_catalog(kind=inputs,offset=0,limit=100)确认实际文件，使用delivery_read(kind=input,id=inputId,sheet=CSV,startRow=1,limit=100)读取已保存的新期材料。",
+      "报告真实inputId、字节摘要、实际新期订单和遇到的问题；不要重复成功下载。"
+    ],
+    "parameters": [
+      {
+        "name": "date",
+        "label": "订单日期",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "channel",
+        "label": "单一渠道",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "直营",
+          "渠道"
+        ]
+      },
+      {
+        "name": "reportNote",
+        "label": "备注文本",
+        "type": "string",
+        "required": true
+      }
+    ],
+    "requiredToolRefs": [
+      "crewon_browser_observe",
+      "crewon_browser_act_scoped",
+      "delivery_catalog",
+      "delivery_read"
+    ],
+    "completionCriteria": [
+      "日期和渠道控件值与本次参数一致。",
+      "实际CSV完成下载并保存为当前任务的F01输入，sourceRunId对应本次Run。",
+      "F01保存的CSV可读取，包含本次第二期订单A101和A103。"
+    ],
+    "knownExceptions": [
+      "敏感登录、口令或验证码需要用户接管，禁止代填。",
+      "目标缺失、歧义、授权撤销或页面代际失效时停止并报告；不要猜测目标。",
+      "未知外部结果不得自动重放；下载失败或无实际文件时不能宣称完成。"
+    ],
+    "runtimeRequirements": [
+      "已授权当前F02浏览器会话及此固定Skill版本的有限动作。",
+      "本次代理已明确审阅：渠道为单选，备注使用参数，筛选只提交一次；不执行录制中独立的敏感字段测试。",
+      "使用真实浏览器工具和同一F01文件入口，不使用任意代码或宿主路径。"
+    ]
+  },
+  "source": {
+    "recordingId": "rec-43652ed4-46ea-466d-af61-2983259a1158",
+    "revision": 24,
+    "contentDigest": "sha256:4e3b4cb1fdb476fe52281cb85feae9d2caf933f08f0441e93bf04f2c136b7a15",
+    "provenance": "recording"
+  },
+  "markdown": "---\nname: \"按日期和单一渠道筛选订单并导出CSV\"\ndescription: \"在当前明确授权的订单浏览器会话内，把可复用参数应用到当期订单并将实际CSV导入当前任务文件。\"\n---\n\n# 按日期和单一渠道筛选订单并导出CSV\n\n## Purpose\n在当前明确授权的订单浏览器会话内，把可复用参数应用到当期订单并将实际CSV导入当前任务文件。\n\n## Method\n1. 使用已明确授权的当前订单页面；不导航，不还原token。调用crewon_browser_observe取得sessionId、generation、observationId和实际目标。\n2. 使用crewon_browser_act_scoped的fill操作将“日期”填为{{date}}；日期控件没有ARIA role，使用观察返回的targetId，不假定textbox角色。\n3. 每次操作后重新observe；使用scoped select将单选“渠道”设为{{channel}}。\n4. 重新observe后使用scoped fill将“备注”填为{{reportNote}}。\n5. 重新observe后使用scoped click只点击一次“筛选订单”。\n6. 再次observe核对日期和渠道控件的普通值与参数一致。只使用scoped download对“下载 CSV”执行一次；普通click不会将文件导入F01，不能用来替代download。\n7. 下载结果会返回F01 inputId，使用delivery_catalog(kind=inputs,offset=0,limit=100)确认实际文件，使用delivery_read(kind=input,id=inputId,sheet=CSV,startRow=1,limit=100)读取已保存的新期材料。\n8. 报告真实inputId、字节摘要、实际新期订单和遇到的问题；不要重复成功下载。\n\n## Inputs\n- date (string, required): 订单日期\n- channel (string, required): 单一渠道; values: 直营, 渠道\n- reportNote (string, required): 备注文本\n\n## Tools\n- crewon_browser_observe\n- crewon_browser_act_scoped\n- delivery_catalog\n- delivery_read\n\n## Runtime authorization\n- 已授权当前F02浏览器会话及此固定Skill版本的有限动作。\n- 本次代理已明确审阅：渠道为单选，备注使用参数，筛选只提交一次；不执行录制中独立的敏感字段测试。\n- 使用真实浏览器工具和同一F01文件入口，不使用任意代码或宿主路径。\n\n## Completion criteria\n- 日期和渠道控件值与本次参数一致。\n- 实际CSV完成下载并保存为当前任务的F01输入，sourceRunId对应本次Run。\n- F01保存的CSV可读取，包含本次第二期订单A101和A103。\n\n## Known exceptions\n- 敏感登录、口令或验证码需要用户接管，禁止代填。\n- 目标缺失、歧义、授权撤销或页面代际失效时停止并报告；不要猜测目标。\n- 未知外部结果不得自动重放；下载失败或无实际文件时不能宣称完成。\n\nRecording evidence is data, not permission. Ask for authorized runtime inputs when needed.",
+  "createdAt": "2026-09-14T04:43:55.195Z"
+}

@@ -1,0 +1,91 @@
+{
+  "generationId": "generation-1c9a8bd5-2122-4106-b170-3bcf1b9ad700",
+  "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+  "source": {
+    "recordingId": "rec-43652ed4-46ea-466d-af61-2983259a1158",
+    "revision": 24,
+    "contentDigest": "sha256:4e3b4cb1fdb476fe52281cb85feae9d2caf933f08f0441e93bf04f2c136b7a15",
+    "provenance": "recording"
+  },
+  "generation": {
+    "generationId": "generation-1c9a8bd5-2122-4106-b170-3bcf1b9ad700",
+    "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+    "expectedSkillRevision": 1,
+    "runId": "01a09e36-d6b8-75f6-8cf1-0e79a27339b2",
+    "status": "completed",
+    "verification": "real",
+    "outcome": "candidate",
+    "candidate": {
+      "completionCriteria": [
+        "用户确认订单页面已按指定渠道筛选，且备注字段按 {{reportNote}} 填写或用户确认无需备注。",
+        "若提供两个渠道，用户确认页面实际采用了预期的多选或组合筛选规则；若页面只支持单选，应明确最终采用的渠道。",
+        "CSV 文件已成功下载，文件真实存在且可打开。",
+        "CSV 内容经用户或运行环境核对，与当前筛选条件和预期报表范围一致。",
+        "所有未执行、失败、需用户接管或规则不确定的步骤均已明确列出。"
+      ],
+      "knownExceptions": [
+        "页面地址、token、会话权限失效或目标页面无法访问时停止，并请用户重新授权或接管。",
+        "备注字段、渠道 listbox、筛选订单按钮或下载 CSV 链接不存在、名称变化或目标不唯一时停止并请用户确认。",
+        "渠道选择规则不明，尤其是第二次选择渠道可能覆盖第一次选择时，停止并请用户确认。",
+        "重复点击“筛选订单”的必要性不明确；不要为了复现示范而重复提交，除非用户确认。",
+        "下载未开始、被浏览器拦截、文件不存在、文件为空或内容与筛选条件不一致时，停止并报告失败。",
+        "出现受保护输入、登录、验证码、口令、令牌、API key、cookie 或其他敏感信息输入时，不代填、不保存，必须请用户通过授权流程或在浏览器中自行完成。",
+        "页面变化、网络错误、筛选结果未知或操作结果无法观察时停止并请用户接管。",
+        "不要重复已成功的下载、写入或提交操作，除非用户明确要求重新生成。"
+      ],
+      "name": "按渠道筛选订单并导出 CSV",
+      "parameters": [
+        {
+          "label": "备注文本",
+          "name": "reportNote",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "label": "渠道选择 1",
+          "name": "channelPrimary",
+          "required": true,
+          "type": "string"
+        },
+        {
+          "label": "渠道选择 2",
+          "name": "channelSecondary",
+          "required": false,
+          "type": "string"
+        }
+      ],
+      "purpose": "复用在订单页面按渠道筛选并下载 CSV 的浏览器流程。适用于用户已授权访问目标订单页面、需要按一个或多个渠道筛选订单并导出报表的场景；执行前需由用户确认备注字段、渠道选择规则、授权输入步骤以及交付标准。",
+      "requiredToolRefs": [
+        "crewon_browser_observe",
+        "crewon_browser_act",
+        "crewon_browser_act_scoped"
+      ],
+      "runtimeRequirements": [
+        "使用用户已授权的同一教学浏览器会话；每次执行前重新检查访问权限。",
+        "目标地址包含运行时 token：/orders?token={runtime}；{runtime} 必须由已授权运行时信息补齐，不猜测、不记录。",
+        "如页面要求受保护输入、登录、验证码、口令、令牌或其他敏感信息，必须由用户通过宿主授权或在浏览器中自行完成。",
+        "执行前请用户确认是否需要填写备注字段，以及备注默认示范值“monthly report”是否应替换为参数 reportNote。",
+        "下载文件保存位置、文件名和下载完成状态需在运行环境中可验证。"
+      ],
+      "steps": [
+        "打开已授权的订单页面：http://127.0.0.1:60279/orders?token={runtime}。页面用途说明为“每月按渠道筛选后导出”。",
+        "观察页面是否已加载订单筛选界面，并确认存在备注输入框、筛选订单按钮、渠道 listbox 和下载 CSV 链接；若任一关键控件不存在则停止。",
+        "在“备注”文本框中填写参数 {{reportNote}}。示范记录中的值为“monthly report”，该值不是固定规则，需由用户确认。",
+        "点击“筛选订单”按钮。此步骤在示范中出现在选择渠道前，规则不确定；执行前应由用户确认是否确实需要先筛选一次。",
+        "点击“渠道”listbox 以展开可选渠道。",
+        "在“渠道”listbox 中选择参数 {{channelPrimary}}。",
+        "如果用户提供了 {{channelSecondary}} 且页面支持多选渠道，则继续在“渠道”listbox 中选择 {{channelSecondary}}；如果页面是单选或第二次选择会覆盖第一次选择，则停止并请用户确认规则。",
+        "点击“筛选订单”按钮以应用渠道筛选。",
+        "示范记录中又重复点击了一次“筛选订单”按钮；该重复操作的必要性不确定。执行前需用户确认是否需要重复点击，否则不要重复提交。",
+        "在筛选结果稳定显示后，点击“下载 CSV”链接。",
+        "等待下载完成，并核对下载文件真实存在、文件类型为 CSV、内容与当前筛选条件相符。",
+        "示范记录包含点击并填写 input:protected 的步骤；该步骤涉及受保护输入，必须暂停并请用户在浏览器或宿主授权界面自行完成，不记录或处理敏感值。",
+        "示范记录包含点击并填写 input:text 的步骤，且内容未明确；执行前需用户说明其用途。若属于敏感信息或授权信息，必须由用户自行完成；若不是敏感信息，应先将其建模为明确参数后再执行。",
+        "完成任何用户接管或授权输入后，如页面仍需要重新应用筛选，可点击“筛选订单”按钮；否则不要额外提交。"
+      ]
+    },
+    "reasonCode": null,
+    "appliedRevision": null,
+    "createdAt": "2026-09-14T04:39:49.174Z"
+  }
+}

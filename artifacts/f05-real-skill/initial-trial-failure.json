@@ -1,0 +1,12 @@
+{
+  "runId": "01a09e3a-98e7-7278-9370-45d10b3d8a17",
+  "outcome": "acceptance-timeout; Run remained running, not completed",
+  "code": "browser_execution_input_invalid",
+  "modelInput": {
+    "sessionId": ""
+  },
+  "observation": "input schema allowed empty string while strict parser rejected it before any host request; exception caused repeated pending work rather than a model-visible error",
+  "workItemAttemptsObserved": 121,
+  "hostDispatches": 0,
+  "fixRequired": "bounded completed isError before host dispatch plus strict schema minLength; retain identity/lease/protocol fail-closed behavior"
+}

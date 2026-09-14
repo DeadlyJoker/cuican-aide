@@ -1,0 +1,121 @@
+{
+  "generationId": "generation-1c9a8bd5-2122-4106-b170-3bcf1b9ad700",
+  "reviewer": "Codex acting under delegated integration acceptance; no human review claimed",
+  "reviewNotes": [
+    "保留真实模型候选原文。已查看实际F02源与页面结构：size=2 listbox没有multiple，仅单选；删除不确定的双渠道与冗余筛选。",
+    "受保护字段是录制中的敏感过滤测试，独立于订单导出；本次不会填写，遇真实鉴权阻断则停止。",
+    "本次显式选择已授权当前/orders页，不还原C01脱敏token。",
+    "根据用户第二周期验收目标添加date参数；该日期输入为页面现存标准控件，旧录制该步已在回看中删除，因此这属于明确的审阅修正。",
+    "独立核验由宿主页面值和F01真实字节完成，模型不会获得任意JS/CDP。"
+  ],
+  "parameters": {
+    "date": "2026-10-01",
+    "channel": "直营",
+    "reportNote": "2026-10 monthly report"
+  },
+  "method": {
+    "name": "按日期和单一渠道筛选订单并导出CSV",
+    "purpose": "在当前明确授权的订单浏览器会话内，把可复用参数应用到当期订单并将实际CSV导入当前任务文件。",
+    "parameters": [
+      {
+        "name": "date",
+        "label": "订单日期",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "channel",
+        "label": "单一渠道",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "直营",
+          "渠道"
+        ]
+      },
+      {
+        "name": "reportNote",
+        "label": "备注文本",
+        "type": "string",
+        "required": true
+      }
+    ],
+    "requiredToolRefs": [
+      "crewon_browser_observe",
+      "crewon_browser_act_scoped",
+      "delivery_catalog",
+      "delivery_read"
+    ],
+    "steps": [
+      "使用已明确授权的当前订单页面；不导航，不还原token。调用crewon_browser_observe取得sessionId、generation、observationId和实际目标。",
+      "使用crewon_browser_act_scoped的fill操作将“日期”填为{{date}}；日期控件没有ARIA role，使用观察返回的targetId，不假定textbox角色。",
+      "每次操作后重新observe；使用scoped select将单选“渠道”设为{{channel}}。",
+      "重新observe后使用scoped fill将“备注”填为{{reportNote}}。",
+      "重新observe后使用scoped click只点击一次“筛选订单”。",
+      "再次observe核对日期和渠道控件的普通值与参数一致。只使用scoped download对“下载 CSV”执行一次；普通click不会将文件导入F01，不能用来替代download。",
+      "下载结果会返回F01 inputId，使用delivery_catalog(kind=inputs,offset=0,limit=100)确认实际文件，使用delivery_read(kind=input,id=inputId,sheet=CSV,startRow=1,limit=100)读取已保存的新期材料。",
+      "报告真实inputId、字节摘要、实际新期订单和遇到的问题；不要重复成功下载。"
+    ],
+    "completionCriteria": [
+      "日期和渠道控件值与本次参数一致。",
+      "实际CSV完成下载并保存为当前任务的F01输入，sourceRunId对应本次Run。",
+      "F01保存的CSV可读取，包含本次第二期订单A101和A103。"
+    ],
+    "knownExceptions": [
+      "敏感登录、口令或验证码需要用户接管，禁止代填。",
+      "目标缺失、歧义、授权撤销或页面代际失效时停止并报告；不要猜测目标。",
+      "未知外部结果不得自动重放；下载失败或无实际文件时不能宣称完成。"
+    ],
+    "runtimeRequirements": [
+      "已授权当前F02浏览器会话及此固定Skill版本的有限动作。",
+      "本次代理已明确审阅：渠道为单选，备注使用参数，筛选只提交一次；不执行录制中独立的敏感字段测试。",
+      "使用真实浏览器工具和同一F01文件入口，不使用任意代码或宿主路径。"
+    ]
+  },
+  "browserRules": [
+    {
+      "action": "fill",
+      "target": {
+        "role": "",
+        "name": "日期"
+      },
+      "value": {
+        "parameter": "date"
+      }
+    },
+    {
+      "action": "select",
+      "target": {
+        "role": "listbox",
+        "name": "渠道"
+      },
+      "value": {
+        "parameter": "channel"
+      }
+    },
+    {
+      "action": "fill",
+      "target": {
+        "role": "textbox",
+        "name": "备注"
+      },
+      "value": {
+        "parameter": "reportNote"
+      }
+    },
+    {
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "筛选订单"
+      }
+    },
+    {
+      "action": "download",
+      "target": {
+        "role": "link",
+        "name": "下载 CSV"
+      }
+    }
+  ]
+}

@@ -1,0 +1,516 @@
+{
+  "authorization": {
+    "allowedOrigins": [
+      "http://127.0.0.1:60279"
+    ],
+    "authorizedAt": "2026-09-14T04:32:11.380Z",
+    "source": "desktop-user-start"
+  },
+  "edits": [
+    {
+      "at": "2026-09-14T04:32:16.399Z",
+      "operation": "delete",
+      "revision": 22,
+      "stepId": "step-2"
+    },
+    {
+      "at": "2026-09-14T04:32:16.455Z",
+      "operation": "annotate",
+      "revision": 23,
+      "stepId": "step-1"
+    }
+  ],
+  "evidence": [
+    {
+      "byteLength": 218,
+      "contentDigest": "sha256:09f04c07effb121f3b1733e717c8c76fa60acd5e5a784c21643eb9edbdf8fe23",
+      "evidenceId": "evidence-3",
+      "kind": "redacted-layout",
+      "mediaType": "image/svg+xml"
+    },
+    {
+      "byteLength": 217,
+      "contentDigest": "sha256:3a92f115d7afbfdf7a8cad175e3d73dabad17ead0abe40c2f097165273cf068b",
+      "evidenceId": "evidence-4",
+      "kind": "redacted-layout",
+      "mediaType": "image/svg+xml"
+    },
+    {
+      "byteLength": 3499,
+      "contentDigest": "sha256:a7303acb5c3e6146a6a1c660f78d54c0d3293a139d953878c79c3f9be8372dd2",
+      "evidenceId": "evidence-5",
+      "kind": "redacted-screenshot",
+      "mediaType": "image/png"
+    },
+    {
+      "byteLength": 4111,
+      "contentDigest": "sha256:a9812a5921a307a303a00842b7336f2bda351c7988f9d4e2690421bfe28db9dc",
+      "evidenceId": "evidence-6",
+      "kind": "redacted-screenshot",
+      "mediaType": "image/png"
+    },
+    {
+      "byteLength": 4116,
+      "contentDigest": "sha256:35061ffb2b1ff63441f5c72a2a64d2ccc1022a39c651413c5aa3672c26dc3cef",
+      "evidenceId": "evidence-7",
+      "kind": "redacted-screenshot",
+      "mediaType": "image/png"
+    },
+    {
+      "byteLength": 217,
+      "contentDigest": "sha256:3a92f115d7afbfdf7a8cad175e3d73dabad17ead0abe40c2f097165273cf068b",
+      "evidenceId": "evidence-8",
+      "kind": "redacted-layout",
+      "mediaType": "image/svg+xml"
+    },
+    {
+      "byteLength": 217,
+      "contentDigest": "sha256:3a92f115d7afbfdf7a8cad175e3d73dabad17ead0abe40c2f097165273cf068b",
+      "evidenceId": "evidence-9",
+      "kind": "redacted-layout",
+      "mediaType": "image/svg+xml"
+    },
+    {
+      "byteLength": 217,
+      "contentDigest": "sha256:f24e46b6b78ee66ae0b43afd35c530574d63f4706504988b70a5881156fd1f33",
+      "evidenceId": "evidence-10",
+      "kind": "redacted-layout",
+      "mediaType": "image/svg+xml"
+    },
+    {
+      "byteLength": 218,
+      "contentDigest": "sha256:11700575504b2bd3875da88007931d5da489e80758bd585364e4a76acd188d8c",
+      "evidenceId": "evidence-12",
+      "kind": "redacted-layout",
+      "mediaType": "image/svg+xml"
+    },
+    {
+      "byteLength": 218,
+      "contentDigest": "sha256:11700575504b2bd3875da88007931d5da489e80758bd585364e4a76acd188d8c",
+      "evidenceId": "evidence-13",
+      "kind": "redacted-layout",
+      "mediaType": "image/svg+xml"
+    },
+    {
+      "byteLength": 218,
+      "contentDigest": "sha256:3491e445d6c51c2107bd64c2cb48740b4af6ffb3576ec5fe8d86386891d72992",
+      "evidenceId": "evidence-14",
+      "kind": "redacted-layout",
+      "mediaType": "image/svg+xml"
+    },
+    {
+      "byteLength": 218,
+      "contentDigest": "sha256:3491e445d6c51c2107bd64c2cb48740b4af6ffb3576ec5fe8d86386891d72992",
+      "evidenceId": "evidence-15",
+      "kind": "redacted-layout",
+      "mediaType": "image/svg+xml"
+    },
+    {
+      "byteLength": 216,
+      "contentDigest": "sha256:aadfa57a6fcd56399b8683bf7902dec5d313dbe8d39e982c6457969d97c273ba",
+      "evidenceId": "evidence-16",
+      "kind": "redacted-layout",
+      "mediaType": "image/svg+xml"
+    }
+  ],
+  "recordingId": "rec-43652ed4-46ea-466d-af61-2983259a1158",
+  "revision": 24,
+  "schemaVersion": 1,
+  "scope": {
+    "ownerId": "desktop-fe7fe94c-4bb1-4f19-804c-474c040fcaed",
+    "workspaceId": null
+  },
+  "startedAt": "2026-09-14T04:32:11.380Z",
+  "status": "completed",
+  "steps": [
+    {
+      "evidenceIds": [],
+      "input": null,
+      "kind": "navigate",
+      "note": "每月按渠道筛选后导出",
+      "occurredAt": "2026-09-14T04:32:11.434Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": null,
+      "relatedStepId": null,
+      "sequence": 1,
+      "stepId": "step-1",
+      "target": null
+    },
+    {
+      "evidenceIds": [
+        "evidence-3"
+      ],
+      "input": {
+        "classification": "ordinary",
+        "value": "monthly report"
+      },
+      "kind": "input",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:12.637Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": "screenshot-unavailable",
+      "relatedStepId": null,
+      "sequence": 3,
+      "stepId": "step-3",
+      "target": {
+        "accessibleName": "备注",
+        "description": "input:text",
+        "role": "textbox",
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > label:nth-of-type(3) > input:nth-of-type(1)",
+        "tag": "input"
+      }
+    },
+    {
+      "evidenceIds": [
+        "evidence-4"
+      ],
+      "input": null,
+      "kind": "click",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:12.639Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": "screenshot-unavailable",
+      "relatedStepId": null,
+      "sequence": 4,
+      "stepId": "step-4",
+      "target": {
+        "accessibleName": "筛选订单",
+        "description": "button",
+        "role": "button",
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > button:nth-of-type(1)",
+        "tag": "button"
+      }
+    },
+    {
+      "evidenceIds": [
+        "evidence-5"
+      ],
+      "input": null,
+      "kind": "click",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:13.143Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": null,
+      "relatedStepId": null,
+      "sequence": 5,
+      "stepId": "step-5",
+      "target": {
+        "accessibleName": "渠道",
+        "description": "select",
+        "role": "listbox",
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > label:nth-of-type(2) > select:nth-of-type(1)",
+        "tag": "select"
+      }
+    },
+    {
+      "evidenceIds": [
+        "evidence-6"
+      ],
+      "input": {
+        "classification": "parameter-candidate",
+        "value": "直营"
+      },
+      "kind": "select",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:13.353Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": null,
+      "relatedStepId": null,
+      "sequence": 6,
+      "stepId": "step-6",
+      "target": {
+        "accessibleName": "渠道",
+        "description": "select",
+        "role": "listbox",
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > label:nth-of-type(2) > select:nth-of-type(1)",
+        "tag": "select"
+      }
+    },
+    {
+      "evidenceIds": [
+        "evidence-7"
+      ],
+      "input": {
+        "classification": "parameter-candidate",
+        "value": "渠道"
+      },
+      "kind": "select",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:13.370Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": null,
+      "relatedStepId": null,
+      "sequence": 7,
+      "stepId": "step-7",
+      "target": {
+        "accessibleName": "渠道",
+        "description": "select",
+        "role": "listbox",
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > label:nth-of-type(2) > select:nth-of-type(1)",
+        "tag": "select"
+      }
+    },
+    {
+      "evidenceIds": [
+        "evidence-8"
+      ],
+      "input": null,
+      "kind": "click",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:13.395Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": "screenshot-unavailable",
+      "relatedStepId": null,
+      "sequence": 8,
+      "stepId": "step-8",
+      "target": {
+        "accessibleName": "筛选订单",
+        "description": "button",
+        "role": "button",
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > button:nth-of-type(1)",
+        "tag": "button"
+      }
+    },
+    {
+      "evidenceIds": [
+        "evidence-9"
+      ],
+      "input": null,
+      "kind": "click",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:14.344Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": "screenshot-unavailable",
+      "relatedStepId": null,
+      "sequence": 9,
+      "stepId": "step-9",
+      "target": {
+        "accessibleName": "筛选订单",
+        "description": "button",
+        "role": "button",
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > button:nth-of-type(1)",
+        "tag": "button"
+      }
+    },
+    {
+      "evidenceIds": [
+        "evidence-10"
+      ],
+      "input": null,
+      "kind": "click",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:14.611Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": "screenshot-unavailable",
+      "relatedStepId": null,
+      "sequence": 10,
+      "stepId": "step-10",
+      "target": {
+        "accessibleName": "下载 CSV",
+        "description": "a",
+        "role": "link",
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > a:nth-of-type(1)",
+        "tag": "a"
+      }
+    },
+    {
+      "evidenceIds": [],
+      "input": null,
+      "kind": "download",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:14.618Z",
+      "outcome": "completed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": null,
+      "relatedStepId": "step-10",
+      "sequence": 11,
+      "stepId": "step-11",
+      "target": null
+    },
+    {
+      "evidenceIds": [
+        "evidence-12"
+      ],
+      "input": null,
+      "kind": "click",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:14.824Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": "sensitive-or-unbounded-input-omitted",
+      "relatedStepId": null,
+      "sequence": 12,
+      "stepId": "step-12",
+      "target": {
+        "accessibleName": null,
+        "description": "input:protected",
+        "role": null,
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > details:nth-of-type(1) > label:nth-of-type(1) > input:nth-of-type(1)",
+        "tag": "input"
+      }
+    },
+    {
+      "evidenceIds": [
+        "evidence-13"
+      ],
+      "input": {
+        "classification": "runtime-required"
+      },
+      "kind": "input",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:14.827Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": "sensitive-or-unbounded-input-omitted",
+      "relatedStepId": null,
+      "sequence": 13,
+      "stepId": "step-13",
+      "target": {
+        "accessibleName": null,
+        "description": "input:protected",
+        "role": null,
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > details:nth-of-type(1) > label:nth-of-type(1) > input:nth-of-type(1)",
+        "tag": "input"
+      }
+    },
+    {
+      "evidenceIds": [
+        "evidence-14"
+      ],
+      "input": null,
+      "kind": "click",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:14.830Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": "sensitive-or-unbounded-input-omitted",
+      "relatedStepId": null,
+      "sequence": 14,
+      "stepId": "step-14",
+      "target": {
+        "accessibleName": null,
+        "description": "input:text",
+        "role": null,
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > details:nth-of-type(1) > label:nth-of-type(2) > input:nth-of-type(1)",
+        "tag": "input"
+      }
+    },
+    {
+      "evidenceIds": [
+        "evidence-15"
+      ],
+      "input": {
+        "classification": "runtime-required"
+      },
+      "kind": "input",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:14.869Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": "sensitive-or-unbounded-input-omitted",
+      "relatedStepId": null,
+      "sequence": 15,
+      "stepId": "step-15",
+      "target": {
+        "accessibleName": null,
+        "description": "input:text",
+        "role": null,
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > details:nth-of-type(1) > label:nth-of-type(2) > input:nth-of-type(1)",
+        "tag": "input"
+      }
+    },
+    {
+      "evidenceIds": [
+        "evidence-16"
+      ],
+      "input": null,
+      "kind": "click",
+      "note": null,
+      "occurredAt": "2026-09-14T04:32:14.872Z",
+      "outcome": "observed",
+      "page": {
+        "origin": "http://127.0.0.1:60279",
+        "routeDigest": "sha256:44b0278210d7cebb805affcdaffccea87498aa6ba9c982078f0b6c9e24d8c029",
+        "routeTemplate": "http://127.0.0.1:60279/orders?token={runtime}"
+      },
+      "reason": "screenshot-unavailable",
+      "relatedStepId": null,
+      "sequence": 16,
+      "stepId": "step-16",
+      "target": {
+        "accessibleName": "筛选订单",
+        "description": "button",
+        "role": "button",
+        "selector": "html:nth-of-type(1) > body:nth-of-type(1) > button:nth-of-type(1)",
+        "tag": "button"
+      }
+    }
+  ],
+  "updatedAt": "2026-09-14T04:32:16.458Z",
+  "contentDigest": "sha256:4e3b4cb1fdb476fe52281cb85feae9d2caf933f08f0441e93bf04f2c136b7a15"
+}
