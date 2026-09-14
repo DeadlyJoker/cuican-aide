@@ -38,3 +38,6 @@ export * from "./automation-skill-binding.ts";
 export * from "./automation-parameter-bindings.ts";
 export * from "./delivery.ts";
 export * from "./delivery-requests.ts";
+
+export * from "./automation-skill-binding.ts";
+export * from "./automation-parameter-bindings.ts";

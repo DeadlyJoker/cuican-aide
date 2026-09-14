@@ -1,3 +1,4 @@
+import { bindSqliteSkillTurn } from "./sqlite-skill-turn-binding.ts";
 import { encodeSqliteExecutionReceipt, decodeSqliteExecutionReceipt } from "./sqlite-execution-receipt-codec.ts";
 import { recordSqliteModelCall, listSqliteModelCalls } from "./sqlite-model-call-store.ts";
 import { readSqliteActiveRun } from "./sqlite-active-run-read.ts";
@@ -2352,6 +2353,7 @@ export class SqliteRunStore implements DomainStore {
         (workItemId) => this.#workItemIdExists(workItemId),
       );
 
+      bindSqliteSkillTurn(this.#database, input, nextRun);
       this.#writeThreadSnapshot(
         currentThread,
         nextThread,

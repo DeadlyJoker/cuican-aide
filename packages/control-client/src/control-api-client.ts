@@ -207,6 +207,22 @@ export class ControlApiClient {
     this.#fetch = config.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
+  /** Authenticated, same-origin transport restricted to the hosted Skill namespace. */
+  requestSkill(path: string, init: RequestInit = {}): Promise<Response> {
+    if (!/^\/api\/v1\/skills(?:\/|\?|$)/u.test(path) || path.includes("..") || path.includes("\\") || /%2e|%2f|%5c/iu.test(path)) throw new ControlApiProtocolError("skill_request_path_invalid");
+    const method = init.method ?? "GET";
+    if (!["GET", "POST", "PATCH"].includes(method)) throw new ControlApiProtocolError("skill_request_method_invalid");
+    const headers = this.#authenticatedHeaders("application/json");
+    if (method !== "GET") {
+      if (this.#csrfToken === null) throw new ControlApiProtocolError("control_client_csrf_token_required");
+      headers.set("x-csrf-token", this.#csrfToken);
+      headers.set("content-type", "application/json");
+    }
+    const suppliedId = new Headers(init.headers).get("idempotency-key");
+    if (suppliedId !== null) headers.set("idempotency-key", idempotencyKey(suppliedId));
+    return this.#fetch(new URL(path, this.#baseUrl), {method, headers, credentials: "include", body: init.body, signal: init.signal});
+  }
+
   async getExecutionIntentCapability(
     options: ControlApiRequestOptions = {},
   ): Promise<ExecutionIntentCapabilityResponse> {

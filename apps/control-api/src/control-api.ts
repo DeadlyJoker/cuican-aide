@@ -1,4 +1,6 @@
 import { projectAutomationWithReadiness } from "./automation-readiness-projection.ts";
+import { registerDemonstratedSkillRoutes } from "./demonstrated-skill-routes.ts";
+import type { DemonstratedSkillService, SkillRecordingStore } from "@crewon/application";
 import { requireSkillScheduleClient, supportsSkillSchedules } from "./automation-client-compatibility.ts";
 import { registerThreadActiveRunRoute } from "./thread-active-run-route.ts";
 import { registerThreadCatalogRoute } from "./thread-catalog-route.ts";
@@ -211,6 +213,8 @@ import type {
 } from "./pim-sandbox-client.ts";
 
 export type ControlApiDependencies = Readonly<{
+  skills?: DemonstratedSkillService | null;
+  skillRecordings?: SkillRecordingStore | null;
   application: RunApplicationService;
   offices?: OfficeApplicationService | null;
   threads: ThreadApplicationService;
@@ -308,6 +312,8 @@ export function buildControlApi(
     const mapped = errorResponse(error, request.id);
     void reply.code(mapped.statusCode).send(mapped.body);
   });
+
+  registerDemonstratedSkillRoutes(app, {skills: dependencies.skills ?? null, recordings: dependencies.skillRecordings, identity: dependencies.identity, outboxWakeup: dependencies.outboxWakeup});
 
   app.setNotFoundHandler((request, reply) => {
     const mapped = notFoundResponse(request.id);

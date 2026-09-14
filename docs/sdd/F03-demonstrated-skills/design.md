@@ -64,3 +64,29 @@ SkillInvocationRecord 固定 spec、threadId、runId、用途和幂等键。先�
 新增 C02 与独立表，旧 prompt Automation、AgentVersion、Run 事件不改形状。F04 自己负责 Automation discriminated binding。C01 由 F02 校验并投影；未知 schema/digest/scope 拒绝，原始录制不复制到版本，按需读取有界证据。F01 DeliveryTargetRef 尚待 owner，暂不自行定义路径协议。F03 不修改 recorder/scheduler。
 
 发布条件：需求与测试对应；真实 F02、F01、模型/浏览器工具接线；新参数/异常成功交付；流式、刷新、重启、禁用/撤权验证。没有这些只标为“可集成实现，真实闭环待验收”。
+
+## S2 契约接线与审查修订
+
+已引入 F02 C01 `2fca252d6`、F01 C03 `9afef710f` 的已提交代码；入口冲突只合并导出。C02 新增可选 `deliveryTarget: DeliveryTargetRef`，规范渲染包含该引用，准入调用 F01 的目标授权端口；未接目标服务时拒绝。导入先由规则保守提取可编辑方法、角色/安全名称、地址模板与候选变量，不宣称模型已经概括或验证方法。模型验证发生在现有真实试跑 Run。超过 40 步或方法预算要求用户精简，不截断冒充完整导入。
+
+C01 图与完整导出在独立 SQLite 表内按认证 tenant/space/owner 持久化；上传检查全部 evidence 的类型、严格 base64、长度和 SHA-256，缺失或额外证据拒绝。每 scope 最多 20 份，单图 16KiB，总量沿用 C01 2MiB。GET Skill recording/evidence 先授权 Skill owner，再有界读取，无任意路径。主窗口接 F02 `desktop.recording.onSkillImportRequest`，只用既有 Control Session/CSRF 导入，成功才显示草稿。
+
+审查发现准备调用与 Run 提交间的禁用竞态，改为内部 StartTurnCommand / CommitTurnStartInput 可选 `skillExecution:{skillId,executionId}`；普通 HTTP turn 不接受该内部字段，旧 Turn 指纹在字段缺省时不变。SQLite 现有 Turn 事务在提交任何 Run/workItem 前校验准备记录、固定版本、精确可重算正文、身份/路由和最新禁用状态，并原子绑定 runId。崩溃不会出现已派发 Run 却缺 Skill 身份的窗口；不支持该宿主的内存/Postgres store 明确拒绝内部字段。该新增内部契约有真实 SQLite 行为测试和既有 Turn 回归。
+
+公开 RunSkillInvocationPort 从持久绑定按真实 Run 查询身份，`ensureRunSkillAllowed` 在新动作前重新准入，禁用后仍可读取历史身份。F04 用其 Run.origin 的权威映射提供日程具体 invocation，复用 F03 唯一准入。GET `/api/v1/runs/:runId/skill-invocation` 供 F05 在真实动作前读取已复核的 threadId/ref/parameters，模型输入不能伪造这些身份。
+
+C05 已由协调新增 F05 owner：`crewon_browser_observe`、`crewon_browser_act` 与独立受限 `crewon_browser_act_scoped`；F03 只声明真实已注册依赖，不实现引擎。受限操作需要用户单独授权固定 Skill/ref、thread/session、origins/actions/role-name 及本次参数，激活不是授权。F05 每次动作重新检查 grant 与上述 Skill 准入。普通 act 保持既有审批，缺受限 scope 不伪造免审批能力。
+
+## 复用与自研边界（2026-09-14 追加约束）
+
+| 能力           | 采用与必要适配                                                                                                                            | 兼容/许可/验证                                                               |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 模型生成与执行 | 复用 TurnApplicationService、Run、Worker、既有 provider adapter；新增 generation 与草稿 revision 的领域关联，完整 JSON 响应验证后人工采用 | 不增模型框架/调度器；真实 Run completed + 精确 outputRef 消息；模拟证据单列  |
+| 通用结构验证   | Zod 4.4.3 strict schema，导出 JSON Schema 给模型；拒绝字段、不coerce、不填默认值                                                          | MIT；仓库已有传递依赖版本，与 TS5.9/Node24 同一锁文件，C02旧fixtures须同输出 |
+| SKILL.md/YAML  | js-yaml 4.3.0 检查 frontmatter；保留已冻结JSON双引号YAML输出以维持v1摘要                                                                  | MIT；仓库已有版本；不编写通用Markdown/YAML解析器，不因换库改旧版本           |
+| 持久化         | Node24 node:sqlite 及现有事务/Run receipt 模式                                                                                            | 不另引数据库运行时；业务CAS/版本/证据/授权是必要自研                         |
+| 组件           | 复用React、既有library表单与UI样式、Vitest和现有workspace覆盖                                                                             | 不引第二设计系统；先组件行为，再实际浏览器验收                               |
+
+未采用另一套Agent框架或通用Skill插件平台，理由是本轮只需要版本、准入和真实现有Run关联；已有执行/恢复权威不能复制。规则提取只提供预处理候选，不称为AI生成或已学会。新增真实模型生成先写独立generation记录和固定Turn命令；重试replay原Run，候选通过Zod结构与业务预算才供审阅，采用CAS更新草稿，仍须新材料试跑才能激活。
+
+官方依据：[Zod v4](https://zod.dev/v4)、[JSON Schema](https://zod.dev/json-schema)、[Zod MIT package](https://github.com/colinhacks/zod/blob/main/packages/zod/package.json)；版本锁定与本地行为兼容结果见evidence，不依赖追随最新版本。

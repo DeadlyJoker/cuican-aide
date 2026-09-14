@@ -37,3 +37,19 @@ export interface SkillExecutionAuthorizationPort {
     route: RunRoute | null;
   }): Promise<{ outcome: "allow" } | { outcome: "deny"; reasonCode: string }>;
 }
+
+export type RunSkillInvocation = Readonly<{
+  invocation: SkillInvocationSpec;
+  threadId: string;
+  agentVersionId: string;
+}>;
+export interface RunSkillInvocationPort {
+  getInvocationForRun(
+    actor: ActorContext,
+    runId: string,
+  ): Promise<RunSkillInvocation | null>;
+  ensureRunSkillAllowed(
+    actor: ActorContext,
+    runId: string,
+  ): Promise<(SkillAdmission & { threadId: string; runId: string }) | null>;
+}

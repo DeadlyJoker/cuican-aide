@@ -22,39 +22,58 @@ type RecordingExport = {
   contentDigest: `sha256:${string}`;
   scope: { ownerId: string; workspaceId: string | null };
   authorization: {
-    source: 'desktop-user-start';
+    source: "desktop-user-start";
     authorizedAt: string;
     allowedOrigins: string[];
   };
   startedAt: string;
   updatedAt: string;
-  status: 'recording' | 'paused' | 'completed' | 'interrupted' | 'budget-exceeded';
+  status:
+    | "recording"
+    | "paused"
+    | "completed"
+    | "interrupted"
+    | "budget-exceeded";
   steps: Array<{
     stepId: string;
     sequence: number; // 原始单调序号，删步不重排身份或序号
-    kind: 'navigate' | 'click' | 'input' | 'select' | 'download' | 'unsupported';
+    kind:
+      | "navigate"
+      | "click"
+      | "input"
+      | "select"
+      | "download"
+      | "unsupported";
     occurredAt: string;
     page: { origin: string; routeTemplate: string; routeDigest: string };
-    target: { tag: string; selector: string; description: string; role: string | null; accessibleName: string | null } | null;
-    input: { classification: 'ordinary' | 'parameter-candidate'; value: string }
-      | { classification: 'runtime-required' } | null;
+    target: {
+      tag: string;
+      selector: string;
+      description: string;
+      role: string | null;
+      accessibleName: string | null;
+    } | null;
+    input:
+      | { classification: "ordinary" | "parameter-candidate"; value: string }
+      | { classification: "runtime-required" }
+      | null;
     note: string | null;
     evidenceIds: string[];
-    outcome: 'observed' | 'completed' | 'cancelled' | 'unknown';
+    outcome: "observed" | "completed" | "cancelled" | "unknown";
     reason: string | null;
     relatedStepId: string | null;
   }>;
   evidence: Array<{
     evidenceId: string;
-    kind: 'redacted-layout' | 'redacted-screenshot';
-    mediaType: 'image/svg+xml' | 'image/png';
+    kind: "redacted-layout" | "redacted-screenshot";
+    mediaType: "image/svg+xml" | "image/png";
     byteLength: number;
     contentDigest: string;
   }>;
   edits: Array<{
     revision: number;
     stepId: string;
-    operation: 'delete' | 'annotate';
+    operation: "delete" | "annotate";
     at: string;
   }>;
 };
