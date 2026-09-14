@@ -177,6 +177,9 @@ try {
         "CREWON_AGENT_VERSION_ID",
         "default-agent-v1",
       ),
+      generationAgentVersionId:
+        process.env.CREWON_SKILL_GENERATION_AGENT_VERSION_ID?.trim() ||
+        undefined,
       sessionToken: requiredEnvironment("CREWON_CONTROL_SESSION_TOKEN"),
       csrfToken: requiredEnvironment("CREWON_CONTROL_CSRF_TOKEN"),
       allowedOrigins: splitRequiredEnvironment(

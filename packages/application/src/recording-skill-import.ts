@@ -84,7 +84,7 @@ export function recordingSkillDraft(recording: RecordingExport): SkillMethod {
     purpose: `复用用户在 ${recording.steps[0]!.page.origin} 示范的流程；执行前审阅用途、变量和交付标准。`,
     steps,
     parameters,
-    requiredToolRefs: ["crewon_browser_observe", "crewon_browser_act"],
+    requiredToolRefs: ["crewon_browser_observe", "crewon_browser_act", "crewon_browser_act_scoped"],
     completionCriteria: [
       "按本次新输入完成示范目标，由用户核对实际结果。",
       "如有下载或交付，确认文件真实存在并核对内容；失败与未覆盖步骤明确列出。",

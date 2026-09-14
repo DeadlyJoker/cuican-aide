@@ -107,17 +107,26 @@ export function registerDemonstratedSkillRoutes(
     "POST",
     "/api/v1/skills",
     async (request, actor, skills) => {
-      skillKeys(request.body, ["recording", "evidence"]);
+      skillKeys(request.body, ["recording", "evidence", "provenance"]);
       const body = request.body;
       if (!skillObject(body.recording)) throw invalid();
-      // Recording parser owns content/provenance validation; this endpoint bounds transport size.
+      if (
+        body.provenance !== undefined &&
+        body.provenance !== "contract-fixture"
+      )
+        throw invalid();
+      // Optional provenance can only demote a declared fixture; it cannot certify browser capture.
       return skills.importRecording(
         actor,
         body.recording,
         uploads(body.evidence),
-        typeof request.headers["idempotency-key"] === "string"
-          ? request.headers["idempotency-key"]
-          : undefined,
+        {
+          importId:
+            typeof request.headers["idempotency-key"] === "string"
+              ? request.headers["idempotency-key"]
+              : undefined,
+          provenance: body.provenance,
+        },
       );
     },
     3 * 1024 * 1024 + 64 * 1024,

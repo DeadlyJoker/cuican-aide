@@ -100,7 +100,7 @@ async function fixture(
           recordingId: "recording",
           revision: 1,
           contentDigest: digester.sha256("recording"),
-          provenance,
+          provenance: "recording" as const,
         },
       }),
     },
@@ -133,7 +133,12 @@ async function fixture(
       title: null,
     })
   ).state;
-  const skill = await service.importRecording(actor, {});
+  const skill = await service.importRecording(
+    actor,
+    {},
+    [],
+    provenance === "contract-fixture" ? { provenance } : {},
+  );
   const version = await service.seal(actor, skill.skillId, 1);
   const invocation: SkillInvocationSpec = {
     schemaVersion: "crewon.skill-invocation.v1",
