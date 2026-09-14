@@ -6,6 +6,35 @@ import { CommandAutomationCreateDialog } from "./CommandAutomationCreateDialog";
 import { skillAutomationDraft } from "./automationCreateDraft";
 import { scheduleSkillInvocation } from "./automationSkill.test-support";
 
+vi.mock("../composer/CommandComposer", () => ({
+  CommandComposerSelect: ({
+    ariaLabel,
+    value,
+    disabled,
+    options,
+    onChange,
+  }: {
+    ariaLabel: string;
+    value: string;
+    disabled?: boolean;
+    options: Array<{ value: string; label: string }>;
+    onChange: (value: string) => void;
+  }) => (
+    <select
+      aria-label={ariaLabel}
+      value={value}
+      disabled={disabled}
+      onChange={(event) => onChange(event.target.value)}
+    >
+      {options.map((option) => (
+        <option key={option.value} value={option.value}>
+          {option.label}
+        </option>
+      ))}
+    </select>
+  ),
+}));
+
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 let root: Root | undefined;
 let container: HTMLDivElement | undefined;
@@ -81,6 +110,77 @@ async function submit() {
 }
 
 describe("Skill schedule creation behavior", () => {
+  it("requires approval by default even with a fixed Skill and delivery target", async () => {
+    const props = mount();
+    expect(container?.textContent).toContain("每次日程任务");
+    await submit();
+    expect(props.onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolPermissionMode: "requestApproval",
+        skillInvocation: scheduleSkillInvocation(),
+      }),
+    );
+  });
+
+  it("submits an explicitly selected whole-task approval mode outside the Skill invocation", async () => {
+    const props = mount();
+    const selector = container?.querySelector<HTMLSelectElement>(
+      '[aria-label="日程任务工具审批"]',
+    );
+    expect(selector).not.toBeNull();
+    act(() => {
+      if (!selector) throw new Error("missing approval selector");
+      selector.value = "approveForMe";
+      selector.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await submit();
+    expect(props.onSubmit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        toolPermissionMode: "approveForMe",
+        skillInvocation: scheduleSkillInvocation(),
+      }),
+    );
+    expect(
+      vi.mocked(props.onSubmit).mock.calls[0]?.[0].skillInvocation,
+    ).not.toHaveProperty("toolPermissionMode");
+  });
+
+  it("freezes the approval selector while the creation outcome is unresolved", async () => {
+    let resolve!: () => void;
+    mount({
+      onSubmit: vi.fn(
+        () =>
+          new Promise<void>((done) => {
+            resolve = done;
+          }),
+      ),
+    });
+    await submit();
+    expect(
+      container?.querySelector<HTMLSelectElement>(
+        '[aria-label="日程任务工具审批"]',
+      )?.disabled,
+    ).toBe(true);
+    await act(async () => resolve());
+    expect(
+      container?.querySelector<HTMLSelectElement>(
+        '[aria-label="日程任务工具审批"]',
+      )?.disabled,
+    ).toBe(false);
+  });
+
+  it("keeps the legacy non-Skill schedule request unchanged", async () => {
+    const props = mount({ createDraft: undefined });
+    expect(
+      container?.querySelector('[aria-label="日程任务工具审批"]'),
+    ).toBeNull();
+    await submit();
+    expect(props.onSubmit).toHaveBeenCalledOnce();
+    expect(vi.mocked(props.onSubmit).mock.calls[0]?.[0]).not.toHaveProperty(
+      "toolPermissionMode",
+    );
+  });
+
   it("preserves parameter types and fixed version when submitting the existing schedule form", async () => {
     const props = mount();
     change("count", "7");

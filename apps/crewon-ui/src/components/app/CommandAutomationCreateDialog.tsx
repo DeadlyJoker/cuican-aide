@@ -11,6 +11,10 @@ import type { AutomationCreateIntent } from "../../lib/control-runtime/controlAu
 import type { AutomationCreateDraft } from "./automationCreateDraft";
 import { AutomationSkillFields } from "./AutomationSkillFields";
 import { automationErrorMessage } from "./automationErrorMessage";
+import {
+  TaskToolPermissionSelect,
+  type TaskToolPermissionMode,
+} from "../composer/TaskToolPermissionSelect";
 
 export function CommandAutomationCreateDialog({
   busy,
@@ -65,6 +69,9 @@ export function CommandAutomationCreateDialog({
       : structuredClone(createDraft.parameterBindings),
   );
   const [validationError, setValidationError] = useState<string | null>(null);
+  const [toolPermissionMode, setToolPermissionMode] =
+    useState<TaskToolPermissionMode>("requestApproval");
+  const [submitting, setSubmitting] = useState(false);
   const submittingRef = useRef(false);
   const targetMismatch =
     skillInvocation?.deliveryTarget !== undefined &&
@@ -88,6 +95,7 @@ export function CommandAutomationCreateDialog({
       return;
     setValidationError(null);
     submittingRef.current = true;
+    setSubmitting(true);
     try {
       const invocation =
         skillInvocation === undefined
@@ -106,7 +114,9 @@ export function CommandAutomationCreateDialog({
         prompt: prompt.trim(),
         agentVersionId: null,
         schedule,
-        ...(invocation === undefined ? {} : { skillInvocation: invocation }),
+        ...(invocation === undefined
+          ? {}
+          : { skillInvocation: invocation, toolPermissionMode }),
         ...(parameterBindings === undefined ||
         Object.keys(parameterBindings).length === 0
           ? {}
@@ -118,6 +128,7 @@ export function CommandAutomationCreateDialog({
       );
     } finally {
       submittingRef.current = false;
+      setSubmitting(false);
     }
   }
 
@@ -245,10 +256,18 @@ export function CommandAutomationCreateDialog({
           </>
         )}
         {skillInvocation ? (
-          <p className="text-sm text-muted-foreground">
-            日程时区：
-            {Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"}
-          </p>
+          <>
+            <p className="text-sm text-muted-foreground">
+              日程时区：
+              {Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC"}
+            </p>
+            <TaskToolPermissionSelect
+              scope="schedule"
+              value={toolPermissionMode}
+              onChange={setToolPermissionMode}
+              disabled={busy || submitting}
+            />
+          </>
         ) : null}
         <section className="schedule-delivery">
           <CalendarClock />

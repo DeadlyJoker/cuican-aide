@@ -32,6 +32,7 @@ export function SkillBrowserAuthorization({
       <BrowserExecutionAuthorization
         threadId={command.threadId}
         skillVersionRef={command.invocation.skill}
+        toolPermissionMode={command.toolPermissionMode}
         scope={scope}
         bridge={bridge}
         onAuthorized={
@@ -44,9 +45,13 @@ export function SkillBrowserAuthorization({
           type="button"
           onClick={() => onProceed("perAction")}
         >
-          {command.purpose === "trial"
-            ? "按逐次确认开始试跑"
-            : "按逐次确认运行"}
+          {command.toolPermissionMode === "approveForMe"
+            ? command.purpose === "trial"
+              ? "按当前审批设置开始试跑"
+              : "按当前审批设置运行"
+            : command.purpose === "trial"
+              ? "按逐次确认开始试跑"
+              : "按逐次确认运行"}
         </button>
       ) : null}
     </fieldset>

@@ -5,6 +5,7 @@ import type {
   SkillVersion,
   SkillVersionRef,
 } from "@crewon/domain/demonstrated-skill";
+import type { ToolPermissionMode } from "@crewon/contracts";
 
 /** Read projections only. The host remains authoritative for admission. */
 export type DemonstratedSkillView = {
@@ -20,6 +21,7 @@ export type SkillCoverage = "new-date" | "new-input" | "handled-exception";
 export type SkillExecutionView = {
   executionId: string;
   invocation: SkillInvocationSpec;
+  command?: { toolPermissionMode?: Exclude<ToolPermissionMode, "fullAccess"> };
   purpose: "trial" | "execute";
   runId: string | null;
   status: string;
@@ -46,12 +48,14 @@ export type SkillExecutionInput = SkillExecutionTarget & {
   executionId: string;
   purpose: "trial" | "execute";
   invocation: SkillInvocationSpec;
+  toolPermissionMode?: Exclude<ToolPermissionMode, "fullAccess">;
 };
 export type SkillExecutionAttempt = {
   executionId: string;
   purpose: "trial" | "execute";
   invocation: SkillInvocationSpec;
   command: SkillExecutionInput | null;
+  toolPermissionMode?: Exclude<ToolPermissionMode, "fullAccess">;
   browserChoice?: "perAction" | "authorized";
 };
 export type SkillExecutionAttemptStore = {

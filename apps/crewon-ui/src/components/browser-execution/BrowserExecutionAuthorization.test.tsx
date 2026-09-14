@@ -137,6 +137,48 @@ describe("BrowserExecutionAuthorization", () => {
     expect(button("接管并撤销授权").disabled).toBe(false);
   });
 
+  it("describes delegated task approval without granting browser access or adding the mode to browser authorization", async () => {
+    const bridge = fakeBridge();
+    await render({ bridge, toolPermissionMode: "approveForMe" });
+    expect(bridge.authorize).not.toHaveBeenCalled();
+    expect(container.textContent).toContain("本次授权方式：按任务设置审批");
+    expect(container.textContent).toContain(
+      "浏览器动作按本次任务的工具审批设置由 CrewON 代为批准；仍需单独授权当前任务使用浏览器。",
+    );
+    expect(container.textContent).not.toContain("浏览器动作仍需逐次确认");
+    await act(async () => button("允许此任务使用浏览器").click());
+    expect(bridge.authorize).toHaveBeenCalledExactlyOnceWith({
+      threadId: "thread-a",
+    });
+    expect(container.textContent).toContain("已授权 · 按任务设置审批");
+    expect(
+      container.innerHTML.replace(/_r_[a-z0-9]+_/g, "_react-id_"),
+    ).toMatchSnapshot();
+    await render({ bridge, toolPermissionMode: "requestApproval" });
+    expect(container.textContent).toContain("已授权 · 逐次确认");
+    expect(bridge.status).toHaveBeenCalledTimes(1);
+    expect(bridge.authorize).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the reviewed browser scope binding under delegated task approval", async () => {
+    const bridge = fakeBridge();
+    bridge.authorize.mockResolvedValue(grant("thread-a", "scoped"));
+    await render({ bridge, scope, toolPermissionMode: "approveForMe" });
+    expect(container.textContent).toContain("本次授权方式：限定范围连续执行");
+    expect(container.textContent).toContain(
+      "自动批准模式下此范围仍生效，超出范围会停止，需要重新授权",
+    );
+    expect(container.textContent).toContain(scope.origins[0]);
+    expect(container.textContent).toContain("参数：date（运行时提供）");
+    expect(bridge.authorize).not.toHaveBeenCalled();
+    await act(async () => button("允许此任务使用浏览器").click());
+    expect(bridge.authorize).toHaveBeenCalledExactlyOnceWith({
+      threadId: "thread-a",
+      scope,
+    });
+    expect(container.textContent).toContain("已授权 · 限定范围连续执行");
+  });
+
   it("displays every reviewed scope field and sends precisely that scope on click", async () => {
     const bridge = fakeBridge();
     bridge.authorize.mockResolvedValue(grant("thread-a", "scoped"));

@@ -434,7 +434,93 @@ describe("ControlAutomationRuntime Skill schedule compatibility", () => {
     ]);
   });
 
-  it.each(["version", "parameter", "target", "binding"])(
+  it("freezes the explicit approval mode across Thread preparation and mismatched receipt retry", async () => {
+    const intent = {
+      threadId: "thread-1",
+      title: "Review changes",
+      prompt: "Review the current changes.",
+      agentVersionId: "agent-version-1",
+      schedule: null,
+      skillInvocation: scheduleSkillInvocation(),
+      toolPermissionMode: "approveForMe" as const,
+    };
+    const commands: unknown[] = [];
+    const keys: Array<string | null> = [];
+    const runtime = new ControlAutomationRuntime({
+      client: client(async (input, init = {}) => {
+        if (String(input).endsWith("/threads/thread-1")) {
+          Object.assign(intent, { toolPermissionMode: "requestApproval" });
+          return json(threadResponse());
+        }
+        commands.push(JSON.parse(String(init.body)));
+        keys.push(new Headers(init.headers).get("idempotency-key"));
+        return json({
+          disposition: commands.length === 1 ? "committed" : "replayed",
+          automation: automation({
+            skillInvocation: scheduleSkillInvocation(),
+            toolPermissionMode:
+              commands.length === 1 ? "requestApproval" : "approveForMe",
+          }),
+        });
+      }),
+      adopter: { adoptAutomationRun: async () => undefined },
+      idempotencyKey: () => "mode-key",
+    });
+    await expect(runtime.createAutomation(intent)).resolves.toMatchObject({
+      toolPermissionMode: "approveForMe",
+    });
+    expect(keys).toEqual(["mode-key", "mode-key"]);
+    expect(commands).toEqual([
+      expect.objectContaining({ toolPermissionMode: "approveForMe" }),
+      expect.objectContaining({ toolPermissionMode: "approveForMe" }),
+    ]);
+  });
+
+  it.each(["fullAccess", null, undefined])(
+    "rejects invalid explicit approval mode %s before network access",
+    async (mode) => {
+      const fetch = vi.fn(async () => json(threadResponse()));
+      const runtime = new ControlAutomationRuntime({
+        client: client(fetch),
+        adopter: { adoptAutomationRun: async () => undefined },
+      });
+      await expect(
+        runtime.createAutomation({
+          threadId: "thread-1",
+          title: "Review changes",
+          prompt: "Review changes",
+          agentVersionId: null,
+          schedule: null,
+          skillInvocation: scheduleSkillInvocation(),
+          toolPermissionMode: mode,
+        } as unknown as Parameters<
+          ControlAutomationRuntime["createAutomation"]
+        >[0]),
+      ).rejects.toThrow("control_automation_create_intent_invalid");
+      expect(fetch).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects approval mode on legacy prompt-only requests before network access", async () => {
+    const fetch = vi.fn(async () => json(threadResponse()));
+    const runtime = new ControlAutomationRuntime({
+      client: client(fetch),
+      adopter: { adoptAutomationRun: async () => undefined },
+    });
+    await expect(
+      runtime.createAutomation({
+        threadId: "thread-1",
+        title: "Review changes",
+        prompt: "Review changes",
+        agentVersionId: null,
+        schedule: null,
+        toolPermissionMode: "approveForMe",
+      }),
+    ).rejects.toThrow("control_automation_create_intent_invalid");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it.each(["version", "parameter", "target", "binding", "permission"])(
     "never adopts a Run whose %s has drifted",
     async (drift) => {
       const pinned = automation({
@@ -449,6 +535,7 @@ describe("ControlAutomationRuntime Skill schedule compatibility", () => {
         changedInvocation.deliveryTarget.spaceId = "space-other";
       if (drift === "binding")
         changed.parameterBindings = { date: "previousWeekEnd" };
+      if (drift === "permission") changed.toolPermissionMode = "approveForMe";
       const adopter = { adoptAutomationRun: vi.fn(async () => undefined) };
       const keys: (string | null)[] = [];
       const runtime = new ControlAutomationRuntime({

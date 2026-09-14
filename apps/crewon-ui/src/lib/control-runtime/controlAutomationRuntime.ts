@@ -13,6 +13,7 @@ import type {
   RunView,
   AutomationSchedule,
   SkillInvocationSpec,
+  ToolPermissionMode,
 } from "@crewon/contracts";
 import {
   ControlApiClient,
@@ -34,6 +35,7 @@ export type AutomationCreateIntent = Readonly<{
   schedule: AutomationSchedule | null;
   skillInvocation?: SkillInvocationSpec;
   parameterBindings?: CreateAutomationRequest["parameterBindings"];
+  toolPermissionMode?: Exclude<ToolPermissionMode, "fullAccess">;
 }>;
 
 export type AutomationRunAdopter = Readonly<{
@@ -115,7 +117,7 @@ export class ControlAutomationRuntime {
       intent,
       ["agentVersionId", "prompt", "schedule", "threadId", "title"],
       "control_automation_create_intent_invalid",
-      ["skillInvocation", "parameterBindings"],
+      ["skillInvocation", "parameterBindings", "toolPermissionMode"],
     );
     if (Object.hasOwn(intent, "skillInvocation")) {
       validateSkillInvocation(
@@ -125,6 +127,10 @@ export class ControlAutomationRuntime {
       );
     }
     validateParameterBindings(
+      intent,
+      "control_automation_create_intent_invalid",
+    );
+    validateToolPermissionMode(
       intent,
       "control_automation_create_intent_invalid",
     );
@@ -144,6 +150,9 @@ export class ControlAutomationRuntime {
       ...(snapshot.parameterBindings === undefined
         ? {}
         : { parameterBindings: snapshot.parameterBindings }),
+      ...(snapshot.toolPermissionMode === undefined
+        ? {}
+        : { toolPermissionMode: snapshot.toolPermissionMode }),
     };
     return this.#commit(
       "automation.create",
@@ -272,6 +281,8 @@ function validateCreateResponse(
     automation.title !== command.title ||
     automation.prompt !== command.prompt ||
     !sameSkillInvocation(automation.skillInvocation, command.skillInvocation) ||
+    (automation.toolPermissionMode ?? "requestApproval") !==
+      (command.toolPermissionMode ?? "requestApproval") ||
     !sameParameterBindings(
       automation.parameterBindings,
       command.parameterBindings,
@@ -353,6 +364,8 @@ function sameAutomation(left: AutomationView, right: AutomationView): boolean {
     left.title === right.title &&
     left.prompt === right.prompt &&
     sameSkillInvocation(left.skillInvocation, right.skillInvocation) &&
+    (left.toolPermissionMode ?? "requestApproval") ===
+      (right.toolPermissionMode ?? "requestApproval") &&
     sameParameterBindings(left.parameterBindings, right.parameterBindings) &&
     left.agentVersionId === right.agentVersionId &&
     left.executionMode === right.executionMode &&
@@ -381,7 +394,12 @@ function validateAutomationView(input: AutomationView): AutomationView {
       "updatedAt",
     ],
     "control_automation_view_invalid",
-    ["skillInvocation", "parameterBindings", "skillReadiness"],
+    [
+      "skillInvocation",
+      "parameterBindings",
+      "skillReadiness",
+      "toolPermissionMode",
+    ],
   );
   if (Object.hasOwn(input, "skillInvocation")) {
     validateSkillInvocation(
@@ -391,6 +409,7 @@ function validateAutomationView(input: AutomationView): AutomationView {
     );
   }
   validateParameterBindings(input, "control_automation_view_invalid");
+  validateToolPermissionMode(input, "control_automation_view_invalid");
   if (Object.hasOwn(input, "skillReadiness")) {
     const readiness = input.skillReadiness;
     if (!input.skillInvocation || !readiness)
@@ -484,6 +503,22 @@ function validateParameterBindings(
   } catch {
     throw new ControlApiProtocolError(code);
   }
+}
+
+function validateToolPermissionMode(
+  input: {
+    skillInvocation?: SkillInvocationSpec;
+    toolPermissionMode?: unknown;
+  },
+  code: string,
+): void {
+  if (!Object.hasOwn(input, "toolPermissionMode")) return;
+  if (
+    input.skillInvocation === undefined ||
+    (input.toolPermissionMode !== "requestApproval" &&
+      input.toolPermissionMode !== "approveForMe")
+  )
+    throw new ControlApiProtocolError(code);
 }
 
 function sameSkillInvocation(

@@ -201,6 +201,8 @@ describe("schedule view on the Control runtime", () => {
       expect(markup).toContain("已选交付目标");
       expect(markup).not.toContain("要完成什么");
       expect(markup).not.toContain("已从助理带入");
+      expect(markup).toContain("日程任务工具审批");
+      expect(markup).toContain("每次日程任务");
       expect(markup).toMatchSnapshot();
     } finally {
       timezone.mockRestore();

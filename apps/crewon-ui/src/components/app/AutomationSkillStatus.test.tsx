@@ -42,6 +42,16 @@ describe("Skill schedule current readiness", () => {
     expect(markup).toContain("固定版本：weekly-report · version-1");
     expect(markup).not.toContain("待恢复");
     expect(markup).not.toContain('role="status"');
+    expect(markup).toContain("每次任务工具审批：请求批准");
+  });
+
+  it("shows the persisted whole-task approval mode on the Skill schedule", () => {
+    const markup = renderToStaticMarkup(
+      <AutomationSkillStatus
+        definition={{ ...definition(), toolPermissionMode: "approveForMe" }}
+      />,
+    );
+    expect(markup).toContain("每次任务工具审批：帮我批准");
   });
 
   it("shows a current authorization block without manufacturing a failed Run", () => {

@@ -1,4 +1,5 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
+import type { ToolPermissionMode } from "@crewon/contracts";
 import type {
   BrowserExecutionAuthorizationState,
   BrowserExecutionBridge,
@@ -12,6 +13,7 @@ export type BrowserExecutionAuthorizationProps = {
   threadId: string | null;
   skillVersionRef: BrowserSkillRef;
   scope?: BrowserGrantScope;
+  toolPermissionMode?: Exclude<ToolPermissionMode, "fullAccess">;
   bridge?: BrowserExecutionBridge;
   onAuthorized?: () => void;
 };
@@ -34,6 +36,7 @@ function AuthorizationPanel({
   threadId,
   skillVersionRef,
   scope,
+  toolPermissionMode = "requestApproval",
   bridge: injectedBridge,
   onAuthorized,
 }: BrowserExecutionAuthorizationProps) {
@@ -202,6 +205,8 @@ function AuthorizationPanel({
     }
   };
 
+  const unscopedApprovalLabel =
+    toolPermissionMode === "approveForMe" ? "按任务设置审批" : "逐次确认";
   const status =
     blockedReason ??
     (phase === "loading"
@@ -211,7 +216,7 @@ function AuthorizationPanel({
         : phase === "revoking"
           ? "正在接管并撤销授权…"
           : grant
-            ? `已授权 · ${grant.mode === "scoped" ? "限定范围连续执行" : "逐次确认"}`
+            ? `已授权 · ${grant.mode === "scoped" ? "限定范围连续执行" : unscopedApprovalLabel}`
             : (notice ?? "尚未授权"));
 
   return (
@@ -227,10 +232,14 @@ function AuthorizationPanel({
         </p>
       </header>
       <div className="browser-execution-authorization-scope">
-        <strong>本次授权方式：{scope ? "限定范围连续执行" : "逐次确认"}</strong>
+        <strong>
+          本次授权方式：{scope ? "限定范围连续执行" : unscopedApprovalLabel}
+        </strong>
         {scope ? (
           <>
-            <p>仅授权当前任务的指定技能版本使用以下网站与操作。自动批准模式下此范围仍生效，超出范围会停止，需要重新授权。</p>
+            <p>
+              仅授权当前任务的指定技能版本使用以下网站与操作。自动批准模式下此范围仍生效，超出范围会停止，需要重新授权。
+            </p>
             <dl>
               <dt>网站</dt>
               <dd>
@@ -253,7 +262,11 @@ function AuthorizationPanel({
             </dl>
           </>
         ) : (
-          <p>浏览器动作仍需逐次确认。此授权仅用于当前任务。</p>
+          <p>
+            {toolPermissionMode === "approveForMe"
+              ? "浏览器动作按本次任务的工具审批设置由 CrewON 代为批准；仍需单独授权当前任务使用浏览器。"
+              : "浏览器动作仍需逐次确认。此授权仅用于当前任务。"}
+          </p>
         )}
       </div>
       {error && (

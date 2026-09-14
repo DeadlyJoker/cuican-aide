@@ -10,6 +10,8 @@ import type {
 import type {
   DemonstratedSkillClient,
   DemonstratedSkillDetail,
+  SkillExecutionAttempt,
+  SkillExecutionInput,
 } from "../../lib/skill/demonstratedSkillClient";
 import { DemonstratedSkillPanel } from "./DemonstratedSkillPanel";
 
@@ -143,6 +145,23 @@ describe("DemonstratedSkillPanel", () => {
     });
   }
 
+  async function chooseApproveForMe() {
+    await act(async () =>
+      container
+        .querySelector<HTMLButtonElement>('[aria-label="本次任务工具审批"]')!
+        .dispatchEvent(
+          new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true }),
+        ),
+    );
+    await act(async () =>
+      container
+        .querySelector<HTMLElement>('[data-value="approveForMe"]')!
+        .dispatchEvent(
+          new KeyboardEvent("keydown", { key: "Enter", bubbles: true }),
+        ),
+    );
+  }
+
   it("snapshots purpose, method, variables, dependencies, criteria and exceptions without pretending a trial passed", async () => {
     await render();
     expect(container.textContent).toContain("待试跑");
@@ -237,9 +256,183 @@ describe("DemonstratedSkillPanel", () => {
       expectedThreadRevision: 9,
       agentVersionId: "agent-v2",
       purpose: "trial",
+      toolPermissionMode: "requestApproval",
       invocation,
     });
     expect(button("确认激活").disabled).toBe(true);
+  });
+
+  it.each(["trial", "execute"] as const)(
+    "sends explicit approval delegation for %s as a task-level command field",
+    async (purpose) => {
+      current.skill.activatedVersionIds = ["v1"];
+      await render();
+      await fill("试跑参数：报表日期", "2026-09-21");
+      await chooseApproveForMe();
+      await click(purpose === "trial" ? "开始试跑" : "运行此版本");
+      expect(client.startExecution).toHaveBeenCalledWith(
+        "skill-1",
+        expect.objectContaining({
+          purpose,
+          toolPermissionMode: "approveForMe",
+          invocation,
+        }),
+      );
+      const command = vi.mocked(client.startExecution).mock.calls[0][1];
+      expect(command.invocation).not.toHaveProperty("toolPermissionMode");
+    },
+  );
+
+  it("defaults execution approval independently of the Composer and leaves schedule approval to its own form", async () => {
+    current.skill.activatedVersionIds = ["v1"];
+    await render();
+    await fill("试跑参数：报表日期", "2026-09-21");
+    await click("运行此版本");
+    expect(client.startExecution).toHaveBeenCalledWith(
+      "skill-1",
+      expect.objectContaining({ toolPermissionMode: "requestApproval" }),
+    );
+    await click("添加到日程");
+    expect(onAddToSchedule).toHaveBeenCalledWith({
+      title: method.name,
+      invocation,
+    });
+  });
+
+  it("freezes approval before preparation, retains it through ACK retries and remount, then resets the next attempt", async () => {
+    let saved: SkillExecutionAttempt | null = null;
+    const store = {
+      get: () => saved,
+      set: (next: SkillExecutionAttempt | null) => {
+        saved = next;
+      },
+    };
+    let finishPreparation!: (value: {
+      threadId: string;
+      expectedThreadRevision: number;
+      agentVersionId: null;
+    }) => void;
+    const prepare = vi.fn(
+      () =>
+        new Promise<{
+          threadId: string;
+          expectedThreadRevision: number;
+          agentVersionId: null;
+        }>((resolve) => {
+          finishPreparation = resolve;
+        }),
+    );
+    const mount = () => (
+      <DemonstratedSkillPanel
+        skillId="skill-1"
+        client={client}
+        executionTarget={null}
+        prepareExecutionTarget={prepare}
+        executionAttemptStore={store}
+      />
+    );
+    client.startExecution = vi
+      .fn()
+      .mockRejectedValueOnce(new Error("lost_ack"))
+      .mockImplementation(async (_id: string, input: SkillExecutionInput) => {
+        current.executions = [
+          {
+            executionId: input.executionId,
+            invocation: input.invocation,
+            command: { toolPermissionMode: input.toolPermissionMode },
+            purpose: input.purpose,
+            runId: "confirmed-run",
+            status: "queued",
+            verification: "unknown",
+            review: null,
+            createdAt: "2026-09-14T00:00:00Z",
+          },
+        ];
+      });
+    await act(async () => root.render(mount()));
+    await fill("试跑参数：报表日期", "2026-09-21");
+    await chooseApproveForMe();
+    await click("开始试跑");
+    expect(store.get()).toMatchObject({
+      toolPermissionMode: "approveForMe",
+      command: null,
+    });
+    expect(
+      container.querySelector<HTMLButtonElement>(
+        '[aria-label="本次任务工具审批"]',
+      )!.disabled,
+    ).toBe(true);
+    await act(async () =>
+      finishPreparation({
+        threadId: "prepared-thread",
+        expectedThreadRevision: 1,
+        agentVersionId: null,
+      }),
+    );
+    const first = vi.mocked(client.startExecution).mock.calls[0][1];
+    await act(async () => root.render(null));
+    await act(async () => root.render(mount()));
+    expect(
+      container.querySelector('[aria-label="本次任务工具审批"]')!.textContent,
+    ).toBe("帮我批准");
+    await click("重试原试跑");
+    expect(vi.mocked(client.startExecution).mock.calls[1][1]).toEqual(first);
+    expect(prepare).toHaveBeenCalledOnce();
+    expect(store.get()).toBeNull();
+    expect(
+      container.querySelector('[aria-label="运行记录"]')?.textContent,
+    ).toContain("本次任务工具审批：帮我批准");
+    expect(
+      container.querySelector('[aria-label="本次任务工具审批"]')!.textContent,
+    ).toBe("请求批准");
+    await click("开始试跑");
+    expect(store.get()).toMatchObject({
+      toolPermissionMode: "requestApproval",
+    });
+    expect(store.get()!.executionId).not.toBe(first.executionId);
+  });
+
+  it("restores legacy pending attempts with default approval while preserving their original command body", async () => {
+    const command: SkillExecutionInput = {
+      executionId: "legacy-attempt",
+      threadId: "thread-1",
+      expectedThreadRevision: 1,
+      agentVersionId: null,
+      purpose: "trial",
+      invocation,
+    };
+    const attempt: SkillExecutionAttempt = {
+      executionId: command.executionId,
+      purpose: "trial",
+      invocation,
+      command,
+    };
+    await act(async () =>
+      root.render(
+        <DemonstratedSkillPanel
+          skillId="skill-1"
+          client={client}
+          executionTarget={command}
+          executionAttemptStore={{ get: () => attempt, set: () => {} }}
+        />,
+      ),
+    );
+    expect(
+      container.querySelector('[aria-label="本次任务工具审批"]')!.textContent,
+    ).toBe("请求批准");
+    await click("重试原试跑");
+    expect(client.startExecution).toHaveBeenCalledWith("skill-1", command);
+    expect(command).not.toHaveProperty("toolPermissionMode");
+  });
+
+  it("resets an unsubmitted approval choice when the authenticated client changes", async () => {
+    await render();
+    await chooseApproveForMe();
+    client = { ...client, startExecution: vi.fn() };
+    await render();
+    expect(
+      container.querySelector('[aria-label="本次任务工具审批"]')!.textContent,
+    ).toBe("请求批准");
   });
 
   it.each(["simulated", "unknown"] as const)(
@@ -316,6 +509,7 @@ describe("DemonstratedSkillPanel", () => {
     current.skill.activatedVersionIds = ["v1"];
     await render();
     await fill("试跑参数：报表日期", "2026-09-21");
+    await chooseApproveForMe();
     await click("添加到日程");
     expect(onAddToSchedule).toHaveBeenCalledWith({
       title: method.name,

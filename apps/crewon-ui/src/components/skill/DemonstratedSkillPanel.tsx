@@ -27,6 +27,10 @@ import type {
 } from "../../lib/browser-execution/browserExecutionGrant";
 import { isReviewedRealTrial, SkillTrialReview } from "./SkillTrialReview";
 import { skillClientKey, useSkillOperationScope } from "./skillClientScope";
+import {
+  TaskToolPermissionSelect,
+  type TaskToolPermissionMode,
+} from "../composer/TaskToolPermissionSelect";
 import "./demonstrated-skill.css";
 
 export type DemonstratedSkillPanelProps = {
@@ -117,6 +121,12 @@ function SkillPanelContent({
   const executionAttempt = useRef<SkillExecutionAttempt | null>(
     executionAttemptStore?.get() ?? null,
   );
+  const [toolPermissionMode, setToolPermissionMode] =
+    useState<TaskToolPermissionMode>(
+      executionAttempt.current?.toolPermissionMode ??
+        executionAttempt.current?.command?.toolPermissionMode ??
+        "requestApproval",
+    );
   const [versionId, setVersionId] = useState(
     executionAttempt.current?.invocation.skill.versionId ?? "",
   );
@@ -167,6 +177,7 @@ function SkillPanelContent({
       executionAttempt.current = null;
       executionAttemptStore?.set(null);
       setRetryPurpose(null);
+      setToolPermissionMode("requestApproval");
     }
     setDraft((current) =>
       options?.replaceDraft || !current ? next.skill.draft : current,
@@ -248,6 +259,7 @@ function SkillPanelContent({
       executionId: crypto.randomUUID(),
       purpose,
       invocation: structuredClone(invocation),
+      toolPermissionMode,
       command: null,
     };
     executionAttempt.current = attempt;
@@ -267,6 +279,7 @@ function SkillPanelContent({
             executionId: attempt.executionId,
             purpose: attempt.purpose,
             invocation: attempt.invocation,
+            toolPermissionMode: attempt.toolPermissionMode ?? "requestApproval",
           };
         }
         if (!isCurrent()) return;
@@ -564,6 +577,17 @@ function SkillPanelContent({
                   )}
                 </label>
               ))}
+              <TaskToolPermissionSelect
+                scope="execution"
+                value={toolPermissionMode}
+                onChange={setToolPermissionMode}
+                disabled={
+                  busy ||
+                  retryPurpose !== null ||
+                  skill.disabled ||
+                  skill.deleted
+                }
+              />
               {!executionTarget && !prepareExecutionTarget ? (
                 <p className="demonstrated-skill-note">
                   选择一个任务和可执行 Agent 后即可试跑。

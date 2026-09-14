@@ -92,6 +92,12 @@ export function SkillTrialReview({
       <p className="demonstrated-skill-note">
         版本 {execution.invocation.skill.versionId} · {execution.createdAt}
       </p>
+      <p className="demonstrated-skill-note">
+        本次任务工具审批：
+        {execution.command?.toolPermissionMode === "approveForMe"
+          ? "帮我批准"
+          : "请求批准"}
+      </p>
       <dl>
         {Object.entries(execution.invocation.parameters).map(([key, value]) => (
           <div key={key}>

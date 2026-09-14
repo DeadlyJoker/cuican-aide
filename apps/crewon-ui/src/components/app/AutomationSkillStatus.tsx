@@ -13,6 +13,12 @@ export function AutomationSkillStatus({
         固定版本：{definition.skillInvocation.skill.skillId} ·{" "}
         {definition.skillInvocation.skill.versionId}
       </small>
+      <small>
+        每次任务工具审批：
+        {definition.toolPermissionMode === "approveForMe"
+          ? "帮我批准"
+          : "请求批准"}
+      </small>
       {definition.skillReadiness?.state === "blocked" ? (
         <div className="text-xs text-destructive" role="status">
           执行条件待恢复：
