@@ -1,0 +1,201 @@
+.demonstrated-skill-panel {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+  color: var(--text);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.demonstrated-skill-library {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.demonstrated-skill-library h2 {
+  margin: 0;
+  font-size: 17px;
+}
+.demonstrated-skill-library-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 12px;
+}
+.demonstrated-skill-library-card {
+  display: grid;
+  gap: 8px;
+  padding: 16px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  text-align: start;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.demonstrated-skill-library-card:is(:hover, :focus-visible) {
+  border-color: var(--border-strong);
+  background: var(--panel-subtle);
+}
+.demonstrated-skill-library-card:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.demonstrated-skill-library-card :is(span, small) {
+  color: var(--text-muted);
+}
+.demonstrated-skill-panel h2,
+.demonstrated-skill-panel h3,
+.demonstrated-skill-panel p {
+  margin: 0;
+}
+.demonstrated-skill-heading,
+.demonstrated-skill-trial header {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.demonstrated-skill-heading h2 {
+  font-size: 20px;
+}
+.demonstrated-skill-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: start;
+  gap: 24px;
+}
+.demonstrated-skill-columns > *,
+.demonstrated-skill-method,
+.demonstrated-skill-generation,
+.demonstrated-skill-parameters,
+.demonstrated-skill-parameter-editor,
+.demonstrated-skill-trial,
+.demonstrated-skill-trial fieldset {
+  display: grid;
+  min-width: 0;
+  gap: 12px;
+}
+.demonstrated-skill-panel fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.demonstrated-skill-panel legend {
+  margin-bottom: 12px;
+  padding: 0;
+  font-weight: 600;
+}
+.demonstrated-skill-panel .form-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+.demonstrated-skill-panel .form-field small {
+  margin-left: 8px;
+  font-weight: normal;
+  color: var(--text-muted);
+}
+.demonstrated-skill-panel input:not([type="checkbox"]),
+.demonstrated-skill-panel textarea,
+.demonstrated-skill-panel select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  padding: 8px 10px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+}
+.demonstrated-skill-panel textarea {
+  resize: vertical;
+}
+.demonstrated-skill-panel
+  :is(input, textarea, select, button, summary):focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.demonstrated-skill-note,
+.demonstrated-skill-trial header span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.demonstrated-skill-warning {
+  padding: 10px 12px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-md);
+  color: var(--warning);
+}
+.demonstrated-skill-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.demonstrated-skill-parameter-editor,
+.demonstrated-skill-trial {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+}
+.demonstrated-skill-check {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.demonstrated-skill-check input {
+  flex: none;
+}
+.demonstrated-skill-trials {
+  display: grid;
+  gap: 12px;
+}
+.demonstrated-skill-trial dl {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+}
+.demonstrated-skill-trial dl > div {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.demonstrated-skill-trial dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.demonstrated-skill-version-method {
+  border-block: 1px solid var(--border);
+  padding-block: 10px;
+}
+.demonstrated-skill-version-method summary {
+  cursor: pointer;
+}
+.demonstrated-skill-version-method > div {
+  padding-top: 10px;
+  overflow-wrap: anywhere;
+}
+.demonstrated-skill-panel button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.demonstrated-skill-generation {
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.demonstrated-skill-method-summary {
+  overflow-wrap: anywhere;
+}
+@media (max-width: 760px) {
+  .demonstrated-skill-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

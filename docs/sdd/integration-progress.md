@@ -52,4 +52,8 @@ F05 成熟浏览器动作宿主尚未在本树集成。真实模型、浏览器�
 
 本树第六批九个测试文件共 51 项通过、0 失败、0 跳过；Control API/Runtime Worker 类型检查通过，日志 `/tmp/crewon-integration-generation-delivery-authority-tests.log`。F03 另报告真实提供方固定无工具生成成功：一次模型调用、零工具回执、候选确认后草稿 revision 增加；输入为显式 contract-fixture，未激活。该报告尚不等于真实录制试跑或周期交付验收，原始 evidence 随其最终提交补入。
 
+F03 真实模型/独立 Control 进程重开证据 `86d37ead2` 已取入本树；重开后的 GET/collect/apply 重放保留原 Run 和 revision，模型调用数未增加，这只证明完成后的 HTTP 恢复。F02 最终 `45b8ee383`/`aa81fecb0` 也已合入：重复 arm 与排队下载生命周期修复、实际 source 导出及同端口站点复现脚本。根协调运行两个变更宿主文件，13 项通过；锁文件合并后 frozen install 通过。实际录制数据位于 `artifacts/f02-recording/recording-export.json`，站点和业务材料合成，采集链路是真实 Electron。
+
+第七批已合入 F03 UI `ee79f42c8`：录制交接、模型候选审阅、版本/试跑/启用、浏览器授权与 Skill 日程入口。保留 F01 App 的 DeliveryClientContext，同时接入录制导入 hook。根协调运行 Skill/导入/日程/交付等十个界面测试文件，58 项通过；UI/Electron 类型检查通过，日志 `/tmp/crewon-integration-skill-ui-tests.log`。F05 正在用实际 C01、真实模型与第二周期数据执行联合验收，尚未结束。
+
 F05 已报告同一真实 WebContentsView 上的 Puppeteer 动作、下载和 focus emulation 恢复探针通过；尚未贯通本树的录制/授权/交付路径，不能冒称人工 GUI 验收或完整后台执行。已找到原工作区现有模型配置，F03 将只在隔离验收进程读取，使用合成材料验证；凭据不复制、不输出，不使用原用户数据库。

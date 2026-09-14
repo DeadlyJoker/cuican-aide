@@ -195,6 +195,27 @@ describe("CrewON resource catalog MVP", () => {
     expect(markup).toMatchSnapshot();
   });
 
+  it("places the demonstrated Skill host in the skill catalog without exposing it in other resource categories", () => {
+    const render = (catalogFilter: string) => renderToStaticMarkup(
+      <AgentsView
+        active
+        catalogFilter={catalogFilter}
+        catalogSearch=""
+        skillLibrary={<div data-testid="demonstrated-skill-host">我的示教 Skill</div>}
+        platformState="ready"
+        resourceStates={readyResourceStates}
+        snapshot={snapshot}
+        onReload={async () => {}}
+        onCatalogFilterChange={() => {}}
+        onCatalogSearchChange={() => {}}
+      />,
+    );
+    expect(render("skill")).toContain('data-testid="demonstrated-skill-host"');
+    expect(render("all")).toContain('data-testid="demonstrated-skill-host"');
+    expect(render("employee")).not.toContain('data-testid="demonstrated-skill-host"');
+    expect(render("service")).not.toContain('data-testid="demonstrated-skill-host"');
+  });
+
   it("snapshots active local TypeScript AgentVersions as runnable agents", () => {
     const markup = renderToStaticMarkup(
       <AgentsView

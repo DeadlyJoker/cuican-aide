@@ -11,7 +11,7 @@
 - 四个 feature 的新任务均已启动，各自在独立 worktree 中读取基线并开展 SDD。创建或启动不代表 feature 完成。
 - 接线检查发现浏览器缺少 Agent 执行动作端口，已新增 F05 独立配套任务，补齐既定示教执行路径。边界见 [browser-execution-gap.md](browser-execution-gap.md)。
 - 原工作区还有“分析内存泄露与磁盘积累”任务进行中。本批任务在隔离基线与独立 worktree 开发，不覆盖其工作。
-- 已建立 `codex/sdd-integration-20260914` 独立集成树。已合入 F04 消费端、F03 生成生命周期与双向宿主接线、F01 表格引擎/传输/交付 UI、F02 完整录制宿主；分批合并后行为检查通过。F03 无工具生成角色、F04 事务内 Skill 准入及 F05 实际动作接线继续收口，完整 E04/E05 未验收，见 [集成记录](integration-progress.md)。
+- 已建立 `codex/sdd-integration-20260914` 独立集成树。已合入 F04 消费端/事务内准入、F03 无工具生成生命周期与 UI/双向宿主、F01 表格引擎/传输/交付 UI、F02 完整录制宿主/实际 source 证据；根补齐 C03 同一服务的目标权限验证。分批合并后行为检查通过。F05 实际动作接线和完整 E04/E05 联合验收继续，见 [集成记录](integration-progress.md)。
 
 ## 开发任务
 
