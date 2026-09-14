@@ -96,6 +96,49 @@ afterEach(() => {
 // These tests isolate the host contract. The DOM/Puppeteer adapter is mocked;
 // they are deliberately not evidence of GUI execution or real model routing.
 describe("BrowserExecutionHost authorization and recovery boundaries", () => {
+  it("invalidates a detached cached driver and waits for its cleanup before rebuilding the same view", async () => {
+    const fixture = setup();
+    await fixture.host.authorize({ threadId: "thread-1" });
+    await observe(fixture.host);
+    const invalidated = automation.construct.mock.calls[0]![2] as (
+      reason: string,
+    ) => void;
+    invalidated("debugger-detached");
+    expect(fixture.host.status("thread-1")).toBeNull();
+    await fixture.host.authorize({ threadId: "thread-1" });
+    const cleanup = deferred<void>();
+    const cleanupStarted = deferred<void>();
+    automation.close.mockImplementationOnce(() => {
+      cleanupStarted.resolve(undefined);
+      return cleanup.promise;
+    });
+    const pending = observe(fixture.host);
+    await cleanupStarted.promise;
+    expect(automation.construct).toHaveBeenCalledTimes(1);
+    cleanup.resolve(undefined);
+    await pending;
+    expect(automation.construct).toHaveBeenCalledTimes(2);
+  });
+
+  it("revokes the current session owner when a reused driver's permanent takeover listener fires", async () => {
+    const fixture = setup();
+    await fixture.host.authorize({ threadId: "thread-1" });
+    await observe(fixture.host);
+    const invalidated = automation.construct.mock.calls[0]![2] as (
+      reason: string,
+    ) => void;
+    await fixture.host.authorize({ threadId: "thread-2" });
+    fixture.authority.resolveRun.mockResolvedValue({
+      ...runIdentity(),
+      threadId: "thread-2",
+      runId: "run-2",
+    });
+    await observe(fixture.host, "run-2");
+    expect(automation.construct).toHaveBeenCalledTimes(1);
+    invalidated("user-takeover");
+    expect(fixture.host.status("thread-2")).toBeNull();
+  });
+
   it("B02 rejects absent grants before acquiring a session or touching automation", async () => {
     const fixture = setup();
     const result = await fixture.host.execute(

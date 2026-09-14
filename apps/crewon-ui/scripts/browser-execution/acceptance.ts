@@ -124,6 +124,34 @@ app
         input: "yes",
         selected: "yes",
       });
+      const beforeRejectedInputs = events.length;
+      await assert.rejects(
+        act("select", "渠道", "missing"),
+        /browser_select_option_unavailable/,
+      );
+      assert.equal(
+        await wc.executeJavaScript("document.querySelector('select').value"),
+        "partner",
+      );
+      await wc.executeJavaScript(
+        "document.querySelector('input').readOnly=true",
+      );
+      await assert.rejects(
+        act("fill", "日期", "must-not-fill"),
+        /browser_fill_unsupported/,
+      );
+      assert.equal(
+        await wc.executeJavaScript("document.querySelector('input').value"),
+        "2026-09",
+      );
+      await wc.executeJavaScript(
+        "document.querySelector('input').readOnly=false;const fieldset=document.createElement('fieldset');fieldset.disabled=true;const child=document.createElement('input');child.setAttribute('aria-label','禁用日期');fieldset.append(child);document.body.append(fieldset)",
+      );
+      await assert.rejects(
+        act("fill", "禁用日期", "must-not-fill"),
+        /browser_fill_unsupported/,
+      );
+      assert.equal(events.length, beforeRejectedInputs);
       const downloads = new BrowserExecutionDownloads(
         join(userData, "downloads"),
       );
@@ -135,7 +163,6 @@ app
       );
       const bytes = downloads.read(receipt.receiptId, command("download-1"));
       assert(Buffer.from(bytes).toString().includes("A101,110.00"));
-      await new Promise((r) => setTimeout(r, 100));
       assert.equal(
         await wc.executeJavaScript("document.visibilityState"),
         "hidden",
@@ -211,6 +238,9 @@ app
         state,
         receipt,
         focusRestoredAfterActionAndCancel: true,
+        downloadReturnedAfterFocusRestored: true,
+        readonlyAndDisabledFillRejected: true,
+        missingSelectOptionRejected: true,
         events,
         automatedInputs,
         manualInputs,

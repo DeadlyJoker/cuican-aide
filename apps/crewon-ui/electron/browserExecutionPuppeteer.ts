@@ -130,12 +130,12 @@ export class BrowserViewAutomation {
   };
   readonly #observed = new Map<string, InspectedBrowserTarget>();
   #closed = false;
+  #closing: Promise<void> | null = null;
   constructor(
     readonly webContents: WebContents,
     inspectionBundle: string,
     private readonly invalidated: (reason: string) => void,
   ) {
-    this.#entry = register(webContents);
     // These fixed functions are built from the checked-in inspection entry, never from Tool input.
     this.#inspect = new Function(
       "element",
@@ -144,15 +144,26 @@ export class BrowserViewAutomation {
     this.#observe = new Function(
       `${inspectionBundle};return CrewonBrowserInspection.observe();`,
     ) as () => { observation: BrowserPageObservation; elements: Element[] };
+    this.#entry = register(webContents);
     this.#connected = ExtensionTransport.connectTab(webContents.id)
       .then((transport) =>
         connect({ transport, defaultViewport: null, protocolTimeout: 5000 }),
       )
       .then(async (browser) => {
-        const pages = await browser.pages();
-        if (pages.length !== 1) throw new Error("browser_target_count_invalid");
-        return { browser, page: pages[0]! };
+        try {
+          const pages = await browser.pages();
+          if (pages.length !== 1)
+            throw new Error("browser_target_count_invalid");
+          return { browser, page: pages[0]! };
+        } catch (error) {
+          await browser.disconnect();
+          throw error;
+        }
       });
+    void this.#connected.catch(() => {
+      if (!this.#closed) this.invalidated("browser-connection-failed");
+      void this.close();
+    });
     webContents.debugger.on("detach", this.#onDetach);
     webContents.on("before-input-event", this.#onNativeInput);
     webContents.on("before-mouse-event", this.#onNativeInput);
@@ -162,10 +173,14 @@ export class BrowserViewAutomation {
       this.invalidated("user-takeover");
   };
   #onDetach = () => {
-    if (!this.#closed) this.invalidated("debugger-detached");
+    if (!this.#closed) {
+      this.invalidated("debugger-detached");
+      void this.close();
+    }
   };
   async observe(): Promise<BrowserPageObservation> {
     const { page } = await this.#connected;
+    if (this.#closed) throw new Error("browser_driver_closed");
     await this.#releaseTargets();
     const handle = await page.evaluateHandle(this.#observe);
     try {
@@ -194,6 +209,7 @@ export class BrowserViewAutomation {
     beforeEffect: () => void,
   ): Promise<void> {
     await this.#connected;
+    if (this.#closed) throw new Error("browser_driver_closed");
     if (signal.aborted) throw new Error("browser_execution_canceled");
     try {
       await this.webContents.debugger.sendCommand(
@@ -243,6 +259,13 @@ export class BrowserViewAutomation {
       throw new Error("browser_select_unsupported");
     if (input.action === "fill" && !["input", "textarea"].includes(checked.tag))
       throw new Error("browser_fill_unsupported");
+    if (input.action === "fill" || input.action === "select") {
+      const problem = await target.evaluate(nativeActionProblem, {
+        action: input.action,
+        value: input.value,
+      });
+      if (problem) throw new Error(problem);
+    }
     const stop = new AbortController();
     const combined = AbortSignal.any([signal, stop.signal]);
     let dispatched = false;
@@ -275,9 +298,13 @@ export class BrowserViewAutomation {
     this.#targets.clear();
     this.#observed.clear();
   }
-  async close(): Promise<void> {
-    if (this.#closed) return;
+  close(): Promise<void> {
+    if (this.#closing) return this.#closing;
     this.#closed = true;
+    this.#closing = this.#dispose();
+    return this.#closing;
+  }
+  async #dispose(): Promise<void> {
     this.webContents.debugger.removeListener("detach", this.#onDetach);
     this.webContents.removeListener("before-input-event", this.#onNativeInput);
     this.webContents.removeListener("before-mouse-event", this.#onNativeInput);
@@ -288,9 +315,78 @@ export class BrowserViewAutomation {
           "Emulation.setFocusEmulationEnabled",
           { enabled: false },
         );
+    } catch {
+      // Detaching below also releases emulation if the debugger stopped responding.
+    }
+    try {
       await (await this.#connected).browser.disconnect();
+    } catch {
+      // A failed connection or a lost debugger must still release its registration.
     } finally {
+      if (this.webContents.debugger.isAttached()) {
+        try {
+          this.webContents.debugger.detach();
+        } catch {
+          /* Already destroyed. */
+        }
+      }
+      for (const [listener, handlers] of listeners) {
+        const handler = handlers.get(this.webContents.id);
+        if (handler)
+          this.webContents.debugger.removeListener("message", handler);
+        handlers.delete(this.webContents.id);
+        if (handlers.size === 0) listeners.delete(listener);
+      }
       registrations.delete(this.webContents.id);
     }
   }
+}
+
+/** Fixed native-control guard evaluated in the existing page, never caller code. */
+function nativeActionProblem(
+  element: Element,
+  request: { action: "fill" | "select"; value: string },
+): string | null {
+  if (request.action === "fill") {
+    if (
+      !(
+        element instanceof HTMLInputElement ||
+        element instanceof HTMLTextAreaElement
+      ) ||
+      element.readOnly ||
+      element.matches(":disabled")
+    )
+      return "browser_fill_unsupported";
+    if (
+      element instanceof HTMLInputElement &&
+      ![
+        "text",
+        "search",
+        "url",
+        "tel",
+        "email",
+        "number",
+        "date",
+        "datetime-local",
+        "month",
+        "time",
+        "week",
+      ].includes(element.type)
+    )
+      return "browser_fill_unsupported";
+    return null;
+  }
+  if (
+    !(element instanceof HTMLSelectElement) ||
+    element.multiple ||
+    element.matches(":disabled")
+  )
+    return "browser_select_unsupported";
+  const options = Array.from(element.options).filter(
+    (option) =>
+      option.value === request.value &&
+      !option.disabled &&
+      !option.parentElement?.matches("optgroup:disabled"),
+  );
+  return options.length === 1 ? null : "browser_select_option_unavailable";
 }

@@ -151,16 +151,32 @@ export class BrowserExecutionDownloads {
     };
     wc.session.on("will-download", onDownload);
     signal.addEventListener("abort", abort, { once: true });
+    const clickCompletion = signal.aborted
+      ? Promise.resolve()
+      : Promise.resolve()
+          .then(() => {
+            if (signal.aborted) throw new Error("browser_download_canceled");
+            return click();
+          })
+          .catch((error) => {
+            const failure =
+              error instanceof Error
+                ? error
+                : new Error("browser_download_click_failed");
+            stop(failure);
+            throw failure;
+          });
     if (signal.aborted) abort();
-    else
-      void click().catch((error) =>
-        stop(
-          error instanceof Error
-            ? error
-            : new Error("browser_download_click_failed"),
-        ),
-      );
-    return result;
+    try {
+      // The driver's click includes its focus-restoration finally block. A fast
+      // download must not publish a receipt while that action is still active.
+      const [receipt] = await Promise.all([result, clickCompletion]);
+      if (signal.aborted) throw new Error("browser_download_canceled");
+      return receipt;
+    } finally {
+      await clickCompletion.catch(() => undefined);
+      cleanup();
+    }
   }
   read(receiptId: string, command: ToolExecutionCommand): Uint8Array {
     if (!/^[a-f0-9-]{36}$/.test(receiptId))

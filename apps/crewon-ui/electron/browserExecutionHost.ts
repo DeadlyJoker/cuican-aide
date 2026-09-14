@@ -103,6 +103,7 @@ export function browserHostPolicy(name: string): ToolExecutionPolicy {
 }
 export class BrowserExecutionHost {
   readonly #automation = new Map<number, BrowserViewAutomation>();
+  readonly #invalidatedAutomation = new Set<number>();
   readonly #grants = new Map<string, Grant>();
   readonly #observations = new Map<string, Observation>();
   readonly #pending = new Map<
@@ -208,6 +209,7 @@ export class BrowserExecutionHost {
     for (const id of [...this.#grants.keys()]) this.revoke(id, "host-closed");
     for (const automation of this.#automation.values()) void automation.close();
     this.#automation.clear();
+    this.#invalidatedAutomation.clear();
   }
   validate(command: ToolExecutionCommand): void {
     validateToolExecutionCommand(command);
@@ -389,14 +391,35 @@ export class BrowserExecutionHost {
           });
       }, 500);
       let automation = this.#automation.get(session.webContents.id);
+      if (
+        automation &&
+        this.#invalidatedAutomation.has(session.webContents.id)
+      ) {
+        await automation.close();
+        this.#automation.delete(session.webContents.id);
+        this.#invalidatedAutomation.delete(session.webContents.id);
+        automation = undefined;
+      }
       if (!automation) {
         for (const previous of this.#automation.values())
           await previous.close();
         this.#automation.clear();
+        this.#invalidatedAutomation.clear();
         automation = new BrowserViewAutomation(
           session.webContents,
           this.options.inspectionBundle,
-          (reason) => this.revoke(identity.threadId, reason),
+          (reason) => {
+            if (
+              reason === "debugger-detached" ||
+              reason === "browser-connection-failed"
+            ) {
+              this.#invalidatedAutomation.add(session.webContents.id);
+            }
+            for (const current of [...this.#grants.values()]) {
+              if (current.sessionId === session.sessionId)
+                this.revoke(current.threadId, reason);
+            }
+          },
         );
         this.#automation.set(session.webContents.id, automation);
       }
