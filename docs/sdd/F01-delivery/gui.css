@@ -1,0 +1,36 @@
+:root {
+  font-family: Inter, system-ui, sans-serif;
+  color: #252823;
+  background: #f7f7f4;
+  font-size: 14px;
+  --text: #252823;
+  --muted: #777c73;
+  --border: #dce0d6;
+  --surface: #fff;
+  --accent: #2d6444;
+}
+body {
+  margin: 0;
+}
+main {
+  padding: 24px;
+  max-width: 1440px;
+  margin: auto;
+}
+header {
+  margin-bottom: 20px;
+}
+h1 {
+  font-size: 22px;
+}
+button,
+input,
+select {
+  font: inherit;
+}
+button {
+  cursor: pointer;
+}
+header button {
+  margin-right: 10px;
+}

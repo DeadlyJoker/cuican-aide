@@ -1,4 +1,5 @@
 import { StreamingTextScope } from "./components/StreamingTextScope";
+import { DeliveryClientContext } from "./components/workbench/DeliveryClientContext";
 import { useControlThreadCatalog } from "./lib/control-runtime/useControlThreadCatalog";
 import { useThreadSelectionRead } from "./lib/thread/useThreadSelectionRead";
 import {
@@ -120,6 +121,14 @@ export function App({
 }: {
   controlClient?: ControlApiClient | null;
 }) {
+  return (
+    <DeliveryClientContext.Provider value={controlClient?.delivery ?? null}>
+      <AppContent controlClient={controlClient} />
+    </DeliveryClientContext.Provider>
+  );
+}
+
+function AppContent({ controlClient }: { controlClient: ControlApiClient | null }) {
   const controlToolApprovals = useAppControlToolApprovals();
   const automationAuthority = selectAutomationAuthority(controlClient !== null);
   const modelProviderSettingsAvailable =

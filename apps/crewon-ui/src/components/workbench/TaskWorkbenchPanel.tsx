@@ -1,5 +1,7 @@
 import { useContext, useState } from "react";
 import { FileText, Globe2 } from "lucide-react";
+import { DeliveryClientContext } from "./DeliveryClientContext";
+import { DeliveryPanel } from "./DeliveryPanel";
 import { renderMarkdown } from "../TranscriptMarkdown";
 import type { Locale } from "../../lib/i18n";
 import type {
@@ -43,8 +45,16 @@ export function TaskWorkbenchPanel({
   locale: Locale;
 }) {
   const actions = useContext(TaskWorkbenchActionsContext);
+  const deliveryClient = useContext(DeliveryClientContext);
+  const threadId = snapshot?.scopeId.startsWith("thread:")
+    ? snapshot.scopeId.slice("thread:".length)
+    : null;
   const zh = locale === "zh";
-  const [section, setSection] = useState<"documents" | "browser">("documents");
+  const [section, setSection] = useState<"documents" | "browser" | "delivery">(
+    "documents",
+  );
+  const activeSection =
+    section === "delivery" && !threadId ? "documents" : section;
   return (
     <section
       className="task-workbench"
@@ -69,7 +79,7 @@ export function TaskWorkbenchPanel({
         <button
           type="button"
           role="tab"
-          aria-selected={section === "documents"}
+          aria-selected={activeSection === "documents"}
           onClick={() => setSection("documents")}
         >
           <FileText size={15} />
@@ -79,15 +89,26 @@ export function TaskWorkbenchPanel({
         <button
           type="button"
           role="tab"
-          aria-selected={section === "browser"}
+          aria-selected={activeSection === "browser"}
           onClick={() => setSection("browser")}
         >
           <Globe2 size={15} />
           {zh ? "浏览活动" : "Browsing"}{" "}
           <span>{snapshot?.browser.length ?? 0}</span>
         </button>
+        {threadId && (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={activeSection === "delivery"}
+            onClick={() => setSection("delivery")}
+          >
+            <FileText size={15} />
+            {zh ? "文件交付" : "File delivery"}
+          </button>
+        )}
       </div>
-      {section === "documents" ? (
+      {activeSection === "documents" ? (
         <div className="task-workbench-list">
           {snapshot?.documents.length ? (
             [...snapshot.documents].reverse().map((document) => (
@@ -110,7 +131,7 @@ export function TaskWorkbenchPanel({
             </p>
           )}
         </div>
-      ) : (
+      ) : activeSection === "browser" ? (
         <div className="task-workbench-list">
           <p className="task-workbench-note">
             {zh
@@ -157,6 +178,15 @@ export function TaskWorkbenchPanel({
                 : "No browser actions recorded. Web links in the conversation can also open here."}
             </p>
           )}
+        </div>
+      ) : null}
+      {threadId && (
+        <div hidden={activeSection !== "delivery"}>
+          <DeliveryPanel
+            client={deliveryClient}
+            threadId={threadId}
+            locale={locale}
+          />
         </div>
       )}
     </section>

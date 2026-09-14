@@ -1,0 +1,190 @@
+{
+  "date": "2026-09-14",
+  "node": "24.19.0",
+  "pnpm": "10.33.0",
+  "backendCommit": "3745d6a797a2eb9f560aefe4dd1f91797da1154a",
+  "commands": [
+    {
+      "command": "pnpm --filter './packages/**' -r typecheck",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm --filter './packages/**' --no-bail -r test",
+      "exitCode": 1,
+      "packages": [
+        {
+          "package": "capability-packs",
+          "tests": 15,
+          "pass": 15,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "eval-harness",
+          "tests": 52,
+          "pass": 52,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "test-contracts",
+          "tests": 15,
+          "pass": 12,
+          "fail": 3,
+          "skipped": 0
+        },
+        {
+          "package": "contracts",
+          "tests": 103,
+          "pass": 103,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "domain",
+          "tests": 132,
+          "pass": 132,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "tool-broker",
+          "tests": 26,
+          "pass": 26,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "context",
+          "tests": 17,
+          "pass": 17,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "agent-kernel",
+          "tests": 33,
+          "pass": 33,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "control-client",
+          "tests": 108,
+          "pass": 108,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "device-dispatch",
+          "tests": 38,
+          "pass": 38,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "application",
+          "tests": 175,
+          "pass": 175,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "mcp-runtime",
+          "tests": 40,
+          "pass": 40,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "agent-version",
+          "tests": 5,
+          "pass": 5,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "agent-responses",
+          "tests": 122,
+          "pass": 122,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "artifacts",
+          "tests": 37,
+          "pass": 37,
+          "fail": 0,
+          "skipped": 0
+        },
+        {
+          "package": "store",
+          "tests": 550,
+          "pass": 457,
+          "fail": 0,
+          "skipped": 93
+        }
+      ],
+      "limitation": "Only the 3 test-contracts boundary failures remain; independently reproduced at baseline. See package-boundary-baseline.json."
+    },
+    {
+      "command": "pnpm --filter @crewon/control-api typecheck",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm --filter @crewon/control-api test",
+      "exitCode": 0,
+      "pass": 169,
+      "skipped": 5
+    },
+    {
+      "command": "pnpm --filter @crewon/runtime-worker typecheck",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm --filter @crewon/runtime-worker test",
+      "exitCode": 0,
+      "pass": 448,
+      "skipped": 46
+    },
+    {
+      "command": "pnpm --filter @crewon/web-bff typecheck",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm --filter @crewon/web-bff test",
+      "exitCode": 0,
+      "pass": 20
+    },
+    {
+      "command": "pnpm --filter @crewon/ui lint",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm --filter @crewon/ui build",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm --filter @crewon/ui test",
+      "exitCode": 1,
+      "pass": 2635,
+      "failed": 1,
+      "limitation": "Existing scripts/soak/trend.test.ts 5-second timeout under full-suite load; isolated 4 tests passed without changing timeout."
+    },
+    {
+      "command": "pnpm crewon:boundary:check",
+      "exitCode": 0
+    },
+    {
+      "command": "pnpm format",
+      "exitCode": 0
+    }
+  ],
+  "unverified": [
+    "Full enterprise-login App GUI",
+    "Real external model autonomous delivery",
+    "Nginx/Docker container startup",
+    "F03/F04/F05 consumer integration",
+    "Production remote/Postgres delivery storage"
+  ]
+}
