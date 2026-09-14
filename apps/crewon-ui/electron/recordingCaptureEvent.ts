@@ -5,6 +5,19 @@ const object = (value: unknown): Record<string, unknown> => {
     throw new Error("recording_event_invalid");
   return value as Record<string, unknown>;
 };
+const SOURCE_REASONS = new Set([
+  "sensitive-or-unbounded-input-omitted",
+  "source-rate-limit",
+  "iframe-not-supported",
+  "target-unavailable",
+  "shadow-dom-not-supported",
+  "embedded-content-not-supported",
+  "contenteditable-not-supported",
+  "control-not-supported",
+  "file-input-not-supported",
+  "multiple-select-not-supported",
+  "target-unlocatable",
+]);
 export function recordingCaptureEvent(raw: unknown): RecordingSourceEvent {
   const data = object(raw);
   if (
@@ -14,7 +27,7 @@ export function recordingCaptureEvent(raw: unknown): RecordingSourceEvent {
   )
     throw new Error("recording_event_invalid");
   const event = data as unknown as RecordingSourceEvent;
-  if (event.reason !== null && safeRecordingText(event.reason) === null)
+  if (event.reason !== null && !SOURCE_REASONS.has(event.reason))
     throw new Error("recording_event_invalid");
   if (event.input !== null) {
     const input = object(event.input);

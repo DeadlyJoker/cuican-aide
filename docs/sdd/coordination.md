@@ -11,7 +11,7 @@
 - 四个 feature 的新任务均已启动，各自在独立 worktree 中读取基线并开展 SDD。创建或启动不代表 feature 完成。
 - 接线检查发现浏览器缺少 Agent 执行动作端口，已新增 F05 独立配套任务，补齐既定示教执行路径。边界见 [browser-execution-gap.md](browser-execution-gap.md)。
 - 原工作区还有“分析内存泄露与磁盘积累”任务进行中。本批任务在隔离基线与独立 worktree 开发，不覆盖其工作。
-- 已建立 `codex/sdd-integration-20260914` 独立集成树，首批合入 F04 完整消费端和 F03 已提交宿主；修复自动合并引起的旧客户端额外权限要求，41 项窄回归通过。生产宿主双向接线由 F04 继续，完整 E04/E05 未验收，见 [集成记录](integration-progress.md)。
+- 已建立 `codex/sdd-integration-20260914` 独立集成树。已合入 F04 消费端、F03 生成生命周期与双向宿主接线、F01 表格引擎/传输/交付 UI、F02 完整录制宿主；分批合并后行为检查通过。F03 无工具生成角色、F04 事务内 Skill 准入及 F05 实际动作接线继续收口，完整 E04/E05 未验收，见 [集成记录](integration-progress.md)。
 
 ## 开发任务
 
@@ -51,7 +51,7 @@ F03 S2 已报告 `bd1e2f309`（持久生命周期与原子 Run 绑定）、`d6c8
 
 - C01 本地录制来源声明不授予远程身份权限，F03 经认证导入后绑定真实 owner/workspace；录制保留授权页中可复用的脱敏导航信息和目标语义。敏感值由运行时参数代替，不能一概删除普通页面路径、控件名称和任务相关文字；几何定位图仅作辅助，不代替实际关键画面。
 - C03 的 tenant/space/thread 来自已授权对象，传入引用仍逐次鉴权；sourceRunId 为 null 只代表受授权人工保存，不冒称 Agent 执行。
-- C02 不另建 AgentVersion 或运行引擎；与 F04 共同确定实际路由绑定与持久指令重算协议。
+- C02 不为每个 Skill 新建 AgentVersion 或运行引擎；与 F04 共同确定实际路由绑定与持久指令重算协议。为保证生成阶段只能产出草稿，允许通过现有正式 release/binding 发布一个固定、无工具的生成角色；所有 Skill 共用该角色，不能只靠 prompt 或 executionIntent 声明禁止执行。F01/F05 工具及动态 goal/plan 工具也必须被排除。
 - C04 将已批准的日期规则按既有 occurrence 解析，单次调用使用固定具体参数；不因创建时与运行时日期不同判为 Skill 被篡改。
 - C04 新客户端通过 `x-crewon-automation-version: 1` 显式声明能力后读取 v0/v1；旧列表只返回 v0，在分页前过滤并覆盖混合分页行为；旧客户端直接访问 v1 返回沿用现有错误封装的升级提示。旧 v0 序列化和执行摘要保持不变。
 - C05 已确认独立 `crewon_browser_act_scoped`，宿主强制验证显式 grant，保留原 act 的逐次审批。授权 epoch 与导航 generation 分开，具体输入绑定本次权威 Skill 参数，F03/F04 分别提供真实 Run/日程 invocation 映射；详见浏览器补充边界，仍待实现验收。
