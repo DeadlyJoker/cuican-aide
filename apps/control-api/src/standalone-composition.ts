@@ -226,6 +226,7 @@ function composeControlApi(
     });
     skillHost = config.skillDatabasePath === undefined ? null : createStandaloneSkillHost({databasePath:config.skillDatabasePath,actor:config.actor,store,turns,routes:routeResolver,application,digester,clock});
     const automations = new AutomationApplicationService({
+      skills: skillHost?.skills,
       store,
       authorization,
       clock,
@@ -301,6 +302,7 @@ function composeControlApi(
     const app = buildControlApi({
       skills: skillHost?.skills ?? null,
       skillRecordings: skillHost?.recordings ?? null,
+      skillGenerations: skillHost?.generations ?? null,
       application,
       offices,
       threads,

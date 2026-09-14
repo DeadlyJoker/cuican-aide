@@ -142,7 +142,7 @@ test("Skill HTTP routes delegate authenticated bounded inputs; only execution wa
       url: "/api/v1/skills",
       payload: { recording: { contractFixture: true } },
       name: "importRecording",
-      args: [actor, { contractFixture: true }, []],
+      args: [actor, { contractFixture: true }, [], undefined],
     },
     {
       method: "GET",
@@ -495,6 +495,7 @@ test("Skill evidence imports are bounded and read as scoped JSON only after Skil
     actor,
     { contractFixture: true },
     [evidence],
+    undefined,
   ]);
   const response = await f.app.inject({
     method: "GET",

@@ -33,6 +33,14 @@
 
 ## GUI 与真实集成限制
 
+### F03 standalone 宿主垂直验证补充
+
+`apps/control-api/src/automation-skill-host.test.ts` 使用真正 `createStandaloneControlApi`、认证 HTTP、SQLite Skill/Run Store、`ConfiguredSkillExecutionAuthorization`、已持久化 AgentVersion release 和现有 scheduler。前置的已激活 Skill 版本是明确标记的合成测试数据；不模拟 C02 准入、SkillService 或准入授权，也不声称此数据经过真实模型试跑。
+
+两项验证通过：保存固定版本日程；到时触发前禁用则没有 Run/消息/WorkItem 且 readiness 显示阻塞；恢复后触发，冻结发生日与时区解析值；修改未封存草稿不改变执行版本；认证 Run lookup 经 `ensureRunSkillAllowed` 返回绑定，匿名请求 401、禁用后 403；关闭并重开真实宿主后同 occurrence 回执不重复创建 Run，恢复权限后仍读到原参数；取消走现有 Run API；AgentVersion 缺工具时保存 403 且没有日程或 Run。
+
+本轮相关六个测试文件共 25 项通过，0 跳过/失败，日志 `/tmp/f04-host-compatibility.log`；Control API typecheck 通过，日志 `/tmp/f04-real-host-types.log`。生产宿主两处注入的小补丁已交 F03，与其生成宿主语义合并后由 F03 提交；这些结果是在本地应用同一小补丁后得到，接入该提交后需窄跑确认。不把这轮前后准入检查称为执行中浏览器工具撤权验证。
+
 UI 子任务以真正 React 生产组件挂载显式 fixture：1440×900、1280×540、390×640 无横向溢出、提交控件可见；实际选择 previousWeekStart 并提交 version-1；交付目标不匹配时禁用。临时本地预览已清理。该检查不是真实 Skill 生命周期 GUI。
 
 真正 `/#view-schedule` 在当前环境停在登录页，后端 8000 未启动；未据此声称真实上游 UI 成功。Skill 面板「添加到日程」公共 shell 入口及 standalone `skills` 宿主注入由 F03 集成，F04 提供 `skillAutomationDraft` 和可选 `SkillInvocationPort`。无端口时拒绝保存/执行。

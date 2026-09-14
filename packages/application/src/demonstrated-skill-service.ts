@@ -159,8 +159,10 @@ export class DemonstratedSkillService implements SkillInvocationPort {
     actor: ActorContext,
     recording: unknown,
     evidence: readonly SkillEvidenceUpload[] = [],
+    importId?: string,
   ) {
-    const skillId = this.dependencies.nextId();
+    if (importId !== undefined) skillText(importId,128,"skill_import_id_invalid");
+    const skillId = importId === undefined ? this.dependencies.nextId() : `skill-${this.dependencies.digester.sha256(skillJson({tenantId:actor.tenantId,spaceId:actor.spaceId,ownerActorId:actor.actorId,importId})).slice(7)}`;
     await this.authorize(actor, skillId, "write");
     const { method, source } =
       await this.dependencies.recording.importRecording(
@@ -168,6 +170,11 @@ export class DemonstratedSkillService implements SkillInvocationPort {
         recording,
         evidence,
       );
+    const existing = await this.dependencies.store.getSkill(this.locator(actor,skillId));
+    if (existing) {
+      if (skillJson(existing.source) !== skillJson(source)) throw new ApplicationError("conflict","skill_import_id_conflict");
+      return existing;
+    }
     const now = this.dependencies.clock.now();
     const record: DemonstratedSkillRecord = {
       ...this.locator(actor, skillId),
@@ -180,7 +187,13 @@ export class DemonstratedSkillService implements SkillInvocationPort {
       createdAt: now,
       updatedAt: now,
     };
-    await this.dependencies.store.saveSkill(record, 0);
+    try { await this.dependencies.store.saveSkill(record, 0); }
+    catch(error) {
+      if (importId === undefined) throw error;
+      const concurrent = await this.dependencies.store.getSkill(this.locator(actor,skillId));
+      if (!concurrent || skillJson(concurrent.source)!==skillJson(source)) throw error;
+      return concurrent;
+    }
     return record;
   }
   async edit(

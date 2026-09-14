@@ -4,6 +4,7 @@ import {
   type DemonstratedSkillService,
   type SkillEvidenceUpload,
   type SkillRecordingStore,
+  type SkillDraftGenerationService,
 } from "@crewon/application";
 import {
   parseSkillInvocationSpec,
@@ -19,6 +20,7 @@ import { errorResponse } from "./control-api-errors.ts";
 import type { ControlApiIdentityPort } from "./control-api-ports.ts";
 import type { OutboxWakeupPort } from "./control-api.ts";
 import { requestContext } from "./request-context.ts";
+import { registerSkillDraftGenerationRoutes } from "./skill-draft-generation-routes.ts";
 
 export function registerDemonstratedSkillRoutes(
   app: FastifyInstance,
@@ -27,8 +29,14 @@ export function registerDemonstratedSkillRoutes(
     identity: ControlApiIdentityPort;
     outboxWakeup: OutboxWakeupPort;
     recordings?: SkillRecordingStore | null;
+    generations?: SkillDraftGenerationService | null;
   },
 ): void {
+  registerSkillDraftGenerationRoutes(app, {
+    generations: dependencies.generations ?? null,
+    identity: dependencies.identity,
+    outboxWakeup: dependencies.outboxWakeup,
+  });
   function register(
     method: HTTPMethods,
     url: string,
@@ -107,6 +115,9 @@ export function registerDemonstratedSkillRoutes(
         actor,
         body.recording,
         uploads(body.evidence),
+        typeof request.headers["idempotency-key"] === "string"
+          ? request.headers["idempotency-key"]
+          : undefined,
       );
     },
     3 * 1024 * 1024 + 64 * 1024,

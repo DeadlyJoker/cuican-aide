@@ -32,8 +32,12 @@ Control API、Store、Control Client 类型检查、OpenAPI 生成一致性和 T
 
 ## 仍待接线和验收
 
-当前已提交 F03 宿主还未给 AutomationApplicationService 注入 skills，也未给 Skill 宿主注入 `scheduledInvocations` 的权威 Run 映射。F04 提供最小接线 patch 和真实宿主垂直测试，由正在修改生成宿主的 F03 统一合入生产接线并提交；F03继续模型生成、UI与录制交接。
+第二批已合并 F03 `12b9a7a50`（包含 Zod/js-yaml 复用、模型草稿生成 Run 持久化 `eb5b211e3` 和 F04 真实宿主测试）。AutomationApplicationService 已注入 skills，Skill 宿主已接入 `scheduledInvocations` 的权威 Run 映射。合并时去除自动合并产生的重复 import/export，保留首批修复的旧客户端运行权限行为。
+
+本树新增实际验证：生成路由、生成 SQLite 恢复、严格 schema、standalone 宿主、真实 Skill 日程宿主及兼容性八个文件共 32 项通过、0 失败、0 跳过；Control API 类型检查通过。日志位于 `/tmp/crewon-integration-generation-host-tests.log`。真实宿主测试的已激活 Skill 是合成前置数据；生成生命周期测试的提供方输出是显式夹具，这些不证明真实模型生成成功。
+
+F03 仍在补充固定无工具生成 AgentVersion 的执行硬门禁和 UI。F04 正在修复日程保存/新 Run 提交与 Skill 禁用之间的 SQLite 原子性窗口；完成前不将前后两次准入检查称为事务内一致性保证。
 
 F01 换库后的文件交付、F02 完整录制宿主、F05 成熟浏览器动作/显式授权尚未在本树集成。真实模型、浏览器取数、文件结果及完整周期执行的 E04/E05 尚未验收；此树当前用于逐批集成，不作为已可发布成品。
 
-真实浏览器验收当前受锁屏下页面 hidden/焦点不可用影响；显式注意力不足状态与焦点仿真的脚本测试分别记录，不能冒称普通后台/锁屏生产执行已支持。真实模型需使用隔离配置和合成材料，未配置时不把固定模型夹具当作验证通过。
+F05 已报告同一真实 WebContentsView 上的 Puppeteer 动作、下载和 focus emulation 恢复探针通过；尚未贯通本树的录制/授权/交付路径，不能冒称人工 GUI 验收或完整后台执行。已找到原工作区现有模型配置，F03 将只在隔离验收进程读取，使用合成材料验证；凭据不复制、不输出，不使用原用户数据库。
