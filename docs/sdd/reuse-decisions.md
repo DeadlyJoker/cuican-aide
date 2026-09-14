@@ -18,7 +18,9 @@
 
 根协调已在隔离集成分支实际合入 F01 的 ExcelJS 4.4.0、csv-parse 7、xlsx-calc 0.9.2，F02 的 dom-accessibility-api 0.7.1，F03 的 Zod 4.4.3 与 js-yaml 4.3.0。F04 继续复用既有 scheduler 与 Intl，没有增加调度引擎。这些不是只有选型文档：表格文件处理、录制语义和严格契约校验已使用上述库执行，根协调的合并后检查见 [集成进度](integration-progress.md)。
 
-F05 已在真实同一 WebContentsView 探针中使用 Puppeteer Core 25.9.0 的公开 ExtensionTransport/connect 与 Locator 完成填写、选择、点击、导航失效、取消及真实 CSV 下载；focus emulation 在动作结束和取消后恢复。该结果由 F05 报告，实际录制宿主、授权与交付链路仍由该任务继续贯通，尚未作为本集成分支完成验收。
+F05 的 Puppeteer Core 25.9.0 已作为生产依赖合入集成分支，使用公开 ExtensionTransport/connect 与 Locator，继续操作 F02 的同一 WebContentsView。实际填写、选择、点击、导航失效、取消、CSV 下载及 focus emulation 恢复已有 owner 证据；根已检查集成后的宿主/Worker/授权/文件导入。真实模型消费录制后自主产出 XLSX 并经日程重复执行仍在联合验收，不能用浏览器探针通过代替。
+
+F01 本轮新增的 50 个公开依赖已逐包核对官方 HTTPS tarball 与 SHA512，并保持版本及依赖图不变。根 frozen install 通过；历史基线的其他内部下载源没有借此改写，整树外部 CI 可安装性仍不能据此推断。
 
 自有代码限定于业务规则、身份与授权、不可变版本、事务一致性、敏感过滤、有限资源预算和跨组件适配。没有保留自写的高层 XLSX writer、CSV 状态机、公式计算引擎或可访问名称算法。即使采用成熟库，模板语义、公式错误、授权与重试边界仍须由产品行为测试证明。
 

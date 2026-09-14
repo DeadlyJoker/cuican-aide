@@ -82,6 +82,28 @@
       "scope": "Built current UI including client identity guards; existing bundle size warnings retained.",
       "logPath": "/tmp/crewon-integration-ui-build-final.log",
       "logSha256": "9485033cf175077ba5cf5bab75a963f766f4561808ec996c3702431f2e3f3a9e"
+    },
+    {
+      "name": "Responses explicit optional-argument serialization",
+      "counts": {
+        "passed": 125,
+        "failed": 0,
+        "skipped": 0
+      },
+      "scope": "At c3b065a8b; actual HTTP/SSE, responsesLite and WebSocket request bodies plus complete package tests. Original pinned schema and local validation retained.",
+      "logPath": "/tmp/crewon-integration-responses-final.log",
+      "logSha256": "5ecc5b2697137bfe59107af5611f5192c7942aa7d892443feff29111d155aaa3"
+    },
+    {
+      "name": "Fresh authoritative lease before browser tool dispatch",
+      "counts": {
+        "passed": 25,
+        "failed": 0,
+        "skipped": 7
+      },
+      "scope": "At 03d6c2d41; later rounds cross the original expiry, lost lease/new owner refuse before dispatch, actual Worker/browser/file recovery and tool continuation. PostgreSQL skips retained.",
+      "logPath": "/tmp/crewon-integration-lease-final.log",
+      "logSha256": "eb6a2c15aa35044d9d79537255d1a93de80adbc3e65364e1a27298ed0fca6fca"
     }
   ],
   "currentPackageBoundaryViolations": [
@@ -123,11 +145,14 @@
     },
     "desktopRuntimeStage": "passed at current source commit",
     "desktopHostBuild": "passed at current source commit",
-    "publicRegistryFrozenInstall": "passed with existing workspace store; F01 independently downloaded and verified all 50 new public packages"
+    "publicRegistryFrozenInstall": "passed with existing workspace store; F01 independently downloaded and verified all 50 new public packages",
+    "responsesTypecheck": "passed after optional-argument serialization fix",
+    "workerTypecheck": "passed after fresh-lease dispatch fix"
   },
   "remainingAcceptance": [
     "F05 actual recorded-source real-provider trial, real XLSX verification, and repeated/scheduled execution are still in progress.",
     "Manual/CUA validation remains unavailable while the macOS desktop is locked.",
     "New Skill-backed scheduling and delivery use the supported local SQLite deployment; live PostgreSQL/remote delivery is not claimed."
-  ]
+  ],
+  "subsequentSourceCommit": "03d6c2d41"
 }
