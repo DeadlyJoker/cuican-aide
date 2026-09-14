@@ -1,5 +1,5 @@
 import { registerDemonstratedSkillRoutes } from "./demonstrated-skill-routes.ts";
-import type { DemonstratedSkillService, SkillRecordingStore } from "@crewon/application";
+import type { DemonstratedSkillService, SkillRecordingStore, SkillDraftGenerationService } from "@crewon/application";
 import { projectAutomationWithReadiness } from "./automation-readiness-projection.ts";
 import { requireSkillScheduleClient, supportsSkillSchedules } from "./automation-client-compatibility.ts";
 import { registerThreadActiveRunRoute } from "./thread-active-run-route.ts";
@@ -215,6 +215,7 @@ import type {
 export type ControlApiDependencies = Readonly<{
   skills?: DemonstratedSkillService | null;
   skillRecordings?: SkillRecordingStore | null;
+  skillGenerations?: SkillDraftGenerationService | null;
   application: RunApplicationService;
   offices?: OfficeApplicationService | null;
   threads: ThreadApplicationService;
@@ -313,7 +314,7 @@ export function buildControlApi(
     void reply.code(mapped.statusCode).send(mapped.body);
   });
 
-  registerDemonstratedSkillRoutes(app, {skills: dependencies.skills ?? null, recordings: dependencies.skillRecordings, identity: dependencies.identity, outboxWakeup: dependencies.outboxWakeup});
+  registerDemonstratedSkillRoutes(app, {skills: dependencies.skills ?? null, recordings: dependencies.skillRecordings, generations: dependencies.skillGenerations, identity: dependencies.identity, outboxWakeup: dependencies.outboxWakeup});
 
   app.setNotFoundHandler((request, reply) => {
     const mapped = notFoundResponse(request.id);

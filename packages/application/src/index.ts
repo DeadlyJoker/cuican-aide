@@ -77,6 +77,8 @@ export * from "./artifact-retention-port.ts";
 export * from "./skill-invocation-port.ts";
 export * from "./demonstrated-skill-store-port.ts";
 export * from "./demonstrated-skill-service.ts";
+export * from "./skill-draft-generation-store-port.ts";
+export * from "./skill-draft-generation.ts";
 export * from "./skill-recording-store-port.ts";
 export * from "./recording-skill-import.ts";
 
