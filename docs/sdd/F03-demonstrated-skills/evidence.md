@@ -70,4 +70,6 @@ F01同一DeliveryService validator与完整F05 bridge由共同集成任务接线
 
 `16e5c67be` 修复复查发现的身份边界：切换 ControlClient 立即重建 Skill 库、面板与生成状态；异步创建Thread后、提交前和回执回调前核对当前客户端与组件生命周期，旧身份不能继续提交或覆盖新页面。新增9项行为反例，其中7项先复现失败；修复后相同窄命令21文件/185项全通过，UI lint/build 与 `git diff --check` 通过。此项为 React/happy-dom 行为验证，不作为真实模型或浏览器闭环证据。
 
+协调分支的首次全 UI 检查发现新增 `SkillLibraryHost.test.tsx` 引用 app 外壳违反既有组件分层规则。协调提交 `269a4c8f9` 合入本分支为 `bc1c52a95`：仅将完整测试移至 `components/app/CommandWorkspaceSkillLibrary.test.tsx` 并修改3个相对导入；原断言与架构规则均保留。本分支重跑新位置测试及 `libArchitecture.test.ts`，2文件/22项通过。全 UI 结果由协调分支另行记录，不将此窄集冒作全量通过。
+
 收口运行 `pnpm format`，并显式检查 F03 文档、脚本与 JSON 的 Prettier 格式；均通过。分支完成 F03 独立实现与证据交付，T08 保留为协调任务与 F05 的联合验收待办。
