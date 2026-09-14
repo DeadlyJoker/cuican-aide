@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-14",
+  "baseCommit": "0638ab701aa43da7b461f12441ad75c98899f1e4",
+  "scope": "UI-only persisted schedule authorization entry and shared browser scope editor integration; fake Control list responses and fake desktop bridge in React happy-dom tests",
+  "entry": "日程安排 → 日期中的日程卡或随时手动执行列表 → 浏览器授权",
+  "changes": [
+    "Shared AutomationSkillStatus renders the entry for scheduled and manual Skill cards containing browser mutation tool refs.",
+    "Authorization uses the saved definition thread, immutable Skill ref, saved approval mode, and saved parameter names.",
+    "Opening a card never grants access; the user explicitly authorizes or revokes through BrowserExecutionAuthorization.",
+    "Scoped-only Skills require an explicitly configured valid scope and cannot choose per-action authorization.",
+    "Authority changes reset the entry; re-opening reads current bridge status instead of retaining an authorized claim.",
+    "Legacy prompt schedules and read-only Skills retain their existing layout."
+  ],
+  "verification": {
+    "command": "pnpm --filter @crewon/ui exec vitest run src/components/app/CommandWorkspaceScheduleBrowserAuthorization.test.tsx src/components/app/CommandWorkspaceSkillSchedules.test.tsx src/components/app/AutomationSkillStatus.test.tsx src/components/app/CommandWorkspaceAutomations.test.tsx --maxWorkers=2",
+    "testFilesPassed": 4,
+    "testsPassed": 18,
+    "testsFailed": 0,
+    "log": "/tmp/crewon-schedule-browser-reauthorization-tests.log",
+    "logSha256": "208789917c537eb32c2d6bd15392a85583e7397102271369bffa383398ec09ac",
+    "newCalendarCardSnapshot": "apps/crewon-ui/src/components/app/__snapshots__/CommandWorkspaceScheduleBrowserAuthorization.test.tsx.snap"
+  },
+  "pauseResumeFinding": {
+    "currentControlPaths": [
+      "GET /api/v1/automations",
+      "POST /api/v1/automations",
+      "GET /api/v1/automations/{automationId}",
+      "POST /api/v1/automations/{automationId}:run-now"
+    ],
+    "conclusion": "The current Control API/client/runtime has no individual schedule update, pause, or resume operation. Legacy app-server automation/update is a separate compatibility path and cannot be attached to current Control schedules.",
+    "source": "packages/contracts/openapi/control-api.v1.json; packages/control-client/src/control-api-client.ts; apps/crewon-ui/src/lib/control-runtime/controlAutomationRuntime.ts"
+  },
+  "limitations": [
+    "This evidence does not prove manual desktop use, real browser grant execution, model execution, schedule timing, or file delivery.",
+    "Browser scope is explicitly configured in the UI and is not persisted in SkillInvocation or the schedule definition; after restart it must be configured and authorized again.",
+    "Full UI/build/browser layout verification is coordinated by the root integration task."
+  ]
+}

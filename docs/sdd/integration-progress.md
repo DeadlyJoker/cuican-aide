@@ -4,6 +4,8 @@
 
 ## 当前结论
 
+App 入口复核补充：发现并补齐当前任务文件用于试跑、浏览器限定范围配置、日程重授权三个界面缺口；补齐后全 UI 437 文件/3031 项通过。正常账号登录后的整页验收仍未完成，单条日程暂停/编辑/删除尚无完整入口。请同时阅读 [App 可用性复核](app-readiness-review.md) 和 [使用说明](../crewon-app-user-guide.md)，不要仅凭下面的脚本闭环证据认定全部产品入口完成。
+
 本轮功能代码已在本隔离分支集成。受支持的单个 CrewON 浏览器和本地 SQLite 文件路径已完成“实际录制 → 真实模型草稿 → 明确审阅的通用 Skill → 新输入试跑 → 同版日程到期 → 模型产出 XLSX”的联合验证。
 
 - 最终日程输出 [实际 XLSX](../../artifacts/f05-real-schedule/second-period-orders.xlsx)：8532 字节，两条明细，direct/CNY 汇总 200.00。模型实际调用 assemble，来源指向新的日程 Run；[根独立文件与身份核验](evidence/scheduled-file-review.json) 与 owner 的真实执行证据分开记录。

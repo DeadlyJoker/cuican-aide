@@ -1,0 +1,90 @@
+{
+  "schemaVersion": "crewon.app-readiness-review.v1",
+  "sourceCommit": "98f3ea5ca4e86a9f5f30b6deb892d8524e366104",
+  "reviewDate": "2026-09-14",
+  "checks": [
+    {
+      "name": "Full UI",
+      "command": "pnpm --filter @crewon/ui exec vitest run --maxWorkers=2",
+      "exitCode": 0,
+      "counts": {
+        "filesPassed": 437,
+        "passed": 3031,
+        "failed": 0
+      },
+      "logPath": "/tmp/crewon-app-readiness-ui-all.log",
+      "logSha256": "ab02ebd578d5283bcf4a2513d62b8bc22b81cd64b39ab2b58a36395af7aa8360"
+    },
+    {
+      "name": "UI and Electron types",
+      "command": "pnpm --filter @crewon/ui lint",
+      "exitCode": 0,
+      "counts": null,
+      "logPath": "/tmp/crewon-app-readiness-ui-lint.log",
+      "logSha256": "4edf75dd64bba90b1fbb4f3f646f6ed490400b42d42249211d286d8053a2457b"
+    },
+    {
+      "name": "UI production build",
+      "command": "pnpm --filter @crewon/ui build",
+      "exitCode": 0,
+      "counts": null,
+      "logPath": "/tmp/crewon-app-readiness-ui-build.log",
+      "logSha256": "ffa537e55d7bc343edfb2af2e90a09ce7a3fb98a7be20e651ec902532a202c66"
+    },
+    {
+      "name": "Electron host build",
+      "command": "pnpm --filter @crewon/ui desktop:host:build",
+      "exitCode": 0,
+      "counts": null,
+      "logPath": "/tmp/crewon-app-readiness-host-build.log",
+      "logSha256": "0615ee1efe08d6721b4f41b6a87362962b0c2dee55de2903ea6c8a45a91e3cbc"
+    },
+    {
+      "name": "TypeScript entrypoint boundary",
+      "command": "pnpm crewon:boundary:check",
+      "exitCode": 0,
+      "counts": null,
+      "logPath": "/tmp/crewon-app-readiness-boundary.log",
+      "logSha256": "02db899c7ceb1f622549b6e84299706734410d2822295572e09043290f3ee3d9"
+    },
+    {
+      "name": "Repository documentation format",
+      "command": "pnpm format",
+      "exitCode": 0,
+      "logPath": "/tmp/crewon-app-readiness-format.log",
+      "logSha256": "6e5be42493c7747b8a88729ef6b60da83a95114c561dd9cbf2c8a4a31fdc520d"
+    },
+    {
+      "name": "Nested SDD documentation format",
+      "command": "pnpm exec prettier --check 'docs/sdd/**/*.md'",
+      "exitCode": 0,
+      "logPath": "/tmp/crewon-app-readiness-sdd-format.log",
+      "logSha256": "17aa973d3f004560237d9a95171210b0671deff23d61628eecf7322ff5938f20"
+    }
+  ],
+  "uiBrowserReview": {
+    "tool": "CUA via Codex in-app browser",
+    "scope": "Production BrowserExecutionAuthorization component with explicitly synthetic in-memory bridge; no real browser grant, model or scheduler mutation",
+    "observed": [
+      "Incomplete scope disables authorization",
+      "Website and named button rule enable explicit authorization",
+      "Explicit authorization shows scoped mode",
+      "Revoke displays user takeover completed",
+      "390x640: document scrollWidth=379",
+      "1280x480: document scrollWidth=1269; primary authorization and takeover controls reached and clicked"
+    ],
+    "normalAppRoute": "/#view-schedule",
+    "normalAppResult": "Account login screen; enterprise WeCom service unavailable; authenticated whole-App path not validated",
+    "temporaryPageAndViteRemoved": true,
+    "viewportReset": true
+  },
+  "priorRealModelEvidence": "artifacts/f05-real-schedule/result.json",
+  "priorRealModelEvidenceIsNewUiEndToEnd": false,
+  "remaining": [
+    "Per-schedule pause/edit/delete API and UI",
+    "Persistence of editable browser scope configuration",
+    "Authenticated whole-App manual GUI and enterprise login acceptance",
+    "Installable release and update acceptance",
+    "Existing package architecture failures: 3 tests / 23 baseline violations"
+  ]
+}
