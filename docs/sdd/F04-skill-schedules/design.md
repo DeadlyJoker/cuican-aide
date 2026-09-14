@@ -64,6 +64,12 @@ v1 HTTP 表示增加 `skillReadiness: {state: "ready" | "blocked", code: string 
 
 `resolveAutomationSkillForRun({store,digester}, actor, runId)` 从已持久 Run.origin.binding 和对应 AutomationDefinition 读取并交叉校验 scope/thread/agentVersion/definitionDigest/routeDigest/instructionDigest，校验 scheduledFor 与已冻结的具体 skillInvocation，并直接返回持久的 C02 spec。返回 null 表示非Skill日程；已损坏或不可读绑定 fail closed。无新映射表，不能接受模型传来的Skill身份。此读端口只证明调用身份，F03 `ensureRunSkillAllowed` 和 C05 工具执行时仍重新验证当前撤权/授权范围。
 
+## Skill 权威与 SQLite 提交的原子边界
+
+F03 standalone 宿主注入真实 SkillService 和上述 Run resolver。SQLite 在新 v1 日程保存、首次 invocation 的 `BEGIN IMMEDIATE` 事务内重新检查同库 Skill 的 owner、激活/禁用状态、固定版本及摘要；校验位于任何业务写入之前。校验复用 F03 Store 的行解码器，同时检查 JSON 与索引 revision/content_digest 一致，再复用同一 `requireSqliteSkillVersion` 供直接 Skill Turn 与 Automation 使用。缺表、缺版本或摘要不一致都拒绝，不能通过可选开关、缺表推断或端口夹具降级。
+
+已提交 receipt 在状态检查前恢复，因此事后禁用不破坏历史、不生成第二个 Run；新 Run 已提交后，实际工具动作仍必须经过 F03/C05 的逐次授权。本期生产 Skill 权威仅支持同库 SQLite。PostgreSQL 可继续读取已有定义和恢复 receipt，但新的 v1 保存/执行明确返回 `automation_skill_backend_unsupported`；memory 用例只证明协议/行为，不证明持久授权的并发保证。
+
 ## 复用与自研边界（用户新增约束评审）
 
 | 领域             | 采用的成熟能力                                                                                                                                   | 候选与取舍                                                                                                                   | 必要 C04 适配                                                                 |
@@ -73,4 +79,4 @@ v1 HTTP 表示增加 `skillReadiness: {state: "ready" | "blocked", code: string 
 | UI 与可访问交互  | React 19、既有 ModalDialog/Button、原生 input/select、仓库 CommandScheduleCalendar；现有 radix-ui 1.6.7 工具链                                   | 不另建表单/日历系统；只新增既有参数控件和值来源选择                                                                          | 固定版本和目标展示、类型保持、日期规则和错误恢复文案                          |
 | Schema 与传输    | C02/C03 权威 parser/renderer；现有 OpenAPI + openapi-typescript 7.13.0、Fastify 5.11.0/AJV 8.20.0 传输工具链、既有严格 request/response 解析惯例 | zod/AJV 为传递依赖，F04不将其当未声明的直接依赖；不另造通用 schema 引擎或改变旧 v0 parser 语义                               | wire parser仅验证新增 C04结构/字节上限；声明参数/激活/权限仍由C02/C03唯一验证 |
 
-本 feature 无新增包或 lockfile 变更。复用包版本来自仓库锁文件；许可沿用现有 scripts/check-\*-licenses 检查，实际结果见 evidence。时区兼容验证覆盖沪/洛跨日、纽约 DST 重复小时、跨年上一完整周，以及现有 scheduler 的夏令时/离线最新 occurrence；这些证明有限规则，不承诺任意表达式或另一套时区调度算法。
+F04 自身无新增包或 lockfile 变更；合入的 F03 `3b6900e61` 已将其权威 C02 校验改为直接依赖 Zod 4.4.3/js-yaml 4.3.0，保留原 canonical Markdown，F04 继续消费同一 API。复用包版本来自仓库锁文件；许可沿用现有 scripts/check-\*-licenses 检查，实际结果见 evidence。时区兼容验证覆盖沪/洛跨日、纽约 DST 重复小时、跨年上一完整周，以及现有 scheduler 的夏令时/离线最新 occurrence；这些证明有限规则，不承诺任意表达式或另一套时区调度算法。

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { test, type TestContext } from "node:test";
 import {
   compileAgentVersion,
@@ -213,6 +214,7 @@ async function hostFixture(t: TestContext, requiredTool = "browser") {
       return host;
     },
     runs,
+    databasePath,
     skillStore,
     record,
     version,
@@ -363,3 +365,169 @@ test("F04 standalone Skill host rejects undeclared AgentVersion tools before sto
   assert.equal(listed.statusCode, 200, listed.body);
   assert.deepEqual(listed.json().data, []);
 });
+
+test("F04 SQLite transaction rejects disable after save admission without persisting a schedule or receipt", async (t) => {
+  const f = await hostFixture(t);
+  const commit = SqliteRunStore.prototype.commitAutomationCreate;
+  let interleave = true;
+  t.mock.method(
+    SqliteRunStore.prototype,
+    "commitAutomationCreate",
+    async function (this: SqliteRunStore, input: Parameters<typeof commit>[0]) {
+      if (interleave) {
+        interleave = false;
+        await f.disable(true);
+      }
+      return commit.call(this, input);
+    },
+  );
+  const rejected = await f.save();
+  assert.equal(rejected.statusCode, 403, rejected.body);
+  assert.equal(rejected.json().error.code, "skill_disabled");
+  assert.deepEqual(
+    (await f.host.app.inject({ url: "/api/v1/automations", headers })).json()
+      .data,
+    [],
+  );
+  assert.equal((await f.runs.listPendingWorkItems(100)).length, 0);
+  await f.disable(false);
+  const retry = await f.save();
+  assert.equal(retry.statusCode, 201, retry.body);
+  await f.disable(true);
+  const receipt = await f.save();
+  assert.equal(receipt.statusCode, 200, receipt.body);
+  assert.deepEqual(receipt.json().automation, retry.json().automation);
+});
+
+test("F04 SQLite transaction rejects disable after execution admission without a Run and preserves retry identity", async (t) => {
+  const f = await hostFixture(t);
+  assert.equal((await f.save()).statusCode, 201);
+  const commit = SqliteRunStore.prototype.commitAutomationInvocation;
+  let interleave = true;
+  t.mock.method(
+    SqliteRunStore.prototype,
+    "commitAutomationInvocation",
+    async function (this: SqliteRunStore, input: Parameters<typeof commit>[0]) {
+      if (interleave) {
+        interleave = false;
+        await f.disable(true);
+      }
+      return commit.call(this, input);
+    },
+  );
+  await f.host.automationScheduler.wake();
+  assert.equal(f.host.automationScheduler.lastFailureCode(), "skill_disabled");
+  assert.equal((await f.runs.listPendingWorkItems(100)).length, 0);
+  assert.equal(
+    (
+      await f.runs.listMessages(
+        { tenantId: actor.tenantId, threadId: f.threadId },
+        0,
+        100,
+      )
+    ).length,
+    0,
+  );
+  assert.equal(
+    (
+      await f.host.app.inject({
+        url: `/api/v1/threads/${f.threadId}/active-run`,
+        headers,
+      })
+    ).json().run,
+    null,
+  );
+  await f.disable(false);
+  await f.host.automationScheduler.wake();
+  assert.equal(f.host.automationScheduler.lastFailureCode(), null);
+  const work = await f.runs.listPendingWorkItems(100);
+  assert.equal(work.length, 1);
+  await f.disable(true);
+  await f.restart();
+  await f.host.automationScheduler.wake();
+  assert.equal(f.host.automationScheduler.lastFailureCode(), null);
+  assert.deepEqual(await f.runs.listPendingWorkItems(100), work);
+});
+
+for (const mutation of [
+  "missing-authority",
+  "changed-version",
+  "digest-column",
+  "revision-column",
+] as const) {
+  test(`F04 SQLite transaction fails closed on ${mutation} after execution admission`, async (t) => {
+    const f = await hostFixture(t);
+    const saved = await f.save();
+    assert.equal(saved.statusCode, 201, saved.body);
+    const database = new DatabaseSync(f.databasePath);
+    t.after(() => database.close());
+    const commit = SqliteRunStore.prototype.commitAutomationInvocation;
+    t.mock.method(
+      SqliteRunStore.prototype,
+      "commitAutomationInvocation",
+      async function (
+        this: SqliteRunStore,
+        input: Parameters<typeof commit>[0],
+      ) {
+        if (mutation === "missing-authority")
+          database.exec("DROP TABLE demonstrated_skill_versions");
+        else if (mutation === "digest-column")
+          database
+            .prepare(
+              "UPDATE demonstrated_skill_versions SET content_digest = ?",
+            )
+            .run(digester.sha256("changed indexed digest"));
+        else if (mutation === "revision-column")
+          database.exec(
+            "UPDATE demonstrated_skills SET revision = revision + 1",
+          );
+        else {
+          const changed = createSkillVersion(
+            {
+              skillId: f.version.ref.skillId,
+              versionId: f.version.ref.versionId,
+              createdAt: f.version.createdAt,
+              source: f.version.source,
+              method: {
+                ...f.version.method,
+                steps: ["A different method must not enter this Run"],
+              },
+            },
+            digester,
+          );
+          database
+            .prepare(
+              "UPDATE demonstrated_skill_versions SET version_json = ?, content_digest = ?",
+            )
+            .run(JSON.stringify(changed), changed.ref.contentDigest);
+        }
+        return commit.call(this, input);
+      },
+    );
+    const response = await f.host.app.inject({
+      method: "POST",
+      url: `/api/v1/automations/${saved.json().automation.automationId}:run-now`,
+      headers: { ...headers, "idempotency-key": "fence-invalid-authority" },
+      payload: { expectedAutomationRevision: 1, expectedThreadRevision: 1 },
+    });
+    assert.equal(response.statusCode, 409, response.body);
+    const codes = {
+      "missing-authority": "skill_authority_unavailable",
+      "changed-version": "skill_ref_mismatch",
+      "digest-column": "skill_digest_mismatch",
+      "revision-column": "skill_store_corrupt",
+    };
+    assert.equal(response.json().error.code, codes[mutation]);
+    assert.equal((await f.runs.listPendingWorkItems(100)).length, 0);
+    assert.equal(
+      (
+        await f.runs.listMessages(
+          { tenantId: actor.tenantId, threadId: f.threadId },
+          0,
+          100,
+        )
+      ).length,
+      0,
+    );
+  });
+}

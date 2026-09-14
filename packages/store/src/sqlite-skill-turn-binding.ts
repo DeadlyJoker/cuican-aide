@@ -1,13 +1,11 @@
-import { createHash } from "node:crypto";
 import type { DatabaseSync } from "node:sqlite";
+import { requireSqliteSkillVersion } from "./sqlite-skill-admission.ts";
 import {
   RunStoreError,
   type CommitTurnStartInput,
   type SkillExecutionRecord,
-  type DemonstratedSkillRecord,
 } from "@crewon/application";
 import {
-  parseSkillVersion,
   renderSkillInvocationContext,
   skillJson,
   type RunState,
@@ -27,13 +25,6 @@ export function bindSqliteSkillTurn(
     run.createdByActorId,
     input.skillExecution.skillId,
   ];
-  const skillRow = database
-    .prepare(`SELECT record_json FROM demonstrated_skills WHERE ${where}`)
-    .get(...args) as { record_json: string } | undefined;
-  if (!skillRow) throw new RunStoreError("skill_not_found");
-  const skill = JSON.parse(skillRow.record_json) as DemonstratedSkillRecord;
-  if (skill.disabled || skill.deleted)
-    throw new RunStoreError("skill_disabled");
   const row = database
     .prepare(
       `SELECT record_json FROM demonstrated_skill_executions WHERE ${where} AND execution_id = ?`,
@@ -44,21 +35,16 @@ export function bindSqliteSkillTurn(
   if (!row) throw new RunStoreError("skill_execution_not_found");
   const execution = JSON.parse(row.record_json) as SkillExecutionRecord;
   const ref = execution.invocation.skill;
-  const versionRow = database
-    .prepare(
-      `SELECT version_json FROM demonstrated_skill_versions WHERE ${where} AND version_id = ?`,
-    )
-    .get(...args, ref.versionId) as { version_json: string } | undefined;
-  if (!versionRow) throw new RunStoreError("skill_version_not_found");
-  const version = parseSkillVersion(JSON.parse(versionRow.version_json), {
-    sha256: (value) =>
-      `sha256:${createHash("sha256").update(value).digest("hex")}`,
+  const { skill, version } = requireSqliteSkillVersion(database, {
+    locator: {
+      tenantId: run.tenantId,
+      spaceId: run.spaceId,
+      ownerActorId: run.createdByActorId,
+      skillId: input.skillExecution.skillId,
+    },
+    ref,
+    purpose: execution.purpose,
   });
-  if (
-    execution.purpose === "execute" &&
-    !skill.activatedVersionIds.includes(ref.versionId)
-  )
-    throw new RunStoreError("skill_not_active");
   const command = execution.command;
   if (
     execution.skillId !== skill.skillId ||

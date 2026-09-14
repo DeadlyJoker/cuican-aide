@@ -1,16 +1,20 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 
 import { Pool } from "pg";
 
 import {
   AutomationStoreError,
+  canonicalJson,
   type AutomationInvocationResult,
   type CommitAutomationInvocationInput,
+  type SkillInvocationPort,
 } from "@crewon/application";
 import {
   reduceRunLifecycleEvent,
+  createSkillVersion,
+  renderSkillInvocationContext,
   reduceThreadLifecycleEvent,
   type RunLifecycleEvent,
   type RunState,
@@ -26,8 +30,117 @@ import {
 } from "./automation-store-conformance.test-support.ts";
 import { POSTGRES_AUTOMATION_SCHEMA_VERSION } from "./postgres-automation-schema.ts";
 import { PostgresDomainStore } from "./postgres-domain-store.ts";
+import { InMemoryRunStore } from "./in-memory-run-store.ts";
 
 const connectionString = process.env.CREWON_TEST_POSTGRES_URL;
+
+test(
+  "Postgres fails closed for new Skill schedule writes while its atomic Skill authority is unsupported",
+  { skip: connectionString === undefined },
+  async (t) => {
+    assert.ok(connectionString);
+    const postgres = await createTestStore(connectionString);
+    const memory = new InMemoryRunStore();
+    t.after(async () => {
+      await memory.close();
+      await postgres.close();
+    });
+    await seedAutomationThread(postgres);
+    await seedAutomationThread(memory);
+    const sha256 = (value: string) =>
+      `sha256:${createHash("sha256").update(value).digest("hex")}`;
+    const version = createSkillVersion(
+      {
+        skillId: "postgres-fixture",
+        versionId: "v1",
+        createdAt: "2026-08-09T00:00:00.000Z",
+        source: {
+          recordingId: "unsupported-fixture",
+          revision: 1,
+          contentDigest: sha256("fixture"),
+          provenance: "contract-fixture",
+        },
+        method: {
+          name: "Report",
+          purpose: "Report status",
+          steps: ["Read status"],
+          parameters: [],
+          requiredToolRefs: [],
+          completionCriteria: ["Status reported"],
+          knownExceptions: ["Missing input"],
+          runtimeRequirements: [],
+        },
+      },
+      { sha256 },
+    );
+    // Explicit admission fixture prepares valid input; this test only proves backend refusal.
+    const skills: SkillInvocationPort = {
+      resolveVersion: async () => version,
+      admitInvocation: async (_actor, invocation, options) => ({
+        invocation,
+        version,
+        context: renderSkillInvocationContext(version, invocation),
+        agentVersionId: options.route.agentVersionId,
+      }),
+    };
+    const command = {
+      ...automationCreateCommand(),
+      skillInvocation: {
+        schemaVersion: "crewon.skill-invocation.v1" as const,
+        skill: version.ref,
+        parameters: {},
+        requiredToolRefs: [],
+      },
+    };
+    const created = await automationApplicationService(
+      memory,
+      skills,
+    ).createAutomation(automationActor(), command);
+    const service = automationApplicationService(postgres, skills);
+    await assert.rejects(service.createAutomation(automationActor(), command), {
+      code: "automation_skill_backend_unsupported",
+    });
+    assert.deepEqual(
+      await postgres.listAutomations({
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        before: null,
+        limit: 100,
+      }),
+      [],
+    );
+    const { definition, definitionDigest } = created.record;
+    // A pre-existing/imported v1 row remains readable but cannot bypass unsupported execution.
+    await postgres.admin.query(
+      `INSERT INTO ${postgres.quotedSchema}.automations (tenant_id,space_id,automation_id,thread_id,revision,definition_digest,definition_json,updated_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [
+        definition.tenantId,
+        definition.spaceId,
+        definition.automationId,
+        definition.threadId,
+        definition.revision,
+        definitionDigest,
+        canonicalJson(definition),
+        definition.updatedAt,
+      ],
+    );
+    await assert.rejects(
+      service.runAutomationNow(automationActor(), automationRunCommand()),
+      { code: "automation_skill_backend_unsupported" },
+    );
+    assert.equal((await postgres.listPendingWorkItems(100)).length, 0);
+    assert.equal(
+      (
+        await postgres.listMessages(
+          { tenantId: "tenant-1", threadId: "thread-1" },
+          0,
+          100,
+        )
+      ).length,
+      0,
+    );
+  },
+);
 
 if (connectionString === undefined) {
   test.skip("Postgres Automation authority requires CREWON_TEST_POSTGRES_URL", () => {});

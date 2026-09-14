@@ -393,10 +393,7 @@ export class SqliteDemonstratedSkillStore implements DemonstratedSkillStore {
       | (JsonRow & { revision: number })
       | undefined;
     if (!row) return null;
-    const record = validateRecord(JSON.parse(row.record_json), this.#digester);
-    exactLocator(record, locator);
-    if (record.revision !== row.revision) invalid("skill_store_corrupt");
-    return record;
+    return decodeSqliteDemonstratedSkillRow(row, locator, this.#digester);
   }
 
   #version(locator: SkillLocator, ref: SkillVersionRef): SkillVersion | null {
@@ -425,18 +422,12 @@ export class SqliteDemonstratedSkillStore implements DemonstratedSkillStore {
     locator: SkillLocator,
     versionId: string,
   ): SkillVersion {
-    const version = validateVersion(
-      JSON.parse(row.version_json),
+    return decodeSqliteDemonstratedSkillVersionRow(
+      row,
+      locator,
+      versionId,
       this.#digester,
     );
-    if (
-      version.ref.skillId !== locator.skillId ||
-      version.ref.versionId !== versionId
-    )
-      invalid("skill_store_corrupt");
-    if (version.ref.contentDigest !== row.content_digest)
-      throw new SkillError("skill_digest_mismatch");
-    return version;
   }
 
   #execution(
@@ -502,6 +493,35 @@ export class SqliteDemonstratedSkillStore implements DemonstratedSkillStore {
     if (this.#closed)
       throw new ApplicationError("internal", "skill_store_closed");
   }
+}
+
+/** Shared by normal reads and transaction admission; indexed columns are authority too. */
+export function decodeSqliteDemonstratedSkillRow(
+  row: JsonRow & { revision: number },
+  locator: SkillLocator,
+  digester: SkillDigester,
+): DemonstratedSkillRecord {
+  const record = validateRecord(JSON.parse(row.record_json), digester);
+  exactLocator(record, locator);
+  if (record.revision !== row.revision) invalid("skill_store_corrupt");
+  return record;
+}
+
+export function decodeSqliteDemonstratedSkillVersionRow(
+  row: VersionRow,
+  locator: SkillLocator,
+  versionId: string,
+  digester: SkillDigester,
+): SkillVersion {
+  const version = validateVersion(JSON.parse(row.version_json), digester);
+  if (
+    version.ref.skillId !== locator.skillId ||
+    version.ref.versionId !== versionId
+  )
+    invalid("skill_store_corrupt");
+  if (version.ref.contentDigest !== row.content_digest)
+    throw new SkillError("skill_digest_mismatch");
+  return version;
 }
 
 function validateRecord(

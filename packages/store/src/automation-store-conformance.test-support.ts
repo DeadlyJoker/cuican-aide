@@ -10,6 +10,7 @@ import {
   type DurableQueueStore,
   type ModelHistoryStore,
   type RunStore,
+  type SkillInvocationPort,
   type ThreadRollbackStore,
   type ThreadStore,
 } from "@crewon/application";
@@ -374,9 +375,13 @@ function deleteThreadInput() {
   };
 }
 
-export function automationApplicationService(store: AutomationStore) {
+export function automationApplicationService(
+  store: AutomationStore,
+  skills?: SkillInvocationPort,
+) {
   return new AutomationApplicationService({
     store,
+    skills,
     authorization: { authorize: async () => ({ outcome: "allow" }) },
     clock: { now: () => "2026-08-09T00:00:00Z" },
     ids: new SequentialIds(),
