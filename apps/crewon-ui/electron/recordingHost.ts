@@ -495,7 +495,6 @@ export class RecordingHost {
         )
           return;
         const current = this.store.current;
-        const relatedStepId = current.steps.at(-1)?.stepId ?? null;
         // Listen before persistence so a fast completion cannot be lost.
         let outcome: "completed" | "cancelled" | "unknown" = "unknown";
         let done = false;
@@ -509,11 +508,14 @@ export class RecordingHost {
                 : "unknown";
         });
         item.setSaveDialogOptions({ title: "保存教学下载" });
-        const appended = this.store.append({
-          ...this.#step("download", view.webContents.getURL()),
-          relatedStepId,
-          outcome: "unknown",
-        });
+        const downloadPage = view.webContents.getURL();
+        const appended = this.#enqueue(() =>
+          this.store.append({
+            ...this.#step("download", downloadPage),
+            relatedStepId: this.store.current?.steps.at(-1)?.stepId ?? null,
+            outcome: "unknown",
+          }),
+        );
         void appended
           .then(async (value) => {
             const step = value.steps.at(-1);
