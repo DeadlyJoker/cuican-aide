@@ -27,13 +27,19 @@ type SkillInvocationSpec = Readonly<{
   // deliveryTarget?: DeliveryTargetRef; 精确结构由 F01 C03 冻结后引入
 }>;
 interface SkillInvocationPort {
-  resolveVersion(actor: ActorContext, ref: SkillVersionRef): Promise<SkillVersion>;
-  admitInvocation(actor: ActorContext, spec: SkillInvocationSpec,
-    options: { purpose: "schedule" | "execute" | "trial" }): Promise<SkillAdmission>;
+  resolveVersion(
+    actor: ActorContext,
+    ref: SkillVersionRef,
+  ): Promise<SkillVersion>;
+  admitInvocation(
+    actor: ActorContext,
+    spec: SkillInvocationSpec,
+    options: { purpose: "schedule" | "execute" | "trial"; route: RunRoute },
+  ): Promise<SkillAdmission>;
 }
 ```
 
-SkillAdmission 返回已规范校验的 invocation、不可变 version 和 bounded `context`。调用准入不是持久授权凭据：F04 保存时用 schedule；每次真正触发再次用 execute，仍需现有 Run/ToolRuntime 的授权。trial 仅 owner 可调用待试跑版本，execute/schedule 要求该版本已激活且 Skill 未禁用/删除。requiredToolRefs 必须与版本声明一致，不能由调用方增减权限。scope 来自 actor，不接收客户端 tenant/owner。
+SkillAdmission 返回已规范校验的 invocation、不可变 version、route.agentVersionId 和 bounded `context`。RunRoute 必须传入，策略校验其 AgentVersion 包含所需工具。公开 parseSkillVersion(value,digester)、parseSkillInvocationSpec(value)、renderSkillInvocationContext(version,spec) 供 F04 Store 重算；绝不信任任意 context。F04 在每 occurrence 解析相对日期为具体值，C02 消费具体参数。调用准入不是持久授权凭据：F04 保存时用 schedule；每次真正触发再次用 execute，仍需现有 Run/ToolRuntime 的授权。trial 仅 owner 可调用待试跑版本，execute/schedule 要求该版本已激活且 Skill 未禁用/删除。requiredToolRefs 必须与版本声明一致，不能由调用方增减权限。scope 来自 actor，不接收客户端 tenant/owner。
 
 输入 schema 是严格扁平字段列表（name、label、type string/number/boolean、required、可选 string enum）；最多 24 个字段，每字符串最多 2048 bytes，参数总计 4096 bytes，禁止未知字段、非有限数字、原型键。敏感依赖仅声明运行时授权引用，参数 schema 不支持 secret 类型；录制敏感值不进入正文。版本身份不可为 latest。方法 Markdown 上限 8192 bytes，完整执行上下文上限 16384 bytes，以 UTF-8 字节作为保守 token 上界还需压至 9216 bytes，超过则拒绝（不截断方法）。
 
