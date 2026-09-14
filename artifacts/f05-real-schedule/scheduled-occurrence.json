@@ -1,0 +1,124 @@
+{
+  "automation": {
+    "toolPermissionMode": "approveForMe",
+    "skillInvocation": {
+      "schemaVersion": "crewon.skill-invocation.v1",
+      "skill": {
+        "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+        "versionId": "v5",
+        "contentDigest": "sha256:3a64fab98a1cfa135d58c8e094d0412f419e3f3830e93144baa55e1e871673ea"
+      },
+      "deliveryTarget": {
+        "schemaVersion": "crewon.delivery-target.v1",
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "threadId": "01a09e60-cd26-7769-b4f7-3b8a3a56edf5",
+        "targetId": "thread-deliveries"
+      },
+      "parameters": {
+        "date": "2026-10-01",
+        "channel": "直营",
+        "reportNote": "2026-10 monthly report"
+      },
+      "requiredToolRefs": [
+        "crewon_browser_observe",
+        "crewon_browser_act_scoped",
+        "delivery_catalog",
+        "delivery_read",
+        "delivery_assemble"
+      ]
+    },
+    "parameterBindings": {},
+    "automationId": "01a09e60-ce62-766b-9ca5-b214e8d224e3",
+    "threadId": "01a09e60-cd26-7769-b4f7-3b8a3a56edf5",
+    "title": "实际录制方法 · 第二周期定时交付",
+    "prompt": "Execute the fixed Skill with the saved parameters and delivery target.",
+    "agentVersionId": "local-desktop-faf0c300baa4b9e3e18dbed5",
+    "executionMode": "scheduled",
+    "automaticScheduling": true,
+    "schedule": {
+      "scheduleType": "once",
+      "nextRunAt": "2026-09-14T05:25:54.497Z",
+      "intervalSeconds": 0,
+      "time": "05:25",
+      "weekday": 1,
+      "timezone": "UTC"
+    },
+    "revision": 1,
+    "createdAt": "2026-09-14T05:25:39.554Z",
+    "updatedAt": "2026-09-14T05:25:39.554Z"
+  },
+  "run": {
+    "runId": "01a09e61-0b3a-74fd-a443-ca28e729fc88",
+    "threadId": "01a09e60-cd26-7769-b4f7-3b8a3a56edf5",
+    "status": "queued",
+    "revision": 1,
+    "lastSequence": 1,
+    "cancelRequested": false,
+    "waitingApproval": null,
+    "collaborationMode": "default",
+    "purpose": "turn",
+    "workflowVersionBinding": null,
+    "goalBinding": null,
+    "outputRef": null,
+    "failure": null,
+    "createdAt": "2026-09-14T05:25:55.130Z",
+    "updatedAt": "2026-09-14T05:25:55.130Z",
+    "terminalAt": null
+  },
+  "binding": {
+    "skillInvocation": {
+      "schemaVersion": "crewon.skill-invocation.v1",
+      "skill": {
+        "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+        "versionId": "v5",
+        "contentDigest": "sha256:3a64fab98a1cfa135d58c8e094d0412f419e3f3830e93144baa55e1e871673ea"
+      },
+      "deliveryTarget": {
+        "schemaVersion": "crewon.delivery-target.v1",
+        "tenantId": "standalone-tenant",
+        "spaceId": "standalone-space",
+        "threadId": "01a09e60-cd26-7769-b4f7-3b8a3a56edf5",
+        "targetId": "thread-deliveries"
+      },
+      "parameters": {
+        "channel": "直营",
+        "date": "2026-10-01",
+        "reportNote": "2026-10 monthly report"
+      },
+      "requiredToolRefs": [
+        "crewon_browser_observe",
+        "crewon_browser_act_scoped",
+        "delivery_catalog",
+        "delivery_read",
+        "delivery_assemble"
+      ]
+    },
+    "scheduledFor": "2026-09-14T05:25:54.497Z",
+    "automationId": "01a09e60-ce62-766b-9ca5-b214e8d224e3",
+    "automationRevision": 1,
+    "definitionDigest": "sha256:e7b85870751890d344b559539abd1707857805710bda949a8ac92163f592c988",
+    "instructionDigest": "sha256:e677f2ea8fa68117ebf7f894156f342d10a2cbcb355513936fea6bda4383506c",
+    "invocationId": "01a09e61-0b3b-709b-a0e4-9e27a50cf845",
+    "runId": "01a09e61-0b3a-74fd-a443-ca28e729fc88",
+    "routeDigest": "sha256:b34eb113fef10017f5ce93f74063cf114d42bf0fe444dda41d6beb6ba6c45cb6"
+  },
+  "scheduledFor": "2026-09-14T05:25:54.497Z",
+  "runCreatedAt": "2026-09-14T05:25:55.130Z",
+  "toolPermissionMode": "approveForMe",
+  "invocationReceiptCount": 1,
+  "schedulerReceiptKey": "scheduled:b84e2578418c1806040a3aa9450d633ad26f1154998e8fe11ee416355e3bd771",
+  "authorization": {
+    "threadId": "01a09e60-cd26-7769-b4f7-3b8a3a56edf5",
+    "skillVersionRef": {
+      "contentDigest": "sha256:3a64fab98a1cfa135d58c8e094d0412f419e3f3830e93144baa55e1e871673ea",
+      "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+      "versionId": "v5"
+    },
+    "parameters": {
+      "date": "2026-10-01",
+      "channel": "直营",
+      "reportNote": "2026-10 monthly report"
+    }
+  }
+}

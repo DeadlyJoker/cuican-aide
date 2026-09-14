@@ -1,0 +1,128 @@
+{
+  "generationId": "generation-1c9a8bd5-2122-4106-b170-3bcf1b9ad700",
+  "reviewer": "Codex acting under delegated integration acceptance; no human review claimed",
+  "reviewNotes": [
+    "保留真实模型候选原文。已查看实际F02源与页面结构：size=2 listbox没有multiple，仅单选；删除不确定的双渠道与冗余筛选。",
+    "受保护字段是录制中的敏感过滤测试，独立于订单导出；本次不会填写，遇真实鉴权阻断则停止。",
+    "本次显式选择已授权当前/orders页，不还原C01脱敏token。",
+    "根据用户第二周期验收目标添加date参数；该日期输入为页面现存标准控件，旧录制该步已在回看中删除，因此这属于明确的审阅修正。",
+    "独立核验由宿主页面值和F01真实字节完成，模型不会获得任意JS/CDP。",
+    "按用户AI自动交付闭环要求增补：已有模板是任务输入，模型必须亲自调用delivery_assemble并读取实际汇总。形成新固定版本；原C01、原generation、v3均保留。",
+    "复核可复用性：从方法步骤和完成条件移除特定订单号与预知金额，要求依据当次实际CSV自行筛选、逐条追溯并求和。特定订单号和200只保留在独立验收脚本。原v4证据完整保留。"
+  ],
+  "parameters": {
+    "date": "2026-10-01",
+    "channel": "直营",
+    "reportNote": "2026-10 monthly report"
+  },
+  "method": {
+    "name": "按日期导出订单并交付汇总工作簿",
+    "purpose": "在已授权浏览器导出新期订单，用当前任务的真实模板生成可下载的XLSX，核验直营人民币有效订单汇总。",
+    "parameters": [
+      {
+        "name": "date",
+        "label": "订单日期",
+        "type": "string",
+        "required": true
+      },
+      {
+        "name": "channel",
+        "label": "单一渠道",
+        "type": "string",
+        "required": true,
+        "enum": [
+          "直营",
+          "渠道"
+        ]
+      },
+      {
+        "name": "reportNote",
+        "label": "备注文本",
+        "type": "string",
+        "required": true
+      }
+    ],
+    "requiredToolRefs": [
+      "crewon_browser_observe",
+      "crewon_browser_act_scoped",
+      "delivery_catalog",
+      "delivery_read",
+      "delivery_assemble"
+    ],
+    "steps": [
+      "使用已明确授权的当前订单页面；不导航，不还原token。调用crewon_browser_observe取得sessionId、generation、observationId和实际目标。",
+      "使用crewon_browser_act_scoped的fill操作将“日期”填为{{date}}；日期控件没有ARIA role，使用观察返回的targetId，不假定textbox角色。",
+      "每次操作后重新observe；使用scoped select将单选“渠道”设为{{channel}}。",
+      "重新observe后使用scoped fill将“备注”填为{{reportNote}}。",
+      "重新observe后使用scoped click只点击一次“筛选订单”。",
+      "再次observe核对日期和渠道控件的普通值与参数一致。只使用scoped download对“下载 CSV”执行一次；普通click不会将文件导入F01，不能用来替代download。",
+      "下载结果会返回F01 inputId，使用delivery_catalog(kind=inputs,offset=0,limit=100)确认实际文件，使用delivery_read(kind=input,id=inputId,sheet=CSV,startRow=1,limit=100)读取已保存的当次材料；如有nextRow继续读取，依据真实记录计算符合业务规则的订单集合与汇总。",
+      "调用delivery_catalog列出inputs，从实际目录找到role=template且名称orders-template.xlsx的模板inputId；不得猜测ID。用刚刚浏览器下载的CSV inputId作为唯一数据source。",
+      "调用delivery_assemble亲自生成文件：name=second-period-orders.xlsx，templateInputId=目录模板ID，sources=[{inputId:下载CSV的ID,sheet:CSV,headerRow:1}]，targetSheet=明细，startRow=2，columns按顺序映射order_id→A、channel→B、currency→C、amount→D、status→E。",
+      "assemble的rules明确为：exclude按顺序[{header:status,equals:canceled},{header:channel,equals:partner},{header:currency,equals:USD}]；requiredHeaders=[amount]；exceptionSheet=异常；lineageSheet=来源；summary={sheet:汇总,startRow:2,groupBy:[channel,currency],valueHeader:amount}。只调用一次成功的assemble；工具可能要求已授权的具体动作审批，不得绕过或代称成功。",
+      "用delivery_read(kind=version,id=实际返回的versionId,sheet=汇总,startRow=1,limit=100)读取真实汇总，再读明细及来源。逐条核对明细与当次CSV中未取消、直营、CNY的实际订单一致，汇总等于这些实际记录amount之和；按nextRow继续翻页，不得预设订单号或金额。最后报告实际versionId、字节摘要和文件名称，只有保存并核验成功才宣称交付。"
+    ],
+    "completionCriteria": [
+      "日期和渠道控件值与本次参数一致。",
+      "实际CSV完成下载并保存为当前任务的F01输入，sourceRunId对应本次Run。",
+      "F01保存的当次CSV可读取，来源为本Run实际下载；字段与实际记录用于本次数据校验。",
+      "本Run实际调用delivery_assemble保存最终XLSX，sourceRunId为本Run；明细逐条对应当次CSV中未取消的直营CNY订单，汇总等于这些实际记录amount之和，来源可追溯且可通过实际版本读取。"
+    ],
+    "knownExceptions": [
+      "敏感登录、口令或验证码需要用户接管，禁止代填。",
+      "目标缺失、歧义、授权撤销或页面代际失效时停止并报告；不要猜测目标。",
+      "未知外部结果不得自动重放；下载失败或无实际文件时不能宣称完成。"
+    ],
+    "runtimeRequirements": [
+      "已授权当前F02浏览器会话及此固定Skill版本的有限动作。",
+      "本次代理已明确审阅：渠道为单选，备注使用参数，筛选只提交一次；不执行录制中独立的敏感字段测试。",
+      "使用真实浏览器工具和同一F01文件入口，不使用任意代码或宿主路径。"
+    ]
+  },
+  "browserRules": [
+    {
+      "action": "fill",
+      "target": {
+        "role": "",
+        "name": "日期"
+      },
+      "value": {
+        "parameter": "date"
+      }
+    },
+    {
+      "action": "select",
+      "target": {
+        "role": "listbox",
+        "name": "渠道"
+      },
+      "value": {
+        "parameter": "channel"
+      }
+    },
+    {
+      "action": "fill",
+      "target": {
+        "role": "textbox",
+        "name": "备注"
+      },
+      "value": {
+        "parameter": "reportNote"
+      }
+    },
+    {
+      "action": "click",
+      "target": {
+        "role": "button",
+        "name": "筛选订单"
+      }
+    },
+    {
+      "action": "download",
+      "target": {
+        "role": "link",
+        "name": "下载 CSV"
+      }
+    }
+  ]
+}

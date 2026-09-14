@@ -1,0 +1,6 @@
+order_id,channel,currency,amount,status
+A101,direct,CNY,110,paid
+A102,direct,CNY,50,canceled
+A103,direct,CNY,90,paid
+A104,partner,CNY,400,paid
+A105,direct,USD,30,paid

@@ -20,6 +20,7 @@ import {
 } from "../../electron/runtimeSupervisor.ts";
 import { startDesktopBrowserExecution } from "../../electron/browserExecutionDesktop.ts";
 import type { BrowserGrantRule } from "../../src/lib/browser-execution/browserExecutionGrant.ts";
+import { prepareScheduledSkillAcceptance } from "./scheduled-skill-acceptance.ts";
 
 // Manual integration acceptance: read only the explicitly authorized credential
 // file. Persisted outputs contain reviewed synthetic business data, never secrets.
@@ -29,11 +30,26 @@ process.loadEnvFile(resolve(envFile));
 const apiKey = process.env.AICUICAN_API_KEY?.trim();
 assert(apiKey, "Authorized provider credential unavailable");
 process.env.CREWON_RESPONSES_STREAM_MAX_RETRIES = "0";
+const executionPath = process.env.CREWON_F05_EXECUTION_PATH ?? "trial";
+assert(executionPath === "trial" || executionPath === "schedule");
 const output = resolve(
-  process.env.CREWON_F05_EVIDENCE_DIR ?? "artifacts/f05-real-skill",
+  process.env.CREWON_F05_EVIDENCE_DIR ??
+    (executionPath === "schedule"
+      ? "artifacts/f05-real-schedule"
+      : "artifacts/f05-real-reusable-skill"),
+);
+const skillEvidence = resolve(
+  process.env.CREWON_F05_SKILL_EVIDENCE_DIR ??
+    (executionPath === "schedule"
+      ? "artifacts/f05-real-reusable-skill"
+      : "artifacts/f05-real-skill"),
 );
 mkdirSync(output, { recursive: true });
 const reuse = process.env.CREWON_F05_REUSE_DATA_DIRECTORY;
+assert(
+  executionPath !== "schedule" || reuse,
+  "Schedule acceptance must reuse the actually reviewed trial",
+);
 const data = reuse
   ? resolve(reuse)
   : mkdtempSync(join(tmpdir(), "crewon-f05-real-skill-"));
@@ -41,8 +57,8 @@ app.setPath("userData", data);
 const pause = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 const write = (name: string, value: unknown) =>
   writeFileSync(join(output, name), JSON.stringify(value, null, 2) + "\n");
-const reviewFile = "reviewed-delivery-method.json";
-const versionFile = "delivery-version.json";
+const reviewFile = "reviewed-reusable-method.json";
+const versionFile = "reusable-version.json";
 const expectedAssembly = (templateInputId: string, inputId: string) => ({
   name: "second-period-orders.xlsx",
   templateInputId,
@@ -179,6 +195,11 @@ app
           );
         }
         if (run.waitingApproval) {
+          assert.equal(
+            executionPath,
+            "trial",
+            "Scheduled execution must continue under its explicit saved mode; no per-action test approval is allowed",
+          );
           // The user delegated this exact file operation. Review the concrete
           // model request against actual saved inputs, then use normal approval.
           assert(trialTemplate, "Generation must never request tool approval");
@@ -275,8 +296,9 @@ app
       let version: any;
       if (reuse) {
         const prior = JSON.parse(
-          readFileSync(join(output, "candidate.json"), "utf8"),
+          readFileSync(join(skillEvidence, "candidate.json"), "utf8"),
         );
+        write("candidate.json", prior);
         assert.deepEqual(prior.source, skill.source);
         const collected = await request(
           `/api/v1/skills/${skill.skillId}/generations/${prior.generationId}`,
@@ -284,11 +306,14 @@ app
         assert.equal(collected.verification, "real");
         generationRun = (await client.getRun(collected.runId)).run;
         assert.equal(generationRun.status, "completed");
-        reviewed = JSON.parse(readFileSync(join(output, reviewFile), "utf8"));
+        reviewed = JSON.parse(
+          readFileSync(join(skillEvidence, reviewFile), "utf8"),
+        );
+        write(reviewFile, reviewed);
         assert.equal(reviewed.generationId, prior.generationId);
-        if (existsSync(join(output, versionFile))) {
+        if (existsSync(join(skillEvidence, versionFile))) {
           const saved = JSON.parse(
-            readFileSync(join(output, versionFile), "utf8"),
+            readFileSync(join(skillEvidence, versionFile), "utf8"),
           );
           version = (
             await request(
@@ -296,6 +321,11 @@ app
             )
           ).version;
         } else {
+          assert.equal(
+            executionPath,
+            "trial",
+            "A schedule must never create or change the reviewed fixed version",
+          );
           const current = await request(`/api/v1/skills/${skill.skillId}`);
           const edited = await request(
             `/api/v1/skills/${skill.skillId}`,
@@ -311,8 +341,9 @@ app
           write(versionFile, version);
         }
         assert.deepEqual(version.method, reviewed.method);
+        write(versionFile, version);
         const oldExecution = JSON.parse(
-          readFileSync(join(output, "execution.json"), "utf8"),
+          readFileSync(join(skillEvidence, "execution.json"), "utf8"),
         );
         const oldRun = (await client.getRun(oldExecution.execution.runId)).run;
         write(`previous-trial-run-${oldRun.runId}.json`, oldRun);
@@ -390,10 +421,24 @@ app
         });
         write(versionFile, version);
       }
-      const { thread: trial } = await client.createThread(
-        { title: "实际录制方法 · 第二期订单试跑" },
-        `f05-trial-thread-${randomUUID()}`,
-      );
+      const savedSchedule =
+        executionPath === "schedule" &&
+        existsSync(join(output, "schedule-request.json"))
+          ? JSON.parse(
+              readFileSync(join(output, "schedule-request.json"), "utf8"),
+            )
+          : null;
+      const { thread: trial } = savedSchedule
+        ? await client.getThread(savedSchedule.threadId)
+        : await client.createThread(
+            {
+              title:
+                executionPath === "schedule"
+                  ? "实际录制方法 · 真实日程订单交付"
+                  : "实际录制方法 · 第二期订单试跑",
+            },
+            `f05-trial-thread-${randomUUID()}`,
+          );
       trialTemplate = await client.delivery.upload(
         trial.threadId,
         {
@@ -407,51 +452,123 @@ app
         },
         `template-${trial.threadId}`,
       );
-      await recording.open();
-      const control = BrowserWindow.getAllWindows().find((w) => w !== owner)!;
-      await control.webContents.executeJavaScript(
-        `window.crewonRecording.navigate(${JSON.stringify(`${origin}/orders`)})`,
-      );
-      await control.webContents.executeJavaScript(
-        "window.crewonRecording.bounds({x:0,y:0,width:1100,height:700})",
-      );
-      const session = recording.getExecutionSession();
-      assert(session && session.mode === "idle");
-      const grant = await bridge.host.authorize({
-        threadId: trial.threadId,
-        scope: {
-          skillVersionRef: version.ref,
-          origins: [origin],
-          rules: reviewed.browserRules as BrowserGrantRule[],
-        },
-      });
+      const savedOccurrence =
+        savedSchedule && existsSync(join(output, "scheduled-occurrence.json"))
+          ? JSON.parse(
+              readFileSync(join(output, "scheduled-occurrence.json"), "utf8"),
+            )
+          : null;
+      const recoveredRunId =
+        savedOccurrence &&
+        (await client.getRun(savedOccurrence.run.runId)).run.status ===
+          "completed"
+          ? (savedOccurrence.run.runId as string)
+          : null;
+      let session: ReturnType<RecordingHost["getExecutionSession"]> = null;
+      let grant: Awaited<ReturnType<typeof bridge.host.authorize>> | null =
+        null;
+      if (!recoveredRunId) {
+        await recording.open();
+        const control = BrowserWindow.getAllWindows().find((w) => w !== owner)!;
+        await control.webContents.executeJavaScript(
+          `window.crewonRecording.navigate(${JSON.stringify(`${origin}/orders`)})`,
+        );
+        await control.webContents.executeJavaScript(
+          "window.crewonRecording.bounds({x:0,y:0,width:1100,height:700})",
+        );
+        session = recording.getExecutionSession();
+        assert(session && session.mode === "idle");
+        grant = await bridge.host.authorize({
+          threadId: trial.threadId,
+          scope: {
+            skillVersionRef: version.ref,
+            origins: [origin],
+            rules: reviewed.browserRules as BrowserGrantRule[],
+          },
+        });
+      }
       const catalog = await client.delivery.catalog(trial.threadId);
       const invocation = {
-        schemaVersion: "crewon.skill-invocation.v1",
+        schemaVersion: "crewon.skill-invocation.v1" as const,
         skill: version.ref,
         parameters: reviewed.parameters,
         requiredToolRefs: version.method.requiredToolRefs,
         deliveryTarget: catalog.target,
       };
-      const executionId = `trial-${randomUUID()}`;
-      const execution = await request(
-        `/api/v1/skills/${skill.skillId}/executions`,
-        {
-          executionId,
+      const executionId =
+        savedSchedule?.idempotencyKey ?? `${executionPath}-${randomUUID()}`;
+      let scheduled: Awaited<
+        ReturnType<typeof prepareScheduledSkillAcceptance>
+      > | null = null;
+      let execution: { runId: string };
+      if (executionPath === "schedule") {
+        if (savedSchedule) {
+          assert.deepEqual(savedSchedule.fixedVersion, version.ref);
+          assert.deepEqual(savedSchedule.invocation, invocation);
+          assert.equal(savedSchedule.toolPermissionMode, "approveForMe");
+        }
+        const scheduleRequest = savedSchedule ?? {
           threadId: trial.threadId,
-          expectedThreadRevision: trial.revision,
-          agentVersionId: null,
-          purpose: "trial",
+          expectedThreadRevision: (await client.getThread(trial.threadId))
+            .thread.revision,
+          fixedVersion: version.ref,
           invocation,
-        },
-      );
-      write("execution.json", {
+          dueAt: new Date(Date.now() + 15000).toISOString(),
+          idempotencyKey: executionId,
+          toolPermissionMode: "approveForMe" as const,
+        };
+        write("schedule-request.json", scheduleRequest);
+        if (!savedSchedule)
+          write("execution-authorization.json", {
+            threadId: trial.threadId,
+            fixedVersion: version.ref,
+            toolPermissionMode: "approveForMe",
+            scope:
+              "all tool approvals in this scheduled Run; browser scope remains separately enforced",
+            basis:
+              "User-delegated E05 acceptance explicitly selects the existing approveForMe mode; no Composer default or C03 reference is treated as consent",
+            selectedAt: new Date().toISOString(),
+          });
+        scheduled = await prepareScheduledSkillAcceptance({
+          ...scheduleRequest,
+          client,
+          request,
+          title: "实际录制方法 · 第二周期定时交付",
+          databasePath: join(data, "runtime/control.sqlite"),
+          onAutomationCreated: (automation) => {
+            write("scheduled-automation.json", automation);
+          },
+        });
+        execution = { runId: scheduled.run.runId };
+        if (recoveredRunId) assert.equal(execution.runId, recoveredRunId);
+        write(
+          recoveredRunId
+            ? "recovered-occurrence.json"
+            : "scheduled-occurrence.json",
+          scheduled,
+        );
+      } else {
+        execution = await request(
+          `/api/v1/skills/${skill.skillId}/executions`,
+          {
+            executionId,
+            threadId: trial.threadId,
+            expectedThreadRevision: trial.revision,
+            agentVersionId: null,
+            purpose: "trial",
+            invocation,
+          },
+        );
+      }
+      write(recoveredRunId ? "recovered-execution.json" : "execution.json", {
         execution,
         invocation,
         grant,
         reviewer: "Codex delegated acceptance, not a claimed human click",
       });
-      process.stdout.write(`REAL_TRIAL ${execution.runId}\n`);
+      process.stdout.write(
+        `REAL_${executionPath.toUpperCase()} ${execution.runId}\n`,
+      );
       const trialRun = await waitRun(execution.runId);
       const finalCatalog = await client.delivery.catalog(trial.threadId);
       assert.equal(finalCatalog.inputs.length, 2);
@@ -500,24 +617,40 @@ app
       assert.equal(workbook.Sheets["汇总"].C2.v, 200);
       assert.equal(deliveryVersion.validation.writtenRows, 2);
       writeFileSync(join(output, "second-period-orders.xlsx"), workbookBytes);
-      const pageState = await session.webContents.executeJavaScript(
-        "({date:document.querySelector('#date').value,channel:document.querySelector('#channel').value,result:document.querySelector('#result').textContent})",
-      );
-      assert.equal(pageState.date, reviewed.parameters.date);
-      assert.equal(pageState.channel, reviewed.parameters.channel);
-      writeFileSync(
-        join(output, "real-trial.png"),
-        (await session.webContents.capturePage()).toPNG(),
-      );
-      const review = await request(
-        `/api/v1/skills/${skill.skillId}/executions/${executionId}/review`,
-        {
-          criteria: version.method.completionCriteria,
-          coverage: ["new-date", "new-input"],
-          resultNote:
-            "Codex代理验收：真实模型、实际F02来源、第二期页面值及CSV字节独立校验；非人工GUI验收。",
-        },
-      );
+      let pageState: { date: string; channel: string; result: string } | null =
+        null;
+      if (session) {
+        pageState = await session.webContents.executeJavaScript(
+          "({date:document.querySelector('#date').value,channel:document.querySelector('#channel').value,result:document.querySelector('#result').textContent})",
+        );
+        write("browser-page.json", { runId: execution.runId, pageState });
+        writeFileSync(
+          join(output, "real-trial.png"),
+          (await session.webContents.capturePage()).toPNG(),
+        );
+      } else if (existsSync(join(output, "browser-page.json"))) {
+        const savedPage = JSON.parse(
+          readFileSync(join(output, "browser-page.json"), "utf8"),
+        );
+        assert.equal(savedPage.runId, execution.runId);
+        pageState = savedPage.pageState;
+      }
+      if (pageState) {
+        assert.equal(pageState.date, reviewed.parameters.date);
+        assert.equal(pageState.channel, reviewed.parameters.channel);
+      }
+      const review =
+        executionPath === "trial"
+          ? await request(
+              `/api/v1/skills/${skill.skillId}/executions/${executionId}/review`,
+              {
+                criteria: version.method.completionCriteria,
+                coverage: ["new-date", "new-input"],
+                resultNote:
+                  "Codex代理验收：真实模型、实际F02来源、第二期页面值及CSV字节独立校验；非人工GUI验收。",
+              },
+            )
+          : null;
       await runtime.restart();
       const rs = runtime.session();
       client = new ControlApiClient({ ...rs, accessToken: rs.sessionToken });
@@ -591,9 +724,15 @@ app
         )
         .all(trialRun.runId)
         .map((row) => JSON.parse(String(row.item_json)));
+      const approvals = database
+        .prepare(
+          "SELECT state_json FROM tool_approvals WHERE run_id = ? ORDER BY required_at",
+        )
+        .all(trialRun.runId)
+        .map((row) => JSON.parse(String(row.state_json)));
       database.close();
       write("model-history.json", modelHistory);
-      write("result.json", {
+      write(recoveredRunId ? "recovered-result.json" : "result.json", {
         checkedAt: new Date().toISOString(),
         provider: "https://api.aicuican.com/v1",
         model: "gpt-5.5",
@@ -605,8 +744,12 @@ app
         modelCalls,
         version: version.ref,
         executionId,
+        executionPath,
+        scheduled,
+        approvals,
         parameters: reviewed.parameters,
         pageState,
+        recoveredCompletedRun: recoveredRunId !== null,
         file,
         deliveryVersion,
         deliveryVerification: {
@@ -625,11 +768,18 @@ app
           "synthetic business material",
           "agent-reviewed, not human/CUA GUI",
           "no enterprise login",
-          "no scheduled occurrence tested in this script",
+          ...(pageState === null
+            ? [
+                "live page evidence unavailable after process restart; only persisted Run and file evidence recovered",
+              ]
+            : []),
+          ...(executionPath === "trial"
+            ? ["no scheduled occurrence tested in this trial"]
+            : []),
         ],
       });
       process.stdout.write(
-        `REAL_TRIAL_PASS ${execution.runId} ${file.inputId}\n`,
+        `REAL_${executionPath.toUpperCase()}_PASS ${execution.runId} ${file.inputId}\n`,
       );
     } finally {
       await bridge?.close();

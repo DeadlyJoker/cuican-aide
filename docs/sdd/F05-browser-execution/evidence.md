@@ -1,6 +1,6 @@
 # F05 证据
 
-工作分支 `codex/f05-browser-execution`，共享基线 `79bf09d88`。所有写入在本工作树；原目录和其他 feature 工作树只读。状态：生产接线、合成模型故障检查、实际录制来源的真实模型 Skill→浏览器→XLSX 联验 E04 已完成；真实日程 occurrence 的 E05 仍待验收。
+工作分支 `codex/f05-browser-execution`，共享基线 `79bf09d88`。所有写入在本工作树；原目录和其他 feature 工作树只读。状态：生产接线、合成模型故障检查、实际录制来源的可复用 v5 真实模型 Skill→浏览器→XLSX 试跑 E04、同一 v5 的真实日程 E05 及重放检查均已完成。
 
 ## 产品接线
 
@@ -72,3 +72,19 @@ v4 的方法包含测试期订单号及预期金额，因此保留其通过记�
 `artifacts/f05-real-reusable-skill/` 保留 v5 真实试跑：Run `01a09e55-ef4a-764a-8642-3931fa9c21b9` completed，24 个模型调用和 16 个浏览器/文件回执；模型实际下载 input `e42cdde8-e391-4262-87b5-500bbe6067b5` 并生成 XLSX version `bf8160cb-2e66-476b-8a84-0c007aebc1d0`，8531 字节，摘要 `sha256:3f3c14cb0febdfb7fb4803ffab88688fc280c5d3ad889208ce82812e63a304ac`。独立读取汇总为 200.00，重启后 CSV/XLSX 字节相同，F03 review 已保存；仍明确记录首次具体文件审批。后续真实 E05 使用该 v5。
 
 `ea7c1faa8` 补齐自动批准与 scoped grant 的组合边界：所有浏览器动作入口都遵守已选 scope，不能换为普通 act 绕过；缺少固定 Skill、错版本、参数/目标/导航越界和撤权均拒绝，匹配范围及既有无 scope perAction 路径保留。8 个新增 Host 用例中 5 个在原实现真实失败；修复后 Host+grant 48/48、Electron 类型和 boundary 检查通过。界面也明确自动批准仍受范围约束，组件既有快照已更新验证。
+
+## 同一固定 v5 的真实日程 E05
+
+`artifacts/f05-real-schedule/` 保存实际日程定义、调用绑定、浏览器授权、模型历史、自动审批回执、CSV、XLSX 和原页面截图。脚本通过真实 F03 activate 审核已通过的 v5，再使用现有 Control API 创建 once 日程；没有 run-now、直接创建 Run、伪造 occurrence、HTTP assemble 或逐动作脚本审批。
+
+- 明确选择整个 Run 的既有 `approveForMe` 模式并写入定义；该模式不是只授权 assemble，浏览器 grant 仍独立约束范围。F01 perAction 默认未放宽。普通默认/requestApproval 仍暂停，模式被冻结至真实 Run，相关模式用例 10/10 通过。
+- Automation `01a09e60-ce62-766b-9ca5-b214e8d224e3` 在 `05:25:39.554Z` 创建，实际到期 `05:25:54.497Z`，现有 scheduler 于 `05:25:55.130Z` 创建 Run `01a09e61-0b3a-74fd-a443-ca28e729fc88`。只读核验 invocation receipt 唯一，并匹配 scheduler 的 `scheduled:b84e2578418c1806040a3aa9450d633ad26f1154998e8fe11ee416355e3bd771` 键、固定 v5、当次参数和交付目标。
+- Run completed；24 个真实模型调用、17 个工具回执。实际下载 CSV input `551a19ef-1d14-4bae-b900-8be3aadd3061`；模型调用 `delivery_assemble` 保存 XLSX version `455877f7-cb85-4033-a619-40907f54da97`，8532 字节，摘要 `sha256:5e7b330b43c5d5b8d11af424ef450df8fceea77819a73d923048f40acf1b8c1e`，来源 Run 和两个实际输入均匹配。
+- 唯一文件审批由真实 Worker 根据已保存的模式记录：`Approved by approveForMe Run permission`，required `05:27:03.859Z`、approved `05:27:03.861Z`。测试脚本未批准动作。独立 SheetJS 从实际文件读取 direct/CNY=200.00、两条明细；Runtime 重启后两个文件逐字节一致、浏览器授权为空。
+- 再次启动真实 Supervisor，复用完整持久请求（包含原 expectedThreadRevision/dueAt/idempotencyKey），查回同一完成 occurrence；不新建浏览器授权、不新增模型调用或工具回执、invocation receipt 仍为 1，文件版本/字节相同。`recovered-result.json` 与 `replay-verification.json` 单独保存，未覆盖首次证据。
+
+helper 的真实 Control/SQLite/scheduler/Worker 回归 4/4 通过，含两种模式、完成后原请求重放、未审阅激活拒绝。最初两项超时来自测试模型只返回 completed 而没有合法非空消息，增加一条明确 fixture 的 output.delta 后通过；未延长超时或修改 scheduler 来遮蔽失败。
+
+显式审批模式 UI 接线也已合入；模式文案不授予浏览器权限，旧调用方仍默认 requestApproval。最终本树 8 个相关 UI/客户端文件共 98 项检查通过，UI/Electron lint、Control 类型、boundary 和 pnpm format 通过。所有临时 Electron/Worker 和 60279 合成站点进程已结束；实际数据目录保留供只读复核。
+
+复现先启动 `scripts/serve-recording-fixture.ts`，再构建宿主和 `scripts/browser-execution/real-skill-acceptance.ts`。首次运行走 generation/代理审阅/试跑；复用实际数据目录以 `CREWON_F05_EXECUTION_PATH=schedule` 选择日程，`CREWON_F05_REUSE_DATA_DIRECTORY` 指向该目录。授权的 provider env 路径作为唯一 argv 参数。需要恢复时保留 `schedule-request.json`，不能重新生成 key 或 dueAt。合成站点和真实数据目录相互独立；本验收没有覆盖企业登录、人工/CUA GUI 或非标准控件。

@@ -1,0 +1,18 @@
+{
+  "runId": "01a09e55-ef4a-764a-8642-3931fa9c21b9",
+  "threadId": "01a09e55-ee52-70b2-a280-2f22f0ccbc10",
+  "status": "completed",
+  "revision": 133,
+  "lastSequence": 133,
+  "cancelRequested": false,
+  "waitingApproval": null,
+  "collaborationMode": "default",
+  "purpose": "turn",
+  "workflowVersionBinding": null,
+  "goalBinding": null,
+  "outputRef": "message:01a09e57-97c1-715e-9296-3ec0cf5ead42",
+  "failure": null,
+  "createdAt": "2026-09-14T05:13:47.082Z",
+  "updatedAt": "2026-09-14T05:15:35.745Z",
+  "terminalAt": "2026-09-14T05:15:35.745Z"
+}

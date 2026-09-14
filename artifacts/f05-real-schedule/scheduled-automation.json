@@ -1,0 +1,49 @@
+{
+  "toolPermissionMode": "approveForMe",
+  "skillInvocation": {
+    "deliveryTarget": {
+      "schemaVersion": "crewon.delivery-target.v1",
+      "spaceId": "standalone-space",
+      "targetId": "thread-deliveries",
+      "tenantId": "standalone-tenant",
+      "threadId": "01a09e60-cd26-7769-b4f7-3b8a3a56edf5"
+    },
+    "parameters": {
+      "channel": "直营",
+      "date": "2026-10-01",
+      "reportNote": "2026-10 monthly report"
+    },
+    "requiredToolRefs": [
+      "crewon_browser_observe",
+      "crewon_browser_act_scoped",
+      "delivery_catalog",
+      "delivery_read",
+      "delivery_assemble"
+    ],
+    "schemaVersion": "crewon.skill-invocation.v1",
+    "skill": {
+      "contentDigest": "sha256:3a64fab98a1cfa135d58c8e094d0412f419e3f3830e93144baa55e1e871673ea",
+      "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+      "versionId": "v5"
+    }
+  },
+  "parameterBindings": {},
+  "automationId": "01a09e60-ce62-766b-9ca5-b214e8d224e3",
+  "threadId": "01a09e60-cd26-7769-b4f7-3b8a3a56edf5",
+  "title": "实际录制方法 · 第二周期定时交付",
+  "prompt": "Execute the fixed Skill with the saved parameters and delivery target.",
+  "agentVersionId": "local-desktop-faf0c300baa4b9e3e18dbed5",
+  "executionMode": "scheduled",
+  "automaticScheduling": true,
+  "schedule": {
+    "intervalSeconds": 0,
+    "nextRunAt": "2026-09-14T05:25:54.497Z",
+    "scheduleType": "once",
+    "time": "05:25",
+    "timezone": "UTC",
+    "weekday": 1
+  },
+  "revision": 1,
+  "createdAt": "2026-09-14T05:25:39.554Z",
+  "updatedAt": "2026-09-14T05:25:39.554Z"
+}
