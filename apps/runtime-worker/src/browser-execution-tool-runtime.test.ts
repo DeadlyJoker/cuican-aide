@@ -92,6 +92,31 @@ test("C05 config registers only an explicitly authenticated numeric loopback bri
       ?.capability,
     "browser.act.scoped.v1",
   );
+  const observe = runtime!.definitions()[0]!;
+  assert.ok(observe.kind === "function");
+  const observeSchema = observe.inputSchema as {
+    required: string[];
+    properties: { sessionId: unknown };
+  };
+  assert.deepEqual(observeSchema.required, []);
+  assert.deepEqual(observeSchema.properties.sessionId, {
+    type: "string",
+    minLength: 1,
+    maxLength: 128,
+  });
+  const act = runtime!.definitions()[1]!;
+  assert.ok(act.kind === "function");
+  const actSchema = act.inputSchema as {
+    properties: { sessionId: unknown; observationId: unknown };
+  };
+  assert.deepEqual(
+    actSchema.properties.sessionId,
+    observeSchema.properties.sessionId,
+  );
+  assert.deepEqual(
+    actSchema.properties.observationId,
+    observeSchema.properties.sessionId,
+  );
 });
 
 test("C05 sends the original validated command with private bearer authentication over real HTTP", async (t) => {
@@ -120,7 +145,7 @@ test("C05 sends the original validated command with private bearer authenticatio
   ]);
 });
 
-test("C05 rejects input, policy, approval, digest and expired execution lease before dispatch", async (t) => {
+test("C05 rejects policy, approval, digest and expired execution lease before dispatch", async (t) => {
   let requests = 0;
   const bridge = await server(t, (_request, response) => {
     requests++;
@@ -129,8 +154,6 @@ test("C05 rejects input, policy, approval, digest and expired execution lease be
   const runtime = new BrowserExecutionToolRuntime({ url: bridge.url, token });
   const valid = command();
   const commands = [
-    command("crewon_browser_observe", JSON.stringify({ runId: "forged-run" })),
-    command("crewon_browser_act", JSON.stringify({ arbitraryCode: "eval()" })),
     command("crewon_browser_act", actInput, {
       capability: "browser.observe.v1",
     }),
@@ -157,6 +180,56 @@ test("C05 rejects input, policy, approval, digest and expired execution lease be
   const aborted = new AbortController();
   aborted.abort();
   await assert.rejects(runtime.execute(valid, aborted.signal));
+  assert.equal(requests, 0);
+});
+
+test("C05 malformed model inputs settle as bounded errors without dispatch, including replay recovery", async (t) => {
+  let requests = 0;
+  const bridge = await server(t, (_request, response) => {
+    requests++;
+    json(response, completed());
+  });
+  const runtime = new BrowserExecutionToolRuntime({ url: bridge.url, token });
+  for (const value of [
+    command("crewon_browser_observe", '{"sessionId":""}'),
+    command("crewon_browser_observe", '{"sessionId":null}'),
+    command("crewon_browser_observe", '{"runId":"forged-run"}'),
+    command("crewon_browser_observe", "{"),
+    command("crewon_browser_act", '{"arbitraryCode":"eval()"}'),
+    command("crewon_browser_act_scoped", "{}"),
+  ]) {
+    const result = await runtime.execute(value, signal());
+    assert.equal(result.status, "completed");
+    assert.ok(result.status === "completed");
+    assert.equal(result.executionId, value.executionId);
+    assert.equal(result.result.callId, value.callId);
+    assert.equal(result.result.isError, true);
+    assert.equal(result.result.artifactRef, null);
+    assert.ok(Buffer.byteLength(result.result.output) <= 9216);
+    const output = JSON.parse(result.result.output);
+    assert.equal(output.code, "browser_execution_input_invalid");
+    if (value.name === "crewon_browser_observe")
+      assert.match(output.message, /Omit sessionId.*empty/u);
+    assert.deepEqual(await runtime.execute(value, signal()), result);
+    assert.deepEqual(await runtime.reconcile(value, signal()), result);
+  }
+  assert.equal(requests, 0);
+  const malformed = command("crewon_browser_act", "{}");
+  await assert.rejects(
+    runtime.execute({ ...malformed, approvalProof: null }, signal()),
+  );
+  await assert.rejects(
+    runtime.execute(
+      {
+        ...malformed,
+        executionLease: {
+          ...malformed.executionLease,
+          expiresAt: "2000-01-01T00:00:00.000Z",
+        },
+      },
+      signal(),
+    ),
+  );
   assert.equal(requests, 0);
 });
 

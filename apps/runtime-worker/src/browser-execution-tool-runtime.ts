@@ -7,8 +7,11 @@ import {
   BROWSER_MAX_OUTPUT_BYTES,
   BROWSER_OBSERVE_TOOL_NAME,
   BROWSER_TIMEOUT_MS,
+  ContractValidationError,
   parseBrowserActInput,
   parseBrowserObserveInput,
+  type BrowserActInput,
+  type BrowserObserveInput,
 } from "@crewon/contracts";
 import {
   ToolBrokerError,
@@ -123,10 +126,30 @@ export class BrowserExecutionToolRuntime implements ToolRuntimePort {
     const policy = browserExecutionPolicy(command.kind, command.name);
     if (policy === null) throw new ToolBrokerError("browser_tool_unavailable");
     validateToolExecutionPolicyMatchesIntent(policy, command.actionIntent);
-    const input =
-      command.name === BROWSER_OBSERVE_TOOL_NAME
-        ? parseBrowserObserveInput(parseJson(command.input))
-        : parseBrowserActInput(parseJson(command.input));
+    signal.throwIfAborted();
+    const remainingLeaseMs =
+      Date.parse(command.executionLease.expiresAt) - Date.now();
+    if (operation === "execute" && remainingLeaseMs <= 0)
+      throw new ToolBrokerError("browser_execution_lease_expired");
+    let input: BrowserObserveInput | BrowserActInput;
+    try {
+      const value: unknown = JSON.parse(command.input);
+      input =
+        command.name === BROWSER_OBSERVE_TOOL_NAME
+          ? parseBrowserObserveInput(value)
+          : parseBrowserActInput(value);
+    } catch (error) {
+      if (
+        !(
+          error instanceof SyntaxError ||
+          error instanceof ContractValidationError
+        )
+      )
+        throw error;
+      // This command never reached the host. Settle deterministically so the
+      // model can repair its arguments, including after an uncommitted result.
+      return rejectedInput(command);
+    }
     const download = "action" in input && input.action === "download";
     if (
       download &&
@@ -134,11 +157,6 @@ export class BrowserExecutionToolRuntime implements ToolRuntimePort {
       this.#importDownloadedFile === undefined
     )
       throw new ToolBrokerError("browser_download_import_unavailable");
-    signal.throwIfAborted();
-    const remainingLeaseMs =
-      Date.parse(command.executionLease.expiresAt) - Date.now();
-    if (operation === "execute" && remainingLeaseMs <= 0)
-      throw new ToolBrokerError("browser_execution_lease_expired");
     const timeout = AbortSignal.timeout(
       operation === "execute"
         ? Math.min(BROWSER_TIMEOUT_MS, Math.max(1, remainingLeaseMs))
@@ -296,14 +314,16 @@ export function browserExecutionToolDefinitions(): readonly ToolDefinition[] {
       {
         type: "object",
         additionalProperties: false,
-        properties: { targetId: { type: "string", maxLength: 128 } },
+        properties: {
+          targetId: { type: "string", minLength: 1, maxLength: 128 },
+        },
         required: ["targetId"],
       },
       {
         type: "object",
         additionalProperties: false,
         properties: {
-          role: { type: "string", maxLength: 32 },
+          role: { type: "string", minLength: 1, maxLength: 32 },
           name: { type: "string", minLength: 1, maxLength: 256 },
         },
         required: ["role", "name"],
@@ -314,9 +334,9 @@ export function browserExecutionToolDefinitions(): readonly ToolDefinition[] {
     type: "object",
     additionalProperties: false,
     properties: {
-      sessionId: { type: "string", maxLength: 128 },
+      sessionId: { type: "string", minLength: 1, maxLength: 128 },
       generation: { type: "integer", minimum: 0 },
-      observationId: { type: "string", maxLength: 128 },
+      observationId: { type: "string", minLength: 1, maxLength: 128 },
       action: {
         type: "string",
         enum: ["navigate", "click", "fill", "select", "download"],
@@ -333,12 +353,14 @@ export function browserExecutionToolDefinitions(): readonly ToolDefinition[] {
       kind: "function",
       name: BROWSER_OBSERVE_TOOL_NAME,
       description:
-        "Observe the browser page authorized for this Run. Omit sessionId to discover the bound session. Returns bounded standard-control targets; input values and page secrets are excluded.",
+        "Observe the browser page authorized for this Run. Omit sessionId to discover the bound session; never pass an empty string. Returns bounded standard-control targets; input values and page secrets are excluded.",
       execution: "serial",
       inputSchema: {
         type: "object",
         additionalProperties: false,
-        properties: { sessionId: { type: "string", maxLength: 128 } },
+        properties: {
+          sessionId: { type: "string", minLength: 1, maxLength: 128 },
+        },
         required: [],
       },
     },
@@ -511,6 +533,27 @@ function opaque(value: unknown): void {
 }
 function invalidResult(): never {
   throw new ToolBrokerError("browser_bridge_result_invalid");
+}
+function rejectedInput(command: ToolExecutionCommand): ToolExecutionResolution {
+  return {
+    status: "completed",
+    executionId: command.executionId,
+    providerReceiptId: `browser-input:${createHash("sha256").update(command.executionId).digest("hex")}`,
+    result: {
+      schemaVersion: "crewon.tool-result.v0",
+      callId: command.callId,
+      isError: true,
+      artifactRef: null,
+      output: JSON.stringify({
+        status: "rejected",
+        code: "browser_execution_input_invalid",
+        message:
+          command.name === BROWSER_OBSERVE_TOOL_NAME
+            ? "Omit sessionId to discover the authorized session; never pass an empty string. Otherwise provide a nonempty sessionId from a prior observation. No other fields are accepted. No browser action was dispatched."
+            : "Use nonempty sessionId and observationId from a current observation, a nonnegative integer generation, and one supported action. navigate requires url without target/value; other actions require target, and fill/select also require value. No browser action was dispatched.",
+      }),
+    },
+  };
 }
 function unknownOutcome(
   command: ToolExecutionCommand,

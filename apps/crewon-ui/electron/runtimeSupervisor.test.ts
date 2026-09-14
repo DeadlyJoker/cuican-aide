@@ -16,6 +16,33 @@ import {
 } from "./runtimeSupervisor.ts";
 
 describe("desktop runtime identity", () => {
+  it("publishes a distinct immutable version for the nonempty browser input contract", () => {
+    const input = {
+      providerId: "provider-1",
+      endpoint: "https://provider.example/v1",
+      modelId: "model-1",
+      modelCatalog: ["model-1"],
+      agentProfiles: [],
+      localWorkspaceMcp: null,
+    };
+    const oldVersion = desktopRuntimeFingerprint({
+      ...input,
+      browserExecutionContract: "crewon.browser-execution.v1",
+    });
+    const correctedVersion = desktopRuntimeFingerprint({
+      ...input,
+      browserExecutionContract: "crewon.browser-execution.v1.1",
+    });
+    expect(correctedVersion).not.toBe(oldVersion);
+    expect(correctedVersion).not.toBe(desktopRuntimeFingerprint(input));
+    expect(correctedVersion).toBe(
+      desktopRuntimeFingerprint({
+        ...input,
+        browserExecutionContract: "crewon.browser-execution.v1.1",
+      }),
+    );
+  });
+
   it("injects the Agent Platform key only into a cloned worker environment", () => {
     const ambientEnvironment: NodeJS.ProcessEnv = {
       CREWON_AGENT_PLATFORM_API_KEY: "wrong-ambient-key",
