@@ -79,14 +79,24 @@ C05 已由协调新增 F05 owner：`crewon_browser_observe`、`crewon_browser_ac
 
 ## 复用与自研边界（2026-09-14 追加约束）
 
-| 能力 | 采用与必要适配 | 兼容/许可/验证 |
-| --- | --- | --- |
-| 模型生成与执行 | 复用 TurnApplicationService、Run、Worker、既有 provider adapter；新增 generation 与草稿 revision 的领域关联，完整 JSON 响应验证后人工采用 | 不增模型框架/调度器；真实 Run completed + 精确 outputRef 消息；模拟证据单列 |
-| 通用结构验证 | Zod 4.4.3 strict schema，导出 JSON Schema 给模型；拒绝字段、不coerce、不填默认值 | MIT；仓库已有传递依赖版本，与 TS5.9/Node24 同一锁文件，C02旧fixtures须同输出 |
-| SKILL.md/YAML | js-yaml 4.3.0 检查 frontmatter；保留已冻结JSON双引号YAML输出以维持v1摘要 | MIT；仓库已有版本；不编写通用Markdown/YAML解析器，不因换库改旧版本 |
-| 持久化 | Node24 node:sqlite 及现有事务/Run receipt 模式 | 不另引数据库运行时；业务CAS/版本/证据/授权是必要自研 |
-| 组件 | 复用React、既有library表单与UI样式、Vitest和现有workspace覆盖 | 不引第二设计系统；先组件行为，再实际浏览器验收 |
+| 能力           | 采用与必要适配                                                                                                                            | 兼容/许可/验证                                                               |
+| -------------- | ----------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| 模型生成与执行 | 复用 TurnApplicationService、Run、Worker、既有 provider adapter；新增 generation 与草稿 revision 的领域关联，完整 JSON 响应验证后人工采用 | 不增模型框架/调度器；真实 Run completed + 精确 outputRef 消息；模拟证据单列  |
+| 通用结构验证   | Zod 4.4.3 strict schema，导出 JSON Schema 给模型；拒绝字段、不coerce、不填默认值                                                          | MIT；仓库已有传递依赖版本，与 TS5.9/Node24 同一锁文件，C02旧fixtures须同输出 |
+| SKILL.md/YAML  | js-yaml 4.3.0 检查 frontmatter；保留已冻结JSON双引号YAML输出以维持v1摘要                                                                  | MIT；仓库已有版本；不编写通用Markdown/YAML解析器，不因换库改旧版本           |
+| 持久化         | Node24 node:sqlite 及现有事务/Run receipt 模式                                                                                            | 不另引数据库运行时；业务CAS/版本/证据/授权是必要自研                         |
+| 组件           | 复用React、既有library表单与UI样式、Vitest和现有workspace覆盖                                                                             | 不引第二设计系统；先组件行为，再实际浏览器验收                               |
 
 未采用另一套Agent框架或通用Skill插件平台，理由是本轮只需要版本、准入和真实现有Run关联；已有执行/恢复权威不能复制。规则提取只提供预处理候选，不称为AI生成或已学会。新增真实模型生成先写独立generation记录和固定Turn命令；重试replay原Run，候选通过Zod结构与业务预算才供审阅，采用CAS更新草稿，仍须新材料试跑才能激活。
 
 官方依据：[Zod v4](https://zod.dev/v4)、[JSON Schema](https://zod.dev/json-schema)、[Zod MIT package](https://github.com/colinhacks/zod/blob/main/packages/zod/package.json)；版本锁定与本地行为兼容结果见evidence，不依赖追随最新版本。
+
+## 生成阶段工具硬边界
+
+普通 Turn 的 `executionIntent:none` 与提示词不构成工具隔离。复用已存在的不可变 AgentVersion、正式 release bundle、digest-pinned runtime binding 和 Worker 准入，发布一个所有 Skill 共用的固定生成角色；不为每个 Skill 建 Agent，也不引入新执行器。生成角色保留配置的 direct-responses 模型，清空静态工具和 governed context，使用 `execution.maxToolRounds=0`。该既有数值字段的兼容扩展含义为：可以生成文字，但不允许任何工具回合；旧的 1–128 行为不变。Worker 同时清空动态 goal/plan 工具目录，并在任何工具执行前拒绝模型请求；不能只靠模型遵守提示词。provider-owned cloud-agent 内部工具不可由该边界控制，生成路由明确拒绝。
+
+本地开发与桌面由 `CREWON_SKILL_GENERATION_AGENT_VERSION_ID` 指定固定角色，经现有 release 命令授权发布并部署；Control 用同一角色和当前 release 校验。未配置时只允许显式已部署的空工具、零工具回合角色。模型候选使用该 Run 的权威 outputRef 与消息完成事件验真；用户确认且原草稿 revision 匹配才可采用。采集与应用都保留来源标记，首次/恢复应用要求存档及当前模型证据均为 real。
+
+## 显式契约样本来源
+
+C01 描述录制结构与摘要，不含真假来源证明。HTTP 导入新增可选 `provenance:"contract-fixture"`，仅允许降低为测试来源；不接受客户端指定 `"recording"` 来提升来源。该标记经完整 C01 校验后写入 SkillSource，与 importId 一起参与幂等一致性检查，重试不能去掉标记改写原记录。普通 F02 handoff 保持原请求形状。样本可验证模型生成和审阅 UI，但即便有真实模型完成的试跑也不能确认真实试跑或激活。首次真实模型验收遗漏该标记的记录保持原样并单列部分证据，修正后另建一条独立的真实生成链，不移接旧输出。
