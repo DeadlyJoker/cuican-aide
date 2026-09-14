@@ -1,0 +1,17 @@
+{
+  "checkedAt": "2026-09-14T04:37:42.752Z",
+  "sourceCommit": "aa81fecb0",
+  "recordingId": "rec-43652ed4-46ea-466d-af61-2983259a1158",
+  "recordingRevision": 24,
+  "contentDigest": "sha256:4e3b4cb1fdb476fe52281cb85feae9d2caf933f08f0441e93bf04f2c136b7a15",
+  "steps": 15,
+  "evidence": 13,
+  "pngEvidence": 3,
+  "provenance": "recording",
+  "promptBytes": 5674,
+  "sourceAndEvidenceUnchangedAfterRestart": true,
+  "limitations": [
+    "F02 supplied actual capture from an automated synthetic website session",
+    "This check imports and persists verbatim; it does not execute browser actions or call a model"
+  ]
+}
