@@ -9,6 +9,7 @@ import {
   Play,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { AutomationSkillStatus } from "./AutomationSkillStatus";
 
 import {
   buildAutomationCalendarDays,
@@ -183,10 +184,21 @@ export function CommandScheduleCalendar({
               <div className="schedule-agenda-main">
                 <div className="schedule-agenda-title">
                   <strong>{definition.title}</strong>
-                  <span className="enabled">自动执行</span>
+                  <span
+                    className={
+                      definition.skillReadiness?.state === "blocked"
+                        ? undefined
+                        : "enabled"
+                    }
+                  >
+                    {definition.skillReadiness?.state === "blocked"
+                      ? "等待恢复"
+                      : "自动执行"}
+                  </span>
                 </div>
                 <p>{definition.prompt}</p>
                 <small>{cadenceLabel(definition)}</small>
+                <AutomationSkillStatus definition={definition} />
               </div>
               <div className="schedule-agenda-actions">
                 <button
@@ -200,7 +212,9 @@ export function CommandScheduleCalendar({
                   ) : (
                     <Play />
                   )}
-                  执行
+                  {definition.skillReadiness?.state === "blocked"
+                    ? "重试"
+                    : "执行"}
                 </button>
                 <button
                   className="icon-action compact"
@@ -222,7 +236,9 @@ export function CommandScheduleCalendar({
             {/* No button here on purpose: the page header already carries the
                 one 新建日程 action, and a second identical primary button read
                 as a duplicate rather than a shortcut. */}
-            <p>选择其他日期查看日程，或从页面右上角创建一个新的自动执行安排。</p>
+            <p>
+              选择其他日期查看日程，或从页面右上角创建一个新的自动执行安排。
+            </p>
           </div>
         ) : null}
       </aside>

@@ -4057,6 +4057,31 @@
           },
           "parameterBindings": {
             "$ref": "#/components/schemas/AutomationParameterBindings"
+          },
+          "skillReadiness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "code"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  "blocked"
+                ]
+              },
+              "code": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            },
+            "description": "Current read-only Skill admission check, not a failed Run or durable permission grant."
           }
         }
       },

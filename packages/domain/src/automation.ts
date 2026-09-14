@@ -1,4 +1,10 @@
 import {
+  parseSkillInvocationSpec,
+  type SkillInvocationSpec,
+  skillJson,
+} from "./demonstrated-skill.ts";
+import { resolveAutomationSkillInvocation } from "./automation-skill-binding.ts";
+import {
   parseAutomationSkillBinding,
   renderAutomationSkillContext,
   type AutomationSkillBinding,
@@ -75,6 +81,8 @@ export type AutomationInvocationBinding = Readonly<{
   runId: string;
   routeDigest: string;
   scheduledFor?: string;
+  skillInvocation?: Omit<SkillInvocationSpec, "requiredToolRefs"> &
+    Readonly<{ requiredToolRefs: string[] }>;
 }>;
 
 export type AutomationInvocationOrigin = Readonly<{
@@ -259,6 +267,14 @@ export function parseAutomationDefinition(
     createdAt,
     updatedAt,
   };
+  const target = definition.skillBinding?.invocation.deliveryTarget;
+  if (
+    target &&
+    (target.tenantId !== tenantId ||
+      target.spaceId !== spaceId ||
+      target.threadId !== threadId)
+  )
+    throw new AutomationDefinitionError("automation_delivery_target_mismatch");
   requireInstructionWithinLimit(definition);
   return structuredClone(definition);
 }
@@ -338,7 +354,9 @@ export function parseAutomationInvocationBinding(
       "invocationId",
       "routeDigest",
       "runId",
-      ...(value.scheduledFor === undefined ? [] : ["scheduledFor"]),
+      ...(value.scheduledFor === undefined
+        ? []
+        : ["scheduledFor", "skillInvocation"]),
     ],
     "automation_invocation_binding_invalid",
   );
@@ -356,6 +374,9 @@ export function parseAutomationInvocationBinding(
     );
   }
   return {
+    ...(value.scheduledFor === undefined
+      ? {}
+      : { skillInvocation: invocationJson(value.skillInvocation) }),
     ...(value.scheduledFor === undefined
       ? {}
       : {
@@ -420,11 +441,13 @@ export function validateAutomationInvocationOrigin(
 export function renderAutomationInstruction(
   definition: AutomationDefinition,
   scheduledFor?: string,
+  skillInvocation?: SkillInvocationSpec,
 ): string {
   const parsed = parseAutomationDefinition(definition);
   const instruction = renderAutomationInstructionUnchecked(
     parsed,
     scheduledFor,
+    skillInvocation,
   );
   if (utf8ByteLength(instruction) > MAX_AUTOMATION_INSTRUCTION_BYTES)
     throw new AutomationDefinitionError("automation_instruction_too_large");
@@ -447,10 +470,23 @@ function requireInstructionWithinLimit(definition: AutomationDefinition): void {
 function renderAutomationInstructionUnchecked(
   definition: AutomationDefinition,
   scheduledFor?: string,
+  skillInvocation?: SkillInvocationSpec,
 ): string {
   if (definition.skillBinding) {
     if (scheduledFor === undefined)
       throw new AutomationDefinitionError("automation_scheduled_for_required");
+    const resolved = resolveAutomationSkillInvocation(
+      definition.skillBinding,
+      scheduledFor,
+      definition.schedule.timezone,
+    );
+    if (
+      skillInvocation !== undefined &&
+      skillJson(skillInvocation) !== skillJson(resolved)
+    )
+      throw new AutomationDefinitionError(
+        "automation_skill_invocation_mismatch",
+      );
     return [
       `<automation_run automation_id="${xmlEscape(definition.automationId)}" automation_revision="${definition.revision}">`,
       `<title>${xmlEscape(definition.title)}</title>`,
@@ -464,7 +500,7 @@ function renderAutomationInstructionUnchecked(
       "</automation_run>",
     ].join("\n");
   }
-  if (scheduledFor !== undefined)
+  if (scheduledFor !== undefined || skillInvocation !== undefined)
     throw new AutomationDefinitionError("automation_scheduled_for_unexpected");
   return [
     `<automation_run automation_id="${xmlEscape(definition.automationId)}" automation_revision="${definition.revision}">`,
@@ -568,4 +604,12 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   }
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
+}
+
+function invocationJson(
+  input: unknown,
+): Omit<SkillInvocationSpec, "requiredToolRefs"> &
+  Readonly<{ requiredToolRefs: string[] }> {
+  const invocation = parseSkillInvocationSpec(input);
+  return { ...invocation, requiredToolRefs: [...invocation.requiredToolRefs] };
 }

@@ -1011,6 +1011,12 @@ export interface components {
       updatedAt: string;
       skillInvocation?: components["schemas"]["SkillInvocationSpec"];
       parameterBindings?: components["schemas"]["AutomationParameterBindings"];
+      /** @description Current read-only Skill admission check, not a failed Run or durable permission grant. */
+      skillReadiness?: {
+        /** @enum {string} */
+        state: "ready" | "blocked";
+        code: string | null;
+      };
     };
     AutomationMutationResponse: {
       /** @enum {string} */

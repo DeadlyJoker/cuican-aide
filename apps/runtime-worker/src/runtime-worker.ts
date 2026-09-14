@@ -1,3 +1,4 @@
+import { skillJson } from "@crewon/domain";
 import { durableModelCallSink } from "./durable-model-call-sink.ts";
 import { StorageAdmissionError } from "@crewon/application";
 import { withToolExecutionCapacity } from "./tool-execution-capacity.ts";
@@ -2745,7 +2746,9 @@ function sameAutomationInvocationBinding(
     left.instructionDigest === right.instructionDigest &&
     left.invocationId === right.invocationId &&
     left.runId === right.runId &&
-    left.routeDigest === right.routeDigest
+    left.routeDigest === right.routeDigest &&
+    left.scheduledFor === right.scheduledFor &&
+    skillJson(left.skillInvocation ?? null) === skillJson(right.skillInvocation ?? null)
   );
 }
 

@@ -1,3 +1,4 @@
+import { projectAutomationWithReadiness } from "./automation-readiness-projection.ts";
 import { requireSkillScheduleClient, supportsSkillSchedules } from "./automation-client-compatibility.ts";
 import { registerThreadActiveRunRoute } from "./thread-active-run-route.ts";
 import { registerThreadCatalogRoute } from "./thread-catalog-route.ts";
@@ -397,7 +398,8 @@ export function buildControlApi(
           ...(supportsSkillSchedules(request.headers) ? {} : { definitionSchemaVersion: "crewon.automation.v0" as const }),
         },
       );
-      const data = definitions.map(projectAutomation);
+      const data = [];
+      for (const definition of definitions) data.push(await projectAutomationWithReadiness(dependencies.automations, actor, definition));
       const last = data.at(-1);
       const response: ListAutomationsResponse = {
         data,
@@ -453,7 +455,7 @@ export function buildControlApi(
       );
       if (definition.skillBinding) requireSkillScheduleClient(request.headers);
       const response: GetAutomationResponse = {
-        automation: projectAutomation(definition),
+        automation: await projectAutomationWithReadiness(dependencies.automations, actor, definition),
       };
       return response;
     },
@@ -466,17 +468,13 @@ export function buildControlApi(
         requestContext(request),
       );
       const body = parseRunAutomationNowRequest(request.body);
-      if (!supportsSkillSchedules(request.headers)) {
-        const definition = await dependencies.automations.getAutomation(actor, parseAutomationId(request.params.automationId));
-        if (definition.skillBinding) requireSkillScheduleClient(request.headers);
-      }
       const result = await dependencies.automations.runAutomationNow(actor, {
         kind: "automation.runNow",
         idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
         automationId: parseAutomationId(request.params.automationId),
         expectedAutomationRevision: body.expectedAutomationRevision,
         expectedThreadRevision: body.expectedThreadRevision,
-      });
+      }, { supportedDefinitionVersion: supportsSkillSchedules(request.headers) ? "v1" : "v0" });
       wakeOutbox(dependencies.outboxWakeup);
       const response: RunAutomationNowResponse =
         projectAutomationInvocation(result);

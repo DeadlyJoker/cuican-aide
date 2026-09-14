@@ -279,16 +279,14 @@ test("F04-R03/R04 rejects invalid parameters, missing capability and untrusted c
     /automation_skill_unavailable/,
   );
   await assert.rejects(
-    f
-      .services()
-      .automations.createAutomation(actor, {
-        ...f.command,
-        parameterBindings: {},
-        skillInvocation: {
-          ...spec,
-          parameters: { start: 42, end: "2026-09-13" },
-        },
-      }),
+    f.services().automations.createAutomation(actor, {
+      ...f.command,
+      parameterBindings: {},
+      skillInvocation: {
+        ...spec,
+        parameters: { start: 42, end: "2026-09-13" },
+      },
+    }),
     /skill_parameter_type_invalid/,
   );
   f.setCorrupt();
@@ -444,4 +442,169 @@ test("F04-R01/R03 HTTP capability negotiation keeps legacy pages parseable and b
     payload: { ...body, skillBinding: { version, context: "untrusted" } },
   });
   assert.equal(injected.statusCode, 400);
+});
+
+test("F04-R03/R04 readiness returns specific recoverable state and validates delivery scope without a Run", async (context) => {
+  const f = await setup(context);
+  const service = f.services().automations;
+  const created = await service.createAutomation(actor, f.command);
+  const id = created.record.definition.automationId;
+  f.setFailure("skill_access_denied");
+  assert.deepEqual(await service.checkAutomationReadiness(actor, id), {
+    state: "blocked",
+    code: "skill_access_denied",
+  });
+  f.setFailure(null);
+  assert.deepEqual(await service.checkAutomationReadiness(actor, id), {
+    state: "ready",
+    code: null,
+  });
+  assert.equal((await f.store.listPendingWorkItems(100)).length, 0);
+  const target = {
+    schemaVersion: "crewon.delivery-target.v1" as const,
+    tenantId: actor.tenantId,
+    spaceId: actor.spaceId,
+    threadId: "another-thread",
+    targetId: "thread-deliveries" as const,
+  };
+  await assert.rejects(
+    service.createAutomation(actor, {
+      ...f.command,
+      idempotencyKey: "wrong-target",
+      skillInvocation: { ...spec, deliveryTarget: target },
+    }),
+    /automation_delivery_target_mismatch/,
+  );
+});
+
+test("F04-R05/R06 SQLite: persisted Run resolves exact occurrence parameters after restart and cancellation", async (context) => {
+  const f = await setup(context, "sqlite");
+  const service = f.services().automations;
+  const created = await service.createAutomation(actor, f.command);
+  const command = {
+    kind: "automation.runNow" as const,
+    idempotencyKey: "manual-first",
+    automationId: created.record.definition.automationId,
+    expectedAutomationRevision: 1 as const,
+    expectedThreadRevision: 1,
+  };
+  const invoked = await service.runAutomationNow(actor, command);
+  const { resolveAutomationSkillForRun, RunApplicationService } = await import(
+    "@crewon/application"
+  );
+  const expected = {
+    ...spec,
+    parameters: { start: "2026-09-07", end: "2026-09-13" },
+  };
+  assert.deepEqual(invoked.binding.skillInvocation, expected);
+  f.setNow("2026-10-05T00:00:00.000Z");
+  await f.restart();
+  const resolved = await resolveAutomationSkillForRun(
+    { store: f.store, digester: digest },
+    actor,
+    invoked.runState.runId,
+  );
+  assert.deepEqual(resolved?.invocation, expected);
+  assert.equal(resolved?.scheduledFor, "2026-09-13T16:05:00.000Z");
+  await assert.rejects(
+    resolveAutomationSkillForRun(
+      { store: f.store, digester: digest },
+      { ...actor, spaceId: "other-space" },
+      invoked.runState.runId,
+    ),
+    /run_not_found/,
+  );
+  const runs = new RunApplicationService({
+    store: f.store,
+    clock: { now: f.now },
+    ids: { nextId: (kind) => `cancel-${kind}` },
+    authorization: { authorize: async () => ({ outcome: "allow" }) },
+  });
+  const canceled = await runs.transitionRun(actor, {
+    kind: "run.requestCancel",
+    runId: invoked.runState.runId,
+    expectedRevision: 1,
+    idempotencyKey: "cancel-existing",
+  });
+  assert.equal(canceled.state.cancelRequested, true);
+  // Receipt replay after cancellation is historical identity, not a new queued execution.
+  assert.equal(
+    (await f.services().automations.runAutomationNow(actor, command)).binding
+      .runId,
+    invoked.runState.runId,
+  );
+  assert.equal((await f.store.listPendingWorkItems(100)).length, 1);
+  const forged = new Proxy(f.store, {
+    get(target, property) {
+      if (property === "loadRun")
+        return async () => ({
+          ...invoked.runState,
+          origin: {
+            kind: "automation",
+            binding: {
+              ...invoked.binding,
+              skillInvocation: {
+                ...expected,
+                parameters: { start: "1999-01-01", end: "1999-01-07" },
+              },
+            },
+          },
+        });
+      const value = Reflect.get(target, property);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  });
+  await assert.rejects(
+    resolveAutomationSkillForRun(
+      { store: forged, digester: digest },
+      actor,
+      invoked.runState.runId,
+    ),
+    /automation_skill_invocation_mismatch/,
+  );
+});
+
+test("F04-R01 legacy run-only authorization does not acquire a new automation:read requirement", async (context) => {
+  const f = await setup(context);
+  const {
+    skillInvocation: _skill,
+    parameterBindings: _bindings,
+    ...legacy
+  } = f.command;
+  const created = await f
+    .services()
+    .automations.createAutomation(actor, legacy);
+  let sequence = 0;
+  const actions: string[] = [];
+  const automations = new AutomationApplicationService({
+    store: f.store,
+    clock: { now: f.now },
+    digester: digest,
+    ids: { nextId: (kind) => `run-only-${kind}-${++sequence}` },
+    routeResolver: { resolveRoute: async () => route },
+    authorization: {
+      authorize: async (request) => {
+        actions.push(request.action);
+        return {
+          outcome: request.action === "automation:read" ? "deny" : "allow",
+        };
+      },
+    },
+  });
+  const { buildControlApi } = await import("./control-api.ts");
+  const app = buildControlApi({
+    automations,
+    outboxWakeup: { wake: async () => undefined },
+    identity: { resolveActor: async () => actor },
+    heartbeatIntervalMs: null,
+  } as unknown as Parameters<typeof buildControlApi>[0]);
+  context.after(() => app.close());
+  const response = await app.inject({
+    method: "POST",
+    url: `/api/v1/automations/${created.record.definition.automationId}:run-now`,
+    headers: { "idempotency-key": "legacy-run-only" },
+    payload: { expectedThreadRevision: 1, expectedAutomationRevision: 1 },
+  });
+  assert.equal(response.statusCode, 201, response.body);
+  assert.equal(actions.includes("automation:read"), false);
 });

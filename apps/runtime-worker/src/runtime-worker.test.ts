@@ -1,3 +1,4 @@
+import { createSkillVersion, renderSkillInvocationContext } from "@crewon/domain";
 import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from "node:fs";
@@ -10877,3 +10878,45 @@ function actor(): ActorContext {
 function hasApplicationCode(code: string): (error: unknown) => boolean {
   return (error) => error instanceof ApplicationError && error.code === code;
 }
+
+
+test("F04 Skill invocation reaches the existing streaming Worker and rejects a changed occurrence payload", async (context) => {
+  // Model transport and C02 admission are explicit fixtures; Worker/Store/Run are real.
+  for (const corrupt of [false, true]) {
+    const fixture = await createFixture(context, (clock) => new InMemoryRunStore({ clock }));
+    const firstWorker = fixture.worker({ transport: successfulTransport() });
+    await firstWorker.wake(); await firstWorker.close();
+    const digester = new Sha256Digester();
+    const version = createSkillVersion({ skillId: "f04-skill", versionId: "v1", createdAt: "2026-08-08T00:00:00Z", source: { recordingId: "explicit-fixture", revision: 1, contentDigest: digester.sha256("fixture"), provenance: "contract-fixture" }, method: {
+      name: "Schedule report", purpose: "Report the selected day", steps: ["Use the supplied date and report results."], parameters: [{ name: "date", label: "Date", type: "string", required: true }], requiredToolRefs: [], completionCriteria: ["Report names the supplied date"], knownExceptions: ["Unavailable input blocks execution"], runtimeRequirements: [],
+    } }, digester);
+    let sequence = 0;
+    const automations = new AutomationApplicationService({ store: fixture.store as DomainStore & AutomationStore, clock: fixture.applicationClock, ids: { nextId: kind => `f04-${kind}-${++sequence}` }, digester, authorization: { authorize: async () => ({ outcome: "allow" }) }, routeResolver: { resolveRoute: async () => ROUTE }, skills: {
+      resolveVersion: async () => version,
+      admitInvocation: async (_actor, invocation) => ({ invocation, version, context: renderSkillInvocationContext(version, invocation), agentVersionId: ROUTE.agentVersionId }),
+    } });
+    const thread = await fixture.store.loadThread({ tenantId: actor().tenantId, threadId: fixture.threadId });
+    assert.ok(thread);
+    const created = await automations.createAutomation(actor(), { kind: "automation.create", idempotencyKey: "f04-create", threadId: fixture.threadId, expectedThreadRevision: thread.revision, title: "Daily report", prompt: "Use the reviewed Skill", requestedAgentVersionId: ROUTE.agentVersionId,
+      schedule: { scheduleType: "daily", nextRunAt: "2026-08-08T00:00:00Z", intervalSeconds: 86400, time: "08:00", weekday: 6, timezone: "Asia/Shanghai" },
+      skillInvocation: { schemaVersion: "crewon.skill-invocation.v1", skill: version.ref, parameters: { date: "2026-08-08" }, requiredToolRefs: [] }, parameterBindings: { date: "runDate" },
+    });
+    const invoked = await automations.runAutomationNow(actor(), { kind: "automation.runNow", idempotencyKey: "f04-run", automationId: created.record.definition.automationId, expectedAutomationRevision: 1, expectedThreadRevision: thread.revision, scheduledFor: "2026-08-09T00:00:00Z" });
+    const transport = new DeterministicFakeModelTransport({ expectedLastUserMessage: invoked.message.content, events: [{ type: "output.delta", delta: "Report " }, { type: "output.delta", delta: "done" }, { type: "completed", checkpoint: null }] });
+    const bound = invoked.binding.skillInvocation;
+    assert.ok(bound);
+    const worker = fixture.worker({ transport, autoCompactAtContextBytes: null, autoCompactAtContextItems: null,
+      ...(corrupt ? { claimStore: automationInvocationClaimStore(fixture.store, { ...invoked.binding, skillInvocation: { ...bound, parameters: { date: "2000-01-01" } } }) } : {}),
+    });
+    const result = await worker.wake();
+    if (corrupt) {
+      assert.deepEqual(result, { kind: "failed", runId: invoked.runState.runId, code: "automation_invocation_payload_invalid" });
+      assert.equal(transport.requests.length, 0);
+    } else {
+      assert.deepEqual(result, { kind: "completed", runId: invoked.runState.runId });
+      assert.match(JSON.stringify(transport.requests), /2026-08-09/);
+      assert.match(JSON.stringify(transport.requests), /f04-skill/);
+    }
+    await worker.close();
+  }
+});

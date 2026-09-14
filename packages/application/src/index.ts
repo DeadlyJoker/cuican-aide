@@ -76,3 +76,5 @@ export * from "./artifact-retention-port.ts";
 
 export * from "./skill-invocation-port.ts";
 export * from "./demonstrated-skill-store-port.ts";
+
+export * from "./automation-run-skill-resolver.ts";

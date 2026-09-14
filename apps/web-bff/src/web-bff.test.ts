@@ -165,6 +165,33 @@ test("uses separate browser and Control CSRF values for mutations", async () => 
   );
 });
 
+test("preserves Automation version negotiation while leaving legacy requests without a version header", async () => {
+  const forwarded: Array<string | null> = [];
+  const bff = testBff({
+    identity: fixedIdentity(SESSION),
+    fetch: async (_input, init) => {
+      forwarded.push(
+        new Headers(init?.headers).get("x-crewon-automation-version"),
+      );
+      return Response.json({ data: [], nextCursor: null });
+    },
+  });
+  for (const version of [undefined, "1"]) {
+    const response = await bff.handle(
+      request("/api/v1/automations", {
+        headers: {
+          cookie: COOKIE,
+          ...(version === undefined
+            ? {}
+            : { "x-crewon-automation-version": version }),
+        },
+      }),
+    );
+    assert.equal(response.status, 200);
+  }
+  assert.deepEqual(forwarded, [null, "1"]);
+});
+
 test("fails closed before proxying mutations with missing origin or invalid CSRF", async () => {
   let fetchCalls = 0;
   const bff = testBff({

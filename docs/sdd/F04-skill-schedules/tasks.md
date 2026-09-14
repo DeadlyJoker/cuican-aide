@@ -1,14 +1,18 @@
 # F04 任务追踪
 
-- [x] S0 独立 worktree 建分支并快进共享基线；读取规范与源码。
-- [x] S1 建立 spec/design/tasks，明确 C04 v0 兼容与 C02 消费端口，自检。
-- [ ] S1 向协调任务提交首轮报告，接收 C02/C03 精确字段并更新差异。
-- [ ] S2 R01 跑现有 domain/application/contracts/store/scheduler 基线，补 v0 恒等兼容行为测试。
-- [ ] S2 R02–R04 先写绑定/准入失败行为测试，再实现显式版本定义与消费端口。
-- [ ] S2 R02–R05 HTTP/projection/generated/store 往返与幂等测试。
-- [ ] S2 R04/R06–R07 错误恢复呈现、重复触发、取消、时区和离线恢复验证。
-- [ ] S2 R08 固定版本添加到现有日程 UI，组件覆盖与设计回归。
-- [ ] S3 真实 C02/C03 接线；记录真实模型 GUI、恢复或明确未覆盖项。
-- [ ] S3 窄检查、必要全检查、pnpm format；提交 feature 与 evidence，向协调任务报告。
-- [ ] S2 R02/R07 动态日期规则（运行日期、上一完整周起止）按 occurrence/timezone冻结，跨日/DST/重启重试测试。
-- [ ] S2 R01 新客户端能力头协商，旧客户端混合分页只读取 v0、v1 get/run-before-side-effects 明确升级错误。
+- [x] S0 独立 worktree 建分支、快进共享基线，读取规范与源码。
+- [x] S1 提交 spec/design/tasks，明确 C04 v0/v1 兼容，报告协调任务。
+- [x] S1 合入 F03 C02 核心与 F01 C03 权威依赖；更新动态日期、旧客户端、readiness、C05 映射设计。
+- [x] S2 R01 固定 v0 JSON/摘要/HTTP/instruction/receipt 兼容行为与 SQLite 恢复。
+- [x] S2 R02–R04 显式版本定义、保存与执行准入、目标scope、有界参数和错误恢复。
+- [x] S2 R02/R07 三种动态日期规则，冻结具体 invocation，跨时区/DST/跨年验证。
+- [x] S2 R01/R05 HTTP/BFF能力头、旧客户端过滤后稳定分页、无额外read授权、幂等。
+- [x] S2 R04/R06–R07 每日程当前准入状态，取消、未知ack、重启同Run验证。
+- [x] S2 R08 现有日程表单、固定版本/参数/目标、typed日期规则；组件/快照/窄屏检查。
+- [x] S2 R06/R09 真正Worker接收v1流式请求（假模型端口），队列篡改参数在模型前拒绝。
+- [x] S2 C05 提供真实 Run origin→已冻结具体 C02 invocation 的验证读端口，不授予权限。
+- [x] S2 复用与自研边界评审；Node Intl、现有scheduler/receipt/UI/C02/C03，无 F04 新框架。
+- [x] S2 必要窄/广检查与独立review，实际通过、基线失败、PG跳过分别记录。
+- [ ] S3 合入 F03 已提交真实宿主与公共 UI 入口接线，再跑有意义的集成验证。
+- [ ] S3 F03/F05 真正浏览器、模型、交付与独立重复授权，执行中撤权/GUI恢复证据。
+- [ ] S3 最终 feature 提交与交付报告；完整E05缺依赖时明确未验收。

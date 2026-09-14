@@ -25,6 +25,7 @@ export async function prepareAutomationSkillBinding(
 ): Promise<AutomationSkillBinding | undefined> {
   const template = command.skillInvocation;
   if (template === undefined) return undefined;
+  assertTargetScope(actor, command.threadId, template.deliveryTarget);
   return mapErrors(async () => {
     const port = requirePort(deps.skills);
     const invocation = {
@@ -70,6 +71,11 @@ export async function assertAutomationSkillExecution(
 ): Promise<void> {
   const binding = definition.skillBinding;
   if (!binding) return;
+  assertTargetScope(
+    actor,
+    definition.threadId,
+    binding.invocation.deliveryTarget,
+  );
   await mapErrors(async () => {
     const port = requirePort(deps.skills);
     parseSkillVersion(binding.version, deps.digester);
@@ -107,12 +113,39 @@ async function mapErrors<T>(operation: () => Promise<T>): Promise<T> {
     return await operation();
   } catch (error) {
     if (error instanceof ApplicationError) throw error;
+    if (
+      error instanceof Error &&
+      [
+        "automation_parameter_bindings_invalid",
+        "automation_timezone_invalid",
+        "automation_scheduled_for_invalid",
+      ].includes(error.message)
+    )
+      throw new ApplicationError("validation", error.message, { cause: error });
     if (error instanceof SkillError)
       throw new ApplicationError("conflict", error.code, { cause: error });
     throw new ApplicationError(
       "internal",
       "automation_skill_admission_failed",
       { cause: error instanceof Error ? error : undefined },
+    );
+  }
+}
+
+function assertTargetScope(
+  actor: ActorContext,
+  threadId: string,
+  target: import("@crewon/domain").DeliveryTargetRef | undefined,
+): void {
+  if (
+    target &&
+    (target.tenantId !== actor.tenantId ||
+      target.spaceId !== actor.spaceId ||
+      target.threadId !== threadId)
+  ) {
+    throw new ApplicationError(
+      "authorization",
+      "automation_delivery_target_mismatch",
     );
   }
 }
