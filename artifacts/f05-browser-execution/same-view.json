@@ -1,0 +1,37 @@
+{
+  "kind": "real-electron-synthetic-business-page",
+  "notCovered": [
+    "F02 RecordingHost integration",
+    "real model Run",
+    "F01 import"
+  ],
+  "electron": "43.4.1",
+  "chromium": "150.0.7871.224",
+  "node": "24.18.1",
+  "puppeteer": "25.9.0",
+  "webContentsId": 2,
+  "generation": 3,
+  "state": {
+    "result": "2026-09 / partner",
+    "input": "yes",
+    "selected": "yes"
+  },
+  "receipt": {
+    "receiptId": "dee19d00-7b5d-4556-bdb2-8cfa922fd1b5",
+    "name": "orders.csv",
+    "mediaType": "text/csv",
+    "sizeBytes": 39,
+    "sha256": "sha256:8bad3bb086e9ce930f0edf6ffcbc332600edbbe8c674509c8762d34710eaa29a"
+  },
+  "focusRestoredAfterActionAndCancel": true,
+  "events": [
+    "effect:fill:日期",
+    "effect:select:渠道",
+    "effect:click:筛选",
+    "effect:download:下载订单",
+    "effect:fill:日期"
+  ],
+  "automatedInputs": 6,
+  "manualInputs": 2,
+  "detached": 3
+}
