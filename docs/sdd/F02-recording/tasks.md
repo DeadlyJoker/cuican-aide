@@ -7,6 +7,9 @@
 - [x] S2 先行为测试，再实现串行存储、revision 和恢复（R01、R04–R07）。
 - [x] S2 独立教学 Electron 宿主、IPC、下载关联（R01–R03、R05）。
 - [x] S2 React 控制/回看/删步/导出、组件测试与快照（R01、R04）。
-- [ ] S3 窄测试、边界、UI lint/build/CommandWorkspace、格式检查。
-- [ ] S3 实际 Electron GUI、跨进程恢复、脱敏导出检查；证据清楚标明限制。
-- [ ] 提交 feature 并向协调任务报告可集成 commit 和实际验收状态。
+- [x] S3 窄测试、边界、UI lint/build/CommandWorkspace、格式检查。
+- [x] S3 实际 Electron GUI、跨进程恢复、脱敏导出检查；证据清楚标明限制。
+- [x] 提交 feature 并向协调任务报告可集成 commit 和实际验收状态。
+
+- [ ] 人工/CUA 输入验收（Mac 锁屏，协调任务要求不解锁；自动化输入证据不能替代）。
+- [ ] F03 真模型草稿与 F05 运行的产品全链路验收（由对应任务与协调任务接线验证）。

@@ -450,6 +450,44 @@ describe("F02 R02/R03 host IPC identity and lifecycle", () => {
     await vi.waitFor(() => expect(f.host.store.current?.steps).toHaveLength(3));
   });
 
+  it("does not append a queued download after an explicit pause", async () => {
+    const f = await setup();
+    await f.start();
+    let release!: (
+      value: Awaited<ReturnType<typeof f.view.webContents.capturePage>>,
+    ) => void;
+    f.view.webContents.capturePage.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    f.source(click({ screenshotSafe: true, layout }));
+    await vi.waitFor(() =>
+      expect(f.view.webContents.capturePage).toHaveBeenCalledOnce(),
+    );
+    const item = Object.assign(new electron.WebContents(), {
+      setSaveDialogOptions: vi.fn(),
+    });
+    f.view.webContents.session.emit(
+      "will-download",
+      {},
+      item,
+      f.view.webContents,
+    );
+    await invoke("control", sender(f.window.webContents), {
+      command: "pause",
+      recordingId: f.host.store.current!.recordingId,
+      expectedRevision: f.host.store.current!.revision,
+    });
+    item.emit("done", {}, "completed");
+    release({ toPNG: () => Buffer.from("late-frame") });
+    await new Promise((resolve) => setImmediate(resolve));
+    await f.host.store.checkBudget();
+    expect(f.host.store.current?.status).toBe("paused");
+    expect(f.host.store.current?.steps).toEqual([]);
+  });
+
   it("requires an owner registration and exact request correlation for Skill handoff", async () => {
     const f = await setup();
     await f.start();

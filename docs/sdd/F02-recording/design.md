@@ -12,7 +12,7 @@
 
 ## C01 RecordingExport v1（F02 owner）
 
-权威公开端口拟为 `@crewon/contracts/recording`，文件 `packages/contracts/src/recording-export.ts`；严格 parser 拒绝未知字段/版本、畸形值、重复 stepId、乱序、悬空 evidence、超预算。`validateRecordingExport(value)` 异步校验结构与摘要，返回已校验值或抛错；`sealRecordingExport(body)` 生成摘要。摘要规则：递归排序对象键，数组保序，JSON UTF-8，省略顶层 contentDigest，对其 SHA-256 后前缀 `sha256:`。证据正文独立授权读取，导出不嵌入正文。
+权威公开端口为 `@crewon/contracts/recording`，文件 `packages/contracts/src/recording-export.ts`；严格 parser 拒绝未知字段/版本、畸形值、重复 stepId、乱序、悬空 evidence、超预算。`validateRecordingExport(value)` 异步校验结构与摘要，返回已校验值或抛错；`sealRecordingExport(body)` 生成摘要。摘要规则：递归排序对象键，数组保序，JSON UTF-8，省略顶层 contentDigest，对其 SHA-256 后前缀 `sha256:`。证据正文独立授权读取，导出不嵌入正文。
 
 ```ts
 type RecordingExport = {
@@ -116,3 +116,7 @@ F05 的 main-only `RecordingExecutionAccess` 与 `RecordingExecutionLease` 在�
 ## 实现期故障闭环
 
 截图候选保存在隔离 preload 的有界私有表中。宿主截图前后分别复核同 generation、目标与同步 DOM mutation 版本；变化、超时、错误 sender 或无法确认时不编码/持久化 PNG。同 selector 的旧候选不能由后续点击更新借用。下载导致的临时导航会关闭源，但下载关联仍按确切 view 与正在录制的 session 记录；did-stop-loading 为仍存活的页面重新握手。
+
+实际回归使用 F05 `BrowserViewAutomation` 与 inspection 模块，不复制或开发第二套 transport。Puppeteer 普通输入与点击、原生导航和下载在同一 F02 WebContentsView 上执行。Puppeteer select 发出合成 change，录制器依约忽略；回归通过明确标记的合成原生方向键验证受信任 select change。敏感字段同样仅在合成测试页使用固定目标的原生输入负例。官方 focus emulation 只由执行 driver 在动作期间开启并 finally 恢复；F02 录制生产代码不启用它。
+
+敏感省略/unsupported 原因码按源定义的固定白名单验证，不能作为任意文本通道。下载追加与来源事件共享队列，先保存触发点击再绑定 relatedStepId。重复的同 generation armed 通知只回 ACK、不重置源候选，确保截图 mutation 失效不能被重置绕过。
