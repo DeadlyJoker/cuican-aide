@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
 import { setTimeout as delay } from "node:timers/promises";
 import type { ControlApiClient } from "@crewon/control-client";
@@ -274,7 +275,7 @@ function readOccurrence(
     );
     const receipts = database
       .prepare(
-        `SELECT run_id, result_json
+        `SELECT run_id, idempotency_key, result_json
       FROM automation_invocation_receipts WHERE tenant_id=? AND automation_id=? LIMIT 2`,
       )
       .all(target.tenantId, automation.automationId);
@@ -285,6 +286,12 @@ function readOccurrence(
     if (receipts.length === 0) return null;
     const receipt = receipts[0]!;
     assert.equal(typeof receipt.run_id, "string");
+    // Verify the existing scheduler's durable occurrence receipt key, in
+    // addition to its Run origin. This does not submit or trigger an occurrence.
+    const schedulerKey = `scheduled:${createHash("sha256")
+      .update(`${automation.automationId}\u0000${dueAt}`)
+      .digest("hex")}`;
+    assert.equal(receipt.idempotency_key, schedulerKey);
     const saved = database
       .prepare(
         `SELECT state_json FROM run_snapshots
@@ -326,6 +333,7 @@ function readOccurrence(
       runCreatedAt: state.createdAt as string,
       toolPermissionMode: options.toolPermissionMode,
       invocationReceiptCount: receipts.length,
+      schedulerReceiptKey: schedulerKey,
     };
   } finally {
     database.exec("ROLLBACK");
