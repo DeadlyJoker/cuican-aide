@@ -6,7 +6,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./thread-title": "./src/thread-title.ts",
-    "./demonstrated-skill": "./src/demonstrated-skill.ts"
+    "./demonstrated-skill": "./src/demonstrated-skill.ts",
+    "./delivery": "./src/delivery.ts",
+    "./delivery-requests": "./src/delivery-requests.ts",
+    "./delivery-http-policy": "./src/delivery-http-policy.ts"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test src/*.test.ts",

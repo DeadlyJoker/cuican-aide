@@ -29,6 +29,11 @@ import type {
   DeviceWorkspaceListDispatchClientPort,
 } from "@crewon/device-dispatch";
 import type { ToolRuntimePort } from "@crewon/tool-broker";
+import {
+  withDeliveryToolRuntime,
+  type RuntimeDeliveryConfig,
+  type DeliveryDownloadImporter,
+} from "./delivery-composition.ts";
 
 import { RuntimeWorker, type RuntimeWorkerConfig } from "./runtime-worker.ts";
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
@@ -92,6 +97,9 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   governedContext?: GovernedContextBundle;
   modelSwitchCompactionResolver?: PriorModelCompactionResolverPort;
   toolRuntime?: ToolRuntimePort;
+  delivery?: RuntimeDeliveryConfig;
+  deliveryToolCatalog?: "disabled" | "enabled";
+  configureDeliveryDownloads?: (importer: DeliveryDownloadImporter) => void;
   artifactStore?: ArtifactStorePort;
   artifactEncryptionKeyId?: string;
   ownerId?: string;
@@ -187,7 +195,10 @@ export async function createStandaloneRuntimeWorker(
       workspaceReadStore,
       {
         ...config,
-        localStoragePaths: [config.databasePath, ...(config.localStoragePaths ?? [])],
+        localStoragePaths: [
+          config.databasePath,
+          ...(config.localStoragePaths ?? []),
+        ],
       },
       releasePlan,
     );
@@ -272,13 +283,21 @@ async function composeRuntimeWorker(
     throw new Error("runtime_artifact_configuration_incomplete");
   }
   validateWorkspaceDeployment(config);
-  const toolRuntime = createRuntimeWorkspaceReadToolRuntime({
+  const workspaceToolRuntime = createRuntimeWorkspaceReadToolRuntime({
     store,
     workspaceReadStore,
     readFile: config.workspaceReadFile,
     deployment: config.workspacePrivate?.authority,
     digester,
     configuredRuntime: config.toolRuntime,
+  });
+  const toolRuntime = withDeliveryToolRuntime({
+    runtime: workspaceToolRuntime,
+    catalog: config.deliveryToolCatalog,
+    delivery: config.delivery,
+    store,
+    tenantId: config.runtimeTenantId,
+    configureDownloads: config.configureDeliveryDownloads,
   });
   if (
     JSON.stringify(toolRuntime.definitions()) !==
@@ -487,6 +506,7 @@ async function composeRuntimeWorker(
           config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
           agentVersionRegistry.close(),
           artifactStore?.close() ?? Promise.resolve(),
+          config.delivery?.store.close() ?? Promise.resolve(),
           workspaceReadStore?.close() ?? Promise.resolve(),
           store.close(),
         ])),
@@ -528,6 +548,7 @@ async function closeStartupResources(
     config.workspacePrivate?.gateway.close() ?? Promise.resolve(),
     config.workspaceReadFile?.gateway.close() ?? Promise.resolve(),
     config.artifactStore?.close() ?? Promise.resolve(),
+    config.delivery?.store.close() ?? Promise.resolve(),
   ]);
 }
 

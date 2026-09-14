@@ -1,4 +1,5 @@
 import type { ToolDefinition, ToolRuntimePort } from "@crewon/tool-broker";
+import { deliveryToolDefinitions } from "./delivery-tool-catalog.ts";
 
 const WORKSPACE_READ_TOOL_DEFINITION: ToolDefinition = {
   schemaVersion: "crewon.tool-definition.v0",
@@ -23,8 +24,27 @@ export function workspaceReadToolDefinitions(): readonly ToolDefinition[] {
 export function runtimeReleaseToolDefinitions(input: {
   toolRuntime?: ToolRuntimePort;
   nativeWorkspaceReadCatalog: "disabled" | "enabled";
+  deliveryToolCatalog?: "disabled" | "enabled";
 }): readonly ToolDefinition[] {
-  const definitions = structuredClone(input.toolRuntime?.definitions() ?? []);
+  const definitions = [
+    ...structuredClone(input.toolRuntime?.definitions() ?? []),
+  ];
+  if (input.deliveryToolCatalog === "enabled") {
+    for (const definition of deliveryToolDefinitions()) {
+      if (
+        definitions.some(
+          (existing) =>
+            existing.kind === definition.kind &&
+            existing.name === definition.name,
+        )
+      )
+        throw new Error("runtime_release_delivery_tool_collision");
+      definitions.push(definition);
+    }
+    definitions.sort((left, right) =>
+      `${left.kind}:${left.name}`.localeCompare(`${right.kind}:${right.name}`),
+    );
+  }
   if (input.nativeWorkspaceReadCatalog === "disabled") {
     return definitions;
   }

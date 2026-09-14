@@ -38,6 +38,10 @@ Control API、Store、Control Client 类型检查、OpenAPI 生成一致性和 T
 
 F03 仍在补充固定无工具生成 AgentVersion 的执行硬门禁和 UI。F04 正在修复日程保存/新 Run 提交与 Skill 禁用之间的 SQLite 原子性窗口；完成前不将前后两次准入检查称为事务内一致性保证。
 
-F01 换库后的文件交付、F02 完整录制宿主、F05 成熟浏览器动作/显式授权尚未在本树集成。真实模型、浏览器取数、文件结果及完整周期执行的 E04/E05 尚未验收；此树当前用于逐批集成，不作为已可发布成品。
+第三批已合并 F01 `3745d6a797a2eb9f560aefe4dd1f91797da1154a`：ExcelJS/csv-parse/xlsx-calc 表格处理、加密文件与版本 CAS、Worker 工具与下载导入、Control/客户端接口、BFF/桌面/代理上传预算。C03 沿用 owner 新增的可选数字格式和输入 Run 来源字段，同时保留 F03/F04 的契约入口。BFF 保留 `x-crewon-automation-version` 转发。
+
+本树实际运行文件/表格/客户端/HTTP/BFF/日程兼容/Worker 恢复十五个测试文件，共 63 项通过、0 失败、0 跳过，日志 `/tmp/crewon-integration-delivery-tests.log`。其中 E01/E02 读取真实生成的 XLSX，属于合成业务材料的实际文件验证。Control API、Runtime Worker、Web BFF、Control Client、Store、Artifacts 六个包类型检查通过。尚未用真实模型把这些文件操作与录制流程贯通。
+
+F02 完整录制宿主、F05 成熟浏览器动作/显式授权尚未在本树集成。真实模型、浏览器取数、文件结果及完整周期执行的 E04/E05 尚未验收；此树当前用于逐批集成，不作为已可发布成品。
 
 F05 已报告同一真实 WebContentsView 上的 Puppeteer 动作、下载和 focus emulation 恢复探针通过；尚未贯通本树的录制/授权/交付路径，不能冒称人工 GUI 验收或完整后台执行。已找到原工作区现有模型配置，F03 将只在隔离验收进程读取，使用合成材料验证；凭据不复制、不输出，不使用原用户数据库。

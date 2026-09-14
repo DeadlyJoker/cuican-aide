@@ -108,6 +108,7 @@ import {
   RunPlanViewValidationError,
 } from "./run-plan-view.ts";
 import { WorkspaceControlClient } from "./workspace-control-client.ts";
+import { DeliveryControlClient } from "./delivery-control-client.ts";
 import { readBoundedWorkspaceJson } from "./workspace-response-reader.ts";
 
 export type ControlApiClientConfig = Readonly<{
@@ -187,6 +188,7 @@ const MAX_SANDBOX_GIT_SUMMARY_BYTES = 16 * 1024;
 const MAX_GIT_BRANCH_BYTES = 1_024;
 
 export class ControlApiClient {
+  readonly delivery: DeliveryControlClient;
   readonly #baseUrl: URL;
   readonly #accessToken: string | null;
   readonly #csrfToken: string | null;
@@ -205,6 +207,21 @@ export class ControlApiClient {
     );
     this.#origin = optionalOrigin(config.origin);
     this.#fetch = config.fetch ?? globalThis.fetch.bind(globalThis);
+    this.delivery = new DeliveryControlClient({
+      json: (method, path, body, options) =>
+        this.#json(method, path, body, options),
+      binary: async (path, options) => {
+        const response = await this.#fetch(new URL(path, this.#baseUrl), {
+          method: "GET",
+          headers: this.#authenticatedHeaders("application/octet-stream"),
+          credentials: "include",
+          signal: options.signal,
+        });
+        if (response.status !== 200)
+          throw await controlApiError(response, 16 * 1024);
+        return response;
+      },
+    });
   }
 
   /** Authenticated, same-origin transport restricted to the hosted Skill namespace. */
@@ -1439,6 +1456,7 @@ export class ControlApiClient {
       maximumResponseBytes?: number;
       accept?: string;
       automationVersion?: 1;
+      responseShape?: "object" | "array";
     },
   ): Promise<T> {
     const headers = this.#authenticatedHeaders(
@@ -1476,7 +1494,11 @@ export class ControlApiClient {
     if (!options.expectedStatuses.includes(response.status)) {
       throw await controlApiError(response, options.maximumResponseBytes);
     }
-    return (await responseJson(response, options.maximumResponseBytes)) as T;
+    return (await responseJson(
+      response,
+      options.maximumResponseBytes,
+      options.responseShape,
+    )) as T;
   }
 
   #authenticatedHeaders(accept: string): Headers {
@@ -1578,6 +1600,7 @@ async function controlApiError(
 async function responseJson(
   response: Response,
   maximumResponseBytes?: number,
+  responseShape: "object" | "array" = "object",
 ): Promise<unknown> {
   const contentType = response.headers.get("content-type") ?? "";
   if (!/^application\/json(?:;|$)/iu.test(contentType)) {
@@ -1591,7 +1614,9 @@ async function responseJson(
           maximumResponseBytes,
           (code) => new ControlApiProtocolError(code),
         );
-  if (!isPlainObject(value)) {
+  if (
+    responseShape === "array" ? !Array.isArray(value) : !isPlainObject(value)
+  ) {
     throw new ControlApiProtocolError("control_api_response_invalid");
   }
   return value;

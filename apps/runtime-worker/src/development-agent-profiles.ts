@@ -117,6 +117,7 @@ export function compileDevelopmentAgentProfileVersion(
     governedContext: undefined,
     toolRuntime: undefined,
     nativeWorkspaceReadCatalog: "disabled",
+    deliveryToolCatalog: "disabled",
     modelIdentity: {
       adapterName: CLOUD_AGENT_ADAPTER_NAME,
       adapterVersion: CLOUD_AGENT_ADAPTER_VERSION,

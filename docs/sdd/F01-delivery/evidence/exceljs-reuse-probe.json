@@ -1,0 +1,47 @@
+{
+  "library": "exceljs@4.4.0",
+  "sheets": [
+    {
+      "name": "明细",
+      "rows": 2,
+      "merges": [
+        "H1:I1"
+      ]
+    },
+    {
+      "name": "汇总",
+      "rows": 2,
+      "merges": []
+    },
+    {
+      "name": "异常",
+      "rows": 0,
+      "merges": []
+    },
+    {
+      "name": "来源",
+      "rows": 0,
+      "merges": []
+    }
+  ],
+  "amount": 100,
+  "format": "0.0",
+  "note": "已核对渠道口径",
+  "width": 22,
+  "rowHeight": 28,
+  "formula": {
+    "formula": "C2*1",
+    "result": 999
+  },
+  "changedParts": [
+    "[Content_Types].xml",
+    "_rels/.rels",
+    "xl/workbook.xml",
+    "xl/_rels/workbook.xml.rels",
+    "xl/styles.xml",
+    "xl/worksheets/sheet1.xml",
+    "xl/worksheets/sheet2.xml",
+    "xl/worksheets/sheet3.xml",
+    "xl/worksheets/sheet4.xml"
+  ]
+}

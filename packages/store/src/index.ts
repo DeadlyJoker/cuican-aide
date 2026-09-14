@@ -29,3 +29,4 @@ export * from "./demonstrated-skill-store.ts";
 export * from "./sqlite-skill-draft-generation.ts";
 export * from "./skill-recording-store.ts";
 export { SQLITE_SCHEMA_VERSION } from "./sqlite-schema.ts";
+export * from "./sqlite-delivery-store.ts";

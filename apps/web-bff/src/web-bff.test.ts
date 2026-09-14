@@ -419,3 +419,43 @@ function testBff(overrides: {
     fetch: overrides.fetch,
   });
 }
+
+test("delivery uploads above the ordinary BFF limit retain session/CSRF checks and forward complete bytes", async () => {
+  let received = 0;
+  const bff = testBff({
+    identity: fixedIdentity(SESSION),
+    fetch: async (_url, init) => {
+      received = (init?.body as ArrayBuffer).byteLength;
+      return new Response(null, { status: 201 });
+    },
+  });
+  const bootstrap = await bff.handle(request("/control-api/session"));
+  const csrfToken = ((await bootstrap.json()) as { csrfToken: string })
+    .csrfToken;
+  const body = JSON.stringify({
+    contentBase64: Buffer.alloc(3 * 1024 * 1024, "a").toString("base64"),
+  });
+  const path = "/api/v1/threads/thread_1/delivery/inputs";
+  const headers = {
+    "origin": PUBLIC_ORIGIN,
+    "x-csrf-token": csrfToken,
+    "content-type": "application/json",
+  };
+  assert.equal(
+    (await bff.handle(request(path, { method: "POST", headers, body }))).status,
+    201,
+  );
+  assert.equal(received, Buffer.byteLength(body));
+  assert.equal(
+    (await bff.handle(request(path, { method: "POST", body }))).status,
+    403,
+  );
+  assert.equal(
+    (
+      await bff.handle(
+        request(path + "?max=99999999", { method: "POST", headers, body }),
+      )
+    ).status,
+    413,
+  );
+});

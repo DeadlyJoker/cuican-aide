@@ -1,0 +1,253 @@
+{
+  "environment": {
+    "node": "v24.19.0",
+    "writer": "ExcelJS 4.4.0",
+    "csvParser": "csv-parse 7.0.2",
+    "formulaEvaluator": "xlsx-calc 0.9.2",
+    "independentReader": "xlsx 0.18.5",
+    "synthetic": true,
+    "path": "SpreadsheetEngine actual bytes; no model/GUI/store claim"
+  },
+  "files": {
+    "orders-a.csv": {
+      "bytes": 153,
+      "sha256": "af6edaa404a0e16fcfd0f1263653913f49bfdf06f21f16f725adf936d982e97b"
+    },
+    "orders-b.csv": {
+      "bytes": 117,
+      "sha256": "d4de5a4c819e3c209280285c2cdbc1dd4918f05b6d6d1e70882f0c9eaa88935c"
+    },
+    "ordinary-template.xlsx": {
+      "bytes": 3942,
+      "sha256": "ae1fc8d85ca941a8bf07b769f6b780ae3082fa3f2fcadfdab828f8d9ca845726"
+    },
+    "orders-template.xlsx": {
+      "bytes": 3529,
+      "sha256": "fdebf2c5d8b0624306fe87e8e2fea3867361eb0ba66b5a77214baa875c328200"
+    },
+    "orders-delivery.xlsx": {
+      "bytes": 8770,
+      "sha256": "e5a233e998287631e0210a2801955fb3611854e447e90f9873bf859410f0d68d"
+    },
+    "orders-noted.xlsx": {
+      "bytes": 8892,
+      "sha256": "c2f203925dbd199724073fe69a81c0e910c0d065dbf2a3ba17eb5570c80b44e9"
+    },
+    "orders-precision.xlsx": {
+      "bytes": 8919,
+      "sha256": "cc638675adc3d4b9f10b769a19219cf040e2cf1d429dc791c0f062ee21f8f4b3"
+    }
+  },
+  "validation": {
+    "status": "verified",
+    "sources": [
+      {
+        "inputId": "a",
+        "sheet": "CSV",
+        "readRows": 4,
+        "writtenRows": 3,
+        "excludedBlankRows": 0,
+        "excludedRuleRows": 1,
+        "exceptionRows": 0
+      },
+      {
+        "inputId": "b",
+        "sheet": "CSV",
+        "readRows": 3,
+        "writtenRows": 2,
+        "excludedBlankRows": 0,
+        "excludedRuleRows": 0,
+        "exceptionRows": 1
+      }
+    ],
+    "writtenRows": 5,
+    "numericTotals": {
+      "D": 340
+    },
+    "formulaCount": 1,
+    "warnings": [
+      "Numeric column totals are arithmetic checks, not a currency-aware business aggregation."
+    ]
+  },
+  "independentRead": {
+    "summary": [
+      {
+        "channel": "直营",
+        "currency": "CNY",
+        "amount": 180,
+        "核对公式": 180
+      },
+      {
+        "channel": "直营",
+        "currency": "USD",
+        "amount": 10
+      },
+      {
+        "channel": "渠道",
+        "currency": "CNY",
+        "amount": 150
+      }
+    ],
+    "exceptionRows": [
+      {
+        "sourceInputId": "b",
+        "sourceSheet": "CSV",
+        "sourceRow": 3,
+        "reason": "required value missing: amount",
+        "order_id": "B002",
+        "channel": "渠道",
+        "currency": "CNY",
+        "amount": null,
+        "status": "paid"
+      }
+    ],
+    "lineage": [
+      {
+        "sourceInputId": "a",
+        "sourceSheet": "CSV",
+        "sourceRow": 2,
+        "status": "written",
+        "outputSheet": "明细",
+        "outputRow": 2
+      },
+      {
+        "sourceInputId": "a",
+        "sourceSheet": "CSV",
+        "sourceRow": 3,
+        "status": "excluded_rule",
+        "outputSheet": null,
+        "outputRow": null
+      },
+      {
+        "sourceInputId": "a",
+        "sourceSheet": "CSV",
+        "sourceRow": 4,
+        "status": "written",
+        "outputSheet": "明细",
+        "outputRow": 3
+      },
+      {
+        "sourceInputId": "a",
+        "sourceSheet": "CSV",
+        "sourceRow": 5,
+        "status": "written",
+        "outputSheet": "明细",
+        "outputRow": 4
+      },
+      {
+        "sourceInputId": "b",
+        "sourceSheet": "CSV",
+        "sourceRow": 2,
+        "status": "written",
+        "outputSheet": "明细",
+        "outputRow": 5
+      },
+      {
+        "sourceInputId": "b",
+        "sourceSheet": "CSV",
+        "sourceRow": 3,
+        "status": "exception",
+        "outputSheet": null,
+        "outputRow": null
+      },
+      {
+        "sourceInputId": "b",
+        "sourceSheet": "CSV",
+        "sourceRow": 4,
+        "status": "written",
+        "outputSheet": "明细",
+        "outputRow": 6
+      }
+    ],
+    "note": "已核对渠道口径",
+    "amount": 100,
+    "amountFormat": "0.0",
+    "amountStyle": {
+      "font": {
+        "b": "",
+        "color": {
+          "rgb": "FF183153"
+        },
+        "sz": {
+          "val": "13"
+        },
+        "name": {
+          "val": "Arial"
+        }
+      },
+      "fill": {
+        "patternFill": {
+          "fgColor": {
+            "rgb": "FFE7F0FF"
+          },
+          "bgColor": {
+            "indexed": "64"
+          },
+          "patternType": "solid"
+        }
+      },
+      "border": {
+        "left": {
+          "color": {
+            "rgb": "FF006699"
+          },
+          "style": "thin"
+        },
+        "right": "",
+        "top": "",
+        "bottom": {
+          "color": {
+            "rgb": "FF006699"
+          },
+          "style": "double"
+        },
+        "diagonal": ""
+      },
+      "alignment": {
+        "horizontal": "center",
+        "vertical": "center",
+        "wrapText": "1"
+      },
+      "protection": {},
+      "numberFormat": "0.0"
+    },
+    "detailLayout": {
+      "merges": ["H1:I1"],
+      "columns": [
+        {
+          "min": 4,
+          "max": 4,
+          "width": 22,
+          "hidden": false
+        }
+      ],
+      "rows": [
+        {
+          "row": 1,
+          "height": 28,
+          "hidden": false
+        }
+      ]
+    },
+    "coreProperties": {
+      "LastAuthor": "Input author",
+      "Author": "F01 fixture author",
+      "Comments": "Preserve reviewed metadata",
+      "Subject": "Format retention",
+      "Title": "Quarterly delivery",
+      "CreatedDate": "2026-01-01T00:00:00.000Z",
+      "ModifiedDate": "2026-01-02T00:00:00.000Z",
+      "Application": "Microsoft Excel",
+      "AppVersion": "16.0300",
+      "DocSecurity": "0",
+      "HyperlinksChanged": false,
+      "SharedDoc": false,
+      "LinksUpToDate": false,
+      "ScaleCrop": false,
+      "Worksheets": 4,
+      "SheetNames": ["明细", "汇总", "异常", "来源"]
+    },
+    "formula": "C2*1",
+    "formulaCache": 180
+  }
+}

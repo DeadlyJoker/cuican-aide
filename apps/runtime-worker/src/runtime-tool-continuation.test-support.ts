@@ -23,6 +23,7 @@ import {
   ToolExecutionUnknownOutcomeError,
   ToolBrokerError,
   type ToolRuntimePort,
+  type ToolExecutionResolution,
 } from "@crewon/tool-broker";
 import { createContextTestStorage } from "./runtime-model-context.test-support.ts";
 import { RuntimeWorker } from "./runtime-worker.ts";
@@ -47,9 +48,12 @@ export async function createFixture(
     settlementFailure?: "beforeCommit" | "afterCommit" | "beforeAck";
     unknownReconciliationOnce?: boolean;
     toolRuntime?: ToolRuntimePort;
+    toolRuntimeFactory?: (store: DomainStore) => ToolRuntimePort;
     toolName?: string;
     toolInput?: string;
-    afterToolProviderResolved?: () => Promise<void>;
+    afterToolProviderResolved?: (
+      resolution: ToolExecutionResolution,
+    ) => Promise<void>;
     providerFailure?: boolean;
     retryAfterMs?: number;
     cancellationScheduler?: RuntimeWorkerScheduler;
@@ -270,7 +274,10 @@ export async function createFixture(
         options.toolInput,
       )) {
       response.write(`data: ${JSON.stringify(event)}\n\n`);
-      if (requests.length === 1 && ++sent === options.interruptFirstStreamAfterEvents) {
+      if (
+        requests.length === 1 &&
+        ++sent === options.interruptFirstStreamAfterEvents
+      ) {
         await new Promise((resolve) => setTimeout(resolve, 20));
         response.destroy();
         return;
@@ -400,6 +407,8 @@ export async function createFixture(
       model: "fixture-model",
       storeResponses: options.storeResponses,
     });
+    const selectedToolRuntime =
+      options.toolRuntimeFactory?.(store) ?? options.toolRuntime ?? broker;
     worker = new RuntimeWorker(
       {
         store: intercepted,
@@ -412,10 +421,10 @@ export async function createFixture(
         kernel: new CrewONAgentKernel({
           transport,
           instructions: "stable instructions",
-          toolCatalog: options.toolRuntime ?? broker,
+          toolCatalog: selectedToolRuntime,
           streamMaxRetries: options.streamMaxRetries ?? 0,
         }),
-        toolRuntime: options.toolRuntime ?? broker,
+        toolRuntime: selectedToolRuntime,
         policy: new PinnedRunExecutionPolicy(route),
         governedContext: options.governedContext,
         artifacts: options.artifacts,
@@ -427,8 +436,8 @@ export async function createFixture(
         retryAfterMs: options.retryAfterMs ?? 0,
         cancellationScheduler: options.cancellationScheduler,
         scanIntervalMs: null,
-        afterToolProviderResolved: async () => {
-          await options.afterToolProviderResolved?.();
+        afterToolProviderResolved: async (resolution) => {
+          await options.afterToolProviderResolved?.(resolution);
           if (options.holdResult !== undefined) {
             options.holdResult.entered();
             await options.holdResult.wait;
@@ -448,8 +457,13 @@ export async function createFixture(
   });
   return {
     requests,
-    accountingReport: () => storage.accountingReport({ tenantId: actor.tenantId, runId: run.state.runId }),
-    canRetireArtifact: (candidate: ArtifactRetentionCandidate) => store.canRetireArtifact(candidate),
+    accountingReport: () =>
+      storage.accountingReport({
+        tenantId: actor.tenantId,
+        runId: run.state.runId,
+      }),
+    canRetireArtifact: (candidate: ArtifactRetentionCandidate) =>
+      store.canRetireArtifact(candidate),
     callRecords: () =>
       store.listModelCalls({
         tenantId: actor.tenantId,
@@ -573,7 +587,7 @@ export async function createFixture(
   };
 }
 
-function responseEvents(
+export function responseEvents(
   tools: boolean,
   toolCount = 1,
   toolName = "fixture_tool",
@@ -621,4 +635,7 @@ function responseEvents(
   });
   return events;
 }
-import type { ArtifactRetentionCandidate, ToolOutputArtifactPort } from "@crewon/application";
+import type {
+  ArtifactRetentionCandidate,
+  ToolOutputArtifactPort,
+} from "@crewon/application";

@@ -12,7 +12,8 @@ import {
   createAgentVersionAsset,
 } from "@crewon/agent-version";
 import type { ModelTransportPort } from "@crewon/agent-kernel";
-import { SqliteRunStore } from "@crewon/store";
+import { SqliteRunStore, SqliteDeliveryStore } from "@crewon/store";
+import { SpreadsheetEngine } from "@crewon/artifacts";
 
 import {
   compileRuntimeAgentVersion,
@@ -115,6 +116,50 @@ test("requires an externally activated bootstrap release before execution", asyn
       workspaceBindingId: config.route.workspaceBindingId,
       deployedAt: "<time>",
     },
+  );
+});
+
+test("F01: standalone binds the released delivery catalog to durable file authority", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const config: RuntimeWorkerCompositionConfig = {
+    ...runtimeConfig(),
+    deliveryToolCatalog: "enabled",
+    delivery: {
+      store: new SqliteDeliveryStore({
+        databasePath: `${databasePath}.delivery.sqlite`,
+        encryptionKey: new Uint8Array(32).fill(17),
+      }),
+      engine: new SpreadsheetEngine(),
+    },
+  };
+  await activateRelease(databasePath, config);
+  const runtime = await createStandaloneRuntimeWorker({
+    ...config,
+    databasePath,
+    scanIntervalMs: null,
+  });
+  assert.deepEqual(
+    runtime.agentVersion.tools.map((tool) => tool.name),
+    [
+      "delivery_assemble",
+      "delivery_catalog",
+      "delivery_patch",
+      "delivery_read",
+    ],
+  );
+  await runtime.close();
+});
+
+test("F01: released delivery catalog without an execution store fails startup", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  await assert.rejects(
+    createStandaloneRuntimeWorker({
+      ...runtimeConfig(),
+      deliveryToolCatalog: "enabled",
+      databasePath,
+      scanIntervalMs: null,
+    }),
+    /runtime_delivery_configuration_incomplete/,
   );
 });
 

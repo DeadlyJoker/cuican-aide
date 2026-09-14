@@ -23,8 +23,25 @@ const boundaries: readonly Boundary[] = [
   },
   {
     packageName: "artifacts",
-    allowedBareImports: ["node:", "@crewon/application", "@crewon/domain"],
-    allowedRuntimeDependencies: ["@crewon/application", "@crewon/domain"],
+    allowedBareImports: [
+      "node:",
+      "@crewon/application",
+      "@crewon/domain",
+      "csv-parse",
+      "exceljs",
+      "fast-xml-parser",
+      "fflate",
+      "xlsx-calc",
+    ],
+    allowedRuntimeDependencies: [
+      "@crewon/application",
+      "@crewon/domain",
+      "csv-parse",
+      "exceljs",
+      "fast-xml-parser",
+      "fflate",
+      "xlsx-calc",
+    ],
   },
   {
     packageName: "agent-kernel",
@@ -62,8 +79,8 @@ const boundaries: readonly Boundary[] = [
   },
   {
     packageName: "control-client",
-    allowedBareImports: ["@crewon/contracts"],
-    allowedRuntimeDependencies: ["@crewon/contracts"],
+    allowedBareImports: ["@crewon/contracts", "@crewon/domain"],
+    allowedRuntimeDependencies: ["@crewon/contracts", "@crewon/domain"],
   },
   {
     packageName: "context",
@@ -111,6 +128,8 @@ const boundaries: readonly Boundary[] = [
     packageName: "store",
     allowedBareImports: [
       "node:crypto",
+      "node:fs",
+      "node:path",
       "node:sqlite",
       "@crewon/application",
       "@crewon/domain",

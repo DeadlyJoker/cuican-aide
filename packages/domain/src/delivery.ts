@@ -34,6 +34,7 @@ export type SpreadsheetCellPatch = Readonly<{
   sheet: string;
   cell: string;
   value: SpreadsheetCellValue | Readonly<{ formula: string }>;
+  numberFormat?: "0" | "0.0" | "0.00";
 }>;
 export type SpreadsheetSheet = Readonly<{
   name: string;
@@ -53,6 +54,7 @@ export type SpreadsheetPage = Readonly<{
   totalColumns: number;
 }>;
 export type DeliveryInputRecord = Readonly<{
+  sourceRunId?: string | null;
   inputId: string;
   target: DeliveryTargetRef;
   ownerActorId: string;

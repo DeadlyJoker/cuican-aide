@@ -1,5 +1,7 @@
 import { createStandaloneSkillHost } from "./standalone-skill-host.ts";
 import type { StorageAdmissionPort } from "@crewon/application";
+import type { DeliveryStorePort } from "@crewon/application";
+import { composeDeliveries } from "./delivery-composition.ts";
 import { createLocalStorageAdmissionOwner } from "@crewon/store";
 import type { OutboxRetentionPolicy } from "@crewon/application";
 import {
@@ -55,6 +57,7 @@ import type { ThreadSandboxPort } from "./pim-sandbox-client.ts";
 
 type ControlApiCompositionConfig = Readonly<{
   skillDatabasePath?: string;
+  deliveryStore?: DeliveryStorePort;
   storageAdmission?: StorageAdmissionPort;
   localStoragePaths?: readonly string[];
   actor: ActorContext;
@@ -157,7 +160,11 @@ function composeControlApi(
   let artifactMaintenance: ArtifactRetentionMaintenance | undefined;
   let skillHost: ReturnType<typeof createStandaloneSkillHost> | null = null;
   try {
-    artifactMaintenance = new ArtifactRetentionMaintenance(config.artifactStore.retention, store, config.artifactRetention);
+    artifactMaintenance = new ArtifactRetentionMaintenance(
+      config.artifactStore.retention,
+      store,
+      config.artifactRetention,
+    );
     const authorization = new StandaloneAuthorization(config.actor);
     const clock = new SystemApplicationClock();
     const digester = new NodeSha256ContentDigester();
@@ -303,6 +310,14 @@ function composeControlApi(
       skills: skillHost?.skills ?? null,
       skillRecordings: skillHost?.recordings ?? null,
       skillGenerations: skillHost?.generations ?? null,
+      deliveries: config.deliveryStore
+        ? composeDeliveries({
+            store: config.deliveryStore,
+            threads,
+            runs: application,
+            authorization,
+          })
+        : null,
       application,
       offices,
       threads,
@@ -356,6 +371,7 @@ function composeControlApi(
       await workspaceWorker?.close();
       await config.artifactStore.close();
       await skillHost?.close();
+      await config.deliveryStore?.close();
       await store.close();
     });
     return {
@@ -376,6 +392,7 @@ function composeControlApi(
     void workspaceWorker?.close();
     void config.artifactStore.close();
     void skillHost?.close();
+    void config.deliveryStore?.close();
     void store.close();
     throw error;
   }

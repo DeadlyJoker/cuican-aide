@@ -1,0 +1,4 @@
+order_id,channel,currency,amount,status
+B001,渠道,CNY,120.00,paid
+B002,渠道,CNY,,paid
+B003,渠道,CNY,30.00,paid

@@ -186,7 +186,21 @@ export function parseDeliveryPatchRequest(
   )
     throw new DeliveryError("delivery_patch_invalid");
   const patches = v.patches.map((p): SpreadsheetCellPatch => {
-    const x = deliveryObject(p, ["sheet", "cell", "value"]);
+    const hasFormat =
+      p !== null && typeof p === "object" && "numberFormat" in p;
+    const x = deliveryObject(p, [
+      "sheet",
+      "cell",
+      "value",
+      ...(hasFormat ? ["numberFormat"] : []),
+    ]);
+    if (
+      hasFormat &&
+      x.numberFormat !== "0" &&
+      x.numberFormat !== "0.0" &&
+      x.numberFormat !== "0.00"
+    )
+      throw new DeliveryError("delivery_number_format_invalid");
     const sheet = deliverySheetName(x.sheet);
     if (typeof x.cell !== "string")
       throw new DeliveryError("delivery_cell_invalid");
@@ -214,7 +228,14 @@ export function parseDeliveryPatchRequest(
         throw new DeliveryError("delivery_formula_invalid");
       cellValue = { formula: f.formula };
     }
-    return { sheet, cell: x.cell, value: cellValue };
+    return {
+      sheet,
+      cell: x.cell,
+      value: cellValue,
+      ...(hasFormat
+        ? { numberFormat: x.numberFormat as "0" | "0.0" | "0.00" }
+        : {}),
+    };
   });
   if (
     new Set(patches.map((p) => `${p.sheet}\0${p.cell}`)).size !== patches.length
