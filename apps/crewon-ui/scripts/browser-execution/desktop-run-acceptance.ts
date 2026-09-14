@@ -274,7 +274,14 @@ app
         ).toString(),
         csv,
       );
-      writeFileSync(join(output, "desktop-run-orders.csv"), await client.delivery.download(thread.threadId, {kind:"input",id:file.inputId}, file));
+      writeFileSync(
+        join(output, "desktop-run-orders.csv"),
+        await client.delivery.download(
+          thread.threadId,
+          { kind: "input", id: file.inputId },
+          file,
+        ),
+      );
       const image = await session.webContents.capturePage();
       writeFileSync(join(output, "desktop-run.png"), image.toPNG());
       await runtime.restart();
