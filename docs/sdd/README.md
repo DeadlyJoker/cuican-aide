@@ -1,6 +1,6 @@
 # CrewON SDD 并行开发总纲
 
-状态：2026-09-14 启动详细设计与开发。产品范围依据[交付与示教路线](../delivery-and-demonstrated-skills-roadmap.md)。当前文档是任务边界与契约基线；各 feature 的详细设计、实现和验收状态由其 spec/design/tasks/evidence 记录，未验收不标为完成。
+状态：2026-09-14 本轮实现已集成，受支持的本地浏览器取数、真实 XLSX 交付及固定 Skill 日程路径已完成真实模型联合验证。人工/CUA 与企业登录未验证，见 [集成证据](integration-progress.md)。产品范围依据[交付与示教路线](../delivery-and-demonstrated-skills-roadmap.md)，各 feature 的详细设计和证据单独记录。
 
 ## 目标与交付边界
 

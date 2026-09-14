@@ -2,6 +2,17 @@
 
 2026-09-14。协调工作区：`/Users/cheneywang/project/wqc/cuican-aide-sdd-integration-20260914`；分支：`codex/sdd-integration-20260914`。原工作区和各 feature 工作树不修改，未合回 main、未 push 或发布。
 
+## 当前结论
+
+本轮功能代码已在本隔离分支集成。受支持的单个 CrewON 浏览器和本地 SQLite 文件路径已完成“实际录制 → 真实模型草稿 → 明确审阅的通用 Skill → 新输入试跑 → 同版日程到期 → 模型产出 XLSX”的联合验证。
+
+- 最终日程输出 [实际 XLSX](../../artifacts/f05-real-schedule/second-period-orders.xlsx)：8532 字节，两条明细，direct/CNY 汇总 200.00。模型实际调用 assemble，来源指向新的日程 Run；[根独立文件与身份核验](evidence/scheduled-file-review.json) 与 owner 的真实执行证据分开记录。
+- 同一日程请求重放仍为一个 Run、一次 invocation receipt、24 次模型调用和 17 条工具回执，文件版本与字节不变。既有 Worker 根据显式保存的 approveForMe 完成审批，验收脚本没有逐项批准或代做文件。
+- 根最终 UI：436 文件/3010 项通过（`--maxWorkers=2`）；模式、调度和文件联调：54 项通过。类型、UI 构建、桌面 runtime/host 构建及分阶段检查见 [机器可读记录](evidence/integration-checks.json)。各次检查保留其源码版本和范围。
+- 限制：合成业务材料与代理审阅，不是用户试点；人工/CUA、企业登录和远程/Postgres 新交付未验证。既有 package 架构检查 3 项失败，23 条违规无新增。F03 默认并发全 UI 曾遇到既有 soak 5 秒超时；受限并发全量通过，未放宽测试阈值。
+
+以下保留分阶段集成历史，早期“待验收”描述以本节当前结论为准。
+
 ## 首批输入与合并处理
 
 - F04 完整消费端提交：`3e3200d47b9f6476d21cde1a7713da895cb19ebf`，作为本次集成基底。
@@ -30,7 +41,7 @@ packages/store/src/skill-recording-store.test.ts
 
 Control API、Store、Control Client 类型检查、OpenAPI 生成一致性和 TypeScript 边界检查已通过。不沿用 feature 各自工作树的测试结果冒称本集成结果。
 
-## 仍待接线和验收
+## 分批接线和验收记录
 
 第二批已合并 F03 `12b9a7a50`（包含 Zod/js-yaml 复用、模型草稿生成 Run 持久化 `eb5b211e3` 和 F04 真实宿主测试）。AutomationApplicationService 已注入 skills，Skill 宿主已接入 `scheduledInvocations` 的权威 Run 映射。合并时去除自动合并产生的重复 import/export，保留首批修复的旧客户端运行权限行为。
 
@@ -85,3 +96,7 @@ F05 实际录制来源的首次真实模型交付证据 `34053bcbb` 已合入根
 根首次相关八文件组合 52 通过、2 失败：helper 测试用模型只发送完成事件、没有正文，实际 Worker 因 message_content_invalid 重试。F04 `8dba99f82` 仅补一行有效 output.delta；同组合重跑 **54/54 通过、0 跳过**，保留首次失败日志，未放宽超时或调度行为。根全部 packages、Control API 与 Worker 类型检查通过。真实 E05 已由既有 scheduler 产生独立到期 Run，正在等待最终文件和重启核验；界面模式选择由 F03 收尾。
 
 F03 审批选择 UI `a77cd9f2b` 已合入根 `541056f4f`，复用现有 CommandComposerSelect；试跑与日程分别默认请求批准，明确选择后冻结本次请求，丢失响应重试保持原模式，已绑定执行后的新尝试恢复默认。运行记录与日程卡回显保存模式，范围说明明确为整个任务的工具审批。两处合并冲突仅是 F05 已有 scope 文案的格式和新增快照，保留新版完整内容。根九个受影响组件/客户端文件 **104 项通过**；包含身份失效、重试及浏览器授权文案。权限/范围修复后的 desktop runtime stage 与 Electron host build 也已通过。
+
+最终 E05 `bf30d7f67` 已合入根 `0c689cb1e`。根独立核对实际 8532 字节 XLSX 的摘要、明细、汇总和新的 sourceRunId，以及原始与重放证据中的同一 Run、版本、24 次模型调用和 17 条工具回执。此前 v4、v5 试跑及失败资料未覆盖。F05 测试站点与 Electron/Worker 进程已由 owner 关闭。
+
+最终 UI/lint/build 已在根执行：UI 全量 436 文件/3010 项通过，并发为两个 worker，未改变断言或时间阈值。最后追加的 F05 提交仅为验收脚本与证据，不修改产品代码。原工作区只同步本任务的协调文档，产品实现保留在隔离集成分支，未 push、未合回 main。

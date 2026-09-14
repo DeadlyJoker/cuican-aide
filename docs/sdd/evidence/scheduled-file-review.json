@@ -1,0 +1,43 @@
+{
+  "sourceCommit": "bf30d7f67ed51eeb021a3fa8012b495a390a352c",
+  "scope": "Root independently read committed owner files, references, schedule/replay evidence and actual workbook; root did not repeat the live model/browser execution.",
+  "runId": "01a09e61-0b3a-74fd-a443-ca28e729fc88",
+  "automationId": "01a09e60-ce62-766b-9ca5-b214e8d224e3",
+  "skill": {
+    "contentDigest": "sha256:3a64fab98a1cfa135d58c8e094d0412f419e3f3830e93144baa55e1e871673ea",
+    "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+    "versionId": "v5"
+  },
+  "scheduledFor": "2026-09-14T05:25:54.497Z",
+  "runCreatedAt": "2026-09-14T05:25:55.130Z",
+  "schedulerReceiptKey": "scheduled:b84e2578418c1806040a3aa9450d633ad26f1154998e8fe11ee416355e3bd771",
+  "invocationReceiptCount": 1,
+  "toolPermissionMode": "approveForMe",
+  "actualWorkerAutomaticApprovalEvidence": true,
+  "deliveryVersion": "455877f7-cb85-4033-a619-40907f54da97",
+  "contentDigest": "sha256:5e7b330b43c5d5b8d11af424ef450df8fceea77819a73d923048f40acf1b8c1e",
+  "byteLength": 8532,
+  "reader": "SheetJS",
+  "detailOrderIds": ["A101", "A103"],
+  "summary": ["direct", "CNY", 200],
+  "newRunAndInputAndOutputFromReviewedTrial": true,
+  "modelCallsBeforeAndAfterReplay": 24,
+  "toolsBeforeAndAfterReplay": 17,
+  "ownerRestartEvidence": true,
+  "ownerReplayEvidence": {
+    "checkedAt": "2026-09-14T05:29:30.940Z",
+    "runId": "01a09e61-0b3a-74fd-a443-ca28e729fc88",
+    "automationId": "01a09e60-ce62-766b-9ca5-b214e8d224e3",
+    "invocationReceiptCount": 1,
+    "sameModelCalls": 24,
+    "sameToolReceipts": 17,
+    "noNewBrowserGrant": true,
+    "actualFilesUnchanged": true,
+    "schedulerReceiptKey": "scheduled:b84e2578418c1806040a3aa9450d633ad26f1154998e8fe11ee416355e3bd771"
+  },
+  "limitations": [
+    "synthetic business material",
+    "agent-reviewed, not human/CUA GUI",
+    "no enterprise login"
+  ]
+}

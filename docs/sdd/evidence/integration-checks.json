@@ -169,6 +169,31 @@
       "scope": "At 9d628460b; actual desktop host/preloads rebuilt.",
       "logPath": "/tmp/crewon-integration-host-build-permission.log",
       "logSha256": "0615ee1efe08d6721b4f41b6a87362962b0c2dee55de2903ea6c8a45a91e3cbc"
+    },
+    {
+      "name": "Final UI full integration",
+      "counts": {
+        "filesPassed": 436,
+        "passed": 3010,
+        "failed": 0
+      },
+      "scope": "At a317d6048 product state; maxWorkers=2, unchanged assertions/timeouts. Subsequent changes only docs and acceptance script/evidence.",
+      "logPath": "/tmp/crewon-integration-ui-final-all.log",
+      "logSha256": "48b96dd20a047fe91ddfcf80fdf7f3ba3bde9936f822cb663178b2aed17efafe"
+    },
+    {
+      "name": "Final UI lint",
+      "counts": null,
+      "scope": "Same final product state.",
+      "logPath": "/tmp/crewon-integration-ui-lint-final.log",
+      "logSha256": "4edf75dd64bba90b1fbb4f3f646f6ed490400b42d42249211d286d8053a2457b"
+    },
+    {
+      "name": "Final UI build",
+      "counts": null,
+      "scope": "Same final product state including explicit permission selectors.",
+      "logPath": "/tmp/crewon-integration-ui-build-permission.log",
+      "logSha256": "16363366d6ad47233ab9f2bc0f77f3ec3c0fb0141d5b4f4f15c351dc4407542d"
     }
   ],
   "currentPackageBoundaryViolations": [
@@ -215,9 +240,18 @@
     "workerTypecheck": "passed after fresh-lease dispatch fix"
   },
   "remainingAcceptance": [
-    "Reusable recorded-source v5 real-provider trial and actual model XLSX passed owner execution plus root file verification. Explicit existing approval mode wiring and real scheduled occurrence are still in progress.",
-    "Manual/CUA validation remains unavailable while the macOS desktop is locked.",
-    "New Skill-backed scheduling and delivery use the supported local SQLite deployment; live PostgreSQL/remote delivery is not claimed."
+    "Manual/CUA and enterprise-login validation not performed; synthetic data and agent review are not a user pilot.",
+    "Remote/PostgreSQL delivery, arbitrary apps and execution while the local host sleeps are outside the implemented scope.",
+    "Existing package architecture failures remain: 23 violations, no new violations. F03 default concurrency full UI had existing soak timeouts; final root maxWorkers=2 full suite passed."
   ],
-  "subsequentSourceCommit": "03d6c2d41"
+  "subsequentSourceCommit": "03d6c2d41",
+  "latestReviewedSourceCommit": "0c689cb1e",
+  "jointAcceptance": {
+    "recording": "actual Electron capture on synthetic site",
+    "skill": "real model draft; explicitly reviewed reusable v5 without fixed answers",
+    "trial": "actual model XLSX with one per-action approval",
+    "schedule": "actual once scheduler and model XLSX with explicit existing approveForMe",
+    "replay": "same completed Run/receipt/version/files; 24 model calls and 17 tools unchanged",
+    "rootReview": "scheduled-file-review.json"
+  }
 }
