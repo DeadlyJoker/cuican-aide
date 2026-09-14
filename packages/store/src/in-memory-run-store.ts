@@ -2201,6 +2201,7 @@ export class InMemoryRunStore implements DomainStore {
   async commitTurnStart(
     input: CommitTurnStartInput,
   ): Promise<CommitTurnStartResult> {
+    if (input.skillExecution !== undefined) throw new RunStoreError("skill_execution_store_unavailable");
     const { runId, threadId } = validateTurnStartInput(input);
     const receiptKey = stableJson([
       input.idempotency.scope,

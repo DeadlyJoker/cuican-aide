@@ -899,6 +899,7 @@ export class PostgresRunStore extends PostgresThreadStore implements RunStore {
   async commitTurnStart(
     input: CommitTurnStartInput,
   ): Promise<CommitTurnStartResult> {
+    if (input.skillExecution !== undefined) throw new RunStoreError("skill_execution_store_unavailable");
     this.assertOpen();
     const { runId, threadId } = validateTurnStartInput(input);
     const client = await this.pool.connect();

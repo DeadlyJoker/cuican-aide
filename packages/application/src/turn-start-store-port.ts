@@ -22,6 +22,7 @@ export type TurnStartReceiptQuery = Readonly<{
 }>;
 
 export type CommitTurnStartInput = Readonly<{
+  skillExecution?: Readonly<{ skillId: string; executionId: string }>;
   tenantId: string;
   idempotency: IdempotencyDescriptor;
   goal: TurnStartGoalMutation;

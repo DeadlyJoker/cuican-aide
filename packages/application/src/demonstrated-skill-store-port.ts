@@ -70,6 +70,14 @@ export interface DemonstratedSkillStore {
     executionId: string,
     review: SkillTrialReview,
   ): Promise<void>;
+  findExecutionByRun(
+    scope: SkillScope,
+    runId: string,
+  ): Promise<SkillExecutionRecord | null>;
+  findReviewedTrial(
+    locator: SkillLocator,
+    ref: SkillVersionRef,
+  ): Promise<SkillExecutionRecord | null>;
   listExecutions(
     locator: SkillLocator,
   ): Promise<readonly SkillExecutionRecord[]>;
