@@ -235,7 +235,34 @@ function composeControlApi(
       digester,
       admission: new StoreBackedAgentVersionAdmission(store),
     });
-    skillHost = config.skillDatabasePath === undefined ? null : createStandaloneSkillHost({databasePath:config.skillDatabasePath,actor:config.actor,store,turns,routes:routeResolver,application,digester,clock,generationAgentVersionId:config.generationAgentVersionId});
+    const deliveries = config.deliveryStore
+      ? composeDeliveries({
+          store: config.deliveryStore,
+          threads,
+          runs: application,
+          authorization,
+        })
+      : null;
+    skillHost =
+      config.skillDatabasePath === undefined
+        ? null
+        : createStandaloneSkillHost({
+            databasePath: config.skillDatabasePath,
+            actor: config.actor,
+            store,
+            turns,
+            routes: routeResolver,
+            application,
+            digester,
+            clock,
+            generationAgentVersionId: config.generationAgentVersionId,
+            deliveryTargets: deliveries
+              ? {
+                  validateTarget: (actor, target) =>
+                    deliveries.validateTarget(actor, target, "write"),
+                }
+              : undefined,
+          });
     const automations = new AutomationApplicationService({
       skills: skillHost?.skills,
       store,
@@ -311,14 +338,7 @@ function composeControlApi(
       authorization,
     });
     const app = buildControlApi({
-      deliveries: config.deliveryStore
-        ? composeDeliveries({
-            store: config.deliveryStore,
-            threads,
-            runs: application,
-            authorization,
-          })
-        : null,
+      deliveries,
       skills: skillHost?.skills ?? null,
       skillRecordings: skillHost?.recordings ?? null,
       skillGenerations: skillHost?.generations ?? null,
