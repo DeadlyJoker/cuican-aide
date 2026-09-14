@@ -1,4 +1,7 @@
 import { RecordingHost } from "./recordingHost.ts";
+import { startDesktopBrowserExecution } from "./browserExecutionDesktop.ts";
+import type { BrowserExecutionHost } from "./browserExecutionHost.ts";
+import type { BrowserExecutionAuthorizationRequest } from "../src/lib/browser-execution/browserExecutionGrant.ts";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -85,6 +88,9 @@ async function launch(): Promise<void> {
     safeStorage,
   );
   let runtime: RuntimeSupervisor | null = null;
+  let browserExecution: Awaited<
+    ReturnType<typeof startDesktopBrowserExecution>
+  > | null = null;
   const paths = runtimePaths({
     packaged: app.isPackaged,
     repositoryRoot: repositoryRoot ?? process.resourcesPath,
@@ -97,6 +103,8 @@ async function launch(): Promise<void> {
     },
   );
   runtime = new RuntimeSupervisor({
+    browserExecution: () => browserExecution?.connection ?? null,
+    revokeBrowserExecutions: () => browserExecution?.host.revokeAll(),
     agentPlatformApiKeyForOrigin: (origin) =>
       agentPlatformCredentials.secretForOrigin(origin),
     dataDirectory: runtimeDataDirectory,
@@ -125,25 +133,34 @@ async function launch(): Promise<void> {
     },
   });
   desktopLog(`provider=${providers.active()?.providerId ?? "unconfigured"}`);
-  await runtime.start().catch((error) => {
-    process.stderr.write(
-      `CrewON runtime unavailable: ${errorMessage(error)}\n`,
-    );
-  });
-
   const window = createWindow();
   desktopLog("window created");
   const browserViews = new BrowserViewManager(window);
-  new RecordingHost({
+  const recording = new RecordingHost({
     ownerWindow: window,
     directory: join(runtimeDataDirectory, "recordings"),
     moduleDirectory,
     rendererUrl: process.env.CREWON_UI_DEV_URL?.trim(),
   });
+  browserExecution = await startDesktopBrowserExecution({
+    sessions: recording,
+    session: () => {
+      if (!runtime) throw new Error("runtime_unavailable");
+      return runtime.session();
+    },
+    dataDirectory: join(runtimeDataDirectory, "browser-execution"),
+    moduleDirectory,
+  });
+  await runtime.start().catch((error) => {
+    process.stderr.write(
+      `CrewON runtime unavailable: ${errorMessage(error)}\n`,
+    );
+  });
   registerIpc({
     agentPlatformCredentials,
     authority,
     browserViews,
+    browserExecution: browserExecution.host,
     paths,
     providers,
     runtime,
@@ -153,13 +170,26 @@ async function launch(): Promise<void> {
   await loadRenderer(window);
   desktopLog("renderer loaded");
 
-  window.on("closed", () => browserViews.destroyAll());
+  const closeBrowserExecution = () => {
+    void browserExecution
+      ?.close()
+      .catch((error) =>
+        desktopLog(`browser bridge shutdown: ${errorMessage(error)}`),
+      );
+  };
+  window.on("closed", () => {
+    closeBrowserExecution();
+    browserViews.destroyAll();
+  });
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0)
       void loadRenderer(createWindow());
   });
   app.on("window-all-closed", () => app.quit());
-  app.on("before-quit", () => void runtime?.stop());
+  app.on("before-quit", () => {
+    closeBrowserExecution();
+    void runtime?.stop();
+  });
   app.on("second-instance", () => {
     if (window.isMinimized()) window.restore();
     window.focus();
@@ -221,6 +251,7 @@ function registerIpc(options: {
   agentPlatformCredentials: AgentPlatformCredentialStore;
   authority: LocalWorkspaceAuthority;
   browserViews: BrowserViewManager;
+  browserExecution: BrowserExecutionHost;
   paths: ReturnType<typeof runtimePaths>;
   providers: ProviderCredentialStore;
   runtime: RuntimeSupervisor;
@@ -231,6 +262,7 @@ function registerIpc(options: {
     agentPlatformCredentials,
     authority,
     browserViews,
+    browserExecution,
     paths,
     providers,
     runtime,
@@ -249,6 +281,17 @@ function registerIpc(options: {
   };
 
   handle("crewon:runtime:bootstrap", () => runtime.session());
+  handle(
+    "crewon:browser-execution:authorize",
+    (input: BrowserExecutionAuthorizationRequest) =>
+      browserExecution.authorize(input),
+  );
+  handle("crewon:browser-execution:revoke", (threadId: string) =>
+    browserExecution.revoke(threadId),
+  );
+  handle("crewon:browser-execution:status", (threadId: string) =>
+    browserExecution.status(threadId),
+  );
   handle("crewon:agent-platform-credentials:catalog", () =>
     agentPlatformCredentials.catalog(),
   );
