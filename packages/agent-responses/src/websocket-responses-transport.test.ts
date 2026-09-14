@@ -147,6 +147,57 @@ test("reuses one authenticated WebSocket and sends only the new Turn suffix", as
   );
 });
 
+test("WebSocket preserves optional function arguments with the same explicit non-strict request policy as HTTP", async (context) => {
+  const fixture = await websocketFixture(context);
+  let frame: Record<string, unknown> | undefined;
+  fixture.webSocketServer.on("connection", (socket) => {
+    socket.on("message", (raw) => {
+      frame = JSON.parse(raw.toString());
+      sendCompleted(socket, "response-optional", "done");
+    });
+  });
+  const transport = new WebSocketResponsesTransport({
+    endpoint: fixture.endpoint,
+    model: "fixture-model",
+  });
+  context.after(() => transport.close());
+  const parameters = {
+    type: "object",
+    additionalProperties: false,
+    properties: { sessionId: { type: "string", minLength: 1 } },
+    required: [],
+  };
+  await collect(
+    transport.stream(
+      {
+        ...manualRequest(
+          "Observe the bound session without inventing an identifier.",
+        ),
+        tools: [
+          {
+            schemaVersion: "crewon.tool-definition.v0",
+            kind: "function",
+            name: "fixture_observe",
+            description: "Omit sessionId for discovery.",
+            execution: "serial",
+            inputSchema: parameters,
+          },
+        ],
+      },
+      signal(),
+    ),
+  );
+  assert.deepEqual(frame?.tools, [
+    {
+      type: "function",
+      name: "fixture_observe",
+      description: "Omit sessionId for discovery.",
+      parameters,
+      strict: false,
+    },
+  ]);
+});
+
 test("does not reuse one incremental baseline across different Runs", async (context) => {
   const fixture = await websocketFixture(context);
   const frames: Record<string, unknown>[] = [];

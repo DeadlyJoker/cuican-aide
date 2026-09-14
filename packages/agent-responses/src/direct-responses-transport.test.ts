@@ -62,6 +62,101 @@ test("streams through a real self-hosted Responses-compatible HTTP server withou
   });
 });
 
+for (const requestProfile of ["standard", "responsesLite"] as const) {
+  test(`HTTP ${requestProfile} preserves optional and union tool schemas by explicitly disabling provider strictification`, async (context) => {
+    let captured: Record<string, unknown> | undefined;
+    const server = createServer(async (request, response) => {
+      captured = JSON.parse(await requestBody(request));
+      response.writeHead(200, { "content-type": "text/event-stream" });
+      for (const chunk of officialStreamChunks()) response.write(chunk);
+      response.end();
+    });
+    const endpoint = await listen(context, server);
+    const parameters: Extract<
+      ModelRequest["tools"][number],
+      { kind: "function" }
+    >["inputSchema"] = {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        sessionId: { type: "string", minLength: 1 },
+        target: {
+          oneOf: [
+            {
+              type: "object",
+              properties: { targetId: { type: "string" } },
+              required: ["targetId"],
+              additionalProperties: false,
+            },
+            {
+              type: "object",
+              properties: {
+                role: { type: "string" },
+                name: { type: "string" },
+              },
+              required: ["role", "name"],
+              additionalProperties: false,
+            },
+          ],
+        },
+      },
+      required: [],
+    };
+    const original = structuredClone(parameters);
+    const transport = new DirectResponsesTransport({
+      endpoint,
+      model: "fixture-model",
+      requestProfile,
+    });
+    await collect(
+      transport.stream(
+        {
+          ...manualRequest(),
+          tools: [
+            {
+              schemaVersion: "crewon.tool-definition.v0",
+              kind: "function",
+              name: "fixture_tool",
+              description: "Optional target lookup.",
+              execution: "serial",
+              inputSchema: parameters,
+            },
+            {
+              schemaVersion: "crewon.tool-definition.v0",
+              kind: "custom",
+              name: "fixture_custom",
+              description: "Plain text.",
+              execution: "serial",
+              inputFormat: "text",
+            },
+          ],
+        },
+        signal(),
+      ),
+    );
+    assert.deepEqual(captured?.tools, [
+      {
+        type: "function",
+        name: "fixture_tool",
+        description: "Optional target lookup.",
+        parameters: original,
+        strict: false,
+      },
+      {
+        type: "custom",
+        name: "fixture_custom",
+        description: "Plain text.",
+        format: { type: "text" },
+      },
+    ]);
+    assert.deepEqual(
+      parameters,
+      original,
+      "serialization must not rewrite the pinned schema",
+    );
+  });
+}
+
 test("accepts a bounded terminal identity from a portable Responses gateway", async () => {
   const transport = new DirectResponsesTransport(
     {

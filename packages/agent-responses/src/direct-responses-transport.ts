@@ -811,6 +811,9 @@ export function toResponsesToolDefinition(
         name: definition.name,
         description: definition.description,
         parameters: definition.inputSchema,
+        // Responses can otherwise normalize optional fields into required ones.
+        // Preserve the pinned schema; each Tool still validates and authorizes input.
+        strict: false,
       }
     : {
         type: "custom",
