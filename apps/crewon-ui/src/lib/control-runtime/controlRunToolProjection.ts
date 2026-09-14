@@ -9,6 +9,13 @@ import type {
 import { parseWorkspaceChangeSummary } from "@crewon/contracts";
 import { controlHistoryReadBudget } from "./controlHistoryReadBudget";
 import { ThreadDetailSize } from "../thread/threadDetailSize";
+import {
+  applyControlImageEvent,
+  controlImageEntries,
+  controlImageProjectionComplete,
+  settleControlImageProjection,
+  type ControlImageGenerationItem,
+} from "./controlImageGeneration";
 
 const MAX_CONTROL_TOOL_ITEMS_PER_RUN = 256;
 const MAX_CONTROL_TOOL_HISTORY_RUNS = 50;
@@ -29,6 +36,7 @@ export type ControlToolItem = Extract<ThreadItem, { type: "dynamicToolCall" }> &
     controlToolKind?: "custom" | "function";
     workspaceChanges?: WorkspaceChangeSummary;
   }>;
+export type ControlRunItem = ControlToolItem | ControlImageGenerationItem;
 type ControlToolEvent = Extract<
   RunEventView,
   { type: "tool.requested" | "tool.completed" }
@@ -241,6 +249,16 @@ export function applyControlToolEvent(
   return entry.item;
 }
 
+/** One path feeds live updates, reconnect backfills, and transcript history. */
+export function applyControlRunItemEvent(
+  state: ControlToolProjectionState,
+  event: RunEventView,
+): ControlRunItem | null {
+  return (
+    applyControlImageEvent(state, event) ?? applyControlToolEvent(state, event)
+  );
+}
+
 /** Bound preview payloads separately from the 256 small identity/status entries. */
 function reserveToolPayload(
   state: ControlToolProjectionState | ControlTaskChangeProjectionState,
@@ -276,7 +294,9 @@ function measureToolPayload(item: ControlToolItem): number {
 export function controlToolProjectionComplete(
   state: ControlToolProjectionState,
 ): boolean {
-  return !overflowedToolStates.has(state);
+  return (
+    !overflowedToolStates.has(state) && controlImageProjectionComplete(state)
+  );
 }
 
 export function controlToolItems(
@@ -311,10 +331,29 @@ export function controlToolItemsWithTaskChanges(
     .map((entry) => entry.item);
 }
 
+export function controlRunItemsWithTaskChanges(
+  toolState: ControlToolProjectionState | undefined,
+  taskChangeState: ControlTaskChangeProjectionState | undefined,
+): ControlRunItem[] {
+  const tools = controlToolItemsWithTaskChanges(toolState, taskChangeState);
+  return [
+    ...tools.map((item) => ({
+      item,
+      firstSequence:
+        toolState?.get(item.id)?.firstSequence ??
+        taskChangeState?.get(item.id)?.firstSequence ??
+        0,
+    })),
+    ...controlImageEntries(toolState),
+  ]
+    .sort((left, right) => left.firstSequence - right.firstSequence)
+    .map((entry) => entry.item);
+}
+
 export function settleControlToolProjection(
   state: ControlToolProjectionState,
   terminal: Pick<RunView, "lastSequence" | "status" | "terminalAt">,
-): ControlToolItem[] {
+): ControlRunItem[] {
   if (
     terminal.terminalAt === null ||
     (terminal.status !== "canceled" &&
@@ -324,7 +363,10 @@ export function settleControlToolProjection(
     return [];
   }
   const terminalAtMs = Date.parse(terminal.terminalAt);
-  const settled: ControlToolItem[] = [];
+  const settled: ControlRunItem[] = settleControlImageProjection(
+    state,
+    terminal,
+  );
   for (const [callId, entry] of state) {
     if (entry.item.status !== "inProgress") {
       continue;
@@ -362,7 +404,7 @@ export async function backfillControlToolProjection(params: {
   onEvent?: (event: RunEventView) => void;
 }): Promise<
   Readonly<{
-    items: ControlToolItem[];
+    items: ControlRunItem[];
     lastSequence: number;
     complete: boolean;
   }>
@@ -374,7 +416,7 @@ export async function backfillControlToolProjection(params: {
     timeoutMs: params.timeoutMs,
     read: async (signal) => {
       let lastSequence = params.afterSequence;
-      const items = new Map<string, ControlToolItem>();
+      const items = new Map<string, ControlRunItem>();
       for await (const event of params.eventStream(params.client, {
         runId: params.runId,
         afterSequence: params.afterSequence,
@@ -391,7 +433,7 @@ export async function backfillControlToolProjection(params: {
         }
         lastSequence = event.sequence;
         params.onEvent?.(event);
-        const item = applyControlToolEvent(params.state, event);
+        const item = applyControlRunItemEvent(params.state, event);
         if (item) {
           items.set(item.id, item);
         }
@@ -622,7 +664,7 @@ async function loadControlToolHistory(
             return null;
           }
           lastSequence = event.sequence;
-          applyControlToolEvent(state, event);
+          applyControlRunItemEvent(state, event);
           if (event.sequence >= run.lastSequence) {
             reachedSnapshotHead = true;
             break;

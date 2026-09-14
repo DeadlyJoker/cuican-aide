@@ -166,6 +166,8 @@ export type AppThreadRuntimeHandlersParams = {
   shouldAutoCloseSidebar: () => boolean;
   untitledThreadLabel: string;
   prepareThreadExecutionContext?: () => ThreadExecutionContextPreparation | null;
+  creationWorkspaceId?: string | null;
+  isCreationWorkspaceCurrent?: () => boolean;
 };
 
 export function createAppThreadRuntimeHandlers(
@@ -201,13 +203,16 @@ export function createAppThreadRuntimeHandlers(
         params.preserveThreadsAfterConnectionLoss,
       resolveBackendCwd: params.resolveBackendCwd,
       setNotice: params.setNotice,
-      setSelectedThreadId: (threadId) => params.setSelectedThreadId(threadId),
+      setSelectedThreadId: (threadId) => {
+        if (params.isCreationWorkspaceCurrent?.() !== false) params.setSelectedThreadId(threadId);
+      },
       setSidebarOpen: params.setSidebarOpen,
       setThreads: params.setThreads,
       shouldAutoCloseSidebar: params.shouldAutoCloseSidebar,
       threadSettings,
       threadSource,
       workspaceCwd,
+      workspaceId: params.creationWorkspaceId,
       executionContextPreparation:
         params.prepareThreadExecutionContext?.() ?? null,
     });
@@ -250,7 +255,9 @@ export function createAppThreadRuntimeHandlers(
       setIsSending: params.setIsSending,
       setNotice: params.setNotice,
       setPendingComposerMentions: params.setPendingComposerMentions,
-      setSelectedThreadId: (threadId) => params.setSelectedThreadId(threadId),
+      setSelectedThreadId: (threadId) => {
+        if (threadContext.selectedThread !== null || params.isCreationWorkspaceCurrent?.() !== false) params.setSelectedThreadId(threadId);
+      },
       setThreads: params.setThreads,
       text,
       images,

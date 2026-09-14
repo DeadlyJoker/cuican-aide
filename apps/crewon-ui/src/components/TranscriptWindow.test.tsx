@@ -35,7 +35,7 @@ const labels = {
   youLabel: "You",
 };
 
-it("uses the real history controls under StrictMode without losing the active stream or scroll position", async () => {
+it("omits the history toolbar while bounded projections retain the active stream and scroll position", async () => {
   let publish: ((thread: Thread) => void) | undefined;
   const f = transcriptFixture(2400, {
     onThread: (thread) => publish?.(thread),
@@ -64,10 +64,6 @@ it("uses the real history controls under StrictMode without losing the active st
       </TranscriptNavigationScope>
     );
   }
-  const button = (text: string) =>
-    [...container.querySelectorAll<HTMLButtonElement>("button")].find(
-      (button) => button.textContent === text,
-    )!;
   try {
     await act(async () => {
       root.render(
@@ -80,9 +76,20 @@ it("uses the real history controls under StrictMode without losing the active st
       await vi.waitFor(() => expect(f.activeStreams).toEqual(["run-live"]));
     });
     expect(container.textContent).toContain("Question 2351");
+    for (const label of [
+      "更早消息",
+      "最新消息",
+      "较新消息",
+      "回到最新",
+      "汇总文件变更",
+    ]) {
+      expect(container.textContent).not.toContain(label);
+    }
     await act(async () => {
-      button("更早消息").click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await f.runtime.navigateTranscript(
+        "thread-1",
+        transcriptWindow(shown)!.olderCursor,
+      );
     });
     expect(container.textContent).toContain("Question 2301");
     expect(container.textContent).not.toContain("Question 2351");
@@ -101,8 +108,7 @@ it("uses the real history controls under StrictMode without losing the active st
     expect(transcriptWindow(shown)!.firstSequence).toBe(firstSequence);
     expect(scroller.scrollTop).toBe(230);
     await act(async () => {
-      button("回到最新").click();
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await f.runtime.navigateTranscript("thread-1", null);
     });
     expect(container.textContent).toContain("Question 2351");
     expect(container.textContent).not.toContain("Question 2301");
@@ -116,7 +122,7 @@ it("uses the real history controls under StrictMode without losing the active st
   }
 });
 
-it("retains the current page on navigation failure and cancels outstanding navigation on unmount", async () => {
+it("retains the current page on tool-history retry failure and cancels the retry on unmount", async () => {
   const f = transcriptFixture(100);
   const thread = await f.runtime.readThread("thread-1", {
     toolHistoryMode: "skip",
@@ -153,7 +159,7 @@ it("retains the current page on navigation failure and cancels outstanding navig
     );
     const button = [
       ...container.querySelectorAll<HTMLButtonElement>("button"),
-    ].find((button) => button.textContent === "更早消息")!;
+    ].find((button) => button.textContent === "重新读取工具过程")!;
     await act(async () => {
       button.click();
     });
@@ -179,7 +185,7 @@ it("retains the current page on navigation failure and cancels outstanding navig
   }
 });
 
-it("renders bounded navigation and explicit partial/unknown history states", async () => {
+it("renders partial and unknown history states without paging or file-summary controls", async () => {
   const f = transcriptFixture(2);
   const fetchWindow = f.client.getThreadTranscriptWindow.bind(f.client);
   vi.spyOn(f.client, "getThreadTranscriptWindow").mockImplementation(
@@ -195,7 +201,7 @@ it("renders bounded navigation and explicit partial/unknown history states", asy
           <TranscriptWindowControls thread={partial} locale="zh" />
         </TranscriptNavigationScope>,
       ),
-    ).toMatchSnapshot("navigation");
+    ).toMatchSnapshot("history status");
     const markup = renderToStaticMarkup(
       <Transcript
         {...labels}

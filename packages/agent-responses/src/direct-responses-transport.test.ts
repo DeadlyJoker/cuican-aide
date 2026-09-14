@@ -1152,7 +1152,7 @@ test("fails closed on non-monotonic SSE sequence and unsupported tool events", a
     {
       type: "response.output_item.done",
       sequence_number: 1,
-      item: { type: "image_generation_call", id: "image-1" },
+      item: { type: "computer_call", id: "unsupported-1" },
     },
   ]);
   await assert.rejects(

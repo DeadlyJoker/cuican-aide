@@ -23,6 +23,22 @@ async function flushAsyncWork() {
   await Promise.resolve();
 }
 
+it("opens the model settings route from a disconnected workspace", () => {
+  const setAppView = vi.fn();
+  const setSettingsSection = vi.fn();
+  const modelProviders = vi.fn();
+  const params = createParams({
+    isConnected: false,
+    setAppView,
+    setSettingsSection,
+    refreshSettingsHandlers: refreshHandlers({ modelProviders }),
+  });
+  createAppShellActionHandlers(params).openSettingsSection("model-providers");
+  expect(setAppView).toHaveBeenCalledWith("settings");
+  expect(setSettingsSection).toHaveBeenCalledWith("model-providers");
+  expect(modelProviders).toHaveBeenCalledOnce();
+});
+
 function panel(title = "Panel"): CapabilityPanel {
   return {
     actions: [],

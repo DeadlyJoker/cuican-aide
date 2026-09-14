@@ -3,6 +3,13 @@ import type { ProviderCheckpoint } from "@crewon/contracts";
 
 import { protocolError, transportError } from "./responses-errors.ts";
 import { parseResponsesSse } from "./responses-sse.ts";
+import { coalesceResponsesOutput } from "./responses-output-coalescer.ts";
+import {
+  MAX_RESPONSES_IMAGE_EVENT_BYTES,
+  ResponsesImageOutput,
+  validateResponsesImageEventSize,
+  type ResponsesImageResult,
+} from "./responses-image-output.ts";
 import {
   isPreviousResponseRejected,
   PREVIOUS_RESPONSE_REJECTED,
@@ -26,11 +33,13 @@ export type ResponsesProtocolOptions = Readonly<{
   completedCheckpoint: (responseId: string) => ProviderCheckpoint | null;
   createdCheckpoint?: (responseId: string) => ProviderCheckpoint | null;
   onResponseIdentity?: (responseId: string) => void;
+  imagesEnabled?: boolean;
 }>;
 
 /** Decodes one Responses event stream independently of its HTTP or WebSocket framing. */
 export class ResponsesProtocolDecoder {
   readonly #options: ResponsesProtocolOptions;
+  readonly #images: ResponsesImageOutput;
   #lastSequence = -1;
   #created = false;
   #responseId: string | null = null;
@@ -42,6 +51,7 @@ export class ResponsesProtocolDecoder {
 
   constructor(options: ResponsesProtocolOptions) {
     this.#options = options;
+    this.#images = new ResponsesImageOutput(options.imagesEnabled === true);
   }
 
   get terminal(): boolean {
@@ -54,6 +64,10 @@ export class ResponsesProtocolDecoder {
 
   get completedHistoryItems(): readonly ModelInputItem[] {
     return this.#completedHistoryItems.map((item) => ({ ...item }));
+  }
+
+  takeImageResults(): readonly ResponsesImageResult[] {
+    return this.#images.takeResults();
   }
 
   accept(value: unknown): readonly ModelTransportEvent[] {
@@ -71,6 +85,7 @@ export class ResponsesProtocolDecoder {
       rejectedPrevious ? "whenPresent" : this.#options.sequencePolicy,
     );
     const type = requireString(event.type, "responses_event_type_invalid");
+    if (this.#options.imagesEnabled) validateResponsesImageEventSize(event);
     switch (type) {
       case "response.created": {
         if (this.#created) {
@@ -145,6 +160,7 @@ export class ResponsesProtocolDecoder {
           });
         }
         const usage = parseUsage(response.usage);
+        this.#images.completed(response.output);
         this.#terminal = true;
         const completed: ModelTransportEvent = {
           type: "completed",
@@ -211,6 +227,10 @@ export class ResponsesProtocolDecoder {
           this.#completedHistoryItems.push(item);
           return [{ type: "output.item.completed", item }];
         }
+        if (outputItem.type === "image_generation_call") {
+          this.#images.done(outputItem, event.output_index);
+          return [];
+        }
         if (outputItem.type === "reasoning") {
           return [];
         }
@@ -251,8 +271,29 @@ export class ResponsesProtocolDecoder {
         this.#completedHistoryItems.push(item);
         return [{ type: "output.item.completed", item }];
       }
+      case "response.output_item.added": {
+        requireCreated(this.#created);
+        if (
+          isPlainObject(event.item) &&
+          event.item.type === "image_generation_call"
+        ) {
+          return this.#images.added(event);
+        }
+        return [];
+      }
+      case "response.image_generation_call.in_progress":
+      case "response.image_generation_call.generating":
+      case "response.image_generation_call.completed": {
+        requireCreated(this.#created);
+        const stage =
+          type === "response.image_generation_call.in_progress"
+            ? "in_progress"
+            : type === "response.image_generation_call.generating"
+              ? "generating"
+              : "completed";
+        return this.#images.progress(event, stage);
+      }
       case "response.in_progress":
-      case "response.output_item.added":
       case "response.content_part.added":
       case "response.content_part.done":
       case "response.output_text.done":
@@ -375,66 +416,61 @@ function completedAssistantMessageContent(
     .join("");
 }
 
-export async function* responsesProtocolEvents(
-  body: ReadableStream<Uint8Array>,
-  options: {
-    sequencePolicy: ResponsesSequencePolicy;
-    identityPolicy?: ResponsesIdentityPolicy;
-    finalOutputPolicy?: ResponsesFinalOutputPolicy;
+export type ResponsesProtocolStreamOptions = Omit<
+  ResponsesProtocolOptions,
+  "imagesEnabled"
+> &
+  Readonly<{
     outputDeltaFlushBytes?: number;
     onActivity: () => void;
-    completedCheckpoint: (responseId: string) => ProviderCheckpoint | null;
-    createdCheckpoint?: (responseId: string) => ProviderCheckpoint | null;
-    onResponseIdentity?: (responseId: string) => void;
-  },
+    persistImage?: (
+      image: ResponsesImageResult,
+    ) => Promise<Extract<ModelTransportEvent, { type: "image.generated" }>>;
+  }>;
+
+export async function* responsesProtocolEvents(
+  body: ReadableStream<Uint8Array>,
+  options: ResponsesProtocolStreamOptions,
 ): AsyncIterable<ModelTransportEvent> {
-  const decoder = new ResponsesProtocolDecoder(options);
-  const outputDeltaFlushBytes = options.outputDeltaFlushBytes;
-  let pendingOutputDelta = "";
-  for await (const item of parseResponsesSse(body, {
-    onActivity: options.onActivity,
-  })) {
-    if (item.kind === "done") {
-      if (!decoder.terminal) {
-        throw protocolError("responses_done_before_terminal");
-      }
-      continue;
-    }
-    for (const event of decoder.accept(item.value)) {
-      if (
-        outputDeltaFlushBytes !== undefined &&
-        event.type === "output.delta"
-      ) {
-        if (
-          pendingOutputDelta.length > 0 &&
-          byteLength(`${pendingOutputDelta}${event.delta}`) >
-            outputDeltaFlushBytes
-        ) {
-          yield { type: "output.delta", delta: pendingOutputDelta };
-          pendingOutputDelta = "";
-        }
-        pendingOutputDelta += event.delta;
-        if (byteLength(pendingOutputDelta) >= outputDeltaFlushBytes) {
-          yield { type: "output.delta", delta: pendingOutputDelta };
-          pendingOutputDelta = "";
-        }
-        continue;
-      }
-      if (pendingOutputDelta.length > 0) {
-        yield { type: "output.delta", delta: pendingOutputDelta };
-        pendingOutputDelta = "";
-      }
-      yield event;
-    }
-  }
-  if (pendingOutputDelta.length > 0) {
-    yield { type: "output.delta", delta: pendingOutputDelta };
-  }
-  decoder.finish();
+  const canceled = new AbortController();
+  yield* coalesceResponsesOutput(
+    rawResponsesProtocolEvents(body, options, canceled.signal),
+    {
+      maxBytes: options.outputDeltaFlushBytes,
+      maxDelayMs: 100,
+      cancelSource: () => canceled.abort(),
+    },
+  );
 }
 
-function byteLength(value: string): number {
-  return new TextEncoder().encode(value).byteLength;
+async function* rawResponsesProtocolEvents(
+  body: ReadableStream<Uint8Array>,
+  options: ResponsesProtocolStreamOptions,
+  signal: AbortSignal,
+): AsyncIterable<ModelTransportEvent> {
+  const decoder = new ResponsesProtocolDecoder({
+    ...options,
+    imagesEnabled: options.persistImage !== undefined,
+  });
+  for await (const item of parseResponsesSse(body, {
+    onActivity: options.onActivity,
+    signal,
+    ...(options.persistImage === undefined
+      ? {}
+      : { maxEventBytes: MAX_RESPONSES_IMAGE_EVENT_BYTES }),
+  })) {
+    if (item.kind === "done") {
+      if (!decoder.terminal)
+        throw protocolError("responses_done_before_terminal");
+      continue;
+    }
+    const decodedEvents = decoder.accept(item.value);
+    for (const image of decoder.takeImageResults()) {
+      yield await options.persistImage!(image);
+    }
+    yield* decodedEvents;
+  }
+  decoder.finish();
 }
 
 function validateSequence(

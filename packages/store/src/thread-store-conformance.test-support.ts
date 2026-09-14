@@ -425,6 +425,7 @@ export function threadStateFixture(): ThreadState {
     spaceId: "space-1",
     createdByActorId: "actor-1",
     title: null,
+    workspaceId: null,
     status: "active",
     revision: 1,
     lastEventSequence: 1,

@@ -45,6 +45,7 @@ export * from "./thread-task-change-query-service.ts";
 export * from "./thread-compaction-application-service.ts";
 export * from "./thread-compaction-commands.ts";
 export * from "./thread-commands.ts";
+export * from "./thread-workspace-admission-port.ts";
 export * from "./thread-store-port.ts";
 export * from "./thread-message-window-store-port.ts";
 export * from "./thread-rollback-application-service.ts";

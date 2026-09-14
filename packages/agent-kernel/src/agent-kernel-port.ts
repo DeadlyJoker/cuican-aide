@@ -65,6 +65,14 @@ type KernelEventBase = Omit<CanonicalAgentEvent, "type" | "data">;
 
 export type KernelAgentEvent =
   | (KernelEventBase & {
+      type: "model.image.progress";
+      data: import("@crewon/contracts").ModelImageProgressData;
+    })
+  | (KernelEventBase & {
+      type: "model.image.generated";
+      data: import("@crewon/contracts").ModelImageGeneratedData;
+    })
+  | (KernelEventBase & {
       type: "segment.provider_response_created";
       data: Readonly<{ checkpoint: ProviderCheckpoint }>;
     })

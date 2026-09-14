@@ -1,4 +1,5 @@
 import type { BrowserExecutionToolRuntime } from "./browser-execution-tool-runtime.ts";
+import { ModelImageArtifactSink } from "./model-image-artifact-sink.ts";
 import type { DeliveryDownloadImporter } from "./delivery-composition.ts";
 import {
   FilesystemArtifactStore,
@@ -121,12 +122,22 @@ const initialized = await (async () => {
         ),
       });
     }
+    artifactAuthority = createConfiguredArtifactAuthority();
+    const modelImageSink =
+      artifactAuthority === undefined
+        ? undefined
+        : new ModelImageArtifactSink({
+            artifacts: artifactAuthority.store,
+            keyId: artifactAuthority.keyId,
+            tenantId: runtimeTenantId,
+          });
     const agentVersionRuntimeFactory = agentVersionRuntimeBindingsPath
       ? loadAgentVersionRuntimeFactory(
           agentVersionRuntimeBindingsPath,
           process.env,
           remoteMcpOwner?.dependencies,
           nativeBootstrap?.apiKey,
+          { imageSink: modelImageSink },
         )
       : undefined;
     transport = createModelTransport(
@@ -134,6 +145,7 @@ const initialized = await (async () => {
       {
         apiKey: nativeBootstrap?.apiKey,
         providerId: nativeBootstrap?.provider?.providerId,
+        imageSink: modelImageSink,
       },
     );
     toolRuntime = await createConfiguredToolRuntime(process.env, {
@@ -141,13 +153,13 @@ const initialized = await (async () => {
         browserRuntime = runtime;
       },
     });
-    artifactAuthority = createConfiguredArtifactAuthority();
     delivery = createConfiguredRuntimeDelivery(process.env);
     return {
       agentVersionRuntimeFactory,
       ambientProviderProbe,
       browserRuntime,
       artifactAuthority,
+      modelImageSink,
       delivery,
       nativeWorkspaceReadCatalog,
       remoteMcpOwner,
@@ -174,6 +186,7 @@ const {
   agentVersionRuntimeFactory,
   ambientProviderProbe,
   artifactAuthority,
+  modelImageSink,
   delivery,
   nativeWorkspaceReadCatalog,
   remoteMcpOwner,
@@ -211,6 +224,7 @@ try {
     runtimeTenantId,
     route,
     transport,
+    modelImageSink,
     agentInstructions: process.env.CREWON_AGENT_INSTRUCTIONS?.trim() || null,
     toolRuntime,
     delivery,
@@ -352,6 +366,7 @@ function createConfiguredArtifactAuthority():
   return {
     keyId,
     store: new FilesystemArtifactStore({
+      maxInlineBytes: 8 * 1024 * 1024,
       rootDirectory: requiredEnvironment("CREWON_ARTIFACT_ROOT"),
       databasePath: requiredEnvironment("CREWON_ARTIFACT_DB_PATH"),
       encryptionKey: loadArtifactEncryptionKey(

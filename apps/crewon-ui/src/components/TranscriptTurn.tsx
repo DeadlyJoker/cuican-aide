@@ -119,7 +119,7 @@ function isTurnProcessSourceItem(
   item: ThreadItem,
   finalAgentSourceIds: Set<string>,
 ): boolean {
-  if (item.type === "userMessage" || item.type === "plan") {
+  if (item.type === "userMessage" || item.type === "plan" || item.type === "imageGeneration") {
     return false;
   }
 

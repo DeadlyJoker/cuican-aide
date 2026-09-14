@@ -137,6 +137,28 @@ export function projectRunEvent(event: RunLifecycleEvent): RunEventView {
           attempt: event.data.attempt,
         },
       };
+    case "model.image.progress":
+      return {
+        ...envelope,
+        type: event.type,
+        data: {
+          segmentId: event.data.segmentId,
+          itemId: event.data.itemId,
+          stage: event.data.stage,
+        },
+      };
+    case "model.image.generated":
+      return {
+        ...envelope,
+        type: event.type,
+        data: {
+          segmentId: event.data.segmentId,
+          itemId: event.data.itemId,
+          artifactRef: event.data.artifactRef,
+          mimeType: event.data.mimeType,
+          byteLength: event.data.byteLength,
+        },
+      };
     case "model.output.delta":
       return {
         ...envelope,

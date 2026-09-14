@@ -661,6 +661,7 @@ test("rolls back a Thread with CAS, CSRF and idempotency", async () => {
     thread: {
       threadId: "thread/with separator",
       title: "Rollback target",
+      workspaceId: null,
       status: "active" as const,
       revision: 4,
       lastMessageSequence: 2,
@@ -927,6 +928,7 @@ test("archives a Thread with CSRF, idempotency and an encoded resource id", asyn
   const thread = {
     threadId: "thread/1",
     title: "Archived",
+    workspaceId: null,
     status: "archived" as const,
     revision: 2,
     lastMessageSequence: 0,
@@ -1110,7 +1112,7 @@ test("reads one exact Thread snapshot cursor and rejects mismatches", async () =
     fetch: async () => jsonResponse(200, snapshot),
   });
 
-  assert.deepEqual(await client.getThread("thread/1"), snapshot);
+  assert.deepEqual(await client.getThread("thread/1"), { ...snapshot, thread: { ...snapshot.thread, workspaceId: null } });
   assert.equal("eventSequence" in snapshot.thread, false);
 
   for (const malformed of [
@@ -1387,6 +1389,31 @@ test("rejects Artifact bytes that do not match the immutable ETag digest", async
     client.downloadArtifact("artifact-1"),
     hasProtocolCode("control_client_artifact_digest_mismatch"),
   );
+});
+
+test("downloads digest-verified generated images through 8 MiB and rejects oversized content with or without a length header", async () => {
+  const content = new Uint8Array(8 * 1024 * 1024);
+  content.set([137, 80, 78, 71]);
+  const digest = `sha256:${createHash("sha256").update(content).digest("hex")}`;
+  const headers = {
+    "content-type": "image/png",
+    "content-disposition": "attachment; filename=artifact",
+    etag: `"${digest}"`,
+  };
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async () => new Response(content, { headers }),
+  });
+  assert.equal((await client.downloadArtifact("artifact:image-1")).content.byteLength, content.length);
+  for (const contentLength of [undefined, String(content.length + 1)]) {
+    const oversized = new ControlApiClient({
+      baseUrl: "https://control.example/",
+      fetch: async () => new Response(new Uint8Array(content.length + 1), {
+        headers: { ...headers, ...(contentLength ? { "content-length": contentLength } : {}) },
+      }),
+    });
+    await assert.rejects(oversized.downloadArtifact("artifact:image-1"), hasProtocolCode("control_client_artifact_content_too_large"));
+  }
 });
 
 test("uses the draft and Thread-scoped PIM sandbox workbench routes", async () => {
@@ -1726,3 +1753,27 @@ function hasProtocolCode(code: string): (error: unknown) => boolean {
   return (error) =>
     error instanceof ControlApiProtocolError && error.code === code;
 }
+
+
+test("preserves workspace ownership across create, list and reconnected Thread reads", async () => {
+  const thread = { threadId: "thread-a", title: null, status: "active" as const, revision: 1, lastMessageSequence: 0, forkedFromThreadId: null, forkedThroughHistorySequence: null, createdAt: "2026-09-14T00:00:00Z", updatedAt: "2026-09-14T00:00:00Z", archivedAt: null, deletedAt: null, workspaceId: "workspace-a" };
+  let currentWorkspace: string | null | undefined = "workspace-a";
+  const requests: unknown[] = [];
+  const client = new ControlApiClient({ baseUrl: "https://control.example", fetch: async (url, init = {}) => {
+    const { workspaceId: _, ...legacy } = thread;
+    const value = currentWorkspace === undefined ? legacy : { ...legacy, workspaceId: currentWorkspace };
+    if (init.method === "POST") { requests.push(JSON.parse(String(init.body))); return jsonResponse(201, { disposition: "committed", thread: value }); }
+    if (String(url).endsWith("/thread-a")) return jsonResponse(200, { thread: value, eventSequence: 1 });
+    return jsonResponse(200, { data: [value], nextCursor: null });
+  } });
+  assert.equal((await client.createThread({ title: null, workspaceId: "workspace-a" }, "workspace-create")).thread.workspaceId, "workspace-a");
+  assert.deepEqual(requests, [{ title: null, workspaceId: "workspace-a" }]);
+  assert.equal((await client.listThreads()).data[0]?.workspaceId, "workspace-a");
+  assert.equal((await client.getThread("thread-a")).thread.workspaceId, "workspace-a");
+  assert.equal((await client.getThread("thread-a")).thread.workspaceId, "workspace-a");
+  currentWorkspace = undefined;
+  assert.equal((await client.getThread("thread-a")).thread.workspaceId, null);
+  assert.equal((await client.listThreads()).data[0]?.workspaceId, null);
+  currentWorkspace = "/tmp/forged";
+  await assert.rejects(client.getThread("thread-a"), /control_client_thread_snapshot_invalid/);
+});

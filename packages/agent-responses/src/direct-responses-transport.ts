@@ -34,6 +34,10 @@ import {
   parseResponsesRateLimitHeaders,
   readBoundedErrorBody,
 } from "./responses-rate-limits.ts";
+import {
+  responsesImagePersistence,
+  type ResponsesImageSink,
+} from "./responses-image-output.ts";
 import { projectRetrievedResponse } from "./responses-retrieve.ts";
 import {
   ResponsesTurnStateAuthority,
@@ -99,6 +103,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
   readonly #fetch: ResponsesFetch;
   readonly #scheduler: ResponsesTimerScheduler;
   readonly #turnStates: ResponsesTurnStateAuthority;
+  readonly #imageSink: ResponsesImageSink | undefined;
 
   constructor(
     config: DirectResponsesTransportConfig,
@@ -107,6 +112,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
       scheduler?: ResponsesTimerScheduler;
       identity?: ResponsesTransportIdentity;
       turnStates?: ResponsesTurnStateAuthority;
+      imageSink?: ResponsesImageSink;
     } = {},
   ) {
     const requestProfile = parseResponsesRequestProfile(
@@ -161,6 +167,7 @@ export class DirectResponsesTransport implements ModelTransportPort {
             config.outputDeltaFlushBytes,
             "responses_output_delta_flush_bytes_invalid",
           );
+    this.#imageSink = dependencies.imageSink;
     this.#fetch = dependencies.fetch ?? globalThis.fetch.bind(globalThis);
     this.#scheduler = dependencies.scheduler ?? systemScheduler;
     this.#turnStates =
@@ -318,6 +325,12 @@ export class DirectResponsesTransport implements ModelTransportPort {
             ? "streamAuthoritativeWhenEmpty"
             : "strict",
         onActivity: () => idle.touch(),
+        persistImage: responsesImagePersistence({
+          sink: this.#imageSink,
+          runId: request.runId,
+          segmentId: request.segmentId,
+          signal: idle.signal,
+        }),
         ...(this.#outputDeltaFlushBytes === undefined
           ? {}
           : { outputDeltaFlushBytes: this.#outputDeltaFlushBytes }),

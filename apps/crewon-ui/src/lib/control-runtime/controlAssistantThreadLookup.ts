@@ -7,6 +7,7 @@ export async function findControlAssistantThread(
   client: Pick<ControlApiClient, "getThreadCatalog">,
   title: string,
   signal: AbortSignal,
+  workspaceId?: string | null,
 ): Promise<ThreadView | null> {
   let cursor: string | null = null;
   const recent: string[] = [];
@@ -29,6 +30,7 @@ export async function findControlAssistantThread(
     const existing = page.data.find(
       (thread) =>
         thread.title === title &&
+        (workspaceId === undefined || (thread.workspaceId ?? null) === workspaceId) &&
         thread.status === "active" &&
         thread.forkedFromThreadId === null,
     );

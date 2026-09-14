@@ -1072,6 +1072,8 @@ export interface components {
     };
     CreateThreadRequest: {
       title: string | null;
+      /** @description Immutable opaque workspace identity. Omission on legacy data is normalized to null. Filesystem paths are never accepted. */
+      workspaceId?: string | null;
     };
     AppendThreadMessageRequest: {
       expectedRevision: number;
@@ -1118,6 +1120,8 @@ export interface components {
       archivedAt: string | null;
       /** Format: date-time */
       deletedAt: string | null;
+      /** @description Immutable opaque workspace identity. Omission on legacy data is normalized to null. Filesystem paths are never accepted. */
+      workspaceId?: string | null;
     };
     /** @enum {string} */
     ThreadEventType:
@@ -1737,20 +1741,28 @@ export interface components {
     };
     ArtifactView: {
       artifactId: string;
-      /** @constant */
-      kind: "toolOutput";
+      /** @enum {string} */
+      kind: "toolOutput" | "modelImage";
       mediaType: string;
       /** @enum {string} */
       sensitivity: "public" | "internal" | "workspaceSensitive";
       contentDigest: string;
       byteLength: number;
-      source: {
-        /** @constant */
-        kind: "toolOutput";
-        runId: string;
-        stepId: string;
-        callId: string;
-      };
+      source:
+        | {
+            /** @constant */
+            kind: "toolOutput";
+            runId: string;
+            stepId: string;
+            callId: string;
+          }
+        | {
+            /** @constant */
+            kind: "modelImage";
+            runId: string;
+            segmentId: string;
+            itemId: string;
+          };
       retention: {
         /** @constant */
         kind: "run";
@@ -2124,7 +2136,9 @@ export interface components {
       | components["schemas"]["SegmentProviderContinuationEventView"]
       | components["schemas"]["SegmentFailedEventView"]
       | components["schemas"]["PlanProposedEventView"]
-      | components["schemas"]["MessageCompletedEventView"];
+      | components["schemas"]["MessageCompletedEventView"]
+      | components["schemas"]["ModelImageProgressEventView"]
+      | components["schemas"]["ModelImageGeneratedEventView"];
     ModelProviderSettingView: {
       providerId: string;
       displayName: string;
@@ -2206,6 +2220,28 @@ export interface components {
       status: components["schemas"]["RunStatus"];
       cancelRequested: boolean;
       revision: number;
+    };
+    ModelImageProgressEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "model.image.progress";
+      data: {
+        segmentId: string;
+        itemId: string;
+        /** @enum {string} */
+        stage: "in_progress" | "generating" | "completed";
+      };
+    };
+    ModelImageGeneratedEventView: components["schemas"]["RunEventEnvelope"] & {
+      /** @constant */
+      type: "model.image.generated";
+      data: {
+        segmentId: string;
+        itemId: string;
+        artifactRef: string;
+        /** @enum {string} */
+        mimeType: "image/png" | "image/jpeg" | "image/webp";
+        byteLength: number;
+      };
     };
   };
   responses: {

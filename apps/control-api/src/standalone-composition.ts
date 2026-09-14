@@ -1,3 +1,4 @@
+import { createDesktopWorkspaceAdmission } from "./desktop-workspace-admission.ts";
 import { createStandaloneSkillHost } from "./standalone-skill-host.ts";
 import type { StorageAdmissionPort } from "@crewon/application";
 import type { DeliveryStorePort } from "@crewon/application";
@@ -59,6 +60,7 @@ type ControlApiCompositionConfig = Readonly<{
   deliveryStore?: DeliveryStorePort;
   skillDatabasePath?: string;
   generationAgentVersionId?: string;
+  desktopWorkspaceRegistryPath?: string;
   storageAdmission?: StorageAdmissionPort;
   localStoragePaths?: readonly string[];
   actor: ActorContext;
@@ -185,6 +187,7 @@ function composeControlApi(
       ids,
     });
     const threads = new ThreadApplicationService({
+      workspaceAdmission: createDesktopWorkspaceAdmission(config.desktopWorkspaceRegistryPath, config.actor),
       store,
       authorization,
       clock,

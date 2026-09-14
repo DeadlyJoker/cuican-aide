@@ -41,6 +41,30 @@ test("requires scan evidence for clean or blocked content", () => {
   );
 });
 
+test("accepts bounded raster image metadata and rejects source/content kind drift", () => {
+  const image = {
+    ...record(),
+    kind: "modelImage",
+    mediaType: "image/png",
+    byteLength: 3 * 1024 * 1024,
+    source: {
+      kind: "modelImage",
+      runId: "run-1",
+      segmentId: "segment-1",
+      itemId: "image-1",
+    },
+  };
+  assert.deepEqual(parseArtifactRecord(image), image);
+  for (const invalid of [
+    { ...image, byteLength: 8 * 1024 * 1024 + 1 },
+    { ...image, mediaType: "image/svg+xml" },
+    { ...image, source: record().source },
+    { ...record(), source: image.source },
+    { ...image, source: { ...image.source, itemId: "file:///secret" } },
+  ])
+    assert.throws(() => parseArtifactRecord(invalid));
+});
+
 function record() {
   return {
     schemaVersion: "crewon.artifact.v0" as const,

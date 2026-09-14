@@ -125,13 +125,6 @@ async function launch(): Promise<void> {
       );
       return result.status === "ok" ? result.models : null;
     },
-    workspaceRoot: () => {
-      try {
-        return authority.root();
-      } catch {
-        return null;
-      }
-    },
   });
   desktopLog(`provider=${providers.active()?.providerId ?? "unconfigured"}`);
   const window = createWindow();
@@ -363,20 +356,19 @@ function registerIpc(options: {
   });
   handle("crewon:workspace:select-and-register", async (request: unknown) => {
     const result = await dialog.showOpenDialog(window, {
-      title: "选择本地工作区",
+      title: "新增本地工作空间",
       properties: ["openDirectory", "createDirectory"],
     });
     if (result.canceled || result.filePaths[0] === undefined)
       return authority.canceled(request);
-    const response = authority.select(result.filePaths[0], request);
-    await runtime.restart();
-    return response;
+    return authority.select(result.filePaths[0], request);
   });
-  handle("crewon:workspace:clear", async (request: unknown) => {
-    const response = authority.clear(request);
-    await runtime.restart();
-    return response;
-  });
+  handle("crewon:workspace:activate", (workspaceId: string, request: unknown) =>
+    authority.activate(workspaceId, request),
+  );
+  handle("crewon:workspace:clear", (request: unknown) =>
+    authority.clear(request),
+  );
   handle("crewon:providers:catalog", () => providers.catalog());
   handle("crewon:providers:activate", (providerId: string) =>
     providers.activate(providerId),

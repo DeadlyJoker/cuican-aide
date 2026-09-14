@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-14",
+  "baseCommit": "1e8329ad4252c0369225b9af7361473fecb45de8",
+  "scope": "Uncommitted integration worktree UI changes. React DOM and Control runtime contract tests use synthetic records and mock services; this record does not claim native picker, model execution, or installed-app verification.",
+  "userPaths": [
+    "Sidebar + is always 新增空间 and calls native selectAndRegister. A canceled folder picker keeps the selected conversation; only a committed selection opens a new-task draft.",
+    "Every registered workspace remains visible, including empty workspaces. Each conversation appears only under its server-owned workspaceId; legacy null/missing ownership remains in 无工作空间.",
+    "Choosing an existing workspace uses activate without replacing the Control runtime. 取消选择工作空间 clears active selection without removing registry entries or rewriting conversation ownership.",
+    "Selecting a saved conversation follows its workspaceId for active filesystem context. A workspace activation failure is visible and gates current-conversation send and file actions.",
+    "Ordinary first sends, Assistant creation, Skill trials/execution, Skill schedule preparation, and Office group conversations carry the captured active workspaceId. Assistant and Office history lookup do not adopt conversations from another workspace.",
+    "Late new-conversation selection callbacks do not select their result after the user changes workspace. Skill operation state is scoped by workspace, and old preparation callbacks cannot dispatch after a workspace switch."
+  ],
+  "narrowVerification": {
+    "command": "pnpm --filter @crewon/ui exec vitest run src/lib/control-runtime/useControlWorkspaceRuntime.test.ts src/lib/control-runtime/controlThreadRuntime.test.ts src/components/app/CommandWorkspaceChrome.test.tsx src/components/app/CommandWorkspaceSkillLibrary.test.tsx src/lib/app/handlers/appThreadRuntimeHandlers.test.ts src/lib/thread/threadMessageActions.test.ts src/components/app/CommandWorkspaceMultiWorkspace.test.tsx src/lib/control-runtime/useControlThreadWorkspaceSelection.test.tsx src/lib/control-runtime/controlAutomationRuntime.test.ts src/components/skill/useSkillScheduleEntry.test.tsx src/components/app/ControlCommandOfficeRoomAdapter.test.tsx src/lib/shared/libArchitecture.test.ts --maxWorkers=2",
+    "filesPassed": 12,
+    "testsPassed": 266,
+    "testsFailed": 0,
+    "log": "/tmp/crewon-multi-workspace-narrow-final.log",
+    "logSha256": "cd8e55680748c38213af08922f0b28edf3dc1dcaba7a609edb922051617796cc",
+    "newSnapshot": "apps/crewon-ui/src/components/app/__snapshots__/CommandWorkspaceMultiWorkspace.test.tsx.snap",
+    "gitDiffCheck": "passed"
+  },
+  "commandWorkspaceRegression": {
+    "change": "Updated the Control sidebar fixture to include its registered workspaceId and the conversation's matching persisted owner. Kept all conversation-chrome and archive assertions and added the workspace group ID check.",
+    "command": "pnpm --filter @crewon/ui exec vitest run src/components/app/CommandWorkspace.test.tsx --maxWorkers=2",
+    "filesPassed": 1,
+    "testsPassed": 58,
+    "testsFailed": 0,
+    "log": "/tmp/crewon-workspace-command-regression.log",
+    "logSha256": "d6ef29fb5dfdeb1cd3299f917d96680cd7c0a58cd99da0e2a49f8864c3ccfb11"
+  },
+  "compatibilityAudit": {
+    "exactKeyReaders": [
+      "controlThreadRuntime.validateThreadSnapshotResponse",
+      "controlAutomationRuntime.validateActiveThread"
+    ],
+    "change": "Both readers accept only the additional optional workspaceId field and validate it through the shared contract parser. Unknown keys remain rejected. Rollback responses must preserve workspaceId.",
+    "legacy": "Missing workspaceId normalizes to null; active native selection is never substituted as ownership.",
+    "internalDefinitionThreads": "Expert/Workflow definition markers remain unbound metadata records. Runtime forks inherit ownership from their parent on the server."
+  },
+  "finalChecks": {
+    "typecheck": "Workspace changes have no remaining TypeScript diagnostics. The concurrent final check reported one error in the separate pagination task's TranscriptWindowControls.tsx:60; that task and root coordinator were notified.",
+    "typecheckLog": "/tmp/crewon-workspace-ui-types.log",
+    "fullUiBuildAndInstalledApp": "Owned by the root coordinator after both concurrent UI tasks are ready."
+  }
+}

@@ -134,6 +134,9 @@ export function createAppShellActionHandlers(
       });
     },
     openSettingsSection: (section) => {
+      params.setAppView("settings");
+      params.setCapabilityDockOpen(false);
+      params.setInspectorOpen(false);
       openSettingsSectionAction({
         demoSettingsPanel,
         isDemo: params.isDemo,

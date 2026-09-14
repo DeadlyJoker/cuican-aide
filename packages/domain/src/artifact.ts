@@ -1,13 +1,20 @@
-export type ArtifactKind = "toolOutput";
+export type ArtifactKind = "toolOutput" | "modelImage";
 export type ArtifactSensitivity = "public" | "internal" | "workspaceSensitive";
 
-export type ArtifactSource = Readonly<{
-  kind: "toolOutput";
-  runId: string;
-  stepId: string;
-  attemptId: string;
-  callId: string;
-}>;
+export type ArtifactSource =
+  | Readonly<{
+      kind: "toolOutput";
+      runId: string;
+      stepId: string;
+      attemptId: string;
+      callId: string;
+    }>
+  | Readonly<{
+      kind: "modelImage";
+      runId: string;
+      segmentId: string;
+      itemId: string;
+    }>;
 
 export type ArtifactRecord = Readonly<{
   schemaVersion: "crewon.artifact.v0";
@@ -84,7 +91,7 @@ export function parseArtifactRecord(input: unknown): ArtifactRecord {
   ] as const) {
     requireOpaqueId(value, code);
   }
-  if (artifact.kind !== "toolOutput") {
+  if (artifact.kind !== "toolOutput" && artifact.kind !== "modelImage") {
     throw new ArtifactError("artifact_kind_invalid");
   }
   if (
@@ -118,8 +125,22 @@ export function parseArtifactRecord(input: unknown): ArtifactRecord {
   const retention = parseRetention(artifact.retention, createdAt);
   const encryption = parseEncryption(artifact.encryption);
   const scan = parseScan(artifact.scan);
-  if (artifact.mediaType !== "text/plain" || scan.status === "pending") {
+  if (source.kind !== artifact.kind) {
+    throw new ArtifactError("artifact_source_invalid");
+  }
+  if (
+    artifact.kind === "toolOutput" &&
+    (artifact.mediaType !== "text/plain" || scan.status === "pending")
+  ) {
     throw new ArtifactError("artifact_tool_output_metadata_invalid");
+  }
+  if (
+    artifact.kind === "modelImage" &&
+    (!["image/png", "image/jpeg", "image/webp"].includes(artifact.mediaType) ||
+      Number(artifact.byteLength) > 8 * 1024 * 1024 ||
+      scan.status === "pending")
+  ) {
+    throw new ArtifactError("artifact_model_image_metadata_invalid");
   }
   return structuredClone({
     ...artifact,
@@ -132,6 +153,13 @@ export function parseArtifactRecord(input: unknown): ArtifactRecord {
 
 function parseSource(value: unknown): ArtifactSource {
   const source = requireObject(value, "artifact_source_invalid");
+  if (source.kind === "modelImage") {
+    requireExactKeys(source, ["kind", "runId", "segmentId", "itemId"]);
+    for (const id of [source.runId, source.segmentId, source.itemId]) {
+      requireOpaqueId(id, "artifact_source_invalid");
+    }
+    return structuredClone(source) as ArtifactSource;
+  }
   requireExactKeys(source, ["attemptId", "callId", "kind", "runId", "stepId"]);
   if (source.kind !== "toolOutput") {
     throw new ArtifactError("artifact_source_invalid");

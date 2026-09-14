@@ -20,7 +20,7 @@ export interface SkillLibraryControlClient {
   delivery?: Pick<DeliveryControlClient, "catalog">;
   requestSkill(path: string, init?: RequestInit): Promise<Response>;
   createThread(
-    body: { title: string | null },
+    body: { title: string | null; workspaceId?: string | null },
     idempotencyKey: string,
   ): Promise<{ thread: { threadId: string; revision: number } }>;
   getThread(threadId: string): Promise<{
@@ -33,6 +33,7 @@ export type SkillLibraryHostProps = {
   controlClient: SkillLibraryControlClient;
   query?: string;
   selectedThreadId?: string | null;
+  workspaceId?: string | null;
   selectedThreadTitle?: string;
   openRequest?: SkillLibraryOpenRequest | null;
   onOpenRequestHandled?: (requestId: string) => void;
@@ -58,7 +59,7 @@ const pendingGenerations = new WeakMap<
 
 export function SkillLibraryHost(props: SkillLibraryHostProps) {
   return (
-    <SkillLibraryContent key={skillClientKey(props.controlClient)} {...props} />
+    <SkillLibraryContent key={`${skillClientKey(props.controlClient)}:${props.workspaceId ?? "unbound"}`} {...props} />
   );
 }
 
@@ -66,6 +67,7 @@ function SkillLibraryContent({
   controlClient,
   query = "",
   selectedThreadId = null,
+  workspaceId,
   selectedThreadTitle,
   openRequest = null,
   onOpenRequestHandled,
@@ -187,7 +189,7 @@ function SkillLibraryContent({
     if (!isCurrent()) throw new Error("skill_client_scope_changed");
     if (!selected) throw new Error("skill_selection_required");
     const created = await controlClient.createThread(
-      { title: `Skill · ${selected.draft.name}` },
+      { title: `Skill · ${selected.draft.name}`, ...(workspaceId === undefined ? {} : { workspaceId }) },
       `skill-thread:${executionId}`,
     );
     if (!isCurrent()) throw new Error("skill_client_scope_changed");
@@ -348,20 +350,20 @@ function SkillLibraryContent({
             client={client}
             executionTarget={null}
             executionAttemptStore={{
-              get: () => attempts.get(selected.skillId) ?? null,
+              get: () => attempts.get(`${workspaceId ?? "unbound"}:${selected.skillId}`) ?? null,
               set: (attempt) => {
-                if (attempt) attempts.set(selected.skillId, attempt);
-                else attempts.delete(selected.skillId);
+                if (attempt) attempts.set(`${workspaceId ?? "unbound"}:${selected.skillId}`, attempt);
+                else attempts.delete(`${workspaceId ?? "unbound"}:${selected.skillId}`);
               },
             }}
             prepareExecutionTarget={prepareExecutionTarget}
             prepareExecution={prepareExecution}
             selectedThreadId={executionThreadId}
             generationAttemptStore={{
-              get: () => generations.get(selected.skillId) ?? null,
+              get: () => generations.get(`${workspaceId ?? "unbound"}:${selected.skillId}`) ?? null,
               set: (attempt) => {
-                if (attempt) generations.set(selected.skillId, attempt);
-                else generations.delete(selected.skillId);
+                if (attempt) generations.set(`${workspaceId ?? "unbound"}:${selected.skillId}`, attempt);
+                else generations.delete(`${workspaceId ?? "unbound"}:${selected.skillId}`);
               },
             }}
             onAddToSchedule={

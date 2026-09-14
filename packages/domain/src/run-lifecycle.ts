@@ -1,4 +1,9 @@
 import {
+  validModelImageEventData,
+  type ModelImageProgressEventData,
+  type ModelImageGeneratedEventData,
+} from "./model-image-event.ts";
+import {
   parseAutomationInvocationOrigin,
   type AutomationInvocationOrigin,
 } from "./automation.ts";
@@ -173,6 +178,14 @@ export type RunLifecycleEvent =
         code: string;
         discardedOutput: boolean;
       }>;
+    })
+  | (RunEventBase & {
+      type: "model.image.progress";
+      data: ModelImageProgressEventData;
+    })
+  | (RunEventBase & {
+      type: "model.image.generated";
+      data: ModelImageGeneratedEventData;
     })
   | (RunEventBase & {
       type: "model.output.delta";
@@ -539,6 +552,14 @@ export function reduceRunLifecycleEvent(
       requireStatus(state, event.type, ["running"]);
       validateSegmentIdentity(event.data);
       requirePositiveInteger(event.data.attempt, "segment_attempt_invalid");
+      return next;
+    case "model.image.progress":
+    case "model.image.generated":
+      requireStatus(state, event.type, ["running"]);
+      validateSegmentIdentity(event.data);
+      if (!validModelImageEventData(event.type, event.data)) {
+        throw new RunLifecycleError("model_image_metadata_invalid");
+      }
       return next;
     case "model.output.delta":
       requireStatus(state, event.type, ["running"]);

@@ -1,4 +1,4 @@
-import { parseSkillRunToolPermissionMode } from "@crewon/contracts";
+import { parseSkillRunToolPermissionMode, normalizeThreadViewWorkspace, parseThreadWorkspaceId } from "@crewon/contracts";
 import {
   parseSkillInvocationSpec,
   parseAutomationParameterBindings,
@@ -182,7 +182,7 @@ export type SandboxCommandView = Readonly<{
   stdout: string;
 }>;
 
-const MAX_ARTIFACT_DOWNLOAD_BYTES = 1024 * 1024;
+const MAX_ARTIFACT_DOWNLOAD_BYTES = 8 * 1024 * 1024;
 const MAX_RUN_PLAN_RESPONSE_BYTES = 16 * 1024;
 const MAX_SANDBOX_DIFF_BYTES = 256 * 1024;
 const MAX_SANDBOX_GIT_SUMMARY_BYTES = 16 * 1024;
@@ -350,21 +350,21 @@ export class ControlApiClient {
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
   ): Promise<ThreadMutationResponse> {
-    return this.#json("POST", "/api/v1/threads", body, {
+    return this.#json<ThreadMutationResponse>("POST", "/api/v1/threads", body, {
       ...options,
       idempotencyKey,
       expectedStatuses: [200, 201],
-    });
+    }).then((response) => ({ ...response, thread: normalizeThreadViewWorkspace(response.thread) }));
   }
 
   listThreads(
     query: { cursor?: string | null; limit?: number } = {},
     options: ControlApiRequestOptions = {},
   ): Promise<ListThreadsResponse> {
-    return this.#json("GET", withQuery("/api/v1/threads", query), null, {
+    return this.#json<ListThreadsResponse>("GET", withQuery("/api/v1/threads", query), null, {
       ...options,
       expectedStatuses: [200],
-    });
+    }).then((response) => ({ ...response, data: response.data.map(normalizeThreadViewWorkspace) }));
   }
 
   async getThreadCatalog(
@@ -610,7 +610,7 @@ export class ControlApiClient {
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
   ): Promise<ThreadMutationResponse> {
-    return this.#json(
+    return this.#json<ThreadMutationResponse>(
       "POST",
       `/api/v1/threads/${resourceId(threadId)}:archive`,
       body,
@@ -621,7 +621,7 @@ export class ControlApiClient {
         requireIdempotency: true,
         expectedStatuses: [200],
       },
-    );
+    ).then((response) => ({ ...response, thread: normalizeThreadViewWorkspace(response.thread) }));
   }
 
   rollbackThread(
@@ -630,7 +630,7 @@ export class ControlApiClient {
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
   ): Promise<ThreadMutationResponse> {
-    return this.#json(
+    return this.#json<ThreadMutationResponse>(
       "POST",
       `/api/v1/threads/${resourceId(threadId)}:rollback`,
       body,
@@ -641,7 +641,7 @@ export class ControlApiClient {
         requireIdempotency: true,
         expectedStatuses: [200, 201],
       },
-    );
+    ).then((response) => ({ ...response, thread: normalizeThreadViewWorkspace(response.thread) }));
   }
 
   unarchiveThread(
@@ -650,7 +650,7 @@ export class ControlApiClient {
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
   ): Promise<ThreadMutationResponse> {
-    return this.#json(
+    return this.#json<ThreadMutationResponse>(
       "POST",
       `/api/v1/threads/${resourceId(threadId)}:unarchive`,
       body,
@@ -661,7 +661,7 @@ export class ControlApiClient {
         requireIdempotency: true,
         expectedStatuses: [200],
       },
-    );
+    ).then((response) => ({ ...response, thread: normalizeThreadViewWorkspace(response.thread) }));
   }
 
   renameThread(
@@ -670,7 +670,7 @@ export class ControlApiClient {
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
   ): Promise<ThreadMutationResponse> {
-    return this.#json(
+    return this.#json<ThreadMutationResponse>(
       "POST",
       `/api/v1/threads/${resourceId(threadId)}:rename`,
       body,
@@ -681,7 +681,7 @@ export class ControlApiClient {
         requireIdempotency: true,
         expectedStatuses: [200],
       },
-    );
+    ).then((response) => ({ ...response, thread: normalizeThreadViewWorkspace(response.thread) }));
   }
 
   deleteThread(
@@ -690,7 +690,7 @@ export class ControlApiClient {
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
   ): Promise<ThreadMutationResponse> {
-    return this.#json(
+    return this.#json<ThreadMutationResponse>(
       "POST",
       `/api/v1/threads/${resourceId(threadId)}:delete`,
       body,
@@ -701,7 +701,7 @@ export class ControlApiClient {
         requireIdempotency: true,
         expectedStatuses: [200],
       },
-    );
+    ).then((response) => ({ ...response, thread: normalizeThreadViewWorkspace(response.thread) }));
   }
 
   getThreadGoal(
@@ -939,12 +939,12 @@ export class ControlApiClient {
     idempotencyKey: string,
     options: ControlApiRequestOptions = {},
   ): Promise<ThreadMutationResponse> {
-    return this.#json(
+    return this.#json<ThreadMutationResponse>(
       "POST",
       `/api/v1/threads/${resourceId(threadId)}/forks`,
       body,
       { ...options, idempotencyKey, expectedStatuses: [200, 201] },
-    );
+    ).then((response) => ({ ...response, thread: normalizeThreadViewWorkspace(response.thread) }));
   }
 
   async getThreadActiveRun(
@@ -1989,7 +1989,7 @@ function parseGetThreadResponse(
       "threadId",
       "title",
       "updatedAt",
-    ]) ||
+    ], ["workspaceId"]) ||
     typeof input.thread.threadId !== "string" ||
     input.thread.threadId !== expectedThreadId ||
     !Number.isSafeInteger(input.eventSequence) ||
@@ -2015,7 +2015,13 @@ function parseGetThreadResponse(
   ) {
     throw new ControlApiProtocolError("control_client_thread_snapshot_invalid");
   }
-  return structuredClone(input) as GetThreadResponse;
+  try {
+    parseThreadWorkspaceId(input.thread.workspaceId);
+    const response = structuredClone(input) as GetThreadResponse;
+    return { ...response, thread: normalizeThreadViewWorkspace(response.thread) };
+  } catch {
+    throw new ControlApiProtocolError("control_client_thread_snapshot_invalid");
+  }
 }
 
 function parseListThreadRunsResponse(
@@ -2229,10 +2235,11 @@ function isAutomationSchedule(input: unknown): input is AutomationSchedule {
 function hasExactKeys(
   value: unknown,
   expected: readonly string[],
+  optional: readonly string[] = [],
 ): value is Record<string, unknown> {
   return (
     isPlainObject(value) &&
-    JSON.stringify(Object.keys(value).sort()) ===
+    JSON.stringify(Object.keys(value).filter((key) => !optional.includes(key)).sort()) ===
       JSON.stringify([...expected].sort())
   );
 }

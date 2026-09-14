@@ -1,6 +1,23 @@
 # DMG 打包与安装验收
 
-## 当前安装包：0.1.1 登录修复
+## 当前安装包：0.1.3 图片流与工作空间修复
+
+2026-09-14，DMG 构建和镜像校验通过。新版已从镜像解包并核对 ASAR；Mac 当前锁屏，覆盖安装及最终 GUI 验收等待解锁，不能把包内服务测试写成界面验收。当前 `/Applications/CrewON.app` 仍为 0.1.2。
+
+- [CrewON-0.1.3-arm64.dmg](../../apps/crewon-ui/release/CrewON-0.1.3-arm64.dmg)：175,842,228 字节。
+- SHA-256：`043c94072d1c8407cbb78618c580da8dfcc56f54b624e8995a2278a2a1f0ed89`。
+- 镜像 App 的 ASAR SHA-256：`1b64a7fae6ae0337e581c7bad41910e61a8e0a3a9a14017c81e26e3319b26acb`。
+- 图片流不再将 base64 当普通文字；生成状态即时展示，图片加密存为附件，支持认证预览和保存。每图最多 8 MiB，普通文字按 100 ms 刷新。
+- 多工作空间加号新增、会话固定归属、文件工具按会话目录执行；切换空间不重启服务。两组无用消息/列表导航已移除。
+- Finder 的最小 PATH 下，缺少 Git/pnpm 不再阻止整个本地服务启动；相关命令在缺少依赖时明确失败，文件工具保持可用。
+
+最终根 UI 全测 445 文件 / 3112 项通过，随后图片引用边界窄测 29 项通过；Worker 484、Control API 232、相关 packages 1270 项通过。外部环境依赖测试按原条件跳过，未放宽规则。全部 packages 类型检查、UI/宿主、Worker/Control 类型检查及入口边界通过。详见 [本版检查记录](evidence/desktop-0.1.3-checks.json)。
+
+直接启动新 App 的 Electron Node 与包内服务，在独立数据目录、最小 Finder PATH 下验证了新增 A/B、服务不中断、会话归属和重启恢复。真实测试提供方使用已有本机凭据：gpt-5.5 在 2.95 秒发出图片进度，31.0 秒完成 1,806,045 字节 PNG；认证下载、实际图片检查、服务重启后再次下载逐字节一致均通过。见 [真实模型记录](evidence/packaged-image-smoke.json) 和 [实际产图](evidence/packaged-image-smoke.png)。这是包内服务测试，GUI 预览与保存按钮仍需解锁后验证。
+
+未把 API key、密码、用户数据库或环境文件放进安装包。保留现有本机 ad-hoc 签名；未完成 Developer ID 签名/Apple 公证，不是公开分发验收。历史记录如下。
+
+## 0.1.1 登录修复历史
 
 2026-09-14，已完成覆盖安装，并在 `/Applications/CrewON.app` 实际确认账号登录、云端资源加载与退出重启后的会话恢复。原用户数据保留，旧 App 备份在 `apps/crewon-ui/release/installed-backups/`。
 

@@ -162,6 +162,7 @@ describe("React catalog lifecycle", () => {
     });
     const runtime = { catalog, readThread } as unknown as ControlThreadRuntime;
     let state!: ReturnType<typeof useAppThreadState>;
+    let catalogNavigation!: ReturnType<typeof useControlThreadCatalog>;
     function Probe() {
       state = useAppThreadState();
       state.selectedThreadIdRef.current = state.selectedThreadId;
@@ -182,6 +183,7 @@ describe("React catalog lifecycle", () => {
         setThreadCatalogPage: state.setThreadCatalogPage,
         setThreads: state.setThreads,
       });
+      catalogNavigation = navigation;
       const thread =
         state.threads.find((thread) => thread.id === state.selectedThreadId) ??
         null;
@@ -272,10 +274,13 @@ describe("React catalog lifecycle", () => {
       const selected = catalogThread(1300).threadId;
       expect(state.selectedThreadId).toBe(selected);
       expect(readThread).toHaveBeenCalledTimes(1);
-      const older = [...element.querySelectorAll("button")].find(
-        (button) => button.textContent === "Older",
-      )!;
-      act(() => older.click());
+      expect(
+        [...element.querySelectorAll("button")].some((button) =>
+          ["Older", "Newer", "Latest"].includes(button.textContent ?? ""),
+        ),
+      ).toBe(false);
+      expect(catalogNavigation).toBeDefined();
+      act(() => catalogNavigation!.onOlder());
       await flush();
       expect(state.threadCatalogIds).not.toContain(selected);
       expect(state.selectedThreadId).toBe(selected);
@@ -307,7 +312,8 @@ describe("React catalog lifecycle", () => {
       const continuation = [...element.querySelectorAll("button")].find(
         (button) => button.textContent === "Continue search",
       );
-      expect(continuation?.disabled).toBe(false);
+      expect(continuation).toBeUndefined();
+      expect(catalogNavigation?.hasOlder).toBe(true);
       expect(
         element.querySelector<HTMLElement>("[data-search-empty]")?.hidden,
       ).toBe(true);

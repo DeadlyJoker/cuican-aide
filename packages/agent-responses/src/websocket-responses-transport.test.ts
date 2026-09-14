@@ -710,6 +710,127 @@ test("matches the shared Rust fallback and sticky transport decisions", async (c
   );
 });
 
+test("HTTP fallback receives the image sink while unsupported WebSocket images fail explicitly", async (context) => {
+  let httpRequests = 0;
+  let persisted = 0;
+  const fixture = await websocketFixture(context, (_request, response) => {
+    httpRequests++;
+    response.writeHead(200, { "content-type": "text/event-stream" });
+    const item = {
+      type: "image_generation_call",
+      id: "image-1",
+      status: "completed",
+      output_format: "png",
+      result: Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).toString("base64"),
+    };
+    for (const event of [
+      {
+        type: "response.created",
+        sequence_number: 0,
+        response: { id: "resp-image" },
+      },
+      {
+        type: "response.output_item.added",
+        sequence_number: 1,
+        output_index: 0,
+        item: {
+          type: "image_generation_call",
+          id: "image-1",
+          status: "in_progress",
+        },
+      },
+      {
+        type: "response.output_item.done",
+        sequence_number: 2,
+        output_index: 0,
+        item,
+      },
+      {
+        type: "response.completed",
+        sequence_number: 3,
+        response: { id: "resp-image", status: "completed", output: [item] },
+      },
+    ])
+      response.write(`data: ${JSON.stringify(event)}\n\n`);
+    response.end();
+  });
+  let websocketImages = false;
+  fixture.webSocketServer.on("connection", (socket) => {
+    socket.once("message", () => {
+      if (!websocketImages) {
+        socket.close();
+        return;
+      }
+      socket.send(
+        JSON.stringify({
+          type: "response.created",
+          sequence_number: 0,
+          response: { id: "resp-image" },
+        }),
+      );
+      socket.send(
+        JSON.stringify({
+          type: "response.output_item.added",
+          sequence_number: 1,
+          output_index: 0,
+          item: {
+            type: "image_generation_call",
+            id: "image-1",
+            status: "in_progress",
+          },
+        }),
+      );
+    });
+  });
+  const dependencies = {
+    imageSink: {
+      persist: async () => {
+        persisted++;
+        return { artifactRef: "artifact-image" };
+      },
+    },
+  };
+  const fallback = new ResilientResponsesTransport(
+    { endpoint: fixture.endpoint, model: "fixture", websocketMaxRetries: 0 },
+    dependencies,
+  );
+  context.after(() => fallback.close());
+  const events = await collect(
+    fallback.stream(manualRequest("draw"), signal()),
+  );
+  assert.equal(events[0]?.type, "transport.fallback");
+  assert.deepEqual(
+    events.find((event) => event.type === "image.generated"),
+    {
+      type: "image.generated",
+      itemId: "image-1",
+      artifactRef: "artifact-image",
+      mimeType: "image/png",
+      byteLength: 8,
+    },
+  );
+  assert.equal(persisted, 1);
+  websocketImages = true;
+  const unsupported = new ResilientResponsesTransport(
+    { endpoint: fixture.endpoint, model: "fixture", websocketMaxRetries: 0 },
+    dependencies,
+  );
+  context.after(() => unsupported.close());
+  await assert.rejects(
+    collect(unsupported.stream(manualRequest("draw"), signal())),
+    (error: unknown) =>
+      error instanceof ModelTransportError &&
+      error.code === "responses_image_sink_unavailable" &&
+      !error.retryable,
+  );
+  assert.equal(
+    httpRequests,
+    1,
+    "unsupported WS images do not silently replay a generation",
+  );
+  assert.equal(persisted, 1);
+});
+
 test("switches immediately and stays on HTTP when upgrade returns 426", async (context) => {
   let upgradeRequests = 0;
   let httpRequests = 0;

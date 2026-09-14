@@ -22,6 +22,8 @@ export type ThreadLifecycleEvent =
         spaceId: string;
         createdByActorId: string;
         title: string | null;
+        /** Missing only in events recorded before workspace ownership existed. */
+        workspaceId?: string | null;
       }>;
     })
   | (ThreadEventBase & {
@@ -80,6 +82,8 @@ export type ThreadState = Readonly<{
   spaceId: string;
   createdByActorId: string;
   title: string | null;
+  /** Legacy snapshots may omit this; readers normalize omission to null. */
+  workspaceId?: string | null;
   status: ThreadStatus;
   revision: number;
   lastEventSequence: number;
@@ -127,6 +131,7 @@ export function reduceThreadLifecycleEvent(
 
   const next = {
     ...state,
+    workspaceId: normalizeThreadWorkspaceId(state.workspaceId),
     revision: state.revision + 1,
     lastEventSequence: event.sequence,
     updatedAt: event.occurredAt,
@@ -239,6 +244,7 @@ function createThread(event: ThreadLifecycleEvent): ThreadState {
     spaceId: event.data.spaceId,
     createdByActorId: event.data.createdByActorId,
     title: event.data.title,
+    workspaceId: normalizeThreadWorkspaceId(event.data.workspaceId),
     status: "active",
     revision: 1,
     lastEventSequence: 1,
@@ -272,6 +278,9 @@ export function validateThreadLifecycleEvent(
   ) {
     throw new ThreadLifecycleError("thread_event_occurred_at_invalid");
   }
+  if (event.type !== "thread.created" && Object.hasOwn(event.data, "workspaceId")) {
+    throw new ThreadLifecycleError("thread_workspace_immutable");
+  }
   switch (event.type) {
     case "thread.created":
       requireNonEmpty(event.data.tenantId, "tenant_id_invalid");
@@ -281,6 +290,7 @@ export function validateThreadLifecycleEvent(
         "created_by_actor_id_invalid",
       );
       requireNullableTitle(event.data.title);
+      normalizeThreadWorkspaceId(event.data.workspaceId);
       return;
     case "thread.message.appended":
       if (event.data.initialTitle !== undefined) {
@@ -371,6 +381,7 @@ export function validateThreadState(state: ThreadState): void {
   requireNonEmpty(state.spaceId, "space_id_invalid");
   requireNonEmpty(state.createdByActorId, "created_by_actor_id_invalid");
   requireNullableTitle(state.title);
+  normalizeThreadWorkspaceId(state.workspaceId);
   if (
     !THREAD_STATUSES.includes(state.status) ||
     !Number.isSafeInteger(state.revision) ||
@@ -414,6 +425,20 @@ export function validateThreadState(state: ThreadState): void {
   ) {
     throw new ThreadLifecycleError("thread_state_invalid");
   }
+}
+
+/** Workspace identities are opaque tokens, never filesystem paths. */
+export function normalizeThreadWorkspaceId(value: unknown): string | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(value)) {
+    throw new ThreadLifecycleError("thread_workspace_id_invalid");
+  }
+  return value;
+}
+
+/** Normalizes legacy JSON without rewriting its durable events or revision. */
+export function normalizeThreadStateWorkspace<T extends ThreadState>(state: T): T & { readonly workspaceId: string | null } {
+  return { ...state, workspaceId: normalizeThreadWorkspaceId(state.workspaceId) };
 }
 
 function requireActive(state: ThreadState): void {

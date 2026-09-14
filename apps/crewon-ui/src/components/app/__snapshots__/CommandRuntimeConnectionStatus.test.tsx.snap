@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`desktop task service setup guidance > opens model settings when a fresh installation has no model configured 1`] = `"<span class="composer-state" role="status">先配置 AI 模型，即可开始任务</span><button class="button compact" type="button">配置 AI 模型</button>"`;

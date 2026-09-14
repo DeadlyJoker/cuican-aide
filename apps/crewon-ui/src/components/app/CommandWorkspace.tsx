@@ -3,6 +3,7 @@ import { Plus, ShieldCheck } from "lucide-react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
 import type { WorkflowRunUpdatedNotification } from "@crewon/app-server-protocol/v2/WorkflowRunUpdatedNotification";
+import { controlThreadWorkspaceId } from "../../lib/control-runtime/controlThreadWorkspace";
 import {
   type ChangeEvent,
   type ClipboardEvent,
@@ -27,6 +28,7 @@ import {
   type CommandTeamCapabilityCreateInput,
 } from "./CommandTeamCapabilityCreateDialog";
 import { useCommandOfficeCatalogAutoReconnect } from "./commandOfficeCatalogReconnect";
+import { CommandRuntimeConnectionStatus } from "./CommandRuntimeConnectionStatus";
 import {
   createCommandOffice,
   type CommandOfficeCreationClient,
@@ -430,6 +432,7 @@ type CommandWorkspaceProps = {
   onEnsureAssistantThread?: () => Promise<Thread | null>;
   onModeChange: (mode: WorkMode) => void;
   onOpenSettings?: () => void;
+  onConfigureModel?: () => void;
   onSaveCapability?: import("../../lib/capability/capabilityCatalog").CapabilityEditorSaveHandler;
   onSceneChange?: (scene: CommandScene) => void;
   onRetryConnection: () => void;
@@ -859,6 +862,7 @@ export function CommandWorkspace({
   onEnsureAssistantThread,
   onModeChange,
   onOpenSettings,
+  onConfigureModel,
   onSaveCapability,
   onSceneChange,
   onRemoveComposerMention,
@@ -1040,6 +1044,7 @@ export function CommandWorkspace({
   const skillScheduleEntry = useSkillScheduleEntry({
     controlClient: skillControlClient,
     selectedThreadId,
+    workspaceId: controlWorkspaceNav?.workspaceId ?? null,
     onReady: (draft, threadId) => {
       setScheduleCreateDraft(draft);
       setScheduleTargetThreadId(threadId);
@@ -2138,7 +2143,7 @@ export function CommandWorkspace({
           const scope = commandSidebarThreadScope(thread);
           const workspacePath =
             workspaceAuthority === "control"
-              ? (controlWorkspaceNav?.name ?? "")
+              ? (controlWorkspaceNav?.workspaces?.find((workspace) => workspace.workspaceId === controlThreadWorkspaceId(thread))?.displayName ?? "")
               : (thread.cwd ?? "");
           const workspaceLabel =
             workspacePath
@@ -2149,6 +2154,7 @@ export function CommandWorkspace({
               .pop() ?? (locale === "zh" ? "无工作空间" : "No workspace");
           return {
             cwd: workspaceAuthority === "legacy" ? (thread.cwd ?? null) : null,
+            workspaceId: workspaceAuthority === "control" ? controlThreadWorkspaceId(thread) : undefined,
             id: thread.id,
             preview: thread.preview,
             scope,
@@ -2169,7 +2175,7 @@ export function CommandWorkspace({
       locale,
       viewedThreadId,
       sidebarSeenThreadEvents,
-      controlWorkspaceNav?.name,
+      controlWorkspaceNav?.workspaces,
       workspaceAuthority,
     ],
   );
@@ -3072,22 +3078,6 @@ export function CommandWorkspace({
   const commandThreadRunning =
     Boolean(activeTurnId) ||
     Boolean(selectedThread?.turns.some((turn) => turn.status === "inProgress"));
-  const connectionStatusLabel =
-    connectionState === "connected"
-      ? locale === "zh"
-        ? "对话服务已连接"
-        : "Conversation service connected"
-      : connectionState === "connecting"
-        ? locale === "zh"
-          ? "正在连接对话服务"
-          : "Connecting to conversation service"
-        : connectionState === "demo"
-          ? locale === "zh"
-            ? "演示模式"
-            : "Demo mode"
-          : locale === "zh"
-            ? "对话服务已断开"
-            : "Conversation service disconnected";
   const composerActivityLabel = isSending
     ? locale === "zh"
       ? "发送中"
@@ -3659,21 +3649,11 @@ export function CommandWorkspace({
                           {composerActivityLabel}
                         </span>
                       ) : null}
-                      {connectionState === "disconnected" ? (
-                        <button
-                          className="button compact"
-                          type="button"
-                          onClick={onRetryConnection}
-                        >
-                          {locale === "zh" ? "重新连接" : "Reconnect"}
-                        </button>
-                      ) : null}
-                      <span
-                        aria-label={connectionStatusLabel}
-                        className="connection-indicator"
-                        data-state={connectionState}
-                        role="status"
-                        title={connectionStatusLabel}
+                      <CommandRuntimeConnectionStatus
+                        connectionState={connectionState}
+                        locale={locale}
+                        onConfigureModel={onConfigureModel}
+                        onReconnect={onRetryConnection}
                       />
                     </>
                   }
@@ -3935,12 +3915,10 @@ export function CommandWorkspace({
                         ? "单一会话 · 默认执行环境 · 上下文自动压缩"
                         : "Single conversation · default environment · automatic context compaction"}
                     </span>
-                    <span
-                      aria-label={connectionStatusLabel}
-                      className="connection-indicator"
-                      data-state={connectionState}
-                      role="status"
-                      title={connectionStatusLabel}
+                    <CommandRuntimeConnectionStatus
+                      connectionState={connectionState}
+                      locale={locale}
+                      onConfigureModel={onConfigureModel}
                     />
                   </>
                 }
@@ -3993,6 +3971,7 @@ export function CommandWorkspace({
               (catalogFilter === "skill" || catalogFilter === "all") ? (
                 <SkillLibraryHost
                   controlClient={skillControlClient}
+                  workspaceId={controlWorkspaceNav?.workspaceId ?? null}
                   selectedThreadId={selectedThreadId}
                   selectedThreadTitle={
                     commandLinkedThreads.find(

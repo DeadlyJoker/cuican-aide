@@ -1,4 +1,5 @@
 import { cancelControlActiveRun } from "./controlSteerActiveRun";
+import { parseThreadWorkspaceId } from "@crewon/contracts";
 import { readControlReplayBoundary } from "./controlReplayBoundary";
 import { ControlTranscriptReads, waitForControlTranscriptRead } from "./controlTranscriptReads";
 import { readControlTranscript } from "./controlTranscriptRead";
@@ -49,6 +50,7 @@ import {
 } from "@crewon/control-client";
 
 import type { ThreadRuntimeSettings } from "../thread/threadRuntimeSettings";
+import type { ControlWorkspaceThread } from "./controlThreadWorkspace";
 import { ASSISTANT_THREAD_SOURCE } from "../thread/assistantThread";
 import type { PendingComposerMention } from "../shared/composerMentions";
 import type { ComposerImageInput } from "../shared/composerImages";
@@ -64,10 +66,10 @@ import { controlAgentVersionForModel } from "./controlModelCatalog";
 import { ControlToolHistoryReaders } from "./controlToolHistoryReaders";
 import {
   applyControlTaskChangeEvent,
-  applyControlToolEvent,
+  applyControlRunItemEvent,
   backfillControlToolProjection,
   controlTaskChangeProjectionComplete,
-  controlToolItemsWithTaskChanges,
+  controlRunItemsWithTaskChanges,
   controlToolProjectionComplete,
   createControlTaskChangeProjectionState,
   createControlToolProjectionState,
@@ -78,6 +80,7 @@ import {
   type ControlToolHistoryLoad,
   type ControlToolHistoryCoverage,
   type ControlToolItem,
+  type ControlRunItem,
   type ControlToolProjectionState,
 } from "./controlRunToolProjection";
 import type { ThreadRunPlanProjection } from "./controlRunPlanProjection";
@@ -159,7 +162,7 @@ export type ControlThreadRuntimeCallbacks = Readonly<{
   onToolItem: (
     threadId: string,
     runId: string,
-    item: Extract<ThreadItem, { type: "dynamicToolCall" }>,
+    item: ControlRunItem,
   ) => void;
   onToolApprovalRequired?: (request: ControlToolApprovalRequest) => void;
   onToolApprovalResolved?: (threadId: string, runId: string) => void;
@@ -214,7 +217,7 @@ export class ControlThreadRuntime {
   readonly managesThreadList = true;
   readonly turnUpdates = "runtime" as const;
   readonly catalog: ControlThreadCatalog;
-  #assistantStart: Promise<Thread> | null = null;
+  #assistantStart = new Map<string | null, Promise<Thread>>();
   readonly #messageReplays = new Set<string>();
   readonly #client: ControlApiClient;
   readonly #eventStream: ControlRunEventStream;
@@ -423,20 +426,23 @@ export class ControlThreadRuntime {
   async startThread(
     _cwd?: string,
     threadSource = "control-api",
+    _settings?: ThreadRuntimeSettings,
+    workspaceId: string | null = null,
   ): Promise<Thread> {
     if (this.#closed) throw new Error("control_thread_runtime_closed");
     if (threadSource === ASSISTANT_THREAD_SOURCE) {
-      if (this.#assistantStart !== null) return this.#assistantStart;
-      const request = this.#resolveAssistantThread();
-      this.#assistantStart = request;
+      const pending = this.#assistantStart.get(workspaceId);
+      if (pending) return pending;
+      const request = this.#resolveAssistantThread(workspaceId);
+      this.#assistantStart.set(workspaceId, request);
       try {
         return await request;
       } finally {
-        if (this.#assistantStart === request) this.#assistantStart = null;
+        if (this.#assistantStart.get(workspaceId) === request) this.#assistantStart.delete(workspaceId);
       }
     }
     const response = await this.#client.createThread(
-      { title: null },
+      { title: null, workspaceId },
       this.#idempotencyKey("thread.create"),
     );
     if (this.catalog.getSnapshot().revision > 0)
@@ -444,7 +450,7 @@ export class ControlThreadRuntime {
     return controlThreadSummary(response.thread);
   }
 
-  async #resolveAssistantThread(): Promise<Thread> {
+  async #resolveAssistantThread(workspaceId: string | null): Promise<Thread> {
     const controller = new AbortController();
     this.#readControllers.add(controller);
     const timer = setTimeout(
@@ -456,6 +462,7 @@ export class ControlThreadRuntime {
         this.#client,
         CONTROL_ASSISTANT_THREAD_TITLE,
         controller.signal,
+        workspaceId,
       );
       if (existing !== null) {
         const resolved = await this.readThread(existing.threadId, {
@@ -467,7 +474,7 @@ export class ControlThreadRuntime {
       }
       controller.signal.throwIfAborted();
       const created = await this.#client.createThread(
-        { title: CONTROL_ASSISTANT_THREAD_TITLE },
+        { title: CONTROL_ASSISTANT_THREAD_TITLE, workspaceId },
         this.#idempotencyKey("thread.create"),
         { signal: controller.signal },
       );
@@ -1004,7 +1011,7 @@ export class ControlThreadRuntime {
         summary: controlThreadSummary(thread), window: transcript.window, cursor: transcript.cursor, runs, activeRun: authoritativeActiveRun,
         visibleUserContent: visibleControlUserContent, isInternalUser: isInternalUserContent,
         projectRun: (run, user, assistants) => projectedTurnWithAssistants(user, assistants, run,
-          controlToolItemsWithTaskChanges(this.#toolStatesByRun.get(run.runId), this.#taskChangeStatesByRun.get(run.runId)),
+          controlRunItemsWithTaskChanges(this.#toolStatesByRun.get(run.runId), this.#taskChangeStatesByRun.get(run.runId)),
           this.#toolCoverageByRun.get(run.runId)?.complete === true && this.#toolCoverageByRun.get(run.runId)!.throughSequence >= run.lastSequence,
           this.#taskChangeCoverageByRun.get(run.runId)?.complete === true && this.#taskChangeCoverageByRun.get(run.runId)!.throughSequence >= run.lastSequence,
           true,
@@ -1799,7 +1806,7 @@ export class ControlThreadRuntime {
             taskChangeState,
             event,
           );
-          const toolItem = applyControlToolEvent(toolState, event);
+          const toolItem = applyControlRunItemEvent(toolState, event);
           if (toolItem) {
             this.#callbacks.onToolItem(threadId, runId, toolItem);
           } else if (taskChangeItem) {
@@ -1812,7 +1819,7 @@ export class ControlThreadRuntime {
               approvalId: event.data.approvalId,
               runId,
               threadId,
-              toolName: toolItem?.tool ?? null,
+              toolName: toolItem?.type === "dynamicToolCall" ? toolItem.tool : null,
             });
           }
           if (event.type === "run.resumed" || isTerminalEvent(event)) {
@@ -2189,7 +2196,7 @@ export class ControlThreadRuntime {
   }
 }
 
-export function controlThreadSummary(thread: ThreadView): Thread {
+export function controlThreadSummary(thread: ThreadView): ControlWorkspaceThread {
   return {
     id: thread.threadId,
     sessionId: thread.threadId,
@@ -2203,6 +2210,7 @@ export function controlThreadSummary(thread: ThreadView): Thread {
     status: { type: "notLoaded" },
     path: null,
     cwd: "",
+    workspaceId: thread.workspaceId ?? null,
     clientVersion: "control-api-v1",
     source: { custom: "crewon-control" },
     threadSource:
@@ -2464,6 +2472,7 @@ function isValidRollbackResponse(
     response.status === "active" &&
     response.revision === current.revision + 1 &&
     response.title === current.title &&
+    (response.workspaceId ?? null) === (current.workspaceId ?? null) &&
     response.lastMessageSequence === current.lastMessageSequence &&
     response.forkedFromThreadId === current.forkedFromThreadId &&
     response.forkedThroughHistorySequence ===
@@ -2481,6 +2490,8 @@ function validateThreadSnapshotResponse(
   response: GetThreadResponse,
   expectedThreadId: string,
 ): void {
+  try { parseThreadWorkspaceId(response.thread?.workspaceId); }
+  catch { throw new Error("control_thread_snapshot_response_invalid"); }
   if (
     !hasExactObjectKeys(response, ["eventSequence", "thread"]) ||
     !hasExactObjectKeys(response.thread, [
@@ -2495,7 +2506,7 @@ function validateThreadSnapshotResponse(
       "threadId",
       "title",
       "updatedAt",
-    ]) ||
+    ], ["workspaceId"]) ||
     response.thread.threadId !== expectedThreadId ||
     !Number.isSafeInteger(response.eventSequence) ||
     response.eventSequence < 0 ||
@@ -2515,6 +2526,7 @@ function validateThreadSnapshotResponse(
 function hasExactObjectKeys(
   input: object,
   expected: readonly string[],
+  optional: readonly string[] = [],
 ): boolean {
   if (
     input === null ||
@@ -2525,7 +2537,7 @@ function hasExactObjectKeys(
     return false;
   }
   return (
-    JSON.stringify(Object.keys(input).sort()) ===
+    JSON.stringify(Object.keys(input).filter((key) => !optional.includes(key)).sort()) ===
     JSON.stringify([...expected].sort())
   );
 }

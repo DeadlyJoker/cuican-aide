@@ -880,6 +880,7 @@ test("migrates v1 pending Outbox rows without losing delivery intent", async (co
       spaceId: "space-legacy-1",
       createdByActorId: "actor-legacy-1",
       title: null,
+      workspaceId: null,
       status: "active",
       revision: 1,
       lastEventSequence: 1,

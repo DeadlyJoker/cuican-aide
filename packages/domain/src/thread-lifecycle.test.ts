@@ -15,6 +15,7 @@ test("creates a tenant-scoped active Thread", () => {
     spaceId: "space-1",
     createdByActorId: "actor-1",
     title: "First thread",
+    workspaceId: null,
     status: "active",
     revision: 1,
     lastEventSequence: 1,
@@ -136,6 +137,7 @@ test("soft-deletes to a terminal metadata-cleared tombstone", () => {
     spaceId: "space-1",
     createdByActorId: "actor-1",
     title: null,
+    workspaceId: null,
     status: "deleted",
     revision: 2,
     lastEventSequence: 2,
@@ -238,3 +240,24 @@ function hasCode(code: string): (error: unknown) => boolean {
   return (error: unknown): boolean =>
     error instanceof ThreadLifecycleError && error.code === code;
 }
+
+
+test("workspace ownership is normalized from legacy events and immutable across lifecycle events", () => {
+  const event = createdEvent();
+  assert.equal(event.type, "thread.created");
+  if (event.type !== "thread.created") throw new Error("fixture");
+  assert.equal(replayThreadLifecycle([event]).workspaceId, null);
+  const bound = { ...event, data: { ...event.data, workspaceId: "workspace-a" } };
+  const state = replayThreadLifecycle([bound, messageEvent(2, 1, "message-1")]);
+  assert.equal(state.workspaceId, "workspace-a");
+  const renamed = reduceThreadLifecycleEvent(state, {
+    ...envelope(3), type: "thread.renamed", data: { actorId: "actor-1", title: "Renamed" },
+  });
+  assert.equal(renamed.workspaceId, "workspace-a");
+  assert.throws(() => reduceThreadLifecycleEvent(state, {
+    ...envelope(3), type: "thread.renamed", data: { actorId: "actor-1", title: "Renamed", workspaceId: "workspace-b" },
+  } as ThreadLifecycleEvent), hasCode("thread_workspace_immutable"));
+  for (const workspaceId of ["", " ", "/tmp/project", "../project", "C:\\project", "w".repeat(129)]) {
+    assert.throws(() => replayThreadLifecycle([{ ...event, data: { ...event.data, workspaceId } }]), hasCode("thread_workspace_id_invalid"));
+  }
+});

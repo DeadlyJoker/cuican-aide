@@ -1,6 +1,7 @@
 import {
   parseAutomationParameterBindings,
   parseSkillInvocationSpec,
+  parseThreadWorkspaceId,
 } from "@crewon/contracts";
 import type {
   AutomationMutationResponse,
@@ -559,6 +560,8 @@ function validateActiveThread(
   response: GetThreadResponse,
   threadId: string,
 ): void {
+  try { parseThreadWorkspaceId(response.thread?.workspaceId); }
+  catch { throw new ControlApiProtocolError("control_automation_thread_response_invalid"); }
   requireExactKeys(
     response,
     ["eventSequence", "thread"],
@@ -580,6 +583,7 @@ function validateActiveThread(
       "updatedAt",
     ],
     "control_automation_thread_response_invalid",
+    ["workspaceId"],
   );
   if (
     response.thread.threadId !== threadId ||

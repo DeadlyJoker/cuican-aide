@@ -78,7 +78,6 @@ export class RuntimeSupervisor {
   readonly #agentPlatformApiKeyForOrigin: (origin: string) => string | null;
   readonly #browserExecution: () => { url: string; token: string } | null;
   readonly #revokeBrowserExecutions: () => void;
-  readonly #workspaceRoot: () => string | null;
   #controlPort = 0;
   #probePort = 0;
   #children: ChildProcess[] = [];
@@ -97,7 +96,6 @@ export class RuntimeSupervisor {
       provider: ActiveProvider,
     ) => Promise<readonly string[] | null>;
     agentPlatformApiKeyForOrigin: (origin: string) => string | null;
-    workspaceRoot: () => string | null;
     browserExecution?: () => { url: string; token: string } | null;
     revokeBrowserExecutions?: () => void;
     logOutputs?: { stdout: Writable; stderr: Writable };
@@ -108,7 +106,6 @@ export class RuntimeSupervisor {
     this.#provider = options.provider;
     this.#providerModelCatalog = options.providerModelCatalog;
     this.#agentPlatformApiKeyForOrigin = options.agentPlatformApiKeyForOrigin;
-    this.#workspaceRoot = options.workspaceRoot;
     this.#browserExecution = options.browserExecution ?? (() => null);
     this.#revokeBrowserExecutions =
       options.revokeBrowserExecutions ?? (() => {});
@@ -312,7 +309,10 @@ export class RuntimeSupervisor {
           "你是本地独立验证智能体。逐项检查证据并明确通过、不通过或缺失证据。",
       },
     ] as const;
-    const workspace = this.#workspaceRoot();
+    // Catalog materialization is stable across selection changes. Actual tool
+    // execution resolves the Thread's immutable workspace in the Worker.
+    const workspace = join(this.#dataDirectory, "workspace-tool-catalog");
+    mkdirSync(workspace, { recursive: true, mode: 0o700 });
     const browserExecution = this.#browserExecution();
     const mcpConfig =
       workspace === null ? null : this.#writeMcpConfig(workspace);
@@ -403,7 +403,11 @@ export class RuntimeSupervisor {
       CREWON_SPACE_ID: "standalone-space",
       CREWON_TENANT_ID: "standalone-tenant",
     };
-    bindDesktopWorkspaceEnvironment(environment, { mcpConfig, workspace });
+    bindDesktopWorkspaceEnvironment(environment, {
+      mcpConfig,
+      workspace,
+      registryPath: join(this.#dataDirectory, "desktop-workspace.json"),
+    });
     delete environment.CREWON_BROWSER_BRIDGE_URL;
     delete environment.CREWON_BROWSER_BRIDGE_TOKEN;
     if (browserExecution !== null) {
@@ -571,14 +575,19 @@ export function desktopRuntimeFingerprint(input: {
     .digest("hex");
 }
 
-/** Binds only the workspace selected by the desktop, clearing ambient values. */
+/** Binds the desktop-owned catalog and registry, clearing ambient values. */
 export function bindDesktopWorkspaceEnvironment(
   environment: NodeJS.ProcessEnv,
   binding: Readonly<{
     mcpConfig: string | null;
     workspace: string | null;
+    registryPath?: string;
   }>,
 ): void {
+  delete environment.CREWON_DESKTOP_WORKSPACE_REGISTRY_PATH;
+  if (binding.registryPath !== undefined) {
+    environment.CREWON_DESKTOP_WORKSPACE_REGISTRY_PATH = binding.registryPath;
+  }
   if (binding.mcpConfig === null) {
     delete environment.CREWON_MCP_STDIO_CONFIG_PATH;
   } else {

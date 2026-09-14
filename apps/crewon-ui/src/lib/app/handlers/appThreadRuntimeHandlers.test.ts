@@ -252,6 +252,23 @@ describe("app thread runtime handlers", () => {
     });
   });
 
+  it("freezes new-message workspace ownership and does not select its late result after a workspace switch", async () => {
+    let current = true;
+    const setSelectedThreadId = vi.fn();
+    const handlers = createAppThreadRuntimeHandlers(createParams({
+      creationWorkspaceId: "workspace-a",
+      isCreationWorkspaceCurrent: () => current,
+      setSelectedThreadId,
+    }));
+    await handlers.sendMessageInNewThread("Build report");
+    await threadMessageSpy.sendParams?.createThread("Build report");
+    expect(threadMessageSpy.createParams?.workspaceId).toBe("workspace-a");
+    current = false;
+    threadMessageSpy.createParams?.setSelectedThreadId("late-thread-a");
+    threadMessageSpy.sendParams?.setSelectedThreadId("late-thread-a");
+    expect(setSelectedThreadId).not.toHaveBeenCalled();
+  });
+
   it("passes Provider execution preparation into the standard thread creator", async () => {
     const preparation = {
       workspaceKey: "workspace-1",

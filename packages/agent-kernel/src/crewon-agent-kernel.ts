@@ -1,4 +1,5 @@
 import { observeModelUsage } from "./model-usage-observer.ts";
+import { ModelImageOutput } from "./model-image-output.ts";
 import {
   parseCanonicalAgentEvent,
   parseProviderCheckpoint,
@@ -173,6 +174,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
       }> = { failed: false, value: undefined };
       let createdCheckpoint: ProviderCheckpoint | null = null;
       let retries = 0;
+      const imageOutput = new ModelImageOutput();
       while (true) {
         let output = "";
         let reasoningObserved = false;
@@ -236,6 +238,22 @@ export class CrewONAgentKernel implements AgentKernelPort {
               throw new AgentKernelError("model_event_after_terminal", false);
             }
             switch (event.type) {
+              case "image.progress":
+              case "image.generated": {
+                if (contract.purpose === "compaction") {
+                  throw new AgentKernelError("compaction_image_output_unsupported", false);
+                }
+                const imageEvent = imageOutput.observe(event);
+                if (imageEvent === null) break;
+                const { type, ...data } = imageEvent;
+                yield canonicalEvent(
+                  contract,
+                  ++sequence,
+                  type === "image.progress" ? "model.image.progress" : "model.image.generated",
+                  data,
+                );
+                break;
+              }
               case "response.created":
                 validateCheckpoint(event.checkpoint, this.modelIdentity);
                 if (createdCheckpoint !== null) {

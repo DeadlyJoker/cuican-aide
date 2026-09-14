@@ -114,7 +114,10 @@ test("discovers, invokes and releases a real out-of-process stdio MCP result thr
     ToolResultCapacityError,
   );
   occupied.release();
-  const reservation = runtime.reserveExecution(command, controller.signal);
+  const reservation = await runtime.reserveExecution(
+    command,
+    controller.signal,
+  );
   assert.ok(reservation !== undefined);
   const first = await reservation.execute();
   reservation.release();

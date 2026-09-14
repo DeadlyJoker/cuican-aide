@@ -38,7 +38,7 @@ test("scopes an additive runtime to the exact historical Tool catalog", async ()
   });
   assert.equal(scoped.executionPolicy("function", "read_file"), null);
   await scoped.execute(command("existing_tool"), signal());
-  const reservation = scoped.reserveExecution?.(
+  const reservation = await scoped.reserveExecution?.(
     command("existing_tool"),
     signal(),
   );

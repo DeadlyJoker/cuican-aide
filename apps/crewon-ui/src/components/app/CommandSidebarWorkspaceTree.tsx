@@ -5,6 +5,7 @@ import {
   Plus,
   SquarePen,
   Trash2,
+  X,
 } from "lucide-react";
 import { useState, type FormEvent } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -15,6 +16,7 @@ import type {
   CommandWorkspaceAuthority,
 } from "./CommandWorkspaceChrome";
 import { classNames } from "./commandWorkspaceUtils";
+import { groupControlWorkspaceThreads } from "../../lib/workspace/controlWorkspaceGroups";
 
 type Copy = {
   addWorkspace: string;
@@ -117,6 +119,10 @@ export function CommandSidebarWorkspaceTree(props: {
   const [expandedThreadGroups, setExpandedThreadGroups] = useState<
     ReadonlySet<string>
   >(() => new Set());
+  const controlGroups = groupControlWorkspaceThreads(
+    controlWorkspace?.workspaces ?? [],
+    linkedThreads,
+  );
   const renderThreadItems = ({
     threads,
     workspaceLabel,
@@ -159,18 +165,10 @@ export function CommandSidebarWorkspaceTree(props: {
               <strong className="tree-head-label">{copy.workspace}</strong>
               {controlWorkspace?.onSelect ? (
                 <button
-                  aria-label={
-                    controlWorkspace.name
-                      ? copy.replaceWorkspace
-                      : copy.selectWorkspace
-                  }
+                  aria-label={copy.addWorkspace}
                   className="tree-head-action"
                   disabled={controlWorkspace.busy}
-                  title={
-                    controlWorkspace.name
-                      ? copy.replaceWorkspace
-                      : copy.selectWorkspace
-                  }
+                  title={copy.addWorkspace}
                   type="button"
                   onClick={() => controlWorkspace.onSelect?.()}
                 >
@@ -178,118 +176,149 @@ export function CommandSidebarWorkspaceTree(props: {
                 </button>
               ) : null}
             </div>
-            {controlWorkspace?.name ? (
+            {controlGroups.groups.map((group) => {
+              const name =
+                group.displayName ??
+                (copy.workspace === "工作空间"
+                  ? "未注册工作空间"
+                  : "Unregistered workspace");
+              const current =
+                group.workspaceId === controlWorkspace?.workspaceId;
+              return (
+                <div
+                  className={classNames(
+                    "space-node real-workspace-node",
+                    current && "current",
+                  )}
+                  key={group.workspaceId}
+                  data-workspace-id={group.workspaceId}
+                >
+                  <div className="space-title real-workspace-title">
+                    <button
+                      aria-label={copy.switchWorkspace(name)}
+                      className="workspace-title-toggle"
+                      type="button"
+                      disabled={
+                        controlWorkspace?.busy ||
+                        group.displayName === null ||
+                        !controlWorkspace?.onActivate
+                      }
+                      onClick={() =>
+                        controlWorkspace?.onActivate?.(group.workspaceId)
+                      }
+                    >
+                      {current ? (
+                        <FolderOpen aria-hidden="true" />
+                      ) : (
+                        <Folder aria-hidden="true" />
+                      )}
+                      <strong>{name}</strong>
+                    </button>
+                    <span className="workspace-row-actions">
+                      <button
+                        aria-label={copy.threadInWorkspace(name)}
+                        title={copy.threadInWorkspace(name)}
+                        type="button"
+                        disabled={
+                          controlWorkspace?.busy ||
+                          !controlWorkspace?.onActivate ||
+                          group.displayName === null
+                        }
+                        onClick={() =>
+                          controlWorkspace?.onActivate?.(group.workspaceId)
+                        }
+                      >
+                        <SquarePen aria-hidden="true" />
+                      </button>
+                      {current && controlWorkspace?.onClear ? (
+                        <button
+                          aria-label={
+                            copy.workspace === "工作空间"
+                              ? "取消选择工作空间"
+                              : "Clear workspace selection"
+                          }
+                          title={
+                            copy.workspace === "工作空间"
+                              ? "取消选择工作空间"
+                              : "Clear workspace selection"
+                          }
+                          type="button"
+                          disabled={controlWorkspace.busy}
+                          onClick={() => controlWorkspace.onClear?.()}
+                        >
+                          <X aria-hidden="true" />
+                        </button>
+                      ) : null}
+                    </span>
+                  </div>
+                  <div className="conversation-list recent-thread-list">
+                    {group.threads.length ? (
+                      renderThreadItems({
+                        threads: group.threads,
+                        workspaceLabel: name,
+                        workspaceKey: group.workspaceId,
+                      })
+                    ) : (
+                      <p className="sidebar-empty-hint">
+                        {copy.workspaceThreadsEmpty}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+            {!controlWorkspace?.workspaces?.length ? (
+              <p className="sidebar-empty-hint workspace-empty-hint">
+                {copy.controlWorkspaceEmpty}
+              </p>
+            ) : null}
+            {controlGroups.unbound.length > 0 ? (
               <div
                 className={classNames(
-                  "space-node current real-workspace-node",
-                  currentWorkspaceCollapsed && "collapsed",
+                  "space-node standalone-workspace-node",
+                  standaloneWorkspaceCollapsed && "collapsed",
                 )}
               >
-                <div className="space-title real-workspace-title">
+                <div className="space-title standalone-workspace-title">
                   <button
-                    aria-controls="current-workspace-thread-list"
-                    aria-expanded={!currentWorkspaceCollapsed}
-                    className="workspace-title-toggle"
+                    aria-controls="standalone-workspace-thread-list"
+                    aria-expanded={!standaloneWorkspaceCollapsed}
+                    className="workspace-title-toggle standalone-workspace-toggle"
                     type="button"
-                    onClick={() => toggleWorkspaceGroup("current")}
+                    onClick={() => toggleWorkspaceGroup("standalone")}
                   >
-                    {currentWorkspaceCollapsed ? (
-                      <Folder aria-hidden="true" />
-                    ) : (
-                      <FolderOpen aria-hidden="true" />
-                    )}
-                    <strong>{controlWorkspace.name}</strong>
+                    <ChevronRight aria-hidden="true" />
+                    <strong>{copy.noWorkspace}</strong>
                   </button>
                   <span className="workspace-row-actions">
                     <button
-                      aria-label={copy.newThread}
-                      title={copy.newThread}
+                      aria-label={copy.newStandaloneThread}
+                      title={copy.newStandaloneThread}
                       type="button"
-                      onClick={() => onNewThread(null)}
+                      disabled={controlWorkspace?.busy}
+                      onClick={() =>
+                        controlWorkspace?.onClear
+                          ? controlWorkspace.onClear()
+                          : onNewThread(null)
+                      }
                     >
                       <SquarePen aria-hidden="true" />
                     </button>
-                    {controlWorkspace.onClear ? (
-                      <button
-                        aria-label={copy.unbindWorkspace(controlWorkspace.name)}
-                        className="workspace-remove-action"
-                        disabled={controlWorkspace.busy}
-                        title={copy.unbindWorkspace(controlWorkspace.name)}
-                        type="button"
-                        onClick={() => controlWorkspace.onClear?.()}
-                      >
-                        <Trash2 aria-hidden="true" />
-                      </button>
-                    ) : null}
                   </span>
                 </div>
                 <div
-                  className="conversation-list recent-thread-list"
-                  hidden={currentWorkspaceCollapsed}
-                  id="current-workspace-thread-list"
+                  className="conversation-list recent-thread-list standalone-thread-list"
+                  hidden={standaloneWorkspaceCollapsed}
+                  id="standalone-workspace-thread-list"
                 >
-                  {linkedThreads.length > 0 ? (
-                    renderThreadItems({
-                      threads: linkedThreads,
-                      workspaceLabel: controlWorkspace.name,
-                      workspaceKey: `control:${controlWorkspace.name}`,
-                    })
-                  ) : (
-                    <p className="sidebar-empty-hint">
-                      {copy.workspaceThreadsEmpty}
-                    </p>
-                  )}
+                  {renderThreadItems({
+                    threads: controlGroups.unbound,
+                    workspaceLabel: copy.noWorkspace,
+                    workspaceKey: "control:unbound",
+                  })}
                 </div>
               </div>
-            ) : (
-              <>
-                <p className="sidebar-empty-hint workspace-empty-hint">
-                  {copy.controlWorkspaceEmpty}
-                </p>
-                {linkedThreads.length > 0 ? (
-                  <div
-                    className={classNames(
-                      "space-node standalone-workspace-node",
-                      standaloneWorkspaceCollapsed && "collapsed",
-                    )}
-                  >
-                    <div className="space-title standalone-workspace-title">
-                      <button
-                        aria-controls="standalone-workspace-thread-list"
-                        aria-expanded={!standaloneWorkspaceCollapsed}
-                        className="workspace-title-toggle standalone-workspace-toggle"
-                        type="button"
-                        onClick={() => toggleWorkspaceGroup("standalone")}
-                      >
-                        <ChevronRight aria-hidden="true" />
-                        <strong>{copy.noWorkspace}</strong>
-                      </button>
-                      <span className="workspace-row-actions">
-                        <button
-                          aria-label={copy.newStandaloneThread}
-                          title={copy.newStandaloneThread}
-                          type="button"
-                          onClick={() => onNewThread(null)}
-                        >
-                          <SquarePen aria-hidden="true" />
-                        </button>
-                      </span>
-                    </div>
-                    <div
-                      className="conversation-list recent-thread-list standalone-thread-list"
-                      hidden={standaloneWorkspaceCollapsed}
-                      id="standalone-workspace-thread-list"
-                    >
-                      {renderThreadItems({
-                        threads: linkedThreads,
-                        workspaceLabel: copy.noWorkspace,
-                        workspaceKey: "control:standalone",
-                      })}
-                    </div>
-                  </div>
-                ) : null}
-              </>
-            )}
+            ) : null}
             {controlWorkspace?.error ? (
               <p className="sidebar-error-hint" role="alert">
                 {copy.workspaceSelectFailed(controlWorkspace.error)}

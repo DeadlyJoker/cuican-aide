@@ -107,6 +107,7 @@ export interface CrewonDesktopBridge {
   readonly workspace: {
     status(): Promise<unknown>;
     selectAndRegister(request: unknown): Promise<unknown>;
+    activate(workspaceId: string, request: unknown): Promise<unknown>;
     clear(request: unknown): Promise<unknown>;
     pickDirectory(title?: string): Promise<string | null>;
   };

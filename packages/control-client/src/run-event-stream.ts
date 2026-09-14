@@ -22,6 +22,8 @@ const RUN_EVENT_TYPES = {
   "context.compacted": true,
   "message.completed": true,
   "model.output.delta": true,
+  "model.image.progress": true,
+  "model.image.generated": true,
   "model.sampling.retry": true,
   "model.transport.fallback": true,
   "plan.proposed": true,
@@ -353,6 +355,33 @@ function isRunEventData(
         isBoundedText(data.segmentId, 128) &&
         isBoundedText(data.delta, 16_384) &&
         new TextEncoder().encode(data.delta).byteLength <= 16_384
+      );
+    case "model.image.progress":
+      return (
+        hasExactKeys(data, ["segmentId", "itemId", "stage"]) &&
+        isBoundedText(data.segmentId, 128) &&
+        isBoundedText(data.itemId, 128) &&
+        (data.stage === "in_progress" ||
+          data.stage === "generating" ||
+          data.stage === "completed")
+      );
+    case "model.image.generated":
+      return (
+        hasExactKeys(data, [
+          "segmentId",
+          "itemId",
+          "artifactRef",
+          "mimeType",
+          "byteLength",
+        ]) &&
+        isBoundedText(data.segmentId, 128) &&
+        isBoundedText(data.itemId, 128) &&
+        isBoundedText(data.artifactRef, 128) &&
+        (data.mimeType === "image/png" ||
+          data.mimeType === "image/jpeg" ||
+          data.mimeType === "image/webp") &&
+        isPositiveInteger(data.byteLength) &&
+        Number(data.byteLength) <= 8 * 1024 * 1024
       );
     case "tool.requested":
       if (view !== "transcript") {

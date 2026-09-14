@@ -1,4 +1,5 @@
 import type { StorageAdmissionPort } from "@crewon/application";
+import type { ModelImageArtifactSink } from "./model-image-artifact-sink.ts";
 import { createLocalStorageAdmissionOwner } from "@crewon/store";
 import {
   CrewONAgentKernel,
@@ -102,6 +103,7 @@ export type RuntimeWorkerCompositionConfig = Readonly<{
   configureDeliveryDownloads?: (importer: DeliveryDownloadImporter) => void;
   artifactStore?: ArtifactStorePort;
   artifactEncryptionKeyId?: string;
+  modelImageSink?: ModelImageArtifactSink;
   ownerId?: string;
   leaseDurationMs?: number;
   streamMaxRetries?: number;
@@ -270,6 +272,7 @@ async function composeRuntimeWorker(
   const digester = new NodeSha256ContentDigester();
   const clock = new SystemApplicationClock();
   const artifactStore = config.artifactStore;
+  config.modelImageSink?.bindRunStore(store);
   if (
     (config.agentVersionRuntimeFactory === undefined) !==
     (config.agentVersionDeployments === undefined)

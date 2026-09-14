@@ -6,6 +6,7 @@ import type { AgentVersionDeploymentCandidate } from "@crewon/application";
 import {
   DirectResponsesTransport,
   type DirectResponsesTransportConfig,
+  type ResponsesImageSink,
 } from "@crewon/agent-responses";
 import { CloudAgentTransport } from "./cloud-agent-transport.ts";
 import {
@@ -78,6 +79,7 @@ export function loadAgentVersionRuntimeFactory(
   environment: Readonly<Record<string, string | undefined>> = process.env,
   remoteMcpDependencies?: RemoteMcpCompositionDependencies,
   nativeProviderApiKey?: string | null,
+  modelDependencies: Readonly<{ imageSink?: ResponsesImageSink }> = {},
 ): ConfiguredAgentVersionRuntimeFactory {
   const input = readBoundedJson(
     path,
@@ -90,6 +92,7 @@ export function loadAgentVersionRuntimeFactory(
       environment,
       remoteMcpDependencies,
       nativeProviderApiKey,
+      modelDependencies,
     ),
   );
 }
@@ -359,6 +362,7 @@ function runtimeBindings(
   environment: Readonly<Record<string, string | undefined>>,
   remoteMcpDependencies: RemoteMcpCompositionDependencies | undefined,
   nativeProviderApiKey: string | null | undefined,
+  modelDependencies: Readonly<{ imageSink?: ResponsesImageSink }>,
 ): readonly AgentVersionRuntimeBinding[] {
   return config.bindings.map((binding) => {
     const executionAuthority =
@@ -379,7 +383,7 @@ function runtimeBindings(
       }
       const provider = binding.provider;
       return (version: CompiledAgentVersion) =>
-        directResponsesTransport(provider, version, apiKey);
+        directResponsesTransport(provider, version, apiKey, modelDependencies);
     })();
     return {
       tenantId: binding.tenantId,
@@ -547,6 +551,7 @@ function directResponsesTransport(
   >,
   version: CompiledAgentVersion,
   apiKey: string | null,
+  dependencies: Readonly<{ imageSink?: ResponsesImageSink }>,
 ): DirectResponsesTransport {
   const config: DirectResponsesTransportConfig = {
     endpoint: provider.endpoint,
@@ -556,8 +561,15 @@ function directResponsesTransport(
     requestProfile: provider.requestProfile,
     idleTimeoutMs: provider.idleTimeoutMs,
     sequencePolicy: provider.sequencePolicy,
+    ...(provider.requestProfile === "responsesLite"
+      ? {
+          identityPolicy: "terminalAuthoritative" as const,
+          outputDeltaFlushBytes: 1024,
+        }
+      : {}),
   };
   return new DirectResponsesTransport(config, {
+    imageSink: dependencies.imageSink,
     identity: {
       adapterName: version.model.adapterName,
       adapterVersion: baseAdapterVersion(

@@ -1,0 +1,73 @@
+{
+  "version": "0.1.3",
+  "kind": "packaged-real-provider-image-smoke",
+  "guiVerified": false,
+  "directory": "/var/folders/1t/_zjjjy650xb76sl820snlssr0000gn/T/crewon-0.1.3-image-RiWLqU",
+  "events": [
+    {
+      "type": "model.image.progress",
+      "elapsedMs": 2954,
+      "sequence": 4,
+      "data": {
+        "segmentId": "segment:01a09f69-2e13-7102-bbc4-394440703546",
+        "itemId": "ig_050208b03b358907016aa7c903e01c87d0b3344ed7eb4b202c",
+        "stage": "in_progress"
+      }
+    },
+    {
+      "type": "model.image.progress",
+      "elapsedMs": 4958,
+      "sequence": 5,
+      "data": {
+        "segmentId": "segment:01a09f69-2e13-7102-bbc4-394440703546",
+        "itemId": "ig_050208b03b358907016aa7c903e01c87d0b3344ed7eb4b202c",
+        "stage": "generating"
+      }
+    },
+    {
+      "type": "model.image.progress",
+      "elapsedMs": 27989,
+      "sequence": 6,
+      "data": {
+        "segmentId": "segment:01a09f69-2e13-7102-bbc4-394440703546",
+        "itemId": "ig_050208b03b358907016aa7c903e01c87d0b3344ed7eb4b202c",
+        "stage": "completed"
+      }
+    },
+    {
+      "type": "model.image.generated",
+      "elapsedMs": 31002,
+      "sequence": 7,
+      "data": {
+        "segmentId": "segment:01a09f69-2e13-7102-bbc4-394440703546",
+        "itemId": "ig_050208b03b358907016aa7c903e01c87d0b3344ed7eb4b202c",
+        "artifactRef": "artifact-3afa8109d7a5a721fba95cfe3ea9d297c13b44fa19b6c231e3e14787df70d65d",
+        "mimeType": "image/png",
+        "byteLength": 1806045
+      }
+    }
+  ],
+  "threadId": "01a09f69-2ddd-701c-aeaf-166d5265b699",
+  "runId": "01a09f69-2de3-70ce-9711-d4e2fd79175e",
+  "terminal": {
+    "type": "run.completed",
+    "elapsedMs": 31002,
+    "data": {
+      "outputRef": "message:01a09f69-a43f-77e8-94c6-2c8bcdbff2e9"
+    }
+  },
+  "image": {
+    "path": "docs/sdd/evidence/packaged-image-smoke.png",
+    "mimeType": "image/png",
+    "byteLength": 1806045,
+    "sha256": "23e913169c99080b57ea14f5ccaebf49167b482f073b1f5321b303aa5858cfd7",
+    "visuallyInspected": true,
+    "dimensions": {
+      "width": 1024,
+      "height": 1536
+    }
+  },
+  "restartDownloadIdentical": true,
+  "success": true,
+  "sourceAppAsarSha256": "1b64a7fae6ae0337e581c7bad41910e61a8e0a3a9a14017c81e26e3319b26acb"
+}

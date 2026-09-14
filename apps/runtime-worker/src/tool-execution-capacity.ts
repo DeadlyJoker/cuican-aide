@@ -20,7 +20,7 @@ export async function withToolExecutionCapacity<T>(
     (command.actionIntent.effect === "readOnly" &&
       command.actionIntent.recovery === "replaySafe");
   const reservation = mayExecute
-    ? runtime.reserveExecution?.(command, signal)
+    ? await runtime.reserveExecution?.(command, signal)
     : undefined;
   try {
     return await admitted(() =>

@@ -133,6 +133,9 @@ test("expired terminal artifacts lose only bodies and preserve metadata/idempote
   );
   assert(!existsSync(f.blob(i)));
   assert.deepEqual(await reopened.get(i.record), metadata);
+  assert.equal(i.record.source.kind, "toolOutput");
+  if (i.record.source.kind !== "toolOutput")
+    throw new Error("fixture_source_invalid");
   await assert.rejects(
     reopened.put({
       ...i,

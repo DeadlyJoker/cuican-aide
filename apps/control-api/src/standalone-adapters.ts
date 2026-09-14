@@ -247,6 +247,9 @@ export class SystemApplicationClock implements ApplicationClock {
 }
 
 export class NodeSha256ContentDigester implements ContentDigester {
+  sha256Bytes(value: Uint8Array): string {
+    return `sha256:${createHash("sha256").update(value).digest("hex")}`;
+  }
   sha256(value: string): string {
     return `sha256:${createHash("sha256").update(value, "utf8").digest("hex")}`;
   }

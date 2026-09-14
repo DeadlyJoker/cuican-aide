@@ -21,6 +21,7 @@ import {
   createPostgresControlApi,
   createStandaloneControlApi,
 } from "./standalone-composition.ts";
+import { resolveDesktopWorkspaceRegistryPath } from "./desktop-workspace-admission.ts";
 import { resolveStandaloneWorkspaceWorkerEnvironment } from "./standalone-workspace-environment.ts";
 import {
   candidateReadinessLine,
@@ -34,6 +35,10 @@ const securityMode = parseSecurityMode(
   process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
 );
 const activationGate = resolvePausedAdmission(process.env, securityMode);
+const desktopWorkspaceRegistryPath = resolveDesktopWorkspaceRegistryPath(
+  process.env,
+  securityMode,
+);
 const standaloneTenantId = environmentOr(
   "CREWON_TENANT_ID",
   "standalone-tenant",
@@ -63,6 +68,7 @@ const artifactRetention = configuredArtifactRetention(
   process.env.CREWON_ARTIFACT_RETENTION,
 );
 const artifactStore = new FilesystemArtifactStore({
+  maxInlineBytes: 8 * 1024 * 1024,
   rootDirectory: requiredEnvironment("CREWON_ARTIFACT_ROOT"),
   databasePath: requiredEnvironment("CREWON_ARTIFACT_DB_PATH"),
   encryptionKey: loadArtifactEncryptionKey(
@@ -173,6 +179,7 @@ try {
       deliveryStore,
       ...sharedConfig,
       actor,
+      desktopWorkspaceRegistryPath,
       defaultAgentVersionId: environmentOr(
         "CREWON_AGENT_VERSION_ID",
         "default-agent-v1",

@@ -3,8 +3,8 @@ import { requireDesktopBridge } from "./desktopBridge";
 
 const STATUS_SCHEMA_VERSION = "crewon.desktop-workspace-status.v0";
 const ERROR_SCHEMA_VERSION = "crewon.desktop-workspace-error.v0";
-const STATUS_WIRE_MAX_BYTES = 4 * 1024;
-const MUTATION_RESPONSE_WIRE_MAX_BYTES = 8 * 1024;
+const STATUS_WIRE_MAX_BYTES = 128 * 1024;
+const MUTATION_RESPONSE_WIRE_MAX_BYTES = 128 * 1024;
 const ERROR_WIRE_MAX_BYTES = 2 * 1024;
 const DISPLAY_NAME_MAX_BYTES = 255;
 const IDEMPOTENCY_KEY_MAX_BYTES = 256;
@@ -20,7 +20,14 @@ export type DesktopWorkspaceStatus = Readonly<{
   availability: DesktopWorkspaceAvailability;
   revision: number;
   supervisorGeneration: number;
-  current: Readonly<{ displayName: string }> | null;
+  current: Readonly<{ workspaceId?: string; displayName: string }> | null;
+  /** Omitted only by a legacy host that predates the native registry. */
+  workspaces?: readonly DesktopWorkspaceSummary[];
+}>;
+
+export type DesktopWorkspaceSummary = Readonly<{
+  workspaceId: string;
+  displayName: string;
 }>;
 
 export type DesktopWorkspaceMutationRequest = Readonly<{
@@ -48,6 +55,10 @@ export interface DesktopWorkspaceAuthorityPort {
   selectAndRegister(
     request: DesktopWorkspaceMutationRequest,
   ): Promise<DesktopWorkspaceSelectResponse>;
+  activate(
+    workspaceId: string,
+    request: DesktopWorkspaceMutationRequest,
+  ): Promise<DesktopWorkspaceClearResponse>;
   clear(
     request: DesktopWorkspaceMutationRequest,
   ): Promise<DesktopWorkspaceClearResponse>;
@@ -153,11 +164,12 @@ export function createDesktopWorkspaceAuthorityAdapter(
     command: string,
     request: DesktopWorkspaceMutationRequest,
     parseResult: (value: unknown) => Result,
+    arguments_: Record<string, unknown> = {},
   ): Promise<Result> => {
     let outcomeUnknown = false;
     for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        return parseResult(await invoke(command, { request }));
+        return parseResult(await invoke(command, { ...arguments_, request }));
       } catch (error) {
         /*
          * The retry uses the exact same parsed command and idempotency key. Once
@@ -212,6 +224,32 @@ export function createDesktopWorkspaceAuthorityAdapter(
         (value) => parseClearResponse(value, prepared.before),
       );
     },
+    async activate(workspaceId, request) {
+      const parsedId = parseWorkspaceId(workspaceId);
+      const prepared = await prepareMutation(request);
+      if (
+        !prepared.before.workspaces?.some(
+          (entry) => entry.workspaceId === parsedId,
+        )
+      ) {
+        throw new DesktopWorkspaceProtocolError("desktop_workspace_id_unknown");
+      }
+      return invokeMutation(
+        "desktop_workspace_activate",
+        prepared.request,
+        (value) => {
+          const response = parseSelectResponse(value, prepared.before);
+          if (
+            response.outcome !== "committed" ||
+            response.snapshot.current?.workspaceId !== parsedId ||
+            !sameWorkspaceRoster(response.snapshot, prepared.before)
+          )
+            throw new DesktopWorkspaceProtocolError();
+          return response;
+        },
+        { workspaceId: parsedId },
+      );
+    },
   };
 }
 
@@ -230,6 +268,8 @@ export function desktopWorkspaceAuthority(): DesktopWorkspaceAuthorityPort | nul
           return bridge.selectAndRegister(args?.request);
         case "desktop_workspace_clear":
           return bridge.clear(args?.request);
+        case "desktop_workspace_activate":
+          return bridge.activate(args?.workspaceId as string, args?.request);
         default:
           throw new Error("desktop_workspace_command_unknown");
       }
@@ -270,7 +310,8 @@ function parseSelectResponse(
       snapshot.availability !== "available" ||
       snapshot.revision !== before.revision ||
       snapshot.supervisorGeneration < before.supervisorGeneration ||
-      !sameCurrentWorkspace(snapshot.current, before.current)
+      !sameCurrentWorkspace(snapshot.current, before.current) ||
+      !sameWorkspaceRoster(snapshot, before)
     ) {
       throw new DesktopWorkspaceProtocolError();
     }
@@ -289,8 +330,18 @@ function sameCurrentWorkspace(
 ): boolean {
   return (
     (left === null && right === null) ||
-    (left !== null && right !== null && left.displayName === right.displayName)
+    (left !== null &&
+      right !== null &&
+      left.workspaceId === right.workspaceId &&
+      left.displayName === right.displayName)
   );
+}
+
+function sameWorkspaceRoster(
+  left: DesktopWorkspaceStatus,
+  right: DesktopWorkspaceStatus,
+): boolean {
+  return JSON.stringify(left.workspaces) === JSON.stringify(right.workspaces);
 }
 
 function parseClearResponse(
@@ -304,6 +355,8 @@ function parseClearResponse(
   }
   const snapshot = parseStatus(value.snapshot);
   validateCommittedSnapshot(snapshot, before, "cleared");
+  if (!sameWorkspaceRoster(snapshot, before))
+    throw new DesktopWorkspaceProtocolError();
   return { outcome: "committed", snapshot };
 }
 
@@ -323,36 +376,72 @@ function validateCommittedSnapshot(
   ) {
     throw new DesktopWorkspaceProtocolError();
   }
+  if (
+    before.workspaces &&
+    (!snapshot.workspaces ||
+      snapshot.workspaces.length > before.workspaces.length + 1 ||
+      before.workspaces.some(
+        (previous) =>
+          !snapshot.workspaces?.some(
+            (entry) =>
+              entry.workspaceId === previous.workspaceId &&
+              entry.displayName === previous.displayName,
+          ),
+      ))
+  ) {
+    throw new DesktopWorkspaceProtocolError();
+  }
 }
 
 function parseStatus(value: unknown): DesktopWorkspaceStatus {
   requireWireSize(value, STATUS_WIRE_MAX_BYTES);
+  const hasRoster =
+    typeof value === "object" &&
+    value !== null &&
+    Object.hasOwn(value, "workspaces");
   exactObject(value, [
     "schemaVersion",
     "availability",
     "revision",
     "supervisorGeneration",
     "current",
+    ...(hasRoster ? ["workspaces"] : []),
   ]);
   if (value.schemaVersion !== STATUS_SCHEMA_VERSION) {
     throw new DesktopWorkspaceProtocolError();
   }
   const availability = parseAvailability(value.availability);
   const current = parseCurrent(value.current);
+  const workspaces = hasRoster ? parseWorkspaces(value.workspaces) : undefined;
+  if (
+    workspaces &&
+    current &&
+    (!current.workspaceId ||
+      !workspaces.some(
+        (entry) =>
+          entry.workspaceId === current.workspaceId &&
+          entry.displayName === current.displayName,
+      ))
+  ) {
+    throw new DesktopWorkspaceProtocolError();
+  }
   return {
     schemaVersion: STATUS_SCHEMA_VERSION,
     availability,
     revision: canonicalInteger(value.revision),
     supervisorGeneration: canonicalInteger(value.supervisorGeneration),
     current,
+    ...(workspaces ? { workspaces } : {}),
   };
 }
 
-function parseCurrent(
-  value: unknown,
-): Readonly<{ displayName: string }> | null {
+function parseCurrent(value: unknown): DesktopWorkspaceStatus["current"] {
   if (value === null) return null;
-  exactObject(value, ["displayName"]);
+  const hasId =
+    typeof value === "object" &&
+    value !== null &&
+    Object.hasOwn(value, "workspaceId");
+  exactObject(value, ["displayName", ...(hasId ? ["workspaceId"] : [])]);
   const displayName = boundedText(
     value.displayName,
     DISPLAY_NAME_MAX_BYTES,
@@ -365,7 +454,33 @@ function parseCurrent(
   ) {
     throw new DesktopWorkspaceProtocolError();
   }
-  return { displayName };
+  return {
+    displayName,
+    ...(hasId ? { workspaceId: parseWorkspaceId(value.workspaceId) } : {}),
+  };
+}
+
+function parseWorkspaceId(value: unknown): string {
+  if (
+    typeof value !== "string" ||
+    !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/u.test(value)
+  ) {
+    throw new DesktopWorkspaceProtocolError("desktop_workspace_id_invalid");
+  }
+  return value;
+}
+
+function parseWorkspaces(value: unknown): readonly DesktopWorkspaceSummary[] {
+  if (!Array.isArray(value) || value.length > 100)
+    throw new DesktopWorkspaceProtocolError();
+  const ids = new Set<string>();
+  return value.map((entry) => {
+    const parsed = parseCurrent(entry);
+    if (!parsed?.workspaceId || ids.has(parsed.workspaceId))
+      throw new DesktopWorkspaceProtocolError();
+    ids.add(parsed.workspaceId);
+    return { workspaceId: parsed.workspaceId, displayName: parsed.displayName };
+  });
 }
 
 function parseAvailability(value: unknown): DesktopWorkspaceAvailability {

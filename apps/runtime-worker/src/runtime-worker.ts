@@ -1007,6 +1007,7 @@ export class RuntimeWorker {
     >[] = [];
     let toolBoundaryCompleted = false;
     let toolBoundaryOutcome: RuntimeWorkerOutcome | null = null;
+    const generatedImageItems = new Set<string>();
     const bufferedEvents: Exclude<
       KernelAgentEvent,
       { type: "segment.continuation_requested" }
@@ -1131,13 +1132,18 @@ export class RuntimeWorker {
         }
         if (
           event.type === "segment.started" ||
-          event.type === "rate_limit.updated"
+          event.type === "rate_limit.updated" ||
+          event.type === "model.image.progress" ||
+          event.type === "model.image.generated"
         ) {
           const persisted = await this.#execution.recordAgentEvent(
             claim,
             event,
           );
           run = persisted.state;
+          if (event.type === "model.image.generated") {
+            generatedImageItems.add(event.data.itemId);
+          }
           continue;
         }
         if (
@@ -1362,7 +1368,10 @@ export class RuntimeWorker {
       throw new PermanentWorkerError("segment_completion_missing");
     }
 
-    let completionOutput = output;
+    let completionOutput =
+      output.trim().length === 0 && generatedImageItems.size > 0
+        ? "图片已生成。"
+        : output;
     let proposedPlan: string | null = null;
     if (run.collaborationMode === "plan") {
       try {

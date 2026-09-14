@@ -60,6 +60,18 @@ function createRuntime() {
 }
 
 describe("ControlCommandOfficeRoomAdapter", () => {
+  it("does not show another workspace's Office conversation with the same title", () => {
+    const liveThread = {
+      id: "thread-a", workspaceId: "workspace-a", name: controlOfficeThreadTitle(record),
+      turns: [{ id: "turn-a", status: "completed", items: [{ type: "agentMessage", id: "answer-a", text: "Only workspace A can show this" }] }],
+    } as unknown as Thread;
+    const adapter = createControlCommandOfficeRoomAdapter({
+      workspaceId: "workspace-b",
+      client: { createOffice: vi.fn(), createThread: vi.fn(), getActiveAgentVersionCatalog: vi.fn(), getExecutionIntentCapability: vi.fn(), getOffice: vi.fn(async () => null as never), getThreadGoal: vi.fn(), listOffices: vi.fn() },
+      liveThreads: [liveThread], locale: "zh", runtime: createRuntime(),
+    });
+    expect(renderToStaticMarkup(<>{adapter.render(record, vi.fn(), vi.fn())}</>)).not.toContain("Only workspace A can show this");
+  });
   it("uses one durable thread title for the Office group chat", () => {
     expect(controlOfficeThreadTitle(record)).toBe("💬 产品交付办公室");
   });

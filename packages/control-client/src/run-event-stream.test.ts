@@ -48,6 +48,85 @@ test("parses fragmented CRLF SSE and preserves the durable sequence cursor", asy
   assert.equal(requests[0]?.headers.get("authorization"), "Bearer token-1");
 });
 
+test("resumes bounded image progress and artifact references without inline image bytes", async () => {
+  const progress = {
+    ...runStartedEvent(),
+    type: "model.image.progress",
+    sequence: 3,
+    data: { segmentId: "segment-1", itemId: "image-1", stage: "generating" },
+  };
+  const generated = {
+    ...runStartedEvent(),
+    type: "model.image.generated",
+    sequence: 4,
+    data: {
+      segmentId: "segment-1",
+      itemId: "image-1",
+      artifactRef: "artifact:image-1",
+      mimeType: "image/png",
+      byteLength: 2_600_000,
+    },
+  };
+  const payload = [progress, generated]
+    .map(
+      (event) =>
+        `id: ${event.sequence}\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+    )
+    .join("");
+  let cursor: string | null = null;
+  const client = new ControlApiClient({
+    baseUrl: "https://control.example/",
+    fetch: async (_input, init) => {
+      cursor = new Headers(init?.headers).get("last-event-id");
+      return new Response(
+        fragmentedStream(new TextEncoder().encode(payload), [1, 7, 19, 43]),
+        { headers: { "content-type": "text/event-stream" } },
+      );
+    },
+  });
+  const events = [];
+  for await (const event of streamRunEvents(client, {
+    runId: "run/1",
+    afterSequence: 2,
+    view: "transcript",
+  }))
+    events.push(event);
+  assert.deepEqual(events, [progress, generated]);
+  assert.equal(cursor, "2");
+  assert.ok(payload.length < 1024);
+});
+
+test("rejects unsafe, oversized, malformed, or inline image metadata", async () => {
+  const valid = {
+    segmentId: "segment-1",
+    itemId: "image-1",
+    artifactRef: "artifact:image-1",
+    mimeType: "image/png",
+    byteLength: 2048,
+  };
+  for (const data of [
+    { ...valid, mimeType: "image/svg+xml" },
+    { ...valid, byteLength: 8 * 1024 * 1024 + 1 },
+    { ...valid, byteLength: 1.5 },
+    { ...valid, artifactRef: "" },
+    { ...valid, result: "data:image/png;base64,unexpected" },
+  ]) {
+    const event = { ...runStartedEvent(), type: "model.image.generated", data };
+    const client = new ControlApiClient({
+      baseUrl: "https://control.example/",
+      fetch: async () =>
+        new Response(
+          `id: 2\nevent: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          { headers: { "content-type": "text/event-stream" } },
+        ),
+    });
+    await assert.rejects(async () => {
+      for await (const _event of streamRunEvents(client, { runId: "run/1" }))
+        assert.fail("invalid image must not reach the UI");
+    }, hasProtocolCode("control_client_event_invalid"));
+  }
+});
+
 test("parses bounded Tool previews from the transcript event view", async () => {
   const requests: string[] = [];
   const requested = {

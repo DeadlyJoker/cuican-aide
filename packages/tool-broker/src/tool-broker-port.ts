@@ -152,7 +152,10 @@ export interface ToolExecutionProviderPort {
   reserveExecution?(
     command: ToolExecutionCommand,
     signal: AbortSignal,
-  ): ToolExecutionReservation | undefined;
+  ):
+    | ToolExecutionReservation
+    | undefined
+    | Promise<ToolExecutionReservation | undefined>;
   executionPolicy(
     kind: ToolCallKind,
     name: string,

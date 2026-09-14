@@ -9,12 +9,15 @@ export function projectArtifact(artifact: ArtifactRecord): ArtifactView {
     sensitivity: artifact.sensitivity,
     contentDigest: artifact.contentDigest,
     byteLength: artifact.byteLength,
-    source: {
-      kind: artifact.source.kind,
-      runId: artifact.source.runId,
-      stepId: artifact.source.stepId,
-      callId: artifact.source.callId,
-    },
+    source:
+      artifact.source.kind === "modelImage"
+        ? structuredClone(artifact.source)
+        : {
+            kind: artifact.source.kind,
+            runId: artifact.source.runId,
+            stepId: artifact.source.stepId,
+            callId: artifact.source.callId,
+          },
     retention: structuredClone(artifact.retention),
     encryption: { scheme: artifact.encryption.scheme },
     scan: {

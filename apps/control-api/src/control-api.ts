@@ -506,6 +506,7 @@ export function buildControlApi(
       kind: "thread.create",
       idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
       title: body.title,
+      ...(body.workspaceId === undefined ? {} : { workspaceId: body.workspaceId }),
     });
     const response: ThreadMutationResponse = {
       disposition: result.disposition,

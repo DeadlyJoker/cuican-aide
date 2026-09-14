@@ -106,7 +106,7 @@ export function requireExactAutomationMessage(value: MessageRecord): void {
 }
 
 export function requireExactThreadState(value: ThreadState): void {
-  requireExactObject(value, ["archivedAt", "createdAt", "createdByActorId", "deletedAt", "deletedByActorId", "forkedFromThreadId", "forkedThroughHistorySequence", "lastEventSequence", "lastMessageSequence", "revision", "spaceId", "status", "tenantId", "threadId", "title", "updatedAt"], "automation_invocation_receipt_invalid");
+  requireExactObject(value, [...(value != null && Object.hasOwn(value, "workspaceId") ? ["workspaceId"] : []), "archivedAt", "createdAt", "createdByActorId", "deletedAt", "deletedByActorId", "forkedFromThreadId", "forkedThroughHistorySequence", "lastEventSequence", "lastMessageSequence", "revision", "spaceId", "status", "tenantId", "threadId", "title", "updatedAt"], "automation_invocation_receipt_invalid");
   try { validateThreadState(value); } catch (error) {
     throw new AutomationStoreError("automation_invocation_receipt_invalid", { cause: error instanceof Error ? error : undefined });
   }

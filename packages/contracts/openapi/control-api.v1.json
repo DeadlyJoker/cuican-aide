@@ -137,9 +137,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": [
-                "1"
-              ]
+              "enum": ["1"]
             },
             "description": "Opt in to fixed-version Skill schedule representations. Legacy list readers see prompt-only definitions."
           }
@@ -184,9 +182,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": [
-                "1"
-              ]
+              "enum": ["1"]
             },
             "description": "Opt in to fixed-version Skill schedule representations. Legacy list readers see prompt-only definitions."
           }
@@ -259,9 +255,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": [
-                "1"
-              ]
+              "enum": ["1"]
             },
             "description": "Opt in to fixed-version Skill schedule representations. Legacy list readers see prompt-only definitions."
           }
@@ -314,9 +308,7 @@
             "required": false,
             "schema": {
               "type": "string",
-              "enum": [
-                "1"
-              ]
+              "enum": ["1"]
             },
             "description": "Opt in to fixed-version Skill schedule representations. Legacy list readers see prompt-only definitions."
           }
@@ -3023,10 +3015,7 @@
             "in": "query",
             "schema": {
               "type": "string",
-              "enum": [
-                "active",
-                "archived"
-              ],
+              "enum": ["active", "archived"],
               "default": "active"
             }
           },
@@ -3357,11 +3346,7 @@
         "description": "Client view hides bounded transient retry noise; audit preserves every durable event; transcript adds bounded Tool input and output previews for transcript rendering.",
         "schema": {
           "type": "string",
-          "enum": [
-            "client",
-            "audit",
-            "transcript"
-          ],
+          "enum": ["client", "audit", "transcript"],
           "default": "client"
         }
       },
@@ -3372,9 +3357,7 @@
         "description": "Opt-in Run event extension. run-plan-v1 enables bounded run.plan.updated snapshots; without it those durable events remain hidden while the server cursor still advances.",
         "schema": {
           "type": "string",
-          "enum": [
-            "run-plan-v1"
-          ]
+          "enum": ["run-plan-v1"]
         }
       },
       "ThreadHistoryView": {
@@ -3384,10 +3367,7 @@
         "description": "Standard view hides deleted content and emits only its tombstone event; audit requires thread:audit:read and preserves durable history.",
         "schema": {
           "type": "string",
-          "enum": [
-            "standard",
-            "audit"
-          ],
+          "enum": ["standard", "audit"],
           "default": "standard"
         }
       },
@@ -3397,10 +3377,7 @@
         "required": false,
         "description": "Exclusive raw UTF-8 byte lexicographic recovery cursor. Omission is equivalent to null.",
         "schema": {
-          "type": [
-            "string",
-            "null"
-          ],
+          "type": ["string", "null"],
           "minLength": 1,
           "maxLength": 128,
           "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
@@ -3476,11 +3453,7 @@
       "OfficeMember": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "memberId",
-          "displayName",
-          "agentVersionId"
-        ],
+        "required": ["memberId", "displayName", "agentVersionId"],
         "properties": {
           "memberId": {
             "type": "string",
@@ -3505,10 +3478,7 @@
       "OfficeExecutionTarget": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "targetId",
-          "agentVersionId"
-        ],
+        "required": ["targetId", "agentVersionId"],
         "properties": {
           "targetId": {
             "type": "string",
@@ -3627,17 +3597,11 @@
       "OfficeMutationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "office"
-        ],
+        "required": ["disposition", "office"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "created",
-              "replayed"
-            ]
+            "enum": ["created", "replayed"]
           },
           "office": {
             "$ref": "#/components/schemas/Office"
@@ -3647,9 +3611,7 @@
       "GetOfficeResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "office"
-        ],
+        "required": ["office"],
         "properties": {
           "office": {
             "$ref": "#/components/schemas/Office"
@@ -3659,10 +3621,7 @@
       "StartOfficeRunRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "targetId",
-          "threadId"
-        ],
+        "required": ["targetId", "threadId"],
         "properties": {
           "targetId": {
             "type": "string",
@@ -3677,9 +3636,7 @@
       "AuthorizeOfficeRunResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "target"
-        ],
+        "required": ["target"],
         "properties": {
           "target": {
             "$ref": "#/components/schemas/OfficeExecutionTarget"
@@ -3689,10 +3646,7 @@
       "ListOfficesResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "data",
-          "nextCursor"
-        ],
+        "required": ["data", "nextCursor"],
         "properties": {
           "data": {
             "type": "array",
@@ -3702,19 +3656,14 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           }
         }
       },
       "HealthResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "status"
-        ],
+        "required": ["status"],
         "properties": {
           "status": {
             "type": "string",
@@ -3724,20 +3673,11 @@
       },
       "ModelProviderCredentialKind": {
         "type": "string",
-        "enum": [
-          "environment",
-          "keychain",
-          "none"
-        ]
+        "enum": ["environment", "keychain", "none"]
       },
       "ModelProviderRuntimeAvailability": {
         "type": "string",
-        "enum": [
-          "available",
-          "unconfigured",
-          "switchPending",
-          "unavailable"
-        ]
+        "enum": ["available", "unconfigured", "switchPending", "unavailable"]
       },
       "ModelProviderSettingsSnapshot": {
         "type": "object",
@@ -3755,10 +3695,7 @@
             "minimum": 0
           },
           "activeProviderId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 128
           },
@@ -3773,10 +3710,7 @@
             "$ref": "#/components/schemas/ModelProviderRuntimeAvailability"
           },
           "updatedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           }
         }
@@ -3784,9 +3718,7 @@
       "GetModelProviderSettingsResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "settings"
-        ],
+        "required": ["settings"],
         "properties": {
           "settings": {
             "$ref": "#/components/schemas/ModelProviderSettingsSnapshot"
@@ -3814,10 +3746,7 @@
       "ModelProviderProbeModelView": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "id",
-          "displayName"
-        ],
+        "required": ["id", "displayName"],
         "properties": {
           "id": {
             "type": "string",
@@ -3825,10 +3754,7 @@
             "maxLength": 256
           },
           "displayName": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 256
           }
@@ -3851,10 +3777,7 @@
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "completed",
-              "replayed"
-            ]
+            "enum": ["completed", "replayed"]
           },
           "providerId": {
             "type": "string",
@@ -3883,10 +3806,7 @@
             ]
           },
           "modelCount": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0,
             "maximum": 100
           },
@@ -3899,10 +3819,7 @@
             "type": "boolean"
           },
           "retryAfterMs": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0,
             "maximum": 86400000
           }
@@ -3922,12 +3839,7 @@
         "properties": {
           "scheduleType": {
             "type": "string",
-            "enum": [
-              "daily",
-              "weekly",
-              "interval",
-              "once"
-            ]
+            "enum": ["daily", "weekly", "interval", "once"]
           },
           "nextRunAt": {
             "type": "string",
@@ -3986,10 +3898,7 @@
             "maxLength": 9999
           },
           "agentVersionId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 512
           },
@@ -4011,10 +3920,7 @@
           },
           "toolPermissionMode": {
             "type": "string",
-            "enum": [
-              "requestApproval",
-              "approveForMe"
-            ],
+            "enum": ["requestApproval", "approveForMe"],
             "description": "Explicit permission mode for each entire Skill Run. Omission defaults to requestApproval. Only supported with skillInvocation."
           }
         },
@@ -4023,10 +3929,7 @@
       "RunAutomationNowRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedAutomationRevision",
-          "expectedThreadRevision"
-        ],
+        "required": ["expectedAutomationRevision", "expectedThreadRevision"],
         "properties": {
           "expectedAutomationRevision": {
             "type": "integer",
@@ -4083,10 +3986,7 @@
           },
           "executionMode": {
             "type": "string",
-            "enum": [
-              "manualOnly",
-              "scheduled"
-            ]
+            "enum": ["manualOnly", "scheduled"]
           },
           "automaticScheduling": {
             "type": "boolean"
@@ -4115,23 +4015,14 @@
           "skillReadiness": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "state",
-              "code"
-            ],
+            "required": ["state", "code"],
             "properties": {
               "state": {
                 "type": "string",
-                "enum": [
-                  "ready",
-                  "blocked"
-                ]
+                "enum": ["ready", "blocked"]
               },
               "code": {
-                "type": [
-                  "string",
-                  "null"
-                ],
+                "type": ["string", "null"],
                 "maxLength": 128
               }
             },
@@ -4139,10 +4030,7 @@
           },
           "toolPermissionMode": {
             "type": "string",
-            "enum": [
-              "requestApproval",
-              "approveForMe"
-            ],
+            "enum": ["requestApproval", "approveForMe"],
             "description": "Explicit permission mode for each entire Skill Run. Omission defaults to requestApproval. Only supported with skillInvocation."
           }
         }
@@ -4150,17 +4038,11 @@
       "AutomationMutationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "automation"
-        ],
+        "required": ["disposition", "automation"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "automation": {
             "$ref": "#/components/schemas/AutomationView"
@@ -4170,9 +4052,7 @@
       "GetAutomationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "automation"
-        ],
+        "required": ["automation"],
         "properties": {
           "automation": {
             "$ref": "#/components/schemas/AutomationView"
@@ -4182,10 +4062,7 @@
       "ListAutomationsResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "data",
-          "nextCursor"
-        ],
+        "required": ["data", "nextCursor"],
         "properties": {
           "data": {
             "type": "array",
@@ -4194,10 +4071,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "pattern": "^[A-Za-z0-9_-]{1,512}$",
             "maxLength": 512
           }
@@ -4207,10 +4081,7 @@
         "type": "object",
         "additionalProperties": false,
         "description": "Safe public association between one Automation definition and its admitted Run. Private invocation IDs, digests and route bindings are omitted.",
-        "required": [
-          "automationId",
-          "runId"
-        ],
+        "required": ["automationId", "runId"],
         "properties": {
           "automationId": {
             "type": "string",
@@ -4228,19 +4099,11 @@
         "type": "object",
         "additionalProperties": false,
         "description": "The Run is projected from the canonical Automation invocation result; private origin bindings and route digests are omitted.",
-        "required": [
-          "disposition",
-          "automation",
-          "invocation",
-          "run"
-        ],
+        "required": ["disposition", "automation", "invocation", "run"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "automation": {
             "$ref": "#/components/schemas/AutomationView"
@@ -4256,27 +4119,26 @@
       "CreateThreadRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "title"
-        ],
+        "required": ["title"],
         "properties": {
           "title": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 256
+          },
+          "workspaceId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "description": "Immutable opaque workspace identity. Omission on legacy data is normalized to null. Filesystem paths are never accepted."
           }
         }
       },
       "AppendThreadMessageRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedRevision",
-          "content"
-        ],
+        "required": ["expectedRevision", "content"],
         "properties": {
           "expectedRevision": {
             "type": "integer",
@@ -4292,20 +4154,14 @@
       "ForkThreadRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedRevision",
-          "throughHistorySequence"
-        ],
+        "required": ["expectedRevision", "throughHistorySequence"],
         "properties": {
           "expectedRevision": {
             "type": "integer",
             "minimum": 1
           },
           "throughHistorySequence": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0
           }
         }
@@ -4313,10 +4169,7 @@
       "RollbackThreadRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedRevision",
-          "numTurns"
-        ],
+        "required": ["expectedRevision", "numTurns"],
         "properties": {
           "expectedRevision": {
             "type": "integer",
@@ -4332,9 +4185,7 @@
       "ArchiveThreadRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedRevision"
-        ],
+        "required": ["expectedRevision"],
         "properties": {
           "expectedRevision": {
             "type": "integer",
@@ -4345,9 +4196,7 @@
       "UnarchiveThreadRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedRevision"
-        ],
+        "required": ["expectedRevision"],
         "properties": {
           "expectedRevision": {
             "type": "integer",
@@ -4358,20 +4207,14 @@
       "RenameThreadRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedRevision",
-          "title"
-        ],
+        "required": ["expectedRevision", "title"],
         "properties": {
           "expectedRevision": {
             "type": "integer",
             "minimum": 1
           },
           "title": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 256
           }
@@ -4380,9 +4223,7 @@
       "DeleteThreadRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedRevision"
-        ],
+        "required": ["expectedRevision"],
         "properties": {
           "expectedRevision": {
             "type": "integer",
@@ -4392,11 +4233,7 @@
       },
       "ThreadStatus": {
         "type": "string",
-        "enum": [
-          "active",
-          "archived",
-          "deleted"
-        ]
+        "enum": ["active", "archived", "deleted"]
       },
       "ThreadView": {
         "type": "object",
@@ -4419,10 +4256,7 @@
             "type": "string"
           },
           "title": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "displayTitle": {
             "type": "string",
@@ -4442,16 +4276,10 @@
             "minimum": 0
           },
           "forkedFromThreadId": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "forkedThroughHistorySequence": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0
           },
           "createdAt": {
@@ -4463,18 +4291,19 @@
             "format": "date-time"
           },
           "archivedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "deletedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
+          },
+          "workspaceId": {
+            "type": ["string", "null"],
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+            "description": "Immutable opaque workspace identity. Omission on legacy data is normalized to null. Filesystem paths are never accepted."
           }
         }
       },
@@ -4594,12 +4423,7 @@
       },
       "MessageRole": {
         "type": "string",
-        "enum": [
-          "user",
-          "assistant",
-          "system",
-          "tool"
-        ]
+        "enum": ["user", "assistant", "system", "tool"]
       },
       "ProposedPlanView": {
         "type": "object",
@@ -4697,17 +4521,11 @@
       "ThreadMutationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "thread"
-        ],
+        "required": ["disposition", "thread"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "thread": {
             "$ref": "#/components/schemas/ThreadView"
@@ -4717,18 +4535,11 @@
       "AppendThreadMessageResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "thread",
-          "message"
-        ],
+        "required": ["disposition", "thread", "message"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "thread": {
             "$ref": "#/components/schemas/ThreadView"
@@ -4741,10 +4552,7 @@
       "GetThreadResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "thread",
-          "eventSequence"
-        ],
+        "required": ["thread", "eventSequence"],
         "properties": {
           "thread": {
             "$ref": "#/components/schemas/ThreadView"
@@ -4770,10 +4578,7 @@
       "ThreadGoalUserStatus": {
         "type": "string",
         "description": "Goal states that a user-facing mutation may request. Runtime and system terminal/limit states are read-only through this API.",
-        "enum": [
-          "active",
-          "paused"
-        ]
+        "enum": ["active", "paused"]
       },
       "ThreadGoalView": {
         "type": "object",
@@ -4810,10 +4615,7 @@
             "$ref": "#/components/schemas/ThreadGoalStatus"
           },
           "tokenBudget": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1
           },
           "tokensUsed": {
@@ -4838,10 +4640,7 @@
       "GetThreadGoalResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "goal",
-          "eventSequence"
-        ],
+        "required": ["goal", "eventSequence"],
         "properties": {
           "goal": {
             "oneOf": [
@@ -4865,9 +4664,7 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "kind"
-            ],
+            "required": ["kind"],
             "properties": {
               "kind": {
                 "type": "string",
@@ -4878,20 +4675,14 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "kind",
-              "value"
-            ],
+            "required": ["kind", "value"],
             "properties": {
               "kind": {
                 "type": "string",
                 "const": "set"
               },
               "value": {
-                "type": [
-                  "integer",
-                  "null"
-                ],
+                "type": ["integer", "null"],
                 "minimum": 1
               }
             }
@@ -4901,25 +4692,14 @@
       "SetThreadGoalRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedRevision",
-          "objective",
-          "status",
-          "tokenBudget"
-        ],
+        "required": ["expectedRevision", "objective", "status", "tokenBudget"],
         "properties": {
           "expectedRevision": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1
           },
           "objective": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 4000
           },
@@ -4941,9 +4721,7 @@
       "ClearThreadGoalRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedRevision"
-        ],
+        "required": ["expectedRevision"],
         "properties": {
           "expectedRevision": {
             "type": "integer",
@@ -4964,10 +4742,7 @@
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "goal": {
             "oneOf": [
@@ -5053,10 +4828,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "type": "string",
@@ -5065,9 +4837,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "goal"
-                ],
+                "required": ["goal"],
                 "properties": {
                   "goal": {
                     "$ref": "#/components/schemas/ThreadGoalView"
@@ -5086,10 +4856,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "type": "string",
@@ -5098,10 +4865,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "previousGoalId",
-                  "previousRevision"
-                ],
+                "required": ["previousGoalId", "previousRevision"],
                 "properties": {
                   "previousGoalId": {
                     "type": "string",
@@ -5131,10 +4895,7 @@
       "ListThreadsResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "data",
-          "nextCursor"
-        ],
+        "required": ["data", "nextCursor"],
         "properties": {
           "data": {
             "type": "array",
@@ -5143,10 +4904,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "pattern": "^[A-Za-z0-9_-]{1,512}$",
             "maxLength": 512
           }
@@ -5155,10 +4913,7 @@
       "ListThreadMessagesResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "data",
-          "nextCursor"
-        ],
+        "required": ["data", "nextCursor"],
         "properties": {
           "data": {
             "type": "array",
@@ -5167,10 +4922,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "pattern": "^[A-Za-z0-9_-]{1,128}$",
             "maxLength": 128
           }
@@ -5179,10 +4931,7 @@
       "CreateWorkspaceListRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedThreadRevision",
-          "maxEntries"
-        ],
+        "required": ["expectedThreadRevision", "maxEntries"],
         "properties": {
           "expectedThreadRevision": {
             "type": "integer",
@@ -5198,9 +4947,7 @@
       "WorkspaceOperationActionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedOperationRevision"
-        ],
+        "required": ["expectedOperationRevision"],
         "properties": {
           "expectedOperationRevision": {
             "type": "integer",
@@ -5211,10 +4958,7 @@
       "WorkspaceListEntryView": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "name",
-          "kind"
-        ],
+        "required": ["name", "kind"],
         "properties": {
           "name": {
             "type": "string",
@@ -5224,21 +4968,14 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "file",
-              "directory"
-            ]
+            "enum": ["file", "directory"]
           }
         }
       },
       "WorkspaceCompletedResultView": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "status",
-          "entries",
-          "truncated"
-        ],
+        "required": ["status", "entries", "truncated"],
         "properties": {
           "status": {
             "type": "string",
@@ -5259,11 +4996,7 @@
       "WorkspaceFailedResultView": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "status",
-          "code",
-          "retryable"
-        ],
+        "required": ["status", "code", "retryable"],
         "properties": {
           "status": {
             "type": "string",
@@ -5311,11 +5044,7 @@
               },
               "status": {
                 "type": "string",
-                "enum": [
-                  "pending",
-                  "canceled",
-                  "unknownOutcome"
-                ]
+                "enum": ["pending", "canceled", "unknownOutcome"]
               },
               "result": {
                 "type": "null"
@@ -5397,18 +5126,11 @@
       "WorkspaceOperationMutationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "eventSequence",
-          "operation"
-        ],
+        "required": ["disposition", "eventSequence", "operation"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "eventSequence": {
             "type": "integer",
@@ -5423,10 +5145,7 @@
       "GetWorkspaceOperationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "operation",
-          "eventSequence"
-        ],
+        "required": ["operation", "eventSequence"],
         "properties": {
           "operation": {
             "$ref": "#/components/schemas/WorkspaceOperationView"
@@ -5442,10 +5161,7 @@
         "type": "object",
         "additionalProperties": false,
         "description": "A response is additionally subject to a 2 MiB UTF-8 JSON hard cap, so a server may return fewer than limit items and a non-null recovery cursor.",
-        "required": [
-          "data",
-          "nextAfterExecutionId"
-        ],
+        "required": ["data", "nextAfterExecutionId"],
         "properties": {
           "data": {
             "type": "array",
@@ -5456,10 +5172,7 @@
             }
           },
           "nextAfterExecutionId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 128,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
@@ -5506,9 +5219,7 @@
           "data": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "operation"
-            ],
+            "required": ["operation"],
             "properties": {
               "operation": {
                 "$ref": "#/components/schemas/WorkspaceOperationView"
@@ -5519,19 +5230,13 @@
       },
       "ToolPermissionMode": {
         "type": "string",
-        "enum": [
-          "requestApproval",
-          "approveForMe",
-          "fullAccess"
-        ],
+        "enum": ["requestApproval", "approveForMe", "fullAccess"],
         "description": "Per-Run Tool permission and host sandbox choice. requestApproval keeps durable user gates inside the workspace sandbox. approveForMe automatically approves Tools but retains workspace-only writes and blocks network access. fullAccess automatically approves Tools and permits unrestricted host-file and network access. Omission fails closed to requestApproval."
       },
       "CreateRunRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "threadId"
-        ],
+        "required": ["threadId"],
         "properties": {
           "threadId": {
             "type": "string",
@@ -5539,10 +5244,7 @@
             "maxLength": 128
           },
           "agentVersionId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 512,
             "description": "Optional immutable AgentVersion selection. The server admits it before creating a Run; omission uses the configured default."
@@ -5583,11 +5285,7 @@
       "StartWorkflowRunRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "workflowVersionId",
-          "threadId",
-          "input"
-        ],
+        "required": ["workflowVersionId", "threadId", "input"],
         "properties": {
           "workflowVersionId": {
             "type": "string",
@@ -5624,22 +5322,14 @@
             "maxLength": 32768
           },
           "agentVersionId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 512,
             "description": "Requested immutable AgentVersion; null uses the active default. The resolved route is server-owned."
           },
           "executionIntent": {
             "type": "string",
-            "enum": [
-              "none",
-              "goal",
-              "plan",
-              "resumeGoal"
-            ],
+            "enum": ["none", "goal", "plan", "resumeGoal"],
             "description": "Atomic Turn intent. Goal creates or updates the persistent Thread Goal; Plan clears an active Goal, retains inactive Goal history, and pins this Run to Plan collaboration mode; ResumeGoal atomically resumes a paused Goal for one bound Run while deferring automatic continuation."
           },
           "toolPermissionMode": {
@@ -5650,20 +5340,14 @@
       "CompactThreadRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedRevision",
-          "agentVersionId"
-        ],
+        "required": ["expectedRevision", "agentVersionId"],
         "properties": {
           "expectedRevision": {
             "type": "integer",
             "minimum": 1
           },
           "agentVersionId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 512,
             "description": "Requested immutable AgentVersion for the compactor; null uses the active default."
@@ -5673,9 +5357,7 @@
       "CancelRunRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedRevision"
-        ],
+        "required": ["expectedRevision"],
         "properties": {
           "expectedRevision": {
             "type": "integer",
@@ -5746,9 +5428,7 @@
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "approvalId"
-                ],
+                "required": ["approvalId"],
                 "properties": {
                   "approvalId": {
                     "type": "string"
@@ -5759,18 +5439,11 @@
           },
           "collaborationMode": {
             "type": "string",
-            "enum": [
-              "default",
-              "plan"
-            ]
+            "enum": ["default", "plan"]
           },
           "purpose": {
             "type": "string",
-            "enum": [
-              "turn",
-              "manualCompaction",
-              "workflow"
-            ],
+            "enum": ["turn", "manualCompaction", "workflow"],
             "description": "Immutable normalized Run purpose. Legacy persisted Runs are projected as turn."
           },
           "workflowVersionBinding": {
@@ -5814,11 +5487,7 @@
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "goalId",
-                  "revision",
-                  "objectiveDigest"
-                ],
+                "required": ["goalId", "revision", "objectiveDigest"],
                 "properties": {
                   "goalId": {
                     "type": "string",
@@ -5837,10 +5506,7 @@
             ]
           },
           "outputRef": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "failure": {
             "oneOf": [
@@ -5850,10 +5516,7 @@
               {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "code",
-                  "retryable"
-                ],
+                "required": ["code", "retryable"],
                 "properties": {
                   "code": {
                     "type": "string"
@@ -5874,32 +5537,19 @@
             "format": "date-time"
           },
           "terminalAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           }
         }
       },
       "RunPlanStatus": {
         "type": "string",
-        "enum": [
-          "pending",
-          "inProgress",
-          "completed",
-          "blocked",
-          "canceled"
-        ]
+        "enum": ["pending", "inProgress", "completed", "blocked", "canceled"]
       },
       "RunPlanItemView": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "itemId",
-          "title",
-          "status"
-        ],
+        "required": ["itemId", "title", "status"],
         "properties": {
           "itemId": {
             "type": "string",
@@ -5944,10 +5594,7 @@
             "minimum": 1
           },
           "explanation": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 1000
           },
@@ -5972,11 +5619,7 @@
       "GetRunPlanResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "runId",
-          "eventSequence",
-          "plan"
-        ],
+        "required": ["runId", "eventSequence", "plan"],
         "properties": {
           "runId": {
             "type": "string",
@@ -6003,17 +5646,11 @@
       "RunMutationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "run"
-        ],
+        "required": ["disposition", "run"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "run": {
             "$ref": "#/components/schemas/RunView"
@@ -6023,29 +5660,16 @@
       "StartTurnResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "thread",
-          "message",
-          "run"
-        ],
+        "required": ["disposition", "thread", "message", "run"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "acceptedExecutionIntent": {
             "type": "string",
             "description": "Execution intent durably accepted for this turn. Always present on the execution-intent-v1 route and present on the legacy Turn route only when its Accept header includes the crewon-execution-intent-ack=v1 media parameter.",
-            "enum": [
-              "none",
-              "goal",
-              "plan",
-              "resumeGoal"
-            ]
+            "enum": ["none", "goal", "plan", "resumeGoal"]
           },
           "thread": {
             "$ref": "#/components/schemas/ThreadView"
@@ -6061,9 +5685,7 @@
       "ExecutionIntentCapabilityResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "version"
-        ],
+        "required": ["version"],
         "properties": {
           "version": {
             "type": "string",
@@ -6074,9 +5696,7 @@
       "GetRunResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "run"
-        ],
+        "required": ["run"],
         "properties": {
           "run": {
             "$ref": "#/components/schemas/RunView"
@@ -6086,10 +5706,7 @@
       "ListThreadRunsResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "data",
-          "nextCursor"
-        ],
+        "required": ["data", "nextCursor"],
         "properties": {
           "data": {
             "type": "array",
@@ -6098,10 +5715,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "pattern": "^[A-Za-z0-9_-]{1,512}$",
             "maxLength": 512
           }
@@ -6109,22 +5723,12 @@
       },
       "ToolApprovalStatus": {
         "type": "string",
-        "enum": [
-          "required",
-          "approved",
-          "rejected",
-          "expired",
-          "superseded"
-        ]
+        "enum": ["required", "approved", "rejected", "expired", "superseded"]
       },
       "DecideToolApprovalRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "expectedRevision",
-          "decision",
-          "comment"
-        ],
+        "required": ["expectedRevision", "decision", "comment"],
         "properties": {
           "expectedRevision": {
             "type": "integer",
@@ -6132,16 +5736,10 @@
           },
           "decision": {
             "type": "string",
-            "enum": [
-              "approved",
-              "rejected"
-            ]
+            "enum": ["approved", "rejected"]
           },
           "comment": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 2048
           }
@@ -6180,34 +5778,18 @@
             "format": "date-time"
           },
           "expiresAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "decision": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "enum": [
-              "approved",
-              "rejected",
-              null
-            ]
+            "type": ["string", "null"],
+            "enum": ["approved", "rejected", null]
           },
           "comment": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "decidedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           }
         }
@@ -6215,9 +5797,7 @@
       "GetToolApprovalResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "approval"
-        ],
+        "required": ["approval"],
         "properties": {
           "approval": {
             "$ref": "#/components/schemas/ToolApprovalView"
@@ -6227,18 +5807,11 @@
       "ToolApprovalMutationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "approval",
-          "run"
-        ],
+        "required": ["disposition", "approval", "run"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "committed",
-              "replayed"
-            ]
+            "enum": ["committed", "replayed"]
           },
           "approval": {
             "$ref": "#/components/schemas/ToolApprovalView"
@@ -6283,10 +5856,7 @@
             "maxLength": 512
           },
           "instructions": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 32768
           },
           "model": {
@@ -6338,10 +5908,7 @@
             "minimum": 1
           },
           "autoCompactAtTokens": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 1
           }
         }
@@ -6349,10 +5916,7 @@
       "AgentVersionExecution": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "streamMaxRetries",
-          "maxToolRounds"
-        ],
+        "required": ["streamMaxRetries", "maxToolRounds"],
         "properties": {
           "streamMaxRetries": {
             "type": "integer",
@@ -6369,19 +5933,13 @@
       "AgentVersionResources": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "workspaceRequired",
-          "governedContextDigest"
-        ],
+        "required": ["workspaceRequired", "governedContextDigest"],
         "properties": {
           "workspaceRequired": {
             "type": "boolean"
           },
           "governedContextDigest": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "pattern": "^sha256:[a-f0-9]{64}$"
           }
         }
@@ -6427,10 +5985,7 @@
           },
           "execution": {
             "type": "string",
-            "enum": [
-              "serial",
-              "parallel"
-            ]
+            "enum": ["serial", "parallel"]
           },
           "inputSchema": {
             "type": "object",
@@ -6469,10 +6024,7 @@
           },
           "execution": {
             "type": "string",
-            "enum": [
-              "serial",
-              "parallel"
-            ]
+            "enum": ["serial", "parallel"]
           },
           "inputFormat": {
             "type": "string",
@@ -6577,11 +6129,7 @@
           },
           "kind": {
             "type": "string",
-            "enum": [
-              "agent",
-              "humanGate",
-              "verification"
-            ]
+            "enum": ["agent", "humanGate", "verification"]
           },
           "title": {
             "type": "string",
@@ -6701,17 +6249,11 @@
       "WorkflowVersionMutationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "workflowVersion"
-        ],
+        "required": ["disposition", "workflowVersion"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "registered",
-              "existing"
-            ]
+            "enum": ["registered", "existing"]
           },
           "workflowVersion": {
             "$ref": "#/components/schemas/WorkflowVersionView"
@@ -6764,9 +6306,7 @@
       "GetWorkflowVersionResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "workflowVersion"
-        ],
+        "required": ["workflowVersion"],
         "properties": {
           "workflowVersion": {
             "$ref": "#/components/schemas/WorkflowVersionView"
@@ -6776,10 +6316,7 @@
       "ListWorkflowVersionsResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "data",
-          "nextCursor"
-        ],
+        "required": ["data", "nextCursor"],
         "properties": {
           "data": {
             "type": "array",
@@ -6788,10 +6325,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 2048
           }
         }
@@ -6824,11 +6358,7 @@
           "model": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "adapterName",
-              "adapterVersion",
-              "modelId"
-            ],
+            "required": ["adapterName", "adapterVersion", "modelId"],
             "properties": {
               "adapterName": {
                 "type": "string"
@@ -6850,17 +6380,11 @@
       "AgentVersionMutationResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "disposition",
-          "agentVersion"
-        ],
+        "required": ["disposition", "agentVersion"],
         "properties": {
           "disposition": {
             "type": "string",
-            "enum": [
-              "registered",
-              "existing"
-            ]
+            "enum": ["registered", "existing"]
           },
           "agentVersion": {
             "$ref": "#/components/schemas/AgentVersionView"
@@ -6870,9 +6394,7 @@
       "GetAgentVersionResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "agentVersion"
-        ],
+        "required": ["agentVersion"],
         "properties": {
           "agentVersion": {
             "$ref": "#/components/schemas/AgentVersionView"
@@ -6882,10 +6404,7 @@
       "ListAgentVersionsResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "data",
-          "nextCursor"
-        ],
+        "required": ["data", "nextCursor"],
         "properties": {
           "data": {
             "type": "array",
@@ -6894,10 +6413,7 @@
             }
           },
           "nextCursor": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "pattern": "^[A-Za-z0-9_-]{1,768}$",
             "maxLength": 768
           }
@@ -6955,18 +6471,14 @@
           },
           "kind": {
             "type": "string",
-            "const": "toolOutput"
+            "enum": ["toolOutput", "modelImage"]
           },
           "mediaType": {
             "type": "string"
           },
           "sensitivity": {
             "type": "string",
-            "enum": [
-              "public",
-              "internal",
-              "workspaceSensitive"
-            ]
+            "enum": ["public", "internal", "workspaceSensitive"]
           },
           "contentDigest": {
             "type": "string",
@@ -6977,37 +6489,53 @@
             "minimum": 1
           },
           "source": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "kind",
-              "runId",
-              "stepId",
-              "callId"
-            ],
-            "properties": {
-              "kind": {
-                "type": "string",
-                "const": "toolOutput"
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "runId", "stepId", "callId"],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "toolOutput"
+                  },
+                  "runId": {
+                    "type": "string"
+                  },
+                  "stepId": {
+                    "type": "string"
+                  },
+                  "callId": {
+                    "type": "string"
+                  }
+                }
               },
-              "runId": {
-                "type": "string"
-              },
-              "stepId": {
-                "type": "string"
-              },
-              "callId": {
-                "type": "string"
+              {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kind", "runId", "segmentId", "itemId"],
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "const": "modelImage"
+                  },
+                  "runId": {
+                    "type": "string"
+                  },
+                  "segmentId": {
+                    "type": "string"
+                  },
+                  "itemId": {
+                    "type": "string"
+                  }
+                }
               }
-            }
+            ]
           },
           "retention": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "kind",
-              "expiresAt"
-            ],
+            "required": ["kind", "expiresAt"],
             "properties": {
               "kind": {
                 "type": "string",
@@ -7022,41 +6550,25 @@
           "encryption": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "scheme"
-            ],
+            "required": ["scheme"],
             "properties": {
               "scheme": {
                 "type": "string",
-                "enum": [
-                  "aes256gcm",
-                  "externalKms"
-                ]
+                "enum": ["aes256gcm", "externalKms"]
               }
             }
           },
           "scan": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "status",
-              "scannedAt"
-            ],
+            "required": ["status", "scannedAt"],
             "properties": {
               "status": {
                 "type": "string",
-                "enum": [
-                  "notRequired",
-                  "pending",
-                  "clean",
-                  "blocked"
-                ]
+                "enum": ["notRequired", "pending", "clean", "blocked"]
               },
               "scannedAt": {
-                "type": [
-                  "string",
-                  "null"
-                ],
+                "type": ["string", "null"],
                 "format": "date-time"
               }
             }
@@ -7070,9 +6582,7 @@
       "GetArtifactResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "artifact"
-        ],
+        "required": ["artifact"],
         "properties": {
           "artifact": {
             "$ref": "#/components/schemas/ArtifactView"
@@ -7097,19 +6607,12 @@
       "ErrorEnvelope": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "error"
-        ],
+        "required": ["error"],
         "properties": {
           "error": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "category",
-              "code",
-              "message",
-              "requestId"
-            ],
+            "required": ["category", "code", "message", "requestId"],
             "properties": {
               "category": {
                 "$ref": "#/components/schemas/ErrorCategory"
@@ -7129,12 +6632,7 @@
       },
       "RunEventEnvelope": {
         "type": "object",
-        "required": [
-          "eventId",
-          "runId",
-          "sequence",
-          "occurredAt"
-        ],
+        "required": ["eventId", "runId", "sequence", "occurredAt"],
         "properties": {
           "eventId": {
             "type": "string"
@@ -7160,10 +6658,7 @@
           {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "type": "string",
@@ -7172,9 +6667,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "threadId"
-                ],
+                "required": ["threadId"],
                 "properties": {
                   "threadId": {
                     "type": "string"
@@ -7195,9 +6688,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type"
-            ],
+            "required": ["type"],
             "properties": {
               "type": {
                 "const": "run.started"
@@ -7213,10 +6704,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "run.approval.required"
@@ -7224,9 +6712,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "approvalId"
-                ],
+                "required": ["approvalId"],
                 "properties": {
                   "approvalId": {
                     "type": "string"
@@ -7247,9 +6733,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type"
-            ],
+            "required": ["type"],
             "properties": {
               "type": {
                 "const": "run.resumed"
@@ -7268,9 +6752,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type"
-            ],
+            "required": ["type"],
             "properties": {
               "type": {
                 "const": "run.suspended"
@@ -7289,9 +6771,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type"
-            ],
+            "required": ["type"],
             "properties": {
               "type": {
                 "const": "run.reconciliation.required"
@@ -7310,9 +6790,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type"
-            ],
+            "required": ["type"],
             "properties": {
               "type": {
                 "const": "run.cancel.requested"
@@ -7328,10 +6806,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "run.completed"
@@ -7339,15 +6814,10 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "outputRef"
-                ],
+                "required": ["outputRef"],
                 "properties": {
                   "outputRef": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   }
                 }
               }
@@ -7362,10 +6832,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "run.failed"
@@ -7373,10 +6840,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "code",
-                  "retryable"
-                ],
+                "required": ["code", "retryable"],
                 "properties": {
                   "code": {
                     "type": "string"
@@ -7400,9 +6864,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type"
-            ],
+            "required": ["type"],
             "properties": {
               "type": {
                 "const": "run.canceled"
@@ -7418,10 +6880,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "segment.started"
@@ -7429,10 +6888,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "segmentId",
-                  "attempt"
-                ],
+                "required": ["segmentId", "attempt"],
                 "properties": {
                   "segmentId": {
                     "type": "string"
@@ -7454,10 +6910,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "model.sampling.retry"
@@ -7503,10 +6956,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "model.transport.fallback"
@@ -7550,10 +7000,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "model.output.delta"
@@ -7561,10 +7008,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "segmentId",
-                  "delta"
-                ],
+                "required": ["segmentId", "delta"],
                 "properties": {
                   "segmentId": {
                     "type": "string"
@@ -7586,10 +7030,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "tool.requested"
@@ -7597,12 +7038,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "segmentId",
-                  "callId",
-                  "kind",
-                  "name"
-                ],
+                "required": ["segmentId", "callId", "kind", "name"],
                 "properties": {
                   "segmentId": {
                     "type": "string"
@@ -7612,10 +7048,7 @@
                   },
                   "kind": {
                     "type": "string",
-                    "enum": [
-                      "function",
-                      "custom"
-                    ]
+                    "enum": ["function", "custom"]
                   },
                   "name": {
                     "type": "string",
@@ -7632,12 +7065,8 @@
                   }
                 },
                 "dependentRequired": {
-                  "inputPreview": [
-                    "inputTruncated"
-                  ],
-                  "inputTruncated": [
-                    "inputPreview"
-                  ]
+                  "inputPreview": ["inputTruncated"],
+                  "inputTruncated": ["inputPreview"]
                 }
               }
             }
@@ -7651,10 +7080,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "tool.completed"
@@ -7680,10 +7106,7 @@
                   },
                   "kind": {
                     "type": "string",
-                    "enum": [
-                      "function",
-                      "custom"
-                    ]
+                    "enum": ["function", "custom"]
                   },
                   "name": {
                     "type": "string",
@@ -7812,10 +7235,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "context.compacted"
@@ -7833,10 +7253,7 @@
                 "properties": {
                   "mode": {
                     "type": "string",
-                    "enum": [
-                      "auto",
-                      "manual"
-                    ]
+                    "enum": ["auto", "manual"]
                   },
                   "replacesThroughSequence": {
                     "type": "integer",
@@ -7863,11 +7280,7 @@
       "RateLimitWindow": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "usedPercent",
-          "windowMinutes",
-          "resetsAt"
-        ],
+        "required": ["usedPercent", "windowMinutes", "resetsAt"],
         "properties": {
           "usedPercent": {
             "type": "number",
@@ -7875,17 +7288,11 @@
             "maximum": 100
           },
           "windowMinutes": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0
           },
           "resetsAt": {
-            "type": [
-              "integer",
-              "null"
-            ],
+            "type": ["integer", "null"],
             "minimum": 0
           }
         }
@@ -7893,11 +7300,7 @@
       "CreditsSnapshot": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "hasCredits",
-          "unlimited",
-          "balance"
-        ],
+        "required": ["hasCredits", "unlimited", "balance"],
         "properties": {
           "hasCredits": {
             "type": "boolean"
@@ -7906,10 +7309,7 @@
             "type": "boolean"
           },
           "balance": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 128
           }
@@ -7918,12 +7318,7 @@
       "SpendControlLimitSnapshot": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "limit",
-          "used",
-          "remainingPercent",
-          "resetsAt"
-        ],
+        "required": ["limit", "used", "remainingPercent", "resetsAt"],
         "properties": {
           "limit": {
             "type": "string",
@@ -7961,18 +7356,12 @@
         ],
         "properties": {
           "limitId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 128
           },
           "limitName": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 256
           },
@@ -8017,18 +7406,12 @@
             ]
           },
           "planType": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 64
           },
           "rateLimitReachedType": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "enum": [
               "rate_limit_reached",
               "workspace_owner_credits_depleted",
@@ -8047,10 +7430,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "rate_limit.updated"
@@ -8058,10 +7438,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "segmentId",
-                  "snapshot"
-                ],
+                "required": ["segmentId", "snapshot"],
                 "properties": {
                   "segmentId": {
                     "type": "string"
@@ -8082,10 +7459,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "usage.recorded"
@@ -8128,10 +7502,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "run.goal.accounting.updated"
@@ -8139,23 +7510,13 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "goalId",
-                  "goalRevision",
-                  "steeringPending"
-                ],
+                "required": ["goalId", "goalRevision", "steeringPending"],
                 "properties": {
                   "goalId": {
-                    "type": [
-                      "string",
-                      "null"
-                    ]
+                    "type": ["string", "null"]
                   },
                   "goalRevision": {
-                    "type": [
-                      "integer",
-                      "null"
-                    ],
+                    "type": ["integer", "null"],
                     "minimum": 1
                   },
                   "steeringPending": {
@@ -8174,10 +7535,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "run.goal.steering.consumed"
@@ -8197,10 +7555,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "run.plan.updated"
@@ -8208,9 +7563,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "plan"
-                ],
+                "required": ["plan"],
                 "properties": {
                   "plan": {
                     "$ref": "#/components/schemas/RunPlanView"
@@ -8228,10 +7581,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "segment.completed"
@@ -8239,9 +7589,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "segmentId"
-                ],
+                "required": ["segmentId"],
                 "properties": {
                   "segmentId": {
                     "type": "string"
@@ -8259,10 +7607,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "segment.checkpointed"
@@ -8270,9 +7615,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "segmentId"
-                ],
+                "required": ["segmentId"],
                 "properties": {
                   "segmentId": {
                     "type": "string"
@@ -8290,10 +7633,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "segment.provider_continuation"
@@ -8331,10 +7671,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "segment.failed"
@@ -8342,11 +7679,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "segmentId",
-                  "code",
-                  "retryable"
-                ],
+                "required": ["segmentId", "code", "retryable"],
                 "properties": {
                   "segmentId": {
                     "type": "string"
@@ -8370,10 +7703,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "message.completed"
@@ -8381,11 +7711,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "messageId",
-                  "messageSequence",
-                  "role"
-                ],
+                "required": ["messageId", "messageSequence", "role"],
                 "properties": {
                   "messageId": {
                     "type": "string"
@@ -8410,10 +7736,7 @@
           },
           {
             "type": "object",
-            "required": [
-              "type",
-              "data"
-            ],
+            "required": ["type", "data"],
             "properties": {
               "type": {
                 "const": "plan.proposed"
@@ -8421,11 +7744,7 @@
               "data": {
                 "type": "object",
                 "additionalProperties": false,
-                "required": [
-                  "planId",
-                  "messageId",
-                  "messageSequence"
-                ],
+                "required": ["planId", "messageId", "messageSequence"],
                 "properties": {
                   "planId": {
                     "type": "string"
@@ -8445,16 +7764,12 @@
       },
       "RunReasonEventData": {
         "type": "object",
-        "required": [
-          "data"
-        ],
+        "required": ["data"],
         "properties": {
           "data": {
             "type": "object",
             "additionalProperties": false,
-            "required": [
-              "reasonCode"
-            ],
+            "required": ["reasonCode"],
             "properties": {
               "reasonCode": {
                 "type": "string"
@@ -8465,9 +7780,7 @@
       },
       "EmptyRunEventData": {
         "type": "object",
-        "required": [
-          "data"
-        ],
+        "required": ["data"],
         "properties": {
           "data": {
             "type": "object",
@@ -8560,6 +7873,12 @@
           },
           {
             "$ref": "#/components/schemas/MessageCompletedEventView"
+          },
+          {
+            "$ref": "#/components/schemas/ModelImageProgressEventView"
+          },
+          {
+            "$ref": "#/components/schemas/ModelImageGeneratedEventView"
           }
         ]
       },
@@ -8595,10 +7914,7 @@
             "$ref": "#/components/schemas/ModelProviderCredentialKind"
           },
           "environmentVariable": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 128
           },
@@ -8647,18 +7963,12 @@
             }
           },
           "olderCursor": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 2048,
             "pattern": "^[A-Za-z0-9_-]+$"
           },
           "newerCursor": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 2048,
             "pattern": "^[A-Za-z0-9_-]+$"
           }
@@ -8692,17 +8002,11 @@
             "maximum": 100
           },
           "olderCursor": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 4096
           },
           "newerCursor": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "maxLength": 4096
           }
         }
@@ -8710,11 +8014,7 @@
       "GetThreadActiveRunResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "schemaVersion",
-          "threadId",
-          "run"
-        ],
+        "required": ["schemaVersion", "threadId", "run"],
         "properties": {
           "schemaVersion": {
             "type": "string",
@@ -8739,11 +8039,7 @@
       "GetThreadTranscriptWindowResponse": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "schemaVersion",
-          "messageWindow",
-          "runBindings"
-        ],
+        "required": ["schemaVersion", "messageWindow", "runBindings"],
         "properties": {
           "schemaVersion": {
             "type": "string",
@@ -8759,11 +8055,7 @@
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": [
-                "messageId",
-                "runId",
-                "source"
-              ],
+              "required": ["messageId", "runId", "source"],
               "properties": {
                 "messageId": {
                   "type": "string",
@@ -8771,10 +8063,7 @@
                   "maxLength": 512
                 },
                 "runId": {
-                  "type": [
-                    "string",
-                    "null"
-                  ],
+                  "type": ["string", "null"],
                   "minLength": 1,
                   "maxLength": 512
                 },
@@ -8794,11 +8083,7 @@
       "SkillVersionRef": {
         "type": "object",
         "additionalProperties": false,
-        "required": [
-          "skillId",
-          "versionId",
-          "contentDigest"
-        ],
+        "required": ["skillId", "versionId", "contentDigest"],
         "properties": {
           "skillId": {
             "type": "string",
@@ -8909,11 +8194,7 @@
         "maxProperties": 24,
         "additionalProperties": {
           "type": "string",
-          "enum": [
-            "runDate",
-            "previousWeekStart",
-            "previousWeekEnd"
-          ]
+          "enum": ["runDate", "previousWeekStart", "previousWeekEnd"]
         }
       },
       "BrowserExecutionAuthorityResponse": {
@@ -8946,10 +8227,7 @@
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
           },
           "workspaceBindingId": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "minLength": 1,
             "maxLength": 512,
             "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$"
@@ -8966,6 +8244,95 @@
             "maximum": 9007199254740991
           }
         }
+      },
+      "ModelImageProgressEventView": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RunEventEnvelope"
+          },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": {
+                "const": "model.image.progress"
+              },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["segmentId", "itemId", "stage"],
+                "properties": {
+                  "segmentId": {
+                    "type": "string"
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$"
+                  },
+                  "stage": {
+                    "type": "string",
+                    "enum": ["in_progress", "generating", "completed"]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ModelImageGeneratedEventView": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RunEventEnvelope"
+          },
+          {
+            "type": "object",
+            "required": ["type", "data"],
+            "properties": {
+              "type": {
+                "const": "model.image.generated"
+              },
+              "data": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "segmentId",
+                  "itemId",
+                  "artifactRef",
+                  "mimeType",
+                  "byteLength"
+                ],
+                "properties": {
+                  "segmentId": {
+                    "type": "string"
+                  },
+                  "itemId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$"
+                  },
+                  "artifactRef": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 512,
+                    "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$"
+                  },
+                  "mimeType": {
+                    "type": "string",
+                    "enum": ["image/png", "image/jpeg", "image/webp"]
+                  },
+                  "byteLength": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 8388608
+                  }
+                }
+              }
+            }
+          }
+        ]
       }
     }
   }

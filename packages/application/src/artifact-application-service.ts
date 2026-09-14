@@ -148,6 +148,7 @@ export class ArtifactApplicationService implements ToolOutputArtifactPort {
       record.spaceId !== locator.spaceId ||
       record.ownerActorId !== locator.ownerActorId ||
       record.kind !== "toolOutput" ||
+      record.source.kind !== "toolOutput" ||
       record.source.runId !== locator.runId ||
       record.source.stepId !== locator.stepId ||
       record.source.attemptId !== locator.attemptId ||
@@ -270,6 +271,9 @@ function contentMatchesRecord(
     return false;
   }
   try {
+    if (record.kind === "modelImage") {
+      return digester.sha256Bytes?.(content) === record.contentDigest;
+    }
     const value = new TextDecoder("utf-8", {
       fatal: true,
       ignoreBOM: true,
@@ -285,6 +289,8 @@ function sameToolOutputSemantics(
   requested: ArtifactRecord,
 ): boolean {
   return (
+    actual.source.kind === "toolOutput" &&
+    requested.source.kind === "toolOutput" &&
     actual.tenantId === requested.tenantId &&
     actual.spaceId === requested.spaceId &&
     actual.ownerActorId === requested.ownerActorId &&

@@ -257,6 +257,7 @@ function itemStatus(item: ThreadItem): string | undefined {
 
   if (
     item.type === "mcpToolCall" ||
+    item.type === "imageGeneration" ||
     item.type === "dynamicToolCall" ||
     item.type === "collabAgentToolCall"
   ) {

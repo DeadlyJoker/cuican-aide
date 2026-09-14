@@ -33,4 +33,6 @@ export interface ApplicationClock {
 
 export interface ContentDigester {
   sha256(value: string): string;
+  /** Required by binary Artifact readers; text-only adapters remain compatible. */
+  sha256Bytes?(value: Uint8Array): string;
 }

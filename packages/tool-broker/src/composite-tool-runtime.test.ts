@@ -28,7 +28,7 @@ test("routes disjoint definitions to their exact runtime", async () => {
   await composite.reconcile(command("first"), new AbortController().signal);
   await composite.cancel(command("second"), new AbortController().signal);
   const execution = command("first");
-  const reservation = composite.reserveExecution(
+  const reservation = await composite.reserveExecution(
     execution,
     new AbortController().signal,
   );

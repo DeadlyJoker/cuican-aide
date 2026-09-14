@@ -2,6 +2,8 @@ import {
   parseProviderCheckpoint,
   parseRateLimitSnapshot,
   parseWorkspaceChangeSummary,
+  parseModelImageGeneratedData,
+  parseModelImageProgressData,
   type CanonicalAgentEvent,
 } from "@crewon/contracts";
 import type { RunLifecycleEvent, RunState } from "@crewon/domain";
@@ -63,6 +65,18 @@ export function mapAgentEvent(
             "segment_attempt_invalid",
           ),
         },
+      };
+    case "model.image.progress":
+      return {
+        ...envelope,
+        type: event.type,
+        data: { ...segment, ...parseModelImageProgressData(event.data) },
+      };
+    case "model.image.generated":
+      return {
+        ...envelope,
+        type: event.type,
+        data: { ...segment, ...parseModelImageGeneratedData(event.data) },
       };
     case "model.output.delta":
       return {

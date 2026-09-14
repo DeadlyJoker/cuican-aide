@@ -15,6 +15,30 @@ import {
 } from "./useControlWorkspaceRuntime";
 
 describe("ControlWorkspaceRuntimeComposition", () => {
+  it("activates a registered workspace without replacing the runtime or losing the roster on clear", async () => {
+    const native = authority();
+    const workspaces = [
+      { workspaceId: "workspace-a", displayName: "Project A" },
+      { workspaceId: "workspace-b", displayName: "Project B" },
+    ];
+    const first = status({ current: workspaces[0]!, workspaces });
+    const second = status({ current: workspaces[1]!, workspaces, revision: 5 });
+    native.status.mockResolvedValueOnce(first).mockResolvedValue(second);
+    native.activate.mockResolvedValue({ outcome: "committed", snapshot: second });
+    const test = composition({ controlConfigured: true, nativeAuthority: native.port });
+    await test.value.refreshNativeAuthority();
+    await test.value.activateNativeWorkspace("workspace-b");
+    expect(native.activate).toHaveBeenCalledWith("workspace-b", { expectedRevision: 4, idempotencyKey: expect.any(String) });
+    expect(native.selectAndRegister).not.toHaveBeenCalled();
+    expect(test.value.getSnapshot()).toMatchObject({ nativeWorkspace: { workspaceId: "workspace-b", displayName: "Project B" }, nativeWorkspaces: workspaces });
+    const cleared = status({ current: null, workspaces, revision: 6 });
+    native.clear.mockResolvedValue({ outcome: "committed", snapshot: cleared });
+    native.status.mockResolvedValue(cleared);
+    await test.value.clearNativeWorkspace();
+    expect(test.value.getSnapshot()).toMatchObject({ nativeWorkspace: { workspaceId: null, displayName: null }, nativeWorkspaces: workspaces });
+    expect(test.runtime.close).not.toHaveBeenCalled();
+    test.value.close();
+  });
   it("projects unavailable, Team read-only, and native desktop authority without legacy fallback", async () => {
     const unavailable = composition({ controlConfigured: false });
     const readOnly = composition({ controlConfigured: true });
@@ -38,6 +62,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
         mutationAuthority: "unavailable",
         nativeWorkspace: {
           availability: "unavailable",
+          workspaceId: null,
           displayName: null,
         },
       }),
@@ -50,6 +75,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
         nativeWorkspaceRevision: "4:7",
         nativeWorkspace: {
           availability: "available",
+          workspaceId: null,
           displayName: "cuican-aide",
         },
       }),
@@ -77,6 +103,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
 
     expect(test.value.getSnapshot().nativeWorkspace).toEqual({
       availability: "available",
+      workspaceId: null,
       displayName: "new",
     });
     expect(test.value.getSnapshot().nativeWorkspaceRevision).toBe("8:7");
@@ -159,7 +186,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
         mutationAuthority: "desktop",
         nativeBusy: false,
         nativeWorkspaceRevision: "6:9",
-        nativeWorkspace: { availability: "available", displayName: null },
+        nativeWorkspace: { availability: "available", workspaceId: null, displayName: null },
       }),
     );
   });
@@ -267,6 +294,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
         control: expect.objectContaining({ status: "error" }),
         nativeWorkspace: {
           availability: "available",
+          workspaceId: null,
           displayName: "selected",
         },
         mutationAuthority: "unavailable",
@@ -296,7 +324,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
 
     await test.value.selectThread("thread-current");
     await test.value.refreshNativeAuthority();
-    await test.value.selectNativeWorkspace();
+    expect(await test.value.selectNativeWorkspace()).toBe(false);
 
     expect(rehydrateThreadAuthority).not.toHaveBeenCalled();
     expect(test.value.getSnapshot().safeError).toBeNull();
@@ -389,6 +417,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
         mutationAuthority: "unavailable",
         nativeWorkspace: {
           availability: "unavailable",
+          workspaceId: null,
           displayName: null,
         },
       }),
@@ -413,6 +442,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
     expect(test.runtime.close).toHaveBeenCalledOnce();
     expect(test.value.getSnapshot().nativeWorkspace).toEqual({
       availability: "unavailable",
+      workspaceId: null,
       displayName: null,
     });
   });
@@ -421,7 +451,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
 function composition(config: {
   controlConfigured: boolean;
   nativeAuthority?: DesktopWorkspaceAuthorityPort | null;
-  idempotencyKey?: (operation: "clear" | "select") => string;
+  idempotencyKey?: (operation: "activate" | "clear" | "select") => string;
   rehydrateThreadAuthority?: (threadId: string) => Promise<void>;
 }) {
   const runtime = fakeRuntime();
@@ -468,14 +498,17 @@ function authority() {
   const selectAndRegister =
     vi.fn<DesktopWorkspaceAuthorityPort["selectAndRegister"]>();
   const clear = vi.fn<DesktopWorkspaceAuthorityPort["clear"]>();
+  const activate = vi.fn<DesktopWorkspaceAuthorityPort["activate"]>();
   return {
     status: statusMock,
     selectAndRegister,
     clear,
+    activate,
     port: {
       status: statusMock,
       selectAndRegister,
       clear,
+      activate,
     } satisfies DesktopWorkspaceAuthorityPort,
   };
 }

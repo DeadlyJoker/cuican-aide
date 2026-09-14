@@ -82,7 +82,6 @@ it("starts, remains responsive and stops real runtime children across blocked-ou
     }),
     providerModelCatalog: async () => ["test-model"],
     agentPlatformApiKeyForOrigin: () => null,
-    workspaceRoot: () => null,
     logOutputs: { stdout, stderr },
   });
   let identity: unknown;

@@ -72,6 +72,8 @@ const bridge: CrewonDesktopBridge = {
     status: () => invoke<unknown>("crewon:workspace:status"),
     selectAndRegister: (request) =>
       invoke<unknown>("crewon:workspace:select-and-register", request),
+    activate: (workspaceId, request) =>
+      invoke<unknown>("crewon:workspace:activate", workspaceId, request),
     clear: (request) => invoke<unknown>("crewon:workspace:clear", request),
     pickDirectory: (title) =>
       invoke<string | null>("crewon:workspace:pick-directory", title),

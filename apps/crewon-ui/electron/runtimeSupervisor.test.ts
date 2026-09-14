@@ -114,7 +114,6 @@ describe("desktop runtime identity", () => {
       repositoryRoot: null,
       provider: () => null,
       providerModelCatalog: async () => null,
-      workspaceRoot: () => null,
     });
 
     await expect(

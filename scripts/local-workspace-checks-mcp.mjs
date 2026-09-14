@@ -30,14 +30,10 @@ const repoRoot = await requireDirectory(
   process.env.CREWON_LOCAL_WORKSPACE_ROOT,
   "local_workspace_root_invalid",
 );
-const pnpmPath = requireExecutablePath(
-  process.env.CREWON_LOCAL_PNPM_PATH,
-  "local_pnpm_path_invalid",
-);
-const gitPath = requireExecutablePath(
-  process.env.CREWON_LOCAL_GIT_PATH,
-  "local_git_path_invalid",
-);
+// Finder launches may have no developer toolchain in PATH. File tools must
+// still start; optional commands report their own missing executable.
+const pnpmPath = optionalExecutablePath(process.env.CREWON_LOCAL_PNPM_PATH);
+const gitPath = optionalExecutablePath(process.env.CREWON_LOCAL_GIT_PATH);
 
 const [
   { Server },
@@ -162,6 +158,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     if (!hasExactKeys(request.params.arguments ?? {}, [])) {
       return toolError("git_status_input_invalid");
     }
+    if (gitPath === null) return toolError("local_git_unavailable");
     return executeCommand({
       command: gitPath,
       args: ["status", "--short"],
@@ -170,6 +167,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     });
   }
   if (request.params.name === "run_ui_test") {
+    if (pnpmPath === null) return toolError("local_pnpm_unavailable");
     const input = request.params.arguments ?? {};
     if (
       !hasExactKeys(input, ["testFile"]) ||
@@ -295,9 +293,9 @@ async function requireDirectory(value, code) {
   return canonical;
 }
 
-function requireExecutablePath(value, code) {
+function optionalExecutablePath(value) {
   if (typeof value !== "string" || !isAbsolute(value) || value.includes("\0")) {
-    throw new Error(code);
+    return null;
   }
   return value;
 }

@@ -4,6 +4,8 @@ export const CANONICAL_AGENT_EVENT_TYPES = [
   "model.sampling.retry",
   "model.transport.fallback",
   "model.output.delta",
+  "model.image.progress",
+  "model.image.generated",
   "model.reasoning.summary",
   "tool.requested",
   "tool.completed",
@@ -90,6 +92,8 @@ export function parseCanonicalAgentEvent(
   if (!isJsonObject(input.data)) {
     throw new ContractValidationError("event_data_invalid");
   }
+  if (input.type === "model.image.progress") parseModelImageProgressData(input.data);
+  if (input.type === "model.image.generated") parseModelImageGeneratedData(input.data);
 
   const encoded = new TextEncoder().encode(JSON.stringify(input));
   if (encoded.byteLength > maxEventBytes) {
@@ -170,3 +174,4 @@ function sameStrings(actual: string[], expected: string[]): boolean {
   );
 }
 import { ContractValidationError } from "./contract-validation-error.ts";
+import { parseModelImageGeneratedData, parseModelImageProgressData } from "./model-image-events.ts";

@@ -39,6 +39,7 @@ it("opens a complete Skill schedule draft only after real thread preparation, re
     entry = useSkillScheduleEntry({
       controlClient: client,
       selectedThreadId: null,
+      workspaceId: "workspace-a",
       onReady,
     });
     return null;
@@ -51,6 +52,7 @@ it("opens a complete Skill schedule draft only after real thread preparation, re
     expect(entry.error).toContain("重试");
     await act(async () => entry.request(input));
     const calls = vi.mocked(client.createThread).mock.calls;
+    expect(calls[0]?.[0]).toEqual({ title: "Skill 日程 · 销售汇总", workspaceId: "workspace-a" });
     expect(calls[1]).toEqual(calls[0]);
     expect(client.getThread).toHaveBeenCalledWith("schedule-thread");
     expect(onReady).toHaveBeenCalledWith(

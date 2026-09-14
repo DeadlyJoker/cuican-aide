@@ -44,6 +44,7 @@ import {
 } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
+import { findImageEventReplay } from "./run-image-output.ts";
 import { prepareRunOutputAppendInput } from "./run-output-append.ts";
 import {
   prepareToolSampleCommit,
@@ -1894,6 +1895,20 @@ export class RunExecutionService {
     if (canonicalEvent.runId !== state.runId) {
       throw new ApplicationError("validation", "agent_event_run_id_mismatch");
     }
+    const imageReplay = await findImageEventReplay(
+      this.#store,
+      state,
+      canonicalEvent,
+    );
+    if (imageReplay !== null) {
+      return {
+        disposition: "replayed",
+        state,
+        events: [imageReplay],
+        outbox: [],
+        workItems: [],
+      };
+    }
     const occurredAt = this.#now();
     const event = mapAgentEvent(
       canonicalEvent,
@@ -2846,7 +2861,11 @@ export class RunExecutionService {
     occurredAt: string,
     canonicalEvent?: CanonicalAgentEvent,
   ): Promise<ModelHistoryAppend | null> {
-    if (event.type !== "tool.requested" && event.type !== "tool.completed") {
+    if (
+      event.type !== "tool.requested" &&
+      event.type !== "tool.completed" &&
+      event.type !== "model.image.generated"
+    ) {
       return null;
     }
     const head = await this.#modelHistoryHead(state);
@@ -2860,6 +2879,20 @@ export class RunExecutionService {
       segmentId: event.data.segmentId,
       createdAt: occurredAt,
     };
+    if (event.type === "model.image.generated") {
+      const content = `Generated image ${event.data.itemId}: artifact ${event.data.artifactRef} (${event.data.mimeType}, ${event.data.byteLength} bytes). The image is available as a saved artifact; image bytes are not included in this conversation context.`;
+      return {
+        expectedLastSequence: head.lastSequence,
+        items: [{
+          ...base,
+          type: "message",
+          role: "assistant",
+          source: "assistant_completion",
+          content,
+          contentDigest: this.#digest(content),
+        }],
+      };
+    }
     const item: ModelHistoryItem =
       event.type === "tool.requested"
         ? {

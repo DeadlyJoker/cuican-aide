@@ -175,3 +175,30 @@ function hasProtocolCode(code: string): (error: unknown) => boolean {
   return (error) =>
     error instanceof ControlApiProtocolError && error.code === code;
 }
+
+
+test("reconnected Thread SSE hydrates the same immutable workspace after each cursor", async () => {
+  const cursors: string[] = [];
+  let revision = 1;
+  const client = new ControlApiClient({ baseUrl: "https://control.example", fetch: async (url, init = {}) => {
+    if (String(url).includes("/events")) {
+      cursors.push(new Headers(init.headers).get("last-event-id") ?? "");
+      revision += 1;
+      return new Response(frame({ ...renamedEvent(), sequence: revision, eventId: `thread-event-${revision}` }), { status: 200, headers: { "content-type": "text/event-stream" } });
+    }
+    return new Response(JSON.stringify({ eventSequence: revision, thread: {
+      threadId: "thread/1", title: "Saved task", workspaceId: "workspace-a", status: "active", revision,
+      lastMessageSequence: 0, forkedFromThreadId: null, forkedThroughHistorySequence: null,
+      createdAt: "2026-08-09T00:00:00Z", updatedAt: "2026-08-09T00:00:03Z", archivedAt: null, deletedAt: null,
+    } }), { status: 200, headers: { "content-type": "application/json" } });
+  } });
+  let snapshot = await client.getThread("thread/1");
+  for (let connection = 0; connection < 2; connection += 1) {
+    for await (const event of streamThreadEvents(client, { threadId: "thread/1", afterSequence: snapshot.eventSequence })) {
+      snapshot = await client.getThread("thread/1");
+      assert.equal(snapshot.eventSequence, event.sequence);
+      assert.equal(snapshot.thread.workspaceId, "workspace-a");
+    }
+  }
+  assert.deepEqual(cursors, ["1", "2"]);
+});

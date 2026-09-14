@@ -222,6 +222,8 @@ function runEvent(
         data: { segmentId: string; attempt: number };
       }
     | { type: "model.output.delta"; data: { segmentId: string; delta: string } }
+    | Pick<Extract<RunEventView, { type: "model.image.progress" }>, "type" | "data">
+    | Pick<Extract<RunEventView, { type: "model.image.generated" }>, "type" | "data">
     | {
         type: "model.sampling.retry";
         data: {
@@ -1475,11 +1477,44 @@ describe("Control thread runtime", () => {
     await runtime.startThread(undefined, "assistant");
 
     expect(client.createThread).toHaveBeenCalledWith(
-      { title: "CrewON Assistant" },
+      { title: "CrewON Assistant", workspaceId: null },
       "thread.create:test",
       { signal: expect.any(AbortSignal) },
     );
     runtime.close();
+  });
+
+  it("creates ordinary conversations with their captured workspace ID and projects the server owner", async () => {
+    const createThread = vi.fn<ControlApiClient["createThread"]>(async (body) => ({
+      disposition: "committed" as const,
+      thread: threadView({ workspaceId: body.workspaceId ?? null }),
+    }));
+    const client = Object.assign(fakeClient({ messages: [], runs: [] }), { createThread });
+    const runtime = new ControlThreadRuntime({ client }, callbacks());
+    try {
+      const first = await runtime.startThread(undefined, "control-api", undefined, "workspace-a");
+      const second = await runtime.startThread(undefined, "control-api", undefined, "workspace-b");
+      expect(first).toMatchObject({ workspaceId: "workspace-a", cwd: "" });
+      expect(second).toMatchObject({ workspaceId: "workspace-b", cwd: "" });
+      expect(createThread.mock.calls.map(([body]) => body)).toEqual([
+        { title: null, workspaceId: "workspace-a" },
+        { title: null, workspaceId: "workspace-b" },
+      ]);
+      expect(controlThreadSummary(threadView())).toMatchObject({ workspaceId: null });
+    } finally { runtime.close(); }
+  });
+
+  it("does not adopt another workspace's Assistant when creating an Assistant in this workspace", async () => {
+    const client = fakeClient({ messages: [], runs: [] });
+    client.getThreadCatalog.mockResolvedValue({
+      schemaVersion: "crewon.thread-catalog.v0", data: [threadView({ title: "CrewON Assistant", workspaceId: "workspace-a" })], scannedCount: 1, olderCursor: null, newerCursor: null,
+    });
+    const runtime = new ControlThreadRuntime({ client }, callbacks());
+    try {
+      await runtime.startThread(undefined, "assistant", undefined, "workspace-b");
+      expect(client.createThread).toHaveBeenCalledWith({ title: "CrewON Assistant", workspaceId: "workspace-b" }, expect.any(String), { signal: expect.any(AbortSignal) });
+      expect(client.getThread).not.toHaveBeenCalled();
+    } finally { runtime.close(); }
   });
 
   it("reuses an Assistant outside the first catalog page instead of creating a second model history", async () => {
@@ -3035,6 +3070,38 @@ describe("Control thread runtime", () => {
       }),
     );
     runtime.close();
+  });
+
+  it("publishes image progress before completion and restores its artifact in a fresh transcript window", async () => {
+    let terminal = false;
+    const imageReady = deferred<void>();
+    const settled = deferred<string>();
+    const runtimeCallbacks = callbacks(settled.resolve);
+    const client = fakeClient({
+      messages: [messageView(1, "user", "生成一张图片"), messageView(2, "assistant", "图片已生成。")],
+      runs: () => [runView(terminal ? { status: "completed", terminalAt: "2026-08-09T08:00:03.000Z", lastSequence: 3 } : {})],
+    });
+    const eventStream = async function* () {
+      yield runEvent(1, { type: "model.image.progress", data: { segmentId: "segment-1", itemId: "image-1", stage: "generating" } });
+      await imageReady.promise;
+      yield runEvent(2, { type: "model.image.generated", data: { segmentId: "segment-1", itemId: "image-1", artifactRef: "artifact:image-1", mimeType: "image/png", byteLength: 2_600_000 } });
+      terminal = true;
+      yield runEvent(3, { type: "run.completed", data: { outputRef: null } });
+    };
+    const runtime = new ControlThreadRuntime({ client, eventStream }, runtimeCallbacks);
+    await runtime.startTurn("thread-1", "生成一张图片");
+    await vi.waitFor(() => expect(runtimeCallbacks.onToolItem).toHaveBeenCalledWith("thread-1", "run-1", expect.objectContaining({ type: "imageGeneration", status: "inProgress" })));
+    expect(runtimeCallbacks.onTextDelta).not.toHaveBeenCalled();
+    imageReady.resolve();
+    await settled.promise;
+    expect(runtimeCallbacks.onToolItem).toHaveBeenLastCalledWith("thread-1", "run-1", expect.objectContaining({ type: "imageGeneration", status: "completed", controlImage: { artifactRef: "artifact:image-1", mimeType: "image/png", byteLength: 2_600_000 } }));
+    runtime.close();
+    const restored = new ControlThreadRuntime({ client, eventStream }, callbacks());
+    try {
+      const thread = await restored.readThread("thread-1");
+      expect(thread.turns[0]?.items).toContainEqual(expect.objectContaining({ type: "imageGeneration", status: "completed", controlImage: { artifactRef: "artifact:image-1", mimeType: "image/png", byteLength: 2_600_000 } }));
+      expect(JSON.stringify(thread).length).toBeLessThan(10_000);
+    } finally { restored.close(); }
   });
 
   it("snapshots each composer permission preset into the Control Run", async () => {

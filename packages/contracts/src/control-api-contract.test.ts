@@ -438,6 +438,24 @@ test("freezes authorized Artifact metadata/content without storage internals", (
   }
 });
 
+test("adds model-image Artifact provenance while preserving the tool-output source contract", () => {
+  const artifact = openApi.components.schemas.ArtifactView as {
+    properties: {
+      kind: { enum: string[] };
+      source: { oneOf: Array<{ required: string[]; additionalProperties: boolean; properties: {kind: {const: string}} }> };
+    };
+  };
+  assert.deepEqual(artifact.properties.kind.enum, ["toolOutput", "modelImage"]);
+  assert.deepEqual(artifact.properties.source.oneOf.map(source => ({
+    kind: source.properties.kind.const,
+    required: source.required,
+    additionalProperties: source.additionalProperties,
+  })), [
+    {kind: "toolOutput", required: ["kind", "runId", "stepId", "callId"], additionalProperties: false},
+    {kind: "modelImage", required: ["kind", "runId", "segmentId", "itemId"], additionalProperties: false},
+  ]);
+});
+
 test("freezes strict immutable AgentVersion publication and pagination", () => {
   const source = {
     schemaVersion: "crewon.agent-version-source.v0",
@@ -1077,7 +1095,7 @@ test("defines sequence-based SSE resume and a bounded safe event projection", ()
   assert.deepEqual(Object.keys(operation.responses["200"].content), [
     "text/event-stream",
   ]);
-  assert.equal(openApi.components.schemas.RunEventView.oneOf.length, 28);
+  assert.equal(openApi.components.schemas.RunEventView.oneOf.length, 30);
   assert.deepEqual(
     openApi.components.schemas.RunGoalAccountingUpdatedEventView.allOf[1]
       .properties.data.required,
@@ -1546,3 +1564,15 @@ type GoalEventPathSchema = Readonly<{
     };
   }>;
 }>;
+
+
+test("Thread create accepts one bounded workspace identity but lifecycle requests cannot rebind it", () => {
+  for (const workspaceId of [null, "workspace-a", "a".repeat(128)]) {
+    assert.deepEqual(parseCreateThreadRequest({ title: null, workspaceId }), { title: null, workspaceId });
+  }
+  for (const workspaceId of ["", " ", "/tmp/project", "../project", "C:\\project", "a".repeat(129), 123]) {
+    assert.throws(() => parseCreateThreadRequest({ title: null, workspaceId }), isContractError);
+  }
+  assert.throws(() => parseForkThreadRequest({ expectedRevision: 1, throughHistorySequence: null, workspaceId: "workspace-b" }), isContractError);
+  assert.throws(() => parseRenameThreadRequest({ expectedRevision: 1, title: "Renamed", workspaceId: "workspace-b" }), isContractError);
+});

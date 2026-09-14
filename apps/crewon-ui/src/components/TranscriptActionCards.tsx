@@ -48,35 +48,4 @@ export function TranscriptImageViewCard({
   );
 }
 
-export function TranscriptImageGenerationCard({
-  item,
-  locale,
-}: {
-  item: Extract<ThreadItem, { type: "imageGeneration" }>;
-  locale: Locale;
-}) {
-  const label =
-    item.status === "completed" || item.status === "succeeded"
-      ? locale === "zh"
-        ? "已生成"
-        : "Generated"
-      : locale === "zh"
-        ? "生成中"
-        : "Generating";
-
-  return (
-    <div
-      className="tool-card compact-tool-card action-card"
-      data-status={
-        item.status === "completed" || item.status === "succeeded"
-          ? "completed"
-          : "inProgress"
-      }
-    >
-      <div className="tool-card-header action-card-header">
-        {actionVerb(label)}
-        <code>{item.savedPath ?? item.revisedPrompt ?? item.result}</code>
-      </div>
-    </div>
-  );
-}
+export { TranscriptImageGenerationCard } from "./TranscriptImageGenerationCard";

@@ -90,6 +90,7 @@ import type {
 import { KernelContextCompactor } from "./kernel-context-compactor.ts";
 import type { ThreadSandboxPort } from "../../control-api/src/pim-sandbox-client.ts";
 import { createPimSandboxToolRuntime } from "./pim-sandbox-tool-runtime.ts";
+import { projectRunEventForView } from "../../control-api/src/run-projection.ts";
 
 const ROUTE: RunRoute = {
   authorityId: "standalone-1",
@@ -98,6 +99,203 @@ const ROUTE: RunRoute = {
   policySnapshotId: "policy-1",
   workspaceBindingId: "workspace-1",
 };
+
+test("image metadata streams durably, survives SQLite reopen and completes an image-only response", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-image-output-"));
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  const databasePath = join(directory, "runtime.sqlite");
+  const fixture = await createFixture(
+    context,
+    (clock) => new SqliteRunStore(databasePath, { clock }),
+  );
+  const image = {
+    type: "image.generated",
+    itemId: "ig-durable-1",
+    artifactRef: "artifact-durable-1",
+    mimeType: "image/png",
+    byteLength: 3_550_000,
+  } as const;
+  let progressSequence = 0;
+  const worker = fixture.worker({
+    transport: {
+      adapterName: "image-fixture",
+      adapterVersion: "1",
+      modelId: "image-model",
+      async *stream() {
+        yield {
+          type: "image.progress",
+          itemId: image.itemId,
+          stage: "generating",
+        };
+        const progress = (await fixture.events()).find(
+          (event) => event.type === "model.image.progress",
+        );
+        assert.ok(progress);
+        progressSequence = progress.sequence;
+        assert.equal((await fixture.loadRun()).status, "running");
+        yield image;
+        const history = await fixture.store.listModelHistoryItems(
+          { tenantId: actor().tenantId, threadId: fixture.threadId },
+          0,
+          100,
+        );
+        assert.equal(
+          history.filter(
+            (item) =>
+              item.type === "message" &&
+              item.content.includes(image.artifactRef),
+          ).length,
+          1,
+        );
+        assert.equal((await fixture.loadRun()).status, "running");
+        yield {
+          type: "image.progress",
+          itemId: image.itemId,
+          stage: "completed",
+        };
+        yield { type: "completed", checkpoint: null };
+      },
+    },
+  });
+  assert.deepEqual(await worker.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  await worker.close();
+  assert.equal((await fixture.messages()).at(-1)?.content, "图片已生成。");
+  const historyBeforeReopen = await fixture.store.listModelHistoryItems(
+    { tenantId: actor().tenantId, threadId: fixture.threadId },
+    0,
+    100,
+  );
+  await fixture.store.close();
+  const reopened = new SqliteRunStore(databasePath, {
+    clock: fixture.leaseClock,
+  });
+  context.after(() => reopened.close());
+  const resumed = await reopened.listRunEvents(
+    { tenantId: actor().tenantId, runId: fixture.runId },
+    progressSequence,
+    100,
+  );
+  assert.equal(
+    resumed.filter((event) => event.type === "model.image.generated").length,
+    1,
+  );
+  assert.equal(
+    resumed.filter((event) => event.type === "model.output.delta").length,
+    0,
+  );
+  for (const view of ["client", "transcript", "audit"] as const) {
+    const projected = resumed
+      .map((event) => projectRunEventForView(event, view))
+      .filter((event) => event?.type === "model.image.generated");
+    assert.equal(projected.length, 1);
+    assert.deepEqual(projected[0]?.data, {
+      segmentId: "segment:attempt-1",
+      itemId: image.itemId,
+      artifactRef: image.artifactRef,
+      mimeType: image.mimeType,
+      byteLength: image.byteLength,
+    });
+    assert.ok(Buffer.byteLength(JSON.stringify(projected)) < 1_000);
+  }
+  assert.deepEqual(
+    await reopened.listModelHistoryItems(
+      { tenantId: actor().tenantId, threadId: fixture.threadId },
+      0,
+      100,
+    ),
+    historyBeforeReopen,
+  );
+});
+
+test("retrieved image output after a worker restart does not duplicate metadata or model history", async (context) => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-image-resume-"));
+  context.after(() => rmSync(directory, { recursive: true, force: true }));
+  const databasePath = join(directory, "runtime.sqlite");
+  const fixture = await createFixture(
+    context,
+    (clock) => new SqliteRunStore(databasePath, { clock }),
+  );
+  const checkpoint = directProviderCheckpoint("resp-image-resume");
+  const image = {
+    type: "image.generated",
+    itemId: "ig-resume-1",
+    artifactRef: "artifact-resume-1",
+    mimeType: "image/webp",
+    byteLength: 3_550_000,
+  } as const;
+  let calls = 0;
+  const transport: ModelTransportPort = {
+    adapterName: checkpoint.adapterName,
+    adapterVersion: checkpoint.adapterVersion,
+    modelId: checkpoint.modelId,
+    supportsResponseRetrieve: true,
+    async *stream(request) {
+      calls += 1;
+      if (calls > 1) assert.deepEqual(request.reconcileCheckpoint, checkpoint);
+      yield { type: "response.created", checkpoint };
+      yield {
+        type: "image.progress",
+        itemId: image.itemId,
+        stage: "generating",
+      };
+      yield image;
+      if (calls === 1)
+        throw new ModelTransportError({
+          category: "unavailable",
+          code: "image_stream_lost",
+          retryable: true,
+        });
+      yield { type: "completed", checkpoint };
+    },
+  };
+  const first = fixture.worker({ transport, retryAfterMs: 0 });
+  assert.deepEqual(await first.wake(), {
+    kind: "retried",
+    runId: fixture.runId,
+    code: "image_stream_lost",
+  });
+  await first.close();
+  await fixture.store.close();
+  const reopened = new SqliteRunStore(databasePath, {
+    clock: fixture.leaseClock,
+  });
+  context.after(() => reopened.close());
+  const recovered = fixture.worker({ transport, store: reopened });
+  assert.deepEqual(await recovered.wake(), {
+    kind: "completed",
+    runId: fixture.runId,
+  });
+  await recovered.close();
+  const events = await reopened.listRunEvents(
+    { tenantId: actor().tenantId, runId: fixture.runId },
+    0,
+    100,
+  );
+  assert.equal(
+    events.filter((event) => event.type === "model.image.generated").length,
+    1,
+  );
+  assert.equal(
+    events.filter((event) => event.type === "model.image.progress").length,
+    1,
+  );
+  const history = await reopened.listModelHistoryItems(
+    { tenantId: actor().tenantId, threadId: fixture.threadId },
+    0,
+    100,
+  );
+  assert.equal(
+    history.filter(
+      (item) =>
+        item.type === "message" && item.content.includes(image.artifactRef),
+    ).length,
+    1,
+  );
+  assert.ok(Buffer.byteLength(JSON.stringify(history)) < 3_000);
+});
 
 test("fits escape-heavy Tool output and workspace metadata into one durable event", () => {
   const workspaceChanges = parseWorkspaceChangeSummary({

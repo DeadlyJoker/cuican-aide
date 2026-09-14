@@ -1,0 +1,37 @@
+{
+  "schemaVersion": 1,
+  "date": "2026-09-14",
+  "scope": "UI and authenticated Control client image-event handling in the uncommitted integration worktree. Tests use synthetic Run events and artifact bytes; final production browser, full UI build, provider, and installed-app verification are owned by the root coordinator.",
+  "behavior": [
+    "model.image.progress immediately projects an imageGeneration item. stage=completed waits for model.image.generated before claiming success.",
+    "Live streaming, settlement backfill, fresh runtime history hydration, and first-fragment transcript-window rendering share the same small artifact metadata projection.",
+    "Image results render directly in the conversation outside the collapsed process group. PNG, JPEG, and WebP previews include a Save image download link.",
+    "artifactRef is the existing opaque artifactId and is passed unchanged to ControlApiClient.downloadArtifact. The client retains authentication and digest verification and bounds the response at 8 MiB.",
+    "The preview checks MIME, metadata byte length, and raster file signature before creating a Blob URL. No base64 or image bytes enter Thread history or persistent UI state.",
+    "Unmount, artifact changes, and identity changes abort reads and revoke object URLs. Old identity callbacks cannot populate a new preview. A stalled read fails after 30 seconds with a reload action.",
+    "Failed or canceled runs without an artifact produce an explicit image-generation failure. Expired, inaccessible, malformed, or undecodable images show a plain-language load failure and retry.",
+    "Image projection retains at most 16 image references per Run and reports incomplete history if that bound is exceeded. Older image items without an artifact retain their saved-path notice without rendering inline result/base64 text."
+  ],
+  "uiVerification": {
+    "command": "pnpm --filter @crewon/ui exec vitest run src/components/TranscriptImageGenerationCard.test.tsx src/lib/control-runtime/controlImageGeneration.test.ts src/lib/control-runtime/controlRunToolProjection.test.ts src/lib/control-runtime/controlThreadRuntime.test.ts src/lib/control-runtime/controlTranscriptWindow.test.ts src/components/Transcript.test.tsx src/lib/shared/libArchitecture.test.ts --maxWorkers=2",
+    "filesPassed": 7,
+    "testsPassed": 191,
+    "testsFailed": 0,
+    "snapshots": "apps/crewon-ui/src/components/__snapshots__/TranscriptImageGenerationCard.test.tsx.snap",
+    "log": "/tmp/crewon-image-ui-narrow-final.log",
+    "logSha256": "02b60d0d72f24841a0fd3ae58f5589d9d37e7b6f776adf4dce32f8f32222be3f"
+  },
+  "clientVerification": {
+    "cwd": "packages/control-client",
+    "command": "node --experimental-strip-types --test src/control-api-client.test.ts src/run-event-stream.test.ts",
+    "testsPassed": 54,
+    "testsFailed": 0,
+    "log": "/tmp/crewon-image-control-client.log",
+    "logSha256": "be677945cf4bb082f3c274f736f619224768507ce0ac0a264758d8683276d1db"
+  },
+  "checks": [
+    "pnpm --filter @crewon/ui exec tsc -b --noEmit: passed",
+    "pnpm --filter @crewon/control-client typecheck: passed",
+    "git diff --check: passed"
+  ]
+}

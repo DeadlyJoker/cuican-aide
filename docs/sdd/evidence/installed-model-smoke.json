@@ -1,0 +1,20 @@
+{
+  "checkedAt": "2026-09-14T09:28:17.679Z",
+  "threadId": "01a09f3c-b9cc-76cd-a1a1-dbaca86156c1",
+  "appVersion": "0.1.2",
+  "endpoint": "https://api.aicuican.com/v1",
+  "model": "gpt-5.5",
+  "credentialStorage": "Electron safeStorage, local only",
+  "expectedReply": "CrewON 模型连接正常，17×23=391",
+  "observedReply": "CrewON 模型连接正常，17×23=391",
+  "uiFinalState": "已处理 1",
+  "runs": [
+    {
+      "runId": "01a09f3c-ba70-7247-9e83-933bb8bab651",
+      "revision": 8,
+      "lastSequence": 8,
+      "status": "completed",
+      "modelCallCount": 1
+    }
+  ]
+}

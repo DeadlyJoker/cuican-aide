@@ -188,7 +188,8 @@ describe("thread message actions", () => {
         setActiveTurnByThread: state.setActiveTurnByThread,
       }));
       await vi.advanceTimersByTimeAsync(10_000);
-      expect(state.threads[0]!.turns[0]!.id).toBe("run-replacement");
+      expect(state.threads[0]!.turns[0]!.error).toBeNull();
+      expect(state.threads[0]!.turns[0]).toMatchObject({ id: "run-replacement" });
       expect(state.activeTurns).toEqual({ "thread-1": "run-replacement" });
       expect(onTextDelta).toHaveBeenCalledWith("thread-1", "Still running");
       expect(read).not.toHaveBeenCalled();

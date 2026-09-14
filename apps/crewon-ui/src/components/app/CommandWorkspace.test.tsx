@@ -350,7 +350,12 @@ describe("CommandWorkspace", () => {
   function controlWorkspaceNav(): CommandWorkspaceControlNav {
     return {
       name: "cuican-aide",
+      workspaceId: "workspace-command",
+      workspaces: [
+        { workspaceId: "workspace-command", displayName: "cuican-aide" },
+      ],
       busy: false,
+      onActivate: () => undefined,
       onClear: () => undefined,
       onSelect: () => undefined,
     };
@@ -359,6 +364,7 @@ describe("CommandWorkspace", () => {
   function workspaceCommandThread(): Thread {
     return {
       id: "thread-command-room",
+      workspaceId: "workspace-command",
       name: "Command room transcript",
       preview: "Agent answered in the command shell",
       updatedAt: Math.floor(Date.now() / 1000),
@@ -2109,6 +2115,7 @@ describe("CommandWorkspace", () => {
     expect(markup).not.toContain("command-thread-stage");
     // The bound workspace lives in the sidebar tree instead.
     expect(markup).toContain('aria-label="工作空间和对话"');
+    expect(markup).toContain('data-workspace-id="workspace-command"');
     expect(markup).toContain("cuican-aide");
     expect(markup).toContain('aria-label="归档会话"');
     expect(markup).toContain('data-archive-thread-id="thread-command-room"');

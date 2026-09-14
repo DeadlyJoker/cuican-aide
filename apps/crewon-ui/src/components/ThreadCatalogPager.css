@@ -9,13 +9,8 @@
   opacity: 0.75;
 }
 
-.thread-catalog-pager nav {
-  display: flex;
-  gap: 6px;
-}
-
 .thread-catalog-pager button {
-  flex: 1;
+  padding: 4px 12px;
   min-height: 30px;
   border: 1px solid currentColor;
   border-radius: 6px;
@@ -23,11 +18,6 @@
   color: inherit;
   font: inherit;
   cursor: pointer;
-}
-
-.thread-catalog-pager button:disabled {
-  opacity: 0.4;
-  cursor: default;
 }
 
 .thread-catalog-pager button:focus-visible {

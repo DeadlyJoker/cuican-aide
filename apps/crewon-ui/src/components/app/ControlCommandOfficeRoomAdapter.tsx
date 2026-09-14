@@ -1,4 +1,5 @@
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
+import { controlThreadWorkspaceId } from "../../lib/control-runtime/controlThreadWorkspace";
 import { TaskWorkbenchScope } from "../workbench/TaskWorkbenchContext";
 import { MessageActions } from "../messages/MessageActions";
 import { EditableMessageContent } from "../messages/MessageInlineEditor";
@@ -242,6 +243,7 @@ function ControlOfficeChatRoom({
   runtime,
   streamingTextByThread,
   liveThreads,
+  workspaceId,
 }: {
   agentSettings?: ControlOfficeMemberAgentSettingsBridge;
   client: ControlOfficeChatClient;
@@ -252,6 +254,7 @@ function ControlOfficeChatRoom({
   runtime: ControlOfficeThreadRuntime;
   streamingTextByThread: Readonly<Record<string, string>>;
   liveThreads: readonly Thread[];
+  workspaceId?: string | null;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
@@ -297,7 +300,7 @@ function ControlOfficeChatRoom({
     [activeRecord],
   );
   const liveThread = controlOfficeLiveThread(
-    liveThreads,
+    liveThreads.filter((thread) => workspaceId === undefined || controlThreadWorkspaceId(thread) === workspaceId),
     threadId,
     title,
     legacyTitle,
@@ -474,9 +477,10 @@ function ControlOfficeChatRoom({
     void runtime
       .listThreads(false)
       .then(async (threads) => {
+        const workspaceThreads = threads.filter((thread) => workspaceId === undefined || controlThreadWorkspaceId(thread) === workspaceId);
         const match =
-          threads.find((candidate) => candidate.name === title) ??
-          threads.find((candidate) => candidate.name === legacyTitle);
+          workspaceThreads.find((candidate) => candidate.name === title) ??
+          workspaceThreads.find((candidate) => candidate.name === legacyTitle);
         if (!match) {
           return null;
         }
@@ -596,7 +600,7 @@ function ControlOfficeChatRoom({
       let activeThreadId = threadId;
       if (!activeThreadId) {
         const created = await client.createThread(
-          { title },
+          { title, ...(workspaceId === undefined ? {} : { workspaceId }) },
           createIdempotencyKey("thread.create"),
         );
         activeThreadId = created.thread.threadId;
@@ -1375,6 +1379,7 @@ export function createControlCommandOfficeRoomAdapter({
   locale,
   runtime,
   streamingTextByThread = {},
+  workspaceId,
 }: {
   agentSettings?: ControlOfficeMemberAgentSettingsBridge;
   client: ControlOfficeChatClient;
@@ -1382,6 +1387,7 @@ export function createControlCommandOfficeRoomAdapter({
   locale: Locale;
   runtime: ControlOfficeThreadRuntime;
   streamingTextByThread?: Readonly<Record<string, string>>;
+  workspaceId?: string | null;
 }): CommandOfficeRoomAdapter {
   return {
     open: async (record) => {
@@ -1401,7 +1407,8 @@ export function createControlCommandOfficeRoomAdapter({
           agentSettings={agentSettings}
           client={client}
           composer={composer}
-          key={officeRecordKey(record)}
+          key={`${officeRecordKey(record)}:${workspaceId ?? "unbound"}`}
+          workspaceId={workspaceId}
           liveThreads={liveThreads}
           locale={locale}
           onBack={onBack}

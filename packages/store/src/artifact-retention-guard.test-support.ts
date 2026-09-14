@@ -46,6 +46,26 @@ export function registerArtifactRetentionGuardConformance(
         scan: { status: "notRequired", scannedAt: null, scanner: null },
       },
     };
+    const imageCandidate: ArtifactRetentionCandidate = {
+      idempotencyKey: "model-image:no-tool-receipt",
+      record: {
+        ...candidate.record,
+        artifactId: "artifact-image",
+        kind: "modelImage",
+        mediaType: "image/png",
+        source: {
+          kind: "modelImage",
+          runId: run.runId,
+          segmentId: "segment-1",
+          itemId: "image-1",
+        },
+      },
+    };
+    assert.equal(
+      await store.canRetireArtifact(imageCandidate),
+      false,
+      "running Run images cannot retire",
+    );
     assert.equal(await store.canRetireArtifact(candidate), false);
     const base = atomicToolCompletionInput(claim, receipt.revision);
     const event = base.commit.events[0]!;
@@ -99,6 +119,24 @@ export function registerArtifactRetentionGuardConformance(
     });
     const history = await store.listRunEvents(run, 0, 100),
       state = await store.loadRun(run);
+    assert.equal(
+      await store.canRetireArtifact(imageCandidate),
+      true,
+      "terminal Run images need no Tool receipt",
+    );
+    for (const record of [
+      { ...imageCandidate.record, tenantId: "other" },
+      { ...imageCandidate.record, spaceId: "other" },
+      { ...imageCandidate.record, ownerActorId: "other" },
+      {
+        ...imageCandidate.record,
+        source: { ...imageCandidate.record.source, runId: "other" },
+      },
+    ])
+      assert.equal(
+        await store.canRetireArtifact({ ...imageCandidate, record }),
+        false,
+      );
     for (let n = 0; n < 10; n++)
       assert.equal(await store.canRetireArtifact(candidate), true);
     for (const record of [

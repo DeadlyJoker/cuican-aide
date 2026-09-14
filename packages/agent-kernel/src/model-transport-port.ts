@@ -40,6 +40,10 @@ export type ModelTransportStreamOptions = Readonly<{
 }>;
 
 export type ModelTransportEvent =
+  | (Readonly<{ type: "image.progress" }> &
+      import("@crewon/contracts").ModelImageProgressData)
+  | (Readonly<{ type: "image.generated" }> &
+      import("@crewon/contracts").ModelImageGeneratedData)
   | Readonly<{ type: "response.created"; checkpoint: ProviderCheckpoint }>
   | Readonly<{ type: "output.delta"; delta: string }>
   | Readonly<{

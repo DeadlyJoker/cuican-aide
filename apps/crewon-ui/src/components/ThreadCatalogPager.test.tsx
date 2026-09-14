@@ -20,7 +20,7 @@ const navigation = (): ThreadCatalogNavigation => ({
 Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 
 describe("catalog pagination", () => {
-  it("renders loading, empty continuation, error and navigation states", () => {
+  it("renders only loading and error states without a paging toolbar", () => {
     for (const state of [
       navigation(),
       { ...navigation(), loading: true },
@@ -33,19 +33,37 @@ describe("catalog pagination", () => {
         ),
       ).toMatchSnapshot();
   });
-  it("continues an empty search page and disables navigation while the request is running", () => {
+  it("has no paging controls for loaded, empty or historical pages", () => {
+    for (const state of [
+      navigation(),
+      { ...navigation(), empty: true, searching: true },
+      { ...navigation(), hasNewer: true },
+    ]) {
+      expect(
+        renderToStaticMarkup(
+          <ThreadCatalogPager navigation={state} locale="zh" />,
+        ),
+      ).toBe("");
+      expect(state.onOlder).not.toHaveBeenCalled();
+      expect(state.onNewer).not.toHaveBeenCalled();
+      expect(state.onRefresh).not.toHaveBeenCalled();
+    }
+  });
+  it("retains error retry and shows only loading state during a request", () => {
     const element = document.createElement("div");
     const root = createRoot(element);
-    const state = { ...navigation(), empty: true, searching: true };
+    const state = { ...navigation(), failed: true };
     try {
       act(() =>
         root.render(<ThreadCatalogPager navigation={state} locale="en" />),
       );
       const button = [...element.querySelectorAll("button")].find(
-        (button) => button.textContent === "Continue search",
+        (button) => button.textContent === "Retry",
       )!;
       act(() => button.click());
-      expect(state.onOlder).toHaveBeenCalledTimes(1);
+      expect(state.onRefresh).toHaveBeenCalledTimes(1);
+      expect(state.onOlder).not.toHaveBeenCalled();
+      expect(state.onNewer).not.toHaveBeenCalled();
       act(() =>
         root.render(
           <ThreadCatalogPager
@@ -54,11 +72,7 @@ describe("catalog pagination", () => {
           />,
         ),
       );
-      expect(
-        [...element.querySelectorAll("button")].every(
-          (button) => button.disabled,
-        ),
-      ).toBe(true);
+      expect(element.querySelectorAll("button")).toHaveLength(0);
       expect(element.querySelector('[role="status"]')?.textContent).toContain(
         "Loading",
       );

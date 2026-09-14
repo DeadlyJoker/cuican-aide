@@ -1,4 +1,5 @@
 export * from "./agent-events.ts";
+export * from "./model-image-events.ts";
 export * from "./action-intent.ts";
 export * from "./action-intent-schema.ts";
 export * from "./contract-validation-error.ts";

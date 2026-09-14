@@ -15,10 +15,12 @@ type Input = {
 export function useSkillScheduleEntry({
   controlClient,
   selectedThreadId,
+  workspaceId,
   onReady,
 }: {
   controlClient: SkillLibraryControlClient | null;
   selectedThreadId: string | null;
+  workspaceId?: string | null;
   onReady: (draft: AutomationCreateDraft, threadId: string) => void;
 }) {
   const [busy, setBusy] = useState(false);
@@ -28,17 +30,20 @@ export function useSkillScheduleEntry({
     key: string;
     requestId: number;
     threadId: string | null;
+    workspaceId?: string | null;
     invocation?: SkillInvocationSpec;
   } | null>(null);
   const active = useRef(true);
   const working = useRef(false);
   const authority = useRef(controlClient);
+  const workspace = useRef(workspaceId);
   const epoch = useRef(0);
   useLayoutEffect(() => {
     epoch.current += 1;
     active.current = true;
-    if (authority.current !== controlClient) {
+    if (authority.current !== controlClient || workspace.current !== workspaceId) {
       authority.current = controlClient;
+      workspace.current = workspaceId;
       pending.current = null;
       working.current = false;
       setBusy(false);
@@ -48,7 +53,7 @@ export function useSkillScheduleEntry({
       active.current = false;
       epoch.current += 1;
     };
-  }, [controlClient]);
+  }, [controlClient, workspaceId]);
   async function request(input: Input) {
     if (working.current) return;
     if (!controlClient) {
@@ -66,6 +71,7 @@ export function useSkillScheduleEntry({
       input: structuredClone(input),
       key: `skill-schedule:${crypto.randomUUID()}`,
       requestId: Date.now(),
+      workspaceId,
       threadId:
         input.invocation.deliveryTarget?.threadId ??
         (Object.hasOwn(input, "threadId")
@@ -80,7 +86,7 @@ export function useSkillScheduleEntry({
     try {
       if (!attempt.threadId) {
         const result = await controlClient.createThread(
-          { title: `Skill 日程 · ${attempt.input.title}` },
+          { title: `Skill 日程 · ${attempt.input.title}`, ...(attempt.workspaceId === undefined ? {} : { workspaceId: attempt.workspaceId }) },
           attempt.key,
         );
         if (!active.current || currentEpoch !== epoch.current) return;

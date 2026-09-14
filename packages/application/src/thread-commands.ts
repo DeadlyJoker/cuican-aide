@@ -4,6 +4,7 @@ export type CreateThreadCommand = Readonly<{
   kind: "thread.create";
   idempotencyKey: string;
   title: string | null;
+  workspaceId?: string | null;
 }>;
 
 export type AppendThreadMessageCommand = Readonly<{

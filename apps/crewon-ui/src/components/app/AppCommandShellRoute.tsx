@@ -129,6 +129,7 @@ export function AppCommandShellRoute({
     authority === "control" &&
     commandWorkspaceProps.connectionState === "connected" &&
     commandWorkspaceProps.controlWorkspaceNav?.busy !== true &&
+    commandWorkspaceProps.controlWorkspaceNav?.threadWorkspaceReady !== false &&
     taskDetailWorkspaceGitClient !== null;
   const latestTurn = selectedThread?.turns.at(-1) ?? null;
   const latestTurnItem = latestTurn?.items.at(-1) ?? null;
@@ -137,7 +138,7 @@ export function AppCommandShellRoute({
       ? JSON.stringify(latestTurnItem.status)
       : "";
   const workspaceGitScopeKey = [
-    commandWorkspaceProps.controlWorkspaceNav?.name ?? "",
+    commandWorkspaceProps.controlWorkspaceNav?.workspaceId ?? "",
     commandWorkspaceProps.controlWorkspaceNav?.revisionKey ?? "unversioned",
   ].join(":");
   const workspaceGitRefreshKey = [

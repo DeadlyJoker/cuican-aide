@@ -11,6 +11,7 @@ export async function* parseResponsesSse(
   options: {
     maxEventBytes?: number;
     onActivity?: () => void;
+    signal?: AbortSignal;
   } = {},
 ): AsyncIterable<ResponsesSseItem> {
   const maxEventBytes = positiveInteger(
@@ -19,7 +20,12 @@ export async function* parseResponsesSse(
   );
   const reader = body.getReader();
   const decoder = new TextDecoder("utf-8", { fatal: true });
-  let buffer = "";
+  const frames = new SseFrames(maxEventBytes);
+  const cancel = () => {
+    void reader.cancel().catch(() => undefined);
+  };
+  options.signal?.addEventListener("abort", cancel, { once: true });
+  if (options.signal?.aborted) cancel();
   try {
     while (true) {
       let result: ReadableStreamReadResult<Uint8Array>;
@@ -40,34 +46,29 @@ export async function* parseResponsesSse(
         break;
       }
       options.onActivity?.();
-      buffer += decoder.decode(result.value, { stream: true });
-      while (true) {
-        const boundary = findEventBoundary(buffer);
-        if (boundary === null) {
-          break;
-        }
-        const frame = buffer.slice(0, boundary.index);
-        buffer = buffer.slice(boundary.index + boundary.length);
-        const parsed = parseFrame(frame, maxEventBytes);
-        if (parsed !== null) {
-          yield parsed;
-        }
-      }
-      assertBounded(buffer, maxEventBytes);
-    }
-    buffer += decoder.decode();
-    if (buffer.trim().length > 0) {
-      const parsed = parseFrame(buffer, maxEventBytes);
-      if (parsed !== null) {
-        yield parsed;
+      // Decode bounded slices even when a stream hands us one very large chunk.
+      for (
+        let offset = 0;
+        offset < result.value.byteLength;
+        offset += 16 * 1024
+      ) {
+        const decoded = decoder.decode(
+          result.value.subarray(offset, offset + 16 * 1024),
+          { stream: true },
+        );
+        yield* frames.accept(decoded);
       }
     }
+    yield* frames.accept(decoder.decode());
+    const last = frames.finish();
+    if (last !== null) yield last;
   } catch (error) {
     if (error instanceof ModelTransportError) {
       throw error;
     }
     throw protocolError("responses_stream_decode_failed", error);
   } finally {
+    options.signal?.removeEventListener("abort", cancel);
     try {
       await reader.cancel();
     } catch {
@@ -77,66 +78,86 @@ export async function* parseResponsesSse(
   }
 }
 
-function parseFrame(
-  frame: string,
-  maxEventBytes: number,
-): ResponsesSseItem | null {
-  assertBounded(frame, maxEventBytes);
-  const dataLines: string[] = [];
-  for (const line of frame.split(/\r\n|\r|\n/)) {
-    if (line.length === 0 || line.startsWith(":")) {
-      continue;
-    }
-    const separator = line.indexOf(":");
-    const field = separator === -1 ? line : line.slice(0, separator);
-    let value = separator === -1 ? "" : line.slice(separator + 1);
-    if (value.startsWith(" ")) {
-      value = value.slice(1);
-    }
-    if (field === "data") {
-      dataLines.push(value);
-    }
+/** SSE line endings are LF, CR, or CRLF, including mixtures and split CRLF. */
+class SseFrames {
+  readonly #maxBytes: number;
+  #line = "";
+  #eventBytes = 0;
+  #skipLf = false;
+  #dataLines: string[] = [];
+
+  constructor(maxBytes: number) {
+    this.#maxBytes = maxBytes;
   }
-  if (dataLines.length === 0) {
+
+  *accept(value: string): Generator<ResponsesSseItem> {
+    let start = 0;
+    for (let offset = 0; offset < value.length; offset++) {
+      const char = value[offset];
+      if (this.#skipLf) {
+        this.#skipLf = false;
+        if (char === "\n") {
+          start = offset + 1;
+          continue;
+        }
+      }
+      if (char !== "\r" && char !== "\n") continue;
+      this.#append(value.slice(start, offset));
+      const event = this.#endLine();
+      this.#skipLf = char === "\r";
+      start = offset + 1;
+      if (event !== null) yield event;
+    }
+    this.#append(value.slice(start));
+  }
+
+  finish(): ResponsesSseItem | null {
+    if (this.#line.length > 0) this.#endLine();
+    return this.#dispatch();
+  }
+
+  #append(part: string): void {
+    this.#eventBytes += new TextEncoder().encode(part).byteLength;
+    if (this.#eventBytes > this.#maxBytes)
+      throw protocolError("responses_event_too_large");
+    this.#line += part;
+  }
+
+  #endLine(): ResponsesSseItem | null {
+    const line = this.#line;
+    this.#line = "";
+    if (line.length === 0) return this.#dispatch();
+    this.#eventBytes += 1;
+    if (this.#eventBytes > this.#maxBytes)
+      throw protocolError("responses_event_too_large");
+    if (line === "data" || line.startsWith("data:")) {
+      let data = line === "data" ? "" : line.slice(5);
+      if (data.startsWith(" ")) data = data.slice(1);
+      this.#dataLines.push(data);
+    }
     return null;
   }
-  const data = dataLines.join("\n");
-  if (data === "[DONE]") {
-    return { kind: "done" };
-  }
-  let value: unknown;
-  try {
-    value = JSON.parse(data);
-  } catch (error) {
-    throw protocolError("responses_event_json_invalid", error);
-  }
-  if (!isPlainObject(value)) {
-    throw protocolError("responses_event_not_object");
-  }
-  return { kind: "event", value };
-}
 
-function findEventBoundary(
-  value: string,
-): Readonly<{ index: number; length: number }> | null {
-  const matches = ["\n\n", "\r\n\r\n", "\r\r"]
-    .map((separator) => ({
-      index: value.indexOf(separator),
-      length: separator.length,
-    }))
-    .filter((match) => match.index !== -1)
-    .sort((left, right) => left.index - right.index);
-  return matches[0] ?? null;
-}
-
-function assertBounded(value: string, maxEventBytes: number): void {
-  if (new TextEncoder().encode(value).byteLength > maxEventBytes) {
-    throw protocolError("responses_event_too_large");
+  #dispatch(): ResponsesSseItem | null {
+    this.#eventBytes = 0;
+    if (this.#dataLines.length === 0) return null;
+    const data = this.#dataLines.join("\n");
+    this.#dataLines = [];
+    if (data === "[DONE]") return { kind: "done" };
+    let value: unknown;
+    try {
+      value = JSON.parse(data);
+    } catch (error) {
+      throw protocolError("responses_event_json_invalid", error);
+    }
+    if (!isPlainObject(value))
+      throw protocolError("responses_event_not_object");
+    return { kind: "event", value };
   }
 }
 
 function positiveInteger(value: number, code: string): number {
-  if (!Number.isSafeInteger(value) || value < 1) {
+  if (!Number.isSafeInteger(value) || value < 1 || value > 48 * 1024 * 1024) {
     throw protocolError(code);
   }
   return value;

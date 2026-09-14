@@ -27,7 +27,9 @@ function processActionStatus(
     case "imageGeneration":
       return item.status === "completed" || item.status === "succeeded"
         ? "completed"
-        : "inProgress";
+        : item.status === "failed" || item.status === "canceled"
+          ? "failed"
+          : "inProgress";
     default:
       return "completed";
   }

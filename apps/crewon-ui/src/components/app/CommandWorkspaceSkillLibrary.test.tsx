@@ -126,12 +126,13 @@ describe("Skill library host integration", () => {
     container.remove();
     Reflect.deleteProperty(window, "crewonDesktop");
   });
-  async function render(selectedThreadId: string | null = null) {
+  async function render(selectedThreadId: string | null = null, workspaceId?: string | null) {
     await act(async () =>
       root.render(
         <SkillLibraryHost
           controlClient={control}
           selectedThreadId={selectedThreadId}
+          workspaceId={workspaceId}
           selectedThreadTitle={selectedThreadId ? "订单交付任务" : undefined}
           onSelectThread={onSelectThread}
         />,
@@ -149,8 +150,8 @@ describe("Skill library host integration", () => {
   async function click(label: string) {
     await act(async () => button(label).click());
   }
-  async function prepareTrial(selectedThreadId: string | null = null) {
-    await render(selectedThreadId);
+  async function prepareTrial(selectedThreadId: string | null = null, workspaceId?: string | null) {
+    await render(selectedThreadId, workspaceId);
     await click("打开示教 Skill：销售汇总");
     const input = container.querySelector<HTMLInputElement>(
       '[aria-label="试跑参数：日期"]',
@@ -351,6 +352,24 @@ describe("Skill library host integration", () => {
     });
     expect(container.textContent).toContain("排队中");
     expect(container.textContent).toContain("真实性待验证");
+  });
+
+  it("binds a new Skill trial to the captured active workspace", async () => {
+    await prepareTrial(null, "workspace-a");
+    await click("开始试跑");
+    expect(control.createThread).toHaveBeenCalledWith({ title: "Skill · 销售汇总", workspaceId: "workspace-a" }, expect.any(String));
+  });
+
+  it("does not continue old workspace preparation after choosing a different workspace", async () => {
+    let resolve!: (value: { thread: { threadId: string; revision: number } }) => void;
+    control.createThread = vi.fn(() => new Promise<{ thread: { threadId: string; revision: number } }>((done) => { resolve = done; }));
+    await prepareTrial(null, "workspace-a");
+    await click("开始试跑");
+    await render(null, "workspace-b");
+    await act(async () => resolve({ thread: { threadId: "thread-a", revision: 1 } }));
+    expect(control.getThread).not.toHaveBeenCalled();
+    expect(posts).toHaveLength(0);
+    expect(control.createThread).toHaveBeenCalledWith({ title: "Skill · 销售汇总", workspaceId: "workspace-a" }, expect.any(String));
   });
 
   function deliveryCatalog(threadId: string) {

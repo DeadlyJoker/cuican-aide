@@ -46,6 +46,7 @@ import {
   validateThreadGoal,
   validateThreadGoalEvent,
   validateThreadState,
+  normalizeThreadStateWorkspace,
   reduceRunLifecycleEvent,
   reduceThreadLifecycleEvent,
   type ModelHistoryItem,
@@ -1819,12 +1820,13 @@ export class SqliteRunStore implements DomainStore {
           prior.result_json,
           "thread_idempotency_receipt_invalid",
         );
-        validateThreadReceiptResult(result, {
+        const normalized = { ...result, state: normalizeThreadStateWorkspace(result.state) };
+        validateThreadReceiptResult(normalized, {
           tenantId: prior.tenant_id,
           threadId: prior.thread_id,
         });
         this.#database.exec("COMMIT");
-        return clone({ ...result, disposition: "replayed" });
+        return clone({ ...normalized, disposition: "replayed" });
       }
 
       if (input.sourceFence !== undefined) {
@@ -1991,7 +1993,7 @@ export class SqliteRunStore implements DomainStore {
       );
       validateThreadRollbackReceiptResult(result, query);
       this.#validateStoredRollbackReceiptAuthority(result);
-      return clone({ ...result, disposition: "replayed" });
+      return clone({ ...result, state: normalizeThreadStateWorkspace(result.state), disposition: "replayed" });
     } catch (error) {
       throw normalizeSqliteError(error);
     }
@@ -2025,7 +2027,7 @@ export class SqliteRunStore implements DomainStore {
         });
         this.#validateStoredRollbackReceiptAuthority(result);
         this.#database.exec("COMMIT");
-        return clone({ ...result, disposition: "replayed" });
+        return clone({ ...result, state: normalizeThreadStateWorkspace(result.state), disposition: "replayed" });
       }
 
       const activeRuns = this.#database
@@ -6073,7 +6075,7 @@ function decodeStoredThreadState(
   ) {
     throw new RunStoreError("stored_thread_state_invalid");
   }
-  return state;
+  return normalizeThreadStateWorkspace(state);
 }
 
 function decodeStoredThreadGoal(

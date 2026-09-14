@@ -1,3 +1,4 @@
+import type { ThreadWorkspaceAdmissionPort } from "./thread-workspace-admission-port.ts";
 import { validateThreadListSelection, type ThreadListSelection } from "./thread-list-selection.ts";
 import type {
   ThreadMessageWindow,
@@ -7,6 +8,8 @@ import { validateThreadMessageWindowQuery } from "./thread-message-window-query.
 import { readThreadTranscriptWindow } from "./thread-transcript-window-query.ts";
 import {
   ThreadLifecycleError,
+  normalizeThreadStateWorkspace,
+  normalizeThreadWorkspaceId,
   initialThreadTitleData,
   type MessageRole,
   type ThreadLifecycleEvent,
@@ -60,6 +63,7 @@ const MAX_FORK_HISTORY_BYTES = 64 * 1024 * 1024;
 const FORK_PAGE_SIZE = 100;
 
 export class ThreadApplicationService {
+  readonly #workspaceAdmission: ThreadWorkspaceAdmissionPort | undefined;
   readonly #store: ThreadStore &
     ModelHistoryStore &
     Pick<ThreadGoalStore, "loadThreadGoal">;
@@ -76,7 +80,9 @@ export class ThreadApplicationService {
     clock: ApplicationClock;
     ids: ApplicationIdGenerator;
     digester: ContentDigester;
+    workspaceAdmission?: ThreadWorkspaceAdmissionPort;
   }) {
+    this.#workspaceAdmission = dependencies.workspaceAdmission;
     this.#store = dependencies.store;
     this.#authorization = dependencies.authorization;
     this.#clock = dependencies.clock;
@@ -96,6 +102,10 @@ export class ThreadApplicationService {
       spaceId: actor.spaceId,
       threadId: null,
     });
+    const workspaceId = normalizeThreadWorkspaceId(command.workspaceId);
+    if (workspaceId !== null) {
+      await this.#workspaceAdmission?.admit({ actor, workspaceId });
+    }
     const threadId = this.#nextId("thread");
     const occurredAt = this.#now();
     const event: ThreadLifecycleEvent = {
@@ -110,6 +120,7 @@ export class ThreadApplicationService {
         spaceId: actor.spaceId,
         createdByActorId: actor.actorId,
         title: command.title,
+        workspaceId,
       },
     };
     const result = await this.#commit({
@@ -241,6 +252,7 @@ export class ThreadApplicationService {
         spaceId: actor.spaceId,
         createdByActorId: actor.actorId,
         title: source.title,
+        workspaceId: normalizeThreadWorkspaceId(source.workspaceId),
       },
     };
     const messages: MessageRecord[] = sourceMessages.map((message, index) => ({
@@ -616,7 +628,7 @@ export class ThreadApplicationService {
       threadId: null,
     });
     try {
-      return await this.#store.listThreads({
+      const states = await this.#store.listThreads({
         tenantId: actor.tenantId,
         spaceId: actor.spaceId,
         before: query.before,
@@ -624,6 +636,7 @@ export class ThreadApplicationService {
         ...(query.filter === undefined ? {} : { filter: query.filter }),
         limit: query.limit,
       });
+      return states.map(normalizeThreadStateWorkspace);
     } catch (error) {
       throw mapThreadApplicationError(error);
     }
@@ -796,7 +809,7 @@ export class ThreadApplicationService {
     if (state === null || state.spaceId !== actor.spaceId) {
       throw new ApplicationError("notFound", "thread_not_found");
     }
-    return state;
+    return normalizeThreadStateWorkspace(state);
   }
 
   async #loadGoal(
@@ -837,7 +850,8 @@ export class ThreadApplicationService {
 
   async #commit(input: CommitThreadInput): Promise<CommitThreadResult> {
     try {
-      return await this.#store.commitThread(input);
+      const result = await this.#store.commitThread(input);
+      return { ...result, state: normalizeThreadStateWorkspace(result.state) };
     } catch (error) {
       throw mapThreadApplicationError(error);
     }
@@ -915,6 +929,11 @@ function validateCreateCommand(command: CreateThreadCommand): void {
     throw new ApplicationError("validation", "thread_command_kind_unsupported");
   }
   requireNonEmpty(command.idempotencyKey, "idempotency_key_invalid");
+  try {
+    normalizeThreadWorkspaceId(command.workspaceId);
+  } catch {
+    throw new ApplicationError("validation", "thread_workspace_id_invalid");
+  }
   if (
     command.title !== null &&
     (typeof command.title !== "string" ||
@@ -954,6 +973,9 @@ function validateForkCommand(command: ForkThreadCommand): void {
   }
   requireNonEmpty(command.idempotencyKey, "idempotency_key_invalid");
   requireNonEmpty(command.sourceThreadId, "thread_id_invalid");
+  if (Object.hasOwn(command, "workspaceId")) {
+    throw new ApplicationError("validation", "thread_workspace_immutable");
+  }
   if (
     !Number.isSafeInteger(command.expectedSourceRevision) ||
     command.expectedSourceRevision < 1 ||

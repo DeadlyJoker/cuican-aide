@@ -30,6 +30,7 @@ import {
 import { protocolError, transportError } from "./responses-errors.ts";
 import { recoverResponsesContinuation } from "./responses-continuation-recovery.ts";
 import { ResponsesProtocolDecoder } from "./responses-protocol.ts";
+import type { ResponsesImageSink } from "./responses-image-output.ts";
 import {
   parseTurnStateHeader,
   ResponsesTurnStateAuthority,
@@ -474,6 +475,7 @@ export class ResilientResponsesTransport implements ModelTransportPort {
     },
     dependencies: {
       fetch?: ResponsesFetch;
+      imageSink?: ResponsesImageSink;
       factory?: WebSocketFactory;
       scheduler?: ResponsesTimerScheduler;
     } = {},
@@ -485,6 +487,7 @@ export class ResilientResponsesTransport implements ModelTransportPort {
     );
     this.#http = new DirectResponsesTransport(config, {
       fetch: dependencies.fetch,
+      imageSink: dependencies.imageSink,
       scheduler: dependencies.scheduler,
       identity: HYBRID_IDENTITY,
       turnStates: this.#turnStates,

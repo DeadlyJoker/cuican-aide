@@ -41,6 +41,7 @@ import {
   activateStandaloneRuntimeAgentVersionRelease,
   ConfiguredAgentVersionRuntimeFactory,
   createStandaloneRuntimeWorker,
+  ModelImageArtifactSink,
 } from "@crewon/runtime-worker";
 import { InMemoryToolBroker, type ToolRuntimePort } from "@crewon/tool-broker";
 
@@ -691,10 +692,21 @@ test("executes an admitted published AgentVersion through the durable SQLite pat
   const retentionDatabase = new DatabaseSync(databasePath);
   const maintenanceStore = new SqliteRunStore(databasePath);
   try {
-    retentionDatabase.prepare("UPDATE outbox SET delivered_at_ms = 0 WHERE run_id = ? AND status = 'delivered'").run(created.run.runId);
-    const removed = await maintenanceStore.outboxRetention.pruneDeliveredOutbox({ retentionMs: 1, minimumIntervalMs: 1_000, maxBatchSize: 100 });
+    retentionDatabase
+      .prepare(
+        "UPDATE outbox SET delivered_at_ms = 0 WHERE run_id = ? AND status = 'delivered'",
+      )
+      .run(created.run.runId);
+    const removed = await maintenanceStore.outboxRetention.pruneDeliveredOutbox(
+      { retentionMs: 1, minimumIntervalMs: 1_000, maxBatchSize: 100 },
+    );
     assert.ok(removed.deletedMessages > 0);
-    assert.equal(retentionDatabase.prepare("SELECT COUNT(*) AS count FROM outbox WHERE run_id = ?").get(created.run.runId)!.count, 0);
+    assert.equal(
+      retentionDatabase
+        .prepare("SELECT COUNT(*) AS count FROM outbox WHERE run_id = ?")
+        .get(created.run.runId)!.count,
+      0,
+    );
   } finally {
     await maintenanceStore.close();
     retentionDatabase.close();
@@ -967,6 +979,164 @@ test("persists a complete Tool output through the encrypted Artifact authority a
 });
 
 const postgresConnectionString = process.env.CREWON_TEST_POSTGRES_URL;
+
+test("streams image progress, persists encrypted binary output and recovers its authenticated download", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const artifactRoot = `${databasePath}.images`;
+  const keyId = "image-e2e-key";
+  const openArtifacts = () =>
+    new FilesystemArtifactStore({
+      rootDirectory: artifactRoot,
+      databasePath: `${databasePath}.artifacts.sqlite`,
+      encryptionKey: Buffer.alloc(32, 0x46),
+      keyId,
+      maxInlineBytes: 8 * 1024 * 1024,
+    });
+  const artifactStore = openArtifacts();
+  const sink = new ModelImageArtifactSink({
+    artifacts: artifactStore,
+    keyId,
+    tenantId: "tenant-e2e-1",
+  });
+  const bytes = Buffer.alloc(2_700_000, 0xff);
+  bytes.set(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  let artifactRef = "";
+  let transportError: unknown;
+  const transport: ModelTransportPort = {
+    adapterName: "image-e2e",
+    adapterVersion: "1",
+    modelId: "image-model",
+    async *stream(request, signal) {
+      yield { type: "image.progress", itemId: "image-1", stage: "in_progress" };
+      yield { type: "image.progress", itemId: "image-1", stage: "generating" };
+      const input = {
+        runId: request.runId,
+        segmentId: request.segmentId,
+        itemId: "image-1",
+        mimeType: "image/png" as const,
+        bytes,
+      };
+      artifactRef = (
+        await sink.persist(input, signal).catch((error) => {
+          transportError = error;
+          throw error;
+        })
+      ).artifactRef;
+      assert.equal(
+        (await sink.persist(input, signal)).artifactRef,
+        artifactRef,
+      );
+      yield {
+        type: "image.generated",
+        itemId: "image-1",
+        artifactRef,
+        mimeType: "image/png",
+        byteLength: bytes.byteLength,
+      };
+      yield { type: "completed", checkpoint: null };
+    },
+  };
+  const cfg = {
+    ...config(databasePath, openArtifacts()),
+    artifactEncryptionKeyId: keyId,
+  };
+  await activateStandaloneRelease({
+    databasePath,
+    route: cfg.route,
+    transport,
+  });
+  const control = createStandaloneControlApi(cfg);
+  context.after(() => closeIfListening(control.app));
+  await control.app.listen({ host: "127.0.0.1", port: 0 });
+  const baseUrl = serverBaseUrl(control.app);
+  const created = await createE2eRun(
+    baseUrl,
+    "image-output",
+    "generate a sample image",
+  );
+  const worker = await createStandaloneRuntimeWorker({
+    databasePath,
+    runtimeTenantId: "tenant-e2e-1",
+    route: cfg.route,
+    transport,
+    artifactStore,
+    artifactEncryptionKeyId: keyId,
+    modelImageSink: sink,
+    scanIntervalMs: null,
+  });
+  context.after(() => worker.close());
+  const outcome = await worker.worker.wake();
+  assert.equal(transportError, undefined);
+  assert.deepEqual(outcome, {
+    kind: "completed",
+    runId: created.run.run.runId,
+  });
+  const client = new ControlApiClient({
+    baseUrl,
+    accessToken: SESSION_TOKEN,
+    csrfToken: CSRF_TOKEN,
+    origin: ORIGIN,
+  });
+  const metadata = await client.getArtifact(artifactRef);
+  assert.equal(metadata.artifact.kind, "modelImage");
+  assert.equal(metadata.artifact.byteLength, bytes.byteLength);
+  assert.deepEqual(metadata.artifact.source, {
+    kind: "modelImage",
+    runId: created.run.run.runId,
+    segmentId:
+      metadata.artifact.source.kind === "modelImage"
+        ? metadata.artifact.source.segmentId
+        : "",
+    itemId: "image-1",
+  });
+  const download = await client.downloadArtifact(artifactRef);
+  assert.equal(download.mediaType, "image/png");
+  assert.deepEqual(Buffer.from(download.content), bytes);
+  const unauthenticated = await fetch(
+    `${baseUrl}/api/v1/artifacts/${artifactRef}/content`,
+  );
+  assert.equal(unauthenticated.status, 401);
+  const reopened = openArtifacts();
+  context.after(() => reopened.close());
+  assert.deepEqual(
+    Buffer.from(
+      (await reopened.read({
+        tenantId: "tenant-e2e-1",
+        artifactId: artifactRef,
+      }))!.content,
+    ),
+    bytes,
+  );
+  assert.equal(
+    await reopened.read({
+      tenantId: "another-tenant",
+      artifactId: artifactRef,
+    }),
+    null,
+  );
+  const events = new DatabaseSync(databasePath, { readOnly: true });
+  const rows = events
+    .prepare(
+      "SELECT event_json FROM run_events WHERE run_id = ? ORDER BY sequence",
+    )
+    .all(created.run.run.runId) as { event_json: string }[];
+  events.close();
+  const imageEvents = rows
+    .map((row) => JSON.parse(row.event_json))
+    .filter((event) => event.type.startsWith("model.image."));
+  assert.deepEqual(
+    imageEvents.map((event) => event.type),
+    ["model.image.progress", "model.image.progress", "model.image.generated"],
+  );
+  assert.ok(imageEvents.every((event) => JSON.stringify(event).length < 2048));
+  assert.equal(listArtifactFiles(`${artifactRoot}/blobs`).length, 1);
+  assert.equal(
+    readFileSync(listArtifactFiles(`${artifactRoot}/blobs`)[0]!).includes(
+      bytes.subarray(0, 4096),
+    ),
+    false,
+  );
+});
 
 test(
   "allows exactly one of two PostgreSQL Worker processes to execute a Run",

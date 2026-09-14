@@ -173,3 +173,47 @@ test("the real stdio MCP entry returns bounded reads and keeps workspace escape 
     truncated: false,
   });
 });
+
+test("desktop file tools start without pnpm or git configured", async (context) => {
+  const workspace = await mkdtemp(join(tmpdir(), "crewon-no-toolchain-"));
+  await writeFile(join(workspace, "fixture.txt"), "desktop readable");
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [
+      fileURLToPath(
+        new URL("./local-workspace-checks-mcp.mjs", import.meta.url),
+      ),
+    ],
+    env: {
+      PATH: "/usr/bin:/bin",
+      CREWON_LOCAL_WORKSPACE_ROOT: workspace,
+      CREWON_LOCAL_PNPM_PATH: "pnpm",
+      CREWON_LOCAL_GIT_PATH: "git",
+    },
+    stderr: "ignore",
+  });
+  const client = new Client({
+    name: "desktop-launch-fixture",
+    version: "1.0.0",
+  });
+  context.after(async () => {
+    await client.close();
+    await transport.close();
+    await rm(workspace, { recursive: true, force: true });
+  });
+  await client.connect(transport);
+  const read = await client.callTool({
+    name: "read_file",
+    arguments: { path: "fixture.txt" },
+  });
+  assert.equal(read.isError, false);
+  assert.equal(read.structuredContent?.content, "desktop readable");
+  const unavailable = await client.callTool({
+    name: "run_ui_test",
+    arguments: { testFile: "src/example.test.ts" },
+  });
+  assert.equal(unavailable.isError, true);
+  assert.match(JSON.stringify(unavailable.content), /local_pnpm_unavailable/);
+  const git = await client.callTool({ name: "git_status", arguments: {} });
+  assert.equal(git.isError, true);
+});

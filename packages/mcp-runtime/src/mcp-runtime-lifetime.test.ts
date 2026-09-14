@@ -164,7 +164,7 @@ test("refresh preserves reserved, pending and completed result identity without 
   await tools.connect(signal());
   const original = tools.definitions();
   const command = executionCommand();
-  const reserved = tools.reserveExecution(command, signal());
+  const reserved = await tools.reserveExecution(command, signal());
   assert.ok(reserved !== undefined);
   context.after(() => reserved.release());
   await tools.refresh(signal());
@@ -324,7 +324,7 @@ test("closing cancels an admitted read without dispatching an unused reservation
   );
   await tools.connect(signal());
   const command = executionCommand();
-  const reserved = tools.reserveExecution(command, signal());
+  const reserved = await tools.reserveExecution(command, signal());
   assert.ok(reserved !== undefined);
   await tools.close();
   const result = await reserved.execute();
