@@ -126,11 +126,13 @@ describe("Skill library host integration", () => {
     container.remove();
     Reflect.deleteProperty(window, "crewonDesktop");
   });
-  async function render() {
+  async function render(selectedThreadId: string | null = null) {
     await act(async () =>
       root.render(
         <SkillLibraryHost
           controlClient={control}
+          selectedThreadId={selectedThreadId}
+          selectedThreadTitle={selectedThreadId ? "订单交付任务" : undefined}
           onSelectThread={onSelectThread}
         />,
       ),
@@ -147,8 +149,8 @@ describe("Skill library host integration", () => {
   async function click(label: string) {
     await act(async () => button(label).click());
   }
-  async function prepareTrial() {
-    await render();
+  async function prepareTrial(selectedThreadId: string | null = null) {
+    await render(selectedThreadId);
     await click("打开示教 Skill：销售汇总");
     const input = container.querySelector<HTMLInputElement>(
       '[aria-label="试跑参数：日期"]',
@@ -351,6 +353,151 @@ describe("Skill library host integration", () => {
     expect(container.textContent).toContain("真实性待验证");
   });
 
+  function deliveryCatalog(threadId: string) {
+    return {
+      target: {
+        schemaVersion: "crewon.delivery-target.v1" as const,
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        threadId,
+        targetId: "thread-deliveries" as const,
+      },
+      inputs: [],
+      deliveries: [],
+    };
+  }
+
+  function requireDelivery() {
+    current.versions = [
+      {
+        ...version,
+        method: {
+          ...version.method,
+          requiredToolRefs: ["delivery_catalog", "delivery_assemble"],
+        },
+      },
+    ];
+  }
+
+  it("uses the selected task and its authoritative delivery target so previously uploaded files remain available", async () => {
+    requireDelivery();
+    control.delivery = { catalog: vi.fn(async (id) => deliveryCatalog(id)) };
+    await prepareTrial("real-thread-1");
+    expect(
+      container.querySelector('[aria-label="执行任务"]')?.outerHTML,
+    ).toMatchSnapshot();
+    await click("打开执行任务");
+    expect(onSelectThread).toHaveBeenCalledWith("real-thread-1");
+    await click("开始试跑");
+    expect(control.createThread).not.toHaveBeenCalled();
+    expect(control.delivery.catalog).toHaveBeenCalledExactlyOnceWith(
+      "real-thread-1",
+    );
+    expect(posts[0]).toMatchObject({
+      threadId: "real-thread-1",
+      expectedThreadRevision: 4,
+      invocation: { deliveryTarget: deliveryCatalog("real-thread-1").target },
+    });
+  });
+
+  it("keeps a pending task destination and file target frozen when the current task changes", async () => {
+    requireDelivery();
+    control.delivery = { catalog: vi.fn(async (id) => deliveryCatalog(id)) };
+    dropNextPost = true;
+    await prepareTrial("real-thread-1");
+    await click("开始试跑");
+    await render("different-thread");
+    expect(container.textContent).toContain("原执行任务：real-thread-1");
+    await click("重试原试跑");
+    expect(posts[1]).toEqual(posts[0]);
+    expect(control.delivery.catalog).toHaveBeenCalledTimes(1);
+    expect(control.getThread).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the original task on a preparation retry after its catalog response is lost", async () => {
+    requireDelivery();
+    control.delivery = { catalog: vi.fn(async (id) => deliveryCatalog(id)) };
+    vi.mocked(control.delivery.catalog).mockRejectedValueOnce(
+      new TypeError("lost_catalog_response"),
+    );
+    await prepareTrial("real-thread-1");
+    await click("开始试跑");
+    await render("different-thread");
+    await click("重试原试跑");
+    expect(control.getThread).toHaveBeenNthCalledWith(2, "real-thread-1");
+    expect(posts[0].threadId).toBe("real-thread-1");
+  });
+
+  it("rejects a delivery catalog for a different task before submitting a Run", async () => {
+    requireDelivery();
+    control.delivery = {
+      catalog: vi.fn(async () => deliveryCatalog("different-thread")),
+    };
+    await prepareTrial("real-thread-1");
+    await click("开始试跑");
+    expect(posts).toEqual([]);
+    expect(container.textContent).toContain("执行任务的文件交付尚未准备好");
+  });
+
+  it("does not require the file service for a browser-only Skill in the selected task", async () => {
+    await prepareTrial("real-thread-1");
+    await click("开始试跑");
+    expect(control.createThread).not.toHaveBeenCalled();
+    expect(posts[0].threadId).toBe("real-thread-1");
+    expect(posts[0].invocation).not.toHaveProperty("deliveryTarget");
+  });
+
+  it("keeps model draft generation in a separate task from the chosen input files", async () => {
+    await prepareTrial("current-file-task");
+    await click("让模型整理草稿");
+    expect(control.createThread).toHaveBeenCalledTimes(1);
+    expect(control.getThread).toHaveBeenCalledWith("real-thread-1");
+    expect(posts).toEqual([]);
+  });
+
+  it("does not dispatch the old account's task after its delivery catalog resolves", async () => {
+    requireDelivery();
+    let resolve!: (value: ReturnType<typeof deliveryCatalog>) => void;
+    control.delivery = {
+      catalog: vi.fn(
+        () =>
+          new Promise<ReturnType<typeof deliveryCatalog>>((done) => {
+            resolve = done;
+          }),
+      ),
+    };
+    await prepareTrial("real-thread-1");
+    await click("开始试跑");
+    const nextControl = {
+      ...control,
+      requestSkill: vi.fn(async () => Response.json({ skills: [] })),
+    };
+    await act(async () =>
+      root.render(
+        <SkillLibraryHost
+          controlClient={nextControl}
+          selectedThreadId="new-account-task"
+        />,
+      ),
+    );
+    await act(async () => resolve(deliveryCatalog("real-thread-1")));
+    expect(posts).toEqual([]);
+  });
+
+  it("keeps new task creation available as an explicit destination", async () => {
+    await prepareTrial("other-current-task");
+    const select = container.querySelector<HTMLSelectElement>(
+      'select[aria-label="执行任务"]',
+    )!;
+    await act(async () => {
+      select.value = "new";
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+    await click("开始试跑");
+    expect(control.createThread).toHaveBeenCalledTimes(1);
+    expect(posts[0].threadId).toBe("real-thread-1");
+  });
+
   it("retries an uncertain execution response with the exact same thread, revision, parameters and execution ID", async () => {
     dropNextPost = true;
     await prepareTrial();
@@ -425,7 +572,7 @@ describe("Skill library host integration", () => {
         ...version,
         method: {
           ...version.method,
-          requiredToolRefs: ["crewon_browser_act_scoped"],
+          requiredToolRefs: ["crewon_browser_act"],
         },
       },
     ];
@@ -455,11 +602,11 @@ describe("Skill library host integration", () => {
       threadId: "real-thread-1",
     });
     expect(posts[0].invocation.requiredToolRefs).toEqual([
-      "crewon_browser_act_scoped",
+      "crewon_browser_act",
     ]);
   });
 
-  it("keeps scoped tool dependencies on the ordinary approval path when the user provides no scoped grant", async () => {
+  it("does not start a scope-only Skill before the required browser scope is configured", async () => {
     current.versions = [
       {
         ...version,
@@ -480,10 +627,10 @@ describe("Skill library host integration", () => {
     });
     await prepareTrial();
     await click("开始试跑");
-    await click("按逐次确认开始试跑");
+    expect(container.textContent).toContain("此技能需要限定范围授权");
+    expect(container.textContent).not.toContain("按逐次确认开始试跑");
+    expect(button("允许此任务使用浏览器").disabled).toBe(true);
     expect(bridge.authorize).not.toHaveBeenCalled();
-    expect(posts).toHaveLength(1);
-    expect(posts[0].threadId).toBe("real-thread-1");
-    expect(posts[0]).not.toHaveProperty("scope");
+    expect(posts).toHaveLength(0);
   });
 });

@@ -14,6 +14,7 @@ import type {
   SkillExecutionAttemptStore,
   SkillGenerationAttemptStore,
   SkillExecutionInput,
+  SkillExecutionPreparation,
 } from "../../lib/skill/demonstratedSkillClient";
 import { SkillMethodEditor } from "./SkillMethodEditor";
 import { SkillDraftGeneration } from "./SkillDraftGeneration";
@@ -40,6 +41,12 @@ export type DemonstratedSkillPanelProps = {
   prepareExecutionTarget?: (
     executionId: string,
   ) => Promise<SkillExecutionTarget>;
+  selectedThreadId?: string | null;
+  prepareExecution?: (input: {
+    executionId: string;
+    selectedThreadId: string | null;
+    invocation: SkillInvocationSpec;
+  }) => Promise<SkillExecutionPreparation>;
   executionAttemptStore?: SkillExecutionAttemptStore;
   generationAttemptStore?: SkillGenerationAttemptStore;
   browserScope?: BrowserGrantScope;
@@ -63,6 +70,8 @@ export function DemonstratedSkillPanel(props: DemonstratedSkillPanelProps) {
 
 function errorText(error: unknown): string {
   const code = error instanceof Error ? error.message : "";
+  if (code.includes("delivery"))
+    return "执行任务的文件交付尚未准备好。请确认文件服务可用，并在该任务上传数据或模板后重试。";
   if (code.includes("revision"))
     return "内容已在另一处更新。请刷新后重新审阅并保存。";
   if (code.includes("trial") || code.includes("review"))
@@ -107,6 +116,8 @@ function SkillPanelContent({
   client,
   executionTarget,
   prepareExecutionTarget,
+  selectedThreadId = null,
+  prepareExecution,
   executionAttemptStore,
   generationAttemptStore,
   browserScope,
@@ -261,6 +272,7 @@ function SkillPanelContent({
       invocation: structuredClone(invocation),
       toolPermissionMode,
       command: null,
+      selectedThreadId,
     };
     executionAttempt.current = attempt;
     executionAttemptStore?.set(attempt);
@@ -269,11 +281,28 @@ function SkillPanelContent({
     await run(
       async () => {
         if (!attempt.command) {
-          const target = prepareExecutionTarget
-            ? await prepareExecutionTarget(attempt.executionId)
-            : executionTarget;
+          const preparation = prepareExecution
+            ? await prepareExecution({
+                executionId: attempt.executionId,
+                selectedThreadId: attempt.selectedThreadId ?? null,
+                invocation: attempt.invocation,
+              })
+            : null;
+          const target =
+            preparation?.target ??
+            (prepareExecutionTarget
+              ? await prepareExecutionTarget(attempt.executionId)
+              : executionTarget);
           if (!isCurrent()) return;
           if (!target) throw new Error("skill_execution_target_required");
+          if (preparation?.deliveryTarget) {
+            if (preparation.deliveryTarget.threadId !== target.threadId)
+              throw new Error("skill_delivery_target_mismatch");
+            attempt.invocation = {
+              ...attempt.invocation,
+              deliveryTarget: preparation.deliveryTarget,
+            };
+          }
           attempt.command = {
             ...target,
             executionId: attempt.executionId,
@@ -281,6 +310,7 @@ function SkillPanelContent({
             invocation: attempt.invocation,
             toolPermissionMode: attempt.toolPermissionMode ?? "requestApproval",
           };
+          executionAttemptStore?.set(attempt);
         }
         if (!isCurrent()) return;
         if (
@@ -374,7 +404,7 @@ function SkillPanelContent({
   const canExecute =
     !busy &&
     !disabled &&
-    (!!executionTarget || !!prepareExecutionTarget) &&
+    (!!executionTarget || !!prepareExecutionTarget || !!prepareExecution) &&
     !!invocation;
   const awaitingBrowserChoice =
     !!browserCommand &&
@@ -596,6 +626,9 @@ function SkillPanelContent({
               {retryPurpose && !awaitingBrowserChoice ? (
                 <p role="status" className="demonstrated-skill-note">
                   本次提交状态待确认。重试将继续使用原参数和同一个执行标识。
+                  {executionAttempt.current?.selectedThreadId
+                    ? ` 原执行任务：${executionAttempt.current.selectedThreadId}。切换任务不改变此次重试。`
+                    : null}
                 </p>
               ) : null}
               {browserCommand ? (

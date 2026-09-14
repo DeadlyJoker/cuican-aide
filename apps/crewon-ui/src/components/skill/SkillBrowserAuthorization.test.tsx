@@ -24,7 +24,7 @@ const command: SkillExecutionInput = {
       contentDigest: `sha256:${"a".repeat(64)}`,
     },
     parameters: {},
-    requiredToolRefs: ["crewon_browser_act_scoped"],
+    requiredToolRefs: ["crewon_browser_act"],
   },
 };
 function bridgeFixture(): BrowserExecutionBridge {
@@ -41,6 +41,41 @@ function bridgeFixture(): BrowserExecutionBridge {
     revoke: vi.fn(async () => {}),
   };
 }
+
+it("requires scope for scoped-only Skills even if a caller passes false", async () => {
+  const container = document.createElement("div");
+  const root = createRoot(container);
+  const bridge = bridgeFixture();
+  const onProceed = vi.fn();
+  try {
+    await act(async () =>
+      root.render(
+        <SkillBrowserAuthorization
+          command={{
+            ...command,
+            invocation: {
+              ...command.invocation,
+              parameters: { date: "2026-09-14" },
+              requiredToolRefs: ["crewon_browser_act_scoped"],
+            },
+          }}
+          requiredScope={false}
+          awaitingChoice
+          busy={false}
+          bridge={bridge}
+          onProceed={onProceed}
+        />,
+      ),
+    );
+    expect(container.textContent).toContain("此技能需要限定范围授权");
+    expect(container.textContent).not.toContain("按逐次确认开始试跑");
+    expect(container.textContent).not.toContain("普通授权（按任务设置审批）");
+    expect(bridge.authorize).not.toHaveBeenCalled();
+    expect(onProceed).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => root.unmount());
+  }
+});
 
 it.each(["trial", "execute"] as const)(
   "forwards delegated %s approval copy without creating a browser grant when continuing",

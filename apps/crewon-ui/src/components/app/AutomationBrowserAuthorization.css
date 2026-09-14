@@ -1,0 +1,16 @@
+.automation-browser-authorization,
+.automation-browser-authorization-panel {
+  display: grid;
+  min-width: 0;
+  gap: 8px;
+}
+
+.automation-browser-authorization > button {
+  justify-self: start;
+}
+
+.schedule-agenda-main .automation-browser-authorization p {
+  display: block;
+  overflow: visible;
+  -webkit-line-clamp: unset;
+}

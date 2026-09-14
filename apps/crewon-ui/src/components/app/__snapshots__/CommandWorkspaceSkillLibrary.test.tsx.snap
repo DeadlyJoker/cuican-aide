@@ -1,0 +1,3 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`Skill library host integration > uses the selected task and its authoritative delivery target so previously uploaded files remain available 1`] = `"<section class="demonstrated-skill-method" aria-label="执行任务"><label class="form-field"><span>执行任务</span><select aria-label="执行任务"><option value="current">当前任务 · 订单交付任务</option><option value="new">新建任务</option></select></label><p class="demonstrated-skill-note">试跑和调用使用此任务已有的文件，交付结果也保存在此任务。需要模板或数据时，请先打开任务，在文件交付中上传。模型整理草稿使用独立任务。</p><button class="button compact" type="button">打开执行任务</button></section>"`;

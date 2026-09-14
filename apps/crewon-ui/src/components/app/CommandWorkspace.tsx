@@ -3993,6 +3993,12 @@ export function CommandWorkspace({
               (catalogFilter === "skill" || catalogFilter === "all") ? (
                 <SkillLibraryHost
                   controlClient={skillControlClient}
+                  selectedThreadId={selectedThreadId}
+                  selectedThreadTitle={
+                    commandLinkedThreads.find(
+                      (thread) => thread.id === selectedThreadId,
+                    )?.title
+                  }
                   query={catalogSearch}
                   openRequest={skillOpenRequest}
                   onOpenRequestHandled={onSkillOpenRequestHandled}

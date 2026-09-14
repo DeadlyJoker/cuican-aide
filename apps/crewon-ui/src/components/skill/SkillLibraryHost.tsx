@@ -1,11 +1,14 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { SkillInvocationSpec } from "@crewon/domain/demonstrated-skill";
+import { parseDeliveryTargetRef } from "@crewon/domain/delivery";
+import type { DeliveryControlClient } from "@crewon/control-client";
 import {
   createDemonstratedSkillClient,
   type DemonstratedSkillView,
   type SkillExecutionTarget,
   type SkillExecutionAttempt,
   type SkillGenerationAttempt,
+  type SkillExecutionPreparation,
 } from "../../lib/skill/demonstratedSkillClient";
 import { DemonstratedSkillPanel } from "./DemonstratedSkillPanel";
 import type { SkillLibraryOpenRequest } from "./useRecordingSkillImport";
@@ -14,6 +17,7 @@ import "./demonstrated-skill.css";
 
 /** Narrow Control port; all identities and revisions originate at the host. */
 export interface SkillLibraryControlClient {
+  delivery?: Pick<DeliveryControlClient, "catalog">;
   requestSkill(path: string, init?: RequestInit): Promise<Response>;
   createThread(
     body: { title: string | null },
@@ -28,6 +32,8 @@ export interface SkillLibraryControlClient {
 export type SkillLibraryHostProps = {
   controlClient: SkillLibraryControlClient;
   query?: string;
+  selectedThreadId?: string | null;
+  selectedThreadTitle?: string;
   openRequest?: SkillLibraryOpenRequest | null;
   onOpenRequestHandled?: (requestId: string) => void;
   onSelectThread?: (threadId: string) => void;
@@ -35,6 +41,7 @@ export type SkillLibraryHostProps = {
   onAddToSchedule?: (draft: {
     title: string;
     invocation: SkillInvocationSpec;
+    threadId?: string | null;
   }) => void;
 };
 
@@ -58,6 +65,8 @@ export function SkillLibraryHost(props: SkillLibraryHostProps) {
 function SkillLibraryContent({
   controlClient,
   query = "",
+  selectedThreadId = null,
+  selectedThreadTitle,
   openRequest = null,
   onOpenRequestHandled,
   onSelectThread,
@@ -95,6 +104,8 @@ function SkillLibraryContent({
   const selectionSequence = useRef(0);
   const [openingImported, setOpeningImported] = useState(false);
   const [importOpenError, setImportOpenError] = useState(false);
+  const [destination, setDestination] = useState<"current" | "new">("current");
+  const executionThreadId = destination === "current" ? selectedThreadId : null;
   const handledRef = useRef(onOpenRequestHandled);
   handledRef.current = onOpenRequestHandled;
 
@@ -198,6 +209,52 @@ function SkillLibraryContent({
     };
   }
 
+  async function prepareExecution(input: {
+    executionId: string;
+    selectedThreadId: string | null;
+    invocation: SkillInvocationSpec;
+  }): Promise<SkillExecutionPreparation> {
+    const isCurrent = captureScope();
+    if (!isCurrent()) throw new Error("skill_client_scope_changed");
+    let target: SkillExecutionTarget;
+    const requestedThreadId =
+      input.invocation.deliveryTarget?.threadId ?? input.selectedThreadId;
+    if (requestedThreadId) {
+      const { thread } = await controlClient.getThread(requestedThreadId);
+      if (!isCurrent()) throw new Error("skill_client_scope_changed");
+      if (
+        thread.threadId !== requestedThreadId ||
+        thread.status !== "active" ||
+        !Number.isSafeInteger(thread.revision) ||
+        thread.revision < 0
+      )
+        throw new Error("skill_execution_thread_invalid");
+      target = {
+        threadId: thread.threadId,
+        expectedThreadRevision: thread.revision,
+        agentVersionId: null,
+      };
+    } else target = await prepareExecutionTarget(input.executionId);
+    if (!isCurrent()) throw new Error("skill_client_scope_changed");
+    const usesDelivery =
+      input.invocation.requiredToolRefs.some((ref) =>
+        ref.startsWith("delivery_"),
+      ) || !!input.invocation.deliveryTarget;
+    if (!usesDelivery) return { target };
+    if (!controlClient.delivery) throw new Error("skill_delivery_unavailable");
+    const catalog = await controlClient.delivery.catalog(target.threadId);
+    if (!isCurrent()) throw new Error("skill_client_scope_changed");
+    const deliveryTarget = parseDeliveryTargetRef(catalog.target);
+    if (
+      deliveryTarget.threadId !== target.threadId ||
+      (input.invocation.deliveryTarget &&
+        (deliveryTarget.tenantId !== input.invocation.deliveryTarget.tenantId ||
+          deliveryTarget.spaceId !== input.invocation.deliveryTarget.spaceId))
+    )
+      throw new Error("skill_delivery_target_mismatch");
+    return { target, deliveryTarget };
+  }
+
   async function openRun(runId: string) {
     const isCurrent = captureScope();
     if (!isCurrent()) return;
@@ -251,6 +308,40 @@ function SkillLibraryContent({
               返回示教 Skill 列表
             </button>
           </div>
+          <section className="demonstrated-skill-method" aria-label="执行任务">
+            <label className="form-field">
+              <span>执行任务</span>
+              <select
+                aria-label="执行任务"
+                value={selectedThreadId ? destination : "new"}
+                onChange={(event) =>
+                  setDestination(event.target.value as "current" | "new")
+                }
+              >
+                {selectedThreadId ? (
+                  <option value="current">
+                    当前任务 · {selectedThreadTitle || selectedThreadId}
+                  </option>
+                ) : null}
+                <option value="new">新建任务</option>
+              </select>
+            </label>
+            <p className="demonstrated-skill-note">
+              {executionThreadId
+                ? "试跑和调用使用此任务已有的文件，交付结果也保存在此任务。需要模板或数据时，请先打开任务，在文件交付中上传。"
+                : "试跑和调用会新建空任务。需要已有模板或数据时，请先在左侧打开任务并上传文件，再选择当前任务。"}
+              模型整理草稿使用独立任务。
+            </p>
+            {executionThreadId && onSelectThread ? (
+              <button
+                className="button compact"
+                type="button"
+                onClick={() => onSelectThread(executionThreadId)}
+              >
+                打开执行任务
+              </button>
+            ) : null}
+          </section>
           <DemonstratedSkillPanel
             key={selected.skillId}
             skillId={selected.skillId}
@@ -264,6 +355,8 @@ function SkillLibraryContent({
               },
             }}
             prepareExecutionTarget={prepareExecutionTarget}
+            prepareExecution={prepareExecution}
+            selectedThreadId={executionThreadId}
             generationAttemptStore={{
               get: () => generations.get(selected.skillId) ?? null,
               set: (attempt) => {
@@ -271,7 +364,12 @@ function SkillLibraryContent({
                 else generations.delete(selected.skillId);
               },
             }}
-            onAddToSchedule={onAddToSchedule}
+            onAddToSchedule={
+              onAddToSchedule
+                ? (draft) =>
+                    onAddToSchedule({ ...draft, threadId: executionThreadId })
+                : undefined
+            }
             onOpenRun={onSelectThread ? (id) => void openRun(id) : undefined}
           />
         </>

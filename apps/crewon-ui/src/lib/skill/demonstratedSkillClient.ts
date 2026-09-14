@@ -57,6 +57,12 @@ export type SkillExecutionAttempt = {
   command: SkillExecutionInput | null;
   toolPermissionMode?: Exclude<ToolPermissionMode, "fullAccess">;
   browserChoice?: "perAction" | "authorized";
+  /** The user's destination choice is frozen even before preparation returns. */
+  selectedThreadId?: string | null;
+};
+export type SkillExecutionPreparation = {
+  target: SkillExecutionTarget;
+  deliveryTarget?: SkillInvocationSpec["deliveryTarget"];
 };
 export type SkillExecutionAttemptStore = {
   get(): SkillExecutionAttempt | null;

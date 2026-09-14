@@ -1,5 +1,11 @@
 import { useId, useLayoutEffect, useRef, useState } from "react";
 import type { ToolPermissionMode } from "@crewon/contracts";
+import { parseBrowserGrantScope } from "../../lib/browser-execution/browserGrantScope";
+import {
+  BrowserGrantScopeEditor,
+  browserActionLabels,
+  browserControlLabels,
+} from "./BrowserGrantScopeEditor";
 import type {
   BrowserExecutionAuthorizationState,
   BrowserExecutionBridge,
@@ -13,6 +19,8 @@ export type BrowserExecutionAuthorizationProps = {
   threadId: string | null;
   skillVersionRef: BrowserSkillRef;
   scope?: BrowserGrantScope;
+  requiredScope?: boolean;
+  parameterNames?: readonly string[];
   toolPermissionMode?: Exclude<ToolPermissionMode, "fullAccess">;
   bridge?: BrowserExecutionBridge;
   onAuthorized?: () => void;
@@ -28,14 +36,67 @@ export function BrowserExecutionAuthorization(
     props.skillVersionRef.versionId,
     props.skillVersionRef.contentDigest,
     props.scope ?? null,
+    props.requiredScope ?? false,
+    props.parameterNames ?? null,
   ]);
-  return <AuthorizationPanel key={identity} {...props} />;
+  return <AuthorizationConfiguration key={identity} {...props} />;
+}
+
+function AuthorizationConfiguration(props: BrowserExecutionAuthorizationProps) {
+  const [mode, setMode] = useState<"perAction" | "scoped">(
+    props.requiredScope ? "scoped" : "perAction",
+  );
+  const [draft, setDraft] = useState<BrowserGrantScope>({
+    skillVersionRef: props.skillVersionRef,
+    origins: [""],
+    rules: [],
+  });
+  const effectiveScope = props.scope ?? (mode === "scoped" ? draft : undefined);
+  return (
+    <div className="browser-authorization-configuration">
+      {!props.scope && (
+        <div className="browser-execution-authorization">
+          <label className="browser-grant-mode">
+            浏览器授权方式
+            <select
+              value={mode}
+              onChange={(event) =>
+                setMode(event.target.value as "perAction" | "scoped")
+              }
+            >
+              {!props.requiredScope && (
+                <option value="perAction">普通授权（按任务设置审批）</option>
+              )}
+              <option value="scoped">限定范围连续执行</option>
+            </select>
+          </label>
+          {props.requiredScope && (
+            <p>此技能需要限定范围授权，配置完成后才能开始。</p>
+          )}
+          {mode === "scoped" && (
+            <BrowserGrantScopeEditor
+              value={draft}
+              parameterNames={props.parameterNames}
+              onChange={setDraft}
+            />
+          )}
+        </div>
+      )}
+      <AuthorizationPanel
+        key={JSON.stringify(effectiveScope ?? null)}
+        {...props}
+        scope={effectiveScope}
+      />
+    </div>
+  );
 }
 
 function AuthorizationPanel({
   threadId,
   skillVersionRef,
   scope,
+  requiredScope = false,
+  parameterNames,
   toolPermissionMode = "requestApproval",
   bridge: injectedBridge,
   onAuthorized,
@@ -55,6 +116,7 @@ function AuthorizationPanel({
   >(bridge && threadId ? "loading" : "ready");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [authorizedHere, setAuthorizedHere] = useState(false);
   const lifecycle = useRef(0);
   const request = useRef(0);
   const mutationPending = useRef(false);
@@ -63,13 +125,16 @@ function AuthorizationPanel({
     ? "请先选择一个任务"
     : !bridge
       ? "当前浏览器未连接"
-      : scopeIssue(scope, skillVersionRef);
+      : requiredScope && !scope
+        ? "此技能需要限定范围授权。"
+        : scopeIssue(scope, skillVersionRef, parameterNames);
 
   // Invalidate callbacks during the commit, before an old task's promise can settle.
   useLayoutEffect(() => {
     const generation = ++lifecycle.current;
     mutationPending.current = false;
     setGrant(null);
+    setAuthorizedHere(false);
     setNotice(null);
     setError(null);
     if (!bridge || !threadId?.trim()) {
@@ -92,6 +157,7 @@ function AuthorizationPanel({
           throw new Error("browser_authorization_status_mismatch");
         }
         setGrant(result);
+        if (!result) setAuthorizedHere(false);
       } catch {
         if (
           generation !== lifecycle.current ||
@@ -151,6 +217,7 @@ function AuthorizationPanel({
         throw new Error("browser_authorization_result_mismatch");
       }
       setGrant(result);
+      setAuthorizedHere(true);
       onAuthorized?.();
     } catch {
       if (
@@ -186,6 +253,7 @@ function AuthorizationPanel({
       )
         return;
       setGrant(null);
+      setAuthorizedHere(false);
       setNotice("授权已撤销，浏览器由你接管。");
     } catch {
       if (
@@ -216,7 +284,9 @@ function AuthorizationPanel({
         : phase === "revoking"
           ? "正在接管并撤销授权…"
           : grant
-            ? `已授权 · ${grant.mode === "scoped" ? "限定范围连续执行" : unscopedApprovalLabel}`
+            ? scope && !authorizedHere
+              ? "此任务已有浏览器授权；本次范围需重新授权。"
+              : `已授权 · ${grant.mode === "scoped" ? "限定范围连续执行" : unscopedApprovalLabel}`
             : (notice ?? "尚未授权"));
 
   return (
@@ -314,6 +384,7 @@ function AuthorizationPanel({
 function scopeIssue(
   scope: BrowserGrantScope | undefined,
   ref: BrowserSkillRef,
+  parameterNames?: readonly string[],
 ): string | null {
   if (!scope) return null;
   if (
@@ -325,6 +396,24 @@ function scopeIssue(
   }
   if (scope.origins.length === 0 || scope.rules.length === 0)
     return "本次授权范围尚未配置完整。";
+  try {
+    parseBrowserGrantScope(scope);
+  } catch {
+    return "授权范围无效：请检查网站来源、操作和控件名称；页面地址必须属于允许的网站。";
+  }
+  const parameters = scope.rules.flatMap((rule) => [
+    ...(rule.value && "parameter" in rule.value ? [rule.value.parameter] : []),
+    ...Array.from(
+      (rule.urlTemplate ?? "").matchAll(/\{([A-Za-z0-9_]+)\}/g),
+      (match) => match[1]!,
+    ),
+  ]);
+  if (
+    parameters.some(
+      (name) => !name || (parameterNames && !parameterNames.includes(name)),
+    )
+  )
+    return "请选择此任务已有的参数，或改用固定值。";
   return null;
 }
 
@@ -343,19 +432,13 @@ function matchesThread(
 }
 
 function RuleSummary({ rule }: { rule: BrowserGrantRule }) {
-  const labels = {
-    navigate: "打开页面",
-    click: "点击",
-    fill: "填写",
-    select: "选择",
-    download: "下载文件",
-  };
   return (
     <div className="browser-execution-authorization-rule">
-      <strong>{labels[rule.action]}</strong>
+      <strong>{browserActionLabels[rule.action]}</strong>
       {rule.target && (
         <span>
-          控件：{rule.target.role} · {rule.target.name}
+          控件：{browserControlLabels[rule.target.role] ?? rule.target.role} ·{" "}
+          {rule.target.name}
         </span>
       )}
       {rule.urlTemplate && <span>地址：{rule.urlTemplate}</span>}

@@ -17,6 +17,8 @@ export function SkillBrowserAuthorization({
   awaitingChoice,
   busy,
   scope,
+  requiredScope,
+  parameterNames,
   bridge,
   onProceed,
 }: {
@@ -24,9 +26,14 @@ export function SkillBrowserAuthorization({
   awaitingChoice: boolean;
   busy: boolean;
   scope?: BrowserGrantScope;
+  requiredScope?: boolean;
+  parameterNames?: readonly string[];
   bridge?: BrowserExecutionBridge;
   onProceed: (choice: "perAction" | "authorized") => void;
 }) {
+  const needsScope =
+    requiredScope ||
+    command.invocation.requiredToolRefs.includes("crewon_browser_act_scoped");
   return (
     <fieldset className="demonstrated-skill-browser" disabled={busy}>
       <BrowserExecutionAuthorization
@@ -34,12 +41,16 @@ export function SkillBrowserAuthorization({
         skillVersionRef={command.invocation.skill}
         toolPermissionMode={command.toolPermissionMode}
         scope={scope}
+        requiredScope={needsScope}
+        parameterNames={
+          parameterNames ?? Object.keys(command.invocation.parameters)
+        }
         bridge={bridge}
         onAuthorized={
           awaitingChoice ? () => onProceed("authorized") : undefined
         }
       />
-      {awaitingChoice ? (
+      {awaitingChoice && !needsScope ? (
         <button
           className="button compact"
           type="button"

@@ -1,5 +1,6 @@
 import type { AutomationView } from "@crewon/contracts";
 import { skillScheduleRecoveryMessage } from "./automationErrorMessage";
+import { AutomationBrowserAuthorization } from "./AutomationBrowserAuthorization";
 
 export function AutomationSkillStatus({
   definition,
@@ -25,6 +26,7 @@ export function AutomationSkillStatus({
           {skillScheduleRecoveryMessage(definition.skillReadiness.code)}
         </div>
       ) : null}
+      <AutomationBrowserAuthorization definition={definition} />
     </div>
   );
 }

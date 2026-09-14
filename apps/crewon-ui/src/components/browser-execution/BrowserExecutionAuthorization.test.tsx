@@ -18,7 +18,7 @@ Object.assign(globalThis, { IS_REACT_ACT_ENVIRONMENT: true });
 const skillVersionRef = {
   skillId: "report-skill",
   versionId: "version-1",
-  contentDigest: "sha256:content-1",
+  contentDigest: `sha256:${"a".repeat(64)}`,
 };
 const scope: BrowserGrantScope = {
   skillVersionRef,
@@ -110,6 +110,147 @@ describe("BrowserExecutionAuthorization", () => {
     return result;
   }
 
+  async function field(label: string, value: string) {
+    const wrapper = [...container.querySelectorAll("label")].find(
+      (node) =>
+        Array.from(node.childNodes)
+          .filter((child) => child.nodeType === Node.TEXT_NODE)
+          .map((child) => child.textContent)
+          .join("")
+          .trim() === label,
+    );
+    const node = wrapper?.querySelector("input,select") as
+      | HTMLInputElement
+      | HTMLSelectElement
+      | null;
+    if (!node) throw new Error(`Missing field: ${label}`);
+    await act(async () => {
+      if (node instanceof HTMLSelectElement) {
+        node.value = value;
+        node.dispatchEvent(new Event("change", { bubbles: true }));
+      } else {
+        Object.getOwnPropertyDescriptor(
+          HTMLInputElement.prototype,
+          "value",
+        )!.set!.call(node, value);
+        node.dispatchEvent(new Event("input", { bubbles: true }));
+      }
+    });
+  }
+
+  it("requires a complete explicitly edited scope and sends only the reviewed fields", async () => {
+    const bridge = fakeBridge();
+    bridge.authorize.mockResolvedValue(grant("thread-a", "scoped"));
+    const onAuthorized = vi.fn();
+    await render({
+      bridge,
+      requiredScope: true,
+      parameterNames: ["date"],
+      onAuthorized,
+    });
+    expect(container.textContent).not.toContain("普通授权（按任务设置审批）");
+    expect(button("允许此任务使用浏览器").disabled).toBe(true);
+    await field("网站 1", "https://reports.example.com");
+    await act(async () => button("添加操作").click());
+    await field("操作类型", "fill");
+    await field("控件类型", "");
+    await field("控件名称", "日期");
+    await field("填写内容来源", "parameter");
+    expect(button("允许此任务使用浏览器").disabled).toBe(true);
+    await field("参数名称", "date");
+    expect(bridge.authorize).not.toHaveBeenCalled();
+    expect(button("允许此任务使用浏览器").disabled).toBe(false);
+    await act(async () => button("允许此任务使用浏览器").click());
+    expect(bridge.authorize).toHaveBeenCalledExactlyOnceWith({
+      threadId: "thread-a",
+      scope: {
+        skillVersionRef,
+        origins: ["https://reports.example.com"],
+        rules: [
+          {
+            action: "fill",
+            target: { role: "", name: "日期" },
+            value: { parameter: "date" },
+          },
+        ],
+      },
+    });
+    expect(onAuthorized).toHaveBeenCalledOnce();
+    expect(
+      container.innerHTML.replace(/_r_[a-z0-9]+_/g, "_react-id_"),
+    ).toMatchSnapshot();
+  });
+
+  it("rejects navigation outside reviewed websites and unknown URL parameters", async () => {
+    const bridge = fakeBridge();
+    await render({ bridge, requiredScope: true, parameterNames: ["date"] });
+    await field("网站 1", "https://reports.example.com");
+    await act(async () => button("添加操作").click());
+    await field("操作类型", "navigate");
+    await field("页面地址模板", "https://other.example.com/?date={date}");
+    expect(button("允许此任务使用浏览器").disabled).toBe(true);
+    await field("页面地址模板", "https://reports.example.com/?date={unknown}");
+    expect(button("允许此任务使用浏览器").disabled).toBe(true);
+    await field("页面地址模板", "https://reports.example.com/?date={date}");
+    expect(button("允许此任务使用浏览器").disabled).toBe(false);
+    expect(bridge.authorize).not.toHaveBeenCalled();
+  });
+
+  it("ignores pending authorization after local scope changes and requires a new click", async () => {
+    const stale = deferred<BrowserExecutionAuthorizationState>();
+    const bridge = fakeBridge();
+    bridge.authorize.mockReturnValueOnce(stale.promise);
+    const onAuthorized = vi.fn();
+    await render({ bridge, requiredScope: true, onAuthorized });
+    await field("网站 1", "https://reports.example.com");
+    await act(async () => button("添加操作").click());
+    await field("控件名称", "筛选");
+    await act(async () => button("允许此任务使用浏览器").click());
+    await field("控件名称", "导出 CSV");
+    await act(async () => stale.resolve(grant("thread-a", "scoped")));
+    expect(onAuthorized).not.toHaveBeenCalled();
+    expect(container.textContent).not.toContain("已授权 ·");
+    expect(bridge.authorize).toHaveBeenCalledOnce();
+    bridge.status.mockResolvedValue(grant("thread-a", "scoped"));
+    await act(async () => window.dispatchEvent(new Event("focus")));
+    expect(container.textContent).toContain("本次范围需重新授权");
+    expect(onAuthorized).not.toHaveBeenCalled();
+    bridge.authorize.mockResolvedValue(grant("thread-a", "scoped"));
+    await act(async () => button("允许此任务使用浏览器").click());
+    expect(onAuthorized).toHaveBeenCalledOnce();
+    expect(bridge.authorize).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        scope: expect.objectContaining({
+          rules: [
+            { action: "click", target: { role: "button", name: "导出 CSV" } },
+          ],
+        }),
+      }),
+    );
+  });
+
+  it("keeps editor cardinality within host limits and resets it for another Skill", async () => {
+    const bridge = fakeBridge();
+    await render({ bridge, requiredScope: true });
+    for (let i = 1; i < 8; i++)
+      await act(async () => button("添加网站").click());
+    expect(button("添加网站").disabled).toBe(true);
+    for (let i = 0; i < 32; i++)
+      await act(async () => button("添加操作").click());
+    expect(button("添加操作").disabled).toBe(true);
+    await render({
+      bridge,
+      requiredScope: true,
+      skillVersionRef: { ...skillVersionRef, versionId: "version-2" },
+    });
+    expect(button("添加网站").disabled).toBe(false);
+    expect(button("添加操作").disabled).toBe(false);
+    expect(
+      container.querySelectorAll(".browser-grant-editor-rule"),
+    ).toHaveLength(0);
+    expect(bridge.authorize).not.toHaveBeenCalled();
+  });
+
   it("only authorizes after an explicit DOM click, including StrictMode mounting", async () => {
     const bridge = fakeBridge();
     const onAuthorized = vi.fn();
@@ -184,8 +325,8 @@ describe("BrowserExecutionAuthorization", () => {
     bridge.authorize.mockResolvedValue(grant("thread-a", "scoped"));
     await render({ bridge, scope });
     expect(container.textContent).toContain(scope.origins[0]);
-    expect(container.textContent).toContain("button · 筛选");
-    expect(container.textContent).toContain("combobox · 部门");
+    expect(container.textContent).toContain("按钮 · 筛选");
+    expect(container.textContent).toContain("下拉框 · 部门");
     expect(container.textContent).toContain("参数：date（运行时提供）");
     expect(container.textContent).toContain("固定值：销售");
     expect(container.textContent).toContain("打开页面");

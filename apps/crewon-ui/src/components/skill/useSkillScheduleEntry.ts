@@ -1,12 +1,17 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import type { SkillInvocationSpec } from "@crewon/domain/demonstrated-skill";
+import { parseDeliveryTargetRef } from "@crewon/domain/delivery";
 import {
   skillAutomationDraft,
   type AutomationCreateDraft,
 } from "../app/automationCreateDraft";
 import type { SkillLibraryControlClient } from "./SkillLibraryHost";
 
-type Input = { title: string; invocation: SkillInvocationSpec };
+type Input = {
+  title: string;
+  invocation: SkillInvocationSpec;
+  threadId?: string | null;
+};
 export function useSkillScheduleEntry({
   controlClient,
   selectedThreadId,
@@ -23,6 +28,7 @@ export function useSkillScheduleEntry({
     key: string;
     requestId: number;
     threadId: string | null;
+    invocation?: SkillInvocationSpec;
   } | null>(null);
   const active = useRef(true);
   const working = useRef(false);
@@ -56,11 +62,15 @@ export function useSkillScheduleEntry({
       setError("上次日程准备尚未确认，请先重试原请求。");
       return;
     }
-    const attempt = pending.current ?? {
+    const attempt: NonNullable<typeof pending.current> = pending.current ?? {
       input: structuredClone(input),
       key: `skill-schedule:${crypto.randomUUID()}`,
       requestId: Date.now(),
-      threadId: input.invocation.deliveryTarget?.threadId ?? selectedThreadId,
+      threadId:
+        input.invocation.deliveryTarget?.threadId ??
+        (Object.hasOwn(input, "threadId")
+          ? (input.threadId ?? null)
+          : selectedThreadId),
     };
     pending.current = attempt;
     const currentEpoch = epoch.current;
@@ -86,8 +96,34 @@ export function useSkillScheduleEntry({
       )
         throw new Error("skill_schedule_thread_invalid");
       if (!active.current || currentEpoch !== epoch.current) return;
+      if (!attempt.invocation) {
+        const invocation = attempt.input.invocation;
+        const usesDelivery =
+          !!invocation.deliveryTarget ||
+          invocation.requiredToolRefs.some((ref) =>
+            ref.startsWith("delivery_"),
+          );
+        if (usesDelivery) {
+          if (!controlClient.delivery)
+            throw new Error("skill_delivery_unavailable");
+          const catalog = await controlClient.delivery.catalog(thread.threadId);
+          if (!active.current || currentEpoch !== epoch.current) return;
+          const target = parseDeliveryTargetRef(catalog.target);
+          if (
+            target.threadId !== thread.threadId ||
+            (invocation.deliveryTarget &&
+              (target.tenantId !== invocation.deliveryTarget.tenantId ||
+                target.spaceId !== invocation.deliveryTarget.spaceId))
+          )
+            throw new Error("skill_delivery_target_mismatch");
+          attempt.invocation = { ...invocation, deliveryTarget: target };
+        } else attempt.invocation = structuredClone(invocation);
+      }
       onReady(
-        skillAutomationDraft(attempt.input, attempt.requestId),
+        skillAutomationDraft(
+          { ...attempt.input, invocation: attempt.invocation },
+          attempt.requestId,
+        ),
         thread.threadId,
       );
       pending.current = null;
