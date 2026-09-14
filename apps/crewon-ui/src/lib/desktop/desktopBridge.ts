@@ -130,3 +130,39 @@ export interface CrewonDesktopBridge {
   readonly recording?: Pick<RecordingBridge, "open"> & {
     onSkillImportRequest(listener: RecordingSkillImportListener): () => void;
   };
+  readonly browser: {
+    create(id: string, url: string, bounds: DesktopRectangle): Promise<void>;
+    updateBounds(id: string, bounds: DesktopRectangle): Promise<void>;
+    setVisible(id: string, visible: boolean): Promise<void>;
+    destroy(id: string): Promise<void>;
+  };
+  readonly updater: {
+    check(): Promise<DesktopUpdateInfo | null>;
+    download(): Promise<void>;
+    relaunch(): Promise<void>;
+    onProgress(listener: (event: DesktopUpdateProgress) => void): () => void;
+  };
+  readonly external: {
+    open(url: string): Promise<void>;
+  };
+}
+
+declare global {
+  interface Window {
+    readonly crewonDesktop?: CrewonDesktopBridge;
+  }
+}
+
+export function getDesktopBridge(): CrewonDesktopBridge | null {
+  const bridge =
+    typeof window === "undefined" ? undefined : window.crewonDesktop;
+  return bridge?.version === DESKTOP_BRIDGE_VERSION ? bridge : null;
+}
+
+export function requireDesktopBridge(): CrewonDesktopBridge {
+  const bridge = getDesktopBridge();
+  if (bridge === null) {
+    throw new Error("desktop_bridge_unavailable");
+  }
+  return bridge;
+}

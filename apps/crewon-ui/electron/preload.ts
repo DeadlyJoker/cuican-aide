@@ -135,3 +135,31 @@ const bridge: CrewonDesktopBridge = {
         void invoke<void>("crewon:recording:skill-listening", false);
       };
     },
+  },
+  browser: {
+    create: (id, url, bounds) =>
+      invoke<void>("crewon:browser:create", id, url, bounds),
+    updateBounds: (id, bounds) =>
+      invoke<void>("crewon:browser:update-bounds", id, bounds),
+    setVisible: (id, visible) =>
+      invoke<void>("crewon:browser:set-visible", id, visible),
+    destroy: (id) => invoke<void>("crewon:browser:destroy", id),
+  },
+  updater: {
+    check: () => invoke<DesktopUpdateInfo | null>("crewon:updater:check"),
+    download: () => invoke<void>("crewon:updater:download"),
+    relaunch: () => invoke<void>("crewon:updater:relaunch"),
+    onProgress: (listener) => {
+      const handler = (_event: unknown, progress: DesktopUpdateProgress) =>
+        listener(progress);
+      ipcRenderer.on("crewon:updater:progress", handler);
+      return () =>
+        ipcRenderer.removeListener("crewon:updater:progress", handler);
+    },
+  },
+  external: {
+    open: (url) => invoke<void>("crewon:external:open", url),
+  },
+};
+
+contextBridge.exposeInMainWorld("crewonDesktop", Object.freeze(bridge));

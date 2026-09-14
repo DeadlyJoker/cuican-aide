@@ -201,3 +201,50 @@ export function parseDeliveryPatchRequest(
       x.numberFormat !== "0.00"
     )
       throw new DeliveryError("delivery_number_format_invalid");
+    const sheet = deliverySheetName(x.sheet);
+    if (typeof x.cell !== "string")
+      throw new DeliveryError("delivery_cell_invalid");
+    const ref = /^([A-Z]{1,2})([1-9][0-9]*)$/u.exec(x.cell);
+    if (!ref) throw new DeliveryError("delivery_cell_invalid");
+    column(ref[1]);
+    deliveryInteger(Number(ref[2]), DELIVERY_LIMITS.rows);
+    let cellValue: SpreadsheetCellPatch["value"];
+    if (x.value === null || typeof x.value === "boolean") cellValue = x.value;
+    else if (typeof x.value === "number" && Number.isFinite(x.value))
+      cellValue = x.value;
+    else if (
+      typeof x.value === "string" &&
+      x.value.length <= 32767 &&
+      !/[\x00-\x08\x0b\x0c\x0e-\x1f]/u.test(x.value)
+    )
+      cellValue = x.value;
+    else {
+      const f = deliveryObject(x.value, ["formula"]);
+      if (
+        typeof f.formula !== "string" ||
+        f.formula.length < 1 ||
+        f.formula.length > 1024
+      )
+        throw new DeliveryError("delivery_formula_invalid");
+      cellValue = { formula: f.formula };
+    }
+    return {
+      sheet,
+      cell: x.cell,
+      value: cellValue,
+      ...(hasFormat
+        ? { numberFormat: x.numberFormat as "0" | "0.0" | "0.00" }
+        : {}),
+    };
+  });
+  if (
+    new Set(patches.map((p) => `${p.sheet}\0${p.cell}`)).size !== patches.length
+  )
+    throw new DeliveryError("delivery_patch_duplicate");
+  return {
+    deliveryId: deliveryId(v.deliveryId),
+    expectedVersionId: deliveryId(v.expectedVersionId),
+    expectedContentDigest: deliveryDigest(v.expectedContentDigest),
+    patches,
+  };
+}
