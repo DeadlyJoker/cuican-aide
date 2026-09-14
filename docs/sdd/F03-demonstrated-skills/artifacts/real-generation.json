@@ -1,0 +1,98 @@
+{
+  "toolReceipts": 0,
+  "modelCalls": [
+    {
+      "attemptId": "01a09e2c-df44-77b5-992d-49b763784a47",
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1+responses-lite",
+        "agentVersionId": "f03-real-generation-acceptance-skill-generator",
+        "callId": "a004ace6-fc03-4107-bfb8-d418713c3e6e",
+        "finishedAt": "2026-09-14T04:29:15.028Z",
+        "firstOutputLatencyMs": 5598,
+        "modelId": "gpt-5.5",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_017dad3f15f5687a016aa778090e4087d08466e3ddd4771dfc",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-09-14T04:28:56.009Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "01a09e2c-dbec-7728-9c8c-1eebd2e41108",
+      "stepId": "01a09e2c-dbed-739c-ada9-4b04f4be5ebf",
+      "tenantId": "standalone-tenant"
+    }
+  ],
+  "checkedAt": "2026-09-14T04:29:15.362Z",
+  "input": "explicit synthetic C01 recording; no real browser capture",
+  "provider": "https://api.aicuican.com/v1",
+  "model": "gpt-5.5",
+  "agentVersionId": "f03-real-generation-acceptance-skill-generator",
+  "contentDigest": "sha256:6138a674f218e33d3bf0583d0573f1926696758b07142f1824b7d3a36d3de279",
+  "tools": [],
+  "maxToolRounds": 0,
+  "runId": "01a09e2c-dbec-7728-9c8c-1eebd2e41108",
+  "status": "completed",
+  "verification": "real",
+  "outcome": "candidate",
+  "appliedRevision": 2,
+  "candidate": {
+    "completionCriteria": [
+      "用户核对实际页面查询条件与本次输入一致，包括 Region 和经用户确认的 Period。",
+      "如触发下载，确认下载文件真实存在、可打开，并且内容与所选查询条件相符。",
+      "如下载或页面验证未完成，应明确列出失败点、未覆盖步骤和需要用户接管的位置。"
+    ],
+    "knownExceptions": [
+      "页面结构、控件名称或 URL 查询参数发生变化时，停止并请用户接管。",
+      "目标控件不唯一、按钮语义不清或可能触发非预期写入/重复下载时，停止并请用户确认。",
+      "录制中的下载只有开始事件，没有完成事件；无法确认文件生成时不得声明成功。",
+      "录制标记存在 frame-content-unavailable；遇到不可观察的框架或嵌入内容时需要人工接管。",
+      "Period 规则不确定；除非用户确认，否则不得假设始终选择 current。",
+      "不得重复已确认成功的下载或写入操作，除非用户明确要求重新执行。"
+    ],
+    "name": "浏览器示教方法",
+    "parameters": [
+      {
+        "label": "Region 输入值",
+        "name": "input_3",
+        "required": true,
+        "type": "string"
+      },
+      {
+        "enum": ["current"],
+        "label": "Period 选择值；录制中观察到 current，是否复用需用户确认",
+        "name": "period",
+        "required": false,
+        "type": "string"
+      }
+    ],
+    "purpose": "复用用户在 https://teaching.example/orders 页面示范的订单查询与下载流程。执行前应由用户审阅用途、变量、授权范围和交付标准；不得将示范值视为固定规则。",
+    "requiredToolRefs": [
+      "crewon_browser_observe",
+      "crewon_browser_act",
+      "crewon_browser_act_scoped"
+    ],
+    "runtimeRequirements": [
+      "使用用户已授权的同一教学浏览器会话；每次执行前重新检查访问权限。",
+      "地址模板中的 {runtime} 必须由已授权运行时信息补齐，不猜测敏感路径、查询值或凭据。",
+      "不得请求、记录或处理密码、令牌、Cookie、API Key 等凭据；凭据只能通过运行时授权提供。",
+      "执行前需具备可观察页面状态和下载结果核验能力。"
+    ],
+    "steps": [
+      "打开已授权教学浏览器会话中的订单页面：https://teaching.example/orders?date={runtime}。其中 {runtime} 必须由已授权运行时信息补齐，不猜测敏感路径、查询值或凭据。",
+      "在页面上的 textbox / Region 字段中填写参数 {{input_3}}。示范中的 Region 仅为候选输入，不代表固定业务规则。",
+      "检查 combobox / Period 当前或目标值。录制中观察到值为 \"current\"；该规则不确定，执行前需用户确认是否使用参数 {{period}}、保持当前值或人工选择。",
+      "在页面 https://teaching.example/orders?date={runtime} 上点击 button / Download。点击前确认目标按钮唯一且语义为下载当前查询结果。",
+      "等待下载结果出现，并核对下载文件真实存在。录制中只有合成下载开始记录，未观察到完成事件；如无法确认下载完成，应停止并请求用户接管。",
+      "如出现未支持的嵌入框、frame 内容不可用、页面内容无法观察或后续操作不明确，应停止自动化并请求用户人工接管，不得假设成功。"
+    ]
+  },
+  "limitations": [
+    "No real browser recording or C05 execution",
+    "No F01 delivery",
+    "No activation",
+    "No reconnect acceptance"
+  ]
+}

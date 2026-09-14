@@ -1,0 +1,44 @@
+{
+  "input": "Explicit synthetic C01 fixture; first import omitted provenance downgrade",
+  "acceptance": "partial: real provider and text-only Run passed; fixture-source assertion failed and prompted API fix",
+  "runId": "01a09e2a-a558-759a-97ad-436aa2698a6e",
+  "agentVersionId": "f03-real-generation-acceptance-skill-generator",
+  "contentDigest": "sha256:6138a674f218e33d3bf0583d0573f1926696758b07142f1824b7d3a36d3de279",
+  "tools": [],
+  "maxToolRounds": 0,
+  "toolReceipts": 0,
+  "modelCalls": [
+    {
+      "attemptId": "01a09e2a-a8b9-7679-bdc7-9a7f7bd721a8",
+      "observation": {
+        "adapterName": "direct-responses",
+        "adapterVersion": "1+responses-lite",
+        "agentVersionId": "f03-real-generation-acceptance-skill-generator",
+        "callId": "2fefe9b1-74ee-4f92-9098-376aa5c22616",
+        "finishedAt": "2026-09-14T04:26:52.598Z",
+        "firstOutputLatencyMs": 6565,
+        "modelId": "gpt-5.5",
+        "operation": "generate",
+        "outcome": "completed",
+        "providerResponseId": "resp_07a9b2a005fd51c4016aa77778575487d0b32ee86cae9c4102",
+        "purpose": "agent",
+        "schemaVersion": "crewon.model-call-observation.v0",
+        "startedAt": "2026-09-14T04:26:30.973Z",
+        "transport": "http",
+        "usageEventObserved": true
+      },
+      "runId": "01a09e2a-a558-759a-97ad-436aa2698a6e",
+      "stepId": "01a09e2a-a558-759a-97ad-58cb9637ece5",
+      "tenantId": "standalone-tenant"
+    }
+  ],
+  "verification": "real",
+  "outcome": "candidate",
+  "appliedRevision": 2,
+  "limitations": [
+    "Not real browser recording",
+    "No activation",
+    "No original record rewritten or rebound",
+    "Corrected provenance requires separate acceptance Run"
+  ]
+}

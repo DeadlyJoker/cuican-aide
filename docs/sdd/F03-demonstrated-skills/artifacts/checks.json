@@ -1,0 +1,26 @@
+{
+  "results": [
+    {
+      "viewport": 1440,
+      "bodyWidth": 1440,
+      "columns": "665px 665px",
+      "modelButton": true,
+      "trialButton": true
+    },
+    {
+      "viewport": 1100,
+      "bodyWidth": 1100,
+      "columns": "495px 495px",
+      "modelButton": true,
+      "trialButton": true
+    },
+    {
+      "viewport": 390,
+      "bodyWidth": 390,
+      "columns": "304px",
+      "modelButton": true,
+      "trialButton": true
+    }
+  ],
+  "errors": []
+}

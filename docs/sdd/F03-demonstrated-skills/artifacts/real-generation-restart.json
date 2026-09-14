@@ -1,0 +1,16 @@
+{
+  "checkedAt": "2026-09-14T04:33:20.185Z",
+  "runId": "01a09e2c-dbec-7728-9c8c-1eebd2e41108",
+  "sourceProvenance": "contract-fixture",
+  "appliedRevision": 2,
+  "verification": "real",
+  "modelCallsBefore": 1,
+  "modelCallsAfter": 1,
+  "readStatus": 200,
+  "collectStatus": 200,
+  "applyReplayStatus": 200,
+  "limits": [
+    "New Control process, same isolated SQLite; no Worker started",
+    "HTTP completion recovery, not an interrupted provider stream or browser reconnect"
+  ]
+}
