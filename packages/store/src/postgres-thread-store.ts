@@ -1,3 +1,6 @@
+import { threadListSql } from "./thread-list-query.ts";
+import { PostgresThreadMessageWindowStore } from "./postgres-thread-message-window.ts";
+import type { ThreadMessageWindowStore } from "@crewon/application";
 import {
   RunStoreError,
   type CommitThreadInput,
@@ -8,6 +11,7 @@ import {
   type MessageView,
   type InvalidatedMessage,
   type ModelHistoryStore,
+  type ModelHistoryContextStore,
   type ThreadLocator,
   type ThreadScopedLocator,
   type ThreadRollbackReceiptQuery,
@@ -44,6 +48,7 @@ import {
   type PostgresThreadRow,
 } from "./postgres-thread-codec.ts";
 import { loadPostgresModelHistoryValidation } from "./postgres-model-history.ts";
+import { PostgresModelHistoryContextStore } from "./postgres-model-history-context.ts";
 import {
   POSTGRES_THREAD_SCHEMA_VERSION,
   postgresThreadSchemaSql,
@@ -143,6 +148,8 @@ export class PostgresThreadStore
     ThreadGoalSnapshotStore,
     ModelHistoryStore
 {
+  readonly messageWindows: ThreadMessageWindowStore;
+  readonly modelHistoryContext: ModelHistoryContextStore;
   protected readonly pool: Pool;
   protected readonly schema: string;
   readonly #ownsPool: boolean;
@@ -153,6 +160,12 @@ export class PostgresThreadStore
     const connection = createPostgresPool(options, "crewon-thread-store");
     this.pool = connection.pool;
     this.#ownsPool = connection.ownsPool;
+    this.messageWindows = new PostgresThreadMessageWindowStore(
+      this.pool,
+      this.schemaSql(),
+      () => this.assertOpen(),
+    );
+    this.modelHistoryContext = new PostgresModelHistoryContextStore(this.pool, this.schemaSql(), () => this.assertOpen());
   }
 
   static async open(
@@ -247,27 +260,9 @@ export class PostgresThreadStore
     this.assertOpen();
     validateThreadListQuery(query);
     try {
-      const result = await this.pool.query<PostgresThreadRow>(
-        `SELECT tenant_id, space_id, thread_id, created_by_actor_id, title, status,
-                revision, last_event_sequence, last_message_sequence, state_json,
-                created_at, updated_at, archived_at, deleted_at,
-                deleted_by_actor_id
-         FROM ${this.#tableSql("threads")}
-         WHERE tenant_id = $1
-           AND space_id = $2
-           AND status != 'deleted'
-           AND ($3::timestamptz IS NULL OR updated_at < $3::timestamptz
-             OR (updated_at = $3::timestamptz AND thread_id < $4))
-         ORDER BY updated_at DESC, thread_id DESC
-         LIMIT $5`,
-        [
-          query.tenantId,
-          query.spaceId,
-          query.before?.updatedAt ?? null,
-          query.before?.threadId ?? null,
-          query.limit,
-        ],
-      );
+      const statement = threadListSql(query, this.#tableSql("threads"), "postgres");
+      const result = await this.pool.query<PostgresThreadRow>(statement.sql, statement.values);
+      if (query.after != null) result.rows.reverse();
       return result.rows.map((row) =>
         decodePostgresThreadState(row, {
           tenantId: query.tenantId,

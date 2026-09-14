@@ -1,3 +1,6 @@
+import { registerModelCallStoreConformance } from "./model-call-store.test-support.ts";
+import { registerReconciliationCancellationWakeConformance } from "./reconciliation-cancellation-wake.test-support.ts";
+import { registerModelUsageStoreConformance, modelUsageInput } from "./model-usage-store.test-support.ts";
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { describe, test, type TestContext } from "node:test";
@@ -31,6 +34,8 @@ import {
   ManualLeaseClock,
 } from "./run-store-conformance.test-support.ts";
 import { seedThread } from "./thread-store-conformance.test-support.ts";
+import { registerRunOutputStoreConformance } from "./run-output-store-conformance.test-support.ts";
+import { registerToolSampleStoreConformance, toolSampleFixtureInput } from "./tool-sample-commit.test-support.ts";
 import { turnStartCommit } from "./turn-start-store-conformance.test-support.ts";
 
 const STEP = {
@@ -45,6 +50,39 @@ export function registerRunExecutionStoreConformance(
   createStore: (clock: LeaseClock) => DomainStore | Promise<DomainStore>,
   options: ExecutionConformanceOptions = {},
 ): void {
+  registerRunOutputStoreConformance(name, createStore);
+  registerArtifactRetentionGuardConformance(name, async context => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "artifact-guard", "artifact-guard-lease");
+    const { receipt } = await prepareAtomicToolCompletion(fixture.store, claim);
+    return { store: fixture.store, claim, receipt };
+  });
+  registerModelUsageStoreConformance(name, async (context) => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "usage-setup", "usage-setup");
+    await fixture.store.renewWorkItemLease({ ...leaseFor(claim), leaseDurationMs: 30_000 });
+    const started = await fixture.store.beginRunAttempt(beginInput(claim, "usage-attempt", "2026-08-08T00:01:01Z"));
+    return { store: fixture.store, input: modelUsageInput(claim, started.step.stepId, started.attempt.attemptId) };
+  });
+  registerModelCallStoreConformance(name, async (context) => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "usage-setup", "usage-setup");
+    await fixture.store.renewWorkItemLease({ ...leaseFor(claim), leaseDurationMs: 30_000 });
+    const started = await fixture.store.beginRunAttempt(beginInput(claim, "usage-attempt", "2026-08-08T00:01:01Z"));
+    return { store: fixture.store, input: modelUsageInput(claim, started.step.stepId, started.attempt.attemptId) };
+  });
+  registerReconciliationCancellationWakeConformance(name, async (context) => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "cancel-setup", "cancel-setup-lease");
+    const prepared = await prepareAtomicToolCompletion(fixture.store, claim);
+    return { store: fixture.store, input: atomicToolUnknownOutcomeInput(claim, prepared.receipt.revision) };
+  });
+  registerToolSampleStoreConformance(name, async (context, includeAssistant) => {
+    const fixture = await executionFixture(context, createStore);
+    const claim = await claimWork(fixture.store, "worker-tool-sample", "lease-tool-sample");
+    await prepareTextCompletion(fixture.store, claim);
+    return { store: fixture.store, input: toolSampleFixtureInput(mixedAssistantToolContinuationInput(claim), includeAssistant), expire: () => expireWorkItem(fixture, options) };
+  });
   describe(name, () => {
     test("persists the first model Attempt independently from queue claim counts", async (context) => {
       const fixture = await executionFixture(context, createStore);
@@ -470,6 +508,10 @@ export function registerRunExecutionStoreConformance(
 
       const completed = await fixture.store.commitTextRunCompletion(input);
       const replayed = await fixture.store.commitTextRunCompletion(input);
+      assert.deepEqual((await fixture.store.messageWindows!.readWindow({
+        tenantId: "tenant-1", spaceId: "space-1", threadId: "thread-1",
+        position: null, limit: 1, view: "transcript",
+      })).runBindings, [{ messageId: input.thread.messages[0]!.messageId, runId: completed.runState.runId, source: "messageCompletedEvent" }]);
 
       assert.equal(completed.runState.status, "completed");
       assert.equal(completed.threadState.lastMessageSequence, 1);
@@ -2638,6 +2680,7 @@ export function contextCompactionInput(
       replacesThroughSequence: 1,
       inputTokens: 10,
       cachedInputTokens: 3,
+      cachedInputTokensReported: true,
       outputTokens: 2,
       totalTokens: 12,
     },
@@ -3927,3 +3970,4 @@ function approvalCommit(
 function hasStoreCode(code: string): (error: unknown) => boolean {
   return (error) => error instanceof RunStoreError && error.code === code;
 }
+import { registerArtifactRetentionGuardConformance } from "./artifact-retention-guard.test-support.ts";

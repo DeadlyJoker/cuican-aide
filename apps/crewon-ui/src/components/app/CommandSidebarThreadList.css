@@ -1,0 +1,38 @@
+.screen-shell.command-screen .sidebar-older-threads {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.screen-shell.command-screen .sidebar-older-threads[hidden] {
+  display: none;
+}
+.screen-shell.command-screen .sidebar-threads-disclosure {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: 100%;
+  min-height: 24px;
+  margin: 0;
+  padding: 3px 7px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--n-650);
+  font: inherit;
+  font-size: calc(11px + var(--user-ui-font-delta));
+  text-align: left;
+  cursor: pointer;
+}
+.screen-shell.command-screen .sidebar-threads-disclosure svg {
+  width: 12px;
+  height: 12px;
+  flex: none;
+}
+.screen-shell.command-screen .sidebar-threads-disclosure:hover {
+  background: var(--command-sidebar-hover);
+  color: var(--n-900);
+}
+.screen-shell.command-screen .sidebar-threads-disclosure:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}

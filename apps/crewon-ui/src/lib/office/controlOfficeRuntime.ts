@@ -9,6 +9,7 @@ import type {
 
 import type { AgentConfig } from "../domain/crewonDomain";
 import type { Locale } from "../i18n";
+import { resolveCloudAgentRuntimeVersion } from "../agent-platform/agentPlatformAgentVersionIdentity";
 import {
   controlAgentCatalogRecords,
   type ControlAgentCatalogAdapter,
@@ -21,6 +22,9 @@ import {
 import {
   officeMemberAgentProfileId,
   readOfficeMemberAgentProfile,
+  readOfficeMemberTeamCoordination,
+  type OfficeMemberAgentProfile,
+  type OfficeMemberTeamCoordination,
   writeOfficeMemberAgentProfile,
 } from "./officeMemberAgentProfile";
 
@@ -38,9 +42,17 @@ export type ControlOfficeClient = {
 };
 
 export type ControlOfficeCatalog = Readonly<{
+  activeAgentVersions: ActiveAgentVersionCatalogResponse["data"];
   agents: Array<{ config: AgentConfig; filePath: string }>;
   offices: OfficeConfigRecordReference[];
 }>;
+
+export type OfficeMemberProfileStorage = Pick<
+  Storage,
+  "getItem" | "setItem"
+> | null;
+
+const MAX_OFFICE_RESPONSIBILITY_CHARACTERS = 240;
 
 export function controlOfficeRecord(
   office: OfficeContract,
@@ -54,6 +66,7 @@ export function controlOfficeRecord(
       subtitle: office.members.map((member) => member.displayName).join(" · "),
     },
     definition: {
+      officeId: office.officeId,
       officeVersionId: office.officeVersionId,
       revision: office.revision,
       members: office.members.map((member) => ({ ...member })),
@@ -80,6 +93,7 @@ export async function listControlOfficeCatalog(
     client.getActiveAgentVersionCatalog(),
   ]);
   return {
+    activeAgentVersions: agents.data,
     agents: controlAgentCatalogRecords(agents, locale, agentAdapters),
     offices: latestOfficeVersions(offices.data).map(controlOfficeRecord),
   };
@@ -99,22 +113,37 @@ function latestOfficeVersions(offices: readonly OfficeContract[]) {
 export async function createControlOffice(input: {
   client: ControlOfficeClient;
   locale: Locale;
-  members: Array<{ config: AgentConfig; displayName?: string }>;
+  members: Array<{
+    config: AgentConfig;
+    displayName?: string;
+    responsibility?: string;
+  }>;
+  storage?: OfficeMemberProfileStorage;
   title: string;
 }): Promise<OfficeConfigRecordReference> {
   const title = input.title.trim();
-  const versions = input.members.flatMap(({ config, displayName }) => {
-    const agentVersionId = config.agentId?.trim();
-    return agentVersionId
-      ? [
-          {
-            agentVersionId,
-            displayName:
-              displayName?.trim() || config.name.trim() || agentVersionId,
-          },
-        ]
-      : [];
-  });
+  const versions = input.members.flatMap(
+    ({ config, displayName, responsibility }) => {
+      const agentVersionId = config.agentId?.trim();
+      const normalizedResponsibility =
+        normalizeOfficeResponsibility(responsibility);
+      return agentVersionId
+        ? [
+            {
+              agentVersionId,
+              config,
+              displayName:
+                displayName?.trim() || config.name.trim() || agentVersionId,
+              responsibility: normalizedResponsibility,
+              teamCoordination: officeMemberTeamCoordination(
+                config,
+                normalizedResponsibility,
+              ),
+            },
+          ]
+        : [];
+    },
+  );
   if (!title || versions.length === 0) {
     throw new Error(
       input.locale === "zh"
@@ -122,6 +151,16 @@ export async function createControlOffice(input: {
         : "Enter an Office name and choose at least one available member",
     );
   }
+  const requestedMembers = versions.map((version, index) => ({
+    agentVersionId: version.agentVersionId,
+    displayName: version.displayName,
+    memberId: `member-${index + 1}`,
+    ...(version.teamCoordination
+      ? {
+          responsibility: version.teamCoordination.responsibility,
+        }
+      : {}),
+  }));
   const response = await input.client.createOffice(
     {
       expectedRevision: 0,
@@ -129,19 +168,123 @@ export async function createControlOffice(input: {
         agentVersionId: version.agentVersionId,
         targetId: `target-${index + 1}`,
       })),
-      members: versions.map((version, index) => ({
-        ...version,
-        memberId: `member-${index + 1}`,
-      })),
+      members: requestedMembers,
       title,
     },
     crypto.randomUUID(),
   );
+  const versionByMemberId = new Map(
+    requestedMembers.map((member, index) => [
+      member.memberId,
+      versions[index]!,
+    ]),
+  );
+  for (const member of response.office.members) {
+    const version = versionByMemberId.get(member.memberId);
+    if (!version) continue;
+    writeOfficeMemberAgentProfile(
+      officeMemberProfile({
+        config: version.config,
+        displayName: member.displayName,
+        locale: input.locale,
+        memberId: member.memberId,
+        officeVersionId: response.office.officeVersionId,
+        responsibility: version.responsibility,
+      }),
+      input.storage,
+      version.teamCoordination,
+    );
+  }
   return controlOfficeRecord(response.office);
 }
 
 /**
- * Rebinds stale desktop-local Office members after the immutable local runtime
+ * Publishes an immutable Office revision and carries browser-side member
+ * profiles forward only when the member identity can be proven safely.
+ */
+export async function publishControlOfficeRevision(input: {
+  client: Pick<ControlOfficeClient, "createOffice">;
+  office: OfficeContract;
+  request: CreateOfficeRequest;
+  storage?: OfficeMemberProfileStorage;
+}): Promise<OfficeMutationResponse> {
+  const response = await input.client.createOffice(
+    input.request,
+    `office.settings.update:${crypto.randomUUID()}`,
+  );
+  copyOfficeRevisionMemberProfiles(
+    input.office,
+    response.office,
+    input.storage,
+  );
+  return response;
+}
+
+function normalizeOfficeResponsibility(value: string | undefined) {
+  const normalized = value?.trim().normalize("NFC");
+  if (!normalized) return undefined;
+  return [...normalized]
+    .slice(0, MAX_OFFICE_RESPONSIBILITY_CHARACTERS)
+    .join("");
+}
+
+function officeMemberProfile(input: {
+  config: AgentConfig;
+  displayName: string;
+  locale: Locale;
+  memberId: string;
+  officeVersionId: string;
+  responsibility?: string;
+}): OfficeMemberAgentProfile {
+  const responsibility = input.responsibility?.trim();
+  const responsibilityPrompt = responsibility
+    ? `${input.locale === "zh" ? "[办公室职责]" : "[Office responsibility]"}\n${responsibility}`
+    : "";
+  return {
+    ...input.config,
+    agentId: officeMemberAgentProfileId(input.officeVersionId, input.memberId),
+    name: input.displayName,
+    role: responsibility || input.config.role,
+    systemPrompt: responsibilityPrompt
+      ? [responsibilityPrompt, input.config.systemPrompt]
+          .filter(Boolean)
+          .join("\n\n")
+      : input.config.systemPrompt,
+    mcp: input.config.mcp.map((option) => ({ ...option })),
+    skills: input.config.skills.map((option) => ({ ...option })),
+    knowledge: [],
+  };
+}
+
+function officeMemberTeamCoordination(
+  config: AgentConfig,
+  responsibility: string | undefined,
+): OfficeMemberTeamCoordination | null {
+  const normalizedResponsibility = responsibility?.trim();
+  if (
+    !normalizedResponsibility ||
+    normalizeTeamRole(normalizedResponsibility) ===
+      normalizeTeamRole(config.role)
+  ) {
+    return null;
+  }
+  return {
+    assignmentMode: "roleDirected",
+    responsibility: normalizedResponsibility,
+    source: "officeDefinition",
+  };
+}
+
+function normalizeTeamRole(value: string): string {
+  return value
+    .normalize("NFKC")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLocaleLowerCase();
+}
+
+/**
+ * Rebinds stale local Office members after the immutable local runtime
  * identity changes. Published or remote AgentVersions are never substituted.
  */
 export async function refreshControlOfficeRuntimeRecord(input: {
@@ -240,9 +383,23 @@ function runnableAgentVersionId(
   activeIds: ReadonlySet<string>,
   model: string | null | undefined,
 ): string {
+  const cloudRuntime = resolveCloudAgentRuntimeVersion(
+    previousId,
+    catalog.data,
+  );
+  if (cloudRuntime.status !== "notCloudAgent") {
+    if (cloudRuntime.status !== "resolved") {
+      throw new Error("control_office_agent_version_not_active");
+    }
+    return cloudRuntime.agentVersionId;
+  }
   const previousBaseId = modelVariantBaseId(previousId);
-  const isLocalDesktop = previousBaseId.startsWith("local-desktop-");
-  if (!isLocalDesktop) {
+  const localPrefix = previousBaseId.startsWith("local-desktop-")
+    ? "local-desktop-"
+    : previousBaseId.startsWith("local-web-")
+      ? "local-web-"
+      : null;
+  if (localPrefix === null) {
     if (!activeIds.has(previousId)) {
       throw new Error("control_office_agent_version_not_active");
     }
@@ -258,7 +415,7 @@ function runnableAgentVersionId(
     : suffix
       ? `${catalog.defaultAgentVersionId}${suffix}`
       : catalog.defaultAgentVersionId;
-  if (!baseId.startsWith("local-desktop-") || !activeIds.has(baseId)) {
+  if (!baseId.startsWith(localPrefix) || !activeIds.has(baseId)) {
     throw new Error("control_office_agent_version_not_active");
   }
   if (!model) {
@@ -285,19 +442,106 @@ function copyOfficeMemberProfiles(
   current: OfficeContract,
 ): void {
   for (const member of current.members) {
+    if (
+      !previous.members.some(
+        (candidate) => candidate.memberId === member.memberId,
+      )
+    ) {
+      continue;
+    }
     const previousProfileId = officeMemberAgentProfileId(
       previous.officeVersionId,
       member.memberId,
     );
     const profile = readOfficeMemberAgentProfile(previousProfileId);
     if (!profile) continue;
-    writeOfficeMemberAgentProfile({
-      ...profile,
-      agentId: officeMemberAgentProfileId(
-        current.officeVersionId,
-        member.memberId,
-      ),
-      name: member.displayName,
-    });
+    writeOfficeMemberAgentProfile(
+      {
+        ...profile,
+        agentId: officeMemberAgentProfileId(
+          current.officeVersionId,
+          member.memberId,
+        ),
+        name: member.displayName,
+      },
+      undefined,
+      readOfficeMemberTeamCoordination(previousProfileId),
+    );
   }
+}
+
+function copyOfficeRevisionMemberProfiles(
+  previous: OfficeContract,
+  current: OfficeContract,
+  storage: OfficeMemberProfileStorage | undefined,
+): void {
+  if (
+    previous.officeId !== current.officeId ||
+    previous.officeVersionId === current.officeVersionId ||
+    current.revision <= previous.revision
+  ) {
+    return;
+  }
+  const previousByMemberId = new Map(
+    previous.members.map((member) => [member.memberId, member]),
+  );
+  const previousByAgentVersion = groupMembersByAgentVersion(previous.members);
+  const currentByAgentVersion = groupMembersByAgentVersion(current.members);
+
+  for (const member of current.members) {
+    const stableMember = previousByMemberId.get(member.memberId);
+    const previousMember =
+      stableMember?.agentVersionId === member.agentVersionId
+        ? stableMember
+        : uniqueAgentVersionMember(
+            member.agentVersionId,
+            previousByAgentVersion,
+            currentByAgentVersion,
+          );
+    if (!previousMember) continue;
+
+    const previousProfileId = officeMemberAgentProfileId(
+      previous.officeVersionId,
+      previousMember.memberId,
+    );
+    const profile = readOfficeMemberAgentProfile(previousProfileId, storage);
+    if (!profile) continue;
+    writeOfficeMemberAgentProfile(
+      {
+        ...profile,
+        agentId: officeMemberAgentProfileId(
+          current.officeVersionId,
+          member.memberId,
+        ),
+        name: member.displayName,
+      },
+      storage,
+      readOfficeMemberTeamCoordination(previousProfileId, storage),
+    );
+  }
+}
+
+function groupMembersByAgentVersion(
+  members: OfficeContract["members"],
+): Map<string, OfficeContract["members"]> {
+  const grouped = new Map<string, OfficeContract["members"]>();
+  for (const member of members) {
+    grouped.set(member.agentVersionId, [
+      ...(grouped.get(member.agentVersionId) ?? []),
+      member,
+    ]);
+  }
+  return grouped;
+}
+
+function uniqueAgentVersionMember(
+  agentVersionId: string,
+  previousByAgentVersion: ReadonlyMap<string, OfficeContract["members"]>,
+  currentByAgentVersion: ReadonlyMap<string, OfficeContract["members"]>,
+) {
+  const previousMatches = previousByAgentVersion.get(agentVersionId) ?? [];
+  const currentMatches = currentByAgentVersion.get(agentVersionId) ?? [];
+  return previousMatches.length === 1 && currentMatches.length === 1
+    ? previousMatches[0]
+    : undefined;
 }

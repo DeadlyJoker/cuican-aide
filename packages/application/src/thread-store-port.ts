@@ -8,6 +8,7 @@ import type {
 
 import type { IdempotencyDescriptor } from "./run-store-port.ts";
 import type { ModelHistoryAppend } from "./model-history-store-port.ts";
+import type { ThreadMessageWindowStore } from "./thread-message-window-store-port.ts";
 
 export type ThreadLocator = Readonly<{
   tenantId: string;
@@ -31,6 +32,12 @@ export type ThreadListQuery = Readonly<{
   tenantId: string;
   spaceId: string;
   before: ThreadListCursor | null;
+  /** Exclusive reverse navigation; cannot be combined with before. */
+  after?: ThreadListCursor | null;
+  filter?: Readonly<{
+    status: "active" | "archived";
+    excludeForks: boolean;
+  }>;
   limit: number;
 }>;
 
@@ -89,6 +96,7 @@ export type CommitThreadResult = Readonly<{
 
 /** Thread and Message persistence authority used by application services. */
 export interface ThreadStore {
+  readonly messageWindows?: ThreadMessageWindowStore;
   loadThread(locator: ThreadLocator): Promise<ThreadState | null>;
   /**
    * Loads a Thread only when tenant, space, and Thread identity all match.

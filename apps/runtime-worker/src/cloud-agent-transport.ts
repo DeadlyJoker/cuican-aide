@@ -1,5 +1,7 @@
 import {
   ModelTransportError,
+  beginModelCall,
+  type ModelTransportStreamOptions,
   type ModelInputItem,
   type ModelRequest,
   type ModelTransportEvent,
@@ -10,6 +12,10 @@ import { parseResponsesSse } from "@crewon/agent-responses";
 const MAX_API_KEY_LENGTH = 8 * 1024;
 const MAX_EVENT_BYTES = 256 * 1024;
 const MAX_HISTORY_MESSAGES = 256;
+const EVENT_STREAM_MEDIA_TYPE = "text/event-stream";
+
+export const CLOUD_AGENT_ADAPTER_NAME = "cloud-agent";
+export const CLOUD_AGENT_ADAPTER_VERSION = "1";
 
 export type CloudAgentTransportConfig = Readonly<{
   invocationUrl: string;
@@ -46,8 +52,7 @@ export class CloudAgentTransport implements ModelTransportPort {
     config: CloudAgentTransportConfig,
     dependencies: Readonly<{
       fetch?: CloudAgentFetch;
-      identity: Readonly<{ adapterName: string; adapterVersion: string }>;
-    }>,
+    }> = {},
   ) {
     this.#invocationUrl = parseInvocationUrl(config.invocationUrl);
     this.#apiKey = bounded(
@@ -61,28 +66,37 @@ export class CloudAgentTransport implements ModelTransportPort {
       config.idleTimeoutMs,
       "cloud_agent_idle_timeout_invalid",
     );
-    this.adapterName = bounded(
-      dependencies.identity.adapterName,
-      128,
-      "cloud_agent_adapter_name_invalid",
-    );
-    this.adapterVersion = bounded(
-      dependencies.identity.adapterVersion,
-      128,
-      "cloud_agent_adapter_version_invalid",
-    );
+    this.adapterName = CLOUD_AGENT_ADAPTER_NAME;
+    this.adapterVersion = CLOUD_AGENT_ADAPTER_VERSION;
     this.#fetch = dependencies.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
   async *stream(
     request: ModelRequest,
     signal: AbortSignal,
+    options?: ModelTransportStreamOptions,
   ): AsyncIterable<ModelTransportEvent> {
     const payload = requestPayload(request);
     const idle = new IdleWatch(this.#idleTimeoutMs, signal);
+    let call: Awaited<ReturnType<typeof beginModelCall>> = null;
+    let outcome: "completed" | "failed" | "canceled" | "interrupted" =
+      "interrupted";
     try {
+      call = await beginModelCall({
+        options,
+        identity: {
+          adapterName: this.adapterName,
+          adapterVersion: this.adapterVersion,
+          modelId: this.modelId,
+          agentVersionId: request.agentVersionId,
+        },
+        transport: "cloudAgent",
+        operation: "generate",
+        signal: idle.signal,
+      });
       const response = await this.#fetch(this.#invocationUrl, {
         method: "POST",
+        redirect: "error",
         headers: {
           "Accept": "text/event-stream",
           "Content-Type": "application/json",
@@ -99,6 +113,14 @@ export class CloudAgentTransport implements ModelTransportPort {
           response.headers.get("retry-after"),
         );
       }
+      if (responseMediaType(response) !== EVENT_STREAM_MEDIA_TYPE) {
+        await cancelBody(response.body);
+        throw transportError(
+          "protocol",
+          "cloud_agent_stream_content_type_invalid",
+          false,
+        );
+      }
       if (response.body === null) {
         throw transportError(
           "protocol",
@@ -113,11 +135,26 @@ export class CloudAgentTransport implements ModelTransportPort {
         onActivity: () => idle.touch(),
       })) {
         if (frame.kind === "done") {
-          continue;
+          if (!completed) {
+            throw transportError(
+              "incomplete",
+              "cloud_agent_stream_incomplete",
+              false,
+            );
+          }
+          outcome = "completed";
+          return;
         }
         const event = frame.value;
         const kind = event.event;
         if (kind === "message") {
+          if (completed) {
+            throw transportError(
+              "protocol",
+              "cloud_agent_event_after_done",
+              false,
+            );
+          }
           const chunk = event.chunk;
           if (typeof chunk !== "string") {
             throw transportError(
@@ -127,7 +164,8 @@ export class CloudAgentTransport implements ModelTransportPort {
             );
           }
           if (chunk.length > 0) {
-            yield { type: "output.delta", delta: chunk };
+            const event = { type: "output.delta", delta: chunk } as const;
+            yield call?.event(event) ?? event;
           }
           continue;
         }
@@ -142,23 +180,41 @@ export class CloudAgentTransport implements ModelTransportPort {
           completed = true;
           const usage = tokenUsage(event.token_usage);
           if (usage !== null) {
-            yield { type: "usage", ...usage };
+            const event = { type: "usage", ...usage } as const;
+            yield call?.event(event) ?? event;
           }
-          yield { type: "completed", checkpoint: null };
+          const completion = { type: "completed", checkpoint: null } as const;
+          yield call?.event(completion) ?? completion;
           continue;
         }
         if (kind === "error") {
+          if (completed) {
+            throw transportError(
+              "protocol",
+              "cloud_agent_event_after_done",
+              false,
+            );
+          }
           throw transportError("incomplete", "cloud_agent_stream_error", false);
+        }
+        if (completed) {
+          throw transportError(
+            "protocol",
+            "cloud_agent_event_after_done",
+            false,
+          );
         }
       }
       if (!completed) {
         throw transportError(
           "incomplete",
           "cloud_agent_stream_incomplete",
-          true,
+          false,
         );
       }
+      outcome = "completed";
     } catch (error) {
+      outcome = signal.aborted ? "canceled" : "failed";
       if (signal.aborted) {
         throw transportError(
           "canceled",
@@ -172,7 +228,7 @@ export class CloudAgentTransport implements ModelTransportPort {
         throw transportError(
           "timeout",
           "cloud_agent_idle_timeout",
-          true,
+          false,
           undefined,
           error,
         );
@@ -183,12 +239,15 @@ export class CloudAgentTransport implements ModelTransportPort {
       throw transportError(
         "unavailable",
         "cloud_agent_transport_unavailable",
-        true,
+        false,
         undefined,
         error,
       );
     } finally {
       idle.close();
+      await call?.finish(
+        outcome === "interrupted" && signal.aborted ? "canceled" : outcome,
+      );
     }
   }
 
@@ -209,6 +268,27 @@ function requestPayload(request: ModelRequest): Readonly<{
       false,
     );
   }
+  if (request.providerTurnState !== undefined) {
+    throw transportError(
+      "invalidRequest",
+      "cloud_agent_turn_state_unsupported",
+      false,
+    );
+  }
+  if (request.instructions !== null) {
+    throw transportError(
+      "invalidRequest",
+      "cloud_agent_instructions_unsupported",
+      false,
+    );
+  }
+  if (request.tools.length !== 0) {
+    throw transportError(
+      "invalidRequest",
+      "cloud_agent_tools_unsupported",
+      false,
+    );
+  }
   if (request.input.strategy !== "manual") {
     throw transportError(
       "invalidRequest",
@@ -216,12 +296,19 @@ function requestPayload(request: ModelRequest): Readonly<{
       false,
     );
   }
-  const messages = request.input.items.flatMap(projectHistoryMessage);
+  const messages = request.input.items.map(projectHistoryMessage);
   const currentIndex = findCurrentUserMessage(messages);
   if (currentIndex === -1) {
     throw transportError(
       "invalidRequest",
       "cloud_agent_user_message_missing",
+      false,
+    );
+  }
+  if (currentIndex !== messages.length - 1) {
+    throw transportError(
+      "invalidRequest",
+      "cloud_agent_current_message_invalid",
       false,
     );
   }
@@ -235,15 +322,19 @@ function requestPayload(request: ModelRequest): Readonly<{
 
 function projectHistoryMessage(
   item: ModelInputItem,
-): readonly Readonly<{ role: "user" | "assistant"; content: string }>[] {
+): Readonly<{ role: "user" | "assistant"; content: string }> {
   if (
     item.type !== "message" ||
     (item.role !== "user" && item.role !== "assistant") ||
     item.content.trim().length === 0
   ) {
-    return [];
+    throw transportError(
+      "invalidRequest",
+      "cloud_agent_history_item_unsupported",
+      false,
+    );
   }
-  return [{ role: item.role, content: item.content }];
+  return { role: item.role, content: item.content };
 }
 
 function findCurrentUserMessage(
@@ -306,7 +397,12 @@ function parseInvocationUrl(value: string): URL {
 }
 
 function isLoopbackHost(host: string): boolean {
-  return host === "localhost" || host === "127.0.0.1" || host === "::1";
+  return (
+    host === "localhost" ||
+    host === "127.0.0.1" ||
+    host === "::1" ||
+    host === "[::1]"
+  );
 }
 
 function cloudAgentHttpError(
@@ -331,7 +427,7 @@ function cloudAgentHttpError(
     return transportError(
       "timeout",
       "cloud_agent_request_timeout",
-      true,
+      false,
       retryAfterMs,
     );
   }
@@ -339,7 +435,7 @@ function cloudAgentHttpError(
     return transportError(
       "rateLimit",
       "cloud_agent_rate_limited",
-      true,
+      false,
       retryAfterMs,
     );
   }
@@ -354,11 +450,17 @@ function cloudAgentHttpError(
     return transportError(
       "unavailable",
       "cloud_agent_unavailable",
-      true,
+      false,
       retryAfterMs,
     );
   }
   return transportError("protocol", "cloud_agent_http_status_invalid", false);
+}
+
+function responseMediaType(response: Response): string | null {
+  const value = response.headers.get("content-type");
+  if (value === null) return null;
+  return value.split(";", 1)[0]?.trim().toLowerCase() ?? null;
 }
 
 function retryAfterMilliseconds(value: string | null): number | undefined {

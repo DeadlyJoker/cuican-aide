@@ -3,6 +3,7 @@ import { Bot, CalendarPlus, Trash2 } from "lucide-react";
 import { useState, type ReactNode } from "react";
 
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
+import type { ReplayMessage } from "../messages/MessageReplayScope";
 import { classNames } from "./commandWorkspaceUtils";
 import type { Locale } from "../../lib/i18n";
 import type { WorkMode } from "../../lib/workMode";
@@ -20,6 +21,8 @@ export function CommandWorkspaceAssistant({
   onCreateSchedule,
   onModeChange,
   onStop,
+  onReplayMessage,
+  isSending = false,
 }: {
   active: boolean;
   activeTurnId: string | null;
@@ -33,6 +36,8 @@ export function CommandWorkspaceAssistant({
   onCreateSchedule?: () => void | Promise<void>;
   onModeChange: (mode: WorkMode) => void;
   onStop?: () => void;
+  onReplayMessage?: ReplayMessage;
+  isSending?: boolean;
 }) {
   const [clearing, setClearing] = useState(false);
   const [creatingSchedule, setCreatingSchedule] = useState(false);
@@ -141,6 +146,9 @@ export function CommandWorkspaceAssistant({
         ) : null}
         {thread ? (
           <CommandThreadRoom
+            onReplayMessage={onReplayMessage}
+            isSending={isSending || clearing}
+            active={active}
             activeTurnId={activeTurnId}
             cwd=""
             locale={locale}

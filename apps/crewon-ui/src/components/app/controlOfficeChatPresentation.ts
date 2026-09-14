@@ -10,6 +10,7 @@ import type { Locale } from "../../lib/i18n";
 import { controlOfficeMemberMentionsFromRenderedText } from "../../lib/office/controlOfficeMemberMentions";
 import type { ControlOfficeDefinitionRecordReference } from "../../lib/office/officePanelFromRecord";
 import { officeMemberDisplayName } from "../../lib/office/officePanelFromRecord";
+import { upsertTurn } from "../../lib/thread/threadModel";
 
 const OFFICE_THREAD_PREFIX = "CrewON Office Chat";
 
@@ -17,6 +18,8 @@ export type ControlOfficeChatMessage = Readonly<{
   author: string;
   glyph: string;
   id: string;
+  messageId?: string;
+  userMessageId?: string;
   self: boolean;
   text: string;
   time: string;
@@ -36,6 +39,59 @@ export function legacyControlOfficeThreadTitle(
   return `${OFFICE_THREAD_PREFIX} · ${record.definition.officeVersionId} · ${title}`;
 }
 
+export function controlOfficeLiveThread(
+  threads: readonly Thread[],
+  threadId: string | null,
+  title: string,
+  legacyTitle: string,
+): Thread | null {
+  if (threadId !== null) {
+    return threads.find((candidate) => candidate.id === threadId) ?? null;
+  }
+  return (
+    threads.find((candidate) => candidate.name === title) ??
+    threads.find((candidate) => candidate.name === legacyTitle) ??
+    null
+  );
+}
+
+export function controlOfficeVisibleThread(
+  loadedThread: Thread | null,
+  liveThread: Thread | null,
+  options?: { removedTurnIds: ReadonlySet<string> },
+): Thread | null {
+  // A committed edit invalidates both the cached history and delayed live updates.
+  const withoutRemovedTurns = (thread: Thread | null) =>
+    thread && options?.removedTurnIds.size
+      ? {
+          ...thread,
+          turns: thread.turns.filter(
+            (turn) => !options.removedTurnIds.has(turn.id),
+          ),
+        }
+      : thread;
+  loadedThread = withoutRemovedTurns(loadedThread);
+  liveThread = withoutRemovedTurns(liveThread);
+  if (loadedThread === null) return liveThread;
+  if (liveThread === null || liveThread.id !== loadedThread.id) {
+    return loadedThread;
+  }
+
+  let merged: Thread = {
+    ...loadedThread,
+    ...liveThread,
+    status:
+      liveThread.status.type === "notLoaded"
+        ? loadedThread.status
+        : liveThread.status,
+    turns: loadedThread.turns,
+  };
+  for (const turn of liveThread.turns) {
+    merged = upsertTurn(merged, turn);
+  }
+  return merged;
+}
+
 export function controlOfficeChatMessages(
   thread: Thread | null,
   leaderName: string,
@@ -45,6 +101,7 @@ export function controlOfficeChatMessages(
   if (!thread) {
     return [];
   }
+  const seenUserMessageIds = new Set<string>();
   return thread.turns.flatMap((turn) => {
     const time = turn.startedAt
       ? new Intl.DateTimeFormat(locale === "zh" ? "zh-CN" : "en-US", {
@@ -62,6 +119,13 @@ export function controlOfficeChatMessages(
             .replace(/\n\n\[附件：[\s\S]*$/u, "")
             .trim()
         : "";
+    const includeUser =
+      user?.type === "userMessage" &&
+      Boolean(userText) &&
+      !seenUserMessageIds.has(user.id);
+    if (includeUser) {
+      seenUserMessageIds.add(user.id);
+    }
     const assistants = turn.items.filter(
       (item): item is Extract<ThreadItem, { type: "agentMessage" }> =>
         item.type === "agentMessage" && Boolean(item.text.trim()),
@@ -88,12 +152,13 @@ export function controlOfficeChatMessages(
         : officeMemberDisplayName(member.displayName, memberIndex, locale);
     };
     return [
-      ...(userText
+      ...(includeUser
         ? [
             {
               author: locale === "zh" ? "你" : "You",
               glyph: "@",
               id: `${turn.id}:user`,
+              userMessageId: user.id,
               self: true,
               text: userText,
               time,
@@ -109,6 +174,8 @@ export function controlOfficeChatMessages(
           author,
           glyph: Array.from(author.trim())[0] || "组",
           id: `${turn.id}:assistant:${assistant.id}`,
+          messageId: assistant.id,
+          userMessageId: user?.id,
           self: false,
           text: visibleControlTeamAssistantContent(assistant.text),
           time,
@@ -116,6 +183,57 @@ export function controlOfficeChatMessages(
       }),
     ];
   });
+}
+
+export function controlOfficeStreamingAuthor(
+  thread: Thread | null,
+  leaderName: string,
+  members: readonly OfficeMemberContract[],
+  locale: Locale,
+): string {
+  const memberName = (memberId: string | null) => {
+    if (memberId === null) return null;
+    const memberIndex = members.findIndex(
+      (member) => member.memberId === memberId,
+    );
+    const member = members[memberIndex];
+    return member === undefined
+      ? null
+      : officeMemberDisplayName(member.displayName, memberIndex, locale);
+  };
+  if (members.length === 1) {
+    return memberName(members[0]?.memberId ?? null) ?? leaderName;
+  }
+
+  const turn = thread?.turns.at(-1);
+  if (!turn) return leaderName;
+  const user = turn.items.find((item) => item.type === "userMessage");
+  const userText =
+    user?.type === "userMessage"
+      ? user.content
+          .filter((item) => item.type === "text")
+          .map((item) => item.text)
+          .join("\n\n")
+          .replace(/\n\n\[附件：[\s\S]*$/u, "")
+          .trim()
+      : "";
+  const directMentions = controlOfficeMemberMentionsFromRenderedText(
+    userText,
+    members,
+    locale,
+  );
+  if (directMentions.length === 1) {
+    return memberName(directMentions[0]!.memberId) ?? leaderName;
+  }
+
+  const delegatedMemberId = turn.items
+    .filter(
+      (item): item is Extract<ThreadItem, { type: "agentMessage" }> =>
+        item.type === "agentMessage",
+    )
+    .map((item) => controlTeamDelegatedMemberId(item.text))
+    .find((memberId): memberId is string => memberId !== null);
+  return memberName(delegatedMemberId ?? null) ?? leaderName;
 }
 
 export function controlOfficeChatErrorMessage(

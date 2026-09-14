@@ -2,6 +2,8 @@ import path from "node:path";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
+import { ErrorCode, McpError } from "@modelcontextprotocol/sdk/types.js";
+import { McpClientRequestScope } from "./mcp-client-request-scope.ts";
 
 import type {
   McpClientPort,
@@ -23,6 +25,7 @@ export class StdioMcpClient implements McpClientPort {
   readonly #client: Client;
   readonly #transport: StdioClientTransport;
   readonly #connectTimeoutMs: number;
+  readonly #requests = new McpClientRequestScope();
   #connected = false;
   #closed = false;
 
@@ -33,6 +36,12 @@ export class StdioMcpClient implements McpClientPort {
       name: config.clientName ?? "crewon-mcp-runtime",
       version: config.clientVersion ?? "0.0.0",
     });
+    this.#client.onclose = () => {
+      this.#connected = false;
+      this.#requests.disconnected(
+        new McpError(ErrorCode.ConnectionClosed, "Connection closed"),
+      );
+    };
     this.#transport = new StdioClientTransport({
       command: config.command,
       args: [...(config.args ?? [])],
@@ -54,10 +63,13 @@ export class StdioMcpClient implements McpClientPort {
     if (this.#connected) {
       return;
     }
-    await this.#client.connect(this.#transport, {
-      signal,
-      timeout: this.#connectTimeoutMs,
-    });
+    await this.#requests.run(signal, (ownedSignal) =>
+      this.#client.connect(this.#transport, {
+        signal: ownedSignal,
+        timeout: this.#connectTimeoutMs,
+      }),
+    );
+    if (this.#closed) throw new Error("mcp_client_closed");
     this.#connected = true;
   }
 
@@ -66,9 +78,10 @@ export class StdioMcpClient implements McpClientPort {
     signal: AbortSignal,
   ): Promise<McpToolPage> {
     this.#requireConnected();
-    const page = await this.#client.listTools(
-      cursor === undefined ? {} : { cursor },
-      { signal },
+    const page = await this.#requests.run(signal, (ownedSignal) =>
+      this.#client.listTools(cursor === undefined ? {} : { cursor }, {
+        signal: ownedSignal,
+      }),
     );
     return {
       tools: page.tools.map((tool) => ({
@@ -88,14 +101,12 @@ export class StdioMcpClient implements McpClientPort {
     options: Readonly<{ signal: AbortSignal; timeoutMs: number }>,
   ): Promise<McpToolCallResult> {
     this.#requireConnected();
-    return (await this.#client.callTool(
-      { name, arguments: { ...input } },
-      undefined,
-      {
-        signal: options.signal,
+    return (await this.#requests.run(options.signal, (ownedSignal) =>
+      this.#client.callTool({ name, arguments: { ...input } }, undefined, {
+        signal: ownedSignal,
         timeout: options.timeoutMs,
         maxTotalTimeout: options.timeoutMs,
-      },
+      }),
     )) as McpToolCallResult;
   }
 
@@ -105,6 +116,9 @@ export class StdioMcpClient implements McpClientPort {
     }
     this.#closed = true;
     this.#connected = false;
+    this.#requests.close(
+      new McpError(ErrorCode.ConnectionClosed, "Connection closed"),
+    );
     await this.#client.close();
   }
 

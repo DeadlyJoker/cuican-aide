@@ -1,4 +1,6 @@
+import type { ModelCallStore } from "./model-call-store-port.ts";
 import type { RunReceiptStore, RunStore } from "./run-store-port.ts";
+import type { ModelUsageStore } from "./model-usage-store-port.ts";
 import type { RunExecutionStore } from "./run-execution-store-port.ts";
 import type { ModelHistoryStore } from "./model-history-store-port.ts";
 import type {
@@ -24,6 +26,9 @@ import type { OfficeDefinitionStore } from "./office-store-port.ts";
 
 /** Combined authority implemented by local and Team composition roots. */
 export type DomainStore = RunStore &
+  ArtifactRetentionGuard &
+  ModelUsageStore &
+  ModelCallStore &
   OfficeDefinitionStore &
   RunReceiptStore &
   ThreadStore &
@@ -43,3 +48,4 @@ export type DomainStore = RunStore &
   GoalToolStore &
   WorkspaceOperationStore &
   TurnStartStore;
+import type { ArtifactRetentionGuard } from "./artifact-retention-port.ts";

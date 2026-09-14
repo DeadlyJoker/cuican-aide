@@ -13,6 +13,7 @@
   "include": [
     "./**/*.ts",
     "../scripts/*.ts",
+    "../scripts/soak/**/*.ts",
     "../src/lib/desktop/desktopBridge.ts"
   ]
 }

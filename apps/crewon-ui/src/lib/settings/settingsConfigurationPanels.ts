@@ -3,6 +3,7 @@ import type { ConfigRequirementsReadResponse } from "@crewon/app-server-protocol
 import type { ModelListResponse } from "@crewon/app-server-protocol/v2/ModelListResponse";
 
 import { appearancePanelFields } from "../appearance/appearancePanelFields";
+import type { AppearancePreferences } from "../appearance/appearancePreferences";
 import { parseAppearancePreferences } from "../appearance/appearanceSerialization";
 import type { CapabilityPanel } from "../capability/capabilityPanelTypes";
 import type { Locale } from "../i18n";
@@ -350,6 +351,7 @@ export function appearanceLoadingPanel(
 }
 
 export function appearancePanel(params: {
+  localPreferences?: AppearancePreferences | null;
   configRead: ConfigReadResponse | null;
   currentLocale: Locale;
   currentTheme: AppearanceTheme;
@@ -361,7 +363,11 @@ export function appearancePanel(params: {
   const { configRead, currentLocale, cwd, locale } = params;
   const configuredLocale =
     configDesktopValue(configRead, "uiLocale") || currentLocale;
-  const preferences = parseAppearancePreferences(configRead?.config.desktop);
+  const preferences =
+    params.localPreferences ??
+    parseAppearancePreferences(configRead?.config.desktop);
+  if (!configRead && !params.localPreferences)
+    preferences.themeMode = params.currentTheme;
 
   return {
     title: appearanceTitle(locale),
@@ -704,102 +710,10 @@ export function personalizationErrorPanel(params: {
   };
 }
 
-export function keyboardSettingsText(
-  configRead: ConfigReadResponse | null,
-  locale: Locale,
-): string {
-  const shortcuts =
-    locale === "zh"
-      ? [
-          "新对话: ⌘N / Ctrl N",
-          "搜索: ⌘K / Ctrl K",
-          "发送: ⌘ Enter / Ctrl Enter",
-          "审查: ⌃⇧G",
-          "浏览器: ⌘T",
-          "文件: ⌘P",
-          "侧边聊天: ⌥⌘S",
-        ]
-      : [
-          "New chat: ⌘N / Ctrl N",
-          "Search: ⌘K / Ctrl K",
-          "Send: ⌘ Enter / Ctrl Enter",
-          "Review: ⌃⇧G",
-          "Browser: ⌘T",
-          "Files: ⌘P",
-          "Side chat: ⌥⌘S",
-        ];
-  return [
-    locale === "zh" ? "键盘快捷键" : "Keyboard shortcuts",
-    shortcuts.map((shortcut) => `- ${shortcut}`).join("\n"),
-    `${locale === "zh" ? "配置层" : "Config layers"}: ${configRead?.layers?.length ?? 0}`,
-    locale === "zh"
-      ? "当前 app-server 协议尚未暴露快捷键写入 API；此页读取配置状态并展示当前桌面端绑定。"
-      : "The current app-server protocol does not expose shortcut-write APIs yet. This page reads config state and shows the active desktop bindings.",
-  ].join("\n");
-}
-
-function keyboardTitle(locale: Locale): string {
-  return locale === "zh" ? "键盘快捷键" : "Keyboard shortcuts";
-}
-
-export function keyboardDisconnectedPanel(
-  connectionHint: string,
-  locale: Locale,
-): CapabilityPanel {
-  return {
-    title: keyboardTitle(locale),
-    subtitle: connectionHint,
-    error:
-      locale === "zh"
-        ? "未连接本地 app-server"
-        : "Local app-server is not connected",
-  };
-}
-
-export function keyboardLoadingPanel(
-  cwd: string | null,
-  locale: Locale,
-): CapabilityPanel {
-  return {
-    title: keyboardTitle(locale),
-    subtitle: configScopedSubtitle(cwd, locale),
-    body: locale === "zh" ? "正在读取快捷键..." : "Reading shortcuts...",
-  };
-}
-
-export function keyboardPanel(params: {
-  configRead: ConfigReadResponse | null;
-  cwd: string | null;
-  locale: Locale;
-}): CapabilityPanel {
-  const { configRead, cwd, locale } = params;
-  return {
-    title: keyboardTitle(locale),
-    subtitle: configScopedSubtitle(cwd, locale),
-    body: keyboardSettingsText(configRead, locale),
-    actions: [
-      {
-        id: "refresh-keyboard",
-        label: locale === "zh" ? "刷新快捷键" : "Refresh shortcuts",
-      },
-    ],
-  };
-}
-
-export function keyboardErrorPanel(params: {
-  cwd: string | null;
-  error: unknown;
-  locale: Locale;
-}): CapabilityPanel {
-  const { cwd, error, locale } = params;
-  return {
-    title: keyboardTitle(locale),
-    subtitle: configScopedSubtitle(cwd, locale),
-    error:
-      error instanceof Error
-        ? error.message
-        : locale === "zh"
-          ? "读取快捷键失败"
-          : "Unable to read shortcuts",
-  };
-}
+export {
+  keyboardSettingsText,
+  keyboardPanel,
+  keyboardLoadingPanel,
+  keyboardDisconnectedPanel,
+  keyboardErrorPanel,
+} from "./keyboardSettingsPanel";

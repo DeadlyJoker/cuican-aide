@@ -1,3 +1,7 @@
+import type {
+  DesktopHttpReadResult,
+  DESKTOP_HTTP_VERSION,
+} from "./desktopHttpProtocol.ts";
 export const DESKTOP_BRIDGE_VERSION = 1 as const;
 
 /**
@@ -11,6 +15,18 @@ export type CloudAgentProfileEntry = Readonly<{
   invocationUrl: string;
   modelId: string;
   agentId: number;
+}>;
+
+export type AgentPlatformCredentialCatalog = Readonly<{
+  bindings: readonly Readonly<{
+    origin: string;
+    credentialAvailable: boolean;
+  }>[];
+}>;
+
+export type AgentPlatformCredentialUpsertRequest = Readonly<{
+  origin: string;
+  apiKey: string;
 }>;
 
 export type DesktopRectangle = Readonly<{
@@ -35,11 +51,6 @@ export type DesktopHttpResponse = Readonly<{
   headers: readonly (readonly [string, string])[];
 }>;
 
-export type DesktopHttpBodyEvent =
-  | Readonly<{ type: "chunk"; chunk: Uint8Array }>
-  | Readonly<{ type: "end" }>
-  | Readonly<{ type: "error"; message: string }>;
-
 export type DesktopUpdateInfo = Readonly<{
   version: string;
   notes?: string;
@@ -56,6 +67,13 @@ export type DesktopUpdateProgress =
  */
 export interface CrewonDesktopBridge {
   readonly version: typeof DESKTOP_BRIDGE_VERSION;
+  readonly agentPlatformCredentials: {
+    catalog(): Promise<AgentPlatformCredentialCatalog>;
+    upsert(
+      request: AgentPlatformCredentialUpsertRequest,
+    ): Promise<AgentPlatformCredentialCatalog>;
+    delete(origin: string): Promise<AgentPlatformCredentialCatalog>;
+  };
   readonly runtime: {
     bootstrap(): Promise<unknown>;
     reloadProvider(): Promise<void>;
@@ -69,10 +87,9 @@ export interface CrewonDesktopBridge {
     ): Promise<void>;
   };
   readonly http: {
-    fetch(
-      request: DesktopHttpRequest,
-      onBodyEvent: (event: DesktopHttpBodyEvent) => void,
-    ): Promise<DesktopHttpResponse>;
+    readonly version: typeof DESKTOP_HTTP_VERSION;
+    fetch(request: DesktopHttpRequest): Promise<DesktopHttpResponse>;
+    read(requestId: string): Promise<DesktopHttpReadResult>;
     abort(requestId: string): Promise<void>;
   };
   readonly sandbox: {

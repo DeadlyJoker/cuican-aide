@@ -8,6 +8,7 @@ import {
   type StreamingTextFrameScheduler,
 } from "../../lib/thread/threadStreamingTextBuffer";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
+import { createDemoTurn, createDraftDemoThread } from "../../lib/demo/demoData";
 
 function manualFrameScheduler() {
   const callbacks = new Map<number, () => void>();
@@ -37,6 +38,114 @@ function manualFrameScheduler() {
 }
 
 describe("CommandThreadRoom", () => {
+  it.each([false, true])(
+    "allows editing a completed message unless another send is pending (%s)",
+    (isSending) => {
+      const thread = createDraftDemoThread({
+        locale: "zh",
+        newDraftPreview: "",
+        newDraftThread: "编辑回归",
+      });
+      thread.turns = [
+        createDemoTurn({ text: "预算为250元", responseText: "已记录" }),
+      ];
+      thread.turns[0]!.status = "completed";
+      const markup = renderToStaticMarkup(
+        <CommandThreadRoom
+          activeTurnId={null}
+          cwd=""
+          locale="zh"
+          selectedThread={thread}
+          streamingText=""
+          workMode="office"
+          isSending={isSending}
+          onModeChange={() => {}}
+          onReplayMessage={async () => {}}
+        />,
+      );
+      const editButton = markup.match(
+        /<button[^>]*aria-label="编辑消息"[^>]*>/,
+      )?.[0];
+      expect(editButton).toBeDefined();
+      expect(editButton!.includes('disabled=""')).toBe(isSending);
+      expect(markup).toContain('data-user="true" data-visibility="on-hover"');
+    },
+  );
+
+  it("keeps a pending Team question visible after thread rehydration without a false missing-Run failure", () => {
+    const thread = {
+      id: "main",
+      cwd: "",
+      turns: [
+        {
+          id: "message-1",
+          status: "failed",
+          durationMs: null,
+          error: {
+            message: "control_run_missing",
+            additionalDetails: null,
+            codexErrorInfo: null,
+          },
+          items: [
+            {
+              type: "userMessage",
+              id: "message-1",
+              clientId: null,
+              content: [{ type: "text", text: "核对预算", text_elements: [] }],
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+    const props = {
+      activeTurnId: null,
+      cwd: "",
+      locale: "zh" as const,
+      selectedThread: thread,
+      streamingText: "",
+      workMode: "code" as const,
+      onModeChange: () => {},
+    };
+    const markup = renderToStaticMarkup(
+      <CommandThreadRoom
+        {...props}
+        teamProgress={{
+          threadId: "main",
+          content: "核对预算",
+          messageId: "message-1",
+          phase: "working",
+          runs: [
+            {
+              runId: "worker",
+              memberName: "核验员",
+              kind: "worker",
+              status: "running",
+              reconnecting: false,
+            },
+          ],
+        }}
+      />,
+    );
+    expect(markup.split("核对预算")).toHaveLength(2);
+    expect(markup).toContain("团队正在协作");
+    expect(markup).not.toContain("control_run_missing");
+    expect(markup).toContain('aria-busy="true"');
+    expect(markup).toMatchSnapshot();
+    const other = renderToStaticMarkup(
+      <CommandThreadRoom
+        {...props}
+        teamProgress={{
+          threadId: "other",
+          content: "不能串到当前会话",
+          messageId: "other-message",
+          phase: "working",
+          runs: [],
+        }}
+      />,
+    );
+    expect(other).not.toContain("不能串到当前会话");
+  });
+
   it("renders a bursty control reply as partial streaming text before the final frame", () => {
     const thread = {
       id: "control-thread-streaming",

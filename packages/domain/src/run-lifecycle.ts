@@ -2,6 +2,7 @@ import {
   parseAutomationInvocationOrigin,
   type AutomationInvocationOrigin,
 } from "./automation.ts";
+import { cacheReadReportingError } from "./model-usage-report.ts";
 import {
   runRateLimitSnapshotError,
   type RunRateLimitSnapshot,
@@ -227,6 +228,8 @@ export type RunLifecycleEvent =
         inputTokens: number;
         /** Absent on legacy events and normalized to zero. */
         cachedInputTokens?: number;
+        /** Absent on legacy events; absence means the cache report is unknown. */
+        cachedInputTokensReported?: boolean;
         outputTokens: number;
         totalTokens: number;
       }>;
@@ -247,6 +250,8 @@ export type RunLifecycleEvent =
         inputTokens: number;
         /** Absent on legacy events and normalized to zero. */
         cachedInputTokens?: number;
+        /** Absent on legacy events; absence means the cache report is unknown. */
+        cachedInputTokensReported?: boolean;
         outputTokens: number;
         totalTokens: number;
       }>;
@@ -538,11 +543,13 @@ export function reduceRunLifecycleEvent(
     case "model.output.delta":
       requireStatus(state, event.type, ["running"]);
       validateSegmentIdentity(event.data);
-      requireBoundedNonEmpty(
+      requireBoundedString(
         event.data.delta,
         16 * 1024,
         "model_output_delta_invalid",
       );
+      if (event.data.delta.length === 0)
+        throw new RunLifecycleError("model_output_delta_invalid");
       return next;
     case "model.reasoning.summary":
       requireStatus(state, event.type, ["running"]);
@@ -555,11 +562,13 @@ export function reduceRunLifecycleEvent(
         if (event.data.delta === undefined) {
           throw new RunLifecycleError("model_reasoning_delta_invalid");
         }
-        requireBoundedNonEmpty(
+        requireBoundedString(
           event.data.delta,
           16 * 1024,
           "model_reasoning_delta_invalid",
         );
+        if (event.data.delta.length === 0)
+          throw new RunLifecycleError("model_reasoning_delta_invalid");
       } else if (event.data.kind !== "partAdded") {
         throw new RunLifecycleError("model_reasoning_kind_invalid");
       }
@@ -593,6 +602,9 @@ export function reduceRunLifecycleEvent(
     case "usage.recorded":
       requireStatus(state, event.type, ["running"]);
       validateSegmentIdentity(event.data);
+      if (cacheReadReportingError(event.data) !== null) {
+        throw new RunLifecycleError("usage_cache_reporting_invalid");
+      }
       requireNonNegativeInteger(
         event.data.inputTokens,
         "usage_input_tokens_invalid",
@@ -663,6 +675,9 @@ export function reduceRunLifecycleEvent(
       return next;
     case "context.compacted":
       requireStatus(state, event.type, ["running"]);
+      if (cacheReadReportingError(event.data) !== null) {
+        throw new RunLifecycleError("usage_cache_reporting_invalid");
+      }
       requireNonEmpty(event.data.stepId, "compaction_step_id_invalid");
       requireNonEmpty(
         event.data.compactionItemId,

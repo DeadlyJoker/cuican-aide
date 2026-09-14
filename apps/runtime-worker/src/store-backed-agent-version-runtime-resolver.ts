@@ -120,6 +120,7 @@ class StoreBackedPriorModelCompactionResolver
     return runtime === null
       ? null
       : {
+          executionAuthority: runtime.executionAuthority,
           compactor: runtime.contextCompactor,
           ...(runtime.governedContext === undefined
             ? {}

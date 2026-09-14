@@ -1,3 +1,10 @@
+import { registerThreadActiveRunRoute } from "./thread-active-run-route.ts";
+import { registerThreadCatalogRoute } from "./thread-catalog-route.ts";
+import type { StorageAdmissionPort } from "@crewon/application";
+import { installStorageAdmission } from "./storage-admission.ts";
+import { registerThreadMessageWindowRoute } from "./thread-message-window-route.ts";
+import { registerThreadTranscriptWindowRoute } from "./thread-transcript-window-route.ts";
+import { withThreadListTitles } from "./thread-list-titles.ts";
 import type {
   AgentVersionApplicationService,
   AgentVersionCatalogApplicationService,
@@ -236,6 +243,7 @@ export type ControlApiDependencies = Readonly<{
   workspaceOperationEventPoller?: WorkspaceOperationEventPoller;
   heartbeatIntervalMs?: number | null;
   activationGate?: ProcessLocalActivationGate;
+  storageAdmission?: StorageAdmissionPort;
 }>;
 
 export interface OutboxWakeupPort {
@@ -272,6 +280,7 @@ export function buildControlApi(
     trustProxy: false,
   });
 
+  installStorageAdmission(app, dependencies.storageAdmission);
   const activationGate = dependencies.activationGate;
   if (activationGate !== undefined) {
     app.addHook("onRequest", async (request, reply) => {
@@ -503,7 +512,15 @@ export function buildControlApi(
               },
         limit: query.limit,
       });
-      const data = threads.map(projectThread);
+      const data = await withThreadListTitles(
+        threads.map(projectThread),
+        (threadId) =>
+          dependencies.threads.listMessages(actor, {
+            threadId,
+            afterSequence: 0,
+            limit: 16,
+          }),
+      );
       const last = data.at(-1);
       const response: ListThreadsResponse = {
         data,
@@ -1235,6 +1252,11 @@ export function buildControlApi(
     };
     return response;
   });
+
+  registerThreadMessageWindowRoute(app, dependencies);
+  registerThreadTranscriptWindowRoute(app, dependencies);
+  registerThreadCatalogRoute(app, dependencies);
+  registerThreadActiveRunRoute(app, dependencies);
 
   app.post<{ Params: { threadId: string }; Body: unknown }>(
     "/api/v1/threads/:threadId/forks",

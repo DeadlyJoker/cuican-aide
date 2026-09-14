@@ -14,6 +14,7 @@ import {
 } from "@crewon/contracts";
 
 import type { WorkItemLeaseInput } from "./durable-queue-port.ts";
+import type { AppendRunOutputEventsInput, AppendRunOutputEventsResult } from "./run-output-store-port.ts";
 import type {
   IdempotencyDescriptor,
   OutboxMessage,
@@ -203,6 +204,13 @@ export type CommitAssistantSampleContinuationResult = Readonly<{
   attempt: RunAttemptState;
 }>;
 
+/** Atomic tool requests, history, completed model attempt and optional continuation. */
+export type CommitToolSampleInput = Omit<
+  CommitAssistantSampleContinuationInput,
+  "sampleIndex"
+>;
+export type CommitToolSampleResult = CommitAssistantSampleContinuationResult;
+
 export type ThreadModelState = Readonly<{
   schemaVersion: "crewon.thread-model-state.v0";
   tenantId: string;
@@ -305,6 +313,8 @@ export type CommitTextRunCompletionResult = Readonly<{
  * transaction is not sufficient to authorize model or execution writes.
  */
 export interface RunExecutionStore {
+  /** Optional only for older Store adapters; built-in stores support bounded stream append. */
+  appendRunOutputEvents?(input: AppendRunOutputEventsInput): Promise<AppendRunOutputEventsResult>;
   loadRunStep(locator: RunStepLocator): Promise<RunStepState | null>;
   loadRunAttempt(locator: RunAttemptLocator): Promise<RunAttemptState | null>;
   listRunAttempts(
@@ -347,6 +357,7 @@ export interface RunExecutionStore {
   commitAssistantSampleContinuation(
     input: CommitAssistantSampleContinuationInput,
   ): Promise<CommitAssistantSampleContinuationResult>;
+  commitToolSample?(input: CommitToolSampleInput): Promise<CommitToolSampleResult>;
   commitTextRunCompletion(
     input: CommitTextRunCompletionInput,
   ): Promise<CommitTextRunCompletionResult>;

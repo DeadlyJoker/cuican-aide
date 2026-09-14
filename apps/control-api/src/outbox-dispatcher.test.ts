@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 
 import {
   RunApplicationService,
@@ -131,6 +131,148 @@ test("retries a malformed Outbox message without a busy loop", async (context) =
   clock.advance(500);
   assert.deepEqual(await store.listPendingOutbox(100), [message]);
 });
+
+test("publishes a full range to an active subscriber and preserves every reconnect cursor after slow-subscriber overflow", async (context) => {
+  const fixture = await rangeFixture(context, [32]);
+  const active = fixture.eventHub.subscribe("run-range");
+  const slow = fixture.eventHub.subscribe("run-range");
+  const consumed: RunLifecycleEvent[] = [];
+  const consume = (async () => {
+    for (let index = 0; index < 32; index += 1) {
+      const next = await active.next();
+      assert.equal(next.done, false);
+      consumed.push(next.value!);
+    }
+  })();
+  await fixture.dispatcher.wake();
+  await consume;
+  assert.deepEqual(consumed, fixture.outputs);
+  assert.deepEqual(await slow.next(), { done: true, value: undefined });
+  assert.deepEqual(await fixture.store.listPendingOutbox(100), []);
+  for (let cursor = 2; cursor <= 34; cursor += 1) {
+    const resumed = await fixture.store.listRunEvents(
+      { tenantId: "tenant-1", runId: "run-range" },
+      cursor,
+      32,
+    );
+    assert.deepEqual(
+      resumed,
+      fixture.outputs.filter((event) => event.sequence > cursor),
+    );
+  }
+  active.close();
+});
+
+test("bounds a dispatcher drain by events even when messages describe ranges", async (context) => {
+  const fixture = await rangeFixture(context, [32, 32], 3);
+  await fixture.dispatcher.wake();
+  assert.equal((await fixture.store.listPendingOutbox(100)).length, 1);
+  await fixture.dispatcher.wake();
+  assert.deepEqual(await fixture.store.listPendingOutbox(100), []);
+});
+
+test("validates the whole durable range before publishing or acknowledging any of it", async (context) => {
+  const fixture = await rangeFixture(context, [4]);
+  const original = fixture.store.listRunEvents.bind(fixture.store);
+  fixture.store.listRunEvents = async (...args) =>
+    (await original(...args)).slice(0, 3);
+  const subscription = fixture.eventHub.subscribe("run-range");
+  await fixture.dispatcher.wake();
+  assert.equal(
+    fixture.dispatcher.lastFailureCode(),
+    "outbox_event_reference_invalid",
+  );
+  assert.deepEqual(await fixture.store.listPendingOutbox(100), []);
+  fixture.clock.advance(500);
+  assert.equal((await fixture.store.listPendingOutbox(100)).length, 1);
+  subscription.close();
+  assert.deepEqual(await subscription.next(), { done: true, value: undefined });
+  fixture.store.listRunEvents = original;
+  await fixture.dispatcher.wake();
+  assert.equal(fixture.dispatcher.lastFailureCode(), null);
+  assert.deepEqual(await fixture.store.listPendingOutbox(100), []);
+});
+
+async function rangeFixture(
+  context: TestContext,
+  sizes: number[],
+  maxBatchSize = 100,
+) {
+  const clock = new MutableLeaseClock();
+  const store = new InMemoryRunStore({ clock });
+  const eventHub = new RunEventHub(2);
+  let lease = 0;
+  const dispatcher = new OutboxDispatcher(
+    { store, eventHub },
+    {
+      ownerId: "range-dispatcher",
+      nextLeaseId: () => `range-lease-${++lease}`,
+      retryAfterMs: 500,
+      scanIntervalMs: null,
+      maxBatchSize,
+    },
+  );
+  context.after(async () => {
+    await dispatcher.close();
+    eventHub.close();
+    await store.close();
+  });
+  await seedThread(store);
+  const created = createdEvent("run-range");
+  const outputs: RunLifecycleEvent[] = Array.from(
+    { length: sizes.reduce((total, size) => total + size, 0) },
+    (_, index) => ({
+      ...created,
+      eventId: `range-event-${index}`,
+      sequence: index + 3,
+      type: "model.output.delta",
+      data: {
+        segmentId: "range-segment",
+        segmentSequence: index + 1,
+        delta: `part-${index}`,
+      },
+    }),
+  );
+  let offset = 0;
+  const messages: OutboxMessage[] = sizes.map((count, index) => {
+    const first = outputs[offset]!;
+    const last = outputs[offset + count - 1]!;
+    offset += count;
+    return {
+      messageId: `range-message-${index}`,
+      tenantId: "tenant-1",
+      runId: "run-range",
+      createdAt: created.occurredAt,
+      topic: "run.events.available",
+      payload: {
+        schemaVersion: "crewon.run-event-range.v0",
+        fromSequence: first.sequence,
+        throughSequence: last.sequence,
+        firstEventId: first.eventId,
+        lastEventId: last.eventId,
+      },
+    };
+  });
+  await store.commitRun({
+    tenantId: "tenant-1",
+    expectedRevision: 0,
+    idempotency: { scope: "range", key: "range", requestFingerprint: "range" },
+    events: [
+      created,
+      {
+        ...created,
+        eventId: "range-started",
+        sequence: 2,
+        type: "run.started",
+        data: {},
+      },
+      ...outputs,
+    ],
+    outbox: messages,
+    workItems: [],
+  });
+  return { store, eventHub, dispatcher, outputs, clock };
+}
 
 class IncrementingIds implements ApplicationIdGenerator {
   readonly #counters = new Map<ApplicationIdKind, number>();

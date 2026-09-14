@@ -1,3 +1,4 @@
+import { SqliteRunStore } from "@crewon/store";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
@@ -53,6 +54,187 @@ import {
 const SESSION_TOKEN = "e2e-session-token-32-bytes-minimum-1";
 const CSRF_TOKEN = "e2e-csrf-token-32-bytes-minimum-val1";
 const ORIGIN = "http://127.0.0.1:5175";
+
+test("reads active Run authority through authenticated HTTP independently of history", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const cfg = config(databasePath);
+  const control = createStandaloneControlApi(cfg);
+  context.after(() => closeIfListening(control.app));
+  await control.app.listen({ host: "127.0.0.1", port: 0 });
+  const client = new ControlApiClient({
+    baseUrl: serverBaseUrl(control.app),
+    accessToken: SESSION_TOKEN,
+    csrfToken: CSRF_TOKEN,
+    origin: ORIGIN,
+  });
+  const created = await client.createThread(
+    { title: "Active Run lookup" },
+    "active-run-create",
+  );
+  const threadId = created.thread.threadId;
+  assert.equal((await client.getThreadActiveRun(threadId)).run, null);
+  const store = new SqliteRunStore(databasePath);
+  context.after(() => store.close());
+  await store.commitRun({
+    tenantId: cfg.actor.tenantId,
+    idempotency: {
+      scope: "active-http-test",
+      key: "run",
+      requestFingerprint: "run",
+    },
+    expectedRevision: 0,
+    events: [
+      {
+        schemaVersion: "crewon.run-event.v0",
+        identity: { runId: "active-http-run" },
+        eventId: "active-http-run:created",
+        sequence: 1,
+        occurredAt: "2026-09-11T00:00:00Z",
+        type: "run.created",
+        data: {
+          tenantId: cfg.actor.tenantId,
+          spaceId: cfg.actor.spaceId,
+          threadId,
+          createdByActorId: cfg.actor.actorId,
+          ...cfg.route,
+          collaborationMode: "default",
+          goalBinding: null,
+        },
+      },
+    ],
+    outbox: [],
+    workItems: [],
+  });
+  assert.equal(
+    (await client.getThreadActiveRun(threadId)).run?.runId,
+    "active-http-run",
+  );
+  const response = await control.app.inject({
+    method: "GET",
+    url: `/api/v1/threads/${threadId}/active-run`,
+    headers: readHeaders(),
+  });
+  assert.equal(response.statusCode, 200);
+  assert.match(response.headers["cache-control"] ?? "", /no-store/);
+  const anonymous = await control.app.inject({
+    method: "GET",
+    url: `/api/v1/threads/${threadId}/active-run`,
+  });
+  assert.equal(anonymous.statusCode, 401);
+  const missing = await control.app.inject({
+    method: "GET",
+    url: "/api/v1/threads/not-found/active-run",
+    headers: readHeaders(),
+  });
+  assert.equal(missing.statusCode, 404);
+  await client.cancelRun(
+    "active-http-run",
+    { expectedRevision: 1 },
+    "active-http-cancel",
+  );
+  await store.commitRun({
+    tenantId: cfg.actor.tenantId,
+    idempotency: {
+      scope: "active-http-test",
+      key: "cancel",
+      requestFingerprint: "cancel",
+    },
+    expectedRevision: 2,
+    events: [
+      {
+        schemaVersion: "crewon.run-event.v0",
+        identity: { runId: "active-http-run" },
+        eventId: "active-http-run:canceled",
+        sequence: 3,
+        occurredAt: "2026-09-11T00:01:00Z",
+        type: "run.canceled",
+        data: { reasonCode: "test_done" },
+      },
+    ],
+    outbox: [],
+    workItems: [],
+  });
+  assert.equal((await client.getThreadActiveRun(threadId)).run, null);
+});
+
+test("persists initial short titles across restart and reads legacy fallbacks without rewriting timestamps", async (context) => {
+  const databasePath = temporaryDatabasePath(context);
+  const first = createStandaloneControlApi(config(databasePath));
+  context.after(() => closeIfListening(first.app));
+  await first.app.listen({ host: "127.0.0.1", port: 0 });
+  const create = await first.app.inject({
+    method: "POST",
+    url: "/api/v1/threads",
+    headers: mutationHeaders("title-create"),
+    payload: { title: null },
+  });
+  const id = create.json().thread.threadId as string;
+  const append = await first.app.inject({
+    method: "POST",
+    url: `/api/v1/threads/${id}/messages`,
+    headers: mutationHeaders("title-append"),
+    payload: {
+      expectedRevision: 1,
+      content: "整理九月项目周报\n" + "详细材料".repeat(500),
+    },
+  });
+  assert.equal(append.statusCode, 201);
+  assert.equal(append.json().thread.title, "整理九月项目周报");
+  assert.equal(append.json().thread.revision, 2);
+  await first.app.close();
+  const second = createStandaloneControlApi(config(databasePath));
+  context.after(() => closeIfListening(second.app));
+  await second.app.listen({ host: "127.0.0.1", port: 0 });
+  const listed = await second.app.inject({
+    method: "GET",
+    url: "/api/v1/threads",
+    headers: readHeaders(),
+  });
+  assert.equal(listed.statusCode, 200);
+  assert.equal(listed.json().data[0].title, "整理九月项目周报");
+
+  const rename = await second.app.inject({
+    method: "POST",
+    url: `/api/v1/threads/${id}:rename`,
+    headers: mutationHeaders("title-manual"),
+    payload: { expectedRevision: 2, title: "我的项目记录" },
+  });
+  assert.equal(rename.statusCode, 200);
+  const followup = await second.app.inject({
+    method: "POST",
+    url: `/api/v1/threads/${id}/messages`,
+    headers: mutationHeaders("title-followup"),
+    payload: { expectedRevision: 3, content: "现在改问另一个问题" },
+  });
+  assert.equal(followup.statusCode, 201);
+  assert.equal(followup.json().thread.title, "我的项目记录");
+
+  // Reproduce a legacy unnamed head using an authorized null rename, not a database rewrite.
+  const clear = await second.app.inject({
+    method: "POST",
+    url: `/api/v1/threads/${id}:rename`,
+    headers: mutationHeaders("title-legacy"),
+    payload: { expectedRevision: 4, title: null },
+  });
+  assert.equal(clear.statusCode, 200);
+  const before = clear.json().thread;
+  const legacy = await second.app.inject({
+    method: "GET",
+    url: "/api/v1/threads",
+    headers: readHeaders(),
+  });
+  assert.equal(legacy.statusCode, 200);
+  assert.deepEqual(legacy.json().data[0], {
+    ...before,
+    displayTitle: "整理九月项目周报",
+  });
+  const after = await second.app.inject({
+    method: "GET",
+    url: `/api/v1/threads/${id}`,
+    headers: readHeaders(),
+  });
+  assert.deepEqual(after.json().thread, before);
+});
 
 test("streams durable SQLite Run events over real loopback HTTP and resumes after restart", async (context) => {
   const databasePath = temporaryDatabasePath(context);
@@ -403,11 +585,15 @@ test("executes an admitted published AgentVersion through the durable SQLite pat
       authorityId: "selected-authority-e2e-1",
       workspaceBindingId: null,
       materializationDigest: `sha256:${"d".repeat(64)}`,
+      executionAuthority: "crewonKernel",
       createTransport: () =>
         new DeterministicFakeModelTransport({
           expectedLastUserMessage: "execute the selected version",
           events: [
-            { type: "output.delta", delta: "selected version completed" },
+            ...[..."selected version completed"].map((delta) => ({
+              type: "output.delta" as const,
+              delta,
+            })),
             {
               type: "usage",
               inputTokens: 4,
@@ -466,10 +652,69 @@ test("executes an admitted published AgentVersion through the durable SQLite pat
   const worker = await createStandaloneRuntimeWorker(workerConfig);
   context.after(() => worker.close());
 
+  const liveStream = await fetch(
+    `${baseUrl}/api/v1/runs/${created.run.runId}/events`,
+    {
+      headers: readHeaders(),
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  assert.equal(liveStream.status, 200);
+  const liveReader = new SseReader(requiredBody(liveStream).getReader());
+  const liveEvents: RunEventView[] = [];
+  const consume = (async () => {
+    while (true) {
+      const frame = await liveReader.nextFrame();
+      assertPublicEvent(frame.data);
+      liveEvents.push(frame.data);
+      if (frame.event === "run.completed") return;
+    }
+  })();
+
   assert.deepEqual(await worker.worker.wake(), {
     kind: "completed",
     runId: created.run.runId,
   });
+  await control.outboxDispatcher.wake();
+  assert.equal(control.outboxDispatcher.lastFailureCode(), null);
+  await consume;
+  await liveReader.cancel();
+  const outputs = liveEvents.filter(
+    (event) => event.type === "model.output.delta",
+  );
+  assert.equal(outputs.length, "selected version completed".length);
+  assert.deepEqual(
+    liveEvents.map((event) => event.sequence),
+    liveEvents.map((_, index) => index + 1),
+  );
+  // Retiring delivery notifications must not change durable SSE replay.
+  const retentionDatabase = new DatabaseSync(databasePath);
+  const maintenanceStore = new SqliteRunStore(databasePath);
+  try {
+    retentionDatabase.prepare("UPDATE outbox SET delivered_at_ms = 0 WHERE run_id = ? AND status = 'delivered'").run(created.run.runId);
+    const removed = await maintenanceStore.outboxRetention.pruneDeliveredOutbox({ retentionMs: 1, minimumIntervalMs: 1_000, maxBatchSize: 100 });
+    assert.ok(removed.deletedMessages > 0);
+    assert.equal(retentionDatabase.prepare("SELECT COUNT(*) AS count FROM outbox WHERE run_id = ?").get(created.run.runId)!.count, 0);
+  } finally {
+    await maintenanceStore.close();
+    retentionDatabase.close();
+  }
+  const cursor = outputs[Math.floor(outputs.length / 2)]!.sequence;
+  const resumedStream = await fetch(
+    `${baseUrl}/api/v1/runs/${created.run.runId}/events`,
+    {
+      headers: { ...readHeaders(), "last-event-id": String(cursor) },
+      signal: AbortSignal.timeout(10_000),
+    },
+  );
+  assert.equal(resumedStream.status, 200);
+  const resumedReader = new SseReader(requiredBody(resumedStream).getReader());
+  for (const expected of liveEvents.filter(
+    (event) => event.sequence > cursor,
+  )) {
+    assert.deepEqual((await resumedReader.nextFrame()).data, expected);
+  }
+  await resumedReader.cancel();
   const messages = await client.listThreadMessages(thread.thread.threadId);
   assert.deepEqual(
     messages.data.map(({ role, content }) => ({ role, content })),

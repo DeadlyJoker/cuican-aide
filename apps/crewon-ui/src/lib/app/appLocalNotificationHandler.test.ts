@@ -65,6 +65,7 @@ function handleNotification(
     streamingTextByThread: {},
     terminalOutput: {
       generation: 1,
+      startOffset: 0,
       processId: "process-1",
       text: "",
     },
@@ -145,6 +146,7 @@ describe("local app notification handler", () => {
     expect(handled).toBe(true);
     expect(state.terminalOutput).toEqual({
       generation: 1,
+      startOffset: 0,
       processId: "process-1",
       text: "done",
     });

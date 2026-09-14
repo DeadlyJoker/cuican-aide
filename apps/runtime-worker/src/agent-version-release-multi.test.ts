@@ -8,7 +8,10 @@ import type { ModelTransportPort } from "@crewon/agent-kernel";
 import { SqliteRunStore } from "@crewon/store";
 
 import { activateStandaloneRuntimeAgentVersionRelease } from "./agent-version-release-composition.ts";
-import { compileRuntimeAgentVersion } from "./agent-version-release.ts";
+import {
+  compileRuntimeAgentVersion,
+  compileRuntimeAgentVersionRelease,
+} from "./agent-version-release.ts";
 import { RuntimeReleaseAuthorization } from "./release-authority.ts";
 import { SystemApplicationClock } from "./standalone-adapters.ts";
 
@@ -109,6 +112,29 @@ test("compiles a model variant without changing its policy or tool contract", ()
       policySnapshotId: "policy-1",
       tools: [],
     },
+  );
+});
+
+test("rejects a bootstrap release whose model identity diverges from its transport", () => {
+  assert.throws(
+    () =>
+      compileRuntimeAgentVersionRelease({
+        runtimeTenantId: "tenant-1",
+        route: {
+          authorityId: "authority-1",
+          runtimeGeneration: "runtime-1",
+          agentVersionId: "executor-1",
+          policySnapshotId: "policy-1",
+          workspaceBindingId: null,
+        },
+        transport,
+        modelIdentity: {
+          adapterName: "different-adapter",
+          adapterVersion: "2",
+          modelId: "different-model",
+        },
+      }),
+    new Error("runtime_release_bootstrap_model_identity_override_unsupported"),
   );
 });
 

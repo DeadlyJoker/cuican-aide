@@ -213,6 +213,19 @@ function validateCreate(command: CreateOfficeCommand) {
     requireText(member.memberId, 128, "office_member_invalid");
     requireText(member.displayName, 160, "office_member_invalid");
     requireText(member.agentVersionId, 128, "office_member_invalid");
+    if (member.responsibility !== undefined) {
+      requireText(
+        member.responsibility,
+        OFFICE_LIMITS.responsibility * 2,
+        "office_member_invalid",
+      );
+      if (
+        [...member.responsibility].length > OFFICE_LIMITS.responsibility ||
+        member.responsibility.normalize("NFC") !== member.responsibility
+      ) {
+        throw new ApplicationError("validation", "office_member_invalid");
+      }
+    }
     if (ids.has(member.memberId))
       throw new ApplicationError("validation", "office_member_duplicate");
     ids.add(member.memberId);

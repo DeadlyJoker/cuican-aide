@@ -17,6 +17,11 @@ type Boundary = Readonly<{
 
 const boundaries: readonly Boundary[] = [
   {
+    packageName: "capability-packs",
+    allowedBareImports: [],
+    allowedRuntimeDependencies: [],
+  },
+  {
     packageName: "artifacts",
     allowedBareImports: ["node:", "@crewon/application", "@crewon/domain"],
     allowedRuntimeDependencies: ["@crewon/application", "@crewon/domain"],
@@ -68,6 +73,11 @@ const boundaries: readonly Boundary[] = [
   {
     packageName: "domain",
     allowedBareImports: [],
+    allowedRuntimeDependencies: [],
+  },
+  {
+    packageName: "eval-harness",
+    allowedBareImports: ["node:fs"],
     allowedRuntimeDependencies: [],
   },
   {

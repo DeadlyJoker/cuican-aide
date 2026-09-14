@@ -1,22 +1,25 @@
 import { hasDesktopBridge } from "../platform";
+import { requireDesktopBridge } from "./desktopBridge";
 import {
-  requireDesktopBridge,
-  type DesktopHttpBodyEvent,
-} from "./desktopBridge";
+  DESKTOP_HTTP_LIMITS as limits,
+  DESKTOP_HTTP_VERSION,
+  isDesktopEventStream,
+} from "./desktopHttpProtocol";
+import {
+  acquireDesktopHttpRequest,
+  desktopAbortReason,
+  readDesktopRequestBody,
+  withDesktopAbort,
+} from "./desktopHttpClientBudget";
 
 const INSTALLED = Symbol.for("crewon.desktopFetch");
 const REQUEST_TIMEOUT_MS = 15_000;
 type MaybePatched = typeof fetch & { [INSTALLED]?: true };
 
-/**
- * Installs the desktop request bridge before React mounts. Absolute requests
- * cross the isolated preload into Electron's TypeScript main process, while
- * relative requests retain normal browser/Vite behavior.
- */
+/** Keep relative Web requests on the platform; absolute Desktop requests use the isolated host. */
 export async function installDesktopFetch(): Promise<void> {
-  if (!hasDesktopBridge() || (globalThis.fetch as MaybePatched)[INSTALLED]) {
+  if (!hasDesktopBridge() || (globalThis.fetch as MaybePatched)[INSTALLED])
     return;
-  }
   const platformFetch = globalThis.fetch.bind(globalThis);
   const patched: MaybePatched = (input, init) =>
     isAbsolute(input)
@@ -26,149 +29,177 @@ export async function installDesktopFetch(): Promise<void> {
   globalThis.fetch = patched;
 }
 
-/** Serializes one Fetch request across the narrow Electron bridge. */
+/** HTTP transport v2 pulls at most one bounded chunk for each consumer read. */
 export async function desktopBridgeFetch(
   input: RequestInfo | URL,
   init?: RequestInit,
 ): Promise<Response> {
   const bridge = requireDesktopBridge();
+  if (
+    bridge.http?.version !== DESKTOP_HTTP_VERSION ||
+    typeof bridge.http.read !== "function"
+  )
+    throw new Error("desktop_http_version_incompatible");
+  const method = (
+    init?.method ?? (input instanceof Request ? input.method : "GET")
+  ).toUpperCase();
+  const budget = acquireDesktopHttpRequest(
+    method === "GET" || method === "HEAD" ? "read" : "write",
+  );
   const requestId = globalThis.crypto.randomUUID();
   const controller = new AbortController();
+  let finished = false,
+    sent = false,
+    abortSent = false,
+    receivedBytes = 0;
+  let bodyController: ReadableStreamDefaultController<Uint8Array> | null = null;
+  let callerSignal: AbortSignal | null = null;
+  let idle: ReturnType<typeof setTimeout> | null = null;
   const timer = setTimeout(
     () => controller.abort(new DeadlineError(REQUEST_TIMEOUT_MS)),
     REQUEST_TIMEOUT_MS,
   );
-  // If the caller supplied their own signal, race it against the deadline.
-  const callerSignal = init?.signal;
-  const relayCallerAbort = () => {
-    if (!controller.signal.aborted) {
-      controller.abort(reasonFromSignal(callerSignal!));
-    }
+  const relayCallerAbort = () =>
+    controller.abort(desktopAbortReason(callerSignal!));
+  const clearIdle = () => {
+    if (idle !== null) clearTimeout(idle);
+    idle = null;
   };
-  if (callerSignal) {
-    if (callerSignal.aborted) {
-      clearTimeout(timer);
-      throw reasonFromSignal(callerSignal);
-    }
-    callerSignal.addEventListener("abort", relayCallerAbort, { once: true });
-  }
-  let bodyController: ReadableStreamDefaultController<Uint8Array> | null = null;
-  let bodyFinished = false;
-  let receivedTerminalEvent = false;
-  const pendingBodyEvents: DesktopHttpBodyEvent[] = [];
-  const finishBody = () => {
+  const armIdle = () => {
+    clearIdle();
+    idle = setTimeout(
+      () => controller.abort(new Error("desktop_http_consumer_idle")),
+      limits.consumerIdleMs,
+    );
+  };
+  const finish = () => {
+    if (finished) return;
+    finished = true;
     clearTimeout(timer);
-    if (callerSignal) {
-      callerSignal.removeEventListener("abort", relayCallerAbort);
-    }
+    clearIdle();
+    callerSignal?.removeEventListener("abort", relayCallerAbort);
+    controller.signal.removeEventListener("abort", abortBody);
+    budget.release();
   };
-  const deliverBodyEvent = (event: DesktopHttpBodyEvent) => {
-    if (bodyFinished || bodyController === null) return;
-    if (event.type === "chunk") {
-      bodyController.enqueue(event.chunk);
-      return;
-    }
-    bodyFinished = true;
-    if (event.type === "end") {
-      bodyController.close();
-    } else {
-      bodyController.error(new Error(event.message));
-    }
-  };
-  const onBodyEvent = (event: DesktopHttpBodyEvent) => {
-    if (bodyFinished || receivedTerminalEvent) return;
-    if (event.type === "end" || event.type === "error") {
-      receivedTerminalEvent = true;
-      finishBody();
-    }
-    if (bodyController === null) {
-      pendingBodyEvents.push(event);
-      return;
-    }
-    deliverBodyEvent(event);
-  };
-  const abortHostRequest = () => {
-    void bridge.http.abort(requestId).catch(() => undefined);
+  const abortHost = () => {
+    if (!sent || abortSent) return;
+    abortSent = true;
+    void bridge.http.abort(requestId).catch(() => {});
   };
   const abortBody = () => {
-    if (bodyFinished) return;
-    bodyFinished = true;
-    receivedTerminalEvent = true;
-    bodyController?.error(reasonFromSignal(controller.signal));
-    finishBody();
-    abortHostRequest();
+    if (finished) return;
+    bodyController?.error(desktopAbortReason(controller.signal));
+    finish();
+    abortHost();
   };
   controller.signal.addEventListener("abort", abortBody, { once: true });
   try {
     const headers = mergeHeaders(input, init);
     const request = new Request(input, init);
-    const body =
-      request.method === "GET" || request.method === "HEAD"
-        ? null
-        : new Uint8Array(await request.arrayBuffer());
-    // The IPC bridge does not accept an AbortSignal, so wrap the pending
-    // promise so that aborting the controller rejects the outstanding call.
-    const result = await withAbort(
-      bridge.http.fetch(
-        {
-          requestId,
-          url: request.url,
-          method: request.method,
-          headers: [...headers.entries()],
-          body,
-        },
-        onBodyEvent,
-      ),
+    if (request.url.length > limits.urlCharacters)
+      throw new Error("desktop_http_request_invalid");
+    const headerEntries: [string, string][] = [];
+    let headerBytes = 0;
+    for (const [name, value] of headers) {
+      if (
+        headerEntries.length >= limits.headers ||
+        name.length + value.length > limits.headerBytes
+      )
+        throw new Error("desktop_http_headers_too_large");
+      headerBytes +=
+        new TextEncoder().encode(name).length +
+        new TextEncoder().encode(value).length;
+      if (headerBytes > limits.headerBytes)
+        throw new Error("desktop_http_headers_too_large");
+      headerEntries.push([name, value]);
+    }
+    callerSignal = request.signal;
+    if (callerSignal.aborted) throw desktopAbortReason(callerSignal);
+    callerSignal.addEventListener("abort", relayCallerAbort, { once: true });
+    const body = await readDesktopRequestBody(
+      request,
+      controller.signal,
+      budget,
+    );
+    controller.signal.throwIfAborted();
+    sent = true;
+    const result = await withDesktopAbort(
+      bridge.http.fetch({
+        requestId,
+        url: request.url,
+        method: request.method,
+        headers: headerEntries,
+        body,
+      }),
       controller.signal,
     );
-    const contentType = result.headers.find(
-      ([name]) => name.toLowerCase() === "content-type",
-    )?.[1];
-    if (/^text\/event-stream(?:;|$)/iu.test(contentType ?? "")) {
-      clearTimeout(timer);
-    }
+    budget.releaseBody();
+    const eventStream = isDesktopEventStream(result.headers);
+    if (eventStream) clearTimeout(timer);
     const bodyAllowed =
-      request.method !== "HEAD" &&
-      result.status !== 204 &&
-      result.status !== 205 &&
-      result.status !== 304;
+      request.method !== "HEAD" && ![204, 205, 304].includes(result.status);
+    if (!bodyAllowed) finish();
     const responseBody = bodyAllowed
-      ? new ReadableStream<Uint8Array>({
-          start(streamController) {
-            bodyController = streamController;
-            for (const event of pendingBodyEvents.splice(0)) {
-              deliverBodyEvent(event);
-            }
+      ? new ReadableStream<Uint8Array>(
+          {
+            start(streamController) {
+              bodyController = streamController;
+              armIdle();
+            },
+            async pull(streamController) {
+              if (finished) return;
+              clearIdle();
+              try {
+                const part = await withDesktopAbort(
+                  bridge.http.read(requestId),
+                  controller.signal,
+                );
+                if (finished) return;
+                if (part.type === "end") {
+                  finish();
+                  streamController.close();
+                  return;
+                }
+                if (
+                  part.type !== "chunk" ||
+                  !(part.chunk instanceof Uint8Array) ||
+                  !part.chunk.byteLength ||
+                  part.chunk.byteLength > limits.chunkBytes
+                )
+                  throw new Error("desktop_http_chunk_invalid");
+                receivedBytes += part.chunk.byteLength;
+                if (receivedBytes > limits.responseBytes)
+                  throw new Error("desktop_http_response_too_large");
+                streamController.enqueue(part.chunk);
+                armIdle();
+              } catch (error) {
+                if (finished) return;
+                finish();
+                abortHost();
+                streamController.error(error);
+              }
+            },
+            cancel() {
+              finish();
+              abortHost();
+            },
           },
-          cancel() {
-            if (!bodyFinished) {
-              bodyFinished = true;
-              receivedTerminalEvent = true;
-              finishBody();
-              abortHostRequest();
-            }
-          },
-        })
+          { highWaterMark: 0 },
+        )
       : null;
     return new Response(responseBody, {
       status: result.status,
       statusText: result.statusText,
       headers: result.headers as [string, string][],
     });
-  } finally {
-    if (bodyController === null && !receivedTerminalEvent) {
-      abortHostRequest();
-      finishBody();
-    }
+  } catch (error) {
+    finish();
+    abortHost();
+    throw error;
   }
 }
 
-/**
- * Chromium removes forbidden browser headers such as `Origin` while building a
- * `Request`. Desktop Control requests cross a typed host bridge instead of the
- * browser network stack, so preserve the caller's original header collection
- * before constructing the Request used for URL/body normalization.
- */
+/** Preserve explicit Origin, which Chromium can strip while constructing Request. */
 function mergeHeaders(input: RequestInfo | URL, init?: RequestInit): Headers {
   const headers = new Headers(
     input instanceof Request ? input.headers : undefined,
@@ -176,14 +207,12 @@ function mergeHeaders(input: RequestInfo | URL, init?: RequestInit): Headers {
   new Headers(init?.headers).forEach((value, name) => headers.set(name, value));
   return headers;
 }
-
 class DeadlineError extends Error {
   constructor(timeoutMs: number) {
     super(`request exceeded ${timeoutMs}ms`);
     this.name = "DeadlineError";
   }
 }
-
 function isAbsolute(input: RequestInfo | URL): boolean {
   const url =
     input instanceof URL
@@ -193,34 +222,8 @@ function isAbsolute(input: RequestInfo | URL): boolean {
         : input.url;
   return /^[a-z][a-z0-9+.-]*:\/\//iu.test(url);
 }
-
-/**
- * Returns a meaningful Error from an aborted signal. Some Electron/Node
- * runtimes leave `signal.reason` as `undefined` when
- * `AbortSignal.timeout()` fires, which surfaces as the opaque
- * "signal is aborted without reason" message. Fall back to a
- * `DeadlineError` so the UI can display actionable text.
- */
-function reasonFromSignal(signal: AbortSignal): Error {
-  const reason = signal.reason;
-  if (reason instanceof Error) {
-    return reason;
-  }
-  return new DeadlineError(REQUEST_TIMEOUT_MS);
-}
-
 function withTimeout(init: RequestInit | undefined): RequestInit {
-  if (init?.signal) return init;
-  return { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) };
-}
-
-function withAbort<T>(pending: Promise<T>, signal: AbortSignal): Promise<T> {
-  if (signal.aborted) return Promise.reject(reasonFromSignal(signal));
-  return new Promise<T>((resolve, reject) => {
-    const abort = () => reject(reasonFromSignal(signal));
-    signal.addEventListener("abort", abort, { once: true });
-    pending.then(resolve, reject).finally(() => {
-      signal.removeEventListener("abort", abort);
-    });
-  });
+  return init?.signal
+    ? init
+    : { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) };
 }

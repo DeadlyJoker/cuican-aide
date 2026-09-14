@@ -2,7 +2,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import type { CrewonWorkflowRecord } from "../../lib/workflow/crewonWorkflow";
-import { CommandWorkflowPanel } from "./CommandWorkflowPanel";
+import {
+  CommandWorkflowPanel,
+  workflowControlPresentation,
+} from "./CommandWorkflowPanel";
 
 function workflowRecord(
   workflowId: string,
@@ -46,6 +49,23 @@ const reviewNodes: CrewonWorkflowRecord["config"]["nodes"] = [
 ];
 
 describe("CommandWorkflowPanel", () => {
+  it("keeps cancel available while Gate resolution waits on verification", () => {
+    expect(
+      workflowControlPresentation({ gateBusy: true, cancelBusy: false }),
+    ).toEqual({
+      cancelDisabled: false,
+      cancelLabel: "取消运行",
+      gateDisabled: true,
+    });
+    expect(
+      workflowControlPresentation({ gateBusy: true, cancelBusy: true }),
+    ).toEqual({
+      cancelDisabled: true,
+      cancelLabel: "取消中…",
+      gateDisabled: true,
+    });
+  });
+
   it("snapshots the design-aligned local Workflow list", () => {
     const markup = renderToStaticMarkup(
       <CommandWorkflowPanel
@@ -207,6 +227,21 @@ describe("CommandWorkflowPanel", () => {
     expect(markup).toContain("取消运行");
     expect(markup).not.toContain("云端节点");
     expect(markup).toMatchSnapshot();
+
+    const refreshingMarkup = renderToStaticMarkup(
+      <CommandWorkflowPanel
+        defaultOpenWorkflowId="workflow-gate"
+        status="loading"
+        workflows={[workflow]}
+        onCancel={vi.fn()}
+        onReload={vi.fn(async () => undefined)}
+        onResolveGate={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+    expect(refreshingMarkup).toContain("workflow-runtime-room");
+    expect(refreshingMarkup).toContain("带人工验收的交付流");
+    expect(refreshingMarkup).not.toContain("正在读取协作流");
   });
 
   it("renders a completed result as readable Markdown without exposing run ids", () => {
@@ -258,5 +293,195 @@ describe("CommandWorkflowPanel", () => {
     expect(markup).not.toContain("internal-run-42");
     expect(markup).not.toContain("### 验收结论");
     expect(markup).toMatchSnapshot();
+  });
+
+  it("does not retain Gate actions or a waiting stage after cancellation", () => {
+    const workflow = workflowRecord(
+      "workflow-canceled-gate",
+      "已取消的人工验收流",
+      "取消后不能继续审批。",
+      [
+        ...reviewNodes.slice(0, 1),
+        {
+          nodeId: "approval",
+          type: "humanGate" as const,
+          title: "人工验收",
+          instruction: "确认结果。",
+        },
+      ],
+    );
+    workflow.config.status = "canceled";
+    workflow.config.runs = [
+      {
+        executionId: "workflow-run-canceled",
+        status: "canceled",
+        input: "检查后取消",
+        output: "",
+        error: null,
+        createdAt: 1,
+        updatedAt: 2,
+        executedNodes: [
+          {
+            nodeId: "review",
+            nodeType: "agent",
+            title: "需求审阅",
+            agentId: "agent-product-review",
+            status: "completed",
+            output: "已完成审阅",
+            error: null,
+          },
+          {
+            nodeId: "approval",
+            nodeType: "humanGate",
+            title: "人工验收",
+            agentId: null,
+            status: "waitingForApproval",
+            output: "",
+            error: null,
+          },
+        ],
+      },
+    ];
+
+    const markup = renderToStaticMarkup(
+      <CommandWorkflowPanel
+        defaultOpenWorkflowId="workflow-canceled-gate"
+        status="ready"
+        workflows={[workflow]}
+        onCancel={vi.fn()}
+        onReload={vi.fn(async () => undefined)}
+        onResolveGate={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("协作已取消，后续步骤不会继续");
+    expect(markup).toContain("已取消");
+    expect(markup).not.toContain("等待你确认");
+    expect(markup).not.toContain("批准并继续");
+    expect(markup).not.toContain("驳回并结束");
+    expect(markup).not.toContain('aria-label="确认环节"');
+    expect(markup).toMatchSnapshot();
+
+    const canceledRun = workflow.config.runs[0]!;
+    workflow.config.status = "failed";
+    workflow.config.runs = [
+      {
+        ...canceledRun,
+        status: "failed",
+        error: "workflow_gate_rejected",
+        executedNodes: canceledRun.executedNodes.map((node) =>
+          node.nodeId === "approval"
+            ? { ...node, status: "rejected", output: "reject" }
+            : node,
+        ),
+      },
+    ];
+    const rejectedMarkup = renderToStaticMarkup(
+      <CommandWorkflowPanel
+        defaultOpenWorkflowId="workflow-canceled-gate"
+        status="ready"
+        workflows={[workflow]}
+        onCancel={vi.fn()}
+        onReload={vi.fn(async () => undefined)}
+        onResolveGate={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+    expect(rejectedMarkup).toContain("人工确认已驳回，协作流已结束");
+    expect(rejectedMarkup).not.toContain("workflow_gate_rejected");
+  });
+
+  it("shows a readable verification failure while preserving its detailed output", () => {
+    const workflow = workflowRecord(
+      "workflow-verification-failed",
+      "独立验收流",
+      "独立验证发布证据。",
+      [
+        ...reviewNodes.slice(0, 1),
+        {
+          nodeId: "verification",
+          type: "verification" as const,
+          title: "独立验证",
+          agentId: "agent-verifier",
+          agentName: "独立验证成员",
+          instruction: "给出明确判定。",
+        },
+      ],
+    );
+    workflow.config.status = "failed";
+    workflow.config.runs = [
+      {
+        executionId: "workflow-run-verification-failed",
+        status: "failed",
+        input: "验证本次发布",
+        output: "### 验证详情\n\nVERDICT: FAIL\n\n- 缺少回滚证据\n- 不允许发布",
+        error: "control_workflow_verification_failed",
+        createdAt: 1,
+        updatedAt: 2,
+        executedNodes: [
+          {
+            nodeId: "review",
+            nodeType: "agent",
+            title: "需求审阅",
+            agentId: "agent-product-review",
+            status: "completed",
+            output: "已完成审阅",
+            error: null,
+          },
+          {
+            nodeId: "verification",
+            nodeType: "verification",
+            title: "独立验证",
+            agentId: "agent-verifier",
+            status: "failed",
+            output: "VERDICT: FAIL",
+            error: "control_workflow_verification_failed",
+          },
+        ],
+      },
+    ];
+
+    const markup = renderToStaticMarkup(
+      <CommandWorkflowPanel
+        defaultOpenWorkflowId="workflow-verification-failed"
+        status="ready"
+        workflows={[workflow]}
+        onCancel={vi.fn()}
+        onReload={vi.fn(async () => undefined)}
+        onResolveGate={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("独立验证未通过");
+    expect(markup).toContain("缺少回滚证据");
+    expect(markup).toContain("不允许发布");
+    expect(markup).not.toContain("control_workflow_verification_failed");
+    expect(markup).toMatchSnapshot();
+
+    workflow.config.runs = [
+      {
+        ...workflow.config.runs[0]!,
+        output: "验证成员没有返回协议要求的 verdict。",
+        error: "control_workflow_verification_invalid",
+      },
+    ];
+    const invalidMarkup = renderToStaticMarkup(
+      <CommandWorkflowPanel
+        defaultOpenWorkflowId="workflow-verification-failed"
+        status="ready"
+        workflows={[workflow]}
+        onCancel={vi.fn()}
+        onReload={vi.fn(async () => undefined)}
+        onResolveGate={vi.fn()}
+        onRun={vi.fn()}
+      />,
+    );
+    expect(invalidMarkup).toContain("没有返回唯一且合法的结论");
+    expect(invalidMarkup).toContain("没有返回协议要求的 verdict");
+    expect(invalidMarkup).not.toContain(
+      "control_workflow_verification_invalid",
+    );
   });
 });

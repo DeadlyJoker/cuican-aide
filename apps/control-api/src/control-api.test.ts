@@ -249,6 +249,8 @@ test("creates, replays, lists, and reads a Control Office definition", async (co
             memberId: "member-1",
             displayName: "Delivery agent",
             agentVersionId: "agent-version-1",
+            responsibility:
+              "Own the release decision and preserve unresolved evidence conflicts.",
           },
         ],
         executionTargets: [
@@ -266,6 +268,59 @@ test("creates, replays, lists, and reads a Control Office definition", async (co
   assert.equal(created.disposition, "created");
   assert.equal(replayed.disposition, "replayed");
   assert.deepEqual(replayed.office, created.office);
+  assert.equal(
+    created.office.members[0]?.responsibility,
+    "Own the release decision and preserve unresolved evidence conflicts.",
+  );
+
+  const driftedResponse = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/offices",
+    headers: jsonMutationHeaders("office-create-1"),
+    payload: {
+      expectedRevision: 0,
+      title: "Delivery",
+      members: [
+        {
+          memberId: "member-1",
+          displayName: "Delivery agent",
+          agentVersionId: "agent-version-1",
+          responsibility:
+            "A different responsibility must not replay the first receipt.",
+        },
+      ],
+      executionTargets: [
+        { targetId: "primary", agentVersionId: "agent-version-1" },
+      ],
+    },
+  });
+  assert.equal(driftedResponse.statusCode, 409, driftedResponse.body);
+
+  const invalidResponsibilityResponse = await runtime.app.inject({
+    method: "POST",
+    url: "/api/v1/offices",
+    headers: jsonMutationHeaders("office-invalid-responsibility"),
+    payload: {
+      expectedRevision: 0,
+      title: "Invalid responsibility",
+      members: [
+        {
+          memberId: "member-1",
+          displayName: "Delivery agent",
+          agentVersionId: "agent-version-1",
+          responsibility: "🚀".repeat(241),
+        },
+      ],
+      executionTargets: [
+        { targetId: "primary", agentVersionId: "agent-version-1" },
+      ],
+    },
+  });
+  assert.equal(
+    invalidResponsibilityResponse.statusCode,
+    400,
+    invalidResponsibilityResponse.body,
+  );
 
   const listedResponse = await runtime.app.inject({
     method: "GET",
@@ -1406,6 +1461,28 @@ test("serves health and strict authenticated Run create/get/cancel commands", as
     data: [messageAppendedBody.message],
     nextCursor: formatMessageCursor(1),
   });
+
+  const windowResponse = await runtime.app.inject({
+    method: "GET", url: "/api/v1/threads/thread-1/message-window?limit=1", headers: readHeaders(),
+  });
+  assert.equal(windowResponse.statusCode, 200, windowResponse.body);
+  assert.deepEqual(windowResponse.json(), {
+    schemaVersion: "crewon.message-window.v0", threadId: "thread-1", threadRevision: 2,
+    eventSequence: 2, headMessageSequence: 1, data: [messageAppendedBody.message], olderCursor: null, newerCursor: null,
+  });
+  assert.equal(windowResponse.headers["cache-control"], "no-store");
+
+  const catalog = await runtime.app.inject({
+    method: "GET", url: "/api/v1/thread-catalog?limit=1", headers: readHeaders(),
+  });
+  assert.equal(catalog.statusCode, 200, catalog.body);
+  assert.equal(catalog.headers["cache-control"], "no-store");
+  assert.deepEqual(catalog.json().data, [messageAppendedBody.thread]);
+  assert.equal(catalog.json().scannedCount, 1);
+  const anonymousCatalog = await runtime.app.inject({ method: "GET", url: "/api/v1/thread-catalog" });
+  assert.equal(anonymousCatalog.statusCode, 401);
+  const injectedCatalog = await runtime.app.inject({ method: "GET", url: "/api/v1/thread-catalog?spaceId=other", headers: readHeaders() });
+  assert.equal(injectedCatalog.statusCode, 400);
 
   const threadList = await runtime.app.inject({
     method: "GET",

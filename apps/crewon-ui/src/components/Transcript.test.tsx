@@ -1,4 +1,6 @@
+// @vitest-environment happy-dom
 import { renderToStaticMarkup } from "react-dom/server";
+import { renderExpandedTranscript } from "./transcript.test-support";
 import { describe, expect, it, vi } from "vitest";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 
@@ -427,6 +429,60 @@ const labels = {
 };
 
 describe("Transcript", () => {
+  it.each(["completed", "inProgress", "failed"] as const)(
+    "keeps only the latest completed response actions visible with a %s trailing turn",
+    (status) => {
+      const turns = [1, 2, 3].map((index) => ({
+        ...thread.turns[0]!,
+        id: `turn-${index}`,
+        status: index === 3 ? status : ("completed" as const),
+        items: thread.turns[0]!.items.filter(
+          (item) =>
+            item.type === "userMessage" ||
+            (item.type === "agentMessage" &&
+              (index !== 3 || status === "completed")),
+        ).map((item) => ({ ...item, id: `${item.id}-${index}` })),
+      }));
+      const markup = renderToStaticMarkup(
+        <Transcript
+          {...labels}
+          locale="en"
+          mode="code"
+          streamingText={
+            status === "inProgress" ? "Working on the next reply" : ""
+          }
+          thread={{ ...thread, turns }}
+          onModeChange={vi.fn()}
+          onStop={vi.fn()}
+        />,
+      );
+      const actionBars = Array.from(
+        markup.matchAll(
+          /class="message-actions" data-user="(true|false)" data-visibility="([^"]+)"/g,
+        ),
+        (match) => [match[1], match[2]],
+      );
+      expect(actionBars.filter(([user]) => user === "true")).toEqual([
+        ["true", "on-hover"],
+        ["true", "on-hover"],
+        ["true", "on-hover"],
+      ]);
+      expect(actionBars.filter(([user]) => user === "false")).toEqual(
+        status === "completed"
+          ? [
+              ["false", "on-hover"],
+              ["false", "on-hover"],
+              ["false", "always"],
+            ]
+          : [
+              ["false", "on-hover"],
+              ["false", "always"],
+            ],
+      );
+      expect(markup).not.toContain('aria-label="Regenerate"');
+    },
+  );
+
   it("renders an accessible spinner without visible copy while messages load", () => {
     const markup = renderToStaticMarkup(
       <Transcript
@@ -434,7 +490,11 @@ describe("Transcript", () => {
         locale="en"
         mode="code"
         streamingText=""
-        thread={{ ...thread, turns: [] }}
+        thread={{
+          ...thread,
+          status: { type: "notLoaded" },
+          turns: [],
+        }}
         onModeChange={vi.fn()}
         onStop={vi.fn()}
       />,
@@ -444,6 +504,23 @@ describe("Transcript", () => {
     expect(markup).toContain('aria-label="Loading messages"');
     expect(markup).not.toContain(">Loading messages<");
     expect(markup).toMatchSnapshot();
+  });
+
+  it("does not leave a hydrated empty thread in a loading state", () => {
+    const markup = renderToStaticMarkup(
+      <Transcript
+        {...labels}
+        locale="en"
+        mode="code"
+        streamingText=""
+        thread={{ ...thread, status: { type: "idle" }, turns: [] }}
+        onModeChange={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(markup).not.toContain('class="message-loading-state"');
+    expect(markup).toContain('aria-busy="false"');
   });
 
   it("follows thread changes and near-bottom updates without fighting manual scroll", () => {
@@ -471,6 +548,27 @@ describe("Transcript", () => {
         isThreadChange: false,
       }),
     ).toBe(false);
+  });
+
+  it("pauses automatic following while an inline message editor is open", () => {
+    for (const isNearBottom of [true, false]) {
+      for (const isThreadChange of [true, false]) {
+        expect(
+          shouldFollowTranscriptUpdate({
+            isNearBottom,
+            isThreadChange,
+            isEditingMessage: true,
+          }),
+        ).toBe(false);
+      }
+    }
+    expect(
+      shouldFollowTranscriptUpdate({
+        isNearBottom: true,
+        isThreadChange: false,
+        isEditingMessage: false,
+      }),
+    ).toBe(true);
   });
 
   it("tracks streaming and live tool result changes for transcript follow", () => {
@@ -539,7 +637,7 @@ describe("Transcript", () => {
   });
 
   it("renders user, command, file change, and streaming messages", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderExpandedTranscript(
       <Transcript
         {...labels}
         locale="en"
@@ -567,8 +665,8 @@ describe("Transcript", () => {
     expect(markup).toContain('class="message" data-kind="commandExecution"');
     expect(markup).toContain('class="message" data-kind="fileChange"');
     expect(markup).toContain('class="turn-process-details"');
-    expect(markup).toContain('data-state="collapsed"');
-    expect(markup).toContain('aria-expanded="false"');
+    expect(markup).toContain('data-state="expanded"');
+    expect(markup).toContain('aria-expanded="true"');
     expect(markup).toContain("Processed");
     expect(markup).toContain("2s");
     expect(markup).not.toContain("Run process");
@@ -689,7 +787,7 @@ describe("Transcript", () => {
   });
 
   it("keeps interim agent messages interleaved with their tool actions", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderExpandedTranscript(
       <Transcript
         {...labels}
         locale="en"
@@ -707,6 +805,7 @@ describe("Transcript", () => {
     expect(markup).toContain("I will inspect the app entry first.");
     expect(markup).toContain("I will verify the app state flow next.");
     expect(markup).toContain("Final architecture summary.");
+    expect(markup).toContain('data-message-id="item-agent-final"');
     expect(markup.indexOf("I will inspect the app entry first.")).toBeLessThan(
       markup.indexOf("rg App apps/crewon-ui/src"),
     );
@@ -723,8 +822,97 @@ describe("Transcript", () => {
     ).toBe(1);
   });
 
-  it("snapshots the processed timeline header and grouped tool batches", () => {
+  it("does not label a combined final bubble as one durable message", () => {
+    const combinedFinalThread = {
+      id: "thread-combined-final",
+      name: "Combined final",
+      turns: [
+        {
+          id: "turn-combined-final",
+          status: "completed",
+          items: [
+            {
+              id: "message-user-combined-final",
+              type: "userMessage",
+              content: [{ type: "text", text: "Summarize both parts." }],
+            },
+            {
+              id: "message-final-part-1",
+              type: "agentMessage",
+              text: "First final part.",
+              phase: "final_answer",
+              memoryCitation: null,
+            },
+            {
+              id: "message-final-part-2",
+              type: "agentMessage",
+              text: "Second final part.",
+              phase: "final_answer",
+              memoryCitation: null,
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+
     const markup = renderToStaticMarkup(
+      <Transcript
+        {...labels}
+        locale="en"
+        mode="code"
+        streamingText=""
+        thread={combinedFinalThread}
+        onModeChange={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("First final part.");
+    expect(markup).toContain("Second final part.");
+    expect(markup).not.toContain("data-message-id");
+  });
+
+  it("does not label an in-progress final item as the durable final message", () => {
+    const inProgressFinalThread = {
+      id: "thread-in-progress-final",
+      name: "In-progress final",
+      turns: [
+        {
+          id: "turn-in-progress-final",
+          status: "inProgress",
+          items: [
+            {
+              id: "message-in-progress-final",
+              type: "agentMessage",
+              text: "Final frame received before terminal settlement.",
+              phase: "final_answer",
+              memoryCitation: null,
+            },
+          ],
+        },
+      ],
+    } as unknown as Thread;
+
+    const markup = renderToStaticMarkup(
+      <Transcript
+        {...labels}
+        locale="en"
+        mode="code"
+        streamingText=""
+        thread={inProgressFinalThread}
+        onModeChange={vi.fn()}
+        onStop={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain(
+      "Final frame received before terminal settlement.",
+    );
+    expect(markup).not.toContain("data-message-id");
+  });
+
+  it("snapshots the processed timeline header and grouped tool batches", () => {
+    const markup = renderExpandedTranscript(
       <Transcript
         {...labels}
         locale="en"
@@ -753,7 +941,7 @@ describe("Transcript", () => {
   });
 
   it("omits low-signal reasoning breadcrumbs from the visible process", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderExpandedTranscript(
       <Transcript
         {...labels}
         locale="en"
@@ -819,7 +1007,7 @@ describe("Transcript", () => {
       ],
     } as unknown as Thread;
 
-    const markup = renderToStaticMarkup(
+    const markup = renderExpandedTranscript(
       <Transcript
         {...labels}
         locale="en"
@@ -841,7 +1029,7 @@ describe("Transcript", () => {
   });
 
   it("renders reasoning content when the backend provides displayable thinking", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderExpandedTranscript(
       <Transcript
         {...labels}
         locale="en"
@@ -952,7 +1140,7 @@ describe("Transcript", () => {
   });
 
   it("renders MCP, Skill, and Mermaid output as structured agent dialogue", () => {
-    const markup = renderToStaticMarkup(
+    const markup = renderExpandedTranscript(
       <Transcript
         {...labels}
         locale="en"
@@ -969,7 +1157,7 @@ graph LR
 
     expect(markup).toContain("MCP");
     expect(markup).toContain('class="turn-process-details"');
-    expect(markup).toContain('data-state="collapsed"');
+    expect(markup).toContain('data-state="expanded"');
     expect(markup).toContain(
       '<span class="message-role">MCP</span><span class="message-type">Call</span>',
     );
@@ -1077,7 +1265,7 @@ graph LR
         },
       ],
     } as unknown as Thread;
-    const markup = renderToStaticMarkup(
+    const markup = renderExpandedTranscript(
       <Transcript
         {...labels}
         locale="en"
@@ -1149,7 +1337,7 @@ graph LR
         },
       ],
     } as unknown as Thread;
-    const markup = renderToStaticMarkup(
+    const markup = renderExpandedTranscript(
       <Transcript
         {...labels}
         locale="zh"
@@ -1322,7 +1510,7 @@ graph LR
       ],
     } as unknown as Thread;
 
-    const markup = renderToStaticMarkup(
+    const markup = renderExpandedTranscript(
       <Transcript
         {...labels}
         locale="en"
@@ -1338,7 +1526,7 @@ graph LR
     expect(markup).toContain("docs.lookup");
     expect(markup).toContain("database.query");
     expect(markup).toContain("Structured result");
-    expect(markup).toContain("&quot;rows&quot;: 2");
+    expect(markup).toContain('"rows": 2');
     expect(markup).not.toContain("Empty structured result");
   });
 

@@ -1,3 +1,4 @@
+import { observeModelUsage } from "./model-usage-observer.ts";
 import {
   parseCanonicalAgentEvent,
   parseProviderCheckpoint,
@@ -182,6 +183,15 @@ export class CrewONAgentKernel implements AgentKernelPort {
         const toolCalls: ObservedToolCall[] = [];
         try {
           for await (const event of this.#transport.stream(request, signal, {
+            ...(options?.callSink
+              ? {
+                  callSink: {
+                    record: (observation) =>
+                      options.callSink!.record(observation),
+                    purpose: contract.purpose,
+                  },
+                }
+              : {}),
             controlSink: {
               providerTurnStateObserved: async (providerTurnState) => {
                 let validated: string | null;
@@ -350,20 +360,44 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 }
                 completedItems.push(event.item);
                 break;
-              case "usage":
+              case "usage": {
                 if (usageSeen) {
                   throw new AgentKernelError("model_usage_duplicate", false);
                 }
                 validateUsage(event);
                 usageSeen = true;
-                sequence += 1;
-                yield canonicalEvent(contract, sequence, "usage.recorded", {
+                const usage = {
                   inputTokens: event.inputTokens,
                   cachedInputTokens: event.cachedInputTokens ?? 0,
+                  cachedInputTokensReported:
+                    event.cachedInputTokensReported ??
+                    event.cachedInputTokens !== undefined,
                   outputTokens: event.outputTokens,
                   totalTokens: event.totalTokens,
-                });
+                };
+                try {
+                  await observeModelUsage({
+                    sink: options?.usageSink,
+                    contract,
+                    model: this.modelIdentity,
+                    event,
+                    usage,
+                  });
+                } catch (error) {
+                  // Never retry a Provider call because accounting persistence failed.
+                  controlSinkFailure = { failed: true, value: error };
+                  throw error;
+                }
+                if (event.responseStatus !== undefined) break;
+                sequence += 1;
+                yield canonicalEvent(
+                  contract,
+                  sequence,
+                  "usage.recorded",
+                  usage,
+                );
                 break;
+              }
               case "rate_limit":
                 parseRateLimitSnapshot(event.snapshot);
                 sequence += 1;
@@ -373,6 +407,26 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 break;
               case "transport.fallback": {
                 const discardedOutput = output.length > 0 || reasoningObserved;
+                if (event.inputStrategy !== undefined) {
+                  if (
+                    event.inputStrategy !== "manual" ||
+                    discardedOutput ||
+                    createdCheckpoint !== null ||
+                    completedItems.length > 0 ||
+                    toolCalls.length > 0 ||
+                    usageSeen ||
+                    request.reconcileCheckpoint !== undefined
+                  ) {
+                    throw new AgentKernelError(
+                      "model_transport_input_fallback_invalid",
+                      false,
+                    );
+                  }
+                  request = {
+                    ...request,
+                    input: { strategy: "manual", items: request.input.items },
+                  };
+                }
                 if (event.discardedOutput !== discardedOutput) {
                   throw new AgentKernelError(
                     "model_transport_fallback_discard_invalid",
@@ -404,7 +458,7 @@ export class CrewONAgentKernel implements AgentKernelPort {
                 reasoningObserved = false;
                 usageSeen = false;
                 toolCalls.length = 0;
-                retries = 0;
+                if (event.inputStrategy === undefined) retries = 0;
                 break;
               }
               case "tool.call":
@@ -1086,7 +1140,9 @@ function validateCheckpoint(
 }
 
 function validateDelta(delta: string): void {
-  requireNonEmpty(delta, "model_output_delta_invalid");
+  if (typeof delta !== "string" || delta.length === 0) {
+    throw new AgentKernelError("model_output_delta_invalid", false);
+  }
   if (byteLength(delta) > MAX_DELTA_BYTES) {
     throw new AgentKernelError("model_output_delta_too_large", false);
   }
@@ -1094,7 +1150,9 @@ function validateDelta(delta: string): void {
 
 function validateReasoningDelta(delta: string, index: number): void {
   validateReasoningIndex(index);
-  requireNonEmpty(delta, "model_reasoning_delta_invalid");
+  if (typeof delta !== "string" || delta.length === 0) {
+    throw new AgentKernelError("model_reasoning_delta_invalid", false);
+  }
   if (byteLength(delta) > MAX_DELTA_BYTES) {
     throw new AgentKernelError("model_reasoning_delta_too_large", false);
   }
@@ -1109,6 +1167,18 @@ function validateReasoningIndex(index: number): void {
 function validateUsage(
   event: Extract<ModelTransportEvent, { type: "usage" }>,
 ): void {
+  if (
+    (event.cachedInputTokens !== undefined &&
+      !Number.isSafeInteger(event.cachedInputTokens)) ||
+    (event.cachedInputTokensReported !== undefined &&
+      typeof event.cachedInputTokensReported !== "boolean") ||
+    (event.cachedInputTokensReported === true &&
+      event.cachedInputTokens === undefined) ||
+    (event.cachedInputTokensReported === false &&
+      (event.cachedInputTokens ?? 0) !== 0)
+  ) {
+    throw new AgentKernelError("model_usage_cache_reporting_invalid", false);
+  }
   for (const value of [
     event.inputTokens,
     event.cachedInputTokens ?? 0,

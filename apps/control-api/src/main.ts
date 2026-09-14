@@ -1,3 +1,4 @@
+import { DEFAULT_OUTBOX_RETENTION } from "./outbox-retention-maintenance.ts";
 import type { AddressInfo } from "node:net";
 
 import {
@@ -57,6 +58,7 @@ if (securityMode === "production" && connectionString === undefined) {
 const artifactEncryptionKeyId = requiredEnvironment(
   "CREWON_ARTIFACT_ENCRYPTION_KEY_ID",
 );
+const artifactRetention = configuredArtifactRetention(process.env.CREWON_ARTIFACT_RETENTION);
 const artifactStore = new FilesystemArtifactStore({
   rootDirectory: requiredEnvironment("CREWON_ARTIFACT_ROOT"),
   databasePath: requiredEnvironment("CREWON_ARTIFACT_DB_PATH"),
@@ -66,6 +68,11 @@ const artifactStore = new FilesystemArtifactStore({
   keyId: artifactEncryptionKeyId,
 });
 const sharedConfig = {
+  artifactRetention,
+  localStoragePaths: [
+    requiredEnvironment("CREWON_ARTIFACT_ROOT"),
+    requiredEnvironment("CREWON_ARTIFACT_DB_PATH"),
+  ],
   artifactStore,
   artifactEncryptionKeyId,
   ...(sandbox === undefined ? {} : { sandbox }),
@@ -73,6 +80,13 @@ const sharedConfig = {
     process.env.CREWON_OUTBOX_SCAN_INTERVAL_MS ?? "1000",
     "CREWON_OUTBOX_SCAN_INTERVAL_MS_invalid",
   ),
+  outboxRetention: process.env.CREWON_OUTBOX_RETENTION_MS === "off" ? null : {
+    ...DEFAULT_OUTBOX_RETENTION,
+    retentionMs: parsePositiveInteger(
+      process.env.CREWON_OUTBOX_RETENTION_MS ?? String(DEFAULT_OUTBOX_RETENTION.retentionMs),
+      "CREWON_OUTBOX_RETENTION_MS_invalid",
+    ),
+  },
   automationScanIntervalMs: parsePositiveInteger(
     process.env.CREWON_AUTOMATION_SCAN_INTERVAL_MS ?? "1000",
     "CREWON_AUTOMATION_SCAN_INTERVAL_MS_invalid",
@@ -300,3 +314,4 @@ function configuredPimSandbox(
     ),
   });
 }
+import { configuredArtifactRetention } from "./artifact-retention-maintenance.ts";

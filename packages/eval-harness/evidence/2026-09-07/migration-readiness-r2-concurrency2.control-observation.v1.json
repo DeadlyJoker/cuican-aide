@@ -1,0 +1,115 @@
+[
+  {
+    "schemaVersion": "crewon.control-team-gui-observation.v1",
+    "collector": "crewon-ui-control-sse-v1",
+    "threadId": "01a07b20-1b71-733a-be58-2b5435411aa0",
+    "startedAt": "2026-09-07T09:08:17.206Z",
+    "updatedAt": "2026-09-07T09:08:50.583Z",
+    "complete": true,
+    "runs": [
+      {
+        "phaseIndex": 0,
+        "kind": "worker",
+        "memberId": "member-2",
+        "agentVersionId": "local-web-601282043bb1db5765dfa973-planner",
+        "runId": "01a07b20-1cb0-7089-80b8-b80fe6ecb8d8",
+        "runThreadId": "01a07b20-1c8e-773c-a372-780b600c8235",
+        "recoveredMemberId": null,
+        "acceptedAt": "2026-09-07T09:08:17.206Z",
+        "createdAt": "2026-09-07T09:08:17.200Z",
+        "controlSse": {
+          "firstDeltaMs": 5355,
+          "maxDeltaGapMs": 1032,
+          "reconnectCount": 0,
+          "outputChunkCount": 438
+        },
+        "signals": {
+          "samplingRetryCount": 0,
+          "transportFallbackCount": 0,
+          "providerContinuationCount": 0
+        },
+        "usage": {
+          "inputTokens": 1354,
+          "outputTokens": 517,
+          "totalTokens": 1871
+        },
+        "terminal": {
+          "status": "completed",
+          "sequence": 445,
+          "occurredAt": "2026-09-07T09:08:31.557Z"
+        }
+      },
+      {
+        "phaseIndex": 0,
+        "kind": "worker",
+        "memberId": "member-3",
+        "agentVersionId": "local-web-601282043bb1db5765dfa973-verifier",
+        "runId": "01a07b20-1cb6-768b-8dcb-a437f57f17c1",
+        "runThreadId": "01a07b20-1c91-757d-bff9-2159f27dace0",
+        "recoveredMemberId": null,
+        "acceptedAt": "2026-09-07T09:08:17.208Z",
+        "createdAt": "2026-09-07T09:08:17.206Z",
+        "controlSse": {
+          "firstDeltaMs": 11374,
+          "maxDeltaGapMs": 2016,
+          "reconnectCount": 0,
+          "outputChunkCount": 450
+        },
+        "signals": {
+          "samplingRetryCount": 0,
+          "transportFallbackCount": 0,
+          "providerContinuationCount": 0
+        },
+        "usage": {
+          "inputTokens": 1367,
+          "outputTokens": 554,
+          "totalTokens": 1921
+        },
+        "terminal": {
+          "status": "completed",
+          "sequence": 457,
+          "occurredAt": "2026-09-07T09:08:37.296Z"
+        }
+      },
+      {
+        "phaseIndex": 1,
+        "kind": "managerFinal",
+        "memberId": "member-1",
+        "agentVersionId": "local-web-601282043bb1db5765dfa973",
+        "runId": "01a07b20-6b83-772a-b206-9291486987c3",
+        "runThreadId": "01a07b20-1b71-733a-be58-2b5435411aa0",
+        "recoveredMemberId": null,
+        "acceptedAt": "2026-09-07T09:08:37.383Z",
+        "createdAt": "2026-09-07T09:08:37.379Z",
+        "controlSse": {
+          "firstDeltaMs": 13200,
+          "maxDeltaGapMs": 0,
+          "reconnectCount": 0,
+          "outputChunkCount": 2
+        },
+        "signals": {
+          "samplingRetryCount": 0,
+          "transportFallbackCount": 0,
+          "providerContinuationCount": 0
+        },
+        "usage": {
+          "inputTokens": 2492,
+          "outputTokens": 535,
+          "totalTokens": 3027
+        },
+        "terminal": {
+          "status": "completed",
+          "sequence": 9,
+          "occurredAt": "2026-09-07T09:08:50.358Z"
+        }
+      }
+    ],
+    "summary": {
+      "modelRunCount": 3,
+      "logicalPhaseCount": 2,
+      "workerRecoveryRunCount": 0,
+      "settledDurationMs": 33158,
+      "finalOutputFirstDeltaFromFirstRunAcceptedMs": 33377
+    }
+  }
+]

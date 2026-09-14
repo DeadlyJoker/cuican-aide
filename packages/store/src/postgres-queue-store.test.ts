@@ -43,7 +43,7 @@ test(
         `SELECT version FROM ${fixture.schemaSql}.schema_migrations
          WHERE component = 'durable_queue'`,
       );
-      assert.equal(version.rows[0]?.version, 1);
+      assert.equal(version.rows[0]?.version, 2);
 
       const messages = [outbox("outbox-1"), outbox("outbox-2")];
       await Promise.all(
@@ -77,7 +77,7 @@ test(
       assert.deepEqual(await fixture.first.listPendingOutbox(10), []);
 
       await fixture.admin.query(
-        `UPDATE ${fixture.schemaSql}.schema_migrations SET version = 2
+        `UPDATE ${fixture.schemaSql}.schema_migrations SET version = 3
          WHERE component = 'durable_queue'`,
       );
       await assert.rejects(

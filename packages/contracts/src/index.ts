@@ -17,6 +17,9 @@ export * from "./device-dispatch-api.ts";
 export * from "./device-dispatch-api-schema.ts";
 export * from "./contract-validation-error.ts";
 export * from "./control-api-contract.ts";
+export * from "./thread-message-window-contract.ts";
+export * from "./thread-transcript-window-contract.ts";
+export * from "./thread-catalog-contract.ts";
 export * from "./provider-checkpoint.ts";
 export * from "./rate-limits.ts";
 export * from "./run-contract.ts";
@@ -24,3 +27,5 @@ export * from "./office-control-contract.ts";
 export * from "./runtime-worker-workspace-api.ts";
 export * from "./workspace-list-control-contract.ts";
 export * from "./workspace-changes.ts";
+
+export * from "./thread-active-run-contract.ts";

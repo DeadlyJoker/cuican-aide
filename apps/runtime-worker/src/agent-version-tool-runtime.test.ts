@@ -38,13 +38,53 @@ test("scopes an additive runtime to the exact historical Tool catalog", async ()
   });
   assert.equal(scoped.executionPolicy("function", "read_file"), null);
   await scoped.execute(command("existing_tool"), signal());
+  const reservation = scoped.reserveExecution?.(
+    command("existing_tool"),
+    signal(),
+  );
+  assert.ok(reservation !== undefined);
+  reservation.release();
+  assert.equal(
+    scoped.readRetainedExecutionResult?.(command("existing_tool")),
+    null,
+  );
+  assert.throws(
+    () => scoped.readRetainedExecutionResult?.(command("read_file")),
+    ToolBrokerError,
+  );
+  assert.throws(
+    () => scoped.reserveExecution?.(command("read_file"), signal()),
+    ToolBrokerError,
+  );
+  scoped.acknowledgeExecutionResult?.({
+    ...command("existing_tool"),
+    status: "canceled",
+    providerReceiptId: null,
+  });
   assert.throws(
     () => scoped.execute(command("read_file"), signal()),
     (error) =>
       error instanceof ToolBrokerError &&
       error.code === "agent_version_tool_not_configured",
   );
-  assert.deepEqual(calls, ["existing_tool"]);
+  assert.throws(
+    () =>
+      scoped.acknowledgeExecutionResult?.({
+        ...command("read_file"),
+        status: "canceled",
+        providerReceiptId: null,
+      }),
+    (error) =>
+      error instanceof ToolBrokerError &&
+      error.code === "agent_version_tool_not_configured",
+  );
+  assert.deepEqual(calls, [
+    "existing_tool",
+    "reserve:existing_tool",
+    "release:existing_tool",
+    "read:existing_tool",
+    "acknowledge:existing_tool",
+  ]);
 });
 
 test("fails closed when a historical Tool implementation is absent or drifts", () => {
@@ -97,11 +137,31 @@ function runtimeOf(
         providerReceiptId: null,
       };
     },
+    reserveExecution(command) {
+      calls.push(`reserve:${command.name}`);
+      return {
+        execute: async () => ({
+          status: "canceled" as const,
+          executionId: command.executionId,
+          providerReceiptId: null,
+        }),
+        release: () => {
+          calls.push(`release:${command.name}`);
+        },
+      };
+    },
     async reconcile(command) {
       return this.execute(command, signal());
     },
     async cancel(command) {
       return this.execute(command, signal());
+    },
+    acknowledgeExecutionResult(acknowledgement) {
+      calls.push(`acknowledge:${acknowledgement.actionIntent.tool.name}`);
+    },
+    readRetainedExecutionResult(lookup) {
+      calls.push(`read:${lookup.actionIntent.tool.name}`);
+      return null;
     },
   };
 }
@@ -127,6 +187,7 @@ function command(name: string): ToolExecutionCommand {
     kind: "function",
     name,
     executionId: `execution-${name}`,
+    actionIntent: { tool: { kind: "function", name } },
   } as ToolExecutionCommand;
 }
 

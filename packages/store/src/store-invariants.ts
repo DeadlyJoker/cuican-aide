@@ -1,3 +1,4 @@
+import { ApplicationError, validateThreadListSelection } from "@crewon/application";
 import {
   MESSAGE_ROLES,
   MAX_AUTOMATION_INSTRUCTION_BYTES,
@@ -2976,6 +2977,12 @@ export function validateThreadScopedLocator(
 }
 
 export function validateThreadListQuery(query: ThreadListQuery): void {
+  try {
+    validateThreadListSelection(query);
+  } catch (error) {
+    if (error instanceof ApplicationError) throw new RunStoreError(error.code);
+    throw error;
+  }
   requireNonEmpty(query.tenantId, "tenant_id_invalid");
   requireNonEmpty(query.spaceId, "space_id_invalid");
   validateLimit(query.limit);

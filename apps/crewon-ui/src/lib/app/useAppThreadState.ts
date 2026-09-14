@@ -1,17 +1,20 @@
 import {
   useCallback,
-  useEffect,
+  useMemo,
+  useReducer,
   useRef,
   useState,
   type Dispatch,
   type SetStateAction,
 } from "react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
-
 import {
-  createStreamingTextBuffer,
-  type StreamingTextByThread,
-} from "../thread/threadStreamingTextBuffer";
+  createThreadCollectionReducer,
+  initialThreadCollection,
+  materializeThreads,
+} from "../thread/threadDetailCache";
+
+import { useStreamingTextState } from "../thread/useStreamingTextState";
 
 export function useAppThreadState() {
   const [showArchivedThreads, setShowArchivedThreads] = useState(false);
@@ -19,58 +22,46 @@ export function useAppThreadState() {
   const [threadSearchTerm, setThreadSearchTerm] = useState("");
   const [isSearchingThreads, setIsSearchingThreads] = useState(false);
   const [loadedThreadIds, setLoadedThreadIds] = useState<string[]>([]);
-  const [threads, setThreads] = useState<Thread[]>([]);
+  const reducerRef = useRef<ReturnType<
+    typeof createThreadCollectionReducer
+  > | null>(null);
+  if (reducerRef.current === null)
+    reducerRef.current = createThreadCollectionReducer();
+  const [collection, dispatch] = useReducer(
+    reducerRef.current,
+    undefined,
+    initialThreadCollection,
+  );
+  const threads = useMemo(() => materializeThreads(collection), [collection]);
+  const { selectedThreadId, activeTurnByThread } = collection;
+  const setThreads: Dispatch<SetStateAction<Thread[]>> = useCallback(
+    (update) => {
+      dispatch({ type: "threads", update });
+    },
+    [],
+  );
+  const setThreadCatalogPage = useCallback((threads: readonly Thread[]) => {
+    dispatch({ type: "catalogPage", threads });
+  }, []);
+  const setSelectedThreadId: Dispatch<SetStateAction<string | null>> =
+    useCallback((update) => {
+      dispatch({ type: "selection", update });
+    }, []);
+  const setActiveTurnByThread: Dispatch<
+    SetStateAction<Record<string, string>>
+  > = useCallback((update) => {
+    dispatch({ type: "activeTurns", update });
+  }, []);
   const threadsRef = useRef<Thread[]>([]);
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null);
   const selectedThreadIdRef = useRef<string | null>(null);
-  const [activeTurnByThread, setActiveTurnByThread] = useState<
-    Record<string, string>
-  >({});
   const activeTurnByThreadRef = useRef<Record<string, string>>({});
   activeTurnByThreadRef.current = activeTurnByThread;
-  const [streamingTextByThread, setStreamingTextByThreadState] =
-    useState<StreamingTextByThread>({});
-  const streamingTextBufferRef = useRef<ReturnType<
-    typeof createStreamingTextBuffer
-  > | null>(null);
-
-  if (streamingTextBufferRef.current === null) {
-    streamingTextBufferRef.current = createStreamingTextBuffer(
-      setStreamingTextByThreadState,
-    );
-  }
-
-  const setStreamingTextByThread: Dispatch<
-    SetStateAction<StreamingTextByThread>
-  > = useCallback((next) => {
-    streamingTextBufferRef.current?.clearPending();
-    setStreamingTextByThreadState(next);
-  }, []);
-
-  const appendStreamingTextDelta = useCallback(
-    (threadId: string, delta: string) => {
-      streamingTextBufferRef.current?.append(threadId, delta);
-    },
-    [],
-  );
-
-  const waitForStreamingTextDrain = useCallback((threadId: string) => {
-    return (
-      streamingTextBufferRef.current?.whenDrained(threadId) ?? Promise.resolve()
-    );
-  }, []);
-
-  useEffect(
-    () => () => {
-      streamingTextBufferRef.current?.dispose();
-    },
-    [],
-  );
+  const streamingState = useStreamingTextState(selectedThreadId);
 
   return {
+    ...streamingState,
     activeTurnByThread,
     activeTurnByThreadRef,
-    appendStreamingTextDelta,
     isSearchingThreads,
     loadedThreadIds,
     selectedThreadId,
@@ -80,15 +71,15 @@ export function useAppThreadState() {
     setLoadedThreadIds,
     setSelectedThreadId,
     setShowArchivedThreads,
-    setStreamingTextByThread,
     setThreadSearchTerm,
+    setThreadCatalogPage,
     setThreads,
     showArchivedThreads,
     showArchivedThreadsRef,
-    streamingTextByThread,
     threadSearchTerm,
+    threadDetailCacheUsage: collection.usage,
+    threadCatalogIds: collection.catalogIds,
     threads,
     threadsRef,
-    waitForStreamingTextDrain,
   };
 }

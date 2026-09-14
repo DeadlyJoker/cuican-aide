@@ -5,6 +5,8 @@ import type {
   ModelContextProjection,
 } from "@crewon/context";
 
+import type { AgentExecutionAuthority } from "./agent-version-runtime.ts";
+
 export type CurrentModelRuntime = Readonly<{
   agentVersionId: string;
   adapterName: string;
@@ -22,6 +24,7 @@ export type ModelSwitchCompactionDecision =
     }>;
 
 export type PriorModelCompactionRuntime = Readonly<{
+  executionAuthority: AgentExecutionAuthority;
   compactor: ContextCompactorPort;
   governedContext?: GovernedContextBundle;
 }>;

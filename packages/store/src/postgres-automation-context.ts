@@ -437,7 +437,10 @@ async function loadOutbox(
 ): Promise<OutboxMessage | null> {
   const result = await client.query<PostgresQueueItemRow>(
     `SELECT tenant_id, run_id, topic, message_json AS item_json, created_at
-     FROM ${schema}.outbox WHERE message_id=$1`,
+     FROM ${schema}.outbox WHERE message_id=$1
+     UNION ALL SELECT tenant_id, run_id, replay_message_json->>'topic' AS topic,
+       replay_message_json AS item_json, (replay_message_json->>'createdAt')::timestamptz AS created_at
+     FROM ${schema}.outbox_deduplication WHERE message_id=$1 AND replay_message_json IS NOT NULL`,
     [messageId],
   );
   return result.rows[0] === undefined

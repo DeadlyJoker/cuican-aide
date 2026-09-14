@@ -1,0 +1,68 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`ComposerExecutionIntentControl > preserves compact, theme-aware selected chips and visible keyboard focus 1`] = `
+".screen-shell.command-screen .composer-intent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 4px 0 9px;
+  border: 1px solid color-mix(in oklch, var(--accent) 34%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--accent) 16%, var(--n-0));
+  color: var(--n-950);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  white-space: nowrap;
+}
+.screen-shell.command-screen .composer-intent-chip svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.screen-shell.command-screen .input-tools .composer-intent-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  min-height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.screen-shell.command-screen .composer-intent-chip button:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--accent) 18%, transparent);
+}
+.screen-shell.command-screen .composer-intent-chip button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.screen-shell.command-screen .composer-intent-chip button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.screen-shell.command-screen .composer-intent-error {
+  max-width: 100%;
+  color: var(--danger);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  overflow-wrap: anywhere;
+}
+.screen-shell.command-screen .composer-intent-chip[data-blocked] {
+  border-color: var(--danger);
+}
+.screen-shell.command-screen
+  .add-palette
+  .context-list
+  .add-palette-item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: transparent;
+}
+"
+`;
+
+exports[`ComposerExecutionIntentControl > shows only the selected goal with an explicit remove action 1`] = `"<span aria-label="执行方式：目标" class="composer-intent-chip" data-execution-intent="goal" title="发送后创建或更新目标，持续推进"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-target" aria-hidden="true"><circle cx="12" cy="12" r="10"></circle><circle cx="12" cy="12" r="6"></circle><circle cx="12" cy="12" r="2"></circle></svg><span>目标</span><button aria-label="取消目标" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></span>"`;
+
+exports[`ComposerExecutionIntentControl > shows only the selected plan with an explicit remove action 1`] = `"<span aria-label="执行方式：计划" class="composer-intent-chip" data-execution-intent="plan" title="本次发送先制定计划，不执行写操作"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-list-checks" aria-hidden="true"><path d="m3 17 2 2 4-4"></path><path d="m3 7 2 2 4-4"></path><path d="M13 6h8"></path><path d="M13 12h8"></path><path d="M13 18h8"></path></svg><span>计划</span><button aria-label="取消计划" type="button"><svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x" aria-hidden="true"><path d="M18 6 6 18"></path><path d="m6 6 12 12"></path></svg></button></span>"`;

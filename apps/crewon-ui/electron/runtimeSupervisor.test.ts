@@ -4,7 +4,10 @@ import { EventEmitter } from "node:events";
 import { describe, expect, it } from "vitest";
 
 import {
+  RuntimeSupervisor,
+  agentPlatformRuntimeEnvironments,
   bindDesktopWorkspaceEnvironment,
+  cloudAgentProfilesOrigin,
   cloudAgentRuntimeVersionId,
   desktopRuntimeFingerprint,
   selectDesktopRuntimeModelCatalog,
@@ -13,6 +16,94 @@ import {
 } from "./runtimeSupervisor.ts";
 
 describe("desktop runtime identity", () => {
+  it("injects the Agent Platform key only into a cloned worker environment", () => {
+    const ambientEnvironment: NodeJS.ProcessEnv = {
+      CREWON_AGENT_PLATFORM_API_KEY: "wrong-ambient-key",
+      CREWON_MODEL_API_KEY: "model-provider-key",
+    };
+
+    const { sharedEnvironment, workerEnvironment } =
+      agentPlatformRuntimeEnvironments(
+        ambientEnvironment,
+        "bpk_agent-open-key",
+      );
+
+    expect(ambientEnvironment.CREWON_AGENT_PLATFORM_API_KEY).toBe(
+      "wrong-ambient-key",
+    );
+    expect(sharedEnvironment.CREWON_AGENT_PLATFORM_API_KEY).toBeUndefined();
+    expect(workerEnvironment).toEqual({
+      CREWON_AGENT_PLATFORM_API_KEY: "bpk_agent-open-key",
+      CREWON_MODEL_API_KEY: "model-provider-key",
+    });
+  });
+
+  it("requires one secure origin for an atomic cloud Agent profile set", () => {
+    const profile = {
+      agentVersionId: "agent-platform:93",
+      instructions: "Help with procurement.",
+      invocationUrl: "https://platform.example/api/v1/open/agent/93/chat",
+      modelId: "gpt-5.5",
+      agentId: 93,
+    } as const;
+
+    expect(cloudAgentProfilesOrigin([profile])).toBe(
+      "https://platform.example",
+    );
+    expect(() =>
+      cloudAgentProfilesOrigin([
+        profile,
+        {
+          ...profile,
+          agentId: 94,
+          invocationUrl:
+            "https://credential-collector.example/api/v1/open/agent/94/chat",
+        },
+      ]),
+    ).toThrow("cloud_agent_profile_origin_mismatch");
+    expect(() =>
+      cloudAgentProfilesOrigin([
+        { ...profile, invocationUrl: "http://platform.example/chat" },
+      ]),
+    ).toThrow("cloud_agent_profile_invocation_url_invalid");
+  });
+
+  it("rejects cloud profiles before restart when their origin has no key", async () => {
+    const requestedOrigins: string[] = [];
+    const supervisor = new RuntimeSupervisor({
+      agentPlatformApiKeyForOrigin: (origin) => {
+        requestedOrigins.push(origin);
+        return null;
+      },
+      dataDirectory: "/unused",
+      paths: {
+        control: "/unused/control",
+        modelCatalog: "/unused/catalog",
+        release: "/unused/release",
+        worker: "/unused/worker",
+        workspaceMcp: "/unused/mcp",
+        source: false,
+      },
+      repositoryRoot: null,
+      provider: () => null,
+      providerModelCatalog: async () => null,
+      workspaceRoot: () => null,
+    });
+
+    await expect(
+      supervisor.updateCloudAgentProfiles([
+        {
+          agentVersionId: "agent-platform:93",
+          instructions: "Help with procurement.",
+          invocationUrl: "https://platform.example/api/v1/open/agent/93/chat",
+          modelId: "gpt-5.5",
+          agentId: 93,
+        },
+      ]),
+    ).rejects.toThrow("agent_platform_api_key_missing");
+    expect(requestedOrigins).toEqual(["https://platform.example"]);
+  });
+
   it("binds the selected workspace independently from the read-only MCP", () => {
     const environment: NodeJS.ProcessEnv = {
       CREWON_DESKTOP_WORKSPACE_ROOT: "/stale/workspace",
@@ -118,7 +209,7 @@ describe("desktop runtime identity", () => {
     } as const;
     const first = cloudAgentRuntimeVersionId(profile, "runtime-a");
 
-    expect(first).toMatch(/^agent-platform:93:[a-f0-9]{32}$/u);
+    expect(first).toBe("agent-platform:93:cd85b99f51c01c85ed8b99306a5c4a40");
     expect(cloudAgentRuntimeVersionId(profile, "runtime-a")).toBe(first);
     expect(
       cloudAgentRuntimeVersionId(

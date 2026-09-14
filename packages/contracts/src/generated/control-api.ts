@@ -792,6 +792,74 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/threads/{threadId}/message-window": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read a bounded standard-view message window in ascending order. Without a cursor returns the newest messages. Cursors are exclusive, thread-scoped and revision-bound; a concurrent append or rollback returns 409. A page may split a logical turn. No audit data is included. */
+    get: operations["getThreadMessageWindow"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/thread-catalog": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Bounded live catalog, newest first. Scans at most limit candidates and returns literal Unicode lowercase display-title matches. Empty data with a cursor is not end-of-search. Cursors bind status, search and excludeForks. Concurrent changes can move rows; refresh starts at the current head. Existing /threads semantics are unchanged. */
+    get: operations["getThreadCatalog"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/active-run": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Read the current non-terminal Run independently of history pagination */
+    get: operations["getThreadActiveRun"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/threads/{threadId}/transcript-window": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** @description Read one revision-bound message window and its exact Run bindings from immutable admission receipts and completion events. Requires thread:read and run:read for each referenced Run. Missing legacy evidence is explicitly unassociated; timestamps are never used to infer a Run. A page may begin or end within a logical turn. */
+    get: operations["getThreadTranscriptWindow"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -800,6 +868,8 @@ export interface components {
       memberId: string;
       displayName: string;
       agentVersionId: string;
+      /** @description Optional immutable responsibility used to coordinate this Office member without an extra planning round. */
+      responsibility?: string;
     };
     OfficeExecutionTarget: {
       targetId: string;
@@ -995,6 +1065,8 @@ export interface components {
     ThreadView: {
       threadId: string;
       title: string | null;
+      /** @description Optional bounded display-only fallback for historical unnamed conversations. Not an authoritative title or a thread revision change. */
+      displayTitle?: string;
       status: components["schemas"]["ThreadStatus"];
       revision: number;
       lastMessageSequence: number;
@@ -2022,6 +2094,43 @@ export interface components {
       credentialKind: components["schemas"]["ModelProviderCredentialKind"];
       environmentVariable: string | null;
       isActive: boolean;
+    };
+    GetThreadMessageWindowResponse: {
+      /** @constant */
+      schemaVersion: "crewon.message-window.v0";
+      threadId: string;
+      threadRevision: number;
+      eventSequence: number;
+      headMessageSequence: number;
+      data: components["schemas"]["MessageView"][];
+      olderCursor: string | null;
+      newerCursor: string | null;
+    };
+    ThreadCatalogResponse: {
+      /** @constant */
+      schemaVersion: "crewon.thread-catalog.v0";
+      data: components["schemas"]["ThreadView"][];
+      scannedCount: number;
+      olderCursor: string | null;
+      newerCursor: string | null;
+    };
+    GetThreadActiveRunResponse: {
+      /** @constant */
+      schemaVersion: "crewon.thread-active-run.v0";
+      threadId: string;
+      run: components["schemas"]["RunView"] | null;
+    };
+    GetThreadTranscriptWindowResponse: {
+      /** @constant */
+      schemaVersion: "crewon.transcript-window.v0";
+      messageWindow: components["schemas"]["GetThreadMessageWindowResponse"];
+      /** @description Exactly one entry per message, in the same order. */
+      runBindings: {
+        messageId: string;
+        runId: string | null;
+        /** @enum {string} */
+        source: "turnStartReceipt" | "messageCompletedEvent" | "unassociated";
+      }[];
     };
   };
   responses: {
@@ -4033,6 +4142,125 @@ export interface operations {
         };
       };
       503: components["responses"]["Error"];
+    };
+  };
+  getThreadMessageWindow: {
+    parameters: {
+      query?: {
+        cursor?: string;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One consistent message window; body size may reduce the requested number of rows. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetThreadMessageWindowResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getThreadCatalog: {
+    parameters: {
+      query?: {
+        cursor?: string;
+        limit?: number;
+        status?: "active" | "archived";
+        search?: string;
+        excludeForks?: boolean;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Bounded catalog with scanned candidate navigation */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ThreadCatalogResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getThreadActiveRun: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Current Run or null; multiple non-terminal Runs fail closed. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetThreadActiveRunResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      500: components["responses"]["Error"];
+    };
+  };
+  getThreadTranscriptWindow: {
+    parameters: {
+      query?: {
+        cursor?: string;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        threadId: components["parameters"]["ThreadId"];
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description One consistent message window; body size may reduce the requested number of rows. */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GetThreadTranscriptWindowResponse"];
+        };
+      };
+      400: components["responses"]["Error"];
+      401: components["responses"]["Error"];
+      403: components["responses"]["Error"];
+      404: components["responses"]["Error"];
+      409: components["responses"]["Error"];
+      500: components["responses"]["Error"];
     };
   };
 }

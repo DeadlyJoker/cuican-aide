@@ -1,4 +1,5 @@
 import type { ToolApprovalState } from "@crewon/domain";
+import { canonicalJson } from "./canonical-json.ts";
 
 import { RunStoreError, type CommitRunInput } from "./run-store-port.ts";
 import type { ReplaceToolApprovalInput } from "./tool-approval-store-port.ts";
@@ -54,7 +55,7 @@ export function validateToolApprovalReplacementReplay(
     current.terminalReasonCode !== "action_replaced" ||
     current.actionDigest !== input.current.actionDigest ||
     existing.status !== "required" ||
-    JSON.stringify(existing) !== JSON.stringify(input.replacement)
+    canonicalJson(existing) !== canonicalJson(input.replacement)
   ) {
     throw new RunStoreError("tool_approval_replacement_replay_mismatch");
   }

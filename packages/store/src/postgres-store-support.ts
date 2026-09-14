@@ -65,6 +65,9 @@ export async function assertPostgresSchemaNotNewer(
 }
 
 export function normalizePostgresError(error: unknown): Error {
+  if (error instanceof Error && (error.message === "run_output_replay_requires_stream_append" || error.message === "outbox_message_conflict")) {
+    return new RunStoreError(error.message, { cause: error });
+  }
   if (
     error instanceof RunStoreError ||
     error instanceof RunLifecycleError ||

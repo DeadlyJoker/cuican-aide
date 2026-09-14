@@ -1,4 +1,9 @@
-export const POSTGRES_EXECUTION_SCHEMA_VERSION = 5;
+import { modelAccountingIndexSql } from "./model-accounting-index.ts";
+import {
+  postgresModelUsageSchemaSql,
+  postgresModelCallSchemaSql,
+} from "./model-usage-schema.ts";
+export const POSTGRES_EXECUTION_SCHEMA_VERSION = 8;
 
 export function postgresExecutionSchemaSql(schema: string): string {
   return `
@@ -166,7 +171,10 @@ export function postgresExecutionSchemaSql(schema: string): string {
     EXCEPTION WHEN duplicate_object THEN NULL;
     END $migration$;
 
+    ${postgresModelUsageSchemaSql(schema)}
+    ${postgresModelCallSchemaSql(schema)}
+    ${modelAccountingIndexSql(true, `${schema}.`)}
     UPDATE ${schema}.schema_migrations
       SET version = ${POSTGRES_EXECUTION_SCHEMA_VERSION}
-      WHERE component = 'execution_authority' AND version BETWEEN 1 AND 4;`;
+      WHERE component = 'execution_authority' AND version BETWEEN 1 AND 7;`;
 }

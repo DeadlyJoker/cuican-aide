@@ -10,17 +10,17 @@
 export const TERMINAL_OUTPUT_CHAR_CAP = 400_000;
 
 export type TerminalOutputStream = {
-  /**
-   * Bumped whenever `text` stops being a pure append (process restart or cap
-   * trim). Consumers reset their view instead of guessing from string prefixes.
-   */
+  /** Bumped on process restart; trimming the retained tail is not a reset. */
   generation: number;
+  /** Absolute UTF-16 offset of the retained text within this generation. */
+  startOffset: number;
   processId: string | null;
   text: string;
 };
 
 export const emptyTerminalOutputStream: TerminalOutputStream = {
   generation: 0,
+  startOffset: 0,
   processId: null,
   text: "",
 };
@@ -36,7 +36,12 @@ export function startTerminalOutputStream(
   if (stream.processId === processId) {
     return stream;
   }
-  return { generation: stream.generation + 1, processId, text: "" };
+  return {
+    generation: stream.generation + 1,
+    startOffset: 0,
+    processId,
+    text: "",
+  };
 }
 
 /**
@@ -51,15 +56,7 @@ export function appendTerminalOutputChunk(
   if (stream.processId !== processId || !chunk) {
     return stream;
   }
-  const text = `${stream.text}${chunk}`;
-  if (text.length <= TERMINAL_OUTPUT_CHAR_CAP) {
-    return { ...stream, text };
-  }
-  return {
-    generation: stream.generation + 1,
-    processId,
-    text: text.slice(text.length - TERMINAL_OUTPUT_CHAR_CAP),
-  };
+  return appendBoundedText(stream, chunk);
 }
 
 /**
@@ -74,5 +71,21 @@ export function appendTerminalOutputNotice(
     return stream;
   }
   const separator = !stream.text || stream.text.endsWith("\n") ? "" : "\r\n";
-  return { ...stream, text: `${stream.text}${separator}${notice}` };
+  return appendBoundedText(stream, `${separator}${notice}`);
+}
+
+function appendBoundedText(
+  stream: TerminalOutputStream,
+  chunk: string,
+): TerminalOutputStream {
+  const trimmedChars = Math.max(
+    0,
+    stream.text.length + chunk.length - TERMINAL_OUTPUT_CHAR_CAP,
+  );
+  // Avoid constructing a full oversized chunk plus the previous retained tail.
+  const text =
+    chunk.length >= TERMINAL_OUTPUT_CHAR_CAP
+      ? chunk.slice(-TERMINAL_OUTPUT_CHAR_CAP)
+      : stream.text.slice(trimmedChars) + chunk;
+  return { ...stream, startOffset: stream.startOffset + trimmedChars, text };
 }

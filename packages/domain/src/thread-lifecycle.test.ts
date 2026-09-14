@@ -40,6 +40,32 @@ test("appends Messages with independent contiguous sequence", () => {
   assert.equal(state.lastMessageSequence, 2);
 });
 
+test("replays optional first-message titles atomically while preserving legacy events and manual names", () => {
+  const created = createdEvent();
+  assert.equal(created.type, "thread.created");
+  if (created.type !== "thread.created") throw new Error("fixture");
+  const unnamed = { ...created, data: { ...created.data, title: null } };
+  const first = messageEvent(2, 1, "message-1");
+  const titled = {
+    ...first,
+    data: { ...first.data, initialTitle: "First request" },
+  };
+  const state = replayThreadLifecycle([unnamed, titled]);
+  assert.equal(state.title, "First request");
+  assert.equal(state.revision, 2);
+  assert.equal(replayThreadLifecycle([unnamed, first]).title, null);
+  assert.equal(replayThreadLifecycle([created, titled]).title, "First thread");
+  for (const invalid of [
+    { ...titled, data: { ...titled.data, role: "assistant" as const } },
+    { ...titled, data: { ...titled.data, messageSequence: 2 } },
+    { ...titled, data: { ...titled.data, initialTitle: "x".repeat(49) } },
+  ])
+    assert.throws(
+      () => replayThreadLifecycle([unnamed, invalid]),
+      hasCode("thread_initial_title_invalid"),
+    );
+});
+
 test("rejects gaps, malformed digests and cross-thread events", () => {
   const state = reduceThreadLifecycleEvent(null, createdEvent());
   assert.throws(

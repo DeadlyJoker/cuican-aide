@@ -15,7 +15,7 @@ import {
   type ModelRequest,
   type ModelTransportEvent,
 } from "@crewon/agent-kernel";
-import { WebSocketServer, type WebSocket } from "ws";
+import { WebSocketServer, WebSocket } from "ws";
 
 import {
   ResilientResponsesTransport,
@@ -766,6 +766,91 @@ test("fails closed on binary WebSocket frames", async (context) => {
     hasTransportCode("responses_websocket_binary_unsupported"),
   );
 });
+
+test(
+  "pauses and resumes a real socket while a slow consumer receives every delta",
+  { timeout: 10_000 },
+  async (context) => {
+    const fixture = await websocketFixture(context);
+    const chunk = "x".repeat(32 * 1024);
+    const count = 70;
+    const output = chunk.repeat(count);
+    fixture.webSocketServer.on("connection", (socket) => {
+      socket.once("message", () => {
+        socket.send(
+          JSON.stringify({
+            type: "response.created",
+            sequence_number: 0,
+            response: { id: "slow-response" },
+          }),
+        );
+        for (let index = 1; index <= count; index += 1) {
+          socket.send(
+            JSON.stringify({
+              type: "response.output_text.delta",
+              sequence_number: index,
+              delta: chunk,
+            }),
+          );
+        }
+        const completed = completedEvents("slow-response", output)[2] as Record<
+          string,
+          unknown
+        >;
+        socket.send(
+          JSON.stringify({ ...completed, sequence_number: count + 1 }),
+        );
+      });
+    });
+    let paused!: () => void;
+    const pauseObserved = new Promise<void>((resolve) => {
+      paused = resolve;
+    });
+    let resumeCount = 0;
+    const transport = new WebSocketResponsesTransport(
+      {
+        endpoint: fixture.endpoint,
+        model: "provider-model",
+        maxMessageBytes: 4 * 1024 * 1024,
+      },
+      {
+        factory: (url, options) => {
+          const socket = new WebSocket(url, options);
+          const pause = socket.pause.bind(socket);
+          const resume = socket.resume.bind(socket);
+          socket.pause = () => {
+            pause();
+            paused();
+          };
+          socket.resume = () => {
+            resumeCount += 1;
+            resume();
+          };
+          return socket;
+        },
+      },
+    );
+    context.after(() => transport.close());
+    const stream = transport.stream(
+      { ...manualRequest("slow consumer"), maxOutputBytes: 4 * 1024 * 1024 },
+      signal(),
+    );
+    const first = await stream[Symbol.asyncIterator]().next();
+    assert.equal(first.value?.type, "output.delta");
+    await pauseObserved;
+    const remaining = await collect(stream);
+    const events = [first.value, ...remaining];
+    assert.equal(
+      events
+        .filter((event) => event?.type === "output.delta")
+        .map((event) => (event?.type === "output.delta" ? event.delta : ""))
+        .join(""),
+      output,
+    );
+    assert.equal(remaining.at(-1)?.type, "completed");
+    assert.ok(resumeCount > 0);
+  },
+);
 
 test("classifies a blocked WebSocket deterministically on abort and idle expiry", async (context) => {
   let requestObserved: (() => void) | undefined;

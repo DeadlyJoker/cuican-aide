@@ -2,7 +2,10 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 
 import { SettingsContent } from "./SettingsContent";
-import { modelProviderListPanel } from "../../lib/model-provider/modelProviderPanel";
+import {
+  modelProviderListPanel,
+  modelProviderFormPanel,
+} from "../../lib/model-provider/modelProviderPanel";
 
 describe("SettingsContent", () => {
   it("renders the assistant role, soul, and memory controls", () => {
@@ -149,13 +152,75 @@ describe("SettingsContent", () => {
       />,
     );
 
-    expect(markup).toContain("连接状态");
+    expect(markup).toContain("模型来源状态");
+    expect(markup).toContain("任务模型与模型服务");
+    expect(markup).not.toContain("选择任务默认使用的模型");
     expect(markup).toContain("不可用");
     expect(markup).toContain("settings-row");
     expect(markup).not.toContain("Provider");
     expect(markup).not.toContain("runtime");
     expect(markup).not.toContain("api.example.com");
-    expect(markup).not.toContain("测试");
+    expect(markup).not.toContain('aria-label="检查连接"');
+    expect(markup).toContain("当前网页版不支持添加或修改模型服务");
+    expect(markup).not.toContain("业务任务验收");
+    expect(markup).toMatchSnapshot();
+  });
+
+  it.each(["zh", "en"] as const)(
+    "keeps the model and configuration entry together in %s",
+    (locale) => {
+      for (const mutationAvailable of [false, true]) {
+        const markup = renderToStaticMarkup(
+          <SettingsContent
+            activeSection="model-providers"
+            locale={locale}
+            panel={modelProviderListPanel({
+              cwd: null,
+              locale,
+              mutationAvailable,
+              defaultTaskModel: "actual-task-model",
+            })}
+            onPanelAction={vi.fn()}
+            onPanelFieldChange={vi.fn()}
+            onSectionChange={vi.fn()}
+          />,
+        );
+        expect(markup).toContain("actual-task-model");
+        expect(markup).not.toContain("View default model");
+        expect(markup).not.toContain("查看默认模型");
+        expect(markup).not.toContain('aria-label="常规"');
+        expect(markup).not.toContain('aria-label="General"');
+        expect(
+          markup.includes(
+            `aria-label="${locale === "zh" ? "添加模型" : "Add model"}"`,
+          ),
+        ).toBe(mutationAvailable);
+        expect(markup).toMatchSnapshot();
+      }
+    },
+  );
+
+  it("renders the actual native configuration form without a General detour", () => {
+    const markup = renderToStaticMarkup(
+      <SettingsContent
+        activeSection="model-providers"
+        locale="zh"
+        panel={modelProviderFormPanel({
+          allowAccountProvider: false,
+          entry: null,
+          isSelected: false,
+          locale: "zh",
+        })}
+        onPanelAction={vi.fn()}
+        onPanelFieldChange={vi.fn()}
+        onSectionChange={vi.fn()}
+      />,
+    );
+    for (const label of ["服务地址", "访问密钥", "模型名称", "保存", "取消"]) {
+      expect(markup).toContain(label);
+    }
+    expect(markup).toContain('type="password"');
+    expect(markup).not.toContain("查看默认模型");
     expect(markup).toMatchSnapshot();
   });
 

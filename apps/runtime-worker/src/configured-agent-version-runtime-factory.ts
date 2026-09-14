@@ -9,6 +9,7 @@ import type { ToolRuntimePort } from "@crewon/tool-broker";
 
 import {
   AgentVersionRuntimeError,
+  type AgentExecutionAuthority,
   type AgentVersionRuntime,
 } from "./agent-version-runtime.ts";
 import type { AgentVersionRuntimeFactoryPort } from "./durable-agent-version-runtime-loader.ts";
@@ -23,6 +24,7 @@ export type AgentVersionRuntimeBinding = Readonly<{
   authorityId: string;
   workspaceBindingId: string | null;
   materializationDigest: string;
+  executionAuthority: AgentExecutionAuthority;
   toolRuntimeMode?: "independent" | "shared";
   createTransport(
     version: CompiledAgentVersion,
@@ -118,6 +120,7 @@ export class ConfiguredAgentVersionRuntimeFactory
         "agent_version_workspace_binding_mismatch",
       );
     }
+    validateVersionAuthority(binding.executionAuthority, input.version);
 
     let transport: ModelTransportPort | null = null;
     let toolRuntime: ToolRuntimePort | null = null;
@@ -160,6 +163,7 @@ export class ConfiguredAgentVersionRuntimeFactory
       let closed = false;
       return {
         version: input.version,
+        executionAuthority: binding.executionAuthority,
         kernel,
         policy: new PinnedRunExecutionPolicy({
           authorityId: binding.authorityId,
@@ -212,6 +216,14 @@ function validateBinding(binding: AgentVersionRuntimeBinding): void {
       "agent_version_runtime_materialization_digest_invalid",
     );
   }
+  if (
+    binding.executionAuthority !== "crewonKernel" &&
+    binding.executionAuthority !== "providerAgent"
+  ) {
+    throw new AgentVersionRuntimeError(
+      "agent_version_execution_authority_invalid",
+    );
+  }
   if (binding.workspaceBindingId !== null) {
     requireBounded(
       binding.workspaceBindingId,
@@ -226,6 +238,23 @@ function validateBinding(binding: AgentVersionRuntimeBinding): void {
   ) {
     throw new AgentVersionRuntimeError(
       "agent_version_tool_runtime_mode_invalid",
+    );
+  }
+}
+
+function validateVersionAuthority(
+  authority: AgentExecutionAuthority,
+  version: CompiledAgentVersion,
+): void {
+  if (
+    authority === "providerAgent" &&
+    (version.instructions !== null ||
+      version.tools.length !== 0 ||
+      version.resources.governedContextDigest !== null ||
+      version.resources.workspaceRequired)
+  ) {
+    throw new AgentVersionRuntimeError(
+      "agent_version_provider_authority_mismatch",
     );
   }
 }

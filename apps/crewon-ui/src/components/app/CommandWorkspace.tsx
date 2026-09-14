@@ -1,3 +1,4 @@
+import type { ThreadCatalogNavigation } from "../../lib/thread/threadCatalogNavigation";
 import { Plus, ShieldCheck } from "lucide-react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import type { ThreadGoalView } from "@crewon/contracts";
@@ -13,6 +14,7 @@ import {
 } from "react";
 
 import { CommandOfficeCreateDialog } from "./CommandOfficeCreateDialog";
+import { AgentPlatformApiKeyDialog } from "./AgentPlatformApiKeyDialog";
 import {
   CommandTeamCapabilityCreateDialog,
   type CommandTeamCapabilityCreateInput,
@@ -51,6 +53,8 @@ import {
   useCommandSidebarSeenThreadEvents,
 } from "./commandSidebarThreadPresentation";
 import { CommandThreadRoom } from "./CommandWorkspaceConversation";
+import type { ReplayMessage } from "../messages/MessageReplayScope";
+import type { ControlTeamProgress } from "../../lib/control-runtime/controlTeamProgress";
 import {
   CommandSceneHeader,
   CommandSceneQuickRow,
@@ -86,6 +90,7 @@ type ThreadGoalStatus = ThreadGoalView["status"];
 import {
   agentPlatformResourceStates as selectAgentPlatformResourceStates,
   emptyAgentPlatformSnapshot,
+  executionTargetCatalogStatus,
   insertTokenIntoComposerValue,
   readThreadExecutionTarget,
   readThreadScene,
@@ -155,9 +160,11 @@ import {
 import {
   createControlOffice,
   listControlOfficeCatalog,
+  type ControlOfficeCatalog,
   type ControlOfficeClient,
 } from "../../lib/office/controlOfficeRuntime";
 import { controlOfficeRuntimeStatus } from "../../lib/office/controlOfficeExecutionTarget";
+import { controlExecutionTargetMemberProfiles } from "../../lib/office/controlOfficeRuntimeMemberProfiles";
 import { isLegacyGeneratedOfficePlaceholder } from "../../lib/office/legacyOfficePlaceholder";
 import {
   commandComposerRuntimeSettings,
@@ -198,14 +205,13 @@ import {
   ComposerExecutionIntentControl,
   ComposerPlanReadonlyStatus,
 } from "../composer/ComposerExecutionIntentControl";
+import { commandExecutionIntentScopeKey } from "../composer/composerExecutionIntentSelection";
+import { useComposerExecutionIntent } from "../composer/useComposerExecutionIntent";
 import {
-  commandExecutionIntentScopeKey,
-  executionIntentSelectionAfterCommit,
-  executionIntentSelectionForScopeChange,
-  nextExecutionIntent,
-  type CommandExecutionIntentSelection,
-  type PendingCommandExecutionIntent,
-} from "../composer/composerExecutionIntentSelection";
+  commandPlanDisabledReason,
+  composerExecutionIntentMenuItems,
+  executionIntentForMenuItem,
+} from "../composer/composerExecutionIntentMenu";
 import { ComposerGoalBar } from "../composer/ComposerGoalBar";
 import {
   composerGoalBarState,
@@ -255,9 +261,33 @@ export type {
   ComposerKeyIntentInput as CommandComposerKeyIntentInput,
 } from "../composer/ComposerCore";
 
+export function hasKnownActiveAgentPlatformRun(input: {
+  backgroundRunActive?: boolean;
+  activeTurnId?: string | null;
+  assistantActiveTurnId?: string | null;
+  assistantThread?: Thread | null;
+  linkedThreads?: readonly Thread[];
+  selectedThread?: Thread | null;
+}): boolean {
+  if (input.backgroundRunActive || input.activeTurnId || input.assistantActiveTurnId) return true;
+  return [
+    input.selectedThread,
+    input.assistantThread,
+    ...(input.linkedThreads ?? []),
+  ].some(
+    (thread) =>
+      thread?.turns?.some((turn) => turn.status === "inProgress") ?? false,
+  );
+}
+
 export type CommandWorkspaceControlNav = CommandControlWorkspaceNav;
 
 type CommandWorkspaceProps = {
+  backgroundRunActive?: boolean;
+  threadCatalogNavigation?: ThreadCatalogNavigation;
+  threadCatalogSearch?: string;
+  onThreadCatalogSearchChange?: (value: string) => void;
+  teamProgress?: ControlTeamProgress | null;
   activeTurnId?: string | null;
   assistantActiveTurnId?: string | null;
   assistantStreamingText?: string;
@@ -398,6 +428,7 @@ type CommandWorkspaceProps = {
     threadSettings?: ThreadRuntimeSettings,
     images?: ComposerImageInput[],
   ) => void;
+  onReplayMessage?: ReplayMessage;
   onSendAssistant?: (
     text: string,
     threadSettings?: ThreadRuntimeSettings,
@@ -531,6 +562,44 @@ export function commandComposerModelDisabledForTarget(input: {
   );
 }
 
+export function commandComposerModelLabelForTarget(input: {
+  agents: ReadonlyArray<{
+    config: Pick<AgentConfig, "agentId" | "model">;
+  }>;
+  executionTarget: string;
+  fallbackLabel: string;
+  locale: Locale;
+  workspaceAuthority: CommandWorkspaceAuthority;
+}): string {
+  if (
+    input.workspaceAuthority !== "control" ||
+    !input.executionTarget.startsWith("agent:")
+  ) {
+    return input.fallbackLabel;
+  }
+  const agentVersionId = input.executionTarget.slice("agent:".length);
+  const fixedModel = input.agents
+    .find((record) => record.config.agentId?.trim() === agentVersionId)
+    ?.config.model.trim();
+  return (
+    fixedModel || (input.locale === "zh" ? "由智能体固定" : "Fixed by agent")
+  );
+}
+
+export function commandWorkspaceComposerRuntimeSettings(
+  input: Parameters<typeof commandComposerRuntimeSettings>[0] & {
+    workspaceAuthority: CommandWorkspaceAuthority;
+  },
+): ThreadRuntimeSettings {
+  const { reasoningEffort, workspaceAuthority, ...settings } = input;
+  return commandComposerRuntimeSettings({
+    ...settings,
+    ...(workspaceAuthority === "legacy" && reasoningEffort
+      ? { reasoningEffort }
+      : {}),
+  });
+}
+
 export type CommandOfficeRoomAdapter = {
   open: (record: OfficeConfigRecordReference) => void | Promise<void>;
   render: (
@@ -548,8 +617,14 @@ export type CommandOfficeComposerCapabilities = {
 };
 
 type PlatformLoadState = "loading" | "ready" | "fallback";
+type PendingAgentPlatformCredential = Readonly<{
+  agentId: number | null;
+  origin: string;
+  targetAfterAdd: string | null;
+}>;
 type TeamMode = "office" | "workflow" | "experts";
 type CommandDomainCatalog = {
+  activeAgentVersions: ControlOfficeCatalog["activeAgentVersions"];
   agents: Array<{ config: AgentConfig; filePath: string }>;
   officeStatus: "loading" | "ready" | "unavailable";
   offices: OfficeConfigRecordReference[];
@@ -719,6 +794,7 @@ export function shouldCloseComposerPalette({
 }
 
 export function CommandWorkspace({
+  teamProgress = null,
   activeTurnId = null,
   assistantActiveTurnId = null,
   assistantStreamingText = "",
@@ -736,6 +812,10 @@ export function CommandWorkspace({
   controlWorkspaceNav = null,
   workspaceAuthority = "legacy",
   isSending,
+  backgroundRunActive = false,
+  threadCatalogNavigation,
+  threadCatalogSearch,
+  onThreadCatalogSearchChange,
   linkedThreads = [],
   locale = "zh",
   platform = "web",
@@ -770,6 +850,7 @@ export function CommandWorkspace({
   onRetryConnection,
   onSend,
   onSendAssistant,
+  onReplayMessage,
   onSendNewThread,
   onSelectLinkedThread,
   onSlashCommandSelect,
@@ -780,6 +861,21 @@ export function CommandWorkspace({
   onSetThreadGoalStatus,
   providerResource,
 }: CommandWorkspaceProps) {
+  // This is the complete run set currently visible to this workspace. The host
+  // does not yet expose a process-wide active-run registry, so every mutating
+  // handler below rechecks this snapshot before requesting a Runtime restart.
+  const agentPlatformRuntimeRestartBlocked = hasKnownActiveAgentPlatformRun({
+    backgroundRunActive,
+    activeTurnId,
+    assistantActiveTurnId,
+    assistantThread,
+    linkedThreads,
+    selectedThread,
+  });
+  const agentPlatformRuntimeRestartBlockedMessage =
+    locale === "zh"
+      ? "任务运行中，完成后再配置 PIM Key 或加入云智能体"
+      : "A task is running. Wait for it to finish before configuring the PIM key or adding a cloud Agent.";
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const assistantTextareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -794,7 +890,9 @@ export function CommandWorkspace({
   );
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [sidebarSearchOpen, setSidebarSearchOpen] = useState(false);
-  const [sidebarSearchQuery, setSidebarSearchQuery] = useState("");
+  const [localSidebarSearchQuery, setLocalSidebarSearchQuery] = useState("");
+  const sidebarSearchQuery = threadCatalogSearch ?? localSidebarSearchQuery;
+  const setSidebarSearchQuery = onThreadCatalogSearchChange ?? setLocalSidebarSearchQuery;
   const [activeLinkedThreadId, setActiveLinkedThreadId] = useState<
     string | null
   >(selectedThreadId);
@@ -841,8 +939,15 @@ export function CommandWorkspace({
   const [cloudAgentTargetError, setCloudAgentTargetError] = useState<
     string | null
   >(null);
+  const [pendingAgentPlatformCredential, setPendingAgentPlatformCredential] =
+    useState<PendingAgentPlatformCredential | null>(null);
+  const [agentPlatformCredentialBusy, setAgentPlatformCredentialBusy] =
+    useState(false);
+  const [agentPlatformCredentialError, setAgentPlatformCredentialError] =
+    useState<string | null>(null);
   const [executionTargetCatalog, setExecutionTargetCatalog] =
     useState<CommandDomainCatalog>({
+      activeAgentVersions: [],
       agents: [],
       offices: [],
       officeStatus: "loading",
@@ -873,44 +978,24 @@ export function CommandWorkspace({
     shouldCreateNewThread: composerShouldCreateNewThread,
     selectedThreadId,
   });
-  const [executionIntentSelection, setExecutionIntentSelection] =
-    useState<CommandExecutionIntentSelection>(() => ({
-      intent: "none",
-      revision: 0,
-      scopeKey: executionIntentScopeKey,
-    }));
-  const executionIntent =
-    executionIntentSelection.scopeKey === executionIntentScopeKey
-      ? executionIntentSelection.intent
-      : "none";
-  const pendingExecutionIntentRef =
-    useRef<PendingCommandExecutionIntent | null>(null);
-
-  useEffect(() => {
-    const transition = executionIntentSelectionForScopeChange({
-      current: executionIntentSelection,
-      nextScopeKey: executionIntentScopeKey,
-      pending: pendingExecutionIntentRef.current,
-      submissionPending: isSending,
-    });
-    pendingExecutionIntentRef.current = transition.pending;
-    if (transition.selection !== executionIntentSelection) {
-      setExecutionIntentSelection(transition.selection);
-    }
-  }, [executionIntentScopeKey, executionIntentSelection, isSending]);
-
-  useEffect(() => {
-    const submittedSelection = pendingExecutionIntentRef.current;
-    if (
-      committedExecutionIntent !== null &&
-      submittedSelection?.intent === committedExecutionIntent.intent
-    ) {
-      setExecutionIntentSelection((current) =>
-        executionIntentSelectionAfterCommit(current, submittedSelection),
-      );
-      pendingExecutionIntentRef.current = null;
-    }
-  }, [committedExecutionIntent]);
+  const {
+    value: executionIntent,
+    selection: executionIntentSelection,
+    pendingRef: pendingExecutionIntentRef,
+    select: selectExecutionIntent,
+  } = useComposerExecutionIntent({
+    scopeKey: executionIntentScopeKey,
+    isSending,
+    committed: committedExecutionIntent,
+  });
+  const planDisabledReason = commandPlanDisabledReason({
+    authority: workspaceAuthority,
+    executionTarget,
+    offices: executionTargetCatalog.offices,
+    locale,
+  });
+  const executionIntentBlocked =
+    executionIntent === "plan" ? planDisabledReason : null;
   const [openPalette, setOpenPalette] = useState<
     "add" | "context" | "provider" | "slash" | null
   >(null);
@@ -934,6 +1019,7 @@ export function CommandWorkspace({
   const scheduleDraftRequestIdRef = useRef(0);
   const [teamMode, setTeamMode] = useState<TeamMode>("office");
   const [teamCatalog, setTeamCatalog] = useState<CommandDomainCatalog>({
+    activeAgentVersions: [],
     agents: [],
     offices: [],
     officeStatus: "loading",
@@ -1045,6 +1131,7 @@ export function CommandWorkspace({
     if (workspaceAuthority === "control") {
       if (!officeControlClient || connectionState !== "connected") {
         setExecutionTargetCatalog({
+          activeAgentVersions: [],
           agents: [],
           offices: [],
           officeStatus:
@@ -1073,6 +1160,7 @@ export function CommandWorkspace({
         () => {
           if (!cancelled) {
             setExecutionTargetCatalog({
+              activeAgentVersions: [],
               agents: [],
               offices: [],
               officeStatus: "unavailable",
@@ -1087,6 +1175,7 @@ export function CommandWorkspace({
     }
     if (!executionTargetClient || !cwd || connectionState !== "connected") {
       setExecutionTargetCatalog({
+        activeAgentVersions: [],
         agents: [],
         offices: [],
         officeStatus:
@@ -1096,6 +1185,7 @@ export function CommandWorkspace({
       return;
     }
     setExecutionTargetCatalog({
+      activeAgentVersions: [],
       agents: [],
       offices: [],
       officeStatus: "loading",
@@ -1109,6 +1199,7 @@ export function CommandWorkspace({
         const agentsAvailable = agents.status === "fulfilled";
         const officesAvailable = offices.status === "fulfilled";
         setExecutionTargetCatalog({
+          activeAgentVersions: [],
           agents: agentsAvailable
             ? agents.value.data.filter(
                 (record) => !isLegacyGeneratedAgentPlaceholder(record.config),
@@ -1149,6 +1240,7 @@ export function CommandWorkspace({
     if (workspaceAuthority === "control") {
       if (!officeControlClient || connectionState !== "connected") {
         setTeamCatalog({
+          activeAgentVersions: [],
           agents: [],
           offices: [],
           officeStatus:
@@ -1158,6 +1250,7 @@ export function CommandWorkspace({
         return;
       }
       setTeamCatalog({
+        activeAgentVersions: [],
         agents: [],
         offices: [],
         officeStatus: "loading",
@@ -1181,6 +1274,7 @@ export function CommandWorkspace({
         () => {
           if (!cancelled) {
             setTeamCatalog({
+              activeAgentVersions: [],
               agents: [],
               offices: [],
               officeStatus: "unavailable",
@@ -1195,6 +1289,7 @@ export function CommandWorkspace({
     }
     if (!executionTargetClient || !cwd || connectionState !== "connected") {
       setTeamCatalog({
+        activeAgentVersions: [],
         agents: [],
         offices: [],
         officeStatus:
@@ -1204,6 +1299,7 @@ export function CommandWorkspace({
       return;
     }
     setTeamCatalog({
+      activeAgentVersions: [],
       agents: [],
       offices: [],
       officeStatus: "loading",
@@ -1219,6 +1315,7 @@ export function CommandWorkspace({
       const agentsAvailable = agents.status === "fulfilled";
       const officesAvailable = offices.status === "fulfilled";
       setTeamCatalog({
+        activeAgentVersions: [],
         agents: agentsAvailable
           ? agents.value.data.filter(
               (record) => !isLegacyGeneratedAgentPlaceholder(record.config),
@@ -1543,7 +1640,7 @@ export function CommandWorkspace({
       const commandThreadId = lastCommandThreadIdRef.current;
       if (
         commandThreadId &&
-        linkedThreads.some((thread) => thread.id === commandThreadId)
+        (threadCatalogNavigation !== undefined || linkedThreads.some((thread) => thread.id === commandThreadId))
       ) {
         onSelectLinkedThread?.(commandThreadId);
       } else {
@@ -1553,6 +1650,7 @@ export function CommandWorkspace({
   }, [
     activeView,
     assistantThread,
+    threadCatalogNavigation,
     linkedThreads,
     onSelectLinkedThread,
     selectedThreadId,
@@ -1581,11 +1679,14 @@ export function CommandWorkspace({
   // Derived rather than synced through an effect: an unsupported effort after a
   // model swap resolves to that model's catalog default on the same render, so
   // the trigger label is never briefly wrong.
-  const effectiveReasoningEffort = resolveReasoningEffort(
-    effectiveModelOptions,
-    model,
-    selectedReasoningEffort,
-  );
+  const effectiveReasoningEffort =
+    workspaceAuthority === "legacy"
+      ? resolveReasoningEffort(
+          effectiveModelOptions,
+          model,
+          selectedReasoningEffort,
+        )
+      : null;
 
   const slots = useMemo(
     () => selectCommandHomeSlots(platformSnapshot),
@@ -1633,6 +1734,16 @@ export function CommandWorkspace({
   );
   const addPaletteItems = useMemo<PaletteItemWithCommand[]>(
     () => [
+      ...(activeView === "command"
+        ? composerExecutionIntentMenuItems({
+            locale,
+            value: executionIntent,
+            disabled: isSending,
+            planDisabledReason,
+            hasActiveGoal:
+              !composerShouldCreateNewThread && threadGoal?.status === "active",
+          })
+        : []),
       {
         action: "attach-files",
         detail: "从本地电脑选择一个或多个文件",
@@ -1663,7 +1774,18 @@ export function CommandWorkspace({
         (item) => item.kind === "skill" || item.kind === "mcp",
       ),
     ],
-    [contextPaletteItems, providerResourceAvailable, slashPaletteItems],
+    [
+      activeView,
+      locale,
+      executionIntent,
+      isSending,
+      planDisabledReason,
+      composerShouldCreateNewThread,
+      threadGoal?.status,
+      contextPaletteItems,
+      providerResourceAvailable,
+      slashPaletteItems,
+    ],
   );
   const providerComposerTag =
     providerResourceAvailable && providerResource?.selectedResource
@@ -1753,6 +1875,7 @@ export function CommandWorkspace({
                 runtimeStatus: controlOfficeRuntimeStatus(
                   record.definition,
                   activeAgentVersionIds,
+                  executionTargetCatalog.activeAgentVersions,
                 ),
               },
               filePath: record.filePath,
@@ -1882,7 +2005,11 @@ export function CommandWorkspace({
       ) !== null;
     if (
       shouldResetExecutionTarget({
-        catalogStatus: executionTargetCatalog.status,
+        catalogStatus: executionTargetCatalogStatus({
+          executionTarget,
+          catalogStatus: executionTargetCatalog.status,
+          expertTeamsStatus,
+        }),
         optionAvailable: executionTargets.some(
           (target) => target.value === executionTarget,
         ),
@@ -1900,6 +2027,7 @@ export function CommandWorkspace({
     executionTargetCatalog.status,
     executionTargets,
     expertTeams,
+    expertTeamsStatus,
     providerResource?.executionAgents,
     providerResource?.onExecutionAgentSelect,
     providerResource?.selectedExecutionAgent,
@@ -1918,7 +2046,11 @@ export function CommandWorkspace({
     );
     if (platformAgent) {
       try {
-        await addPlatformAgentToWorkspace(platformAgent.id);
+        const added = await addPlatformAgentToWorkspace(
+          platformAgent.id,
+          nextTarget,
+        );
+        if (!added) return;
       } catch (error) {
         setCloudAgentTargetError(
           error instanceof Error ? error.message : "云智能体同步失败",
@@ -1926,6 +2058,10 @@ export function CommandWorkspace({
         return;
       }
     }
+    commitExecutionTarget(nextTarget);
+  }
+
+  function commitExecutionTarget(nextTarget: string) {
     const providerAgent = providerAgentResourceForTarget(
       providerResource?.executionAgents ?? [],
       nextTarget,
@@ -2151,7 +2287,7 @@ export function CommandWorkspace({
 
   function sendComposerValue(submittedValue = composerValue) {
     const trimmed = submittedValue.trim();
-    if (isSending || !trimmed) {
+    if (isSending || !trimmed || executionIntentBlocked) {
       return;
     }
     onChangeComposerValue("");
@@ -2173,28 +2309,40 @@ export function CommandWorkspace({
             sourceThreadId: selectedThreadId,
           }
         : null;
+    const teamMemberProfiles =
+      workspaceAuthority === "control"
+        ? controlExecutionTargetMemberProfiles({
+            executionTarget,
+            expertTeams,
+            offices: executionTargetCatalog.offices,
+          })
+        : undefined;
     submitCommandComposer({
       cwd: workspaceAuthority === "legacy" ? cwd || null : null,
       images: commandImages.map(({ detail, url }) => ({ detail, url })),
       onSend,
       onSendNewThread,
-      settings: commandComposerRuntimeSettings({
-        executionTarget,
-        ...(commandComposerModelForTarget({
+      settings: {
+        ...commandWorkspaceComposerRuntimeSettings({
           executionTarget,
-          model,
+          ...(commandComposerModelForTarget({
+            executionTarget,
+            model,
+            workspaceAuthority,
+          })
+            ? { model }
+            : {}),
+          permission,
+          ...(effectiveReasoningEffort
+            ? { reasoningEffort: effectiveReasoningEffort }
+            : {}),
+          scene,
+          sceneMode,
+          executionIntent,
           workspaceAuthority,
-        })
-          ? { model }
-          : {}),
-        permission,
-        ...(effectiveReasoningEffort
-          ? { reasoningEffort: effectiveReasoningEffort }
-          : {}),
-        scene,
-        sceneMode,
-        executionIntent,
-      }),
+        }),
+        ...(teamMemberProfiles !== undefined ? { teamMemberProfiles } : {}),
+      },
       shouldCreateNewThread,
       text: trimmed,
     });
@@ -2213,7 +2361,7 @@ export function CommandWorkspace({
       return;
     }
     setAssistantComposerValue("");
-    const settings = commandComposerRuntimeSettings({
+    const settings = commandWorkspaceComposerRuntimeSettings({
       executionTarget: "crewon",
       model,
       permission,
@@ -2221,6 +2369,7 @@ export function CommandWorkspace({
         ? { reasoningEffort: effectiveReasoningEffort }
         : {}),
       executionIntent: "none",
+      workspaceAuthority,
     });
     const images = assistantImages.map(({ detail, url }) => ({ detail, url }));
     if (images.length) {
@@ -2393,6 +2542,15 @@ export function CommandWorkspace({
   }
 
   function insertAddItem(item: PaletteItemWithCommand) {
+    if (item.disabled) return;
+    const intent = executionIntentForMenuItem(item);
+    if (intent) {
+      if (isSending || (intent === "plan" && planDisabledReason)) return;
+      selectExecutionIntent(intent);
+      closeComposerPalette();
+      focusActiveComposer();
+      return;
+    }
     if (item.action === "attach-files") {
       closeComposerPalette();
       fileInputRef.current?.click();
@@ -2412,20 +2570,6 @@ export function CommandWorkspace({
       return;
     }
     insertContextItem(item);
-  }
-
-  function selectExecutionIntent(
-    selected: Exclude<CommandExecutionIntent, "none">,
-  ) {
-    pendingExecutionIntentRef.current = null;
-    setExecutionIntentSelection((current) => ({
-      intent: nextExecutionIntent(
-        current.scopeKey === executionIntentScopeKey ? current.intent : "none",
-        selected,
-      ),
-      revision: current.revision + 1,
-      scopeKey: executionIntentScopeKey,
-    }));
   }
 
   async function openRuntimeOffice(record: OfficeConfigRecordReference) {
@@ -2550,7 +2694,10 @@ export function CommandWorkspace({
     textareaRef.current?.focus();
   }
 
-  async function addPlatformAgentToWorkspace(agentId: number) {
+  async function addPlatformAgentToWorkspace(
+    agentId: number,
+    targetAfterAdd: string | null = null,
+  ): Promise<boolean> {
     const index = platformSnapshot.agents.findIndex(
       (agent) => agent.id === agentId,
     );
@@ -2560,14 +2707,34 @@ export function CommandWorkspace({
     }
 
     if (workspaceAuthority === "control") {
+      if (agentPlatformRuntimeRestartBlocked) {
+        throw new Error(agentPlatformRuntimeRestartBlockedMessage);
+      }
       const bridge = getDesktopBridge();
       if (!bridge) {
         throw new Error("当前环境没有可用的桌面运行时，无法加入云智能体");
       }
+      const invocationUrl = agentPlatformInvocationUrl(
+        agent.invocation_url ?? "",
+      );
+      const origin = new URL(invocationUrl).origin;
+      const credentialCatalog = await bridge.agentPlatformCredentials.catalog();
+      const credentialAvailable = credentialCatalog.bindings.some(
+        (binding) => binding.origin === origin && binding.credentialAvailable,
+      );
+      if (!credentialAvailable) {
+        setAgentPlatformCredentialError(null);
+        setPendingAgentPlatformCredential({
+          agentId,
+          origin,
+          targetAfterAdd,
+        });
+        return false;
+      }
       const profile: CloudAgentProfileEntry = {
         agentVersionId: `agent-platform:${agent.id}`,
         instructions: agent.system_prompt ?? "",
-        invocationUrl: agentPlatformInvocationUrl(agent.invocation_url ?? ""),
+        invocationUrl,
         modelId: agent.model_info?.model_name ?? agent.model_info?.name ?? "",
         agentId: agent.id,
       };
@@ -2582,6 +2749,75 @@ export function CommandWorkspace({
       );
     }
     setTeamRefreshNonce((current) => current + 1);
+    return true;
+  }
+
+  async function saveAgentPlatformCredential(apiKey: string) {
+    const pending = pendingAgentPlatformCredential;
+    const bridge = getDesktopBridge();
+    if (!pending || !bridge || agentPlatformCredentialBusy) return;
+    if (agentPlatformRuntimeRestartBlocked) {
+      setAgentPlatformCredentialError(
+        agentPlatformRuntimeRestartBlockedMessage,
+      );
+      return;
+    }
+    setAgentPlatformCredentialBusy(true);
+    setAgentPlatformCredentialError(null);
+    try {
+      await bridge.agentPlatformCredentials.upsert({
+        apiKey,
+        origin: pending.origin,
+      });
+      if (pending.agentId === null) {
+        setPendingAgentPlatformCredential(null);
+        return;
+      }
+      const added = await addPlatformAgentToWorkspace(
+        pending.agentId,
+        pending.targetAfterAdd,
+      );
+      if (!added) {
+        throw new Error("Agent Platform API Key 保存后仍不可用");
+      }
+      setPendingAgentPlatformCredential(null);
+      if (pending.targetAfterAdd !== null) {
+        commitExecutionTarget(pending.targetAfterAdd);
+      }
+    } catch (error) {
+      setAgentPlatformCredentialError(
+        error instanceof Error
+          ? error.message
+          : "Agent Platform API Key 保存失败",
+      );
+    } finally {
+      setAgentPlatformCredentialBusy(false);
+    }
+  }
+
+  function openAgentPlatformCredentialConfiguration() {
+    const agent = platformSnapshot.agents.find((candidate) =>
+      candidate.invocation_url?.trim(),
+    );
+    if (!agent) {
+      setCloudAgentTargetError("当前没有可绑定开放接口 Key 的云智能体");
+      return;
+    }
+    try {
+      const origin = new URL(
+        agentPlatformInvocationUrl(agent.invocation_url ?? ""),
+      ).origin;
+      setAgentPlatformCredentialError(null);
+      setPendingAgentPlatformCredential({
+        agentId: null,
+        origin,
+        targetAfterAdd: null,
+      });
+    } catch (error) {
+      setCloudAgentTargetError(
+        error instanceof Error ? error.message : "云智能体地址不可用",
+      );
+    }
   }
 
   async function createExpertTeam(input: CommandTeamCapabilityCreateInput) {
@@ -2860,22 +3096,36 @@ export function CommandWorkspace({
     ? composerGoalBarState(threadGoal, locale)
     : null;
   const goalThreadId = selectedThread?.id ?? null;
-  const reasoningEffortOptions = commandReasoningEffortOptions(
-    effectiveModelOptions,
-    model,
-    locale,
-  );
-  const modelTriggerLabel = commandModelEffortLabel({
+  const reasoningEffortOptions =
+    workspaceAuthority === "legacy"
+      ? commandReasoningEffortOptions(effectiveModelOptions, model, locale)
+      : [];
+  const selectedModelTriggerLabel = commandModelEffortLabel({
     effort: reasoningEffortOptions.length > 0 ? effectiveReasoningEffort : null,
     locale,
     modelLabel:
       effectiveModelOptions.find((option) => option.value === model)?.label ??
       model,
   });
+  const modelTriggerLabel = commandComposerModelLabelForTarget({
+    agents: executionTargetCatalog.agents,
+    executionTarget,
+    fallbackLabel: selectedModelTriggerLabel,
+    locale,
+    workspaceAuthority,
+  });
   const modelEffortOptions = modelEffortMenuOptions({
     effortOptions: reasoningEffortOptions,
     modelOptions: effectiveModelOptions,
   });
+  const modelSelectorAriaLabel =
+    workspaceAuthority === "control"
+      ? locale === "zh"
+        ? "模型"
+        : "Model"
+      : locale === "zh"
+        ? "模型与推理档位"
+        : "Model and effort";
 
   function selectModelOrEffort(nextValue: string) {
     const nextEffort = effortFromOptionValue(nextValue);
@@ -2896,6 +3146,37 @@ export function CommandWorkspace({
   const commandThreadRoom =
     showCommandThread && selectedThread ? (
       <CommandThreadRoom
+        teamProgress={teamProgress}
+        isSending={isSending}
+        onReplayMessage={
+          onReplayMessage
+            ? (request) =>
+                onReplayMessage({
+                  ...request,
+                  settings: {
+                    ...commandWorkspaceComposerRuntimeSettings({
+                      executionTarget,
+                      model,
+                      permission,
+                      scene,
+                      sceneMode,
+                      executionIntent: "none",
+                      workspaceAuthority,
+                    }),
+                    ...(workspaceAuthority === "control"
+                      ? {
+                          teamMemberProfiles:
+                            controlExecutionTargetMemberProfiles({
+                              executionTarget,
+                              expertTeams,
+                              offices: executionTargetCatalog.offices,
+                            }),
+                        }
+                      : {}),
+                  },
+                })
+            : undefined
+        }
         activeTurnId={activeTurnId}
         cwd={workspaceAuthority === "legacy" ? cwd : ""}
         locale={locale}
@@ -2949,6 +3230,7 @@ export function CommandWorkspace({
           isSearchOpen={sidebarSearchOpen}
           cwd={workspaceAuthority === "legacy" ? cwd : ""}
           linkedThreads={commandLinkedThreads}
+          threadCatalogNavigation={threadCatalogNavigation}
           locale={locale}
           platform={platform}
           query={sidebarSearchQuery}
@@ -3097,11 +3379,7 @@ export function CommandWorkspace({
                             ? [effortOptionValue(effectiveReasoningEffort)]
                             : []),
                         ]}
-                        ariaLabel={
-                          locale === "zh"
-                            ? "模型与推理档位"
-                            : "Model and effort"
-                        }
+                        ariaLabel={modelSelectorAriaLabel}
                         className="max-w-[138px]"
                         disabled={commandComposerModelDisabledForTarget({
                           executionTarget,
@@ -3195,6 +3473,8 @@ export function CommandWorkspace({
                           locale === "zh" ? "添加上下文" : "Add context"
                         }
                         className="icon-action composer-plus-action"
+                        aria-expanded={openPalette === "add"}
+                        aria-controls="add-search-panel"
                         data-palette-trigger="add"
                         type="button"
                         onClick={() => toggleComposerPalette("add")}
@@ -3208,7 +3488,11 @@ export function CommandWorkspace({
                         }
                         locale={locale}
                         value={executionIntent}
-                        onSelect={selectExecutionIntent}
+                        blockedReason={executionIntentBlocked}
+                        onClear={() => {
+                          selectExecutionIntent("none");
+                          focusActiveComposer();
+                        }}
                       />
                       {executionIntent === "plan" ? (
                         <ComposerPlanReadonlyStatus locale={locale} />
@@ -3367,6 +3651,7 @@ export function CommandWorkspace({
                   stateId="composer-status"
                   stopLabel={locale === "zh" ? "停止" : "Stop"}
                   submitBehavior="enter"
+                  submitBlocked={Boolean(executionIntentBlocked)}
                   submitting={isSending}
                   textareaDataOdId="composer-input"
                   textareaRef={textareaRef}
@@ -3398,6 +3683,22 @@ export function CommandWorkspace({
           </section>
 
           <CommandWorkspaceAssistant
+            isSending={isSending}
+            onReplayMessage={
+              onReplayMessage
+                ? (request) =>
+                    onReplayMessage({
+                      ...request,
+                      settings: commandWorkspaceComposerRuntimeSettings({
+                        executionTarget: "crewon",
+                        model,
+                        permission,
+                        executionIntent: "none",
+                        workspaceAuthority,
+                      }),
+                    })
+                : undefined
+            }
             active={activeView === "assist"}
             activeTurnId={assistantActiveTurnId}
             composer={
@@ -3410,9 +3711,7 @@ export function CommandWorkspace({
                         ? [effortOptionValue(effectiveReasoningEffort)]
                         : []),
                     ]}
-                    ariaLabel={
-                      locale === "zh" ? "模型与推理档位" : "Model and effort"
-                    }
+                    ariaLabel={modelSelectorAriaLabel}
                     className="max-w-[138px]"
                     groups={modelEffortGroups(locale)}
                     options={modelEffortOptions}
@@ -3512,7 +3811,9 @@ export function CommandWorkspace({
                     <Palette
                       id="assistant-add-search-panel"
                       inputId="assistant-add-search"
-                      items={visibleAddItems}
+                      items={visibleAddItems.filter(
+                        (item) => item.kind !== "intent",
+                      )}
                       kind="add"
                       open={openPalette === "add"}
                       placeholder={
@@ -3666,6 +3967,11 @@ export function CommandWorkspace({
             onReload={reloadPlatformResources}
             onCatalogFilterChange={setCatalogFilter}
             onCatalogSearchChange={setCatalogSearch}
+            onConfigureAgentPlatformCredential={
+              workspaceAuthority === "control"
+                ? openAgentPlatformCredentialConfiguration
+                : undefined
+            }
             onAddAgent={addPlatformAgentToWorkspace}
             onSaveCapability={onSaveCapability}
           />
@@ -3808,6 +4114,26 @@ export function CommandWorkspace({
               setOfficeRoomWarning(null);
             }}
           />
+          {pendingAgentPlatformCredential ? (
+            <AgentPlatformApiKeyDialog
+              blockedReason={
+                agentPlatformRuntimeRestartBlocked
+                  ? agentPlatformRuntimeRestartBlockedMessage
+                  : null
+              }
+              busy={agentPlatformCredentialBusy}
+              error={agentPlatformCredentialError}
+              locale={locale}
+              origin={pendingAgentPlatformCredential.origin}
+              onClose={() => {
+                if (!agentPlatformCredentialBusy) {
+                  setPendingAgentPlatformCredential(null);
+                  setAgentPlatformCredentialError(null);
+                }
+              }}
+              onSubmit={saveAgentPlatformCredential}
+            />
+          ) : null}
           {officeCreateOpen ? (
             <CommandOfficeCreateDialog
               agents={teamCatalog.agents}

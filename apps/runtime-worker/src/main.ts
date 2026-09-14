@@ -180,6 +180,10 @@ try {
           route,
         });
   const config = {
+    localStoragePaths: artifactAuthority === undefined ? [] : [
+      requiredEnvironment("CREWON_ARTIFACT_ROOT"),
+      requiredEnvironment("CREWON_ARTIFACT_DB_PATH"),
+    ],
     runtimeTenantId,
     route,
     transport,

@@ -98,12 +98,29 @@ export function formatOfficeCursor(value: {
 }
 function member(value: unknown): OfficeMemberContract {
   const object = record(value, "office_member_invalid");
-  exact(object, ["memberId", "displayName", "agentVersionId"]);
+  exact(object, [
+    "memberId",
+    "displayName",
+    "agentVersionId",
+    "responsibility",
+  ]);
+  const responsibility =
+    object.responsibility === undefined
+      ? undefined
+      : officeResponsibility(object.responsibility);
   return {
     memberId: text(object.memberId, 128, "office_member_invalid"),
     displayName: text(object.displayName, 160, "office_member_invalid"),
     agentVersionId: text(object.agentVersionId, 128, "office_member_invalid"),
+    ...(responsibility === undefined ? {} : { responsibility }),
   };
+}
+function officeResponsibility(value: unknown): string {
+  const parsed = text(value, 480, "office_member_invalid");
+  if ([...parsed].length > 240 || parsed.normalize("NFC") !== parsed) {
+    fail("office_member_invalid");
+  }
+  return parsed;
 }
 function target(value: unknown): OfficeExecutionTargetContract {
   const object = record(value, "office_target_invalid");

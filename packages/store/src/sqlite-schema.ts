@@ -1,4 +1,19 @@
+import { migrateSqliteActiveRunIndex } from "./active-run-read.ts";
+import { modelAccountingIndexSql } from "./model-accounting-index.ts";
+import { sqliteMessageRunEvidenceIndexSql } from "./message-run-evidence-schema.ts";
+import { sqliteOutboxRetentionSchemaSql } from "./sqlite-outbox-retention-schema.ts";
+import {
+  sqliteModelUsageSchemaSql,
+  sqliteModelCallSchemaSql,
+} from "./model-usage-schema.ts";
 import { DatabaseSync } from "node:sqlite";
+import {
+  sqliteAutomationScheduleIndexSql,
+  assertSqliteAutomationScheduleIndex,
+} from "./automation-schedule-index-schema.ts";
+import { sqliteRunOutputSchemaSql } from "./sqlite-run-output-schema.ts";
+import { sqliteModelHistoryAppendSchemaSql } from "./sqlite-model-history-append-schema.ts";
+import { sqliteModelHistoryContextSchemaSql } from "./sqlite-model-history-context-schema.ts";
 
 import { RunStoreError } from "@crewon/application";
 import {
@@ -10,7 +25,7 @@ import {
   sqliteWorkspaceOperationTablesSql,
 } from "./sqlite-workspace-operation-schema.ts";
 
-export const SQLITE_SCHEMA_VERSION = 23;
+export const SQLITE_SCHEMA_VERSION = 34;
 
 type LegacyRunRow = Readonly<{
   tenant_id: string;
@@ -38,6 +53,7 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
     throw new RunStoreError("sqlite_schema_too_new");
   }
   if (version === SQLITE_SCHEMA_VERSION) {
+    assertSqliteAutomationScheduleIndex(database);
     migrateSqliteWorkspaceOperationAuthority(database);
     return;
   }
@@ -122,6 +138,28 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
       // Version 21 has Automation authority but predates workspace operations.
     } else if (version === 22) {
       // Version 22 has workspace operation v1 but predates durable delivery leases.
+    } else if (version === 23) {
+      // Version 23 predates compact, event-identified output append receipts.
+    } else if (version === 24) {
+      // Version 24 predates incremental model-history append validation.
+    } else if (version === 25) {
+      // Version 25 predates resumable effective-context reference checkpoints.
+    } else if (version === 26) {
+      // Version 26 predates delivered outbox retention and identity registration.
+    } else if (version === 27) {
+      // Version 27 predates the global scheduled-automation seek index.
+    } else if (version === 28) {
+      // Version 28 predates independent, response-deduplicated model usage.
+    } else if (version === 29) {
+      // Version 29 predates the bounded live Run lookup index.
+    } else if (version === 30) {
+      // Version 30 predates immutable message/Run evidence indexes.
+    } else if (version === 31) {
+      // Version 31 predates provider call accounting intents.
+    } else if (version === 32) {
+      // Version 32 predates the bounded call-to-usage reconciliation index.
+    } else if (version === 33) {
+      // Version 33 predates bounded lossless internal execution receipt encoding.
     } else {
       throw new RunStoreError("sqlite_schema_version_unsupported");
     }
@@ -167,6 +205,17 @@ export function configureAndMigrateSqlite(database: DatabaseSync): void {
     if (version !== 0 && version <= 22) {
       migrateVersionTwentyTwo(database);
     }
+    database.exec(sqliteRunOutputSchemaSql());
+    database.exec(sqliteModelHistoryAppendSchemaSql());
+    database.exec(sqliteModelHistoryContextSchemaSql());
+    database.exec(sqliteOutboxRetentionSchemaSql());
+    database.exec(sqliteAutomationScheduleIndexSql());
+    database.exec(sqliteModelUsageSchemaSql());
+    database.exec(sqliteModelCallSchemaSql());
+    database.exec(modelAccountingIndexSql(false));
+    migrateSqliteActiveRunIndex(database);
+    database.exec(sqliteMessageRunEvidenceIndexSql());
+    assertSqliteAutomationScheduleIndex(database);
     database.exec(`PRAGMA user_version = ${SQLITE_SCHEMA_VERSION}`);
     database.exec("COMMIT");
   } catch (error) {

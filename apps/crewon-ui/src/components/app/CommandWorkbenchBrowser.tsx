@@ -44,7 +44,9 @@ export function normalizeWorkbenchBrowserUrl(value: string): string | null {
     : `${localhostUrl(trimmed) ? "http" : "https"}://${trimmed}`;
   try {
     const url = new URL(candidate);
-    return url.protocol === "http:" || url.protocol === "https:"
+    return (url.protocol === "http:" || url.protocol === "https:") &&
+      !url.username &&
+      !url.password
       ? url.toString()
       : null;
   } catch {
@@ -64,6 +66,7 @@ function browserTitle(url: string | null, locale: Locale): string {
 }
 
 function NativeBrowserViewport({
+  linkedPreview,
   active,
   instanceId,
   locale,
@@ -71,6 +74,7 @@ function NativeBrowserViewport({
   reloadKey,
   url,
 }: {
+  linkedPreview: boolean;
   active: boolean;
   instanceId: string;
   locale: Locale;
@@ -243,6 +247,11 @@ function NativeBrowserViewport({
         )
       ) : (
         <iframe
+          sandbox={
+            linkedPreview
+              ? "allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-downloads"
+              : undefined
+          }
           key={`${url}:${reloadKey}`}
           referrerPolicy="strict-origin-when-cross-origin"
           src={url}
@@ -254,6 +263,8 @@ function NativeBrowserViewport({
 }
 
 export function CommandWorkbenchBrowser({
+  initialUrl,
+  sourceLabel,
   active,
   instanceId,
   interactive = active,
@@ -262,6 +273,8 @@ export function CommandWorkbenchBrowser({
   onNewTab,
   onTitleChange,
 }: {
+  initialUrl?: string;
+  sourceLabel?: string;
   active: boolean;
   instanceId: string;
   interactive?: boolean;
@@ -271,10 +284,13 @@ export function CommandWorkbenchBrowser({
   onTitleChange: (title: string) => void;
 }) {
   const [history, setHistory] = useState<BrowserHistory>({
-    entries: [],
-    index: -1,
+    entries:
+      initialUrl && normalizeWorkbenchBrowserUrl(initialUrl)
+        ? [normalizeWorkbenchBrowserUrl(initialUrl)!]
+        : [],
+    index: initialUrl && normalizeWorkbenchBrowserUrl(initialUrl) ? 0 : -1,
   });
-  const [address, setAddress] = useState("");
+  const [address, setAddress] = useState(history.entries[0] ?? "");
   const [addressError, setAddressError] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [reloadKey, setReloadKey] = useState(0);
@@ -405,6 +421,7 @@ export function CommandWorkbenchBrowser({
     <div
       className="command-browser"
       data-has-page={currentUrl ? "true" : "false"}
+      data-linked-preview={sourceLabel ? "true" : undefined}
     >
       <div className="command-browser-toolbar">
         <div className="command-browser-nav">
@@ -493,8 +510,23 @@ export function CommandWorkbenchBrowser({
           ) : null}
         </div>
       </div>
+      {sourceLabel ? (
+        <div className="command-browser-source">
+          <p title={sourceLabel}>
+            {locale === "zh"
+              ? "来自当前任务的独立网页预览；不会重放 Agent 操作或共享其会话。"
+              : "Independent task preview; no Agent action replay or shared session."}
+          </p>
+          <p>
+            {locale === "zh"
+              ? "如网站禁止嵌入，可在浏览器菜单中选择独立窗口打开。"
+              : "If embedding is blocked, use the browser menu to open a separate window."}
+          </p>
+        </div>
+      ) : null}
       {currentUrl ? (
         <NativeBrowserViewport
+          linkedPreview={Boolean(sourceLabel)}
           active={active}
           instanceId={instanceId}
           locale={locale}

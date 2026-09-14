@@ -6,6 +6,7 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  safeStorage,
   type IpcMainInvokeEvent,
 } from "electron";
 import electronUpdater from "electron-updater";
@@ -15,7 +16,13 @@ import type {
   DesktopUpdateProgress,
 } from "../src/lib/desktop/desktopBridge.ts";
 import { BrowserViewManager, openExternal } from "./browserViews.ts";
-import { desktopFetch } from "./desktopHttp.ts";
+import {
+  AgentPlatformCredentialStore,
+  parseAgentPlatformOrigin,
+} from "./agentPlatformCredentials.ts";
+import { DesktopHttpTransport } from "./desktopHttp.ts";
+import { bindDesktopHttpLifetime } from "./desktopHttpLifetime.ts";
+import { desktopHttpReply } from "./desktopHttpReply.ts";
 import {
   LocalWorkspaceAuthority,
   LocalWorkspaceSandbox,
@@ -72,6 +79,10 @@ async function launch(): Promise<void> {
       undefined,
   );
   const sandbox = new LocalWorkspaceSandbox(authority);
+  const agentPlatformCredentials = new AgentPlatformCredentialStore(
+    runtimeDataDirectory,
+    safeStorage,
+  );
   let runtime: RuntimeSupervisor | null = null;
   const paths = runtimePaths({
     packaged: app.isPackaged,
@@ -85,6 +96,8 @@ async function launch(): Promise<void> {
     },
   );
   runtime = new RuntimeSupervisor({
+    agentPlatformApiKeyForOrigin: (origin) =>
+      agentPlatformCredentials.secretForOrigin(origin),
     dataDirectory: runtimeDataDirectory,
     paths,
     repositoryRoot,
@@ -121,6 +134,7 @@ async function launch(): Promise<void> {
   desktopLog("window created");
   const browserViews = new BrowserViewManager(window);
   registerIpc({
+    agentPlatformCredentials,
     authority,
     browserViews,
     paths,
@@ -197,6 +211,7 @@ async function loadRenderer(window: BrowserWindow): Promise<void> {
 }
 
 function registerIpc(options: {
+  agentPlatformCredentials: AgentPlatformCredentialStore;
   authority: LocalWorkspaceAuthority;
   browserViews: BrowserViewManager;
   paths: ReturnType<typeof runtimePaths>;
@@ -206,6 +221,7 @@ function registerIpc(options: {
   window: BrowserWindow;
 }): void {
   const {
+    agentPlatformCredentials,
     authority,
     browserViews,
     paths,
@@ -214,7 +230,7 @@ function registerIpc(options: {
     sandbox,
     window,
   } = options;
-  const activeHttpRequests = new Map<string, AbortController>();
+  const desktopHttp = new DesktopHttpTransport();
   const handle = <T extends unknown[]>(
     channel: string,
     listener: (...args: T) => unknown,
@@ -226,6 +242,28 @@ function registerIpc(options: {
   };
 
   handle("crewon:runtime:bootstrap", () => runtime.session());
+  handle("crewon:agent-platform-credentials:catalog", () =>
+    agentPlatformCredentials.catalog(),
+  );
+  handle(
+    "crewon:agent-platform-credentials:upsert",
+    async (request: unknown) => {
+      const origin = parseAgentPlatformOrigin(
+        typeof request === "object" && request !== null && "origin" in request
+          ? request.origin
+          : null,
+      );
+      const catalog = agentPlatformCredentials.upsert(request);
+      await runtime.agentPlatformCredentialChanged(origin);
+      return catalog;
+    },
+  );
+  handle("crewon:agent-platform-credentials:delete", async (value: unknown) => {
+    const origin = parseAgentPlatformOrigin(value);
+    const catalog = agentPlatformCredentials.delete(origin);
+    await runtime.agentPlatformCredentialChanged(origin);
+    return catalog;
+  });
   handle("crewon:runtime:reload-provider", () => runtime.restart());
   handle(
     "crewon:runtime:update-cloud-agent-profiles",
@@ -239,30 +277,16 @@ function registerIpc(options: {
       }[],
     ) => runtime.updateCloudAgentProfiles(profiles),
   );
-  handle("crewon:http:fetch", (request: DesktopHttpRequest) =>
-    desktopFetch(request, {
-      activeRequests: activeHttpRequests,
-      emit: (requestId, event) => {
-        if (!window.isDestroyed() && !window.webContents.isDestroyed()) {
-          window.webContents.send("crewon:http:body", requestId, event);
-        }
-      },
-    }),
+  handle("crewon:http:open-v2", (request: DesktopHttpRequest) =>
+    desktopHttpReply(() => desktopHttp.fetch(request)),
   );
-  handle("crewon:http:abort", (requestId: string) => {
-    if (!/^[0-9a-f-]{36}$/iu.test(requestId)) {
-      throw new Error("desktop_http_request_id_invalid");
-    }
-    activeHttpRequests
-      .get(requestId)
-      ?.abort(new Error("desktop_http_request_aborted"));
-  });
-  window.once("closed", () => {
-    for (const controller of activeHttpRequests.values()) {
-      controller.abort(new Error("desktop_http_window_closed"));
-    }
-    activeHttpRequests.clear();
-  });
+  handle("crewon:http:read-v2", (requestId: string) =>
+    desktopHttpReply(() => desktopHttp.read(requestId)),
+  );
+  handle("crewon:http:abort-v2", (requestId: string) =>
+    desktopHttpReply(() => desktopHttp.abort(requestId)),
+  );
+  bindDesktopHttpLifetime(window.webContents, desktopHttp);
   handle("crewon:sandbox:list-directory", (path?: string) =>
     sandbox.listDirectory(path),
   );

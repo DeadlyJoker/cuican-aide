@@ -1,0 +1,204 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`workbench output style > keeps standalone previews bounded and accessible without inline reply controls 1`] = `
+".task-workbench,
+.task-document-preview {
+  height: 100%;
+  overflow: auto;
+  min-width: 0;
+  color: var(--text);
+  padding: 20px;
+}
+.task-workbench header,
+.task-document-preview header {
+  display: grid;
+  gap: 8px;
+}
+.task-workbench h2,
+.task-document-preview h2 {
+  font-size: 16px;
+  line-height: 1.5;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.task-workbench header h2 {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.task-workbench p,
+.task-document-preview header p,
+.task-workbench small,
+.task-document-preview small {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.task-workbench-sections {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border);
+  margin-top: 18px;
+  padding-bottom: 10px;
+}
+.task-workbench-sections button,
+.task-document-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  background: transparent;
+  padding: 7px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.task-workbench-sections [aria-selected="true"] {
+  color: var(--text);
+  background: var(--surface-strong);
+}
+.task-workbench-list {
+  display: grid;
+  align-content: start;
+  gap: 12px;
+  padding-top: 16px;
+}
+.task-workbench-list > button,
+.task-workbench-list > article {
+  display: grid;
+  gap: 7px;
+  text-align: left;
+  background: var(--panel-subtle, var(--surface));
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  color: var(--text);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.task-workbench-list > button {
+  cursor: pointer;
+}
+.task-workbench-list strong {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.task-workbench-list span {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-muted);
+}
+.task-workbench-list em {
+  font-style: normal;
+  font-size: 12px;
+  margin-top: 4px;
+  color: var(--text-muted);
+}
+.task-workbench-url {
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  font-size: 12px;
+  text-align: left;
+  padding: 4px 0;
+  overflow-wrap: anywhere;
+  cursor: pointer;
+}
+.task-workbench-empty {
+  padding: 18px 0;
+}
+.task-document-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.task-document-preview > .task-workbench-note {
+  padding: 12px 0;
+  margin-top: 12px;
+  border-top: 1px solid var(--border);
+}
+.task-document-body {
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+}
+.task-document-body table {
+  width: 100%;
+  display: block;
+  overflow: auto;
+}
+.task-document-body pre {
+  overflow: auto;
+  max-width: 100%;
+}
+.task-workbench button:focus-visible,
+.task-document-preview button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.task-workbench-list > button:hover {
+  border-color: var(--border-strong);
+  background: var(--surface-strong);
+}
+.command-browser-source {
+  padding: 8px 12px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+.command-browser-source p {
+  margin: 0;
+}
+.command-browser[data-linked-preview="true"] {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+@media (prefers-reduced-motion: reduce) {
+  .task-workbench *,
+  .task-document-preview * {
+    scroll-behavior: auto;
+  }
+}
+
+.command-workbench .task-workbench,
+.command-workbench .task-document-preview {
+  --text: var(--workbench-text);
+  --text-muted: var(--workbench-muted);
+  --border: var(--workbench-border);
+  --surface-strong: var(--workbench-raised);
+  --panel-subtle: var(--workbench-surface);
+  color: var(--workbench-text);
+}
+.command-workbench
+  .task-document-preview
+  .task-document-body
+  .markdown-content {
+  color: var(--workbench-text);
+}
+.command-workbench
+  .task-document-body
+  .markdown-content
+  :is(p, li, td, th, blockquote) {
+  color: inherit;
+}
+.command-workbench .task-document-body .markdown-content :is(ul, ol) {
+  padding-left: 20px;
+  list-style-position: outside;
+}
+.command-workbench .task-document-body .markdown-content ul {
+  list-style-type: disc;
+}
+.command-workbench .task-document-body .markdown-content ol {
+  list-style-type: decimal;
+}
+.command-workbench .task-workbench-note {
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--workbench-muted);
+}
+"
+`;

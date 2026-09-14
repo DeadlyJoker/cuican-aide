@@ -17,6 +17,7 @@ import { canonicalActionIntent } from "@crewon/contracts";
 import type {
   ToolExecutionCommand,
   ToolExecutionPolicyContext,
+  ToolExecutionResolution,
   ToolRuntimePort,
 } from "@crewon/tool-broker";
 
@@ -295,6 +296,50 @@ test("only configures the command tool for a bound desktop workspace", () => {
       }),
     /CREWON_DESKTOP_WORKSPACE_ROOT_invalid/u,
   );
+});
+
+test("releases completed results in both sandbox policy runtimes", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "crewon-local-result-release-"));
+  try {
+    const runtime = createLocalWorkspaceCommandToolRuntime(directory);
+    const commands = ["workspace-write", "danger-full-access"].map(
+      (sandboxMode) =>
+        approvedCommand(
+          runtime,
+          JSON.stringify({
+            command: "echo released",
+            cwd: "/workspace",
+            timeoutSeconds: 10,
+          }),
+          sandboxMode as ToolExecutionPolicyContext["sandboxMode"],
+        ),
+    );
+    const results: ToolExecutionResolution[] = [];
+    for (const command of commands)
+      results.push(
+        await runtime.execute(command, new AbortController().signal),
+      );
+    assert.equal(
+      runtime.retainedExecutionResults?.({ runId: "run-1", limit: 128 }).length,
+      2,
+    );
+    for (const [index, command] of commands.entries()) {
+      const result = results[index]!;
+      assert.equal(result.status, "completed");
+      runtime.acknowledgeExecutionResult?.({
+        ...command,
+        status: "completed",
+        providerReceiptId: result.providerReceiptId,
+      });
+      assert.equal(
+        runtime.retainedExecutionResults?.({ runId: "run-1", limit: 128 })
+          .length,
+        1 - index,
+      );
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
 });
 
 function approvedCommand(

@@ -1,0 +1,59 @@
+.screen-shell.command-screen .composer-intent-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 0 4px 0 9px;
+  border: 1px solid color-mix(in oklch, var(--accent) 34%, transparent);
+  border-radius: var(--radius-md);
+  background: color-mix(in oklch, var(--accent) 16%, var(--n-0));
+  color: var(--n-950);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  white-space: nowrap;
+}
+.screen-shell.command-screen .composer-intent-chip svg {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+.screen-shell.command-screen .input-tools .composer-intent-chip button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  min-height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.screen-shell.command-screen .composer-intent-chip button:hover:not(:disabled) {
+  background: color-mix(in oklch, var(--accent) 18%, transparent);
+}
+.screen-shell.command-screen .composer-intent-chip button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.screen-shell.command-screen .composer-intent-chip button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.screen-shell.command-screen .composer-intent-error {
+  max-width: 100%;
+  color: var(--danger);
+  font-size: calc(12px + var(--user-ui-font-delta));
+  overflow-wrap: anywhere;
+}
+.screen-shell.command-screen .composer-intent-chip[data-blocked] {
+  border-color: var(--danger);
+}
+.screen-shell.command-screen
+  .add-palette
+  .context-list
+  .add-palette-item:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  background: transparent;
+}

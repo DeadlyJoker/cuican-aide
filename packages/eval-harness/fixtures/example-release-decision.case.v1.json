@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "crewon.team-effect-case.v1",
+  "caseId": "example-release-decision",
+  "caseRevision": "revision-1",
+  "title": "GUI Team release decision",
+  "prompt": "请基于 rollback、monitoring、owner 和 rehearsal 证据判断本次发布是否放行；明确列出冲突、门禁、两项行动和未知项，并严格使用约定标签。",
+  "expectedMemberIds": ["manager", "planner", "verifier"],
+  "efficiencyGate": {
+    "modelRunCount": {
+      "maxRegressionPercent": 0,
+      "minImprovementPercent": 1
+    },
+    "logicalPhaseCount": {
+      "maxRegressionPercent": 0,
+      "minImprovementPercent": 1
+    },
+    "timeToFirstVisibleOutputMs": {
+      "maxRegressionPercent": null,
+      "minImprovementPercent": null
+    },
+    "settledDurationMs": {
+      "maxRegressionPercent": null,
+      "minImprovementPercent": null
+    }
+  },
+  "qualityGate": {
+    "authoredOrder": [
+      "decision",
+      "evidence-a",
+      "evidence-b",
+      "evidence-c",
+      "evidence-d",
+      "conflict",
+      "gate",
+      "action-one",
+      "action-two",
+      "unknown"
+    ],
+    "maxAnswerCharacters": 2000,
+    "allowUnlabelledText": false,
+    "labels": [
+      {
+        "id": "decision",
+        "kind": "decision",
+        "label": "结论:",
+        "expectedFragments": [],
+        "exactContent": "NO-GO",
+        "minContentCharacters": 5
+      },
+      {
+        "id": "evidence-a",
+        "kind": "evidence",
+        "label": "证据A:",
+        "expectedFragments": ["rollback"],
+        "exactContent": null,
+        "minContentCharacters": 12
+      },
+      {
+        "id": "evidence-b",
+        "kind": "evidence",
+        "label": "证据B:",
+        "expectedFragments": ["monitoring"],
+        "exactContent": null,
+        "minContentCharacters": 16
+      },
+      {
+        "id": "evidence-c",
+        "kind": "evidence",
+        "label": "证据C:",
+        "expectedFragments": ["owner"],
+        "exactContent": null,
+        "minContentCharacters": 12
+      },
+      {
+        "id": "evidence-d",
+        "kind": "evidence",
+        "label": "证据D:",
+        "expectedFragments": ["rehearsal"],
+        "exactContent": null,
+        "minContentCharacters": 16
+      },
+      {
+        "id": "conflict",
+        "kind": "conflict",
+        "label": "冲突:",
+        "expectedFragments": ["planner", "verifier"],
+        "exactContent": null,
+        "minContentCharacters": 24
+      },
+      {
+        "id": "gate",
+        "kind": "decision",
+        "label": "门禁:",
+        "expectedFragments": ["rollback drill"],
+        "exactContent": null,
+        "minContentCharacters": 16
+      },
+      {
+        "id": "action-one",
+        "kind": "decision",
+        "label": "行动1:",
+        "expectedFragments": ["owner"],
+        "exactContent": null,
+        "minContentCharacters": 10
+      },
+      {
+        "id": "action-two",
+        "kind": "decision",
+        "label": "行动2:",
+        "expectedFragments": ["monitoring"],
+        "exactContent": null,
+        "minContentCharacters": 16
+      },
+      {
+        "id": "unknown",
+        "kind": "unknown",
+        "label": "未知:",
+        "expectedFragments": ["恢复时长"],
+        "exactContent": null,
+        "minContentCharacters": 10
+      }
+    ]
+  }
+}

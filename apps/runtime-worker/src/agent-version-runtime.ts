@@ -16,8 +16,12 @@ import type {
   PriorModelCompactionRuntime,
 } from "./model-switch-compaction.ts";
 
+/** Identifies who owns the Agent prompt, tools, and orchestration loop. */
+export type AgentExecutionAuthority = "crewonKernel" | "providerAgent";
+
 export type AgentVersionRuntime = Readonly<{
   version: CompiledAgentVersion;
+  executionAuthority: AgentExecutionAuthority;
   kernel: AgentKernelPort;
   policy: RunExecutionPolicyPort;
   toolRuntime: ToolRuntimePort;
@@ -136,6 +140,7 @@ class RegistryPriorModelCompactionResolver
     return runtime === null
       ? null
       : {
+          executionAuthority: runtime.executionAuthority,
           compactor: runtime.contextCompactor,
           ...(runtime.governedContext === undefined
             ? {}
@@ -163,6 +168,26 @@ function validateRuntime(
   runtime: AgentVersionRuntime,
   digester: ContentDigester,
 ): void {
+  if (
+    runtime.executionAuthority !== "crewonKernel" &&
+    runtime.executionAuthority !== "providerAgent"
+  ) {
+    throw new AgentVersionRuntimeError(
+      "agent_version_execution_authority_invalid",
+    );
+  }
+  if (
+    runtime.executionAuthority === "providerAgent" &&
+    (runtime.version.instructions !== null ||
+      runtime.version.tools.length !== 0 ||
+      runtime.version.resources.governedContextDigest !== null ||
+      runtime.version.resources.workspaceRequired ||
+      runtime.governedContext !== undefined)
+  ) {
+    throw new AgentVersionRuntimeError(
+      "agent_version_provider_authority_mismatch",
+    );
+  }
   const identity = runtime.kernel.modelIdentity;
   if (
     identity.adapterName !== runtime.version.model.adapterName ||

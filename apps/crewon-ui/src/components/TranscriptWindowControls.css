@@ -1,0 +1,31 @@
+.transcript-window-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 10px 0;
+  font-size: 12px;
+}
+.transcript-window-controls button {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+.transcript-window-controls button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.transcript-window-controls [role="status"],
+.transcript-history-note {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.transcript-window-controls [role="alert"] {
+  flex-basis: 100%;
+}
+.transcript-history-note {
+  padding: 8px 0;
+}

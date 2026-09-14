@@ -120,13 +120,11 @@ export function useCommandSidebarWorkspaceController({ accountId, addWorkspaceLa
       : noWorkspaceLabel;
   const currentWorkspaceThreads =
     workspaceAuthority === "legacy"
-      ? linkedThreads
-          .filter((thread) => Boolean(cwd) && thread.cwd === cwd)
-          .slice(0, 5)
+      ? linkedThreads.filter((thread) => Boolean(cwd) && thread.cwd === cwd)
       : [];
   const standaloneThreads =
     workspaceAuthority === "legacy"
-      ? linkedThreads.filter((thread) => !thread.cwd).slice(0, 5)
+      ? linkedThreads.filter((thread) => !thread.cwd)
       : [];
   /*
    * Driven by the roster rather than by conversation grouping: a folder the user
@@ -150,7 +148,7 @@ export function useCommandSidebarWorkspaceController({ accountId, addWorkspaceLa
     .slice(0, 8)
     .map((path) => ({
       path,
-      threads: (threadsByWorkspace.get(path) ?? []).slice(0, 5),
+      threads: threadsByWorkspace.get(path) ?? [],
     }));
 
   useEffect(() => {

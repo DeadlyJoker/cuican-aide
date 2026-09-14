@@ -7,10 +7,18 @@ import type {
   WorkspaceChangeSummary,
 } from "@crewon/contracts";
 import { parseWorkspaceChangeSummary } from "@crewon/contracts";
+import { controlHistoryReadBudget } from "./controlHistoryReadBudget";
+import { ThreadDetailSize } from "../thread/threadDetailSize";
 
 const MAX_CONTROL_TOOL_ITEMS_PER_RUN = 256;
 const MAX_CONTROL_TOOL_HISTORY_RUNS = 50;
 const CONTROL_TOOL_HISTORY_CONCURRENCY = 4;
+const MAX_CONTROL_TOOL_PAYLOAD_BYTES = 2 * 1024 * 1024;
+const toolPayloadSizes = new ThreadDetailSize(MAX_CONTROL_TOOL_PAYLOAD_BYTES);
+const payloadUsage = new WeakMap<
+  object,
+  { bytes: number; weights: Map<string, number> }
+>();
 
 export type ControlToolItem = Extract<ThreadItem, { type: "dynamicToolCall" }> &
   Readonly<{
@@ -135,6 +143,10 @@ export function applyControlTaskChangeEvent(
     }
   }
   const entry = projectControlToolEntry(event, existing);
+  if (!reserveToolPayload(state, event.data.callId, entry.item)) {
+    overflowedTaskChangeStates.add(state);
+    return null;
+  }
   state.set(event.data.callId, {
     ...entry,
     phase: event.type === "tool.requested" ? "pending" : "completed",
@@ -221,8 +233,44 @@ export function applyControlToolEvent(
   }
 
   const entry = projectControlToolEntry(event, existing);
+  if (!reserveToolPayload(state, event.data.callId, entry.item)) {
+    overflowedToolStates.add(state);
+    return null;
+  }
   state.set(event.data.callId, entry);
   return entry.item;
+}
+
+/** Bound preview payloads separately from the 256 small identity/status entries. */
+function reserveToolPayload(
+  state: ControlToolProjectionState | ControlTaskChangeProjectionState,
+  callId: string,
+  item: ControlToolItem,
+): boolean {
+  let usage = payloadUsage.get(state);
+  if (!usage) {
+    usage = { bytes: 0, weights: new Map() };
+    for (const [id, entry] of state) {
+      const weight = measureToolPayload(entry.item);
+      usage.weights.set(id, weight);
+      usage.bytes += weight;
+    }
+    payloadUsage.set(state, usage);
+  }
+  const weight = measureToolPayload(item);
+  const bytes = usage.bytes - (usage.weights.get(callId) ?? 0) + weight;
+  if (bytes > MAX_CONTROL_TOOL_PAYLOAD_BYTES) return false;
+  usage.bytes = bytes;
+  usage.weights.set(callId, weight);
+  return true;
+}
+
+function measureToolPayload(item: ControlToolItem): number {
+  return (
+    toolPayloadSizes.measure(item.arguments) +
+    toolPayloadSizes.measure(item.contentItems) +
+    toolPayloadSizes.measure(item.workspaceChanges)
+  );
 }
 
 export function controlToolProjectionComplete(
@@ -319,45 +367,48 @@ export async function backfillControlToolProjection(params: {
     complete: boolean;
   }>
 > {
-  const deadline = controlToolHistoryDeadline(params.signal, params.timeoutMs);
-  let lastSequence = params.afterSequence;
-  const items: ControlToolItem[] = [];
-  try {
-    for await (const event of params.eventStream(params.client, {
-      runId: params.runId,
-      afterSequence: params.afterSequence,
-      extensions: ["run-plan-v1"],
-      view: "transcript",
-      signal: deadline.controller.signal,
-    })) {
-      deadline.controller.signal.throwIfAborted();
-      if (event.sequence <= lastSequence) {
-        continue;
+  return controlHistoryReadBudget.run({
+    kind: "settlement",
+    runId: params.runId,
+    signal: params.signal,
+    timeoutMs: params.timeoutMs,
+    read: async (signal) => {
+      let lastSequence = params.afterSequence;
+      const items = new Map<string, ControlToolItem>();
+      for await (const event of params.eventStream(params.client, {
+        runId: params.runId,
+        afterSequence: params.afterSequence,
+        extensions: ["run-plan-v1"],
+        view: "transcript",
+        signal,
+      })) {
+        signal.throwIfAborted();
+        if (event.sequence <= lastSequence) {
+          continue;
+        }
+        if (event.sequence !== lastSequence + 1) {
+          throw new Error("control_tool_history_sequence_gap");
+        }
+        lastSequence = event.sequence;
+        params.onEvent?.(event);
+        const item = applyControlToolEvent(params.state, event);
+        if (item) {
+          items.set(item.id, item);
+        }
+        if (lastSequence >= params.throughSequence) {
+          break;
+        }
       }
-      if (event.sequence !== lastSequence + 1) {
-        throw new Error("control_tool_history_sequence_gap");
+      if (lastSequence < params.throughSequence) {
+        throw new Error("control_tool_history_backfill_incomplete");
       }
-      lastSequence = event.sequence;
-      params.onEvent?.(event);
-      const item = applyControlToolEvent(params.state, event);
-      if (item) {
-        items.push(item);
-      }
-      if (lastSequence >= params.throughSequence) {
-        break;
-      }
-    }
-  } finally {
-    deadline.dispose();
-  }
-  if (lastSequence < params.throughSequence) {
-    throw new Error("control_tool_history_backfill_incomplete");
-  }
-  return {
-    items,
-    lastSequence,
-    complete: controlToolProjectionComplete(params.state),
-  };
+      return {
+        items: [...items.values()],
+        lastSequence,
+        complete: controlToolProjectionComplete(params.state),
+      };
+    },
+  });
 }
 
 export async function hydrateControlToolHistories(params: {
@@ -371,34 +422,56 @@ export async function hydrateControlToolHistories(params: {
   coverageByRun: Map<string, ControlToolHistoryCoverage>;
   timeoutMs: number;
 }): Promise<void> {
-  const runs = params.runsNewestFirst
-    .filter(
-      (run) =>
-        (run.purpose ?? "turn") === "turn" &&
-        run.terminalAt !== null &&
-        run.lastSequence > 0 &&
-        (params.coverageByRun.get(run.runId)?.throughSequence ?? -1) <
-          run.lastSequence,
-    )
-    .slice(0, MAX_CONTROL_TOOL_HISTORY_RUNS);
+  const deadline = new AbortController();
+  const abortFromCaller = () => deadline.abort(params.requestSignal?.reason);
+  if (params.requestSignal?.aborted) abortFromCaller();
+  else
+    params.requestSignal?.addEventListener("abort", abortFromCaller, {
+      once: true,
+    });
+  const timer = setTimeout(
+    () => deadline.abort(new Error("control_tool_hydration_timeout")),
+    Math.min(params.timeoutMs, 10_000),
+  );
+  try {
+    const runs = params.runsNewestFirst
+      .filter(
+        (run) =>
+          (run.purpose ?? "turn") === "turn" &&
+          run.terminalAt !== null &&
+          run.lastSequence > 0 &&
+          (params.coverageByRun.get(run.runId)?.throughSequence ?? -1) <
+            run.lastSequence,
+      )
+      .slice(0, MAX_CONTROL_TOOL_HISTORY_RUNS);
 
-  for (
-    let index = 0;
-    index < runs.length;
-    index += CONTROL_TOOL_HISTORY_CONCURRENCY
-  ) {
-    params.requestSignal?.throwIfAborted();
-    const batch = runs.slice(index, index + CONTROL_TOOL_HISTORY_CONCURRENCY);
-    const histories = await waitForControlToolHistoryBatch(
-      Promise.all(batch.map((run) => controlToolHistoryLoad(params, run))),
-      params.requestSignal,
-    );
-    for (const history of histories) {
-      if (history && !params.lifecycleSignal.aborted) {
-        params.statesByRun.set(history.runId, history.state);
-        params.coverageByRun.set(history.runId, history.coverage);
+    for (
+      let index = 0;
+      index < runs.length;
+      index += CONTROL_TOOL_HISTORY_CONCURRENCY
+    ) {
+      deadline.signal.throwIfAborted();
+      if (params.lifecycleSignal.aborted) return;
+      const batch = runs.slice(index, index + CONTROL_TOOL_HISTORY_CONCURRENCY);
+      const histories = await waitForControlToolHistoryBatch(
+        Promise.all(batch.map((run) => controlToolHistoryLoad(params, run))),
+        deadline.signal,
+      );
+      for (const history of histories) {
+        if (history && !params.lifecycleSignal.aborted) {
+          params.statesByRun.set(history.runId, history.state);
+          params.coverageByRun.set(history.runId, history.coverage);
+        }
       }
     }
+  } catch (error) {
+    // Optional history cannot block the canonical page indefinitely. Caller
+    // cancellation still propagates; the local deadline leaves partial coverage.
+    if (!deadline.signal.aborted || params.requestSignal?.aborted) throw error;
+  } finally {
+    clearTimeout(timer);
+    params.requestSignal?.removeEventListener("abort", abortFromCaller);
+    deadline.abort();
   }
 }
 
@@ -406,15 +479,21 @@ function controlToolHistoryLoad(
   params: Parameters<typeof hydrateControlToolHistories>[0],
   run: RunView,
 ): ControlToolHistoryLoad {
-  const existing = params.inFlightByRun.get(run.runId);
+  const inFlightByRun = params.inFlightByRun;
+  const existing = inFlightByRun.get(run.runId);
   if (existing) {
     return existing;
   }
-  const load = loadControlToolHistory(params, run);
-  params.inFlightByRun.set(run.runId, load);
+  // Do not let an admitted read retain the caller's entire staged Thread maps.
+  const { client, eventStream, lifecycleSignal, timeoutMs } = params;
+  const load = loadControlToolHistory(
+    { client, eventStream, lifecycleSignal, timeoutMs },
+    run,
+  );
+  inFlightByRun.set(run.runId, load);
   const clear = () => {
-    if (params.inFlightByRun.get(run.runId) === load) {
-      params.inFlightByRun.delete(run.runId);
+    if (inFlightByRun.get(run.runId) === load) {
+      inFlightByRun.delete(run.runId);
     }
   };
   void load.then(clear, clear);
@@ -518,78 +597,53 @@ async function loadControlToolHistory(
   },
   run: RunView,
 ): ControlToolHistoryLoad {
-  const deadline = controlToolHistoryDeadline(
-    params.lifecycleSignal,
-    params.timeoutMs,
-  );
-  const state = createControlToolProjectionState();
-  let lastSequence = 0;
-  let reachedSnapshotHead = false;
-  try {
-    for await (const event of params.eventStream(params.client, {
+  return controlHistoryReadBudget
+    .run({
+      kind: "history",
       runId: run.runId,
-      afterSequence: 0,
-      extensions: ["run-plan-v1"],
-      view: "transcript",
-      signal: deadline.controller.signal,
-    })) {
-      deadline.controller.signal.throwIfAborted();
-      if (event.sequence <= lastSequence) {
-        continue;
-      }
-      if (event.sequence !== lastSequence + 1) {
-        return null;
-      }
-      lastSequence = event.sequence;
-      applyControlToolEvent(state, event);
-      if (event.sequence >= run.lastSequence) {
-        reachedSnapshotHead = true;
-        break;
-      }
-    }
-  } catch {
-    return null;
-  } finally {
-    deadline.dispose();
-  }
+      signal: params.lifecycleSignal,
+      timeoutMs: params.timeoutMs,
+      read: async (signal) => {
+        const state = createControlToolProjectionState();
+        let lastSequence = 0;
+        let reachedSnapshotHead = false;
+        for await (const event of params.eventStream(params.client, {
+          runId: run.runId,
+          afterSequence: 0,
+          extensions: ["run-plan-v1"],
+          view: "transcript",
+          signal,
+        })) {
+          signal.throwIfAborted();
+          if (event.sequence <= lastSequence) {
+            continue;
+          }
+          if (event.sequence !== lastSequence + 1) {
+            return null;
+          }
+          lastSequence = event.sequence;
+          applyControlToolEvent(state, event);
+          if (event.sequence >= run.lastSequence) {
+            reachedSnapshotHead = true;
+            break;
+          }
+        }
 
-  if (!reachedSnapshotHead) {
-    return null;
-  }
-  settleControlToolProjection(state, run);
-  return {
-    runId: run.runId,
-    state,
-    coverage: {
-      throughSequence: run.lastSequence,
-      complete: controlToolProjectionComplete(state),
-    },
-  };
-}
-
-function controlToolHistoryDeadline(
-  parentSignal: AbortSignal,
-  timeoutMs: number,
-): Readonly<{ controller: AbortController; dispose: () => void }> {
-  const controller = new AbortController();
-  const abortFromParent = () => controller.abort(parentSignal.reason);
-  if (parentSignal.aborted) {
-    abortFromParent();
-  } else {
-    parentSignal.addEventListener("abort", abortFromParent, { once: true });
-  }
-  const timeoutId = globalThis.setTimeout(
-    () => controller.abort(new Error("control_tool_history_timeout")),
-    timeoutMs,
-  );
-  return {
-    controller,
-    dispose: () => {
-      globalThis.clearTimeout(timeoutId);
-      parentSignal.removeEventListener("abort", abortFromParent);
-      controller.abort();
-    },
-  };
+        if (!reachedSnapshotHead) {
+          return null;
+        }
+        settleControlToolProjection(state, run);
+        return {
+          runId: run.runId,
+          state,
+          coverage: {
+            throughSequence: run.lastSequence,
+            complete: controlToolProjectionComplete(state),
+          },
+        };
+      },
+    })
+    .catch(() => null);
 }
 
 function waitForControlToolHistoryBatch<T>(

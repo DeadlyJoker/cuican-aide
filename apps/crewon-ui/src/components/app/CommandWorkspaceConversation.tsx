@@ -1,11 +1,21 @@
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
+import { useMemo } from "react";
+import { TaskWorkbenchScope } from "../workbench/TaskWorkbenchContext";
+import { projectThreadWorkbench } from "../../lib/workbench/taskWorkbenchProjection";
 
 import type { Locale } from "../../lib/i18n";
 import type { WorkMode } from "../../lib/workMode";
 import { sidebarThreadTitle } from "../SidebarPresentation";
 import { Transcript } from "../Transcript";
+import type { ControlTeamProgress } from "../../lib/control-runtime/controlTeamProgress";
+import {
+  MessageReplayScope,
+  type ReplayMessage,
+} from "../messages/MessageReplayScope";
 
 type CommandThreadRoomProps = {
+  active?: boolean;
+  teamProgress?: ControlTeamProgress | null;
   activeTurnId: string | null;
   cwd: string;
   locale: Locale;
@@ -15,6 +25,8 @@ type CommandThreadRoomProps = {
   workMode: WorkMode;
   onModeChange: (mode: WorkMode) => void;
   onStop?: () => void;
+  onReplayMessage?: ReplayMessage;
+  isSending?: boolean;
 };
 
 function transcriptLabels(locale: Locale) {
@@ -68,6 +80,8 @@ function workspaceLabel(path: string | null, locale: Locale): string {
 }
 
 export function CommandThreadRoom({
+  active = true,
+  teamProgress = null,
   activeTurnId,
   cwd,
   locale,
@@ -77,9 +91,13 @@ export function CommandThreadRoom({
   workMode,
   onModeChange,
   onStop,
+  onReplayMessage,
+  isSending = false,
 }: CommandThreadRoomProps) {
   const labels = transcriptLabels(locale);
   const isRunning =
+    (teamProgress?.threadId === selectedThread.id &&
+      teamProgress.phase !== "failed") ||
     Boolean(activeTurnId) ||
     selectedThread.turns.some((turn) => turn.status === "inProgress");
   const title =
@@ -106,53 +124,67 @@ export function CommandThreadRoom({
   const workspacePath =
     variant === "assistant" ? null : selectedThread.cwd || cwd || null;
   const workspaceText = workspaceLabel(workspacePath, locale);
+  const workbench = useMemo(
+    () => projectThreadWorkbench(selectedThread, title),
+    [selectedThread, title],
+  );
 
   return (
-    <>
-      {variant === "default" ? (
-        <header
-          className="home-title thread-home-title"
-          data-od-id="desktop-command-header"
-        >
-          <p>{contextLabel}</p>
-          <h1>
-            <span>{title}</span>
-          </h1>
-        </header>
-      ) : null}
+    <MessageReplayScope
+      key={selectedThread.id}
+      thread={selectedThread}
+      busy={isRunning || isSending || !active}
+      locale={locale}
+      onReplay={onReplayMessage}
+    >
+      <TaskWorkbenchScope snapshot={workbench} active={active}>
+        {variant === "default" ? (
+          <header
+            className="home-title thread-home-title"
+            data-od-id="desktop-command-header"
+          >
+            <p>{contextLabel}</p>
+            <h1>
+              <span>{title}</span>
+            </h1>
+          </header>
+        ) : null}
 
-      <section
-        className={
-          variant === "assistant"
-            ? "command-thread-room assistant-thread-room"
-            : "command-thread-room"
-        }
-        data-od-id="command-thread-room"
-      >
-        <Transcript
-          commandLabel={labels.commandLabel}
-          crewonLabel={labels.crewonLabel}
-          emptyDescription={labels.emptyDescription}
-          emptyTitle={labels.emptyTitle}
-          filesLabel={labels.filesLabel}
-          loadingLabel={labels.loadingLabel}
-          locale={locale}
-          mode={workMode}
-          modeCodeDescription={labels.modeCodeDescription}
-          modeCodeLabel={labels.modeCodeLabel}
-          modeOfficeDescription={labels.modeOfficeDescription}
-          modeOfficeLabel={labels.modeOfficeLabel}
-          modeTitleLabel={labels.modeTitleLabel}
-          onModeChange={onModeChange}
-          onStop={onStop ?? (() => {})}
-          planLabel={labels.planLabel}
-          reasoningLabel={labels.reasoningLabel}
-          stopLabel={labels.stopLabel}
-          streamingText={streamingText}
-          thread={selectedThread}
-          youLabel={labels.youLabel}
-        />
-      </section>
-    </>
+        <section
+          className={
+            variant === "assistant"
+              ? "command-thread-room assistant-thread-room"
+              : "command-thread-room"
+          }
+          data-od-id="command-thread-room"
+        >
+          <Transcript
+            teamProgress={teamProgress}
+            activeTurnId={activeTurnId}
+            commandLabel={labels.commandLabel}
+            crewonLabel={labels.crewonLabel}
+            emptyDescription={labels.emptyDescription}
+            emptyTitle={labels.emptyTitle}
+            filesLabel={labels.filesLabel}
+            loadingLabel={labels.loadingLabel}
+            locale={locale}
+            mode={workMode}
+            modeCodeDescription={labels.modeCodeDescription}
+            modeCodeLabel={labels.modeCodeLabel}
+            modeOfficeDescription={labels.modeOfficeDescription}
+            modeOfficeLabel={labels.modeOfficeLabel}
+            modeTitleLabel={labels.modeTitleLabel}
+            onModeChange={onModeChange}
+            onStop={onStop ?? (() => {})}
+            planLabel={labels.planLabel}
+            reasoningLabel={labels.reasoningLabel}
+            stopLabel={labels.stopLabel}
+            streamingText={streamingText}
+            thread={selectedThread}
+            youLabel={labels.youLabel}
+          />
+        </section>
+      </TaskWorkbenchScope>
+    </MessageReplayScope>
   );
 }

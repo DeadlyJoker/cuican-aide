@@ -49,8 +49,72 @@ test("loads a bounded Direct Responses runtime manifest without provider SDKs", 
     adapterVersion: "1",
     modelId: "model-1",
   });
+  assert.equal(runtime.executionAuthority, "crewonKernel");
   assert.deepEqual(runtime.toolRuntime.definitions(), []);
   await runtime.close?.();
+});
+
+test("materializes a provider-owned cloud Agent without ambient local tools", async (context) => {
+  const version = compileAgentVersion(
+    {
+      ...source(),
+      model: {
+        ...source().model,
+        adapterName: "cloud-agent",
+        modelId: "cloud-model",
+      },
+    },
+    { sha256 },
+  );
+  const path = temporaryFile(context);
+  writeFileSync(
+    path,
+    JSON.stringify(cloudConfig(version.contentDigest)),
+    "utf8",
+  );
+  const factory = loadAgentVersionRuntimeFactory(path, {
+    CREWON_AGENT_PLATFORM_API_KEY: "cloud-key",
+    CREWON_PIM_SANDBOX_BASE_URL: "https://pim.example.com",
+    CREWON_PIM_SANDBOX_USERNAME: "admin",
+    CREWON_PIM_SANDBOX_PASSWORD: "secret",
+    CREWON_PIM_SANDBOX_AGENT_ID: "42",
+  });
+
+  const runtime = await factory.create({ tenantId: "tenant-1", version });
+  assert.equal(runtime.executionAuthority, "providerAgent");
+  assert.deepEqual(runtime.kernel.modelIdentity, {
+    adapterName: "cloud-agent",
+    adapterVersion: "1",
+    modelId: "cloud-model",
+  });
+  assert.deepEqual(runtime.toolRuntime.definitions(), []);
+  await runtime.close?.();
+});
+
+test("never falls back to the model Provider credential for a cloud Agent", (context) => {
+  const version = compileAgentVersion(
+    {
+      ...source(),
+      model: {
+        ...source().model,
+        adapterName: "cloud-agent",
+        modelId: "cloud-model",
+      },
+    },
+    { sha256 },
+  );
+  const path = temporaryFile(context);
+  writeFileSync(
+    path,
+    JSON.stringify(cloudConfig(version.contentDigest)),
+    "utf8",
+  );
+
+  assert.throws(
+    () =>
+      loadAgentVersionRuntimeFactory(path, {}, undefined, "model-provider-key"),
+    hasMessage("agent_version_runtime_provider_key_missing"),
+  );
 });
 
 test("carries the ambient PIM sandbox into independently bound agent runtimes", async (context) => {
@@ -492,6 +556,23 @@ test("rejects injected fields and unsafe runtime manifests", () => {
       }),
     hasMessage("agent_version_runtime_binding_invalid"),
   );
+  const cloud = cloudConfig(version.contentDigest);
+  for (const override of [
+    { workspaceBindingId: "workspace-1" },
+    { mcpStdioConfigPath: "/tmp/mcp.json" },
+    { deviceToolConfigPath: "/tmp/device.json" },
+    { remoteMcpConfigPath: "/tmp/remote.json" },
+    { toolRuntimeMode: "shared" },
+  ]) {
+    assert.throws(
+      () =>
+        parseRuntimeBindingConfig({
+          ...cloud,
+          bindings: [{ ...cloud.bindings[0], ...override }],
+        }),
+      hasMessage("agent_version_runtime_provider_authority_invalid"),
+    );
+  }
 });
 
 function config(contentDigest: string, apiKeyEnvironment: string | null) {
@@ -516,6 +597,30 @@ function config(contentDigest: string, apiKeyEnvironment: string | null) {
         mcpStdioConfigPath: null,
         deviceToolConfigPath: null,
         remoteMcpConfigPath: null,
+      },
+    ],
+  };
+}
+
+function cloudConfig(contentDigest: string) {
+  const direct = config(contentDigest, null);
+  return {
+    ...direct,
+    bindings: [
+      {
+        ...direct.bindings[0],
+        provider: {
+          kind: "cloudAgent" as const,
+          invocationUrl: "https://agents.example/invoke",
+          modelId: "cloud-model",
+          agentId: 42,
+          apiKeyEnvironment: "CREWON_AGENT_PLATFORM_API_KEY",
+          storeResponses: false,
+          requestProfile: "standard" as const,
+          idleTimeoutMs: 60_000,
+          sequencePolicy: "required" as const,
+        },
+        toolRuntimeMode: "independent" as const,
       },
     ],
   };

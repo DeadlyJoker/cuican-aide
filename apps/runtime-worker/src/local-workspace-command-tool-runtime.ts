@@ -117,6 +117,18 @@ export function createLocalWorkspaceCommandToolRuntime(
   const fullAccessRuntime = broker(FULL_ACCESS_SANDBOX_MODE);
   return {
     definitions: () => workspaceRuntime.definitions(),
+    retainedExecutionResults: (query) => {
+      const results = workspaceRuntime.retainedExecutionResults(query);
+      return results.length >= query.limit
+        ? results
+        : [
+            ...results,
+            ...fullAccessRuntime.retainedExecutionResults({
+              ...query,
+              limit: query.limit - results.length,
+            }),
+          ];
+    },
     executionPolicy: (kind, name, context?: ToolExecutionPolicyContext) =>
       runtimeForPolicyContext(
         workspaceRuntime,
@@ -128,6 +140,12 @@ export function createLocalWorkspaceCommandToolRuntime(
         command,
         signal,
       ),
+    reserveExecution: (command, signal) =>
+      runtimeForCommand(
+        workspaceRuntime,
+        fullAccessRuntime,
+        command,
+      ).reserveExecution?.(command, signal),
     reconcile: (command, signal) =>
       runtimeForCommand(workspaceRuntime, fullAccessRuntime, command).reconcile(
         command,
@@ -138,6 +156,18 @@ export function createLocalWorkspaceCommandToolRuntime(
         command,
         signal,
       ),
+    readRetainedExecutionResult: (lookup) =>
+      runtimeForCommand(
+        workspaceRuntime,
+        fullAccessRuntime,
+        lookup,
+      ).readRetainedExecutionResult?.(lookup) ?? null,
+    acknowledgeExecutionResult: (acknowledgement) =>
+      runtimeForCommand(
+        workspaceRuntime,
+        fullAccessRuntime,
+        acknowledgement,
+      ).acknowledgeExecutionResult?.(acknowledgement),
   };
 }
 
@@ -154,7 +184,7 @@ function runtimeForPolicyContext(
 function runtimeForCommand(
   workspaceRuntime: ToolRuntimePort,
   fullAccessRuntime: ToolRuntimePort,
-  command: ToolExecutionCommand,
+  command: Pick<ToolExecutionCommand, "actionIntent">,
 ): ToolRuntimePort {
   return command.actionIntent.capability === fullAccessPolicy.capability
     ? fullAccessRuntime

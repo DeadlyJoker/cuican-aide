@@ -4,6 +4,24 @@ import { describe, expect, it } from "vitest";
 import { OfficeMessageMarkdown } from "./OfficeMessageMarkdown";
 
 describe("OfficeMessageMarkdown", () => {
+  it("preserves user-visible line requirements without requiring blank Markdown lines", () => {
+    const markup = renderToStaticMarkup(
+      <OfficeMessageMarkdown
+        mentions={[]}
+        text={[
+          "DECISION: NO-GO",
+          "CONFLICT: 摘要不一致",
+          "GATE: 退款复测通过后发布",
+          "UNRESOLVED: 缺少修复证据",
+        ].join("\n")}
+      />,
+    );
+
+    expect(markup).toMatchInlineSnapshot(
+      `"<div class=\"markdown-content\"><p>DECISION: NO-GO<br/>\nCONFLICT: 摘要不一致<br/>\nGATE: 退款复测通过后发布<br/>\nUNRESOLVED: 缺少修复证据</p></div>"`,
+    );
+  });
+
   it("renders Markdown and highlights only visible Office members", () => {
     const markup = renderToStaticMarkup(
       <OfficeMessageMarkdown

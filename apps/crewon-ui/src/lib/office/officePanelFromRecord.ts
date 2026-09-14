@@ -17,12 +17,14 @@ export type ControlOfficeDefinitionRecordReference =
     authority: "controlDefinition";
     config: Pick<OfficeConfig, "subtitle" | "title">;
     definition: {
+      officeId: string;
       officeVersionId: string;
       revision: number;
       members: ReadonlyArray<{
         agentVersionId: string;
         displayName: string;
         memberId: string;
+        responsibility?: string;
       }>;
       executionTargets: ReadonlyArray<{
         agentVersionId: string;

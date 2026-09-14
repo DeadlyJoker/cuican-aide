@@ -1,5 +1,6 @@
 import {
   projectEffectiveModelHistory,
+  validateModelHistoryItem,
   type ModelHistoryItem,
 } from "@crewon/domain";
 
@@ -44,6 +45,69 @@ export function projectModelHistory(
     throw new ContextHistoryError("context_compaction_projection_invalid");
   }
 
+  return projectModelHistoryWindow(
+    {
+      items: effective.items
+        .filter((item) => item.type !== "compaction")
+        .filter(
+          (item) =>
+            item.sequence > (lastCompaction?.replacesThroughSequence ?? 0),
+        ),
+      lastCompaction,
+      latestRollback: effective.latestRollback,
+      throughHistorySequence: effective.throughHistorySequence,
+    },
+    options,
+  );
+}
+
+/** Projects a Store-certified effective window without decoding compacted raw history. */
+export function projectModelHistoryWindow(
+  window: Readonly<{
+    items: readonly Exclude<
+      ModelHistoryItem,
+      { type: "compaction" | "rollback" }
+    >[];
+    lastCompaction: Extract<ModelHistoryItem, { type: "compaction" }> | null;
+    latestRollback: Extract<ModelHistoryItem, { type: "rollback" }> | null;
+    throughHistorySequence: number;
+  }>,
+  options: Readonly<{ maxItems?: number; maxBytes?: number }> = {},
+): ModelContextProjection {
+  const { lastCompaction, latestRollback, throughHistorySequence } = window;
+  if (
+    (lastCompaction !== null && lastCompaction.type !== "compaction") ||
+    (latestRollback !== null && latestRollback.type !== "rollback")
+  ) {
+    throw new ContextHistoryError("context_compaction_projection_invalid");
+  }
+  if (
+    !Number.isSafeInteger(throughHistorySequence) ||
+    throughHistorySequence < 1
+  ) {
+    throw new ContextHistoryError("context_history_empty");
+  }
+  let identity: ModelHistoryItem | null = null;
+  const validate = (item: ModelHistoryItem) => {
+    validateModelHistoryItem(item);
+    identity ??= item;
+    if (
+      item.tenantId !== identity.tenantId ||
+      item.threadId !== identity.threadId ||
+      item.sequence > throughHistorySequence
+    )
+      throw new ContextHistoryError("context_history_sequence_gap");
+  };
+  if (lastCompaction !== null) validate(lastCompaction);
+  if (latestRollback !== null) validate(latestRollback);
+  let cursor = lastCompaction?.replacesThroughSequence ?? 0;
+  for (const item of window.items) {
+    validate(item);
+    if (item.sequence <= cursor)
+      throw new ContextHistoryError("context_history_sequence_gap");
+    cursor = item.sequence;
+  }
+
   const entries: ContextProjectionEntry[] = [];
   if (lastCompaction?.type === "compaction") {
     for (const retained of lastCompaction.retainedUserMessages) {
@@ -62,33 +126,21 @@ export function projectModelHistory(
     });
   }
 
-  for (const item of effective.items) {
-    if (
-      lastCompaction?.type === "compaction" &&
-      item.sequence <= lastCompaction.replacesThroughSequence
-    ) {
-      continue;
-    }
-    if (item === lastCompaction) {
-      continue;
-    }
-    if (item.type === "compaction") {
-      continue;
-    }
+  for (const item of window.items) {
     entries.push({ sourceSequence: item.sequence, item: projectItem(item) });
   }
   const normalized = normalizeContextHistoryEntries(entries, options);
   const latestRewrite =
     lastCompaction?.type === "compaction" &&
-    (effective.latestRollback === null ||
-      lastCompaction.sequence > effective.latestRollback.sequence)
+    (latestRollback === null ||
+      lastCompaction.sequence > latestRollback.sequence)
       ? lastCompaction
-      : effective.latestRollback;
+      : latestRollback;
   return {
     ...normalized,
     revision: latestRewrite?.itemId ?? "canonical",
     historyRewritten: latestRewrite !== null || normalized.historyRewritten,
-    throughHistorySequence: effective.throughHistorySequence,
+    throughHistorySequence,
     compactedThroughSequence:
       lastCompaction?.type === "compaction"
         ? lastCompaction.replacesThroughSequence

@@ -1,0 +1,36 @@
+.team-progress-status {
+  display: grid;
+  gap: 10px;
+  padding: 14px 0;
+  color: var(--n-800);
+  font-size: calc(13px + var(--user-ui-font-delta, 0px));
+  line-height: 1.6;
+}
+.team-progress-status > strong {
+  color: var(--n-1000);
+  font-weight: 500;
+}
+.team-progress-status ul {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.team-progress-status li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.team-progress-status li > span:first-child {
+  overflow-wrap: anywhere;
+}
+.team-progress-status li > span:last-child {
+  color: var(--n-650);
+}
+.team-progress-status p {
+  margin: 0;
+  color: var(--n-650);
+  font-size: calc(12px + var(--user-ui-font-delta, 0px));
+}

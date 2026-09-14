@@ -1,3 +1,4 @@
+import { formatThreadCatalogCursor, parseThreadCatalogQuery, matchesThreadCatalogSearch, formatThreadMessageWindowCursor, parseThreadMessageWindowQuery } from "@crewon/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import type {
@@ -20,6 +21,7 @@ import {
   ControlThreadRuntime,
   controlTurnContent,
   controlThreadPreview,
+  controlThreadSummary,
   controlThreadProjection,
   visibleControlUserContent,
 } from "./controlThreadRuntime";
@@ -27,6 +29,24 @@ import { appendItem, upsertTurn } from "../thread/threadModel";
 import { projectTaskDetail } from "../task-detail/taskDetailProjection";
 
 const occurredAt = "2026-08-09T08:00:00.000Z";
+
+it("keeps historical list and hydrated titles identical without replacing the latest-message preview", () => {
+  const head = threadView({ title: null, displayTitle: "首条任务" });
+  expect(controlThreadSummary(head).name).toBe("首条任务");
+  const messages = [
+    messageView(1, "user", "首条任务\n长材料"),
+    messageView(2, "user", "后续问题"),
+  ];
+  expect(controlThreadProjection(head, messages, []).name).toBe("首条任务");
+  expect(
+    controlThreadProjection({ ...head, displayTitle: undefined }, messages, [])
+      .name,
+  ).toBe("首条任务");
+  expect(controlThreadProjection(head, messages, []).preview).toBe("后续问题");
+  expect(
+    controlThreadProjection({ ...head, title: "我的命名" }, messages, []).name,
+  ).toBe("我的命名");
+});
 
 const activeCatalog: ActiveAgentVersionCatalogResponse = {
   releaseId: `sha256:${"a".repeat(64)}`,
@@ -197,7 +217,31 @@ function runEvent(
   sequence: number,
   event:
     | { type: "run.started"; data: Record<string, never> }
+    | {
+        type: "segment.started";
+        data: { segmentId: string; attempt: number };
+      }
     | { type: "model.output.delta"; data: { segmentId: string; delta: string } }
+    | {
+        type: "model.sampling.retry";
+        data: {
+          segmentId: string;
+          samplingAttempt: number;
+          maxRetries: number;
+          code: string;
+          discardedOutput: boolean;
+        };
+      }
+    | {
+        type: "model.transport.fallback";
+        data: {
+          segmentId: string;
+          fromTransport: string;
+          toTransport: string;
+          code: string;
+          discardedOutput: boolean;
+        };
+      }
     | {
         type: "tool.requested";
         data: {
@@ -256,7 +300,7 @@ function fakeClient({
   const thread = threadView({
     lastMessageSequence: messages.at(-1)?.sequence ?? 0,
   });
-  return Object.assign(
+  const client = Object.assign(
     new ControlApiClient({
       baseUrl: "http://127.0.0.1:3210",
       accessToken: "authenticated-test-token",
@@ -267,6 +311,7 @@ function fakeClient({
       },
     }),
     {
+      getThreadCatalog: vi.fn<ControlApiClient["getThreadCatalog"]>(async () => ({ schemaVersion: "crewon.thread-catalog.v0", data: [], scannedCount: 0, olderCursor: null, newerCursor: null })),
       getActiveAgentVersionCatalog: vi.fn(async () => activeCatalog),
       getExecutionIntentCapability: vi.fn(async () => ({
         version: "v1" as const,
@@ -405,6 +450,10 @@ function fakeClient({
         data: messages,
         nextCursor: null,
       })),
+      getThreadActiveRun: vi.fn<ControlApiClient["getThreadActiveRun"]>(async () => ({
+        schemaVersion: "crewon.thread-active-run.v0", threadId: thread.threadId,
+        run: (typeof runs === "function" ? runs() : runs).find(run => !["completed", "failed", "canceled"].includes(run.status)) ?? null,
+      })),
       listThreadRuns: vi.fn(async () => ({
         data: typeof runs === "function" ? runs() : runs,
         nextCursor: null,
@@ -412,6 +461,44 @@ function fakeClient({
       listThreads: vi.fn(async () => ({ data: [thread], nextCursor: null })),
     },
   );
+  // The fixture models the new server endpoints from its mutable canonical rows.
+  // Timestamp grouping is confined to legacy fixture construction; production uses proofs.
+  const messageWindow = async (threadId: string, query: { cursor?: string | null; limit?: number } = {}) => {
+    const headIndex = client.getThread.mock.calls.findLastIndex(([id]) => id === threadId);
+    const head = await (client.getThread.mock.results[headIndex]?.value ?? Promise.resolve({ thread, eventSequence: thread.revision }));
+    const { data } = await client.listThreadMessages(threadId, { limit: 100 });
+    const position = parseThreadMessageWindowQuery(query, threadId).position;
+    const candidates = data.filter((message) => !position || (position.direction === "older" ? message.sequence < position.messageSequence : message.sequence > position.messageSequence));
+    const selected = position?.direction === "newer" ? candidates.slice(0, query.limit ?? 100) : candidates.slice(-(query.limit ?? 100));
+    return {
+      schemaVersion: "crewon.message-window.v0" as const, threadId,
+      threadRevision: head.thread.revision, eventSequence: head.eventSequence,
+      headMessageSequence: head.thread.lastMessageSequence, data: selected,
+      olderCursor: selected[0] && data.some((item) => item.sequence < selected[0]!.sequence) ? formatThreadMessageWindowCursor(threadId, { direction: "older", threadRevision: head.thread.revision, messageSequence: selected[0].sequence }) : null,
+      newerCursor: selected.at(-1) && data.some((item) => item.sequence > selected.at(-1)!.sequence) ? formatThreadMessageWindowCursor(threadId, { direction: "newer", threadRevision: head.thread.revision, messageSequence: selected.at(-1)!.sequence }) : null,
+    };
+  };
+  return Object.assign(client, {
+    getThreadMessageWindow: vi.fn<ControlApiClient["getThreadMessageWindow"]>(messageWindow),
+    getRunInThread: vi.fn<ControlApiClient["getRunInThread"]>(async (threadId, runId) => {
+      const candidates = await client.listThreadRuns(threadId, { limit: 100 });
+      const run = candidates.data.find((run) => run.runId === runId);
+      if (!run) throw new Error("fixture_run_missing");
+      return { run };
+    }),
+    getThreadTranscriptWindow: vi.fn<ControlApiClient["getThreadTranscriptWindow"]>(async (threadId, query) => {
+      const messagePage = await messageWindow(threadId, query);
+      const candidates = (await client.listThreadRuns(threadId, { limit: 100 })).data;
+      const groups = controlThreadProjection(thread, messagePage.data, candidates).turns;
+      return {
+        schemaVersion: "crewon.transcript-window.v0", messageWindow: messagePage,
+        runBindings: messagePage.data.map((message) => {
+          const runId = groups.find((turn) => turn.items.some((item) => item.id === message.messageId || (message.proposedPlan !== null && item.id === message.proposedPlan.planId)))?.id;
+          return !runId || runId.startsWith("orphan:") ? { messageId: message.messageId, runId: null, source: "unassociated" } : { messageId: message.messageId, runId, source: message.role === "user" ? "turnStartReceipt" : "messageCompletedEvent" };
+        }),
+      };
+    }),
+  });
 }
 
 function callbacks(onSettled: (runId: string) => void = () => {}) {
@@ -420,6 +507,7 @@ function callbacks(onSettled: (runId: string) => void = () => {}) {
     onThreadDeleted: vi.fn(),
     onTurnStarted: vi.fn(),
     onTextDelta: vi.fn(),
+    onTextReset: vi.fn(),
     onToolItem: vi.fn(),
     onToolApprovalRequired: vi.fn(),
     onToolApprovalResolved: vi.fn(),
@@ -646,6 +734,50 @@ describe("Control thread projection", () => {
         {
           type: "agentMessage",
           text: "@Security answer the release question.\n[[CrewON delegate:security]]",
+        },
+        {
+          type: "agentMessage",
+          text: "NO-GO until the rollback drill passes",
+        },
+      ],
+    });
+  });
+
+  it("keeps the Office manager synthesis prompt private and attributes the final answer to the original task", () => {
+    const projected = controlThreadProjection(
+      threadView({ lastMessageSequence: 3 }),
+      [
+        messageView(1, "user", "Decide whether tonight's release is safe"),
+        messageView(
+          2,
+          "user",
+          "[Team Runtime · Release office · 组长汇总]\nprivate member evidence",
+        ),
+        messageView(3, "assistant", "NO-GO until the rollback drill passes"),
+      ],
+      [
+        runView({
+          runId: "run-manager-final",
+          status: "completed",
+          createdAt: "2026-08-09T08:00:02.500Z",
+          terminalAt: "2026-08-09T08:00:03.500Z",
+        }),
+      ],
+    );
+
+    expect(projected.preview).toBe("Decide whether tonight's release is safe");
+    expect(projected.turns).toHaveLength(1);
+    expect(projected.turns[0]).toMatchObject({
+      id: "run-manager-final",
+      items: [
+        {
+          type: "userMessage",
+          content: [
+            {
+              type: "text",
+              text: "Decide whether tonight's release is safe",
+            },
+          ],
         },
         {
           type: "agentMessage",
@@ -918,6 +1050,71 @@ describe("Control thread projection", () => {
 });
 
 describe("Control thread runtime", () => {
+  it("excludes internal team Threads before bootstrap selection and search, across pages", async () => {
+    const internalTitles = [
+      "__crewon_workflow_run__:version-1:execution-1",
+      "__crewon_workflow_definition__:version-1",
+      "__crewon_experts_definition__:experts-1",
+    ];
+    const internalThreads = internalTitles.map((title, index) =>
+      threadView({ threadId: `internal-${index}`, title }),
+    );
+    const visible = threadView({ title: "方案评审" });
+    const archived = threadView({
+      threadId: "archived-conversation",
+      title: "已归档的方案评审",
+      status: "archived",
+      archivedAt: occurredAt,
+    });
+    const client = Object.assign(fakeClient({ messages: [], runs: [] }), {
+      getThreadCatalog: vi.fn<ControlApiClient["getThreadCatalog"]>(async (input) => {
+        const query = parseThreadCatalogQuery(input);
+        const first = query.position === null;
+        const candidates = first ? [...internalThreads,
+          threadView({ threadId: "member-branch", forkedFromThreadId: "thread-1" }),
+          ...internalThreads.map(thread => ({ ...thread, threadId: `archived-${thread.threadId}`, status: "archived" as const, archivedAt: occurredAt }))]
+          : [visible, archived];
+        return {
+          schemaVersion: "crewon.thread-catalog.v0",
+          scannedCount: candidates.length,
+          data: candidates.filter(thread => thread.status === query.status && matchesThreadCatalogSearch(thread, query.search)),
+          olderCursor: first ? formatThreadCatalogCursor(query, { direction: "older", updatedAt: occurredAt, threadId: "internal-boundary" }) : null,
+          newerCursor: null,
+        };
+      }),
+    });
+    const runtime = new ControlThreadRuntime({ client }, callbacks());
+
+    expect(
+      (await runtime.listThreads(false)).map((thread) => thread.id),
+    ).toEqual([visible.threadId]);
+    expect(
+      (await runtime.listThreads(true)).map((thread) => thread.id),
+    ).toEqual([archived.threadId]);
+    expect(await runtime.searchThreads("__crewon_", false)).toEqual([]);
+    expect(
+      (await runtime.searchThreads("方案", false)).map((thread) => thread.id),
+    ).toEqual([visible.threadId]);
+    runtime.close();
+  });
+
+  it("keeps an empty conversation list when only hidden team Threads exist", async () => {
+    const client = Object.assign(fakeClient({ messages: [], runs: [] }), {
+      getThreadCatalog: vi.fn<ControlApiClient["getThreadCatalog"]>(async () => ({
+        schemaVersion: "crewon.thread-catalog.v0", scannedCount: 1,
+        data: [
+          threadView({
+            title: "__crewon_workflow_run__:version-1:execution-1",
+          }),
+        ],
+        olderCursor: null, newerCursor: null,
+      })),
+    });
+    const runtime = new ControlThreadRuntime({ client }, callbacks());
+    expect(await runtime.listThreads(false)).toEqual([]);
+    runtime.close();
+  });
+
   it("commits a pending Tool approval through the Control API", async () => {
     const currentApproval = {
       approvalId: "approval-1",
@@ -1203,13 +1400,17 @@ describe("Control thread runtime", () => {
       callbacks(),
     );
 
+    client.listThreadRuns.mockRejectedValue(new Error("must_not_read_history_to_steer"));
     await expect(
       runtime.steerTurn("thread-1", "Stage two evidence"),
     ).resolves.toEqual({ turnId: "run-stage-2" });
+    expect(client.listThreadRuns).not.toHaveBeenCalled();
+    expect(client.getThreadActiveRun).toHaveBeenCalledTimes(1);
     expect(client.cancelRun).toHaveBeenCalledWith(
       "run-continuation",
       { expectedRevision: 4 },
       expect.any(String),
+      { signal: expect.any(AbortSignal) },
     );
     expect(client.startTurn).toHaveBeenCalledWith(
       "thread-1",
@@ -1220,6 +1421,44 @@ describe("Control thread runtime", () => {
       expect.any(String),
     );
     runtime.close();
+  });
+
+  it("closing during an unresponsive active Run lookup prevents steering and clears the deadline", async () => {
+    vi.useFakeTimers();
+    const client = fakeClient({ messages: [], runs: [] });
+    let finish!: (value: Awaited<ReturnType<ControlApiClient["getThreadActiveRun"]>>) => void;
+    client.getThreadActiveRun.mockImplementation(() => new Promise(resolve => { finish = resolve; }));
+    const runtime = new ControlThreadRuntime({ client, eventStream: idleRunEventStream }, callbacks());
+    const start = vi.spyOn(runtime, "startTurn");
+    try {
+      const pending = runtime.steerTurn("thread-1", "next");
+      const rejected = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+      runtime.close();
+      await rejected;
+      finish({ schemaVersion: "crewon.thread-active-run.v0", threadId: "thread-1", run: null });
+      await Promise.resolve();
+      expect(start).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { runtime.close(); vi.useRealTimers(); }
+  });
+
+  it("steering stops after its total cancellation deadline without sending a replacement Turn", async () => {
+    vi.useFakeTimers();
+    const client = Object.assign(fakeClient({ messages: [], runs: [runView({ status: "running" })] }), {
+      getRun: vi.fn(async () => ({ run: runView({ status: "running" }) })),
+      cancelRun: vi.fn(async () => ({ disposition: "committed" as const, run: runView({ status: "running", cancelRequested: true }) })),
+    });
+    const runtime = new ControlThreadRuntime({ client, eventStream: idleRunEventStream }, callbacks());
+    const start = vi.spyOn(runtime, "startTurn");
+    try {
+      const rejected = expect(runtime.steerTurn("thread-1", "next")).rejects.toThrow("control_run_steer_cancel_timeout");
+      await vi.advanceTimersByTimeAsync(10_001);
+      await rejected;
+      expect(start).not.toHaveBeenCalled();
+      expect(client.cancelRun).toHaveBeenCalledTimes(1);
+      expect(client.listThreadRuns).not.toHaveBeenCalled();
+      expect(vi.getTimerCount()).toBe(0);
+    } finally { runtime.close(); vi.useRealTimers(); }
   });
 
   it("creates Assistant threads with a durable reserved title", async () => {
@@ -1238,7 +1477,37 @@ describe("Control thread runtime", () => {
     expect(client.createThread).toHaveBeenCalledWith(
       { title: "CrewON Assistant" },
       "thread.create:test",
+      { signal: expect.any(AbortSignal) },
     );
+    runtime.close();
+  });
+
+  it("reuses an Assistant outside the first catalog page instead of creating a second model history", async () => {
+    const client = fakeClient({ messages: [], runs: [] });
+    const assistant = threadView({ title: "CrewON Assistant" });
+    client.getThread.mockResolvedValue({ thread: assistant, eventSequence: assistant.revision });
+    client.getThreadCatalog.mockResolvedValueOnce({ schemaVersion: "crewon.thread-catalog.v0", data: [], scannedCount: 100, olderCursor: "continue", newerCursor: null });
+    client.getThreadCatalog.mockResolvedValueOnce({ schemaVersion: "crewon.thread-catalog.v0", data: [assistant], scannedCount: 1, olderCursor: null, newerCursor: null });
+    const runtime = new ControlThreadRuntime({ client }, callbacks());
+    runtime.setThreadEventStreamFocus(null);
+    try {
+      const result = await runtime.startThread(undefined, "assistant");
+      expect(result.id).toBe(assistant.threadId);
+      expect(result.threadSource).toBe("assistant");
+      expect(client.getThreadCatalog).toHaveBeenCalledTimes(2);
+      expect(client.createThread).not.toHaveBeenCalled();
+    } finally { runtime.close(); }
+  });
+
+  it("does not create an Assistant when an incomplete lookup is canceled", async () => {
+    const client = fakeClient({ messages: [], runs: [] });
+    client.getThreadCatalog.mockImplementation(() => new Promise(() => {}));
+    const runtime = new ControlThreadRuntime({ client }, callbacks());
+    const pending = runtime.startThread(undefined, "assistant");
+    const canceled = expect(pending).rejects.toMatchObject({ name: "AbortError" });
+    runtime.close();
+    await canceled;
+    expect(client.createThread).not.toHaveBeenCalled();
   });
 
   it("uses current revisions for archive, restore, rename and terminal delete", async () => {
@@ -1324,6 +1593,23 @@ describe("Control thread runtime", () => {
     runtime.close();
   });
 
+  it("rejects a replay rollback when its reviewed revision is stale", async () => {
+    const client = fakeClient({ messages: [], runs: [] });
+    const runtime = new ControlThreadRuntime(
+      {
+        client,
+        eventStream: idleRunEventStream,
+        threadEventStream: idleThreadEventStream,
+      },
+      callbacks(),
+    );
+    await expect(
+      runtime.rollbackThread("thread-1", 1, { expectedRevision: 99 }),
+    ).rejects.toThrow("message_replay_changed");
+    expect(client.rollbackThread).not.toHaveBeenCalled();
+    runtime.close();
+  });
+
   it("rolls back through Control with frozen CAS and idempotency, then rehydrates", async () => {
     const client = fakeClient({
       messages: [messageView(1, "user", "Keep this projection")],
@@ -1364,7 +1650,8 @@ describe("Control thread runtime", () => {
     expect(client.getThread).toHaveBeenCalledTimes(4);
     expect(thread).toMatchObject({
       id: "thread-1",
-      turns: [expect.objectContaining({ id: "orphan:message-1" })],
+      turns: [],
+      controlTranscriptWindow: { rows: [expect.objectContaining({ kind: "unassociated", item: expect.objectContaining({ id: "message-1" }) })] },
     });
     expect(runtimeCallbacks.onThread).toHaveBeenCalledWith(thread);
     runtime.close();
@@ -1897,6 +2184,102 @@ describe("Control thread runtime", () => {
     runtime.close();
   });
 
+  it("keeps only the focused Thread SSE and releases every subscription on close", async () => {
+    const client = fakeClient({ messages: [], runs: [] });
+    vi.mocked(client.getThread).mockImplementation(async (threadId) => ({
+      thread: threadView({ threadId }),
+      eventSequence: 1,
+    }));
+    const starts: string[] = [];
+    const aborts: string[] = [];
+    const runtime = new ControlThreadRuntime(
+      {
+        client,
+        threadEventStream: async function* (_streamClient, input) {
+          starts.push(input.threadId);
+          await waitForAbort(input.signal);
+          aborts.push(input.threadId);
+        },
+      },
+      callbacks(),
+    );
+
+    runtime.setThreadEventStreamFocus("thread-1");
+    await runtime.readThread("thread-1");
+    await vi.waitFor(() => expect(starts).toEqual(["thread-1"]));
+
+    runtime.setThreadEventStreamFocus("thread-2");
+    await vi.waitFor(() => expect(aborts).toEqual(["thread-1"]));
+    await runtime.readThread("thread-2");
+    await vi.waitFor(() => expect(starts).toEqual(["thread-1", "thread-2"]));
+
+    runtime.setThreadEventStreamFocus("thread-2");
+    await Promise.resolve();
+    expect(starts).toEqual(["thread-1", "thread-2"]);
+
+    await runtime.readThread("thread-1");
+    expect(starts).toEqual(["thread-1", "thread-2"]);
+
+    runtime.setThreadEventStreamFocus("thread-1");
+    await vi.waitFor(() =>
+      expect(starts).toEqual(["thread-1", "thread-2", "thread-1"]),
+    );
+    await vi.waitFor(() => expect(aborts).toEqual(["thread-1", "thread-2"]));
+
+    runtime.close();
+    await vi.waitFor(() =>
+      expect(aborts).toEqual(["thread-1", "thread-2", "thread-1"]),
+    );
+  });
+
+  it("resumes a refocused Thread SSE from its highest observed cursor", async () => {
+    const client = fakeClient({ messages: [], runs: [] });
+    let thread1Sequence = 4;
+    vi.mocked(client.getThread).mockImplementation(async (threadId) => {
+      const eventSequence = threadId === "thread-1" ? thread1Sequence : 1;
+      return {
+        thread: threadView({ threadId, revision: eventSequence }),
+        eventSequence,
+      };
+    });
+    const starts: Array<{ threadId: string; afterSequence: number }> = [];
+    const runtime = new ControlThreadRuntime(
+      {
+        client,
+        threadEventStream: async function* (_streamClient, input) {
+          starts.push({
+            threadId: input.threadId,
+            afterSequence: input.afterSequence ?? 0,
+          });
+          await waitForAbort(input.signal);
+        },
+      },
+      callbacks(),
+    );
+
+    runtime.setThreadEventStreamFocus("thread-1");
+    await runtime.readThread("thread-1");
+    await vi.waitFor(() =>
+      expect(starts).toEqual([{ threadId: "thread-1", afterSequence: 4 }]),
+    );
+
+    runtime.setThreadEventStreamFocus("thread-2");
+    thread1Sequence = 9;
+    await runtime.readThread("thread-1");
+    thread1Sequence = 6;
+    await runtime.readThread("thread-1");
+    expect(starts).toHaveLength(1);
+
+    runtime.setThreadEventStreamFocus("thread-1");
+    await vi.waitFor(() =>
+      expect(starts).toEqual([
+        { threadId: "thread-1", afterSequence: 4 },
+        { threadId: "thread-1", afterSequence: 9 },
+      ]),
+    );
+    runtime.close();
+  });
+
   it("freezes the Thread snapshot cursor before reading projection material", async () => {
     const client = fakeClient({ messages: [], runs: [] });
     let snapshotRead = false;
@@ -2062,13 +2445,14 @@ describe("Control thread runtime", () => {
       callbacks(),
     );
 
-    const stale = runtime.readThread("thread-1");
+    const stale = runtime.readThread("thread-1", { includeTaskChanges: true });
+    const staleRejected = expect(stale).rejects.toThrow("control_thread_projection_superseded");
     await vi.waitFor(() => expect(ledgerRead).toBe(1));
-    const current = await runtime.readThread("thread-1");
+    const current = await runtime.readThread("thread-1", { includeTaskChanges: true });
     releaseFirstLedger.resolve();
 
     expect(current.id).toBe("thread-1");
-    await expect(stale).rejects.toThrow("control_thread_projection_superseded");
+    await staleRejected;
     runtime.close();
   });
 
@@ -2187,6 +2571,11 @@ describe("Control thread runtime", () => {
       runtimeCallbacks,
     );
 
+    const fixtureWindow = client.getThreadTranscriptWindow.getMockImplementation()!;
+    client.getThreadTranscriptWindow.mockImplementation(async (...args) => {
+      const result = await fixtureWindow(...args);
+      return { ...result, runBindings: result.runBindings.map(binding => ({ ...binding, runId: "run-1-effective", source: "turnStartReceipt" as const })) };
+    });
     const projected = await runtime.readThread("thread-1", {
       toolHistoryMode: "skip",
     });
@@ -2284,6 +2673,15 @@ describe("Control thread runtime", () => {
       runtimeCallbacks,
     );
 
+    const historyRun = runView({ runId: "run-history", status: "completed", lastSequence: 1, terminalAt: "2026-08-09T08:00:04.000Z" });
+    client.getThreadActiveRun.mockResolvedValueOnce({ schemaVersion: "crewon.thread-active-run.v0", threadId: "thread-1", run: runView({ runId: "run-old-active" }) }).mockResolvedValue({ schemaVersion: "crewon.thread-active-run.v0", threadId: "thread-1", run: null });
+    client.listThreadMessages.mockResolvedValueOnce({ data: [messageView(1, "user", "Historical work")], nextCursor: null }).mockResolvedValue({ data: [], nextCursor: null });
+    client.getRunInThread.mockResolvedValue({ run: historyRun });
+    const fixtureWindow = client.getThreadTranscriptWindow.getMockImplementation()!;
+    client.getThreadTranscriptWindow.mockImplementation(async (...args) => {
+      const result = await fixtureWindow(...args);
+      return { ...result, runBindings: result.messageWindow.data.map(message => ({ messageId: message.messageId, runId: "run-history", source: "turnStartReceipt" as const })) };
+    });
     const stale = runtime.readThread("thread-1");
     const staleOutcome = stale.then(
       () => null,
@@ -2352,6 +2750,8 @@ describe("Control thread runtime", () => {
       runtimeCallbacks,
     );
 
+    client.getThreadActiveRun.mockResolvedValueOnce({ schemaVersion: "crewon.thread-active-run.v0", threadId: "thread-1", run: runView({ runId: "run-old" }) }).mockResolvedValue({ schemaVersion: "crewon.thread-active-run.v0", threadId: "thread-1", run: null });
+    client.getRunInThread.mockResolvedValue({ run: runView({ runId: "run-old" }) });
     const staleRead = runtime.readThread("thread-1");
     const staleOutcome = staleRead.then(
       () => null,
@@ -3245,7 +3645,7 @@ describe("Control thread runtime", () => {
 
     await runtime.startTurn("thread-1", "Edit the workspace");
     await streamStarted.promise;
-    const read = runtime.readThread("thread-1");
+    const read = runtime.readThread("thread-1", { includeTaskChanges: true });
     await planStarted.promise;
     releaseMutation.resolve();
     await mutationCompleted.promise;
@@ -3864,7 +4264,7 @@ describe("Control thread runtime", () => {
     await streamStarted.promise;
     const secondRead = runtime.readThread("thread-1");
     await vi.waitFor(() => {
-      expect(client.listThreadRuns).toHaveBeenCalledTimes(2);
+      expect(client.getRunPlan).toHaveBeenCalledTimes(2);
     });
 
     expect(streamCount).toBe(1);
@@ -3942,7 +4342,7 @@ describe("Control thread runtime", () => {
 
   it("stops scheduling durable tool history batches after caller cancellation", async () => {
     const client = fakeClient({
-      messages: [messageView(1, "user", "Inspect several runs")],
+      messages: Array.from({ length: 5 }, (_, index) => messageView(index + 1, "user", `Inspect run ${index + 1}`)),
       runs: Array.from({ length: 5 }, (_, index) =>
         runView({
           runId: `run-${index + 1}`,
@@ -3951,6 +4351,11 @@ describe("Control thread runtime", () => {
           lastSequence: 1,
         }),
       ),
+    });
+    const fixtureWindow = client.getThreadTranscriptWindow.getMockImplementation()!;
+    client.getThreadTranscriptWindow.mockImplementation(async (...args) => {
+      const result = await fixtureWindow(...args);
+      return { ...result, runBindings: result.messageWindow.data.map(message => ({ messageId: message.messageId, runId: `run-${message.sequence}`, source: "turnStartReceipt" as const })) };
     });
     const firstBatchStarted = deferred<void>();
     const releaseFirstBatch = deferred<void>();
@@ -3989,6 +4394,44 @@ describe("Control thread runtime", () => {
     await new Promise<void>((resolve) => globalThis.setTimeout(resolve, 0));
     expect(streamedRunIds).toHaveLength(4);
     runtime.close();
+  });
+
+  it("keeps a healthy Run stream responsive with at most five status checks per minute", async () => {
+    vi.useFakeTimers();
+    const client = fakeClient({ messages: [], runs: [runView()] });
+    const runtimeCallbacks = callbacks();
+    const runtime = new ControlThreadRuntime(
+      {
+        client,
+        eventStream: async function* (_client, input) {
+          yield runEvent(1, {
+            type: "model.output.delta",
+            data: { segmentId: "segment-1", delta: "working" },
+          });
+          await waitForAbort(input.signal);
+        },
+      },
+      runtimeCallbacks,
+    );
+    try {
+      await runtime.readThread("thread-1");
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(runtimeCallbacks.onTextDelta).toHaveBeenCalledWith(
+        "thread-1",
+        "working",
+      );
+      expect(vi.mocked(client.getRun).mock.calls.length).toBeGreaterThan(0);
+      expect(vi.mocked(client.getRun).mock.calls.length).toBeLessThanOrEqual(5);
+      expect(runtimeCallbacks.onStreamError).not.toHaveBeenCalled();
+    } finally {
+      try {
+        runtime.close();
+        await vi.advanceTimersByTimeAsync(0);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    }
   });
 
   it("settles from the durable Run when SSE closes before its terminal event", async () => {
@@ -4031,7 +4474,7 @@ describe("Control thread runtime", () => {
     await runtime.readThread("thread-1");
     await settled.promise;
 
-    expect(client.getRun).toHaveBeenCalledWith("run-1");
+    expect(client.getRun).toHaveBeenCalledWith("run-1", { signal: expect.any(AbortSignal) });
     expect(runtimeCallbacks.onStreamError).not.toHaveBeenCalled();
     expect(runtimeCallbacks.onThread).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -4055,7 +4498,7 @@ describe("Control thread runtime", () => {
             ? {
                 status: "completed",
                 terminalAt: "2026-08-09T08:00:04.000Z",
-                lastSequence: 2,
+                lastSequence: 4,
               }
             : {},
         ),
@@ -4067,7 +4510,7 @@ describe("Control thread runtime", () => {
         run: runView({
           status: "completed",
           terminalAt: "2026-08-09T08:00:04.000Z",
-          lastSequence: 2,
+          lastSequence: 4,
         }),
       };
     });
@@ -4080,8 +4523,10 @@ describe("Control thread runtime", () => {
       ...baseCallbacks,
       onBeforeRunSettled: vi.fn(async () => {
         expect(baseCallbacks.onTextDelta.mock.calls).toEqual([
+          ["thread-1", "Discarded draft"],
           ["thread-1", "The TypeScript desktop is ready."],
         ]);
+        expect(baseCallbacks.onTextReset).toHaveBeenCalledWith("thread-1");
       }),
     };
     const runtime = new ControlThreadRuntime(
@@ -4099,10 +4544,27 @@ describe("Control thread runtime", () => {
             type: "model.output.delta",
             data: {
               segmentId: "segment-1",
-              delta: "The TypeScript desktop is ready.",
+              delta: "Discarded draft",
             },
           });
           yield runEvent(2, {
+            type: "model.sampling.retry",
+            data: {
+              segmentId: "segment-1",
+              samplingAttempt: 2,
+              maxRetries: 3,
+              code: "transient",
+              discardedOutput: true,
+            },
+          });
+          yield runEvent(3, {
+            type: "model.output.delta",
+            data: {
+              segmentId: "segment-1",
+              delta: "The TypeScript desktop is ready.",
+            },
+          });
+          yield runEvent(4, {
             type: "run.completed",
             data: { outputRef: "message:message-2" },
           });
@@ -4116,7 +4578,7 @@ describe("Control thread runtime", () => {
     await settled.promise;
     await streamAborted.promise;
 
-    expect(client.getRun).toHaveBeenCalledWith("run-1");
+    expect(client.getRun).toHaveBeenCalledWith("run-1", { signal: expect.any(AbortSignal) });
     expect(streamCursors).toEqual([0, 0]);
     expect(runtimeCallbacks.onBeforeRunSettled).toHaveBeenCalledOnce();
     expect(runtimeCallbacks.onRunSettled).toHaveBeenCalledOnce();
@@ -4155,6 +4617,9 @@ describe("Control thread runtime", () => {
     const cursors: number[] = [];
     const settled = deferred<string>();
     const runtimeCallbacks = callbacks(settled.resolve);
+    const beforeSettled = vi.fn(async () => {
+      expect(runtimeCallbacks.onTextReset).not.toHaveBeenCalled();
+    });
     const runtime = new ControlThreadRuntime(
       {
         client,
@@ -4184,7 +4649,7 @@ describe("Control thread runtime", () => {
         },
         threadEventStream: idleThreadEventStream,
       },
-      runtimeCallbacks,
+      { ...runtimeCallbacks, onBeforeRunSettled: beforeSettled },
     );
 
     await runtime.readThread("thread-1");
@@ -4196,6 +4661,9 @@ describe("Control thread runtime", () => {
       ["thread-1", "B"],
     ]);
     expect(runtimeCallbacks.onStreamError).toHaveBeenCalledOnce();
+    expect(beforeSettled).toHaveBeenCalledOnce();
+    expect(runtimeCallbacks.onTextReset).toHaveBeenCalledExactlyOnceWith("thread-1");
+    expect(runtimeCallbacks.onTextReset.mock.invocationCallOrder[0]).toBeGreaterThan(beforeSettled.mock.invocationCallOrder[0]!);
     runtime.close();
   });
 
@@ -4999,9 +5467,11 @@ describe("Control thread runtime", () => {
     expect(routedContent).toContain(
       "Use the review checklist before answering.",
     );
+    expect(routedContent).not.toContain("· 组长汇总]");
     expect(visibleControlUserContent(routedContent ?? "")).toBe(
       "@Reviewer review this",
     );
+    expect(client.startTurn).toHaveBeenCalledTimes(1);
     runtime.close();
   });
 

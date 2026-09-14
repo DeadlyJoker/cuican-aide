@@ -1,4 +1,24 @@
+import { cancelControlActiveRun } from "./controlSteerActiveRun";
+import { readControlReplayBoundary } from "./controlReplayBoundary";
+import { ControlTranscriptReads, waitForControlTranscriptRead } from "./controlTranscriptReads";
+import { readControlTranscript } from "./controlTranscriptRead";
+import { projectControlTranscriptWindow } from "./controlTranscriptWindow";
+import { findControlAssistantThread } from "./controlAssistantThreadLookup";
+import { ControlThreadCatalog } from "./controlThreadCatalog";
+import {
+  ControlProjectionReads,
+  type ControlProjectionRead,
+} from "./controlProjectionReads";
+import {
+  ControlTurnRunIndex,
+  groupControlTurnMessages,
+  isInternalUserContent,
+} from "./controlTurnProjectionIndex";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
+import { waitForControlRuntimeDelay } from "./controlRuntimeDelay";
+import { ControlRunStatusMonitor } from "./controlRunStatusMonitor";
+import { retireOtherRunPresentations } from "./controlRunPresentation";
+import { deriveThreadTitle } from "@crewon/domain/thread-title";
 import type { ThreadItem } from "@crewon/app-server-protocol/v2/ThreadItem";
 import type { Turn } from "@crewon/app-server-protocol/v2/Turn";
 import type { TurnStartResponse } from "@crewon/app-server-protocol/v2/TurnStartResponse";
@@ -41,6 +61,7 @@ import {
   refreshControlOfficeRuntime,
 } from "../office/controlOfficeRuntime";
 import { controlAgentVersionForModel } from "./controlModelCatalog";
+import { ControlToolHistoryReaders } from "./controlToolHistoryReaders";
 import {
   applyControlTaskChangeEvent,
   applyControlToolEvent,
@@ -61,6 +82,11 @@ import {
 } from "./controlRunToolProjection";
 import type { ThreadRunPlanProjection } from "./controlRunPlanProjection";
 import {
+  applyControlRunDraftEvent,
+  createControlRunDraftProjectionState,
+  type ControlRunDraftProjectionState,
+} from "./controlRunDraftProjection";
+import {
   ThreadGoalControlState,
   type ControlThreadGoalMutationSignal,
   type ControlThreadGoalSnapshot,
@@ -72,12 +98,16 @@ import {
   controlTeamMemberGuidance,
   requireControlExecutionIntentCapability,
   resolveControlTeamPlan,
-  startControlTeamTurn,
+  type ControlTeamRunAcceptedEvent,
 } from "./controlTeamRuntime";
 import type { ControlToolApprovalRequest } from "./controlToolApprovalPresentation";
+import { startPresentedControlTeamTurn } from "./controlTeamTurnPresentation";
+import type { ControlTeamProgress } from "./controlTeamProgress";
+import {
+  replayControlMessage,
+  type MessageReplayRequest,
+} from "./controlMessageReplay";
 
-const MAX_LIST_PAGES = 10;
-const PAGE_SIZE = 100;
 const CONTROL_ASSISTANT_THREAD_TITLE = "CrewON Assistant";
 const MAX_CONTROL_MESSAGE_BYTES = 32 * 1024;
 const DEFAULT_CONTROL_TOOL_HISTORY_TIMEOUT_MS = 30_000;
@@ -105,18 +135,26 @@ type ActiveThreadEventStream = {
 
 type ActiveRunEventStream = {
   threadId: string;
+  presentsThread: boolean;
   controller: AbortController;
   afterSequence: number;
   settlement: Promise<void> | null;
+  statusMonitor: ControlRunStatusMonitor;
 };
 
 type ControlToolHistoryMode = "hydrate" | "skip";
 
 export type ControlThreadRuntimeCallbacks = Readonly<{
+  onTeamProgress?: (
+    threadId: string,
+    progress: ControlTeamProgress | null,
+  ) => void;
   onThread: (thread: Thread) => void;
   onTurnStarted?: (threadId: string, turn: Turn) => void;
+  onTurnSettled?: (threadId: string, turn: Turn) => void;
   onThreadDeleted?: (threadId: string) => void;
   onTextDelta: (threadId: string, delta: string) => void;
+  onTextReset?: (threadId: string) => void;
   onBeforeRunSettled?: (threadId: string, runId: string) => Promise<void>;
   onToolItem: (
     threadId: string,
@@ -136,6 +174,10 @@ export type ControlThreadRuntimeCallbacks = Readonly<{
     coverage: ControlToolHistoryCoverage,
   ) => void;
   onRunSettled: (threadId: string, runId: string) => void;
+  onTeamRunAccepted?: (
+    threadId: string,
+    event: ControlTeamRunAcceptedEvent,
+  ) => void | Promise<void>;
   onRunPlan?: (projection: ThreadRunPlanProjection) => void;
   onRunPlanReset?: (threadId: string) => void;
   onStreamError: (threadId: string, runId: string, error: unknown) => void;
@@ -169,6 +211,11 @@ export type ControlProjectedThread = Thread &
  * Worker; this adapter only computes a bounded UI projection.
  */
 export class ControlThreadRuntime {
+  readonly managesThreadList = true;
+  readonly turnUpdates = "runtime" as const;
+  readonly catalog: ControlThreadCatalog;
+  #assistantStart: Promise<Thread> | null = null;
+  readonly #messageReplays = new Set<string>();
   readonly #client: ControlApiClient;
   readonly #eventStream: ControlRunEventStream;
   readonly #threadEventStream: ThreadEventStream;
@@ -179,14 +226,21 @@ export class ControlThreadRuntime {
     attempt: number,
     signal: AbortSignal,
   ) => Promise<void>;
-  readonly #runStatusPollDelay: (signal: AbortSignal) => Promise<void>;
+  readonly #runStatusPollDelay:
+    | ((signal: AbortSignal) => Promise<void>)
+    | undefined;
   readonly #readControllers = new Set<AbortController>();
   readonly #runStreams = new Map<string, ActiveRunEventStream>();
-  readonly #toolHistoryController = new AbortController();
+  readonly #toolHistoryReaders = new ControlToolHistoryReaders();
+  readonly #teamProgressController = new AbortController();
   readonly #toolHistoryLoadsByRun = new Map<string, ControlToolHistoryLoad>();
   readonly #toolHistoryTimeoutMs: number;
   readonly #toolStatesByRun = new Map<string, ControlToolProjectionState>();
   readonly #toolCoverageByRun = new Map<string, ControlToolHistoryCoverage>();
+  readonly #draftStatesByRun = new Map<
+    string,
+    ControlRunDraftProjectionState
+  >();
   readonly #taskChangeStatesByRun = new Map<
     string,
     ControlTaskChangeProjectionState
@@ -195,8 +249,14 @@ export class ControlThreadRuntime {
     string,
     ControlToolHistoryCoverage
   >();
-  readonly #threadProjectionGeneration = new Map<string, number>();
+  readonly #threadEventCursorByThread = new Map<string, number>();
+  readonly #projectionReads = new ControlProjectionReads();
+  readonly #transcriptReads = new ControlTranscriptReads<Thread>();
   readonly #threadStreams = new Map<string, ActiveThreadEventStream>();
+  // `undefined` preserves direct-runtime compatibility for callers that have not
+  // opted into focus management. The production React hook sets an explicit
+  // focus before exposing the runtime, so UI reads never retain background SSEs.
+  #threadEventStreamFocus: string | null | undefined;
   #nextThreadStreamGeneration = 0;
   #closed = false;
 
@@ -205,6 +265,7 @@ export class ControlThreadRuntime {
     callbacks: ControlThreadRuntimeCallbacks,
   ) {
     this.#client = config.client;
+    this.catalog = new ControlThreadCatalog(config.client);
     this.#eventStream = config.eventStream ?? streamRunEvents;
     this.#threadEventStream = config.threadEventStream ?? streamThreadEvents;
     this.#callbacks = callbacks;
@@ -212,8 +273,7 @@ export class ControlThreadRuntime {
       config.idempotencyKey ??
       ((operation) => `${operation}:${globalThis.crypto.randomUUID()}`);
     this.#reconnectDelay = config.reconnectDelay ?? defaultReconnectDelay;
-    this.#runStatusPollDelay =
-      config.runStatusPollDelay ?? defaultRunStatusPollDelay;
+    this.#runStatusPollDelay = config.runStatusPollDelay;
     this.#toolHistoryTimeoutMs =
       config.toolHistoryTimeoutMs ?? DEFAULT_CONTROL_TOOL_HISTORY_TIMEOUT_MS;
     if (
@@ -282,9 +342,12 @@ export class ControlThreadRuntime {
   }
 
   close(): void {
+    this.catalog.close();
+    this.#transcriptReads.close();
     this.#closed = true;
     this.#goals.close();
-    this.#toolHistoryController.abort();
+    this.#toolHistoryReaders.close();
+    this.#teamProgressController.abort();
     for (const controller of this.#readControllers) {
       controller.abort();
     }
@@ -297,47 +360,60 @@ export class ControlThreadRuntime {
       stream.controller.abort();
     }
     this.#threadStreams.clear();
+    this.#threadEventCursorByThread.clear();
     this.#toolHistoryLoadsByRun.clear();
+    this.#draftStatesByRun.clear();
     this.#toolStatesByRun.clear();
     this.#toolCoverageByRun.clear();
     this.#taskChangeStatesByRun.clear();
     this.#taskChangeCoverageByRun.clear();
-    this.#threadProjectionGeneration.clear();
+    this.#projectionReads.close();
+  }
+
+  /**
+   * Keeps the long-lived Thread event subscription scoped to the conversation
+   * the user is viewing. Browser HTTP/1.1 connection pools are small, so
+   * retaining one SSE request for every previously viewed Thread can starve the
+   * ordinary requests needed to start the next turn.
+   */
+  setThreadEventStreamFocus(threadId: string | null): void {
+    if (this.#closed || this.#threadEventStreamFocus === threadId) {
+      return;
+    }
+    this.#threadEventStreamFocus = threadId;
+    for (const subscribedThreadId of this.#threadStreams.keys()) {
+      if (subscribedThreadId !== threadId) {
+        this.#stopThreadEventStream(subscribedThreadId);
+      }
+    }
+    if (threadId === null) {
+      return;
+    }
+    const cursor = this.#threadEventCursorByThread.get(threadId);
+    if (cursor !== undefined) {
+      this.#ensureThreadEventStream(threadId, cursor);
+    }
   }
 
   async listThreads(showArchived: boolean): Promise<Thread[]> {
-    const views: ThreadView[] = [];
-    let cursor: string | null = null;
-    for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-      const response = await this.#client.listThreads({
-        ...(cursor === null ? {} : { cursor }),
-        limit: PAGE_SIZE,
-      });
-      views.push(...response.data);
-      cursor = response.nextCursor;
-      if (cursor === null) {
-        return views
-          .filter((thread) =>
-            showArchived
-              ? thread.status === "archived"
-              : thread.status === "active",
-          )
-          .map(controlThreadSummary);
-      }
-    }
-    throw new Error("control_thread_list_page_limit_exceeded");
+    const current = this.catalog.getSnapshot().filter;
+    const status = showArchived ? "archived" : "active";
+    const page = await this.catalog.refresh({
+      status,
+      search: current.status === status ? current.search : "",
+    });
+    return page.threads.map(controlThreadSummary);
   }
 
   async searchThreads(
     searchTerm: string,
     showArchived: boolean,
   ): Promise<Thread[]> {
-    const query = searchTerm.trim().toLocaleLowerCase();
-    return (await this.listThreads(showArchived)).filter((thread) =>
-      `${thread.name ?? ""} ${thread.preview}`
-        .toLocaleLowerCase()
-        .includes(query),
-    );
+    const page = await this.catalog.load({
+      status: showArchived ? "archived" : "active",
+      search: searchTerm,
+    });
+    return page.threads.map(controlThreadSummary);
   }
 
   async listLoadedThreadIds(): Promise<string[]> {
@@ -348,16 +424,60 @@ export class ControlThreadRuntime {
     _cwd?: string,
     threadSource = "control-api",
   ): Promise<Thread> {
+    if (this.#closed) throw new Error("control_thread_runtime_closed");
+    if (threadSource === ASSISTANT_THREAD_SOURCE) {
+      if (this.#assistantStart !== null) return this.#assistantStart;
+      const request = this.#resolveAssistantThread();
+      this.#assistantStart = request;
+      try {
+        return await request;
+      } finally {
+        if (this.#assistantStart === request) this.#assistantStart = null;
+      }
+    }
     const response = await this.#client.createThread(
-      {
-        title:
-          threadSource === ASSISTANT_THREAD_SOURCE
-            ? CONTROL_ASSISTANT_THREAD_TITLE
-            : null,
-      },
+      { title: null },
       this.#idempotencyKey("thread.create"),
     );
+    if (this.catalog.getSnapshot().revision > 0)
+      void this.catalog.refresh().catch(() => undefined);
     return controlThreadSummary(response.thread);
+  }
+
+  async #resolveAssistantThread(): Promise<Thread> {
+    const controller = new AbortController();
+    this.#readControllers.add(controller);
+    const timer = setTimeout(
+      () => controller.abort(new Error("control_assistant_lookup_timeout")),
+      30_000,
+    );
+    try {
+      const existing = await findControlAssistantThread(
+        this.#client,
+        CONTROL_ASSISTANT_THREAD_TITLE,
+        controller.signal,
+      );
+      if (existing !== null) {
+        const resolved = await this.readThread(existing.threadId, {
+          signal: controller.signal,
+        });
+        if (resolved.threadSource !== ASSISTANT_THREAD_SOURCE)
+          throw new Error("control_assistant_changed");
+        return resolved;
+      }
+      controller.signal.throwIfAborted();
+      const created = await this.#client.createThread(
+        { title: CONTROL_ASSISTANT_THREAD_TITLE },
+        this.#idempotencyKey("thread.create"),
+        { signal: controller.signal },
+      );
+      if (this.catalog.getSnapshot().revision > 0)
+        void this.catalog.refresh().catch(() => undefined);
+      return controlThreadSummary(created.thread);
+    } finally {
+      clearTimeout(timer);
+      this.#readControllers.delete(controller);
+    }
   }
 
   async resumeThread(threadId: string): Promise<Thread> {
@@ -445,6 +565,11 @@ export class ControlThreadRuntime {
       throw new Error("control_thread_delete_response_invalid");
     }
     this.#callbacks.onRunPlanReset?.(threadId);
+    this.#stopThreadEventStream(threadId);
+    this.#threadEventCursorByThread.delete(threadId);
+    if (this.#threadEventStreamFocus === threadId) {
+      this.#threadEventStreamFocus = null;
+    }
     this.#callbacks.onThreadDeleted?.(threadId);
   }
 
@@ -477,9 +602,15 @@ export class ControlThreadRuntime {
       throw new Error("control_thread_rename_response_invalid");
     }
     this.#callbacks.onThread(controlThreadSummary(response.thread));
+    if (this.catalog.getSnapshot().revision > 0)
+      void this.catalog.refresh().catch(() => undefined);
   }
 
-  async rollbackThread(threadId: string, numTurns = 1): Promise<Thread> {
+  async rollbackThread(
+    threadId: string,
+    numTurns = 1,
+    guard?: { expectedRevision: number },
+  ): Promise<Thread> {
     if (
       !Number.isSafeInteger(numTurns) ||
       numTurns < 1 ||
@@ -488,6 +619,9 @@ export class ControlThreadRuntime {
       throw new Error("control_thread_rollback_turn_count_invalid");
     }
     const current = await this.#getThreadSnapshot(threadId);
+    if (guard && current.thread.revision !== guard.expectedRevision) {
+      throw new Error("message_replay_changed");
+    }
     if (
       current.thread.threadId !== threadId ||
       current.thread.status !== "active"
@@ -513,10 +647,85 @@ export class ControlThreadRuntime {
     // refresh and supersede a mutation that already succeeded.
     this.#stopThreadEventStream(threadId);
     this.#stopRunStreamsForThread(threadId);
+    this.#transcriptReads.reset(threadId);
     this.#callbacks.onThreadRolledBack?.(threadId);
     const thread = await this.readThread(threadId);
     this.#callbacks.onThread(thread);
     return thread;
+  }
+
+  async replayMessage(request: MessageReplayRequest): Promise<void> {
+    if (this.#messageReplays.has(request.threadId))
+      throw new Error("message_replay_busy");
+    this.#messageReplays.add(request.threadId);
+    const controller = new AbortController();
+    this.#readControllers.add(controller);
+    const timer = setTimeout(() => controller.abort(new Error("control_replay_read_timeout")), 30_000);
+    const read = <T>(promise: Promise<T>) => waitForControlTranscriptRead(promise, controller.signal);
+    try {
+      await replayControlMessage({
+        request,
+        runtime: {
+          readThread: (threadId) => this.readThread(threadId, { signal: controller.signal }),
+          rollbackThread: this.rollbackThread.bind(this),
+          startTurn: this.startTurn.bind(this),
+        },
+        readRevision: async () =>
+          (await read(this.#getThreadSnapshot(request.threadId, controller.signal))).thread.revision,
+        readBoundary: (revision) => read(readControlReplayBoundary({ client: this.#client, threadId: request.threadId, userMessageId: request.userMessageId, revision, signal: controller.signal })),
+        preflight: () => read((async () => {
+          validateSupportedTurnInput([], request.settings, []);
+          const catalog = await this.#client.getActiveAgentVersionCatalog({ signal: controller.signal });
+          controller.signal.throwIfAborted();
+          const target = request.settings?.scene?.executionTarget;
+          if (target?.kind === "team" || target?.kind === "experts") {
+            const office = await readLatestControlOffice(
+              this.#client,
+              target.id,
+            );
+            controller.signal.throwIfAborted();
+            if (
+              request.settings?.teamTargetMemberId &&
+              !office.members.some(
+                (member) =>
+                  member.memberId === request.settings!.teamTargetMemberId,
+              )
+            ) {
+              throw new Error("control_office_target_member_not_found");
+            }
+            if (office.members.length > 1) {
+              await resolveControlTeamPlan({
+                client: this.#client,
+                threadId: request.threadId,
+                officeVersionId: office.officeVersionId,
+                catalog,
+                office,
+                memberProfiles: request.settings?.teamMemberProfiles,
+              });
+            } else {
+              await selectTurnAgentVersion(
+                this.#client,
+                request.threadId,
+                catalog,
+                request.settings,
+              );
+            }
+          } else {
+            await selectTurnAgentVersion(
+              this.#client,
+              request.threadId,
+              catalog,
+              request.settings,
+            );
+          }
+        })()),
+      });
+    } finally {
+      clearTimeout(timer);
+      controller.abort();
+      this.#readControllers.delete(controller);
+      this.#messageReplays.delete(request.threadId);
+    }
   }
 
   async #commitThreadMutation<Result>(
@@ -616,8 +825,30 @@ export class ControlThreadRuntime {
       publishBase?: boolean;
       signal?: AbortSignal;
       toolHistoryMode?: ControlToolHistoryMode;
+      transcriptCursor?: string | null;
+      includeTaskChanges?: boolean;
     }> = {},
   ): Promise<Thread> {
+    // Retain shared history before superseding a same-Thread read. The next
+    // projection may need that history after its canonical HTTP reads finish.
+    return this.#toolHistoryReaders.run(threadId, () =>
+      this.#transcriptReads.run({
+        threadId,
+        cursor: options.transcriptCursor,
+        mode: `${options.toolHistoryMode ?? "hydrate"}:${options.includeTaskChanges === true}`,
+        signal: options.signal,
+        read: (cursor, signal) => this.#readThreadWindow(threadId, { ...options, transcriptCursor: cursor, signal }),
+      }),
+    );
+  }
+
+  async navigateTranscript(threadId: string, cursor: string | null, options: { signal?: AbortSignal; includeTaskChanges?: boolean } = {}): Promise<Thread> {
+    const thread = await this.readThread(threadId, { ...options, transcriptCursor: cursor, publishBase: false });
+    this.#callbacks.onThread(thread);
+    return thread;
+  }
+
+  async #readThreadWindow(threadId: string, options: { publishBase?: boolean; signal?: AbortSignal; toolHistoryMode?: ControlToolHistoryMode; transcriptCursor: string | null; includeTaskChanges?: boolean }): Promise<Thread> {
     const controller = new AbortController();
     const abortFromCaller = () => controller.abort(options.signal?.reason);
     if (this.#closed || options.signal?.aborted) {
@@ -634,6 +865,8 @@ export class ControlThreadRuntime {
         controller.signal,
         options.toolHistoryMode ?? "hydrate",
         options.publishBase ?? true,
+        options.transcriptCursor,
+        options.includeTaskChanges ?? false,
       );
       controller.signal.throwIfAborted();
       this.#ensureThreadEventStream(threadId, snapshot.eventSequence);
@@ -649,21 +882,48 @@ export class ControlThreadRuntime {
     signal?: AbortSignal,
     toolHistoryMode: ControlToolHistoryMode = "hydrate",
     publishBase = true,
+    transcriptCursor: string | null = null,
+    includeTaskChanges = false,
   ): Promise<{
     thread: Thread;
     eventSequence: number;
   }> {
-    const generation =
-      (this.#threadProjectionGeneration.get(threadId) ?? 0) + 1;
-    this.#threadProjectionGeneration.set(threadId, generation);
+    return this.#toolHistoryReaders.run(threadId, (historySignal) =>
+      this.#projectionReads.run(threadId, (read) =>
+        waitForControlTranscriptRead(this.#readThreadProjection(
+          threadId,
+          read,
+          signal,
+          toolHistoryMode,
+          publishBase,
+          transcriptCursor,
+          includeTaskChanges,
+          historySignal,
+        ), signal),
+      ),
+    );
+  }
+
+  async #readThreadProjection(
+    threadId: string,
+    read: ControlProjectionRead,
+    signal: AbortSignal | undefined,
+    toolHistoryMode: ControlToolHistoryMode,
+    publishBase: boolean,
+    transcriptCursor: string | null,
+    includeTaskChanges: boolean,
+    historySignal: AbortSignal,
+  ): Promise<{ thread: Thread; eventSequence: number }> {
+    signal?.throwIfAborted();
+    const priorStreams = new Map([...this.#runStreams].filter(([, stream]) => stream.threadId === threadId));
     const snapshot = await this.#getThreadSnapshot(threadId, signal);
-    this.#assertThreadProjectionGeneration(threadId, generation);
-    const [messages, runs, taskChangeLedgerResult] = await Promise.all([
-      this.#listMessages(threadId, signal),
-      this.#listRuns(threadId, signal),
-      this.#loadThreadTaskChangeLedger(threadId, signal),
+    read.assertCurrent();
+    const [transcript, taskChangeLedgerResult] = await Promise.all([
+      readControlTranscript({ client: this.#client, threadId, threadRevision: snapshot.thread.revision, cursor: transcriptCursor, signal }),
+      includeTaskChanges ? this.#loadThreadTaskChangeLedger(threadId, signal) : Promise.resolve(null),
     ]);
-    this.#assertThreadProjectionGeneration(threadId, generation);
+    const { runs, activeRun: authoritativeActiveRun } = transcript;
+    read.assertCurrent();
     const { thread } = snapshot;
     if (thread.threadId !== threadId) {
       throw new Error("control_thread_projection_identity_invalid");
@@ -675,18 +935,36 @@ export class ControlThreadRuntime {
         ? taskChangeLedgerResult
         : incompleteControlTaskChangeLedger(thread);
     const finalSnapshot = await this.#getThreadSnapshot(threadId, signal);
-    this.#assertThreadProjectionGeneration(threadId, generation);
+    read.assertCurrent();
     if (
       finalSnapshot.thread.revision !== thread.revision ||
       finalSnapshot.eventSequence !== snapshot.eventSequence
     ) {
       throw new Error("control_thread_projection_snapshot_changed");
     }
+    for (const [runId, stream] of this.#runStreams) {
+      if (stream.threadId === threadId && priorStreams.get(runId) !== stream) {
+        throw new Error("control_thread_projection_superseded");
+      }
+    }
 
     // No shared projection state is changed until the server-side Thread head
     // proves that the independently loaded messages, Runs and ledger belong to
     // one revision.
-    this.#stopRunStreamsMissingFromSnapshot(threadId, runs);
+    const presentationChanged = authoritativeActiveRun !== null && retireOtherRunPresentations(
+      this.#runStreams, threadId, authoritativeActiveRun.runId,
+    );
+    if (presentationChanged) this.#callbacks.onTextReset?.(threadId);
+    for (const [runId, stream] of priorStreams) {
+      // Settlement owns its final backfill and text drain. Its own refresh must
+      // not abort that work merely because the server has cleared active-run.
+      if (stream.settlement !== null || runId === authoritativeActiveRun?.runId || this.#runStreams.get(runId) !== stream) continue;
+      stream.controller.abort();
+      this.#runStreams.delete(runId);
+      this.#draftStatesByRun.delete(runId);
+      if (stream.presentsThread) this.#callbacks.onTextReset?.(threadId);
+      this.#callbacks.onRunSettled(threadId, runId);
+    }
     const retainedRunIds = new Set([
       ...runs.map((run) => run.runId),
       ...this.#runStreams.keys(),
@@ -721,26 +999,26 @@ export class ControlThreadRuntime {
         this.#taskChangeCoverageByRun.delete(runId);
       }
     }
-    const projectThread = () =>
-      controlThreadProjection(
-        thread,
-        messages,
-        runs,
-        new Map(
-          runs.map((run) => [
-            run.runId,
-            controlToolItemsWithTaskChanges(
-              this.#toolStatesByRun.get(run.runId),
-              this.#taskChangeStatesByRun.get(run.runId),
-            ),
-          ]),
+    const projectThread = (): ControlProjectedThread => {
+      const projected = projectControlTranscriptWindow({
+        summary: controlThreadSummary(thread), window: transcript.window, cursor: transcript.cursor, runs, activeRun: authoritativeActiveRun,
+        visibleUserContent: visibleControlUserContent, isInternalUser: isInternalUserContent,
+        projectRun: (run, user, assistants) => projectedTurnWithAssistants(user, assistants, run,
+          controlToolItemsWithTaskChanges(this.#toolStatesByRun.get(run.runId), this.#taskChangeStatesByRun.get(run.runId)),
+          this.#toolCoverageByRun.get(run.runId)?.complete === true && this.#toolCoverageByRun.get(run.runId)!.throughSequence >= run.lastSequence,
+          this.#taskChangeCoverageByRun.get(run.runId)?.complete === true && this.#taskChangeCoverageByRun.get(run.runId)!.throughSequence >= run.lastSequence,
+          true,
         ),
-        this.#toolCoverageByRun,
-        this.#taskChangeCoverageByRun,
-        taskChangeLedger,
-      );
+      });
+      projected.controlTranscriptWindow!.toolHistory = runs.some((run) => {
+        if ((run.purpose ?? "turn") !== "turn") return false;
+        const coverage = this.#toolCoverageByRun.get(run.runId);
+        return coverage?.complete === false || (isTerminalRun(run) && run.lastSequence > 0 && (!coverage || coverage.throughSequence < run.lastSequence));
+      }) ? "partial" : "ready";
+      return { ...projected, controlTaskChangeLedger: taskChangeLedger };
+    };
     const turnRuns = runs.filter((run) => (run.purpose ?? "turn") === "turn");
-    const activeRun = runs.find((run) => !isTerminalRun(run));
+    const activeRun = authoritativeActiveRun ?? undefined;
     const activeTurnRun = turnRuns.find((run) => !isTerminalRun(run));
     const includedRunIds = new Set(taskChangeLedger.includedRunIds);
     const visiblePlanRun =
@@ -762,13 +1040,20 @@ export class ControlThreadRuntime {
     const hasActiveRunStream =
       activeRun !== undefined && this.#runStreams.has(activeRun.runId);
     if (
-      publishBase &&
+      (publishBase || presentationChanged) &&
       ((activeRun && !hasActiveRunStream) || hasPendingToolHistory)
     ) {
       this.#callbacks.onThread(projectThread());
     }
     if (activeRun && !hasActiveRunStream) {
-      this.#scheduleEventStream(threadId, activeRun, generation);
+      read.defer(() =>
+        this.#ensureEventStream(
+          threadId,
+          activeRun.runId,
+          activeRun.collaborationMode,
+          { adoptPlan: false },
+        ),
+      );
     }
 
     const stagedToolStates = new Map(this.#toolStatesByRun);
@@ -779,7 +1064,7 @@ export class ControlThreadRuntime {
             client: this.#client,
             eventStream: this.#eventStream,
             inFlightByRun: this.#toolHistoryLoadsByRun,
-            lifecycleSignal: this.#toolHistoryController.signal,
+            lifecycleSignal: historySignal,
             requestSignal: signal,
             runsNewestFirst: runs,
             statesByRun: stagedToolStates,
@@ -791,12 +1076,12 @@ export class ControlThreadRuntime {
         ? this.#loadRunPlan(visiblePlanRun.runId, signal)
         : Promise.resolve(null),
     ]);
-    this.#assertThreadProjectionGeneration(threadId, generation);
+    read.assertCurrent();
     const postHydrationSnapshot = await this.#getThreadSnapshot(
       threadId,
       signal,
     );
-    this.#assertThreadProjectionGeneration(threadId, generation);
+    read.assertCurrent();
     if (
       postHydrationSnapshot.thread.revision !== thread.revision ||
       postHydrationSnapshot.eventSequence !== snapshot.eventSequence
@@ -846,15 +1131,6 @@ export class ControlThreadRuntime {
     }
   }
 
-  #assertThreadProjectionGeneration(threadId: string, generation: number) {
-    if (
-      this.#closed ||
-      this.#threadProjectionGeneration.get(threadId) !== generation
-    ) {
-      throw new Error("control_thread_projection_superseded");
-    }
-  }
-
   #adoptRunPlan(threadId: string, runId: string): void {
     this.#callbacks.onRunPlan?.({
       eventSequence: 0,
@@ -898,24 +1174,6 @@ export class ControlThreadRuntime {
       runId: response.runId,
       threadId,
     });
-  }
-
-  #scheduleEventStream(
-    threadId: string,
-    run: RunView,
-    projectionGeneration: number,
-  ): void {
-    globalThis.setTimeout(() => {
-      if (
-        this.#closed ||
-        this.#threadProjectionGeneration.get(threadId) !== projectionGeneration
-      ) {
-        return;
-      }
-      this.#ensureEventStream(threadId, run.runId, run.collaborationMode, {
-        adoptPlan: false,
-      });
-    }, 0);
   }
 
   async #getThreadSnapshot(
@@ -1103,36 +1361,57 @@ export class ControlThreadRuntime {
           office,
           memberProfiles: settings?.teamMemberProfiles,
         });
-        const started = await startControlTeamTurn({
-          client: this.#client,
-          threadId,
-          expectedRevision: current.thread.revision,
-          content,
-          plan,
-          responseMode: target.kind === "experts" ? "manager" : "member",
-          idempotencyKey: this.#idempotencyKey,
-          executionIntent: settings?.executionIntent ?? "none",
-          toolPermissionMode,
-          onFinalTurnStarted: (finalStarted) => {
-            const turn = projectedTurn(
-              finalStarted.message,
-              null,
-              finalStarted.run,
-              [],
-              false,
-            );
-            this.#callbacks.onTurnStarted?.(threadId, turn);
-            this.#ensureEventStream(
-              threadId,
-              finalStarted.run.runId,
-              finalStarted.run.collaborationMode,
-            );
+        const started = await startPresentedControlTeamTurn(
+          {
+            client: this.#client,
+            threadId,
+            expectedRevision: current.thread.revision,
+            content,
+            plan,
+            responseMode: "manager",
+            managerResponseKind:
+              target.kind === "experts" ? "experts" : "office",
+            idempotencyKey: this.#idempotencyKey,
+            executionIntent: settings?.executionIntent ?? "none",
+            toolPermissionMode,
+            onFinalTurnStarted: (finalStarted) => {
+              const turn = projectedTurn(
+                finalStarted.message,
+                null,
+                finalStarted.run,
+                [],
+                false,
+              );
+              this.#callbacks.onTurnStarted?.(threadId, turn);
+              this.#ensureEventStream(
+                threadId,
+                finalStarted.run.runId,
+                finalStarted.run.collaborationMode,
+              );
+            },
+            onExecutionIntentMismatch: (run) => {
+              this.#callbacks.onExecutionIntentMismatch?.(threadId, run.runId);
+            },
+            onTeamRunAccepted: (event) => {
+              this.#callbacks.onTeamRunAccepted?.(threadId, event);
+            },
           },
-          onExecutionIntentMismatch: (run) => {
-            this.#callbacks.onExecutionIntentMismatch?.(threadId, run.runId);
+          {
+            client: this.#client,
+            eventStream: this.#eventStream,
+            signal: this.#teamProgressController.signal,
+            visibleContent: visibleControlUserContent(content),
+            onChange: this.#callbacks.onTeamProgress
+              ? (progress) =>
+                  this.#callbacks.onTeamProgress?.(threadId, progress)
+              : undefined,
           },
-        });
+        );
         if (isTerminalRun(started.run)) {
+          const presentation = this.#runStreams.get(started.run.runId);
+          if (presentation?.presentsThread ?? ![...this.#runStreams.values()].some(
+            (stream) => stream.threadId === threadId && stream.presentsThread,
+          )) this.#callbacks.onTextReset?.(threadId);
           this.#callbacks.onRunSettled(threadId, started.run.runId);
           const refreshed = await this.readThread(threadId, {
             toolHistoryMode: "skip",
@@ -1257,33 +1536,28 @@ export class ControlThreadRuntime {
     mentions: PendingComposerMention[] = [],
   ): Promise<{ turnId: string }> {
     validateSupportedTurnInput(mentions, undefined, []);
-    const activeRun = (await this.#listRuns(threadId)).find(
-      (run) => !isTerminalRun(run),
+    if (this.#closed) throw new Error("control_runtime_closed");
+    const controller = new AbortController();
+    this.#readControllers.add(controller);
+    const timeout = setTimeout(
+      () => controller.abort(new Error("control_run_steer_cancel_timeout")),
+      10_000,
     );
-    if (activeRun !== undefined) {
-      let current = (await this.#client.getRun(activeRun.runId)).run;
-      if (!isTerminalRun(current)) {
-        const canceled = await this.#client.cancelRun(
-          current.runId,
-          { expectedRevision: current.revision },
-          this.#idempotencyKey("run.steer.cancel"),
-        );
-        current = canceled.run;
-      }
-      for (
-        let attempt = 0;
-        !isTerminalRun(current) && attempt < 200;
-        attempt += 1
-      ) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-        current = (await this.#client.getRun(activeRun.runId)).run;
-      }
-      if (!isTerminalRun(current)) {
-        throw new Error("control_run_steer_cancel_timeout");
-      }
+    try {
+      await cancelControlActiveRun({
+        client: this.#client,
+        threadId,
+        signal: controller.signal,
+        idempotencyKey: () => this.#idempotencyKey("run.steer.cancel"),
+      });
+      controller.signal.throwIfAborted();
+      clearTimeout(timeout);
+      const started = await this.startTurn(threadId, text, mentions);
+      return { turnId: started.turn.id };
+    } finally {
+      clearTimeout(timeout);
+      this.#readControllers.delete(controller);
     }
-    const started = await this.startTurn(threadId, text, mentions);
-    return { turnId: started.turn.id };
   }
 
   async interruptTurn(_threadId: string, runId: string): Promise<void> {
@@ -1293,51 +1567,6 @@ export class ControlThreadRuntime {
       { expectedRevision: current.run.revision },
       this.#idempotencyKey("run.cancel"),
     );
-  }
-
-  async #listMessages(
-    threadId: string,
-    signal?: AbortSignal,
-  ): Promise<MessageView[]> {
-    const messages: MessageView[] = [];
-    let cursor: string | null = null;
-    for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-      const response = await this.#client.listThreadMessages(
-        threadId,
-        {
-          ...(cursor === null ? {} : { cursor }),
-          limit: PAGE_SIZE,
-        },
-        signal ? { signal } : {},
-      );
-      messages.push(...response.data);
-      cursor = response.nextCursor;
-      if (cursor === null) {
-        return messages;
-      }
-    }
-    throw new Error("control_message_list_page_limit_exceeded");
-  }
-
-  async #listRuns(threadId: string, signal?: AbortSignal): Promise<RunView[]> {
-    const runs: RunView[] = [];
-    let cursor: string | null = null;
-    for (let page = 0; page < MAX_LIST_PAGES; page += 1) {
-      const response = await this.#client.listThreadRuns(
-        threadId,
-        {
-          ...(cursor === null ? {} : { cursor }),
-          limit: PAGE_SIZE,
-        },
-        signal ? { signal } : {},
-      );
-      runs.push(...response.data);
-      cursor = response.nextCursor;
-      if (cursor === null) {
-        return runs;
-      }
-    }
-    throw new Error("control_run_list_page_limit_exceeded");
   }
 
   #ensureEventStream(
@@ -1351,12 +1580,22 @@ export class ControlThreadRuntime {
     }
     if (options.adoptPlan !== false) this.#adoptRunPlan(threadId, runId);
     const controller = new AbortController();
+    const presentationChanged = retireOtherRunPresentations(this.#runStreams, threadId, runId);
     this.#runStreams.set(runId, {
       threadId,
+      presentsThread: true,
       controller,
       afterSequence: 0,
       settlement: null,
+      statusMonitor: new ControlRunStatusMonitor({
+        client: this.#client,
+        runId,
+        threadId,
+        signal: controller.signal,
+        pollDelay: this.#runStatusPollDelay,
+      }),
     });
+    if (presentationChanged) this.#callbacks.onTextReset?.(threadId);
     void Promise.race([
       this.#consumeEventStream(threadId, runId, collaborationMode, controller),
       this.#pollRunUntilSettled(threadId, runId, collaborationMode, controller),
@@ -1375,21 +1614,8 @@ export class ControlThreadRuntime {
       }
       stream.controller.abort();
       this.#runStreams.delete(runId);
-      this.#callbacks.onRunSettled(threadId, runId);
-    }
-  }
-
-  #stopRunStreamsMissingFromSnapshot(
-    threadId: string,
-    runs: readonly RunView[],
-  ): void {
-    const snapshotRunIds = new Set(runs.map((run) => run.runId));
-    for (const [runId, stream] of this.#runStreams) {
-      if (stream.threadId !== threadId || snapshotRunIds.has(runId)) {
-        continue;
-      }
-      stream.controller.abort();
-      this.#runStreams.delete(runId);
+      this.#draftStatesByRun.delete(runId);
+      if (stream.presentsThread) this.#callbacks.onTextReset?.(threadId);
       this.#callbacks.onRunSettled(threadId, runId);
     }
   }
@@ -1405,8 +1631,22 @@ export class ControlThreadRuntime {
     if (this.#closed) {
       return;
     }
+    const effectiveAfterSequence = Math.max(
+      this.#threadEventCursorByThread.get(threadId) ?? 0,
+      afterSequence,
+    );
+    this.#threadEventCursorByThread.set(threadId, effectiveAfterSequence);
+    if (
+      this.#threadEventStreamFocus !== undefined &&
+      this.#threadEventStreamFocus !== threadId
+    ) {
+      return;
+    }
     const previous = this.#threadStreams.get(threadId);
-    if (previous !== undefined && previous.afterSequence >= afterSequence) {
+    if (
+      previous !== undefined &&
+      previous.afterSequence >= effectiveAfterSequence
+    ) {
       return;
     }
     previous?.controller.abort();
@@ -1414,7 +1654,7 @@ export class ControlThreadRuntime {
     const stream: ActiveThreadEventStream = {
       controller,
       generation: ++this.#nextThreadStreamGeneration,
-      afterSequence,
+      afterSequence: effectiveAfterSequence,
     };
     this.#threadStreams.set(threadId, stream);
     void this.#consumeThreadEventStream(threadId, stream).finally(() => {
@@ -1456,7 +1696,8 @@ export class ControlThreadRuntime {
             // Run can still publish or settle while the authoritative Thread
             // refresh is in flight.
             this.#stopRunStreamsForThread(threadId);
-            const projection = await this.#loadThreadProjection(threadId);
+            this.#transcriptReads.reset(threadId);
+            const projection = await this.#loadThreadProjection(threadId, stream.controller.signal);
             if (
               stream.controller.signal.aborted ||
               this.#threadStreams.get(threadId)?.generation !==
@@ -1473,6 +1714,7 @@ export class ControlThreadRuntime {
           } else {
             stream.afterSequence = event.sequence;
           }
+          this.#threadEventCursorByThread.set(threadId, stream.afterSequence);
           reconnectAttempt = 0;
         }
       } catch (error) {
@@ -1540,6 +1782,7 @@ export class ControlThreadRuntime {
             throw new Error("control_run_event_sequence_gap");
           }
           active.afterSequence = event.sequence;
+          active.statusMonitor.observeStreamEvent();
           reconnectAttempt = 0;
           if (event.type === "run.plan.updated") {
             this.#callbacks.onRunPlan?.({
@@ -1549,11 +1792,8 @@ export class ControlThreadRuntime {
               threadId,
             });
           }
-          if (
-            event.type === "model.output.delta" &&
-            collaborationMode !== "plan"
-          ) {
-            this.#callbacks.onTextDelta(threadId, event.data.delta);
+          if (collaborationMode !== "plan") {
+            this.#applyDraftEvent(threadId, runId, event);
           }
           const taskChangeItem = applyControlTaskChangeEvent(
             taskChangeState,
@@ -1660,8 +1900,9 @@ export class ControlThreadRuntime {
         this.#recordLiveTaskChangeCoverage(threadId, runId, coverage);
         streamFailure = { error };
       }
+      active.statusMonitor.observeStreamDisconnected();
       try {
-        const response = await this.#client.getRun(runId);
+        const response = await active.statusMonitor.read();
         if (
           controller.signal.aborted ||
           this.#closed ||
@@ -1705,13 +1946,15 @@ export class ControlThreadRuntime {
     collaborationMode: RunView["collaborationMode"],
     controller: AbortController,
   ): Promise<void> {
+    const active = this.#runStreams.get(runId);
+    if (active?.controller !== controller) return;
     while (!controller.signal.aborted && !this.#closed) {
-      await this.#runStatusPollDelay(controller.signal);
+      await active.statusMonitor.waitForPoll();
       if (!this.#isCurrentRunStream(threadId, runId, controller)) {
         return;
       }
       try {
-        const response = await this.#client.getRun(runId);
+        const response = await active.statusMonitor.read();
         if (!this.#isCurrentRunStream(threadId, runId, controller)) {
           return;
         }
@@ -1801,7 +2044,7 @@ export class ControlThreadRuntime {
         }
         const toolState = this.#toolStatesByRun.get(runId);
         const taskChangeState = this.#taskChangeStatesByRun.get(runId);
-        const taskChangeBackfillItems: ControlToolItem[] = [];
+        const taskChangeBackfillItems = new Map<string, ControlToolItem>();
         let toolHistoryReachedTerminal =
           toolState !== undefined &&
           active.afterSequence >= terminal.lastSequence;
@@ -1832,17 +2075,14 @@ export class ControlThreadRuntime {
                     taskChangeState,
                     event,
                   );
-                  if (item) taskChangeBackfillItems.push(item);
+                  if (item) taskChangeBackfillItems.set(item.id, item);
                 }
                 active.afterSequence = Math.max(
                   active.afterSequence,
                   event.sequence,
                 );
-                if (
-                  event.type === "model.output.delta" &&
-                  collaborationMode !== "plan"
-                ) {
-                  this.#callbacks.onTextDelta(threadId, event.data.delta);
+                if (collaborationMode !== "plan") {
+                  this.#applyDraftEvent(threadId, runId, event);
                 }
               },
             });
@@ -1867,7 +2107,7 @@ export class ControlThreadRuntime {
             for (const item of backfill.items) {
               this.#callbacks.onToolItem(threadId, runId, item);
             }
-            for (const item of taskChangeBackfillItems) {
+            for (const item of taskChangeBackfillItems.values()) {
               if (!generalItemIds.has(item.id)) {
                 this.#callbacks.onToolItem(threadId, runId, item);
               }
@@ -1905,12 +2145,19 @@ export class ControlThreadRuntime {
         if (!this.#isCurrentRunStream(threadId, runId, controller)) {
           return;
         }
-        await this.#callbacks.onBeforeRunSettled?.(threadId, runId);
+        if (active.presentsThread) await this.#callbacks.onBeforeRunSettled?.(threadId, runId);
         if (!this.#isCurrentRunStream(threadId, runId, controller)) {
           return;
         }
-        this.#callbacks.onThread(thread);
+        if (active.presentsThread) {
+          this.#callbacks.onThread(thread);
+          this.#callbacks.onTextReset?.(threadId);
+        } else {
+          const turn = thread.turns.find((item) => item.id === runId);
+          if (turn) this.#callbacks.onTurnSettled?.(threadId, turn);
+        }
         this.#callbacks.onRunSettled(threadId, runId);
+        this.#draftStatesByRun.delete(runId);
       });
       active.settlement = settlement;
       try {
@@ -1925,6 +2172,21 @@ export class ControlThreadRuntime {
     }
     await active.settlement;
   }
+
+  #applyDraftEvent(threadId: string, runId: string, event: RunEventView): void {
+    if (this.#runStreams.get(runId)?.presentsThread !== true) return;
+    const current =
+      this.#draftStatesByRun.get(runId) ??
+      createControlRunDraftProjectionState();
+    const projected = applyControlRunDraftEvent(current, event);
+    this.#draftStatesByRun.set(runId, projected.state);
+    if (projected.reset) {
+      this.#callbacks.onTextReset?.(threadId);
+    }
+    if (projected.delta) {
+      this.#callbacks.onTextDelta(threadId, projected.delta);
+    }
+  }
 }
 
 export function controlThreadSummary(thread: ThreadView): Thread {
@@ -1933,7 +2195,7 @@ export function controlThreadSummary(thread: ThreadView): Thread {
     sessionId: thread.threadId,
     forkedFromId: thread.forkedFromThreadId,
     parentThreadId: null,
-    preview: thread.title ?? "",
+    preview: thread.title ?? thread.displayTitle ?? "",
     ephemeral: false,
     modelProvider: "crewon-control",
     createdAt: unixSeconds(thread.createdAt),
@@ -1950,7 +2212,7 @@ export function controlThreadSummary(thread: ThreadView): Thread {
     agentNickname: null,
     agentRole: null,
     gitInfo: null,
-    name: thread.title,
+    name: thread.title ?? thread.displayTitle ?? null,
     turns: [],
   };
 }
@@ -1971,81 +2233,50 @@ export function controlThreadProjection(
   taskChangeLedger: ThreadTaskChangeLedgerResponse | null = null,
 ): ControlProjectedThread {
   const summary = controlThreadSummary(thread);
-  const users = messages.filter(
-    (message) =>
-      message.role === "user" && !isControlInternalUserContent(message.content),
-  );
-  const runs = [...runsNewestFirst].reverse();
-  const turnRuns = runs.filter((run) => (run.purpose ?? "turn") === "turn");
-  const effectiveTerminalRunIds =
+  const groups = groupControlTurnMessages(messages);
+  const users = groups.map((group) => group.user);
+  const runIndex = new ControlTurnRunIndex(
+    runsNewestFirst,
     taskChangeLedger?.complete === true
       ? new Set(taskChangeLedger.includedRunIds)
-      : null;
-  const turns = users.map((user, index) => {
-    const nextUser = users[index + 1];
-    const assistants = messages.filter(
-      (message) =>
-        message.role === "assistant" &&
-        message.sequence > user.sequence &&
-        (nextUser === undefined || message.sequence < nextUser.sequence),
-    );
-    const hasTeamMemberDirectResponse = messages.some(
-      (message) =>
-        message.role === "user" &&
-        message.sequence > user.sequence &&
-        (nextUser === undefined || message.sequence < nextUser.sequence) &&
-        isControlTeamMemberDirectContent(message.content),
-    );
-    const userCreatedAt = Date.parse(user.createdAt);
-    const nextUserCreatedAt =
-      nextUser === undefined
-        ? Number.POSITIVE_INFINITY
-        : Date.parse(nextUser.createdAt);
-    const candidates = turnRuns.filter((candidate) => {
-      const createdAt = Date.parse(candidate.createdAt);
-      return createdAt >= userCreatedAt && createdAt < nextUserCreatedAt;
-    });
-    const run =
-      effectiveTerminalRunIds === null
-        ? (candidates.at(-1) ?? null)
-        : (candidates
-            .filter(
-              (candidate) =>
-                !isTerminalRun(candidate) ||
-                effectiveTerminalRunIds.has(candidate.runId),
-            )
-            .at(-1) ??
-          candidates.find(
-            (candidate) =>
-              isTerminalRun(candidate) &&
-              !effectiveTerminalRunIds.has(candidate.runId),
-          ) ??
-          null);
-    return projectedTurnWithAssistants(
-      user,
-      hasTeamMemberDirectResponse ? assistants : assistants.slice(0, 1),
-      run,
-      run === null ? [] : (toolItemsByRun.get(run.runId) ?? []),
-      toolCoverageByRun === null
-        ? true
-        : run !== null &&
-            toolCoverageByRun.get(run.runId)?.complete === true &&
-            toolCoverageByRun.get(run.runId)!.throughSequence >=
-              run.lastSequence,
-      taskChangeCoverageByRun === null
-        ? true
-        : run !== null &&
-            taskChangeCoverageByRun.get(run.runId)?.complete === true &&
-            taskChangeCoverageByRun.get(run.runId)!.throughSequence >=
-              run.lastSequence,
-    );
-  });
+      : null,
+  );
+  const turns = groups.map(
+    ({ user, assistants, hasTeamMemberDirectResponse }, index) => {
+      const nextUser = users[index + 1];
+      const run = runIndex.find(
+        Date.parse(user.createdAt),
+        nextUser === undefined
+          ? Number.POSITIVE_INFINITY
+          : Date.parse(nextUser.createdAt),
+      );
+      return projectedTurnWithAssistants(
+        user,
+        hasTeamMemberDirectResponse ? assistants : assistants.slice(0, 1),
+        run,
+        run === null ? [] : (toolItemsByRun.get(run.runId) ?? []),
+        toolCoverageByRun === null
+          ? true
+          : run !== null &&
+              toolCoverageByRun.get(run.runId)?.complete === true &&
+              toolCoverageByRun.get(run.runId)!.throughSequence >=
+                run.lastSequence,
+        taskChangeCoverageByRun === null
+          ? true
+          : run !== null &&
+              taskChangeCoverageByRun.get(run.runId)?.complete === true &&
+              taskChangeCoverageByRun.get(run.runId)!.throughSequence >=
+                run.lastSequence,
+      );
+    },
+  );
   const activeRun = runsNewestFirst.find((run) => !isTerminalRun(run));
   return {
     ...summary,
     ...(taskChangeLedger === null
       ? {}
       : { controlTaskChangeLedger: taskChangeLedger }),
+    name: summary.name ?? deriveThreadTitle(users[0]?.content ?? ""),
     preview: controlThreadPreview(users.at(-1)?.content, thread.title),
     status:
       activeRun === undefined
@@ -2066,14 +2297,10 @@ export function controlThreadPreview(
   threadTitle: string | null,
 ): string {
   const content = visibleControlUserContent(latestUserContent ?? "").trim();
-  if (!content) {
-    return threadTitle ?? "";
-  }
+  if (!content) return threadTitle ?? "";
   if (/^<automation_run\b/u.test(content)) {
     const title = /<title>([^<]{1,256})<\/title>/u.exec(content)?.[1]?.trim();
-    if (title) {
-      return title;
-    }
+    if (title) return title;
   }
   return content;
 }
@@ -2099,19 +2326,6 @@ function incompleteControlTaskChangeLedger(
   };
 }
 
-function isControlInternalUserContent(content: string): boolean {
-  return (
-    /^\[Team Runtime · [^\n]{1,256} · 成员报告\](?:\n|$)/u.test(content) ||
-    /^\[Team Runtime · [^\n]{1,256} · 专家会诊报告\](?:\n|$)/u.test(content) ||
-    isControlTeamMemberDirectContent(content) ||
-    /^\[Team Runtime recovery report\](?:\n|$)/u.test(content)
-  );
-}
-
-function isControlTeamMemberDirectContent(content: string): boolean {
-  return /^\[Team Runtime · [^\n]{1,256} · 成员直答\](?:\n|$)/u.test(content);
-}
-
 function projectedTurn(
   user: MessageView,
   assistant: MessageView | null,
@@ -2134,12 +2348,13 @@ export type ControlProjectedTurn = Turn &
   Readonly<{ taskChangesView: "full" | "summary" }>;
 
 function projectedTurnWithAssistants(
-  user: MessageView,
+  user: MessageView | null,
   assistants: readonly MessageView[],
   run: RunView | null,
   toolItems: readonly ThreadItem[] = [],
   itemsComplete = true,
   taskChangesComplete = itemsComplete,
+  partialMessages = false,
 ): ControlProjectedTurn {
   const status = run === null ? "failed" : projectedTurnStatus(run);
   for (const assistant of assistants) {
@@ -2156,27 +2371,27 @@ function projectedTurnWithAssistants(
     }
   }
   if (
-    run?.status === "completed" &&
+    !partialMessages && run?.status === "completed" &&
     run.collaborationMode === "plan" &&
     assistants.every((assistant) => assistant.proposedPlan === null)
   ) {
     throw new Error("control_proposed_plan_missing");
   }
   return {
-    id: run?.runId ?? `orphan:${user.messageId}`,
+    id: run?.runId ?? `orphan:${user!.messageId}`,
     items: [
-      {
-        type: "userMessage",
+      ...(user === null ? [] : [{
+        type: "userMessage" as const,
         id: user.messageId,
         clientId: null,
         content: [
           {
-            type: "text",
+            type: "text" as const,
             text: visibleControlUserContent(user.content),
             text_elements: [],
           },
         ],
-      },
+      }]),
       ...toolItems,
       ...assistants.map((assistant) =>
         assistant.proposedPlan !== null
@@ -2194,7 +2409,7 @@ function projectedTurnWithAssistants(
             },
       ),
     ],
-    itemsView: itemsComplete ? "full" : "summary",
+    itemsView: itemsComplete && !partialMessages ? "full" : "summary",
     taskChangesView: taskChangesComplete ? "full" : "summary",
     status,
     error:
@@ -2205,7 +2420,7 @@ function projectedTurnWithAssistants(
             additionalDetails: null,
           }
         : null,
-    startedAt: unixSeconds(run?.createdAt ?? user.createdAt),
+    startedAt: unixSeconds(run?.createdAt ?? user!.createdAt),
     completedAt:
       run?.terminalAt === null || run?.terminalAt === undefined
         ? null
@@ -2572,37 +2787,5 @@ function defaultReconnectDelay(
   signal: AbortSignal,
 ): Promise<void> {
   const milliseconds = Math.min(5_000, 250 * 2 ** Math.min(attempt - 1, 5));
-  return new Promise((resolve) => {
-    if (signal.aborted) {
-      resolve();
-      return;
-    }
-    const timeoutId = globalThis.setTimeout(resolve, milliseconds);
-    signal.addEventListener(
-      "abort",
-      () => {
-        globalThis.clearTimeout(timeoutId);
-        resolve();
-      },
-      { once: true },
-    );
-  });
-}
-
-function defaultRunStatusPollDelay(signal: AbortSignal): Promise<void> {
-  return new Promise((resolve) => {
-    if (signal.aborted) {
-      resolve();
-      return;
-    }
-    const timeoutId = globalThis.setTimeout(resolve, 500);
-    signal.addEventListener(
-      "abort",
-      () => {
-        globalThis.clearTimeout(timeoutId);
-        resolve();
-      },
-      { once: true },
-    );
-  });
+  return waitForControlRuntimeDelay({ delayMs: milliseconds, signal });
 }

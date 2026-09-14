@@ -5,6 +5,8 @@ import {
   type CanonicalAgentEvent,
 } from "@crewon/contracts";
 import type { RunLifecycleEvent, RunState } from "@crewon/domain";
+import { cacheReadReportingError } from "@crewon/domain";
+import { requireStreamContent } from "./run-stream-content.ts";
 
 import { ApplicationError } from "./application-error.ts";
 import { canonicalJson } from "./canonical-json.ts";
@@ -68,7 +70,7 @@ export function mapAgentEvent(
         type: event.type,
         data: {
           ...segment,
-          delta: requireNonEmpty(
+          delta: requireStreamContent(
             event.data.delta,
             "model_output_delta_invalid",
           ),
@@ -94,7 +96,7 @@ export function mapAgentEvent(
           ),
           ...(kind === "delta"
             ? {
-                delta: requireNonEmpty(
+                delta: requireStreamContent(
                   event.data.delta,
                   "model_reasoning_delta_invalid",
                 ),
@@ -155,6 +157,9 @@ export function mapAgentEvent(
         },
       };
     case "usage.recorded":
+      if (cacheReadReportingError(event.data) !== null) {
+        throw new ApplicationError("validation", "usage_cache_reporting_invalid");
+      }
       return {
         ...envelope,
         type: event.type,
@@ -168,6 +173,12 @@ export function mapAgentEvent(
             event.data.cachedInputTokens ?? 0,
             "usage_cached_input_tokens_invalid",
           ),
+          ...(event.data.cachedInputTokensReported === undefined
+            ? {}
+            : {
+                cachedInputTokensReported: event.data
+                  .cachedInputTokensReported as boolean,
+              }),
           outputTokens: requireNonNegativeInteger(
             event.data.outputTokens,
             "usage_output_tokens_invalid",

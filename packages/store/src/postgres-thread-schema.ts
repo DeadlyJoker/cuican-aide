@@ -1,4 +1,6 @@
-export const POSTGRES_THREAD_SCHEMA_VERSION = 5;
+import { postgresModelHistoryContextSchemaSql } from "./postgres-model-history-context-schema.ts";
+
+export const POSTGRES_THREAD_SCHEMA_VERSION = 6;
 
 export function postgresThreadSchemaSql(schema: string): string {
   return `
@@ -244,7 +246,7 @@ export function postgresThreadSchemaSql(schema: string): string {
           );
 
         UPDATE ${schema}.schema_migrations
-          SET version = ${POSTGRES_THREAD_SCHEMA_VERSION}
+          SET version = 5
           WHERE component = 'thread_authority' AND version = 4;
       END IF;
     END
@@ -268,5 +270,6 @@ export function postgresThreadSchemaSql(schema: string): string {
       WHERE item_type = 'tool_call';
     CREATE UNIQUE INDEX IF NOT EXISTS model_history_tool_result_key_idx
       ON ${schema}.model_history_items(thread_id, run_id, call_id)
-      WHERE item_type = 'tool_result';`;
+      WHERE item_type = 'tool_result';
+    ${postgresModelHistoryContextSchemaSql(schema)}`;
 }

@@ -1,3 +1,4 @@
+import type { ThreadCatalogNavigation } from "../../lib/thread/threadCatalogNavigation";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 
 import { Sidebar } from "../Sidebar";
@@ -10,6 +11,7 @@ import type { ProjectSessionGroup } from "../SidebarPresentation";
 import type { SettingsSection } from "../../lib/settings/settingsCatalog";
 
 type AppWorkspaceNavigationProps = {
+  threadCatalogNavigation?: ThreadCatalogNavigation;
   activeLibraryKind: LibraryKind | null;
   activeSection: SettingsSection;
   appView: AppView;
@@ -54,6 +56,7 @@ type AppWorkspaceNavigationProps = {
 };
 
 export function AppWorkspaceNavigation({
+  threadCatalogNavigation,
   activeLibraryKind,
   activeSection,
   appView,
@@ -109,6 +112,7 @@ export function AppWorkspaceNavigation({
 
   return (
     <Sidebar
+      threadCatalogNavigation={threadCatalogNavigation}
       threads={threads}
       selectedThreadId={selectedThreadId}
       clearSearchLabel={clearSearchLabel}

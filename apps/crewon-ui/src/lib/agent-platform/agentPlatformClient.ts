@@ -15,7 +15,7 @@ import type {
   LibraryAccent,
   LibraryItem,
 } from "../domain/crewonDomain";
-import { hasDevServerProxy } from "../platform";
+import { hasDesktopBridge, hasDevServerProxy } from "../platform";
 import { promptPreview } from "../shared/text";
 
 type PageResponse<T> = {
@@ -263,12 +263,16 @@ function envValue(key: string): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-export function agentPlatformBaseUrl(): string {
-  const configured = (
+function configuredAgentPlatformBaseUrl(): string {
+  return (
     envValue("VITE_AGENT_PLATFORM_BASE_URL") ??
     envValue("VITE_AGENT_PLATFORM_API_BASE_URL") ??
     DEFAULT_BASE_URL
   ).replace(/\/+$/, "");
+}
+
+export function agentPlatformBaseUrl(): string {
+  const configured = configuredAgentPlatformBaseUrl();
 
   // A root-relative path is a dev-server proxy route. In a packaged build there
   // is no proxy and the page is loaded from the packaged desktop bundle, where
@@ -293,23 +297,39 @@ export function agentPlatformInvocationUrl(value: string): string {
     throw new Error("agent_platform_invocation_url_invalid");
   }
 
-  let resolved: URL;
+  const configuredBase = configuredAgentPlatformBaseUrl();
+  const base =
+    configuredBase.startsWith("/") && hasDesktopBridge()
+      ? (envValue("VITE_AGENT_PLATFORM_RUNTIME_BASE_URL") ??
+        import.meta.env.VITE_AGENT_PLATFORM_RUNTIME_BASE_URL?.trim() ??
+        PACKAGED_BASE_URL)
+      : agentPlatformBaseUrl();
+  let platformBaseUrl: URL;
   try {
-    resolved = new URL(invocation);
-  } catch {
-    const base = agentPlatformBaseUrl();
     if (base.startsWith("/")) {
       if (typeof window === "undefined" || !window.location.origin) {
         throw new Error("agent_platform_invocation_url_invalid");
       }
+      platformBaseUrl = new URL(base, window.location.origin);
+    } else {
+      platformBaseUrl = new URL(base);
+    }
+  } catch {
+    throw new Error("agent_platform_invocation_url_invalid");
+  }
+
+  let resolved: URL;
+  try {
+    resolved = new URL(invocation);
+  } catch {
+    if (base.startsWith("/")) {
       const path = invocation.startsWith("/")
         ? `${base}${invocation}`
         : `${base}/${invocation}`;
-      resolved = new URL(path, window.location.origin);
+      resolved = new URL(path, platformBaseUrl.origin);
     } else {
-      const baseUrl = new URL(base);
       resolved = invocation.startsWith("/")
-        ? new URL(invocation, baseUrl.origin)
+        ? new URL(invocation, platformBaseUrl.origin)
         : new URL(invocation, `${base}/`);
     }
   }
@@ -321,6 +341,7 @@ export function agentPlatformInvocationUrl(value: string): string {
   if (
     resolved.username ||
     resolved.password ||
+    resolved.origin !== platformBaseUrl.origin ||
     (resolved.protocol !== "https:" &&
       !(resolved.protocol === "http:" && loopback))
   ) {

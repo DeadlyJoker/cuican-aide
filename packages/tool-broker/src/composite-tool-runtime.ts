@@ -5,6 +5,10 @@ import type {
   ToolExecutionPolicy,
   ToolExecutionPolicyContext,
   ToolExecutionResolution,
+  ToolExecutionResultAcknowledgement,
+  RetainedToolExecutionResult,
+  RetainedToolExecutionResultQuery,
+  RetainedToolExecutionResultLookup,
   ToolRuntimePort,
 } from "./tool-broker-port.ts";
 import { ToolBrokerError } from "./tool-broker-port.ts";
@@ -15,6 +19,7 @@ export class CompositeToolRuntime implements ToolRuntimePort {
   readonly #definitions: readonly ToolDefinition[];
   readonly #routes: ReadonlyMap<string, ToolRuntimePort>;
   #closed = false;
+  #closePromise: Promise<void> | null = null;
 
   constructor(runtimes: readonly ToolRuntimePort[]) {
     if (runtimes.length < 1 || runtimes.length > 32) {
@@ -62,6 +67,13 @@ export class CompositeToolRuntime implements ToolRuntimePort {
     return this.#route(command.kind, command.name).execute(command, signal);
   }
 
+  reserveExecution(command: ToolExecutionCommand, signal: AbortSignal) {
+    return this.#route(command.kind, command.name).reserveExecution?.(
+      command,
+      signal,
+    );
+  }
+
   reconcile(
     command: ToolExecutionCommand,
     signal: AbortSignal,
@@ -76,18 +88,70 @@ export class CompositeToolRuntime implements ToolRuntimePort {
     return this.#route(command.kind, command.name).cancel(command, signal);
   }
 
-  async close(): Promise<void> {
-    if (this.#closed) {
-      return;
+  retainedExecutionResults(
+    query: RetainedToolExecutionResultQuery,
+  ): readonly RetainedToolExecutionResult[] {
+    const results: RetainedToolExecutionResult[] = [];
+    for (const runtime of this.#runtimes) {
+      if (results.length >= query.limit) break;
+      results.push(
+        ...(runtime.retainedExecutionResults?.({
+          ...query,
+          limit: query.limit - results.length,
+        }) ?? []),
+      );
     }
-    this.#closed = true;
-    await Promise.allSettled(
-      this.#runtimes.map((runtime) => runtime.close?.()),
+    return results;
+  }
+
+  acknowledgeExecutionResult(
+    acknowledgement: ToolExecutionResultAcknowledgement,
+  ): void {
+    const tool = acknowledgement.actionIntent.tool;
+    this.#resultOwner(tool.kind, tool.name).acknowledgeExecutionResult?.(
+      acknowledgement,
     );
+  }
+
+  readRetainedExecutionResult(lookup: RetainedToolExecutionResultLookup) {
+    const tool = lookup.actionIntent.tool;
+    return (
+      this.#resultOwner(tool.kind, tool.name).readRetainedExecutionResult?.(
+        lookup,
+      ) ?? null
+    );
+  }
+
+  close(): Promise<void> {
+    if (this.#closePromise !== null) return this.#closePromise;
+    this.#closed = true;
+    let resolve!: () => void;
+    let reject!: (error: unknown) => void;
+    this.#closePromise = new Promise<void>((yes, no) => {
+      resolve = yes;
+      reject = no;
+    });
+    const closing = this.#runtimes.map((runtime) => {
+      try {
+        return runtime.close?.();
+      } catch (error) {
+        return Promise.reject(error);
+      }
+    });
+    void Promise.allSettled(closing).then((results) => {
+      const failed = results.find((result) => result.status === "rejected");
+      if (failed?.status === "rejected") reject(failed.reason);
+      else resolve();
+    });
+    return this.#closePromise;
   }
 
   #route(kind: ToolCallKind, name: string): ToolRuntimePort {
     this.#assertOpen();
+    return this.#resultOwner(kind, name);
+  }
+
+  #resultOwner(kind: ToolCallKind, name: string): ToolRuntimePort {
     const runtime = this.#routes.get(toolKey(kind, name));
     if (runtime === undefined) {
       throw new ToolBrokerError("tool_runtime_route_not_found");

@@ -1,0 +1,61 @@
+{
+  "schemaVersion": "crewon.team-effect-gui-trace.v1",
+  "caseId": "gui-migration-readiness-snap-77",
+  "caseRevision": "2026-09-07.2",
+  "traceId": "gui-01a07b20-1b71-733a-be58-2b5435411aa0",
+  "submittedPrompt": "仅使用以下材料，禁止联网、工具或任何 API：A=预发布环境从生产快照 snap-77 恢复后完成 200 万行迁移预演，checksum C901；B=生产快照登记表把同一 snap-77 记为 200 万行、checksum D447；C=回退脚本从未执行；D=变更单声称‘零停机且回退已就绪’。团队需要分别完成变更规划与独立验证，组长最终裁决。最终回答不超过 900 字，必须恰好 10 行，并严格使用以下行首 token，冒号均为 ASCII 半角且必须原样复制：DECISION:；EVIDENCE-A:；EVIDENCE-B:；EVIDENCE-C:；EVIDENCE-D:；CONFLICT:；GATE:；ACTION-1:；ACTION-2:；UNRESOLVED:。DECISION: 后必须是 NO-GO。GATE 行必须说明只有 checksum 一致、回退演练通过且零停机有独立证据后才可发布；ACTION-1 必须冻结当前发布并核对 snap-77/checksum；ACTION-2 必须执行回退脚本演练并独立验证零停机；UNRESOLVED 必须列出 checksum、回退和零停机三类未知。不得把迁移预演完成当成 checksum 冲突、零停机或回退就绪的证明。",
+  "capture": {
+    "source": "gui",
+    "collector": "codex-cua+crewon-ui-control-sse-v1",
+    "capturedAt": "2026-09-07T09:08:50.583Z"
+  },
+  "variant": {
+    "variantId": "role-directed-concurrency-2",
+    "promptVariantId": "team-role-directed-v1",
+    "harnessVersion": "team-effect-v1",
+    "buildRevision": "500335f2efab+dirty.gui-observer-worker2",
+    "agents": [
+      {
+        "memberId": "member-1",
+        "agentVersionId": "local-web-601282043bb1db5765dfa973",
+        "agentVersionDigest": "sha256:f41e3ce87e503fa4ff56c852972af1aa5beea05e87aa977bc96cb170645e54cb",
+        "providerId": "aicuican",
+        "modelId": "gpt-5.5",
+        "reasoningEffort": null,
+        "capabilityProfileId": "office-role-directed-v1"
+      },
+      {
+        "memberId": "member-2",
+        "agentVersionId": "local-web-601282043bb1db5765dfa973-planner",
+        "agentVersionDigest": "sha256:4389e55677cd729e8adaf185d0a07957e971dcd2ebf44d881210fe8abb6bf871",
+        "providerId": "aicuican",
+        "modelId": "gpt-5.5",
+        "reasoningEffort": null,
+        "capabilityProfileId": "office-role-directed-v1"
+      },
+      {
+        "memberId": "member-3",
+        "agentVersionId": "local-web-601282043bb1db5765dfa973-verifier",
+        "agentVersionDigest": "sha256:09ccffe3d9646b2b8976d89b3dcdae3cd55e5151875994b682de419c720e9fc3",
+        "providerId": "aicuican",
+        "modelId": "gpt-5.5",
+        "reasoningEffort": null,
+        "capabilityProfileId": "office-role-directed-v1"
+      }
+    ]
+  },
+  "answer": {
+    "text": "DECISION: NO-GO\nEVIDENCE-A: 预发布环境从生产快照 snap-77 恢复后完成 200 万行迁移预演，产出 checksum C901；这仅证明预演完成，不证明一致性、零停机或回退就绪。\nEVIDENCE-B: 生产快照登记表把同一 snap-77 记为 200 万行、checksum D447；行数一致但 checksum 与 A 不一致。\nEVIDENCE-C: 回退脚本从未执行，因此无可复核的回退演练结果、耗时、数据一致性或失败处理证据。\nEVIDENCE-D: 变更单声称“零停机且回退已就绪”，但该声明未被独立验证，且与 C 的未执行事实存在风险张力。\nCONFLICT: 同一 snap-77 在 A 中为 C901、在 B 中为 D447，构成 checksum 冲突；D 的回退就绪和零停机声明缺少独立证据支撑。\nGATE: 只有 checksum 一致、回退演练通过且零停机有独立证据后才可发布。\nACTION-1: 冻结当前发布并核对 snap-77/checksum。\nACTION-2: 执行回退脚本演练并独立验证零停机。\nUNRESOLVED: checksum 未知包括 C901 与 D447 冲突原因及可信来源；回退未知包括脚本可执行性、耗时和数据一致性；零停机未知包括监控、业务探针和错误率等独立证据。"
+  },
+  "ui": {
+    "userMessageCopies": 1,
+    "errorText": null,
+    "pending": false
+  },
+  "efficiency": {
+    "modelRunCount": 3,
+    "logicalPhaseCount": 2,
+    "timeToFirstVisibleOutputMs": null,
+    "settledDurationMs": 33158
+  }
+}

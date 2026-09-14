@@ -56,6 +56,10 @@ describe("workbench tool launcher", () => {
       new URL("./CommandWorkbenchBrowser.tsx", import.meta.url),
       "utf8",
     );
+    const surfaceSource = readFileSync(
+      new URL("./CommandWorkbenchTools.tsx", import.meta.url),
+      "utf8",
+    );
     const tabbar = drawerSource.slice(
       drawerSource.indexOf('<header className="command-workbench-tabbar">'),
       drawerSource.indexOf(
@@ -75,11 +79,11 @@ describe("workbench tool launcher", () => {
       "!launcherMenuRef.current?.contains(event.target as Node)",
     );
     expect(drawerSource).toContain("workbenchOverlayOpen={launcherOpen}");
-    expect(drawerSource).toContain(
+    expect(surfaceSource).toContain(
       "obscured={workbenchOverlayOpen || interactionInactive}",
     );
     expect(drawerSource).toContain("active={open && activeTabId === tab.id}");
-    expect(drawerSource).toContain(
+    expect(surfaceSource).toContain(
       "interactive={active && !interactionInactive}",
     );
     expect(browserSource).toContain("obscured={menuOpen || obscured}");

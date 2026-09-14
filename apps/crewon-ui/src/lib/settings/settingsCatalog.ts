@@ -111,7 +111,7 @@ const sidebarCopy: Record<Locale, SettingsSidebarCopy> = {
     hooks: "自动执行",
     integrations: "能力与连接",
     keyboard: "键盘快捷键",
-    mcpServers: "工具与服务",
+    mcpServers: "工具与扩展",
     modelProviders: "AI 模型",
     personal: "个人设置",
     personalization: "助理与记忆",
@@ -134,7 +134,7 @@ const sidebarCopy: Record<Locale, SettingsSidebarCopy> = {
     hooks: "Automatic actions",
     integrations: "Tools & connections",
     keyboard: "Keyboard shortcuts",
-    mcpServers: "Tools & services",
+    mcpServers: "Tools & extensions",
     modelProviders: "AI models",
     personal: "Personal settings",
     personalization: "Assistant & memory",
@@ -168,9 +168,7 @@ export function settingsSectionDescription(
   locale: Locale,
 ): string {
   if (section === "account") {
-    return locale === "zh"
-      ? "管理登录状态、套餐和使用情况"
-      : "Manage sign-in, plan, and usage";
+    return locale === "zh" ? "查看当前登录账号" : "View your signed-in account";
   }
   const item = settingsCatalogItem(section);
   return item?.description[locale] ?? "";
@@ -293,8 +291,8 @@ export const settingsCatalog = [
         icon: "cable",
         mode: "action",
         description: {
-          zh: "选择任务默认使用的模型",
-          en: "Choose the default model for tasks",
+          zh: "任务模型与模型服务",
+          en: "Task models and model services",
         },
         backend: {
           refreshTarget: "model-providers",
@@ -307,8 +305,8 @@ export const settingsCatalog = [
         icon: "sliders-horizontal",
         mode: "editable",
         description: {
-          zh: "设置默认模型、确认时机和可操作范围",
-          en: "Choose the default model, confirmations, and access range",
+          zh: "使用环境与任务偏好",
+          en: "Environment and task preferences",
         },
         backend: {
           refreshTarget: "config",
@@ -385,13 +383,24 @@ export const settingsCatalog = [
         },
       },
       {
+        id: "keyboard",
+        labelKey: "keyboard",
+        icon: "keyboard",
+        mode: "status",
+        description: {
+          zh: "用快捷键更快地完成常用操作",
+          en: "Get common tasks done faster with shortcuts",
+        },
+        backend: { refreshTarget: "keyboard-settings", scope: "desktop" },
+      },
+      {
         id: "account",
         labelKey: "general",
         icon: "shield-check",
         mode: "action",
         description: {
-          zh: "管理登录状态、套餐和使用情况",
-          en: "Manage sign-in, plan, and usage",
+          zh: "查看当前登录账号",
+          en: "View your signed-in account",
         },
         backend: {
           refreshTarget: "account",
@@ -410,8 +419,8 @@ export const settingsCatalog = [
         icon: "bot",
         mode: "action",
         description: {
-          zh: "管理助理可以调用的工具和服务",
-          en: "Manage tools and services available to the assistant",
+          zh: "设置常用任务的输出偏好",
+          en: "Set output preferences for common tasks",
         },
         backend: {
           refreshTarget: "mcp-settings",
@@ -424,8 +433,8 @@ export const settingsCatalog = [
         icon: "globe",
         mode: "status",
         description: {
-          zh: "查看助理可以使用的网页应用",
-          en: "Review web apps available to the assistant",
+          zh: "在任务中查看和使用网页",
+          en: "View and use web pages in your tasks",
         },
         backend: {
           refreshTarget: "browser-settings",
@@ -438,8 +447,8 @@ export const settingsCatalog = [
         icon: "terminal-square",
         mode: "action",
         description: {
-          zh: "管理可由助理协助操作的设备",
-          en: "Manage devices the assistant can help operate",
+          zh: "使用本地文件与终端",
+          en: "Use local files and terminals",
         },
         backend: {
           refreshTarget: "computer-control-settings",
@@ -474,8 +483,8 @@ export const settingsCatalog = [
         icon: "terminal-square",
         mode: "status",
         description: {
-          zh: "查看任务权限和设备保护状态",
-          en: "Review task access and device protection",
+          zh: "了解任务可以执行哪些操作",
+          en: "Understand what your tasks can do",
         },
         backend: {
           refreshTarget: "environment-settings",

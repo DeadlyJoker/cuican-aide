@@ -1,5 +1,14 @@
 import type { CompiledAgentVersion } from "@crewon/agent-version";
 
+import {
+  CLOUD_AGENT_ADAPTER_NAME,
+  CLOUD_AGENT_ADAPTER_VERSION,
+} from "./cloud-agent-transport.ts";
+import {
+  compileRuntimeAgentVersion,
+  type RuntimeAgentVersionReleaseConfig,
+} from "./agent-version-release.ts";
+
 const MAX_PROFILES = 8;
 const MAX_PROFILE_JSON_BYTES = 32 * 1024;
 
@@ -44,7 +53,7 @@ export function parseDevelopmentAgentProfiles(
       !item.agentVersionId.trim() ||
       item.agentVersionId.length > 512 ||
       typeof item.instructions !== "string" ||
-      !item.instructions.trim() ||
+      (cloudAgent === undefined && !item.instructions.trim()) ||
       new TextEncoder().encode(item.instructions).byteLength > 9_999 ||
       ids.has(item.agentVersionId)
     ) {
@@ -81,6 +90,46 @@ export function parseDevelopmentAgentProfiles(
   });
 }
 
+/** Compiles a local profile without claiming provider-owned Agent behavior. */
+export function compileDevelopmentAgentProfileVersion(
+  config: RuntimeAgentVersionReleaseConfig,
+  profile: DevelopmentAgentProfile,
+): CompiledAgentVersion {
+  if (profile.cloudAgent === undefined) {
+    return compileRuntimeAgentVersion({
+      ...config,
+      route: {
+        ...config.route,
+        agentVersionId: profile.agentVersionId,
+      },
+      agentInstructions: profile.instructions,
+      expectedAgentVersionDigest: null,
+    });
+  }
+  return compileRuntimeAgentVersion({
+    ...config,
+    route: {
+      ...config.route,
+      agentVersionId: profile.agentVersionId,
+      workspaceBindingId: null,
+    },
+    agentInstructions: null,
+    governedContext: undefined,
+    toolRuntime: undefined,
+    nativeWorkspaceReadCatalog: "disabled",
+    modelIdentity: {
+      adapterName: CLOUD_AGENT_ADAPTER_NAME,
+      adapterVersion: CLOUD_AGENT_ADAPTER_VERSION,
+      modelId: profile.cloudAgent.modelId,
+    },
+    // The provider-owned Agent may have already executed hidden mutation tools
+    // when an SSE response is lost. Automatic replay requires a provider-backed
+    // idempotency key and queryable receipt, neither of which this API exposes.
+    streamMaxRetries: 0,
+    expectedAgentVersionDigest: null,
+  });
+}
+
 /** Builds credential-free runtime bindings for local development versions. */
 export function developmentAgentRuntimeBindings(input: {
   versions: readonly CompiledAgentVersion[];
@@ -92,7 +141,7 @@ export function developmentAgentRuntimeBindings(input: {
   requestProfile: "standard" | "responsesLite";
   sequencePolicy: "required" | "whenPresent";
   idleTimeoutMs: number;
-  apiKeyEnvironment?: string | null;
+  directApiKeyEnvironment?: string | null;
   mcpStdioConfigPath?: string | null;
   toolRuntimeMode?: "independent" | "shared";
 }) {
@@ -109,17 +158,14 @@ export function developmentAgentRuntimeBindings(input: {
         agentVersionId: version.agentVersionId,
         contentDigest: version.contentDigest,
         authorityId: input.authorityId,
-        workspaceBindingId: input.workspaceBindingId,
+        workspaceBindingId: isCloudAgent ? null : input.workspaceBindingId,
         provider: isCloudAgent
           ? {
               kind: "cloudAgent" as const,
               invocationUrl: profile.cloudAgent!.invocationUrl,
               modelId: profile.cloudAgent!.modelId,
               agentId: profile.cloudAgent!.agentId,
-              apiKeyEnvironment:
-                input.apiKeyEnvironment === undefined
-                  ? "CREWON_AGENT_PLATFORM_API_KEY"
-                  : input.apiKeyEnvironment,
+              apiKeyEnvironment: "CREWON_AGENT_PLATFORM_API_KEY",
               storeResponses: false,
               requestProfile: input.requestProfile,
               idleTimeoutMs: input.idleTimeoutMs,
@@ -129,23 +175,25 @@ export function developmentAgentRuntimeBindings(input: {
               kind: "directResponses" as const,
               endpoint: input.endpoint,
               apiKeyEnvironment:
-                input.apiKeyEnvironment === undefined
+                input.directApiKeyEnvironment === undefined
                   ? "CREWON_MODEL_API_KEY"
-                  : input.apiKeyEnvironment,
+                  : input.directApiKeyEnvironment,
               storeResponses: false,
               requestProfile: input.requestProfile,
               idleTimeoutMs: input.idleTimeoutMs,
               sequencePolicy: input.sequencePolicy,
             },
         mcpStdioConfigPath:
-          input.toolRuntimeMode === "shared"
+          isCloudAgent || input.toolRuntimeMode === "shared"
             ? null
             : (input.mcpStdioConfigPath ?? null),
         deviceToolConfigPath: null,
         remoteMcpConfigPath: null,
-        ...(input.toolRuntimeMode === undefined
-          ? {}
-          : { toolRuntimeMode: input.toolRuntimeMode }),
+        ...(isCloudAgent
+          ? { toolRuntimeMode: "independent" as const }
+          : input.toolRuntimeMode === undefined
+            ? {}
+            : { toolRuntimeMode: input.toolRuntimeMode }),
       };
     }),
   };

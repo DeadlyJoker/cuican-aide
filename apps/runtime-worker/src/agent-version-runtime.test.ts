@@ -68,6 +68,7 @@ test("retains multiple immutable runtimes and resolves the prior compactor", asy
     updatedAt: "2026-08-09T00:00:00Z",
   });
   assert.equal(prior?.compactor, large.contextCompactor);
+  assert.equal(prior?.executionAuthority, "crewonKernel");
   await registry.close();
 });
 
@@ -242,6 +243,7 @@ test("single-flights a tenant runtime from the Store on first Run resolution", a
     updatedAt: "2026-08-09T00:00:00Z",
   });
   assert.equal(prior?.compactor, first?.contextCompactor);
+  assert.equal(prior?.executionAuthority, "crewonKernel");
   await registry.close();
   await store.close();
 });
@@ -290,6 +292,7 @@ function runtimeForVersion(version: CompiledAgentVersion): AgentVersionRuntime {
   const toolRuntime = new InMemoryToolBroker();
   return {
     version,
+    executionAuthority: "crewonKernel",
     kernel: kernel(version.model.modelId),
     policy: allowPolicy,
     toolRuntime,

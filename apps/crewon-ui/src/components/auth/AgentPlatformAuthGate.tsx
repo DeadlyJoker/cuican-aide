@@ -30,6 +30,10 @@ import {
   type WeComLoginConfig,
 } from "../../lib/agent-platform/agentPlatformSession";
 import {
+  AGENT_PLATFORM_AUTH_UNAVAILABLE_MESSAGE,
+  withAgentPlatformAuthBootstrapDeadline,
+} from "../../lib/agent-platform/agentPlatformAuthBootstrap";
+import {
   clearPimLaunchToken,
   getPimLaunchToken,
   isPimLaunchSession,
@@ -340,10 +344,17 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     let cancelled = false;
     async function initializeAccount() {
+      const configPromise = withAgentPlatformAuthBootstrapDeadline(
+        readWeComLoginConfig(),
+      ).catch(
+        (): WeComLoginConfig => ({
+          enabled: false,
+          provider: "wecom",
+          label: "企业微信",
+          reason: "企业微信登录服务不可用",
+        }),
+      );
       try {
-        const config = await readWeComLoginConfig();
-        if (!cancelled) setWeComConfig(config);
-
         const params = new URLSearchParams(window.location.search);
 
         // --- PIM launch token path ---
@@ -352,7 +363,9 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
         // the login screen entirely.
         if (isPimLaunchSession()) {
           try {
-            const currentUser = await readAgentPlatformCurrentUser();
+            const currentUser = await withAgentPlatformAuthBootstrapDeadline(
+              readAgentPlatformCurrentUser(),
+            );
             if (!cancelled) setUser(currentUser);
           } catch {
             // Token is invalid or expired — clear it and let the user
@@ -389,14 +402,24 @@ export function AgentPlatformAuthGate({ children }: { children: ReactNode }) {
           }
           return;
         }
-        const currentUser = await readAgentPlatformCurrentUser();
+        const currentUser = await withAgentPlatformAuthBootstrapDeadline(
+          readAgentPlatformCurrentUser(),
+        );
         if (!cancelled) setUser(currentUser);
       } catch (reason) {
         if (!cancelled) {
-          setError(reason instanceof Error ? reason.message : "账号服务不可用");
+          setError(
+            reason instanceof Error
+              ? reason.message
+              : AGENT_PLATFORM_AUTH_UNAVAILABLE_MESSAGE,
+          );
         }
       } finally {
-        if (!cancelled) setChecking(false);
+        const config = await configPromise;
+        if (!cancelled) {
+          setWeComConfig(config);
+          setChecking(false);
+        }
       }
     }
     void initializeAccount();

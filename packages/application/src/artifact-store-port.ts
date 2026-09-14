@@ -1,4 +1,5 @@
 import type { ArtifactRecord } from "@crewon/domain";
+import type { ArtifactRetentionStore } from "./artifact-retention-port.ts";
 
 export type ArtifactLocator = Readonly<{
   tenantId: string;
@@ -23,6 +24,7 @@ export type ArtifactContent = Readonly<{
 
 /** Persists immutable Artifact metadata and encrypted content outside Run state. */
 export interface ArtifactStorePort {
+  readonly retention?: ArtifactRetentionStore;
   put(input: PutArtifactInput): Promise<PutArtifactResult>;
   get(locator: ArtifactLocator): Promise<ArtifactRecord | null>;
   read(locator: ArtifactLocator): Promise<ArtifactContent | null>;

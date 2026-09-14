@@ -41,8 +41,10 @@ test("streams through a real self-hosted Responses-compatible HTTP server withou
     { type: "output.delta", delta: "ne" },
     {
       type: "usage",
+      providerResponseId: "resp-1",
       inputTokens: 4,
       cachedInputTokens: 2,
+      cachedInputTokensReported: true,
       outputTokens: 1,
       totalTokens: 5,
     },
@@ -218,7 +220,11 @@ test("projects shared AR-042 reasoning through the real Direct transport boundar
 
   assert.deepEqual(
     await collect(transport.stream(manualRequest(), signal())),
-    reference.expected.transportEvents,
+    reference.expected.transportEvents.map((event) =>
+      event.type === "usage"
+        ? { ...event, cachedInputTokensReported: false, providerResponseId: "resp-ar-042" }
+        : event,
+    ),
   );
 });
 
@@ -461,8 +467,10 @@ test("retrieves a completed response without resampling and rebuilds ordered tex
     },
     {
       type: "usage",
+      providerResponseId: "resp-lost",
       inputTokens: 5,
       cachedInputTokens: 1,
+      cachedInputTokensReported: true,
       outputTokens: 3,
       totalTokens: 8,
     },
@@ -662,8 +670,10 @@ test("serializes Tool definitions and exact call outputs for follow-up sampling"
     },
     {
       type: "usage",
+      providerResponseId: "resp-1",
       inputTokens: 1,
       cachedInputTokens: 0,
+      cachedInputTokensReported: false,
       outputTokens: 0,
       totalTokens: 1,
     },
@@ -1094,8 +1104,10 @@ test("exposes a completed assistant item before the response terminal", async ()
     },
     {
       type: "usage",
+      providerResponseId: "resp-1",
       inputTokens: 1,
       cachedInputTokens: 0,
+      cachedInputTokensReported: false,
       outputTokens: 1,
       totalTokens: 2,
     },
@@ -1122,8 +1134,10 @@ test("preserves the Provider end_turn=false continuation directive", async () =>
   assert.deepEqual(await collect(transport.stream(manualRequest(), signal())), [
     {
       type: "usage",
+      providerResponseId: "resp-1",
       inputTokens: 4,
       cachedInputTokens: 0,
+      cachedInputTokensReported: false,
       outputTokens: 0,
       totalTokens: 4,
     },
@@ -1221,8 +1235,10 @@ test("defaults missing cached usage to zero and rejects cached input above total
     [
       {
         type: "usage",
+        providerResponseId: "resp-1",
         inputTokens: 3,
         cachedInputTokens: 0,
+        cachedInputTokensReported: false,
         outputTokens: 1,
         totalTokens: 4,
       },

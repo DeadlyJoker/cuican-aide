@@ -7,6 +7,7 @@ import type {
   StartTurnResponse,
   ToolPermissionMode,
 } from "@crewon/contracts";
+import { formatMessageCursor } from "@crewon/contracts";
 import type { ControlApiClient } from "@crewon/control-client";
 
 import type { TeamMemberRuntimeProfile } from "../thread/threadRuntimeSettings";
@@ -14,6 +15,20 @@ import {
   controlTeamDelegatedMemberId,
   controlTeamDelegationMarker,
 } from "./controlTeamDelegation";
+import {
+  controlExpertManagerFinalResponseMessage,
+  controlOfficeManagerFinalResponseMessage,
+  controlTeamModelVisibleReportExecution,
+} from "./controlTeamManagerPrompts";
+import {
+  controlTeamManagerPlanningPrompt,
+  controlTeamMemberAssignment,
+  controlTeamMemberGuidance,
+  controlTeamPlanningStrategy,
+  type ControlTeamAssignmentBasis,
+} from "./controlTeamPlanning";
+
+export { controlTeamMemberGuidance } from "./controlTeamPlanning";
 
 const MAX_TEAM_MEMBERS = 6;
 const MAX_MEMBER_REPORT_CHARACTERS = 1_600;
@@ -87,6 +102,63 @@ export type ControlTeamTurnResult = Readonly<{
 
 export type ControlTeamResponseMode = "manager" | "member";
 
+export type ControlTeamManagerResponseKind = "office" | "experts";
+
+export type ControlTeamRunKind =
+  | "managerPlanning"
+  | "worker"
+  | "workerRecovery"
+  | "managerFinal"
+  | "managerDelegation"
+  | "memberFinal";
+
+/**
+ * Emitted only after Control accepted a durable Team Run and the response was
+ * checked against the expected Thread and Run shape. The Run remains the
+ * source of truth; this event only records its structural place in the
+ * browser-side Team execution.
+ */
+export type ControlTeamRunAcceptedEvent = Readonly<{
+  phaseIndex: number;
+  kind: ControlTeamRunKind;
+  /** Office member whose AgentVersion was submitted for this Run. */
+  memberId: string;
+  agentVersionId: string;
+  runId: string;
+  runThreadId: string;
+  recoveredMemberId?: string;
+}>;
+
+export type StartControlTeamTurnInput = Readonly<{
+  client: ControlTeamRuntimeClient;
+  threadId: string;
+  expectedRevision: number;
+  content: string;
+  plan: ControlTeamPlan;
+  idempotencyKey: (operation: string) => string;
+  executionIntent?: "none" | "goal" | "plan";
+  toolPermissionMode?: ToolPermissionMode;
+  onRunStarted?: (run: RunView) => void;
+  onTaskAccepted?: (message: MessageView) => void;
+  onTeamRunAccepted?: (
+    event: ControlTeamRunAcceptedEvent,
+  ) => void | Promise<void>;
+  onFinalTurnStarted?: (started: ControlTeamTurnResult) => void;
+  onExecutionIntentMismatch?: (run: RunView) => void;
+  pollIntervalMs?: number;
+  runDeadlineMs?: number;
+}> &
+  (
+    | Readonly<{
+        responseMode: "manager";
+        managerResponseKind: ControlTeamManagerResponseKind;
+      }>
+    | Readonly<{
+        responseMode: "member";
+        managerResponseKind?: never;
+      }>
+  );
+
 export async function resolveControlTeamPlan(input: {
   client: ControlTeamRuntimeClient;
   threadId: string;
@@ -139,14 +211,31 @@ export async function resolveControlTeamPlan(input: {
       if (member === undefined) {
         throw new Error("control_team_member_mapping_invalid");
       }
+      const localProfile = profilesByMemberId.get(member.memberId);
+      const responsibility = member.responsibility?.trim();
+      const profile = responsibility
+        ? {
+            ...(localProfile ?? {
+              memberId: member.memberId,
+              systemPrompt: "",
+              skills: [],
+              mcp: [],
+              knowledge: [],
+            }),
+            memberId: member.memberId,
+            teamCoordination: {
+              assignmentMode: "roleDirected" as const,
+              responsibility,
+              source: "officeDefinition" as const,
+            },
+          }
+        : localProfile;
       return {
         memberId: member.memberId,
         displayName: member.displayName,
         agentVersionId: member.agentVersionId,
         targetId: target.targetId,
-        ...(profilesByMemberId.get(member.memberId)
-          ? { profile: profilesByMemberId.get(member.memberId) }
-          : {}),
+        ...(profile ? { profile } : {}),
       } satisfies ControlTeamMember;
     }),
   );
@@ -169,22 +258,9 @@ export async function resolveControlTeamPlan(input: {
  * them according to local capacity. The manager receives a bounded, auditable
  * report before the final synthesis Run starts on the original Thread.
  */
-export async function startControlTeamTurn(input: {
-  client: ControlTeamRuntimeClient;
-  threadId: string;
-  expectedRevision: number;
-  content: string;
-  plan: ControlTeamPlan;
-  responseMode: ControlTeamResponseMode;
-  idempotencyKey: (operation: string) => string;
-  executionIntent?: "none" | "goal" | "plan";
-  toolPermissionMode?: ToolPermissionMode;
-  onRunStarted?: (run: RunView) => void;
-  onFinalTurnStarted?: (started: ControlTeamTurnResult) => void;
-  onExecutionIntentMismatch?: (run: RunView) => void;
-  pollIntervalMs?: number;
-  runDeadlineMs?: number;
-}): Promise<ControlTeamTurnResult> {
+export async function startControlTeamTurn(
+  input: StartControlTeamTurnInput,
+): Promise<ControlTeamTurnResult> {
   if (input.executionIntent === "plan") {
     throw new Error(CONTROL_TEAM_PLAN_UNSUPPORTED);
   }
@@ -203,15 +279,21 @@ export async function startControlTeamTurn(input: {
   ) {
     throw new Error("control_team_manager_thread_invalid");
   }
-  const [managerFork, ...forks] = await Promise.all([
-    input.client.forkThread(
-      input.threadId,
-      {
-        expectedRevision: forkSource.thread.revision,
-        throughHistorySequence: null,
-      },
-      input.idempotencyKey("team.manager.plan.fork"),
-    ),
+  const planningStrategy = controlTeamPlanningStrategy(input.plan);
+  const workerPhaseIndex = planningStrategy === "managerGenerated" ? 1 : 0;
+  const forked = await Promise.all([
+    ...(planningStrategy === "managerGenerated"
+      ? [
+          input.client.forkThread(
+            input.threadId,
+            {
+              expectedRevision: forkSource.thread.revision,
+              throughHistorySequence: null,
+            },
+            input.idempotencyKey("team.manager.plan.fork"),
+          ),
+        ]
+      : []),
     ...input.plan.workers.map((worker) =>
       input.client.forkThread(
         input.threadId,
@@ -223,9 +305,14 @@ export async function startControlTeamTurn(input: {
       ),
     ),
   ]);
+  const managerFork =
+    planningStrategy === "managerGenerated" ? forked[0] : null;
+  const forks =
+    planningStrategy === "managerGenerated" ? forked.slice(1) : forked;
   if (
-    managerFork.thread.forkedFromThreadId !== input.threadId ||
-    managerFork.thread.forkedThroughHistorySequence === null
+    managerFork !== null &&
+    (managerFork.thread.forkedFromThreadId !== input.threadId ||
+      managerFork.thread.forkedThroughHistorySequence === null)
   ) {
     throw new Error("control_team_manager_plan_fork_invalid");
   }
@@ -254,40 +341,25 @@ export async function startControlTeamTurn(input: {
   ) {
     throw new Error("control_team_message_response_invalid");
   }
-  const managerPlanningPrompt = await input.client.appendThreadMessage(
-    managerFork.thread.threadId,
-    {
-      expectedRevision: managerFork.thread.revision,
-      content: teamManagerPlanningPrompt(input.plan, input.content),
-    },
-    input.idempotencyKey("team.manager.plan.prompt"),
-  );
-  const managerStarted = await input.client.createRun(
-    {
-      threadId: managerPlanningPrompt.thread.threadId,
-      agentVersionId: input.plan.manager.agentVersionId,
-      toolPermissionMode,
-    },
-    input.idempotencyKey("team.manager.plan"),
-  );
-  validateStartedRun(managerStarted.run, managerFork.thread.threadId);
-  const managerTerminal = await waitForTerminalRun({
-    client: input.client,
-    run: managerStarted.run,
-    pollIntervalMs,
-    runDeadlineMs,
-  });
-  const managerPlan =
-    managerTerminal.status === "completed"
-      ? await latestAssistantOutput(input.client, managerFork.thread.threadId)
-      : null;
-  if (managerTerminal.status !== "completed" || managerPlan === null) {
-    throw new Error(
-      `control_team_manager_plan_failed:${managerTerminal.failure?.code ?? managerTerminal.status}`,
-    );
+  try {
+    input.onTaskAccepted?.(appended.message);
+  } catch {
+    // Presentation must not fail an already durable task submission.
   }
-  const workerAssignments = await Promise.all(
-    forks.map((fork, index) => {
+  const branchOriginals = await Promise.all([
+    ...(managerFork === null
+      ? []
+      : [
+          input.client.appendThreadMessage(
+            managerFork.thread.threadId,
+            {
+              expectedRevision: managerFork.thread.revision,
+              content: input.content,
+            },
+            input.idempotencyKey("team.manager.plan.original"),
+          ),
+        ]),
+    ...forks.map((fork, index) => {
       const worker = input.plan.workers[index];
       if (worker === undefined) {
         throw new Error("control_team_worker_mapping_invalid");
@@ -296,23 +368,103 @@ export async function startControlTeamTurn(input: {
         fork.thread.threadId,
         {
           expectedRevision: fork.thread.revision,
-          content: teamMemberAssignment(
+          content: input.content,
+        },
+        input.idempotencyKey(`team.original.${worker.memberId}`),
+      );
+    }),
+  ]);
+  if (
+    branchOriginals.some(
+      (original) =>
+        original.message.role !== "user" ||
+        original.message.content !== input.content ||
+        original.message.threadId !== original.thread.threadId,
+    )
+  ) {
+    throw new Error("control_team_branch_message_response_invalid");
+  }
+  const managerOriginal = managerFork === null ? null : branchOriginals[0];
+  const workerOriginals =
+    managerFork === null ? branchOriginals : branchOriginals.slice(1);
+  let assignmentBasis: ControlTeamAssignmentBasis;
+  if (managerFork === null) {
+    assignmentBasis = { kind: "explicitResponsibilities" };
+  } else {
+    if (managerOriginal === null) {
+      throw new Error("control_team_manager_plan_fork_invalid");
+    }
+    const managerPlanningPrompt = await input.client.appendThreadMessage(
+      managerFork.thread.threadId,
+      {
+        expectedRevision: managerOriginal.thread.revision,
+        content: controlTeamManagerPlanningPrompt(input.plan),
+      },
+      input.idempotencyKey("team.manager.plan.prompt"),
+    );
+    const managerStarted = await input.client.createRun(
+      {
+        threadId: managerPlanningPrompt.thread.threadId,
+        agentVersionId: input.plan.manager.agentVersionId,
+        toolPermissionMode,
+      },
+      input.idempotencyKey("team.manager.plan"),
+    );
+    validateStartedRun(managerStarted.run, managerFork.thread.threadId);
+    emitControlTeamRunAccepted(input.onTeamRunAccepted, managerStarted.run, {
+      phaseIndex: 0,
+      kind: "managerPlanning",
+      memberId: input.plan.manager.memberId,
+      agentVersionId: input.plan.manager.agentVersionId,
+    });
+    const managerTerminal = await waitForTerminalRun({
+      client: input.client,
+      run: managerStarted.run,
+      pollIntervalMs,
+      runDeadlineMs,
+    });
+    const managerPlan =
+      managerTerminal.status === "completed"
+        ? await latestAssistantOutput(
+            input.client,
+            managerFork.thread.threadId,
+            managerPlanningPrompt.message.sequence,
+          )
+        : null;
+    if (managerTerminal.status !== "completed" || managerPlan === null) {
+      throw new Error(
+        `control_team_manager_plan_failed:${managerTerminal.failure?.code ?? managerTerminal.status}`,
+      );
+    }
+    assignmentBasis = { kind: "managerPlan", text: managerPlan };
+  }
+  const workerAssignments = await Promise.all(
+    forks.map((fork, index) => {
+      const worker = input.plan.workers[index];
+      const original = workerOriginals[index];
+      if (worker === undefined || original === undefined) {
+        throw new Error("control_team_worker_mapping_invalid");
+      }
+      return input.client.appendThreadMessage(
+        fork.thread.threadId,
+        {
+          expectedRevision: original.thread.revision,
+          content: controlTeamMemberAssignment(
             input.plan,
             worker,
-            input.content,
-            managerPlan,
+            assignmentBasis,
           ),
         },
         input.idempotencyKey(`team.assignment.${worker.memberId}`),
       );
     }),
   );
-  const workerRunPromises = workerAssignments.map((assignment, index) => {
+  const workerRunPromises = workerAssignments.map(async (assignment, index) => {
     const worker = input.plan.workers[index];
     if (worker === undefined) {
       throw new Error("control_team_worker_mapping_invalid");
     }
-    return input.client.createRun(
+    const started = await input.client.createRun(
       {
         threadId: assignment.thread.threadId,
         agentVersionId: worker.agentVersionId,
@@ -320,6 +472,14 @@ export async function startControlTeamTurn(input: {
       },
       input.idempotencyKey(`team.worker.${worker.memberId}`),
     );
+    validateStartedRun(started.run, assignment.thread.threadId);
+    emitControlTeamRunAccepted(input.onTeamRunAccepted, started.run, {
+      phaseIndex: workerPhaseIndex,
+      kind: "worker",
+      memberId: worker.memberId,
+      agentVersionId: worker.agentVersionId,
+    });
+    return started;
   });
   const workerStarts = await Promise.all(workerRunPromises);
 
@@ -330,7 +490,6 @@ export async function startControlTeamTurn(input: {
       if (worker === undefined || fork === undefined) {
         throw new Error("control_team_worker_mapping_invalid");
       }
-      validateStartedRun(started.run, fork.thread.threadId);
       const terminal = await waitForTerminalRun({
         client: input.client,
         run: started.run,
@@ -339,7 +498,11 @@ export async function startControlTeamTurn(input: {
       });
       const directOutput =
         terminal.status === "completed"
-          ? await latestAssistantOutput(input.client, fork.thread.threadId)
+          ? await latestAssistantOutput(
+              input.client,
+              fork.thread.threadId,
+              workerAssignments[index]!.message.sequence,
+            )
           : null;
       if (directOutput !== null) {
         return memberReport(worker, terminal, directOutput, null);
@@ -349,11 +512,17 @@ export async function startControlTeamTurn(input: {
         worker,
         workerThreadId: fork.thread.threadId,
         failedRun: terminal,
+        phaseIndex: workerPhaseIndex + 1,
         pollIntervalMs,
         runDeadlineMs,
       });
     }),
   );
+
+  const managerFinalPhaseIndex =
+    workerPhaseIndex +
+    1 +
+    (reports.some((report) => report.recoveredBy !== null) ? 1 : 0);
 
   const current = await input.client.getThread(input.threadId);
   if (
@@ -362,9 +531,17 @@ export async function startControlTeamTurn(input: {
   ) {
     throw new Error("control_team_manager_thread_invalid");
   }
+  const managerPromptInput = {
+    officeTitle: input.plan.officeTitle,
+    managerDisplayName: input.plan.manager.displayName,
+    managerGuidance: controlTeamMemberGuidance(input.plan.manager),
+    reports,
+  };
   const managerMessage =
     input.responseMode === "manager"
-      ? teamManagerFinalResponseMessage(input.plan, reports)
+      ? input.managerResponseKind === "office"
+        ? controlOfficeManagerFinalResponseMessage(managerPromptInput)
+        : controlExpertManagerFinalResponseMessage(managerPromptInput)
       : teamDelegationMessage(input.plan, reports);
   const finalManagerExecutionIntent =
     input.responseMode === "manager" && goalPause !== null
@@ -404,6 +581,13 @@ export async function startControlTeamTurn(input: {
   validateStartedRun(finalManagerStarted.run, input.threadId, {
     allowGoalBinding: input.responseMode === "manager",
   });
+  emitControlTeamRunAccepted(input.onTeamRunAccepted, finalManagerStarted.run, {
+    phaseIndex: managerFinalPhaseIndex,
+    kind:
+      input.responseMode === "manager" ? "managerFinal" : "managerDelegation",
+    memberId: input.plan.manager.memberId,
+    agentVersionId: input.plan.manager.agentVersionId,
+  });
   if (!finalManagerIntentMatches) {
     input.onExecutionIntentMismatch?.(finalManagerStarted.run);
   }
@@ -423,7 +607,11 @@ export async function startControlTeamTurn(input: {
   });
   const delegation =
     finalManagerTerminal.status === "completed"
-      ? await latestAssistantOutput(input.client, input.threadId)
+      ? await latestAssistantOutput(
+          input.client,
+          input.threadId,
+          finalManagerStarted.message.sequence,
+        )
       : null;
   if (finalManagerTerminal.status !== "completed" || delegation === null) {
     throw new Error(
@@ -484,6 +672,12 @@ export async function startControlTeamTurn(input: {
   }
   validateStartedRun(memberStarted.run, input.threadId, {
     allowGoalBinding: true,
+  });
+  emitControlTeamRunAccepted(input.onTeamRunAccepted, memberStarted.run, {
+    phaseIndex: managerFinalPhaseIndex + 1,
+    kind: "memberFinal",
+    memberId: delegatedMember.memberId,
+    agentVersionId: delegatedMember.agentVersionId,
   });
   if (!memberIntentMatches) {
     input.onExecutionIntentMismatch?.(memberStarted.run);
@@ -645,49 +839,6 @@ async function settleGoalMutationRuns(input: {
   }
 }
 
-function teamMemberAssignment(
-  plan: ControlTeamPlan,
-  worker: ControlTeamMember,
-  originalTask: string,
-  managerPlan: string,
-): string {
-  return [
-    `[Team Runtime · ${plan.officeTitle} · 成员任务]`,
-    `你是团队成员「${worker.displayName}」。`,
-    "请从该角色的专业视角独立分析上一条原始用户任务。输出可验证结论、证据缺口、风险和给组长的建议。",
-    "请将报告控制在 1,200 个字符以内，优先保留结论和证据，避免在回收时被截断。",
-    "不要代替组长做最终汇总，不要虚构外部证据，也不要创建或完成主线程 Goal。",
-    ...controlTeamMemberGuidance(worker),
-    "",
-    "原始用户任务：",
-    originalTask.slice(0, MAX_MEMBER_REPORT_CHARACTERS),
-    "",
-    "组长拆解（仅作为任务边界；仍需独立验证）：",
-    managerPlan.slice(0, MAX_MEMBER_REPORT_CHARACTERS),
-  ].join("\n");
-}
-
-function teamManagerPlanningPrompt(
-  plan: ControlTeamPlan,
-  originalTask: string,
-): string {
-  return [
-    `[Team Runtime · ${plan.officeTitle} · 组长拆解]`,
-    "基于上一条原始用户任务，只生成团队执行拆解，不要给最终答复。",
-    `请分别为 ${plan.workers.map((worker) => `「${worker.displayName}」`).join("、")} 指定互补的分析重点、证据要求和交付边界。`,
-    "输出控制在 1,200 个字符以内；不要创建、修改或完成长期 Goal。",
-    ...controlTeamMemberGuidance(plan.manager),
-    ...plan.workers.flatMap((worker) => [
-      "",
-      `成员「${worker.displayName}」的工作设定：`,
-      ...controlTeamMemberGuidance(worker),
-    ]),
-    "",
-    "原始用户任务：",
-    originalTask.slice(0, MAX_MEMBER_REPORT_CHARACTERS),
-  ].join("\n");
-}
-
 type MemberReport = Readonly<{
   memberId: string;
   displayName: string;
@@ -695,6 +846,7 @@ type MemberReport = Readonly<{
   runId: string;
   status: RunView["status"];
   recoveredBy: string | null;
+  truncated: boolean;
   output: string;
 }>;
 
@@ -704,7 +856,11 @@ async function recoverWorker(input: {
   worker: ControlTeamMember;
   workerThreadId: string;
   failedRun: RunView;
+  phaseIndex: number;
   idempotencyKey: (operation: string) => string;
+  onTeamRunAccepted?: (
+    event: ControlTeamRunAcceptedEvent,
+  ) => void | Promise<void>;
   toolPermissionMode?: ToolPermissionMode;
   pollIntervalMs: number;
   runDeadlineMs: number;
@@ -735,6 +891,13 @@ async function recoverWorker(input: {
     input.idempotencyKey(`team.recovery.run.${input.worker.memberId}`),
   );
   validateStartedRun(started.run, input.workerThreadId);
+  emitControlTeamRunAccepted(input.onTeamRunAccepted, started.run, {
+    phaseIndex: input.phaseIndex,
+    kind: "workerRecovery",
+    memberId: input.plan.manager.memberId,
+    agentVersionId: input.plan.manager.agentVersionId,
+    recoveredMemberId: input.worker.memberId,
+  });
   const terminal = await waitForTerminalRun({
     client: input.client,
     run: started.run,
@@ -743,7 +906,11 @@ async function recoverWorker(input: {
   });
   const output =
     terminal.status === "completed"
-      ? await latestAssistantOutput(input.client, input.workerThreadId)
+      ? await latestAssistantOutput(
+          input.client,
+          input.workerThreadId,
+          recovery.message.sequence,
+        )
       : null;
   return memberReport(
     input.worker,
@@ -766,6 +933,7 @@ function memberReport(
     runId: run.runId,
     status: run.status,
     recoveredBy,
+    truncated: output.length > MAX_MEMBER_REPORT_CHARACTERS,
     output: output.slice(0, MAX_MEMBER_REPORT_CHARACTERS),
   };
 }
@@ -790,39 +958,7 @@ function teamDelegationMessage(
     lines.push(
       "",
       `## ${report.displayName}`,
-      `- memberId: ${report.memberId}`,
-      `- agentVersionId: ${report.agentVersionId}`,
-      `- runId: ${report.runId}`,
-      `- status: ${report.status}`,
-      `- recoveredBy: ${report.recoveredBy ?? "none"}`,
-      "",
-      report.output,
-    );
-  }
-  return lines.join("\n");
-}
-
-function teamManagerFinalResponseMessage(
-  plan: ControlTeamPlan,
-  reports: readonly MemberReport[],
-): string {
-  const lines = [
-    `[Team Runtime · ${plan.officeTitle} · 专家会诊报告]`,
-    "以下内容由后台专家分支独立执行后回收；实际并发度由 Runtime 容量决定。",
-    "你是专家团团长，也是唯一面向用户的对话入口。请综合报告后直接回答原始用户，给出可验证结论、证据缺口、风险和下一步。",
-    "不要 @ 任何专家，不要把最终回答转交给成员，也不要向用户暴露内部 CrewON 标记或后台分支细节。即使用户要求指定专家直接回复，也必须由你统一汇总答复。",
-    "若本次运行绑定了长期 Goal：请先检查原始目标与全部阶段是否确实完成；只有全部完成时才调用 update_goal 标记 complete，确有连续三轮且无法推进的同一阻塞时才标记 blocked。若仍有后续阶段，不要完成 Goal。",
-    ...controlTeamMemberGuidance(plan.manager),
-  ];
-  for (const report of reports) {
-    lines.push(
-      "",
-      `## ${report.displayName}`,
-      `- memberId: ${report.memberId}`,
-      `- agentVersionId: ${report.agentVersionId}`,
-      `- runId: ${report.runId}`,
-      `- status: ${report.status}`,
-      `- recoveredBy: ${report.recoveredBy ?? "none"}`,
+      controlTeamModelVisibleReportExecution(report),
       "",
       report.output,
     );
@@ -856,51 +992,27 @@ function teamMemberDirectResponsePrompt(input: {
     lines.push(
       "",
       `## ${report.displayName}`,
-      `- status: ${report.status}`,
-      `- recoveredBy: ${report.recoveredBy ?? "none"}`,
+      controlTeamModelVisibleReportExecution(report),
       report.output,
     );
   }
   return lines.join("\n");
 }
 
-export function controlTeamMemberGuidance(member: ControlTeamMember): string[] {
-  const profile = member.profile;
-  if (!profile) return [];
-  const lines = ["", `请遵循「${member.displayName}」在办公室中的工作设定：`];
-  const systemPrompt = profile.systemPrompt.trim().slice(0, 2_000);
-  if (systemPrompt) lines.push(systemPrompt);
-  appendCapabilityGuidance(lines, "Skill", profile.skills);
-  appendCapabilityGuidance(lines, "MCP 服务", profile.mcp);
-  appendCapabilityGuidance(lines, "知识库", profile.knowledge);
-  lines.push(
-    "未选中的专属能力不要主动假设可用；所有操作仍需遵守当前运行权限。",
-  );
-  return lines;
-}
-
-function appendCapabilityGuidance(
-  lines: string[],
-  label: string,
-  capabilities: TeamMemberRuntimeProfile["skills"],
-): void {
-  const selected = capabilities.slice(0, 8).map((capability) => {
-    const name = capability.name.trim().slice(0, 80);
-    const description = capability.description.trim().slice(0, 160);
-    return description ? `${name}（${description}）` : name;
-  });
-  if (selected.length > 0) {
-    lines.push(`${label}：${selected.join("、")}`);
-  }
-}
-
 async function latestAssistantOutput(
   client: ControlTeamRuntimeClient,
   threadId: string,
+  afterSequence: number,
 ): Promise<string | null> {
-  const response = await client.listThreadMessages(threadId, { limit: 100 });
+  const response = await client.listThreadMessages(threadId, {
+    cursor: formatMessageCursor(afterSequence),
+    limit: 100,
+  });
   const assistant = response.data
-    .filter((message) => message.role === "assistant")
+    .filter(
+      (message) =>
+        message.role === "assistant" && message.sequence > afterSequence,
+    )
     .sort((left, right) => right.sequence - left.sequence)[0];
   const content = assistant?.content.trim();
   return content ? content : null;
@@ -963,6 +1075,28 @@ function validateStartedRun(
     (!options.allowGoalBinding && run.goalBinding !== null)
   ) {
     throw new Error("control_team_run_response_invalid");
+  }
+}
+
+function emitControlTeamRunAccepted(
+  observer: StartControlTeamTurnInput["onTeamRunAccepted"],
+  run: RunView,
+  placement: Omit<ControlTeamRunAcceptedEvent, "runId" | "runThreadId">,
+): void {
+  if (!observer) return;
+  try {
+    void Promise.resolve(
+      observer(
+        Object.freeze({
+          ...placement,
+          runId: run.runId,
+          runThreadId: run.threadId,
+        }),
+      ),
+    ).catch(() => undefined);
+  } catch {
+    // Observation is best-effort here: the Run is already durable, so a
+    // collector failure must not turn accepted execution into a false failure.
   }
 }
 

@@ -16,6 +16,92 @@ import {
 } from "./controlRunToolProjection";
 
 describe("controlRunToolProjection", () => {
+  it("bounds Unicode preview payloads independently of item count and frees weight on replacement", () => {
+    const state = createControlToolProjectionState();
+    const request = (
+      sequence: number,
+      callId: string,
+      text: string,
+    ): RunEventView =>
+      ({
+        ...workspaceRequestEvent(sequence),
+        data: {
+          ...workspaceRequestEvent(sequence).data,
+          callId,
+          inputPreview: text,
+        },
+      }) as RunEventView;
+    const preview = "文".repeat(16_384);
+    for (let index = 0; index < 63; index++) {
+      expect(
+        applyControlToolEvent(
+          state,
+          request(index + 1, "call-" + index, preview),
+        ),
+      ).not.toBeNull();
+    }
+    expect(
+      applyControlToolEvent(state, request(64, "overflow", preview)),
+    ).toBeNull();
+    expect(state.size).toBe(63);
+    expect(controlToolProjectionComplete(state)).toBe(false);
+    expect(
+      applyControlToolEvent(state, request(65, "call-0", "small")),
+    ).not.toBeNull();
+    expect(
+      applyControlToolEvent(state, request(66, "overflow", preview)),
+    ).not.toBeNull();
+    expect(state.size).toBe(64);
+    // Recovering capacity cannot claim the previously omitted event was seen.
+    expect(controlToolProjectionComplete(state)).toBe(false);
+    const ledger = createControlTaskChangeProjectionState();
+    for (let index = 0; index < 63; index++) {
+      expect(
+        applyControlTaskChangeEvent(
+          ledger,
+          request(index + 1, "call-" + index, preview),
+        ),
+      ).not.toBeNull();
+    }
+    expect(
+      applyControlTaskChangeEvent(ledger, request(64, "overflow", preview)),
+    ).toBeNull();
+    expect(ledger.size).toBe(63);
+    expect(controlTaskChangeProjectionComplete(ledger)).toBe(false);
+  });
+
+  it("retains only the latest backfilled Tool item across repeated approval transitions", async () => {
+    const state = createControlToolProjectionState();
+    const result = await backfillControlToolProjection({
+      client: {} as never,
+      runId: "run-plan-history",
+      afterSequence: 0,
+      throughSequence: 1003,
+      state,
+      signal: new AbortController().signal,
+      timeoutMs: 1000,
+      eventStream: async function* () {
+        yield workspaceRequestEvent(1);
+        for (let sequence = 2; sequence <= 1001; sequence++)
+          yield {
+            ...terminalEvent(sequence),
+            type: sequence % 2 === 0 ? "run.approval.required" : "run.resumed",
+            data:
+              sequence % 2 === 0
+                ? { approvalId: "approval-1" }
+                : { reasonCode: "approved" },
+          } as RunEventView;
+        yield workspaceCompletionEvent(1002);
+        yield terminalEvent(1003);
+      },
+    });
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      id: "call-plan-history",
+      status: "completed",
+    });
+    expect(result.complete).toBe(true);
+  });
   it("maps the local workspace MCP adapter to a product-facing identity", () => {
     const state = createControlToolProjectionState();
     const item = applyControlToolEvent(state, {

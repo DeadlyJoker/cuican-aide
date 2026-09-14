@@ -1,4 +1,5 @@
 import type { RunLifecycleEvent, RunState } from "@crewon/domain";
+import type { ThreadScopedLocator } from "./thread-store-port.ts";
 
 import type {
   DurableQueueStore,
@@ -75,6 +76,8 @@ export interface RunReceiptStore {
 }
 
 export interface RunStore extends DurableQueueStore {
+  /** Independent of history pagination; rejects multiple non-terminal Runs. */
+  loadActiveRunInThread?(locator: ThreadScopedLocator): Promise<RunState | null>;
   close(): Promise<void>;
   loadRun(locator: RunLocator): Promise<RunState | null>;
   /** User-facing read fence that rejects cross-space Run snapshots in Store. */

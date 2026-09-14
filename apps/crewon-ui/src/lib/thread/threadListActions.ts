@@ -1,4 +1,5 @@
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
+import type { ThreadSelectionRead } from "./useThreadSelectionRead";
 
 import type { AppView } from "../shared/appView";
 import type { PendingComposerMention } from "../shared/composerMentions";
@@ -36,13 +37,19 @@ import {
 } from "./threadActionPresentation";
 
 type ThreadListClient = {
+  readonly managesThreadList?: boolean;
   archiveThread(threadId: string): Promise<unknown>;
   deleteThread(threadId: string): Promise<unknown>;
   listThreads(showArchived: boolean): Promise<Thread[]>;
-  readThread(threadId: string): Promise<Thread>;
+  readThread(
+    threadId: string,
+    options?: { signal?: AbortSignal },
+  ): Promise<Thread>;
   renameThread(threadId: string, name: string): Promise<unknown>;
   unarchiveThread(threadId: string): Promise<unknown>;
 };
+
+type ThreadListClientSlice<K extends keyof ThreadListClient> = Pick<ThreadListClient, K | "managesThreadList">;
 
 type ThreadListSetter = (updater: (current: Thread[]) => Thread[]) => void;
 type SelectedThreadSetter = (
@@ -50,7 +57,8 @@ type SelectedThreadSetter = (
 ) => void;
 
 export type SelectThreadActionParams = {
-  client: Pick<ThreadListClient, "readThread"> | null | undefined;
+  runSelectionRead?: ThreadSelectionRead;
+  client: ThreadListClientSlice<"readThread"> | null | undefined;
   isConnected: boolean;
   locale: Locale;
   preserveThreadsAfterConnectionLoss: () => void;
@@ -77,7 +85,7 @@ export type StartDraftThreadActionParams = {
 };
 
 export type ToggleArchivedThreadsActionParams = {
-  client: Pick<ThreadListClient, "listThreads"> | null | undefined;
+  client: ThreadListClientSlice<"listThreads"> | null | undefined;
   isConnected: boolean;
   locale: Locale;
   setNotice: (notice: NoticeState | null) => void;
@@ -90,9 +98,7 @@ export type ToggleArchivedThreadsActionParams = {
 
 export type ArchiveThreadActionParams = {
   client:
-    | Pick<
-        ThreadListClient,
-        "archiveThread" | "listThreads" | "unarchiveThread"
+    | ThreadListClientSlice<"archiveThread" | "listThreads" | "unarchiveThread"
       >
     | null
     | undefined;
@@ -107,7 +113,7 @@ export type ArchiveThreadActionParams = {
 
 export type DeleteArchivedThreadActionParams = {
   client:
-    | Pick<ThreadListClient, "deleteThread" | "listThreads">
+    | ThreadListClientSlice<"deleteThread" | "listThreads">
     | null
     | undefined;
   confirm: ConfirmHandler;
@@ -123,7 +129,7 @@ export type DeleteArchivedThreadActionParams = {
 
 export type ClearAssistantThreadActionParams = {
   client:
-    | Pick<ThreadListClient, "deleteThread" | "listThreads">
+    | ThreadListClientSlice<"deleteThread" | "listThreads">
     | null
     | undefined;
   confirm: ConfirmHandler;
@@ -136,7 +142,7 @@ export type ClearAssistantThreadActionParams = {
 };
 
 export type RenameThreadActionParams = {
-  client: Pick<ThreadListClient, "renameThread"> | null | undefined;
+  client: ThreadListClientSlice<"renameThread"> | null | undefined;
   isConnected: boolean;
   locale: Locale;
   prompt: (message: string, defaultValue: string) => string | null;
@@ -147,6 +153,7 @@ export type RenameThreadActionParams = {
 };
 
 export async function selectThreadAction({
+  runSelectionRead,
   client,
   isConnected,
   locale,
@@ -172,16 +179,32 @@ export async function selectThreadAction({
     return null;
   }
 
+  let readSignal: AbortSignal | undefined;
   try {
-    const thread = await client?.readThread(threadId);
-    if (thread) {
+    const load = async (signal?: AbortSignal) => {
+      readSignal = signal;
+      signal?.throwIfAborted();
+      const thread = signal
+        ? await client?.readThread(threadId, { signal })
+        : await client?.readThread(threadId);
+      signal?.throwIfAborted();
+      if (!thread) return null;
       const restoredThread = restoreThread
         ? await restoreThread(thread).catch(() => thread)
         : thread;
+      signal?.throwIfAborted();
       setThreads((current) => upsertThread(current, restoredThread));
       return restoredThread;
-    }
+    };
+    return await (runSelectionRead
+      ? runSelectionRead(threadId, load)
+      : load());
   } catch (error) {
+    if (
+      (readSignal?.aborted && readSignal.reason === error) ||
+      (!readSignal && error instanceof Error && error.name === "AbortError")
+    )
+      return null;
     preserveThreadsAfterConnectionLoss();
     setNotice(threadReadPreservedFailureNotice(error, locale));
   }
@@ -224,9 +247,9 @@ export async function toggleArchivedThreadsAction({
   setShowArchivedThreads(nextShowArchived);
   setSelectedThreadId(null);
   setThreadSearchTerm("");
-  setThreads(() => []);
+  if (!client?.managesThreadList) setThreads(() => []);
 
-  if (!isConnected) {
+  if (!isConnected || client?.managesThreadList) {
     return nextShowArchived;
   }
 
@@ -264,6 +287,10 @@ export async function archiveThreadAction({
     }
 
     const serverThreads = await client?.listThreads(showArchivedThreads);
+    if (client?.managesThreadList) {
+      setSelectedThreadId(current => current === thread.id ? null : current);
+      return;
+    }
     setThreads(() => serverThreads ?? []);
     setSelectedThreadId((currentThreadId) =>
       selectedThreadIdAfterThreadList(currentThreadId, serverThreads),
@@ -298,6 +325,11 @@ export async function deleteArchivedThreadAction({
   try {
     await client?.deleteThread(thread.id);
     const serverThreads = await client?.listThreads(showArchivedThreads);
+    if (client?.managesThreadList) {
+      setSelectedThreadId(current => current === thread.id ? null : current);
+      setNotice(threadDeletedNotice(title, locale));
+      return;
+    }
     setThreads(() => serverThreads ?? []);
     setSelectedThreadId((currentThreadId) =>
       selectedThreadIdAfterThreadList(currentThreadId, serverThreads),
@@ -330,6 +362,11 @@ export async function clearAssistantThreadAction({
   try {
     await client.deleteThread(thread.id);
     const serverThreads = await client.listThreads(false);
+    if (client?.managesThreadList) {
+      setSelectedThreadId(current => current === thread.id ? null : current);
+      setNotice(assistantThreadClearedNotice(locale));
+      return;
+    }
     setThreads(() => serverThreads);
     setSelectedThreadId((currentThreadId) =>
       selectedThreadIdAfterThreadList(currentThreadId, serverThreads),
@@ -383,9 +420,7 @@ function removeThreadLocally(
 
 export type ArchiveWorkspaceThreadsActionParams = {
   client:
-    | Pick<
-        ThreadListClient,
-        "archiveThread" | "listThreads" | "unarchiveThread"
+    | ThreadListClientSlice<"archiveThread" | "listThreads" | "unarchiveThread"
       >
     | null
     | undefined;
@@ -402,7 +437,7 @@ export type ArchiveWorkspaceThreadsActionParams = {
 
 export type DeleteWorkspaceThreadsActionParams = {
   client:
-    | Pick<ThreadListClient, "deleteThread" | "listThreads">
+    | ThreadListClientSlice<"deleteThread" | "listThreads">
     | null
     | undefined;
   confirm: ConfirmHandler;
@@ -457,6 +492,12 @@ export async function archiveWorkspaceThreadsAction({
     );
 
     const serverThreads = await client?.listThreads(showArchivedThreads);
+    if (client?.managesThreadList) {
+      const changed = new Set(threads.map(thread => thread.id));
+      setSelectedThreadId(current => current !== null && changed.has(current) ? null : current);
+      setNotice(workspaceArchivedNotice(workspaceName, count, locale));
+      return;
+    }
     setThreads(() => serverThreads ?? []);
     setSelectedThreadId((currentThreadId) =>
       selectedThreadIdAfterThreadList(currentThreadId, serverThreads),
@@ -503,6 +544,12 @@ export async function deleteWorkspaceThreadsAction({
     await Promise.all(threads.map((thread) => client?.deleteThread(thread.id)));
 
     const serverThreads = await client?.listThreads(showArchivedThreads);
+    if (client?.managesThreadList) {
+      const changed = new Set(threads.map(thread => thread.id));
+      setSelectedThreadId(current => current !== null && changed.has(current) ? null : current);
+      setNotice(workspaceDeletedNotice(workspaceName, count, locale));
+      return;
+    }
     setThreads(() => serverThreads ?? []);
     setSelectedThreadId((currentThreadId) =>
       selectedThreadIdAfterThreadList(currentThreadId, serverThreads),

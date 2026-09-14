@@ -1,4 +1,8 @@
 import { createHash } from "node:crypto";
+import {
+  validateModelHistoryIncrementalAppend,
+  type ModelHistoryAppendState,
+} from "./model-history-append-validation.ts";
 
 import {
   AutomationStoreError,
@@ -188,7 +192,7 @@ export function prepareAutomationInvocation(
   authority: Readonly<{
     record: AutomationDefinitionRecord;
     thread: ThreadState | null;
-    history: readonly ModelHistoryItem[];
+    history: readonly ModelHistoryItem[] | ModelHistoryAppendState;
     activeRunExists: boolean;
     unsettledWorkExists: boolean;
     runIdExists: boolean;
@@ -241,7 +245,11 @@ export function prepareAutomationInvocation(
   if (authority.runIdExists) {
     throw new AutomationStoreError("run_id_conflict");
   }
-  if (fence.expectedHistorySequence !== authority.history.length) {
+  const historySequence =
+    "lastSequence" in authority.history
+      ? authority.history.lastSequence
+      : authority.history.length;
+  if (fence.expectedHistorySequence !== historySequence) {
     throw new AutomationStoreError("model_history_sequence_conflict");
   }
 
@@ -255,15 +263,29 @@ export function prepareAutomationInvocation(
     definition.tenantId,
     authority.messageIdExists,
   );
-  validateModelHistoryAppend(
-    {
-      expectedLastSequence: fence.expectedHistorySequence,
-      items: [input.historyItem],
-    },
-    { tenantId: definition.tenantId, threadId: definition.threadId },
-    authority.history,
-    authority.historyItemIdExists,
-  );
+  const historyAppend = {
+    expectedLastSequence: fence.expectedHistorySequence,
+    items: [input.historyItem],
+  };
+  const historyLocator = {
+    tenantId: definition.tenantId,
+    threadId: definition.threadId,
+  };
+  if ("lastSequence" in authority.history) {
+    validateModelHistoryIncrementalAppend(
+      historyAppend,
+      historyLocator,
+      authority.history,
+      authority.historyItemIdExists,
+    );
+  } else {
+    validateModelHistoryAppend(
+      historyAppend,
+      historyLocator,
+      authority.history,
+      authority.historyItemIdExists,
+    );
+  }
   validateEvents([input.runEvent], input.binding.runId, (id) =>
     authority.runEventIdExists(id),
   );

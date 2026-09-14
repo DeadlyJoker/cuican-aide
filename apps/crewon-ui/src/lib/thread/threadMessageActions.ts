@@ -39,6 +39,7 @@ type ActiveTurnByThreadSetter = (
 type ThreadListSetter = (updater: (current: Thread[]) => Thread[]) => void;
 
 type ThreadMessageClient = {
+  readonly turnUpdates?: "runtime";
   interruptTurn(threadId: string, turnId: string): Promise<unknown>;
   readThread?(threadId: string): Promise<Thread>;
   resumeThread(threadId: string): Promise<Thread>;
@@ -130,6 +131,7 @@ export type SendMessageActionParams = {
     | Pick<
         ThreadMessageClient,
         | "readThread"
+        | "turnUpdates"
         | "resumeThread"
         | "startReview"
         | "startTurn"
@@ -455,13 +457,15 @@ export async function sendMessageAction({
       setActiveTurnByThread((current) =>
         activeTurnByThreadAfterTurn(current, turnThreadId, response.turn),
       );
-      void refreshThreadAfterTurnStart({
-        client,
-        setActiveTurnByThread,
-        setThreads,
-        threadId: turnThreadId,
-        turnId: response.turn.id,
-      });
+      if (client?.turnUpdates !== "runtime") {
+        void refreshThreadAfterTurnStart({
+          client,
+          setActiveTurnByThread,
+          setThreads,
+          threadId: turnThreadId,
+          turnId: response.turn.id,
+        });
+      }
     }
   } catch (error) {
     setPendingComposerMentions([]);
@@ -561,7 +565,9 @@ async function refreshThreadAfterTurnStart({
     setThreads((current) => upsertThread(current, thread));
     const turn = thread.turns.find((candidate) => candidate.id === turnId);
     if (turn && turn.status !== "inProgress") {
-      setActiveTurnByThread((current) => removeRecordKey(current, threadId));
+      setActiveTurnByThread((current) => current[threadId] === turnId
+        ? removeRecordKey(current, threadId)
+        : current);
       return;
     }
   }

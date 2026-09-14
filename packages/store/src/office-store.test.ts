@@ -73,3 +73,42 @@ test("SQLite persists and replays an immutable Office definition", async (contex
     [definition],
   );
 });
+
+test("SQLite persists an immutable Office member responsibility", async (context) => {
+  const directory = await mkdtemp(join(tmpdir(), "crewon-office-role-store-"));
+  context.after(() => rm(directory, { force: true, recursive: true }));
+  const path = join(directory, "control.sqlite");
+  const withResponsibility = {
+    ...definition,
+    officeId: "office-role-1",
+    officeVersionId: "office-role-version-1",
+    members: [
+      {
+        ...definition.members[0],
+        responsibility:
+          "Own the release decision and preserve unresolved evidence conflicts.",
+      },
+    ],
+  };
+  const store = new SqliteRunStore(path);
+  context.after(() => store.close());
+
+  await store.commitOfficeDefinition({
+    definition: withResponsibility,
+    expectedRevision: 0,
+    receipt: {
+      actorId: "actor-1",
+      idempotencyKey: "office-role-create-1",
+      requestDigest: "digest-role-1",
+    },
+  });
+
+  assert.deepEqual(
+    await store.loadOfficeDefinition({
+      tenantId: "tenant-1",
+      spaceId: "space-1",
+      officeVersionId: "office-role-version-1",
+    }),
+    withResponsibility,
+  );
+});

@@ -198,6 +198,8 @@ export default defineConfig(({ mode }) => {
   const appServerDisabled = env.CREWON_APP_SERVER_DISABLED === "1";
   const agentPlatformTarget =
     env.CREWON_AGENT_PLATFORM_TARGET ?? "http://127.0.0.1:8000";
+  const agentPlatformRuntimeBaseUrl =
+    env.VITE_AGENT_PLATFORM_RUNTIME_BASE_URL ?? agentPlatformTarget;
   const controlTarget = env.CREWON_CONTROL_TARGET ?? "http://127.0.0.1:3210";
   const controlSessionToken = env.CREWON_CONTROL_SESSION_TOKEN;
   const controlCsrfToken = env.CREWON_CONTROL_CSRF_TOKEN;
@@ -211,6 +213,11 @@ export default defineConfig(({ mode }) => {
 
   return {
     base: "./",
+    define: {
+      "import.meta.env.VITE_AGENT_PLATFORM_RUNTIME_BASE_URL": JSON.stringify(
+        agentPlatformRuntimeBaseUrl.replace(/\/+$/, ""),
+      ),
+    },
     resolve: {
       alias: {
         "@": "/src",

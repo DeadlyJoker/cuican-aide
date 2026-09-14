@@ -14,6 +14,7 @@ import {
   ModelTransportError,
   type ModelInputItem,
   type ModelRequest,
+  type ModelTransportEvent,
   type ModelTransportPort,
 } from "./model-transport-port.ts";
 
@@ -54,6 +55,7 @@ test("runs a bounded deterministic text segment with canonical ordering", async 
   assert.deepEqual(events[3]?.data, {
     inputTokens: 4,
     cachedInputTokens: 2,
+    cachedInputTokensReported: true,
     outputTokens: 1,
     totalTokens: 5,
   });
@@ -61,6 +63,89 @@ test("runs a bounded deterministic text segment with canonical ordering", async 
     strategy: "manual",
     items: [{ type: "message", role: "user", content: "hello" }],
   });
+});
+
+test("preserves whitespace deltas and still rejects empty or oversized output and reasoning", async () => {
+  for (const kind of ["output.delta", "reasoning.delta"] as const) {
+    for (const delta of [" \n\t", "", "x".repeat(16 * 1024 + 1)]) {
+      const transport = new DeterministicFakeModelTransport({
+        expectedLastUserMessage: "hello",
+        events: [
+          kind === "output.delta"
+            ? { type: kind, delta }
+            : { type: kind, channel: "summary", index: 0, delta },
+          { type: "completed", checkpoint: null },
+        ],
+      });
+      const stream = new CrewONAgentKernel({ transport }).runSegment(
+        segmentContract(),
+        new AbortController().signal,
+      );
+      if (delta === " \n\t") {
+        const events = await collect(stream);
+        assert.equal(events.at(-1)?.type, "segment.completed");
+        const content = events[1];
+        assert.ok(content?.type === "model.output.delta" || content?.type === "model.reasoning.summary");
+        assert.ok("delta" in content.data);
+        assert.equal(content.data.delta, delta);
+      } else {
+        const prefix =
+          kind === "output.delta"
+            ? "model_output_delta"
+            : "model_reasoning_delta";
+        await assert.rejects(
+          collect(stream),
+          (error) =>
+            error instanceof AgentKernelError &&
+            error.code ===
+              `${prefix}_${delta.length === 0 ? "invalid" : "too_large"}`,
+        );
+      }
+    }
+  }
+});
+
+test("distinguishes reported cache zeros from unreported usage at the Kernel boundary", async () => {
+  for (const [cache, reported] of [
+    [{ cachedInputTokens: 0 }, true],
+    [{ cachedInputTokens: 0, cachedInputTokensReported: false }, false],
+    [{}, false],
+  ] as const) {
+    const transport = new DeterministicFakeModelTransport({
+      expectedLastUserMessage: "hello",
+      events: [
+        {
+          type: "usage",
+          inputTokens: 10,
+          outputTokens: 0,
+          totalTokens: 10,
+          ...cache,
+        },
+        { type: "completed", checkpoint: null },
+      ],
+    });
+    const events = await collect(
+      new CrewONAgentKernel({ transport }).runSegment(
+        segmentContract(),
+        new AbortController().signal,
+      ),
+    );
+    assert.deepEqual(
+      events.find((event) => event.type === "usage.recorded")?.data,
+      {
+        inputTokens: 10,
+        cachedInputTokens: 0,
+        cachedInputTokensReported: reported,
+        outputTokens: 0,
+        totalTokens: 10,
+      },
+    );
+  }
+  const invalid = new DeterministicFakeModelTransport({
+    expectedLastUserMessage: "hello",
+    events: [{ type: "usage", inputTokens: 10, cachedInputTokens: null, cachedInputTokensReported: true, outputTokens: 0, totalTokens: 10 } as unknown as ModelTransportEvent],
+  });
+  await assert.rejects(collect(new CrewONAgentKernel({ transport: invalid }).runSegment(segmentContract(), new AbortController().signal)), hasKernelCode("model_usage_cache_reporting_invalid"));
 });
 
 test("matches the shared deterministic text Segment trace", async () => {

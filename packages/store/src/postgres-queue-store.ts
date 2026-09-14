@@ -1,3 +1,6 @@
+import { prunePostgresDeliveredOutbox } from "./postgres-outbox-retention.ts";
+import type { OutboxRetentionStore } from "@crewon/application";
+import { RECONCILIATION_CANCEL_WAKE } from "./reconciliation-cancellation-wake.ts";
 import {
   RunStoreError,
   type DurableQueueStore,
@@ -113,6 +116,13 @@ export class PostgresQueueStore implements DurableQueueStore {
     this.#closed = true;
     if (this.#ownsPool) await this.#pool.end();
   }
+
+  readonly outboxRetention: OutboxRetentionStore = {
+    pruneDeliveredOutbox: async (policy) => {
+      this.#assertOpen();
+      return prunePostgresDeliveredOutbox(this.#pool, this.#schemaSql(), policy);
+    },
+  };
 
   async listPendingOutbox(limit: number): Promise<readonly OutboxMessage[]> {
     return this.#listPending("outbox", limit).then((rows) =>
@@ -276,7 +286,8 @@ export class PostgresQueueStore implements DurableQueueStore {
          SET status = 'leased', lease_owner_id = $1, lease_id = $2,
              lease_epoch = queue.lease_epoch + 1,
              lease_expires_at = clock_timestamp() + $3 * interval '1 millisecond',
-             attempt_count = queue.attempt_count + 1
+             attempt_count = queue.attempt_count + 1,
+             last_error_code = CASE WHEN '${kind}' = 'work_items' AND queue.last_error_code = '${RECONCILIATION_CANCEL_WAKE}' THEN NULL ELSE queue.last_error_code END
          FROM candidate
          WHERE queue.${id} = candidate.${id}
          RETURNING queue.tenant_id, queue.run_id,
@@ -300,7 +311,7 @@ export class PostgresQueueStore implements DurableQueueStore {
       await expectOne(
         client.query(
           `UPDATE ${this.#tableSql(kind)}
-           SET status = 'pending', available_at = clock_timestamp() + $2 * interval '1 millisecond',
+           SET status = 'pending', available_at = clock_timestamp() + CASE WHEN '${kind}' = 'work_items' AND last_error_code = '${RECONCILIATION_CANCEL_WAKE}' THEN 0 ELSE $2 END * interval '1 millisecond',
                lease_owner_id = NULL, lease_id = NULL, lease_expires_at = NULL,
                last_error_code = $3
            WHERE ${idColumn(kind)} = $1 AND lease_expires_at > clock_timestamp()`,

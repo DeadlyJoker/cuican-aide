@@ -27,10 +27,29 @@ test("routes disjoint definitions to their exact runtime", async () => {
   await composite.execute(command("second"), new AbortController().signal);
   await composite.reconcile(command("first"), new AbortController().signal);
   await composite.cancel(command("second"), new AbortController().signal);
+  const execution = command("first");
+  const reservation = composite.reserveExecution(
+    execution,
+    new AbortController().signal,
+  );
+  assert.ok(reservation !== undefined);
+  await reservation.execute();
+  reservation.release();
+  assert.equal(composite.readRetainedExecutionResult(execution), null);
+  composite.acknowledgeExecutionResult({
+    ...execution,
+    status: "completed",
+    providerReceiptId: "receipt-first",
+  });
   assert.deepEqual(calls, [
     "second:execute",
     "first:reconcile",
     "second:cancel",
+    "first:reserve",
+    "first:reserved-execute",
+    "first:release",
+    "first:read",
+    "first:acknowledge",
   ]);
 });
 
@@ -67,6 +86,41 @@ test("forwards the Run sandbox context to the routed policy owner", () => {
   assert.equal(sandboxMode, "danger-full-access");
 });
 
+test("close waits for every owner, reports failure and reuses one promise even when an owner throws synchronously", async () => {
+  const calls: string[] = [];
+  let finish!: () => void;
+  const held = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const first = {
+    ...runtime("first", calls),
+    close: () => {
+      calls.push("first:close");
+      throw new Error("close_failed");
+    },
+  };
+  const second = {
+    ...runtime("second", calls),
+    close: () => {
+      calls.push("second:close");
+      return held;
+    },
+  };
+  const composite = new CompositeToolRuntime([first, second]);
+  const closing = composite.close();
+  let settled = false;
+  const rejected = assert.rejects(closing, /close_failed/).then(() => {
+    settled = true;
+  });
+  for (let i = 0; i < 1000; i++) assert.equal(composite.close(), closing);
+  await Promise.resolve();
+  assert.equal(settled, false);
+  assert.deepEqual(calls, ["first:close", "second:close"]);
+  finish();
+  await rejected;
+  assert.equal(composite.close(), closing);
+});
+
 function runtime(name: string, calls: string[]): ToolRuntimePort {
   const definition = toolDefinition(name);
   return {
@@ -77,6 +131,18 @@ function runtime(name: string, calls: string[]): ToolRuntimePort {
       calls.push(`${name}:execute`);
       return completed(command);
     },
+    reserveExecution(command) {
+      calls.push(`${name}:reserve`);
+      return {
+        execute: async () => {
+          calls.push(`${name}:reserved-execute`);
+          return completed(command);
+        },
+        release: () => {
+          calls.push(`${name}:release`);
+        },
+      };
+    },
     async reconcile(command) {
       calls.push(`${name}:reconcile`);
       return completed(command);
@@ -84,6 +150,13 @@ function runtime(name: string, calls: string[]): ToolRuntimePort {
     async cancel(command) {
       calls.push(`${name}:cancel`);
       return completed(command);
+    },
+    acknowledgeExecutionResult() {
+      calls.push(`${name}:acknowledge`);
+    },
+    readRetainedExecutionResult() {
+      calls.push(`${name}:read`);
+      return null;
     },
   };
 }

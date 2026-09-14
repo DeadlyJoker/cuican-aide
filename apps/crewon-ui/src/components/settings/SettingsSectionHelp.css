@@ -1,0 +1,63 @@
+.settings-section-help {
+  border-left: 2px solid var(--settings-border, var(--border));
+  padding: 4px 0 4px 14px;
+  color: var(--settings-muted, var(--text-muted));
+  font-size: calc(12px + var(--user-ui-font-delta));
+  line-height: 1.65;
+}
+.settings-section-help strong {
+  color: var(--settings-fg, var(--text));
+  font-weight: 550;
+}
+.settings-section-help p {
+  margin: 4px 0 0;
+}
+.settings-section-help button {
+  display: block;
+  margin-top: 8px;
+  padding: 0;
+  background: none;
+  border: none;
+  color: var(--settings-fg, var(--text));
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+.settings-section-help button:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 4px;
+}
+.settings-page .settings-row-subtitle {
+  overflow-wrap: anywhere;
+}
+
+.screen-shell.command-screen
+  .settings-page[data-presentation="authored"]
+  .settings-row-copy
+  small {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.65;
+}
+.screen-shell.command-screen
+  .settings-page[data-presentation="authored"]
+  .settings-card {
+  padding: 0;
+  gap: 0;
+}
+.screen-shell.command-screen
+  .settings-page[data-presentation="authored"]
+  .settings-row-list,
+.screen-shell.command-screen
+  .settings-page[data-presentation="authored"]
+  .settings-row-list
+  ~ [data-slot="card-content"] {
+  padding: 0;
+}
+.screen-shell.command-screen
+  .settings-page[data-presentation="authored"]
+  .settings-summary-sections {
+  padding: 16px 18px;
+}

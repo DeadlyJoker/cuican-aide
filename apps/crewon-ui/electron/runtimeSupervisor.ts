@@ -11,8 +11,13 @@ import {
 } from "node:fs";
 import { createServer } from "node:net";
 import { join, resolve } from "node:path";
+import type { Writable } from "node:stream";
 
 import type { ActiveProvider } from "./providerCredentials.ts";
+import {
+  RuntimeLogForwarder,
+  forwardRuntimeChildLogs,
+} from "./runtimeLogForwarder.ts";
 
 const MODEL_CATALOG_CACHE_FILE = "desktop-model-catalog-cache.json";
 const MODEL_CATALOG_CACHE_SCHEMA = "crewon.desktop-model-catalog-cache.v1";
@@ -51,6 +56,7 @@ export type ControlRuntimeSession = Readonly<{
 
 export type CloudAgentProfile = Readonly<{
   agentVersionId: string;
+  /** Provider-owned prompt snapshot used only to version the binding identity. */
   instructions: string;
   invocationUrl: string;
   modelId: string;
@@ -69,6 +75,7 @@ export class RuntimeSupervisor {
   readonly #providerModelCatalog: (
     provider: ActiveProvider,
   ) => Promise<readonly string[] | null>;
+  readonly #agentPlatformApiKeyForOrigin: (origin: string) => string | null;
   readonly #workspaceRoot: () => string | null;
   #controlPort = 0;
   #probePort = 0;
@@ -77,6 +84,7 @@ export class RuntimeSupervisor {
   #ready = false;
   #stopWatchingChildren: (() => void) | null = null;
   #cloudAgentProfiles: readonly CloudAgentProfile[] = [];
+  readonly #logs: RuntimeLogForwarder;
 
   constructor(options: {
     dataDirectory: string;
@@ -86,18 +94,28 @@ export class RuntimeSupervisor {
     providerModelCatalog: (
       provider: ActiveProvider,
     ) => Promise<readonly string[] | null>;
+    agentPlatformApiKeyForOrigin: (origin: string) => string | null;
     workspaceRoot: () => string | null;
+    logOutputs?: { stdout: Writable; stderr: Writable };
   }) {
     this.#dataDirectory = options.dataDirectory;
     this.#paths = options.paths;
     this.#repositoryRoot = options.repositoryRoot;
     this.#provider = options.provider;
     this.#providerModelCatalog = options.providerModelCatalog;
+    this.#agentPlatformApiKeyForOrigin = options.agentPlatformApiKeyForOrigin;
     this.#workspaceRoot = options.workspaceRoot;
+    this.#logs = new RuntimeLogForwarder(
+      options.logOutputs ?? {
+        stdout: process.stdout,
+        stderr: process.stderr,
+      },
+    );
   }
 
   async start(): Promise<void> {
     if (this.#children.length > 0) return;
+    this.#logs.resume();
     const provider = this.#provider();
     if (provider === null) {
       this.#ready = false;
@@ -107,15 +125,32 @@ export class RuntimeSupervisor {
     this.#probePort ||= await freePort();
     ensureStorage(this.#dataDirectory);
     const modelCatalog = await this.#resolveModelCatalog(provider);
+    const agentPlatformApiKey =
+      this.#cloudAgentProfiles.length === 0
+        ? null
+        : this.#agentPlatformApiKeyForOrigin(
+            cloudAgentProfilesOrigin(this.#cloudAgentProfiles),
+          );
     const environment = this.#environment(
       provider,
       modelCatalog,
-      this.#cloudAgentProfiles,
+      agentPlatformApiKey === null ? [] : this.#cloudAgentProfiles,
     );
-    await this.#runOnce("Runtime release", this.#paths.release, environment);
+    const { sharedEnvironment, workerEnvironment } =
+      agentPlatformRuntimeEnvironments(environment, agentPlatformApiKey);
+    await this.#runOnce(
+      "Runtime release",
+      this.#paths.release,
+      sharedEnvironment,
+    );
     this.#children = [
-      this.#spawn("Control API", this.#paths.control, environment),
-      this.#spawn("Runtime Worker", this.#paths.worker, environment, true),
+      this.#spawn("Control API", this.#paths.control, sharedEnvironment),
+      this.#spawn(
+        "Runtime Worker",
+        this.#paths.worker,
+        workerEnvironment,
+        true,
+      ),
     ];
     try {
       await waitForReady(
@@ -132,12 +167,16 @@ export class RuntimeSupervisor {
           this.#ready = false;
           this.#stopWatchingChildren?.();
           this.#stopWatchingChildren = null;
-          process.stderr.write(
-            `[${name}] exited unexpectedly (${signal ?? code ?? "unknown"}); restarting runtime\n`,
+          this.#logs.write(
+            "stderr",
+            name,
+            `exited unexpectedly (${signal ?? code ?? "unknown"}); restarting runtime\n`,
           );
           void this.restart().catch((error) => {
-            process.stderr.write(
-              `[Runtime restart] ${error instanceof Error ? error.message : String(error)}\n`,
+            this.#logs.write(
+              "stderr",
+              "Runtime restart",
+              `${error instanceof Error ? error.message : String(error)}\n`,
             );
           });
         },
@@ -164,7 +203,24 @@ export class RuntimeSupervisor {
   async updateCloudAgentProfiles(
     profiles: readonly CloudAgentProfile[],
   ): Promise<void> {
+    if (profiles.length > 0) {
+      const origin = cloudAgentProfilesOrigin(profiles);
+      if (this.#agentPlatformApiKeyForOrigin(origin) === null) {
+        throw new Error("agent_platform_api_key_missing");
+      }
+    }
     this.#cloudAgentProfiles = profiles;
+    await this.restart();
+  }
+
+  /** Applies key replacement or revocation to active profiles for one origin. */
+  async agentPlatformCredentialChanged(origin: string): Promise<void> {
+    if (
+      this.#cloudAgentProfiles.length === 0 ||
+      cloudAgentProfilesOrigin(this.#cloudAgentProfiles) !== origin
+    ) {
+      return;
+    }
     await this.restart();
   }
 
@@ -173,7 +229,11 @@ export class RuntimeSupervisor {
     this.#stopWatchingChildren?.();
     this.#stopWatchingChildren = null;
     const children = this.#children.splice(0);
-    await Promise.all(children.map((child) => terminateRuntimeChild(child)));
+    try {
+      await Promise.all(children.map((child) => terminateRuntimeChild(child)));
+    } finally {
+      this.#logs.suspend();
+    }
   }
 
   session(): ControlRuntimeSession {
@@ -195,6 +255,10 @@ export class RuntimeSupervisor {
     };
   }
 
+  logStatus() {
+    return this.#logs.status();
+  }
+
   async #resolveModelCatalog(
     provider: ActiveProvider,
   ): Promise<readonly string[]> {
@@ -203,8 +267,10 @@ export class RuntimeSupervisor {
     try {
       discovered = await this.#providerModelCatalog(provider);
     } catch (error) {
-      process.stderr.write(
-        `[Model catalog] ${error instanceof Error ? error.message : String(error)}\n`,
+      this.#logs.write(
+        "stderr",
+        "Model catalog",
+        `${error instanceof Error ? error.message : String(error)}\n`,
       );
     }
     const selected = selectDesktopRuntimeModelCatalog({
@@ -278,7 +344,6 @@ export class RuntimeSupervisor {
       NODE_ENV: "production",
       CREWON_ACTOR_ID: "standalone-actor",
       CREWON_AGENT_VERSION_ID: agentVersionId,
-      CREWON_AGENT_PLATFORM_API_KEY: provider.apiKey ?? "",
       CREWON_ARTIFACT_DB_PATH: join(
         this.#dataDirectory,
         "artifact-metadata.sqlite",
@@ -327,6 +392,7 @@ export class RuntimeSupervisor {
     };
     bindDesktopWorkspaceEnvironment(environment, { mcpConfig, workspace });
     for (const name of [
+      "CREWON_AGENT_PLATFORM_API_KEY",
       "CREWON_CONTROL_DATABASE_URL",
       "CREWON_CONTROL_DATABASE_SCHEMA",
       "CREWON_DEVICE_TOOL_CONFIG_PATH",
@@ -413,15 +479,7 @@ export class RuntimeSupervisor {
         windowsHide: true,
       },
     );
-    child.stdout?.on("data", (chunk: Buffer) =>
-      process.stdout.write(`[${name}] ${chunk}`),
-    );
-    child.stderr?.on("data", (chunk: Buffer) =>
-      process.stderr.write(`[${name}] ${chunk}`),
-    );
-    child.once("error", (error) =>
-      process.stderr.write(`[${name}] ${error.message}\n`),
-    );
+    forwardRuntimeChildLogs(child, name, this.#logs);
     return child;
   }
 
@@ -513,6 +571,60 @@ export function bindDesktopWorkspaceEnvironment(
   }
 }
 
+/** Partitions the dedicated Agent Open API key into the worker child only. */
+export function agentPlatformRuntimeEnvironments(
+  environment: NodeJS.ProcessEnv,
+  apiKey: string | null,
+): Readonly<{
+  sharedEnvironment: NodeJS.ProcessEnv;
+  workerEnvironment: NodeJS.ProcessEnv;
+}> {
+  const sharedEnvironment = { ...environment };
+  delete sharedEnvironment.CREWON_AGENT_PLATFORM_API_KEY;
+  const workerEnvironment = { ...sharedEnvironment };
+  if (apiKey !== null) {
+    workerEnvironment.CREWON_AGENT_PLATFORM_API_KEY = apiKey;
+  }
+  return { sharedEnvironment, workerEnvironment };
+}
+
+/** Returns the one credential origin shared by an atomic cloud-profile set. */
+export function cloudAgentProfilesOrigin(
+  profiles: readonly CloudAgentProfile[],
+): string {
+  if (profiles.length === 0) {
+    throw new Error("cloud_agent_profiles_empty");
+  }
+  const origins = new Set(
+    profiles.map((profile) => cloudAgentProfileOrigin(profile.invocationUrl)),
+  );
+  if (origins.size !== 1) {
+    throw new Error("cloud_agent_profile_origin_mismatch");
+  }
+  return [...origins][0]!;
+}
+
+function cloudAgentProfileOrigin(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("cloud_agent_profile_invocation_url_invalid");
+  }
+  const loopback =
+    url.hostname === "localhost" ||
+    url.hostname === "127.0.0.1" ||
+    url.hostname === "[::1]";
+  if (
+    url.username ||
+    url.password ||
+    (url.protocol !== "https:" && !(url.protocol === "http:" && loopback))
+  ) {
+    throw new Error("cloud_agent_profile_invocation_url_invalid");
+  }
+  return url.origin;
+}
+
 /**
  * Derives an immutable runtime version ID for a logical cloud Agent profile.
  * The source Agent ID stays readable while runtime/profile changes publish a
@@ -535,6 +647,7 @@ export function cloudAgentRuntimeVersionId(
       JSON.stringify({
         agentId: profile.agentId,
         agentVersionId: logicalId,
+        authorityContract: "provider-agent-v1",
         instructions: profile.instructions,
         invocationUrl: profile.invocationUrl,
         modelId: profile.modelId,

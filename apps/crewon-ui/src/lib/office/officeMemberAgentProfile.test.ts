@@ -5,6 +5,7 @@ import {
   mergeOfficeMemberAgentProfile,
   officeMemberAgentProfileId,
   readOfficeMemberAgentProfile,
+  readOfficeMemberTeamCoordination,
   writeOfficeMemberAgentProfile,
 } from "./officeMemberAgentProfile";
 
@@ -89,6 +90,64 @@ describe("Office member Agent profiles", () => {
 
     expect(readOfficeMemberAgentProfile(profile.agentId, storage)).toEqual(
       profile,
+    );
+  });
+
+  it("stores structured Team coordination beside the AgentConfig and preserves it across edits", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+    const profile = {
+      ...createDefaultAgentConfig("zh"),
+      agentId: officeMemberAgentProfileId("office-1", "member-2"),
+      name: "质量验收",
+      systemPrompt: "先检查证据，再给出结论。",
+      knowledge: [],
+    };
+    const coordination = {
+      assignmentMode: "roleDirected" as const,
+      responsibility: "独立核验每一项交付证据，并明确冲突与未知。",
+      source: "officeDefinition" as const,
+    };
+
+    writeOfficeMemberAgentProfile(profile, storage, coordination);
+    writeOfficeMemberAgentProfile(
+      { ...profile, systemPrompt: "编辑后的成员提示。" },
+      storage,
+    );
+
+    expect(readOfficeMemberTeamCoordination(profile.agentId, storage)).toEqual(
+      coordination,
+    );
+    expect(readOfficeMemberAgentProfile(profile.agentId, storage)).toEqual({
+      ...profile,
+      systemPrompt: "编辑后的成员提示。",
+    });
+  });
+
+  it("accepts a 240-code-point responsibility in browser storage", () => {
+    const values = new Map<string, string>();
+    const storage = {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+    };
+    const profile = {
+      ...createDefaultAgentConfig("zh"),
+      agentId: officeMemberAgentProfileId("office-1", "member-emoji"),
+      knowledge: [],
+    };
+    const coordination = {
+      assignmentMode: "roleDirected" as const,
+      responsibility: "🚀".repeat(240),
+      source: "officeDefinition" as const,
+    };
+
+    writeOfficeMemberAgentProfile(profile, storage, coordination);
+
+    expect(readOfficeMemberTeamCoordination(profile.agentId, storage)).toEqual(
+      coordination,
     );
   });
 });

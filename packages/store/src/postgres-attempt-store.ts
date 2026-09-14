@@ -1,5 +1,20 @@
+import { PostgresModelCallStore } from "./postgres-model-call-store.ts";
+import { RECONCILIATION_CANCEL_WAKE } from "./reconciliation-cancellation-wake.ts";
+import { PostgresModelUsageStore } from "./postgres-model-usage-store.ts";
+import type {
+  RecordModelUsageInput,
+  RecordModelCallInput,
+  ModelUsagePageQuery,
+} from "@crewon/application";
+import {
+  validateToolSampleCommit,
+  validateToolSampleAuthority,
+  validateToolSampleReplay,
+} from "./tool-sample-commit.ts";
 import {
   RunStoreError,
+  type AppendRunOutputEventsInput,
+  type AppendRunOutputEventsResult,
   type BeginRunAttemptInput,
   type BeginRunAttemptResult,
   type CheckpointRunAttemptInput,
@@ -9,6 +24,7 @@ import {
   type CommitContextCompactionInput,
   type CommitContextCompactionResult,
   type CommitAssistantSampleContinuationInput,
+  type CommitToolSampleInput,
   type CommitAssistantSampleContinuationResult,
   type CommitRunResult,
   type CompleteRunAttemptInput,
@@ -46,6 +62,8 @@ import {
   type PostgresRunReceiptRow,
 } from "./postgres-run-codec.ts";
 import { PostgresRunStore } from "./postgres-run-store.ts";
+import { appendPostgresRunOutputEventsWithin } from "./postgres-run-output-store.ts";
+import { validateRunOutputAppend } from "./run-output-append.ts";
 import {
   writePostgresOutbox,
   writePostgresRunEvents,
@@ -82,6 +100,54 @@ import {
 
 /** PostgreSQL Step/Attempt authority; compound terminal transactions follow separately. */
 export class PostgresAttemptStore extends PostgresRunStore {
+  async canRetireArtifact(input: ArtifactRetentionCandidate): Promise<boolean> {
+    this.assertOpen();
+    return canRetirePostgresArtifact(this.pool, this.schemaSql(), input);
+  }
+  readonly #modelUsage = new PostgresModelUsageStore(
+    this.pool,
+    this.schemaSql(),
+    (client, input) =>
+      this.validateExecutionLeaseWithin(
+        client,
+        input.record.tenantId,
+        input.record.runId,
+        input.lease,
+      ),
+  );
+
+  recordModelUsage(input: RecordModelUsageInput) {
+    this.assertOpen();
+    return this.#modelUsage.recordModelUsage(input);
+  }
+
+  listModelUsage(query: ModelUsagePageQuery) {
+    this.assertOpen();
+    return this.#modelUsage.listModelUsage(query);
+  }
+
+  readonly #modelCalls = new PostgresModelCallStore(
+    this.pool,
+    this.schemaSql(),
+    (client, input) =>
+      this.validateExecutionLeaseWithin(
+        client,
+        input.record.tenantId,
+        input.record.runId,
+        input.lease,
+      ),
+  );
+
+  recordModelCall(input: RecordModelCallInput) {
+    this.assertOpen();
+    return this.#modelCalls.recordModelCall(input);
+  }
+
+  listModelCalls(query: ModelUsagePageQuery) {
+    this.assertOpen();
+    return this.#modelCalls.listModelCalls(query);
+  }
+
   static override async open(
     options: PostgresThreadStoreOptions,
   ): Promise<PostgresAttemptStore> {
@@ -341,6 +407,49 @@ export class PostgresAttemptStore extends PostgresRunStore {
       );
       await client.query("COMMIT");
       return run;
+    } catch (error) {
+      await rollbackPostgres(client);
+      throw normalizePostgresError(error);
+    } finally {
+      client.release();
+    }
+  }
+
+  async appendRunOutputEvents(
+    input: AppendRunOutputEventsInput,
+  ): Promise<AppendRunOutputEventsResult> {
+    this.assertOpen();
+    validateRunOutputAppend(input);
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await advisoryLock(client, `run:${input.tenantId}:${input.runId}`);
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.tenantId,
+        input.runId,
+        input.lease,
+      );
+      const current = await this.loadRunWithin(
+        client,
+        { tenantId: input.tenantId, runId: input.runId },
+        true,
+      );
+      if (current === null) throw new RunStoreError("run_not_found");
+      const result = await appendPostgresRunOutputEventsWithin(
+        client,
+        this.schemaSql(),
+        current,
+        input,
+      );
+      await this.validateExecutionLeaseWithin(
+        client,
+        input.tenantId,
+        input.runId,
+        input.lease,
+      );
+      await client.query("COMMIT");
+      return result;
     } catch (error) {
       await rollbackPostgres(client);
       throw normalizePostgresError(error);
@@ -649,7 +758,29 @@ export class PostgresAttemptStore extends PostgresRunStore {
     input: CommitAssistantSampleContinuationInput,
   ): Promise<CommitAssistantSampleContinuationResult> {
     this.assertOpen();
-    const runId = validateAssistantSampleContinuationInput(input);
+    return this.#commitModelSample(
+      input,
+      validateAssistantSampleContinuationInput(input),
+      "assistant",
+    );
+  }
+
+  async commitToolSample(
+    input: CommitToolSampleInput,
+  ): Promise<CommitAssistantSampleContinuationResult> {
+    this.assertOpen();
+    return this.#commitModelSample(
+      input,
+      validateToolSampleCommit(input),
+      "tool",
+    );
+  }
+
+  async #commitModelSample(
+    input: CommitToolSampleInput,
+    runId: string,
+    boundary: "assistant" | "tool",
+  ): Promise<CommitAssistantSampleContinuationResult> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
@@ -681,6 +812,9 @@ export class PostgresAttemptStore extends PostgresRunStore {
         );
         if (step === null || attempt?.status !== "completed") {
           throw new RunStoreError("assistant_sample_replay_conflict");
+        }
+        if (boundary === "tool") {
+          validateToolSampleReplay(input, run, step, attempt);
         }
         await client.query("COMMIT");
         return structuredClone({
@@ -734,6 +868,17 @@ export class PostgresAttemptStore extends PostgresRunStore {
           attempt: { ...input.attempt, status: "completed" },
         },
       );
+      if (boundary === "tool") {
+        validateToolSampleAuthority(
+          input,
+          await this.loadRunWithin(
+            client,
+            { tenantId: input.commit.tenantId, runId },
+            true,
+          ),
+          execution.step,
+        );
+      }
       const run = await this.commitRunWithin(client, input.commit, {
         executionLease: input.lease,
         history: input.history,
@@ -809,7 +954,7 @@ export class PostgresAttemptStore extends PostgresRunStore {
       });
       const retried = await client.query(
         `UPDATE ${this.schemaSql()}.work_items
-         SET status='pending', available_at=clock_timestamp()+$2*interval '1 millisecond',
+         SET status='pending', available_at=clock_timestamp()+CASE WHEN last_error_code='${RECONCILIATION_CANCEL_WAKE}' THEN 0 ELSE $2 END*interval '1 millisecond',
              lease_owner_id=NULL, lease_id=NULL, lease_expires_at=NULL,
              last_error_code=$3
          WHERE work_item_id=$1 AND lease_expires_at>clock_timestamp()`,
@@ -1008,3 +1153,5 @@ async function advisoryLock(client: PoolClient, key: string): Promise<void> {
     key,
   ]);
 }
+import type { ArtifactRetentionCandidate } from "@crewon/application";
+import { canRetirePostgresArtifact } from "./artifact-retention-guard.ts";

@@ -1,7 +1,11 @@
 import { RunStoreError } from "@crewon/application";
 import { type PoolClient } from "pg";
+import {
+  postgresAutomationScheduleIndexSql,
+  assertPostgresAutomationScheduleIndex,
+} from "./automation-schedule-index-schema.ts";
 
-export const POSTGRES_AUTOMATION_SCHEMA_VERSION = 1;
+export const POSTGRES_AUTOMATION_SCHEMA_VERSION = 2;
 
 export async function migratePostgresAutomationSchema(
   client: PoolClient,
@@ -13,7 +17,11 @@ export async function migratePostgresAutomationSchema(
      WHERE component = 'automation_authority'`,
   );
   const version = current.rows[0]?.version;
-  if (version !== undefined && version !== POSTGRES_AUTOMATION_SCHEMA_VERSION) {
+  if (
+    version !== undefined &&
+    version !== 1 &&
+    version !== POSTGRES_AUTOMATION_SCHEMA_VERSION
+  ) {
     throw new RunStoreError(
       version > POSTGRES_AUTOMATION_SCHEMA_VERSION
         ? "postgres_schema_too_new"
@@ -22,8 +30,14 @@ export async function migratePostgresAutomationSchema(
   }
   if (version === undefined) {
     await client.query(postgresAutomationSchemaSql(schema));
+  } else if (version === 1) {
+    await client.query(postgresAutomationScheduleIndexSql(schema));
+    await client.query(
+      `UPDATE ${schema}.schema_migrations SET version=2 WHERE component='automation_authority' AND version=1`,
+    );
   }
   await assertPostgresAutomationSchema(client, schema, schemaName);
+  await assertPostgresAutomationScheduleIndex(client, schema);
 }
 
 export function postgresAutomationSchemaSql(schema: string): string {
@@ -79,6 +93,7 @@ export function postgresAutomationSchemaSql(schema: string): string {
       ON ${schema}.automations(tenant_id, thread_id, automation_id);
     CREATE INDEX IF NOT EXISTS automation_invocation_receipts_run_idx
       ON ${schema}.automation_invocation_receipts(tenant_id, run_id);
+    ${postgresAutomationScheduleIndexSql(schema)};
   `;
 }
 

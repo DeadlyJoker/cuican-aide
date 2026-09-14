@@ -179,6 +179,59 @@ export class RunApplicationService {
     return state;
   }
 
+  async getActiveRunInThread(
+    actor: ActorContext,
+    threadId: string,
+  ): Promise<RunState | null> {
+    validateActor(actor);
+    requireNonEmpty(threadId, "thread_id_invalid");
+    const locator = {
+      tenantId: actor.tenantId,
+      spaceId: actor.spaceId,
+      threadId,
+    };
+    const thread = await this.#store.loadThreadInSpace(locator);
+    if (
+      thread === null ||
+      thread.status === "deleted" ||
+      thread.tenantId !== locator.tenantId ||
+      thread.spaceId !== locator.spaceId ||
+      thread.threadId !== threadId
+    )
+      throw new ApplicationError("notFound", "thread_not_found");
+    await this.#authorize(actor, "thread:read", { kind: "thread", ...locator });
+    await this.#authorize(actor, "run:read", {
+      kind: "run",
+      ...locator,
+      runId: null,
+    });
+    if (this.#store.loadActiveRunInThread === undefined)
+      throw new ApplicationError("internal", "active_run_store_unavailable");
+    try {
+      const run = await this.#store.loadActiveRunInThread(locator);
+      if (
+        run !== null &&
+        (run.tenantId !== locator.tenantId ||
+          run.spaceId !== locator.spaceId ||
+          run.threadId !== threadId ||
+          ![
+            "queued",
+            "running",
+            "waitingApproval",
+            "suspended",
+            "reconciling",
+          ].includes(run.status))
+      )
+        throw new ApplicationError(
+          "internal",
+          "thread_active_run_identity_invalid",
+        );
+      return run;
+    } catch (error) {
+      throw mapApplicationError(error);
+    }
+  }
+
   async listThreadRuns(
     actor: ActorContext,
     query: {

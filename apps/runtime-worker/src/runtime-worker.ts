@@ -1,4 +1,20 @@
+import { durableModelCallSink } from "./durable-model-call-sink.ts";
+import { StorageAdmissionError } from "@crewon/application";
+import { withToolExecutionCapacity } from "./tool-execution-capacity.ts";
+import { settleCanceledToolResults } from "./canceled-tool-results.ts";
+import { resolveToolBatch } from "./resolve-tool-batch.ts";
 import { createHash } from "node:crypto";
+import { setImmediate as yieldToEventLoop } from "node:timers/promises";
+import { loadRuntimeModelContext } from "./runtime-model-context.ts";
+import { durableModelUsageSink } from "./durable-model-usage-sink.ts";
+import {
+  loadToolReconciliationDelay,
+  toolReconciliationDelay,
+} from "./tool-reconciliation-backoff.ts";
+import {
+  acknowledgeCommittedToolResult,
+  reconcileCommittedToolResults,
+} from "./committed-tool-result.ts";
 
 import {
   AgentKernelError,
@@ -27,7 +43,6 @@ import {
   ContextHistoryError,
   CONTEXT_COMPACTION_PROMPT,
   boundedContextTail,
-  projectModelHistory,
   projectedContinuationStart,
   type ContextCompactorPort,
   type ContextHistoryItem,
@@ -35,7 +50,6 @@ import {
   type ModelContextProjection,
 } from "@crewon/context";
 import type {
-  ModelHistoryItem,
   RunLifecycleEvent,
   RunState,
   ToolApprovalState,
@@ -44,6 +58,7 @@ import type {
 import { parseAutomationInvocationBinding } from "@crewon/domain";
 import {
   InMemoryToolBroker,
+  ToolResultCapacityError,
   modelVisibleToolOutput,
   type ToolExecutionCommand,
   type ToolDefinition,
@@ -63,11 +78,13 @@ import {
   type PriorModelCompactionResolverPort,
 } from "./model-switch-compaction.ts";
 import type {
+  AgentExecutionAuthority,
   AgentVersionRuntime,
   AgentVersionRuntimeResolverPort,
 } from "./agent-version-runtime.ts";
 import { PlanOutputError, parseProposedPlan } from "./plan-output.ts";
 import { goalToolsForRun, isGoalToolCall } from "./goal-tools.ts";
+import { batchModelOutputEvents } from "./model-output-batches.ts";
 import { isRunPlanToolCall, runPlanToolsForRun } from "./run-plan-tools.ts";
 import { replaceChangedToolApproval } from "./tool-approval-replacement.ts";
 
@@ -85,8 +102,6 @@ const DEFAULT_MAX_CONTEXT_BYTES = 512 * 1024;
 const DEFAULT_AUTO_COMPACT_AT_CONTEXT_BYTES = 384 * 1024;
 const DEFAULT_AUTO_COMPACT_AT_TOKENS = 200_000;
 const DEFAULT_MODEL_CONTEXT_WINDOW_TOKENS = 273_000;
-const MAX_DURABLE_HISTORY_ITEMS = 10_000;
-const MAX_DURABLE_HISTORY_BYTES = 64 * 1024 * 1024;
 const MAX_CANONICAL_AGENT_EVENT_BYTES = 64 * 1024;
 const MAX_TOOL_ARTIFACT_REF_BYTES = 512;
 const MIN_MAX_CONTEXT_BYTES = 96 * 1024;
@@ -165,6 +180,7 @@ export type RuntimeWorkerOutcome =
   | Readonly<{ kind: "leaseLost"; runId: string }>;
 
 type WorkerAgentRuntime = Readonly<{
+  executionAuthority: AgentExecutionAuthority;
   kernel: AgentKernelPort;
   policy: RunExecutionPolicyPort;
   toolRuntime: ToolRuntimePort;
@@ -417,24 +433,25 @@ export class RuntimeWorker {
     this.#timer.unref?.();
   }
 
-  async wake(): Promise<RuntimeWorkerOutcome> {
+  wake(): Promise<RuntimeWorkerOutcome> {
     if (this.#closed) {
-      return { kind: "idle" };
+      return Promise.resolve({ kind: "idle" });
     }
     if (this.#drain !== null) {
       return this.#drain;
     }
-    const drain = this.#runOnce();
+    const drain = this.#runOnce()
+      .then((outcome) => {
+        this.#lastOutcome = outcome;
+        return outcome;
+      })
+      .finally(() => {
+        if (this.#drain === drain) {
+          this.#drain = null;
+        }
+      });
     this.#drain = drain;
-    try {
-      const outcome = await drain;
-      this.#lastOutcome = outcome;
-      return outcome;
-    } finally {
-      if (this.#drain === drain) {
-        this.#drain = null;
-      }
-    }
+    return drain;
   }
 
   lastOutcome(): RuntimeWorkerOutcome | null {
@@ -469,6 +486,21 @@ export class RuntimeWorker {
       if (isLeaseLoss(error)) {
         return { kind: "leaseLost", runId: claim.workItem.runId };
       }
+      if (
+        error instanceof StorageAdmissionError ||
+        error instanceof ToolResultCapacityError
+      ) {
+        const run = await this.#execution.loadRun(claim);
+        if (run.cancelRequested && run.status !== "reconciling") {
+          return this.#cancel(claim);
+        }
+        await this.#store.retryWorkItem({
+          ...leaseInput(claim),
+          retryAfterMs: error.retryAfterMs,
+          reasonCode: error.code,
+        });
+        return { kind: "retried", runId: run.runId, code: error.code };
+      }
       if (error instanceof PermanentWorkerError) {
         const run = await this.#execution.loadRun(claim);
         if (run.cancelRequested) {
@@ -493,7 +525,11 @@ export class RuntimeWorker {
         const code = failureCode(error);
         await this.#store.retryWorkItem({
           ...leaseInput(claim),
-          retryAfterMs: this.#retryAfterMs,
+          retryAfterMs: await loadToolReconciliationDelay(
+            this.#store,
+            run,
+            this.#retryAfterMs,
+          ),
           reasonCode: code,
         });
         return { kind: "retried", runId: run.runId, code };
@@ -522,6 +558,7 @@ export class RuntimeWorker {
   ): Promise<WorkerAgentRuntime | null> {
     if (this.#agentVersionRuntimeResolver === undefined) {
       return {
+        executionAuthority: "crewonKernel",
         kernel: this.#kernel,
         policy: this.#policy,
         toolRuntime: this.#toolRuntime,
@@ -550,6 +587,18 @@ export class RuntimeWorker {
   #projectAgentVersionRuntime(
     runtime: AgentVersionRuntime,
   ): WorkerAgentRuntime {
+    if (
+      runtime.executionAuthority === "providerAgent" &&
+      (runtime.version.instructions !== null ||
+        runtime.version.tools.length !== 0 ||
+        runtime.version.resources.governedContextDigest !== null ||
+        runtime.version.resources.workspaceRequired ||
+        runtime.governedContext !== undefined)
+    ) {
+      throw new PermanentWorkerError(
+        "agent_version_provider_authority_mismatch",
+      );
+    }
     const governedContextItems = runtime.governedContext?.modelItems() ?? [];
     const governedContextBytes = governedContextItems.reduce(
       (total, item) =>
@@ -564,6 +613,7 @@ export class RuntimeWorker {
       throw new PermanentWorkerError("worker_governed_context_limit_exceeded");
     }
     return {
+      executionAuthority: runtime.executionAuthority,
       kernel: runtime.kernel,
       policy: runtime.policy,
       toolRuntime: runtime.toolRuntime,
@@ -697,6 +747,26 @@ export class RuntimeWorker {
         code: "agent_version_runtime_unavailable",
       };
     }
+    await reconcileCommittedToolResults({
+      runtime: runtime.toolRuntime,
+      store: this.#store,
+      tenantId: run.tenantId,
+      runId: run.runId,
+    });
+    if (
+      runtime.executionAuthority === "providerAgent" &&
+      run.collaborationMode !== "default"
+    ) {
+      throw new PermanentWorkerError(
+        "provider_agent_collaboration_mode_unsupported",
+      );
+    }
+    if (
+      runtime.executionAuthority === "providerAgent" &&
+      (run.goalBinding !== null || run.goalAccounting !== null)
+    ) {
+      throw new PermanentWorkerError("provider_agent_goal_unsupported");
+    }
     if (run.status === "reconciling") {
       return this.#reconcileToolClaim(claim, run, runtime);
     }
@@ -736,7 +806,7 @@ export class RuntimeWorker {
     }
 
     if (manualCompaction !== null) {
-      const context = await this.#loadContext(run, {
+      const context = await this.#loadContext(claim, run, {
         allowAssistantBoundary: true,
       });
       if (
@@ -792,7 +862,7 @@ export class RuntimeWorker {
     if ((await this.#execution.consumeGoalSteering(claim)) !== null) {
       run = await this.#execution.loadRun(claim);
     }
-    const context = await this.#loadContext(run);
+    const context = await this.#loadContext(claim, run);
     const priorModelState = await this.#execution.loadThreadModelState(claim);
     const modelSwitch = decideModelSwitchCompaction(
       priorModelState,
@@ -815,6 +885,7 @@ export class RuntimeWorker {
       }
       return this.#compactContext(claim, run, context, runtime, {
         compactor: priorRuntime.compactor,
+        executionAuthority: priorRuntime.executionAuthority,
         governedContext: priorRuntime.governedContext,
         agentVersionId: priorModelState.agentVersionId,
         replacesThroughSequence: modelSwitch.replacesThroughSequence,
@@ -853,6 +924,14 @@ export class RuntimeWorker {
           },
     );
     const attempt = attemptIdentity(attemptResult);
+    if (
+      runtime.executionAuthority === "providerAgent" &&
+      attemptResult.attempt.retryOfAttemptId !== null
+    ) {
+      const code = "provider_agent_recovery_unsupported";
+      await this.#execution.failRun(claim, { code, retryable: false }, attempt);
+      return { kind: "failed", runId: run.runId, code };
+    }
     await this.#afterAttemptStarted?.();
 
     const modelIdentity = {
@@ -916,57 +995,78 @@ export class RuntimeWorker {
       { type: "segment.continuation_requested" }
     > | null = null;
     try {
-      for await (const event of runtime.kernel.runSegment(
-        {
-          schemaVersion: "crewon.agent-segment.v0",
-          purpose: "agent",
-          runId: run.runId,
-          segmentId,
-          attempt: attemptResult.attempt.attemptNumber,
-          agentVersionId: run.agentVersionId,
-          policySnapshotId: run.policySnapshotId,
-          collaborationMode: run.collaborationMode,
-          allowedTools:
-            run.collaborationMode === "plan" ? planAllowedTools(runtime) : null,
-          runtimeTools: [...goalToolsForRun(run), ...runPlanToolsForRun(run)],
-          history: [...runtime.governedContextItems, ...context.items],
-          continuation:
-            continuation.kind === "providerCheckpoint"
-              ? {
-                  ...continuation,
-                  newHistoryStartIndex:
-                    runtime.governedContextItems.length +
-                    continuation.newHistoryStartIndex,
-                }
-              : continuation,
-          ...(recoveryCheckpoint === null
-            ? {}
-            : {
-                reconcileCheckpoint: recoveryCheckpoint,
-              }),
-          ...(providerTurnState === null ? {} : { providerTurnState }),
-          budget: { maxOutputBytes: 32 * 1024 },
-        },
-        controller.signal,
-        {
-          controlSink: {
-            providerTurnStateObserved: async (observedProviderTurnState) => {
-              await this.#execution.recordProviderTurnState(
-                claim,
-                attempt,
-                observedProviderTurnState,
-              );
-              providerTurnState = observedProviderTurnState;
-            },
+      for await (const batch of batchModelOutputEvents(
+        runtime.kernel.runSegment(
+          {
+            schemaVersion: "crewon.agent-segment.v0",
+            purpose: "agent",
+            runId: run.runId,
+            segmentId,
+            attempt: attemptResult.attempt.attemptNumber,
+            agentVersionId: run.agentVersionId,
+            policySnapshotId: run.policySnapshotId,
+            collaborationMode: run.collaborationMode,
+            allowedTools:
+              run.collaborationMode === "plan"
+                ? planAllowedTools(runtime)
+                : null,
+            runtimeTools:
+              runtime.executionAuthority === "providerAgent"
+                ? []
+                : [...goalToolsForRun(run), ...runPlanToolsForRun(run)],
+            history: [...runtime.governedContextItems, ...context.items],
+            continuation:
+              continuation.kind === "providerCheckpoint"
+                ? {
+                    ...continuation,
+                    newHistoryStartIndex:
+                      runtime.governedContextItems.length +
+                      continuation.newHistoryStartIndex,
+                  }
+                : continuation,
+            ...(recoveryCheckpoint === null
+              ? {}
+              : {
+                  reconcileCheckpoint: recoveryCheckpoint,
+                }),
+            ...(providerTurnState === null ? {} : { providerTurnState }),
+            budget: { maxOutputBytes: 32 * 1024 },
           },
-        },
+          controller.signal,
+          {
+            controlSink: {
+              providerTurnStateObserved: async (observedProviderTurnState) => {
+                await this.#execution.recordProviderTurnState(
+                  claim,
+                  attempt,
+                  observedProviderTurnState,
+                );
+                providerTurnState = observedProviderTurnState;
+              },
+            },
+            usageSink: durableModelUsageSink(this.#store, claim, attempt),
+            callSink: durableModelCallSink(this.#store, claim, attempt),
+          },
+        ),
       )) {
         await this.#renew(claim);
         run = await this.#execution.loadRun(claim);
         if (run.cancelRequested) {
           controller.abort("user_requested");
-          return this.#cancel(claim, attempt);
+          // Close the iterator and its accounting before settling the attempt.
+          break;
         }
+        if (batch.kind === "output") {
+          const persisted = await this.#execution.recordOutputEvents(
+            claim,
+            batch.events,
+          );
+          run = persisted.state;
+          for (const event of batch.events) output += event.data.delta;
+          lastAgentSequence = batch.events.at(-1)!.sequence;
+          continue;
+        }
+        const event = batch.event;
         lastAgentSequence = event.sequence;
         if (event.type === "segment.provider_response_created") {
           providerCheckpoint = event.data.checkpoint;
@@ -1012,7 +1112,18 @@ export class RuntimeWorker {
           run = persisted.state;
           continue;
         }
-        bufferedEvents.push(event);
+        if (
+          event.type === "model.sampling.retry" ||
+          event.type === "model.transport.fallback"
+        ) {
+          const persisted = await this.#execution.recordAgentEvent(
+            claim,
+            event,
+          );
+          run = persisted.state;
+        } else {
+          bufferedEvents.push(event);
+        }
         if (event.type === "tool.requested") {
           providerTurnState = event.data.providerTurnState ?? providerTurnState;
           requestedTools.push(event);
@@ -1023,14 +1134,21 @@ export class RuntimeWorker {
           event.data.discardedOutput
         ) {
           output = "";
-        } else if (event.type === "model.output.delta") {
-          output += event.data.delta;
         } else if (event.type === "usage.recorded") {
           latestUsage = event.data;
         } else if (event.type === "segment.failed") {
           break;
         }
       }
+      if (run.cancelRequested) return this.#cancel(claim, attempt);
+      const atomicToolSample =
+        assistantContinuation === null &&
+        !completed &&
+        requestedTools.length > 0 &&
+        checkpointEvent !== null &&
+        bufferedEvents.length <= 254 &&
+        !bufferedEvents.some((event) => event.type === "segment.failed") &&
+        this.#execution.supportsToolSampleCommit();
       if (assistantContinuation !== null) {
         if (
           assistantContinuation.data.completedAssistantItems.join("") !==
@@ -1045,6 +1163,7 @@ export class RuntimeWorker {
           {
             sampleIndex: completedAssistantSamples + 1,
             segmentId,
+            continuationSequence: assistantContinuation.sequence,
             output: assistantContinuation.data.output,
             completedAssistantItems:
               assistantContinuation.data.completedAssistantItems,
@@ -1074,7 +1193,7 @@ export class RuntimeWorker {
         } else {
           toolBoundaryCompleted = true;
         }
-      } else {
+      } else if (!atomicToolSample) {
         for (const event of bufferedEvents) {
           const persisted = await this.#execution.recordAgentEvent(
             claim,
@@ -1104,21 +1223,38 @@ export class RuntimeWorker {
             false,
           );
         }
-        if (checkpointEvent !== null) {
-          await this.#execution.recordAgentEvent(claim, checkpointEvent);
-        }
         lastAgentSequence += 1;
-        await this.#execution.recordAgentEvent(claim, {
+        const toolSampleCompleted: CanonicalAgentEvent = {
           schemaVersion: "crewon.agent-event.v0",
           runId: run.runId,
           segmentId,
           sequence: lastAgentSequence,
           type: "segment.completed",
           data: { output: "" },
-        });
-        await this.#execution.completeAttempt(claim, attempt, null, {
-          providerTurnState,
-        });
+        };
+        if (atomicToolSample && checkpointEvent !== null) {
+          await this.#execution.commitToolSample(claim, attempt, {
+            segmentId,
+            events: [...bufferedEvents, checkpointEvent, toolSampleCompleted],
+            identity: modelIdentity,
+            contextRevision: context.revision,
+            modelPolicy: {
+              contextWindowTokens: runtime.modelContextWindowTokens,
+              autoCompactAtTokens: runtime.autoCompactAtTokens,
+            },
+            latestUsage,
+            checkpoint: checkpointEvent.data.checkpoint,
+            providerTurnState,
+          });
+        } else {
+          if (checkpointEvent !== null) {
+            await this.#execution.recordAgentEvent(claim, checkpointEvent);
+          }
+          await this.#execution.recordAgentEvent(claim, toolSampleCompleted);
+          await this.#execution.completeAttempt(claim, attempt, null, {
+            providerTurnState,
+          });
+        }
         toolBoundaryOutcome = await this.#executeToolCalls(
           claim,
           run,
@@ -1136,6 +1272,11 @@ export class RuntimeWorker {
       if (heartbeat.failure() !== null) {
         throw heartbeat.failure();
       }
+      if (
+        error instanceof StorageAdmissionError ||
+        error instanceof ToolResultCapacityError
+      )
+        throw error;
       if (error instanceof AgentKernelError && !error.retryable) {
         run = await this.#execution.loadRun(claim);
         if (!(await this.#attemptIsRunning(run, attempt))) {
@@ -1316,6 +1457,7 @@ export class RuntimeWorker {
     runtime: WorkerAgentRuntime,
     options?: Readonly<{
       compactor?: ContextCompactorPort;
+      executionAuthority?: AgentExecutionAuthority;
       governedContext?: GovernedContextBundle;
       agentVersionId?: string;
       replacesThroughSequence: number;
@@ -1323,6 +1465,15 @@ export class RuntimeWorker {
       completion?: "continueRun" | "completeRun";
     }>,
   ): Promise<RuntimeWorkerOutcome> {
+    const compactorAuthority =
+      options?.compactor === undefined
+        ? runtime.executionAuthority
+        : options.executionAuthority;
+    if (compactorAuthority !== "crewonKernel") {
+      throw new PermanentWorkerError(
+        "provider_agent_context_compaction_unsupported",
+      );
+    }
     const replacesThroughSequence =
       options?.replacesThroughSequence ?? context.throughHistorySequence;
     const governedContextItems =
@@ -1383,9 +1534,14 @@ export class RuntimeWorker {
           agentVersionId: options?.agentVersionId ?? run.agentVersionId,
           policySnapshotId: run.policySnapshotId,
           history: [...governedContextItems, ...compactedInput.items],
+          protectedPrefixLength: governedContextItems.length,
           maxOutputBytes: 32 * 1024,
         },
         controller.signal,
+        {
+          usageSink: durableModelUsageSink(this.#store, claim, attempt),
+          callSink: durableModelCallSink(this.#store, claim, attempt),
+        },
       );
       await this.#renew(claim);
       run = await this.#execution.loadRun(claim);
@@ -1488,7 +1644,7 @@ export class RuntimeWorker {
       this.#cancellationScheduler,
     );
     heartbeat.start();
-    cancellationWatcher.start();
+    if (!run.cancelRequested) cancellationWatcher.start();
     try {
       const approval = await this.#approvedToolApproval(receipt);
       let resolution: ToolExecutionResolution;
@@ -1522,8 +1678,21 @@ export class RuntimeWorker {
         await this.#execution.retryToolReconciliation(
           claim,
           attempt,
-          this.#retryAfterMs,
+          toolReconciliationDelay(
+            this.#retryAfterMs,
+            recovery.attempt.attemptNumber,
+          ),
         );
+        try {
+          acknowledgeCommittedToolResult(runtime.toolRuntime, receipt);
+        } catch {
+          // The transaction already released this lease. Repair the ACK on the next claim.
+          return {
+            kind: "retried",
+            runId: run.runId,
+            code: "tool_result_acknowledgement_pending",
+          };
+        }
         return {
           kind: "retried",
           runId: run.runId,
@@ -1538,6 +1707,7 @@ export class RuntimeWorker {
             resolution.providerReceiptId,
           );
         }
+        acknowledgeCommittedToolResult(runtime.toolRuntime, receipt);
         await this.#execution.resumeToolReconciliation(claim, receipt);
         const resumed = await this.#execution.loadRun(claim);
         if (resumed.cancelRequested) {
@@ -1555,6 +1725,20 @@ export class RuntimeWorker {
         };
       }
 
+      if ((await this.#execution.loadRun(claim)).cancelRequested) {
+        if (receipt.status !== "completed") {
+          receipt =
+            await this.#execution.completeToolExecutionAfterCancellation(
+              claim,
+              receipt,
+              resolution.providerReceiptId,
+              resolution.result,
+            );
+        }
+        acknowledgeCommittedToolResult(runtime.toolRuntime, receipt);
+        await this.#execution.resumeToolReconciliation(claim, receipt);
+        return this.#cancel(claim, attempt);
+      }
       const projected = await this.#projectToolOutput(
         run,
         receipt,
@@ -1588,6 +1772,7 @@ export class RuntimeWorker {
           resolution.providerReceiptId,
         );
         receipt = completion.receipt;
+        acknowledgeCommittedToolResult(runtime.toolRuntime, receipt);
         if (completion.run.state.cancelRequested) {
           return this.#cancel(claim);
         }
@@ -1814,7 +1999,7 @@ export class RuntimeWorker {
     const preparedCalls: Array<{
       event: Extract<KernelAgentEvent, { type: "tool.requested" }>;
       receipt: ToolExecutionReceiptState;
-      attempt: RunAttemptIdentity;
+      attempt: RunAttemptIdentity | null;
       resolve: () => Promise<ToolExecutionResolution>;
     }> = [];
     for (const event of calls) {
@@ -1851,9 +2036,11 @@ export class RuntimeWorker {
         },
         policy,
       );
-      const toolAttemptResult =
-        prepared.attempt ??
-        (await this.#execution.beginToolRecovery(claim, prepared.receipt));
+      const getToolAttempt = async () =>
+        attemptIdentity(
+          prepared.attempt ??
+            (await this.#execution.beginToolRecovery(claim, prepared.receipt)),
+        );
       let receipt = prepared.receipt;
       let toolApproval: ToolApprovalState | null = null;
       if (policy.approvalRequirement === "perAction") {
@@ -1888,26 +2075,28 @@ export class RuntimeWorker {
           await this.#execution.failRun(
             claim,
             { code, retryable: false },
-            attemptIdentity(toolAttemptResult),
+            await getToolAttempt(),
           );
           return { kind: "failed", runId: receipt.runId, code };
         }
         toolApproval = approval.approval;
       }
       if (receipt.status === "completed") {
+        acknowledgeCommittedToolResult(runtime.toolRuntime, receipt);
         preparedCalls.push({
           event,
           receipt,
-          attempt: attemptIdentity(toolAttemptResult),
+          attempt: await getToolAttempt(),
           resolve: () => Promise.resolve(completedResolution(receipt)),
         });
         continue;
       }
       if (receipt.status === "canceled") {
+        acknowledgeCommittedToolResult(runtime.toolRuntime, receipt);
         preparedCalls.push({
           event,
           receipt,
-          attempt: attemptIdentity(toolAttemptResult),
+          attempt: await getToolAttempt(),
           resolve: () =>
             Promise.resolve({
               status: "canceled" as const,
@@ -1918,28 +2107,41 @@ export class RuntimeWorker {
         continue;
       }
       const shouldExecute = receipt.status === "prepared";
-      if (shouldExecute) {
-        receipt = await this.#execution.dispatchToolExecution(claim, receipt);
-        await this.#afterToolDispatched?.(receipt);
-      }
-      const command = toolExecutionCommand(
-        receipt,
-        call.input,
-        toolApproval,
-        claim,
-      );
-      preparedCalls.push({
+      const preparedCall: (typeof preparedCalls)[number] = {
         event,
         receipt,
-        attempt: attemptIdentity(toolAttemptResult),
-        resolve: async () => {
-          const resolution = shouldExecute
-            ? await runtime.toolRuntime.execute(command, signal)
-            : await runtime.toolRuntime.reconcile(command, signal);
-          await this.#afterToolProviderResolved?.(resolution);
-          return resolution;
-        },
-      });
+        attempt:
+          prepared.attempt === null ? null : attemptIdentity(prepared.attempt),
+        resolve: () =>
+          withToolExecutionCapacity(
+            {
+              runtime: runtime.toolRuntime,
+              command: toolExecutionCommand(
+                receipt,
+                call.input,
+                toolApproval,
+                claim,
+              ),
+              signal,
+              operation: shouldExecute ? "execute" : "reconcile",
+            },
+            async (execute) => {
+              preparedCall.attempt ??= await getToolAttempt();
+              if (shouldExecute) {
+                receipt = await this.#execution.dispatchToolExecution(
+                  claim,
+                  receipt,
+                );
+                preparedCall.receipt = receipt;
+                await this.#afterToolDispatched?.(receipt);
+              }
+              const resolution = await execute();
+              await this.#afterToolProviderResolved?.(resolution);
+              return resolution;
+            },
+          ),
+      };
+      preparedCalls.push(preparedCall);
     }
 
     const canRunInParallel = calls.every((event) =>
@@ -1950,40 +2152,45 @@ export class RuntimeWorker {
           definition.execution === "parallel",
       ),
     );
-    const resolved: Array<{
-      prepared: (typeof preparedCalls)[number];
-      resolution: ToolExecutionResolution;
-    }> = [];
-    if (canRunInParallel) {
-      resolved.push(
-        ...(await Promise.all(
-          preparedCalls.map(async (prepared) => ({
-            prepared,
-            resolution: await prepared.resolve(),
-          })),
-        )),
-      );
-    } else {
-      for (const prepared of preparedCalls) {
-        resolved.push({
-          prepared,
-          resolution: await prepared.resolve(),
-        });
-      }
-    }
+    const resolved = await resolveToolBatch({
+      mode: canRunInParallel ? "parallel" : "sequential",
+      calls: preparedCalls.map((prepared) => async () => ({
+        prepared,
+        resolution: await prepared.resolve(),
+      })),
+    });
 
-    for (const { prepared, resolution } of resolved) {
+    for (const result of resolved) {
+      // Commit the successful prefix before surfacing a later failure. This
+      // avoids reconciling finished calls on every pressure retry.
+      if (result.status === "rejected") throw result.reason;
+      const { prepared, resolution } = result.value;
       const { event, attempt: toolAttempt } = prepared;
+      if (toolAttempt === null)
+        throw new PermanentWorkerError("tool_attempt_missing");
       const call = event.data;
       let receipt = prepared.receipt;
       if (resolution.status === "unknownOutcome") {
-        await this.#execution.commitToolExecutionUnknownOutcome(
-          claim,
-          receipt,
-          toolAttempt,
-          resolution.providerReceiptId,
-          this.#retryAfterMs,
-        );
+        const committed =
+          await this.#execution.commitToolExecutionUnknownOutcome(
+            claim,
+            receipt,
+            toolAttempt,
+            resolution.providerReceiptId,
+            this.#retryAfterMs,
+          );
+        try {
+          acknowledgeCommittedToolResult(
+            runtime.toolRuntime,
+            committed.receipt,
+          );
+        } catch {
+          return {
+            kind: "retried",
+            runId: claim.workItem.runId,
+            code: "tool_result_acknowledgement_pending",
+          };
+        }
         return {
           kind: "retried",
           runId: claim.workItem.runId,
@@ -1998,6 +2205,7 @@ export class RuntimeWorker {
             resolution.providerReceiptId,
           );
         }
+        acknowledgeCommittedToolResult(runtime.toolRuntime, receipt);
         const run = await this.#execution.loadRun(claim);
         if (run.cancelRequested) {
           return this.#cancel(claim, toolAttempt);
@@ -2039,6 +2247,7 @@ export class RuntimeWorker {
           resolution.providerReceiptId,
         );
         receipt = completion.receipt;
+        acknowledgeCommittedToolResult(runtime.toolRuntime, receipt);
         await this.#afterToolReceiptCommitted?.(receipt);
         if (completion.run.state.cancelRequested) {
           return this.#cancel(claim);
@@ -2188,6 +2397,7 @@ export class RuntimeWorker {
   }
 
   async #loadContext(
+    claim: WorkItemClaim,
     run: RunState,
     options: Readonly<{ allowAssistantBoundary?: boolean }> = {},
   ): Promise<ModelContextProjection> {
@@ -2202,50 +2412,27 @@ export class RuntimeWorker {
     ) {
       throw new PermanentWorkerError("thread_not_executable");
     }
-    const head = await this.#store.loadModelHistoryHead({
-      tenantId: run.tenantId,
-      threadId: run.threadId,
-    });
-    if (head === null) {
-      throw new PermanentWorkerError("model_history_not_found");
-    }
-    const items: ModelHistoryItem[] = [];
-    let cursor = 0;
-    while (items.length < MAX_DURABLE_HISTORY_ITEMS) {
-      const page = await this.#store.listModelHistoryItems(
-        { tenantId: run.tenantId, threadId: run.threadId },
-        cursor,
-        Math.min(HISTORY_PAGE_SIZE, MAX_DURABLE_HISTORY_ITEMS - items.length),
-      );
-      if (page.length === 0) {
-        break;
-      }
-      for (const item of page) {
-        items.push(item);
-        cursor = item.sequence;
-      }
-      if (page.length < HISTORY_PAGE_SIZE) {
-        break;
-      }
-    }
-    if (cursor !== head.lastSequence || items.length !== head.lastSequence) {
-      throw new PermanentWorkerError("context_history_limit_exceeded");
-    }
-    const last = items.at(-1);
-    if (
-      last === undefined ||
-      !(
-        (last.type === "message" &&
-          (last.role === "user" || options.allowAssistantBoundary === true)) ||
-        last.runId === run.runId
-      )
-    ) {
-      throw new PermanentWorkerError("context_last_turn_boundary_invalid");
-    }
+    let lastLeaseCheck = -Infinity;
     try {
-      return projectModelHistory(items, {
-        maxItems: MAX_DURABLE_HISTORY_ITEMS,
-        maxBytes: MAX_DURABLE_HISTORY_BYTES,
+      return await loadRuntimeModelContext(this.#store, run, {
+        ...options,
+        onProgress: async () => {
+          await yieldToEventLoop();
+          if (this.#closed) throw new Error("worker_closed");
+          const now = performance.now();
+          if (
+            now - lastLeaseCheck <
+            Math.min(1000, this.#leaseDurationMs / 3)
+          ) {
+            return;
+          }
+          await this.#renew(claim);
+          const current = await this.#execution.loadRun(claim);
+          if (current.cancelRequested) {
+            throw new PermanentWorkerError("worker_cancel_requested");
+          }
+          lastLeaseCheck = now;
+        },
       });
     } catch (error) {
       if (error instanceof ContextHistoryError) {
@@ -2302,6 +2489,79 @@ export class RuntimeWorker {
     const run = await this.#execution.loadRun(claim);
     if (run.status !== "canceled") {
       await this.#renew(claim);
+      try {
+        const runtime = await this.#resolveAgentVersionRuntime(
+          run.tenantId,
+          run.agentVersionId,
+        );
+        if (runtime !== null) {
+          const drain = await settleCanceledToolResults({
+            runtime: runtime.toolRuntime,
+            store: this.#store,
+            execution: this.#execution,
+            claim,
+          });
+          if (
+            drain.kind === "more" ||
+            (drain.kind === "unknown" && run.status === "reconciling")
+          ) {
+            await this.#store.retryWorkItem({
+              ...leaseInput(claim),
+              retryAfterMs: this.#retryAfterMs,
+              reasonCode: "tool_cancellation_settlement_pending",
+            });
+            return {
+              kind: "retried",
+              runId: run.runId,
+              code: "tool_cancellation_settlement_pending",
+            };
+          }
+          if (drain.kind === "unknown") {
+            const recovery = await this.#execution.beginToolRecovery(
+              claim,
+              drain.receipt,
+            );
+            const committed =
+              await this.#execution.commitToolExecutionUnknownOutcome(
+                claim,
+                drain.receipt,
+                attemptIdentity(recovery),
+                drain.providerReceiptId,
+                this.#retryAfterMs,
+              );
+            try {
+              acknowledgeCommittedToolResult(
+                runtime.toolRuntime,
+                committed.receipt,
+              );
+            } catch {
+              // The compound commit already rescheduled this claim. Repair ACK on its next wake.
+              return {
+                kind: "retried",
+                runId: run.runId,
+                code: "tool_result_acknowledgement_pending",
+              };
+            }
+            return {
+              kind: "retried",
+              runId: run.runId,
+              code: "tool_outcome_unknown",
+            };
+          }
+        }
+      } catch (error) {
+        if (isLeaseLoss(error)) return { kind: "leaseLost", runId: run.runId };
+        await this.#store.retryWorkItem({
+          ...leaseInput(claim),
+          retryAfterMs: this.#retryAfterMs,
+          reasonCode: "tool_cancellation_settlement_failed",
+        });
+        return {
+          kind: "retried",
+          runId: run.runId,
+          code: "tool_cancellation_settlement_failed",
+        };
+      }
       const approvalAttempt =
         currentAttempt === null && run.status === "running"
           ? await this.#cancelPreparedApprovedTool(claim, run)

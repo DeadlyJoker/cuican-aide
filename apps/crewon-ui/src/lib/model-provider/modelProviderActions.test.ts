@@ -1,4 +1,5 @@
 import type {
+  ActiveAgentVersionCatalogResponse,
   ModelProviderSettingsSnapshot,
   ProbeModelProviderResponse,
 } from "@crewon/contracts";
@@ -47,6 +48,26 @@ const catalog = {
       isActive: true,
       modelId: "gateway-model",
       providerId: "gateway",
+    },
+  ],
+};
+
+const activeAgents: ActiveAgentVersionCatalogResponse = {
+  releaseId: "release-1",
+  activatedAt: "2026-09-09T00:00:00Z",
+  defaultAgentVersionId: "agent-1",
+  data: [
+    {
+      agentVersionId: "agent-1",
+      contentDigest: "sha256:test",
+      runtimeGeneration: "runtime-1",
+      policySnapshotId: "policy-1",
+      model: {
+        adapterName: "responses",
+        adapterVersion: "1",
+        modelId: "actual-task-model",
+      },
+      createdAt: "2026-09-09T00:00:00Z",
     },
   ],
 };
@@ -134,11 +155,122 @@ describe("final Provider control actions", () => {
       settings: { ...settings, runtimeAvailability: "unavailable" },
     });
     await refreshModelProvidersPanelAction(test.params);
-    expect(test.panel()?.body).toContain("read-only");
-    expect(test.panel()?.body).toContain("Runtime: Unavailable");
+    expect(test.panel()?.body).toContain(
+      "Adding or editing model services is not supported on this web page",
+    );
+    expect(test.panel()?.fields).toBeUndefined();
+    expect(test.panel()?.body).toContain("Model source status: Unavailable");
     expect(test.panel()?.actions?.map(({ id }) => id)).toEqual([
       "refresh-model-providers",
     ]);
+  });
+
+  it("shows the actual task model on the web model page even without managed providers", async () => {
+    const test = fixture({ store: null });
+    test.params.controlClient = {
+      ...test.controlClient,
+      getActiveAgentVersionCatalog: vi.fn(async () => activeAgents),
+    };
+    test.controlClient.getModelProviderSettings.mockResolvedValue({
+      settings: {
+        ...settings,
+        activeProviderId: null,
+        providers: [],
+        runtimeAvailability: "unconfigured",
+      },
+    });
+
+    await refreshModelProvidersPanelAction(test.params);
+
+    expect(test.panel()?.rows).toEqual([
+      {
+        id: "runtime:default-task-model",
+        title: "Default task model",
+        subtitle: "actual-task-model",
+      },
+    ]);
+    expect(test.panel()?.body).not.toContain("Not configured");
+    expect(test.panel()?.body).toContain("Settings → AI models → Add model");
+    expect(test.panel()?.body).toContain("do not automatically apply");
+    expect(test.panel()?.actions?.map(({ id }) => id)).toEqual([
+      "refresh-model-providers",
+    ]);
+  });
+
+  it("opens native setup on the same page when the Control runtime is unreachable", async () => {
+    const test = fixture();
+    test.controlClient.getModelProviderSettings.mockRejectedValue(
+      new Error("runtime_not_started"),
+    );
+    await refreshModelProvidersPanelAction(test.params);
+    expect(test.panel()?.actions?.map(({ id }) => id)).toContain(
+      "model-provider-add",
+    );
+    expect(test.panel()?.error).toBeUndefined();
+
+    handleModelProviderAction(test.params, "add", null);
+    await vi.waitFor(() =>
+      expect(test.panel()?.fields?.length).toBeGreaterThan(0),
+    );
+    expect(test.panel()?.fields?.map(({ id }) => id)).toEqual(
+      expect.arrayContaining([
+        MODEL_PROVIDER_FIELD_IDS.baseUrl,
+        MODEL_PROVIDER_FIELD_IDS.apiKey,
+        MODEL_PROVIDER_FIELD_IDS.modelId,
+      ]),
+    );
+    expect(test.panel()?.actions?.map(({ id }) => id)).toEqual(
+      expect.arrayContaining(["model-provider-save", "model-provider-cancel"]),
+    );
+    expect(test.store?.upsert).not.toHaveBeenCalled();
+    expect(test.store?.activate).not.toHaveBeenCalled();
+
+    handleModelProviderAction(test.params, "cancel", null);
+    await vi.waitFor(() =>
+      expect(test.panel()?.actions?.map(({ id }) => id)).toContain(
+        "model-provider-add",
+      ),
+    );
+    expect(test.panel()?.fields).toBeUndefined();
+  });
+
+  it("keeps setup available without claiming a default when task metadata fails or is ambiguous", async () => {
+    for (const getActiveAgentVersionCatalog of [
+      async () => {
+        throw new Error("catalog_unavailable");
+      },
+      async () => ({ ...activeAgents, data: [] }),
+      async () => ({
+        ...activeAgents,
+        data: [...activeAgents.data, ...activeAgents.data],
+      }),
+    ]) {
+      const test = fixture();
+      test.params.controlClient = {
+        ...test.controlClient,
+        getActiveAgentVersionCatalog,
+      };
+      await refreshModelProvidersPanelAction(test.params);
+      expect(
+        test
+          .panel()
+          ?.rows?.some(({ id }) => id === "runtime:default-task-model"),
+      ).toBe(false);
+      expect(test.panel()?.actions?.map(({ id }) => id)).toContain(
+        "model-provider-add",
+      );
+    }
+  });
+
+  it("does not expose a setup form or swallow Control failures on web", async () => {
+    const test = fixture({ store: null });
+    test.controlClient.getModelProviderSettings.mockRejectedValue(
+      new Error("runtime_not_started"),
+    );
+    await refreshModelProvidersPanelAction(test.params);
+    expect(test.panel()?.error).toBeTruthy();
+    handleModelProviderAction(test.params, "add", null);
+    expect(test.panel()?.fields).toBeUndefined();
   });
 
   it("saves only through native IPC and rehydrates from public Control", async () => {

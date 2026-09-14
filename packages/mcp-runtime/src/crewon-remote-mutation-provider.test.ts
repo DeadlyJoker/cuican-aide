@@ -116,6 +116,11 @@ test("possibly-sent timeout is recovered only through reconcile", async (t) => {
       error instanceof CrewonRemoteMcpMutationError &&
       error.certainty === "possiblySent",
   );
+  // The client deadline proves only that the request crossed the send
+  // boundary; under parallel test load the loopback server may not have
+  // committed it yet. Wait on the server-side commit signal so this assertion
+  // tests reconciliation rather than scheduler timing.
+  await harness.waitUntilExecuted();
 
   assert.deepEqual(
     await provider(harness.endpoint).reconcile(execution, signal()),
@@ -320,6 +325,10 @@ async function durableHarness(options: { hangExecuteResponse?: boolean } = {}) {
     headers: IncomingMessage["headers"];
   }> = [];
   let executeCount = 0;
+  let resolveFirstExecution!: () => void;
+  const firstExecution = new Promise<void>((resolve) => {
+    resolveFirstExecution = resolve;
+  });
   const server = createServer(async (request, response) => {
     const body = JSON.parse(await readRequest(request));
     requests.push({ body, headers: request.headers });
@@ -333,6 +342,7 @@ async function durableHarness(options: { hangExecuteResponse?: boolean } = {}) {
     if (body.phase === "execute") {
       executeCount += 1;
       durable.set(id, { structuredContent: { durable: true } });
+      resolveFirstExecution();
       if (options.hangExecuteResponse) return;
     }
     const resolution =
@@ -355,6 +365,7 @@ async function durableHarness(options: { hangExecuteResponse?: boolean } = {}) {
     endpoint: `http://127.0.0.1:${address.port}/mcp-mutations`,
     requests,
     executeCount: () => executeCount,
+    waitUntilExecuted: () => firstExecution,
     close: () =>
       new Promise<void>((resolve, reject) =>
         server.close((error) => (error ? reject(error) : resolve())),

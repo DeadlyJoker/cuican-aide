@@ -1,0 +1,124 @@
+{
+  "schemaVersion": "crewon.team-effect-case.v1",
+  "caseId": "gui-migration-readiness-snap-77",
+  "caseRevision": "2026-09-07.2",
+  "title": "GUI Team migration readiness with explicit output contract",
+  "prompt": "仅使用以下材料，禁止联网、工具或任何 API：A=预发布环境从生产快照 snap-77 恢复后完成 200 万行迁移预演，checksum C901；B=生产快照登记表把同一 snap-77 记为 200 万行、checksum D447；C=回退脚本从未执行；D=变更单声称‘零停机且回退已就绪’。团队需要分别完成变更规划与独立验证，组长最终裁决。最终回答不超过 900 字，必须恰好 10 行，并严格使用以下行首 token，冒号均为 ASCII 半角且必须原样复制：DECISION:；EVIDENCE-A:；EVIDENCE-B:；EVIDENCE-C:；EVIDENCE-D:；CONFLICT:；GATE:；ACTION-1:；ACTION-2:；UNRESOLVED:。DECISION: 后必须是 NO-GO。GATE 行必须说明只有 checksum 一致、回退演练通过且零停机有独立证据后才可发布；ACTION-1 必须冻结当前发布并核对 snap-77/checksum；ACTION-2 必须执行回退脚本演练并独立验证零停机；UNRESOLVED 必须列出 checksum、回退和零停机三类未知。不得把迁移预演完成当成 checksum 冲突、零停机或回退就绪的证明。",
+  "expectedMemberIds": ["member-1", "member-2", "member-3"],
+  "efficiencyGate": {
+    "modelRunCount": {
+      "maxRegressionPercent": 0,
+      "minImprovementPercent": 20
+    },
+    "logicalPhaseCount": {
+      "maxRegressionPercent": 0,
+      "minImprovementPercent": 20
+    },
+    "timeToFirstVisibleOutputMs": {
+      "maxRegressionPercent": null,
+      "minImprovementPercent": null
+    },
+    "settledDurationMs": {
+      "maxRegressionPercent": null,
+      "minImprovementPercent": null
+    }
+  },
+  "qualityGate": {
+    "authoredOrder": [
+      "decision",
+      "evidence-a",
+      "evidence-b",
+      "evidence-c",
+      "evidence-d",
+      "conflict",
+      "gate",
+      "action-one",
+      "action-two",
+      "unknown"
+    ],
+    "maxAnswerCharacters": 900,
+    "allowUnlabelledText": false,
+    "labels": [
+      {
+        "id": "decision",
+        "kind": "decision",
+        "label": "DECISION:",
+        "expectedFragments": [],
+        "exactContent": "NO-GO",
+        "minContentCharacters": 5
+      },
+      {
+        "id": "evidence-a",
+        "kind": "evidence",
+        "label": "EVIDENCE-A:",
+        "expectedFragments": ["snap-77", "200", "万行", "C901"],
+        "exactContent": null,
+        "minContentCharacters": 24
+      },
+      {
+        "id": "evidence-b",
+        "kind": "evidence",
+        "label": "EVIDENCE-B:",
+        "expectedFragments": ["snap-77", "200", "万行", "D447"],
+        "exactContent": null,
+        "minContentCharacters": 24
+      },
+      {
+        "id": "evidence-c",
+        "kind": "evidence",
+        "label": "EVIDENCE-C:",
+        "expectedFragments": ["回退脚本", "从未执行"],
+        "exactContent": null,
+        "minContentCharacters": 16
+      },
+      {
+        "id": "evidence-d",
+        "kind": "evidence",
+        "label": "EVIDENCE-D:",
+        "expectedFragments": ["零停机", "回退已就绪"],
+        "exactContent": null,
+        "minContentCharacters": 18
+      },
+      {
+        "id": "conflict",
+        "kind": "conflict",
+        "label": "CONFLICT:",
+        "expectedFragments": ["C901", "D447", "回退", "冲突"],
+        "exactContent": null,
+        "minContentCharacters": 38
+      },
+      {
+        "id": "gate",
+        "kind": "decision",
+        "label": "GATE:",
+        "expectedFragments": ["checksum", "一致", "回退", "通过", "零停机"],
+        "exactContent": null,
+        "minContentCharacters": 30
+      },
+      {
+        "id": "action-one",
+        "kind": "decision",
+        "label": "ACTION-1:",
+        "expectedFragments": ["冻结", "snap-77", "checksum"],
+        "exactContent": null,
+        "minContentCharacters": 28
+      },
+      {
+        "id": "action-two",
+        "kind": "decision",
+        "label": "ACTION-2:",
+        "expectedFragments": ["回退脚本", "独立验证", "零停机"],
+        "exactContent": null,
+        "minContentCharacters": 28
+      },
+      {
+        "id": "unknown",
+        "kind": "unknown",
+        "label": "UNRESOLVED:",
+        "expectedFragments": ["checksum", "回退", "零停机"],
+        "exactContent": null,
+        "minContentCharacters": 28
+      }
+    ]
+  }
+}

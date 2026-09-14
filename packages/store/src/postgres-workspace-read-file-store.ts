@@ -1,4 +1,5 @@
 import { Pool, type PoolClient } from "pg";
+import { stableJson } from "./store-invariants.ts";
 
 import {
   RunStoreError,
@@ -141,7 +142,7 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
       );
       if (existing !== null) {
         requireWorkspaceReadFileLocator(existing, locator);
-        if (JSON.stringify(existing.frozen) !== JSON.stringify(frozen))
+        if (stableJson(existing.frozen) !== stableJson(frozen))
           conflict();
         await this.#insertReceipt(
           client,
@@ -289,7 +290,7 @@ export class PostgresWorkspaceReadFileStore implements WorkspaceReadFileStore {
       if (current.resolution !== null) {
         if (receipt === null) conflict();
         const parsed = exactResolution(current, input.phase, input.resolution);
-        if (JSON.stringify(parsed) !== JSON.stringify(current.resolution))
+        if (stableJson(parsed) !== stableJson(current.resolution))
           conflict();
         return result("replayed", current);
       }

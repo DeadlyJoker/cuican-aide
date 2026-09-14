@@ -26,6 +26,54 @@ const fingerprintRoots = [
   join(repositoryRoot, "packages", "agent-version", "src"),
   join(repositoryRoot, "packages", "tool-broker", "src"),
 ];
+const MAX_DEVELOPMENT_RUNTIME_WORKERS = 8;
+const PROVIDER_PROBE_ENVIRONMENT_NAMES = [
+  "CREWON_PROVIDER_PROBE_PORT",
+  "CREWON_PROVIDER_PROBE_TOKEN",
+  "CREWON_PROVIDER_PROBE_PROVIDER_ID",
+  "CREWON_PROVIDER_PROBE_RUNTIME_BINDING_ID",
+  "CREWON_PROVIDER_PROBE_ENDPOINT",
+  "CREWON_PROVIDER_PROBE_CREDENTIAL_ENVIRONMENT",
+];
+
+export function developmentRuntimeWorkerCount(value) {
+  const normalized = value?.trim() || "1";
+  if (!/^\d+$/u.test(normalized)) {
+    throw new Error("CREWON_CONTROL_DEV_RUNTIME_WORKER_COUNT_invalid");
+  }
+  const parsed = Number(normalized);
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed < 1 ||
+    parsed > MAX_DEVELOPMENT_RUNTIME_WORKERS
+  ) {
+    throw new Error("CREWON_CONTROL_DEV_RUNTIME_WORKER_COUNT_invalid");
+  }
+  return parsed;
+}
+
+export function developmentRuntimeWorkerEnvironment(
+  baseEnvironment,
+  workerIndex,
+) {
+  if (
+    !Number.isSafeInteger(workerIndex) ||
+    workerIndex < 0 ||
+    workerIndex >= MAX_DEVELOPMENT_RUNTIME_WORKERS
+  ) {
+    throw new Error("development_runtime_worker_index_invalid");
+  }
+  const environment = {
+    ...baseEnvironment,
+    CREWON_WORKER_OWNER_ID: `control-web-runtime-worker-${workerIndex + 1}`,
+  };
+  if (workerIndex > 0) {
+    for (const name of PROVIDER_PROBE_ENVIRONMENT_NAMES) {
+      delete environment[name];
+    }
+  }
+  return environment;
+}
 
 export function defaultControlDataDirectory(
   platform = process.platform,
@@ -168,71 +216,11 @@ export function runtimeFingerprint(input) {
   return digest.digest("hex");
 }
 
-export function persistentDevelopmentAgentVersionId(
-  dataDirectory,
-  fallbackAgentVersionId,
-) {
-  const identityPath = join(
-    dataDirectory,
-    "development-agent-identity.json",
-  );
-  if (existsSync(identityPath)) {
-    const identity = JSON.parse(readBoundedUtf8(identityPath, 16 * 1024));
-    if (
-      identity?.schemaVersion !== "crewon.development-agent-identity.v0" ||
-      !validAgentVersionId(identity.agentVersionId)
-    ) {
-      throw new Error("development agent identity is invalid");
-    }
-    return identity.agentVersionId;
+export function developmentAgentVersionId(fingerprint) {
+  if (!/^[a-f0-9]{64}$/u.test(fingerprint)) {
+    throw new Error("development runtime fingerprint is invalid");
   }
-
-  const bindingsPath = join(
-    dataDirectory,
-    "agent-version-runtime-bindings.json",
-  );
-  let agentVersionId = fallbackAgentVersionId;
-  if (existsSync(bindingsPath)) {
-    const manifest = JSON.parse(readBoundedUtf8(bindingsPath, 1024 * 1024));
-    const previous = Array.isArray(manifest?.bindings)
-      ? manifest.bindings.find(
-          (binding) =>
-            validAgentVersionId(binding?.agentVersionId) &&
-            binding.agentVersionId.startsWith("local-web-") &&
-            !binding.agentVersionId.endsWith("-planner") &&
-            !binding.agentVersionId.endsWith("-verifier"),
-        )?.agentVersionId
-      : null;
-    if (previous) agentVersionId = previous;
-  }
-  if (!validAgentVersionId(agentVersionId)) {
-    throw new Error("development agent version id is invalid");
-  }
-  writeFileSync(
-    identityPath,
-    JSON.stringify({
-      schemaVersion: "crewon.development-agent-identity.v0",
-      agentVersionId,
-    }),
-    { encoding: "utf8", mode: 0o600 },
-  );
-  chmodSync(identityPath, 0o600);
-  return agentVersionId;
-}
-
-function readBoundedUtf8(path, maxBytes) {
-  const metadata = statSync(path);
-  if (!metadata.isFile() || metadata.size < 1 || metadata.size > maxBytes) {
-    throw new Error("development runtime metadata is invalid");
-  }
-  return readFileSync(path, "utf8");
-}
-
-function validAgentVersionId(value) {
-  return (
-    typeof value === "string" &&
-    /^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$/u.test(value)
-  );
+  return `local-web-${fingerprint.slice(0, 24)}`;
 }
 
 function runtimeFiles(root) {
@@ -384,14 +372,14 @@ export async function main() {
   });
   const agentVersionId =
     process.env.CREWON_AGENT_VERSION_ID?.trim() ||
-    persistentDevelopmentAgentVersionId(
-      dataDirectory,
-      `local-web-${fingerprint.slice(0, 24)}`,
-    );
+    developmentAgentVersionId(fingerprint);
   const runtimeGeneration = `web-runtime-${fingerprint.slice(0, 32)}`;
   const controlPort = Number(process.env.CREWON_CONTROL_PORT ?? "3210");
   const probePort = Number(process.env.CREWON_PROVIDER_PROBE_PORT ?? "3211");
   const uiPort = Number(process.env.CREWON_UI_PORT ?? "5175");
+  const runtimeWorkerCount = developmentRuntimeWorkerCount(
+    process.env.CREWON_CONTROL_DEV_RUNTIME_WORKER_COUNT,
+  );
   for (const [name, port] of [
     ["CREWON_CONTROL_PORT", controlPort],
     ["CREWON_PROVIDER_PROBE_PORT", probePort],
@@ -437,23 +425,29 @@ export async function main() {
     ),
   );
   const runtimeMainUrl = pathToFileURL(join(runtimeSource, "main.ts")).href;
-  children.push(
-    spawnManaged(
-      "Runtime Worker",
-      process.execPath,
-      [
-        "--experimental-strip-types",
-        "--input-type=module",
-        "--eval",
-        `await import(${JSON.stringify(runtimeMainUrl)}); process.stdin.resume();`,
-      ],
-      {
-        cwd: repositoryRoot,
-        env: environment,
-        stdio: ["pipe", "inherit", "inherit"],
-      },
-    ),
-  );
+  for (
+    let workerIndex = 0;
+    workerIndex < runtimeWorkerCount;
+    workerIndex += 1
+  ) {
+    children.push(
+      spawnManaged(
+        `Runtime Worker ${workerIndex + 1}/${runtimeWorkerCount}`,
+        process.execPath,
+        [
+          "--experimental-strip-types",
+          "--input-type=module",
+          "--eval",
+          `await import(${JSON.stringify(runtimeMainUrl)}); process.stdin.resume();`,
+        ],
+        {
+          cwd: repositoryRoot,
+          env: developmentRuntimeWorkerEnvironment(environment, workerIndex),
+          stdio: ["pipe", "inherit", "inherit"],
+        },
+      ),
+    );
+  }
   if (!process.argv.includes("--runtime-only")) {
     children.push(
       spawnManaged(

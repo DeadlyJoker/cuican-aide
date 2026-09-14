@@ -60,7 +60,7 @@ const fieldCopy: Record<Locale, Record<string, FieldCopy>> = {
       label: "访问密钥",
     },
     "model-provider-base-url": {
-      description: "由模型服务提供；选择常用来源时会自动填写",
+      description: "填写服务地址（通常以 /v1 结尾），服务需支持 Responses 接口",
       label: "服务地址",
     },
     "model-provider-credential-kind": {
@@ -152,7 +152,7 @@ const fieldCopy: Record<Locale, Record<string, FieldCopy>> = {
     },
     "model-provider-base-url": {
       description:
-        "Provided by the model service and filled for common choices",
+        "Enter the service address (usually ending in /v1). Responses API support is required.",
       label: "Service address",
     },
     "model-provider-credential-kind": {
@@ -210,12 +210,6 @@ export function presentSettingsPanel(
   const fields = panel.fields?.map((field) => presentField(field, locale));
   const rows = panel.rows?.map((row) => presentRow(section, row, locale));
   const hasStructuredContent = Boolean(fields?.length || rows?.length);
-  const modelStatus =
-    section === "model-providers" && rows?.length && panel.body
-      ? panel.body
-          .split("\n")
-          .find((line) => /^(?:运行状态|Runtime)\s*[:：]/iu.test(line.trim()))
-      : undefined;
   const deviceSummary =
     section === "computer-control" && panel.body
       ? presentBody(section, panel.body, locale)
@@ -225,18 +219,14 @@ export function presentSettingsPanel(
     ...panel,
     title: settingsSectionLabel(section, locale),
     subtitle: settingsSectionDescription(section, locale),
-    body: modelStatus
-      ? [
-          productText(modelStatus, locale),
-          locale === "zh"
-            ? "访问密钥只保存在当前设备。"
-            : "Access keys stay on this device.",
-        ].join("\n")
-      : deviceSummary
-        ? deviceSummary
-        : panel.body && !hasStructuredContent
-          ? presentBody(section, panel.body, locale)
-          : undefined,
+    body:
+      section === "model-providers" && panel.body
+        ? presentBody(section, panel.body, locale)
+        : deviceSummary
+          ? deviceSummary
+          : panel.body && !hasStructuredContent
+            ? presentBody(section, panel.body, locale)
+            : undefined,
     error: panel.error ? presentError(section, panel.error, locale) : undefined,
     fields,
     rows,
@@ -406,11 +396,6 @@ function presentBody(
           .join("\n"),
       )
       .filter(Boolean);
-    outcome.push(
-      locale === "zh"
-        ? "访问密钥只保存在当前设备。切换模型不会中断正在进行的任务。"
-        : "Access keys stay on this device. Switching models will not interrupt a running task.",
-    );
     return outcome.join("\n\n");
   }
 

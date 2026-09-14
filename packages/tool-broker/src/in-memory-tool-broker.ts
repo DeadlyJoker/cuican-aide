@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import {
   canonicalActionIntent,
+  MAX_WORKSPACE_CHANGE_SUMMARY_BYTES,
   parseActionIntent,
   parseWorkspaceChangeSummary,
   type ActionIntent,
@@ -14,12 +15,23 @@ import {
   type ToolCallKind,
   type ToolDefinition,
   type ToolExecutionCommand,
+  type ToolExecutionReservation,
   type ToolExecutionPolicy,
   type ToolRuntimePort,
   type ToolExecutionResolution,
+  type ToolExecutionResultAcknowledgement,
+  type RetainedToolExecutionResultQuery,
+  type RetainedToolExecutionResult,
+  type RetainedToolExecutionResultLookup,
   type ToolInvocation,
   type ToolResult,
 } from "./tool-broker-port.ts";
+
+import { RetainedToolExecutions } from "./retained-tool-executions.ts";
+import {
+  ToolResultCapacity,
+  processToolResultCapacity,
+} from "./tool-result-capacity.ts";
 
 const MAX_ID_LENGTH = 512;
 const MAX_TOOL_NAME_LENGTH = 128;
@@ -43,18 +55,13 @@ export class InMemoryToolBroker implements ToolRuntimePort {
   readonly #definitions: readonly ToolDefinition[];
   readonly #handlers: ReadonlyMap<string, ToolHandler>;
   readonly #policies: ReadonlyMap<string, ToolExecutionPolicy>;
-  readonly #executionReceipts = new Map<
-    string,
-    Readonly<{
-      fingerprint: string;
-      resolution: Promise<ToolExecutionResolution>;
-    }>
-  >();
+  readonly #executions: RetainedToolExecutions;
 
   constructor(
     definitions: readonly ToolDefinition[] = [],
     handlers: ReadonlyMap<string, ToolHandler> = new Map(),
     policies: ReadonlyMap<string, ToolExecutionPolicy> = new Map(),
+    options: { resultCapacity?: ToolResultCapacity } = {},
   ) {
     if (definitions.length > MAX_TOOL_DEFINITIONS) {
       throw new ToolBrokerError("tool_definitions_too_many");
@@ -71,6 +78,9 @@ export class InMemoryToolBroker implements ToolRuntimePort {
     this.#definitions = structuredClone(definitions);
     this.#handlers = new Map(handlers);
     this.#policies = validatePolicies(policies, names);
+    this.#executions = new RetainedToolExecutions(
+      options.resultCapacity ?? processToolResultCapacity,
+    );
   }
 
   definitions(): readonly ToolDefinition[] {
@@ -93,51 +103,75 @@ export class InMemoryToolBroker implements ToolRuntimePort {
     command: ToolExecutionCommand,
     signal: AbortSignal,
   ): Promise<ToolExecutionResolution> {
+    return this.reserveExecution(command, signal).execute();
+  }
+
+  reserveExecution(
+    command: ToolExecutionCommand,
+    signal: AbortSignal,
+  ): ToolExecutionReservation {
     validateToolExecutionCommand(command);
     throwIfAborted(signal);
     const invocation = invocationFromCommand(command);
     const key = toolKey(command.kind, command.name);
-    if (this.#handlers.has(key) && !this.#policies.has(key)) {
+    if (this.#handlers.has(key) && !this.#policies.has(key))
       throw new ToolBrokerError("tool_execution_policy_missing");
-    }
     const fingerprint = executionFingerprint(command);
-    const prior = this.#executionReceipts.get(command.idempotencyKey);
-    if (prior !== undefined) {
-      if (prior.fingerprint !== fingerprint) {
-        throw new ToolBrokerError("tool_idempotency_conflict");
-      }
-      return prior.resolution;
-    }
+    const prior = this.#executions.find(command.idempotencyKey, fingerprint);
+    if (prior !== undefined) return { execute: () => prior, release() {} };
     const policy = this.#policies.get(key);
-    if (policy !== undefined) {
+    if (policy !== undefined)
       validateToolExecutionPolicyMatchesIntent(policy, command.actionIntent);
-    }
-    const resolution = this.#execute(invocation, signal).then(
-      (result) => ({
-        status: "completed" as const,
-        executionId: command.executionId,
-        providerReceiptId: providerReceiptId(command.executionId),
-        result,
-      }),
-      (error): ToolExecutionResolution => {
-        if (
-          !signal.aborted &&
-          !(error instanceof ToolExecutionUnknownOutcomeError)
-        ) {
-          throw error;
-        }
-        return {
-          status: policy?.effect === "mutation" ? "unknownOutcome" : "canceled",
-          executionId: command.executionId,
-          providerReceiptId: null,
-        };
-      },
-    );
-    this.#executionReceipts.set(command.idempotencyKey, {
+    return this.#executions.reserve({
+      command,
       fingerprint,
-      resolution,
+      maximumResultBytes:
+        MAX_TOOL_OUTPUT_BYTES + MAX_WORKSPACE_CHANGE_SUMMARY_BYTES + 16 * 1024,
+      execute: () =>
+        this.#execute(invocation, signal).then(
+          (result) => ({
+            status: "completed" as const,
+            executionId: command.executionId,
+            providerReceiptId: providerReceiptId(command.executionId),
+            result,
+          }),
+          (error): ToolExecutionResolution => {
+            if (
+              !signal.aborted &&
+              !(error instanceof ToolExecutionUnknownOutcomeError)
+            )
+              throw error;
+            return {
+              status:
+                policy?.effect === "mutation" ? "unknownOutcome" : "canceled",
+              executionId: command.executionId,
+              providerReceiptId: null,
+            };
+          },
+        ),
     });
-    return resolution;
+  }
+
+  get retainedExecutionCount(): number {
+    return this.#executions.size;
+  }
+
+  retainedExecutionResults(
+    query: RetainedToolExecutionResultQuery,
+  ): readonly RetainedToolExecutionResult[] {
+    return this.#executions.retained(query);
+  }
+
+  acknowledgeExecutionResult(
+    acknowledgement: ToolExecutionResultAcknowledgement,
+  ): void {
+    validateToolExecutionResultAcknowledgement(acknowledgement);
+    this.#executions.acknowledge(acknowledgement);
+  }
+
+  readRetainedExecutionResult(lookup: RetainedToolExecutionResultLookup) {
+    validateToolExecutionResultIdentity(lookup);
+    return this.#executions.read(lookup);
   }
 
   reconcile(
@@ -146,13 +180,11 @@ export class InMemoryToolBroker implements ToolRuntimePort {
   ): Promise<ToolExecutionResolution> {
     validateToolExecutionCommand(command);
     throwIfAborted(signal);
-    const prior = this.#executionReceipts.get(command.idempotencyKey);
-    if (prior !== undefined) {
-      if (prior.fingerprint !== executionFingerprint(command)) {
-        throw new ToolBrokerError("tool_idempotency_conflict");
-      }
-      return prior.resolution;
-    }
+    const prior = this.#executions.recover(
+      command.idempotencyKey,
+      executionFingerprint(command),
+    );
+    if (prior !== undefined) return prior;
     const key = toolKey(command.kind, command.name);
     const policy = this.#policies.get(key);
     if (!this.#handlers.has(key) || policy?.recovery === "replaySafe") {
@@ -171,13 +203,11 @@ export class InMemoryToolBroker implements ToolRuntimePort {
   ): Promise<ToolExecutionResolution> {
     validateToolExecutionCommand(command);
     throwIfAborted(signal);
-    const prior = this.#executionReceipts.get(command.idempotencyKey);
-    if (prior !== undefined) {
-      if (prior.fingerprint !== executionFingerprint(command)) {
-        throw new ToolBrokerError("tool_idempotency_conflict");
-      }
-      return prior.resolution;
-    }
+    const prior = this.#executions.recover(
+      command.idempotencyKey,
+      executionFingerprint(command),
+    );
+    if (prior !== undefined) return prior;
     return this.#handlers.has(toolKey(command.kind, command.name))
       ? {
           status: "unknownOutcome",
@@ -195,6 +225,7 @@ export class InMemoryToolBroker implements ToolRuntimePort {
     invocation: ToolInvocation,
     signal: AbortSignal,
   ): Promise<ToolResult> {
+    throwIfAborted(signal);
     const handler = this.#handlers.get(
       toolKey(invocation.kind, invocation.name),
     );
@@ -414,17 +445,58 @@ function invocationFromCommand(command: ToolExecutionCommand): ToolInvocation {
   };
 }
 
+export function validateToolExecutionResultAcknowledgement(
+  acknowledgement: ToolExecutionResultAcknowledgement,
+): void {
+  const intent = validateToolExecutionResultIdentity(acknowledgement);
+  if (
+    (acknowledgement.status !== "completed" &&
+      acknowledgement.status !== "canceled" &&
+      acknowledgement.status !== "unknownOutcome") ||
+    (acknowledgement.status === "unknownOutcome" &&
+      (intent.effect !== "mutation" || intent.recovery !== "reconcilable")) ||
+    (acknowledgement.status === "completed" &&
+      acknowledgement.providerReceiptId === null)
+  ) {
+    throw new ToolBrokerError("tool_result_acknowledgement_invalid");
+  }
+  if (acknowledgement.providerReceiptId !== null) {
+    requireBoundedNonEmpty(
+      acknowledgement.providerReceiptId,
+      MAX_ID_LENGTH,
+      "tool_result_acknowledgement_invalid",
+    );
+  }
+}
+
+function validateToolExecutionResultIdentity(
+  identity: RetainedToolExecutionResultLookup,
+): ActionIntent {
+  for (const value of [identity.executionId, identity.idempotencyKey])
+    requireBoundedNonEmpty(
+      value,
+      MAX_ID_LENGTH,
+      "tool_result_acknowledgement_invalid",
+    );
+  const intent = parseActionIntent(identity.actionIntent);
+  if (identity.actionDigest !== sha256(canonicalActionIntent(intent)))
+    throw new ToolBrokerError("tool_result_acknowledgement_invalid");
+  return intent;
+}
+
 function executionFingerprint(command: ToolExecutionCommand): string {
-  return JSON.stringify({
-    executionId: command.executionId,
-    actionDigest: command.actionDigest,
-    actionIntent: canonicalActionIntent(command.actionIntent),
-    approvalProof: command.approvalProof,
-    callId: command.callId,
-    kind: command.kind,
-    name: command.name,
-    input: command.input,
-  });
+  return sha256(
+    JSON.stringify({
+      executionId: command.executionId,
+      actionDigest: command.actionDigest,
+      actionIntent: canonicalActionIntent(command.actionIntent),
+      approvalProof: command.approvalProof,
+      callId: command.callId,
+      kind: command.kind,
+      name: command.name,
+      input: command.input,
+    }),
+  );
 }
 
 function validateApprovalProof(

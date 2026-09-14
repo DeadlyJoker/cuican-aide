@@ -14,6 +14,7 @@ import {
 import { SettingsIcon } from "./SettingsIcon";
 
 type SettingsNavigationProps = {
+  hiddenSections?: readonly SettingsSection[];
   activeSection: SettingsSection;
   locale: Locale;
   onBack: () => void;
@@ -21,6 +22,7 @@ type SettingsNavigationProps = {
 };
 
 export function SettingsNavigation({
+  hiddenSections,
   activeSection,
   locale,
   onBack,
@@ -34,15 +36,23 @@ export function SettingsNavigation({
       settingsCatalog
         .map((group) => ({
           ...group,
-          items: group.items.filter((item) =>
-            [settingsSectionLabel(item.id, locale), item.description[locale]]
-              .join(" ")
-              .toLowerCase()
-              .includes(normalizedQuery),
+          items: group.items.filter(
+            (item) =>
+              !hiddenSections?.includes(item.id) &&
+              [settingsSectionLabel(item.id, locale), item.description[locale]]
+                .concat(
+                  item.id,
+                  item.id === "mcp-servers"
+                    ? "插件 plugin MCP skill 技能 扩展"
+                    : "",
+                )
+                .join(" ")
+                .toLowerCase()
+                .includes(normalizedQuery),
           ),
         }))
         .filter((group) => group.items.length > 0),
-    [locale, normalizedQuery],
+    [locale, normalizedQuery, hiddenSections],
   );
 
   return (
@@ -84,6 +94,7 @@ export function SettingsNavigation({
                   size="sm"
                   className="w-full justify-start gap-2"
                   data-active={isActive}
+                  aria-current={isActive ? "page" : undefined}
                   onClick={() => onSectionChange(item.id)}
                 >
                   <SettingsIcon icon={item.icon} size={14} />

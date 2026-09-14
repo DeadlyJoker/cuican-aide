@@ -5,8 +5,13 @@ import {
   type ContextCompactionResult,
   type ContextCompactorPort,
 } from "@crewon/context";
+import {
+  MAX_COMPACTION_CONTEXT_ATTEMPTS,
+  nextCompactionRecoveryHistory,
+  validateCompactionPrefix,
+} from "./compaction-recovery-history.ts";
 
-/** Executes one Tool-free bounded Kernel segment and returns only its compaction result. */
+/** Runs Tool-free compaction with bounded recovery from context overflow. */
 export class KernelContextCompactor implements ContextCompactorPort {
   readonly #kernel: AgentKernelPort;
 
@@ -17,16 +22,37 @@ export class KernelContextCompactor implements ContextCompactorPort {
   async compact(
     contract: ContextCompactionContract,
     signal: AbortSignal,
+    options?: Parameters<ContextCompactorPort["compact"]>[2],
   ): Promise<ContextCompactionResult> {
-    let history = [...contract.history];
-    while (true) {
+    signal.throwIfAborted();
+    const protectedPrefixLength = contract.protectedPrefixLength ?? 0;
+    validateCompactionPrefix(contract.history, protectedPrefixLength);
+    if (contract.history.length === protectedPrefixLength) {
+      throw new AgentKernelError("compaction_source_empty", false);
+    }
+    let history = contract.history;
+    for (let attempt = 1; ; attempt += 1) {
+      signal.throwIfAborted();
       try {
-        return await this.#compactOnce({ ...contract, history }, signal);
+        return await this.#compactOnce(
+          { ...contract, history },
+          signal,
+          options,
+        );
       } catch (error) {
-        if (!isContextWindowExceeded(error) || history.length === 0) {
+        signal.throwIfAborted();
+        if (
+          !isContextWindowExceeded(error) ||
+          attempt >= MAX_COMPACTION_CONTEXT_ATTEMPTS
+        ) {
           throw error;
         }
-        history = history.slice(1);
+        const next = nextCompactionRecoveryHistory(
+          history,
+          protectedPrefixLength,
+        );
+        if (next === null) throw error;
+        history = next;
       }
     }
   }
@@ -34,6 +60,7 @@ export class KernelContextCompactor implements ContextCompactorPort {
   async #compactOnce(
     contract: ContextCompactionContract,
     signal: AbortSignal,
+    options?: Parameters<ContextCompactorPort["compact"]>[2],
   ): Promise<ContextCompactionResult> {
     let output = "";
     let usage: ContextCompactionResult["usage"] | null = null;
@@ -61,6 +88,7 @@ export class KernelContextCompactor implements ContextCompactorPort {
         budget: { maxOutputBytes: contract.maxOutputBytes },
       },
       signal,
+      options,
     )) {
       switch (event.type) {
         case "segment.started":

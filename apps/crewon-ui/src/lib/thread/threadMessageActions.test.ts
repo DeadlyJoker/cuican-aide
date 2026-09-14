@@ -8,6 +8,7 @@ import type { PendingComposerMention } from "../shared/composerMentions";
 import type { ComposerImageInput } from "../shared/composerImages";
 import type { NoticeState } from "../shared/noticeState";
 import type { ThreadRuntimeSettings } from "./threadRuntimeSettings";
+import { transcriptFixture } from "../control-runtime/controlTranscriptWindow.test-support";
 import {
   createDemoThreadAction,
   createThreadAction,
@@ -173,6 +174,55 @@ function baseSendParams(
 }
 
 describe("thread message actions", () => {
+  it("uses the actual Control runtime's subscribed updates without starting the fallback refresh loop", async () => {
+    vi.useFakeTimers();
+    const onTextDelta = vi.fn();
+    const f = transcriptFixture(0, { onTextDelta });
+    f.runtime.setThreadEventStreamFocus(null);
+    const state = threadState();
+    const read = vi.spyOn(f.runtime, "readThread");
+    try {
+      await sendMessageAction(baseSendParams({
+        client: f.runtime,
+        setThreads: state.setThreads,
+        setActiveTurnByThread: state.setActiveTurnByThread,
+      }));
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(state.threads[0]!.turns[0]!.id).toBe("run-replacement");
+      expect(state.activeTurns).toEqual({ "thread-1": "run-replacement" });
+      expect(onTextDelta).toHaveBeenCalledWith("thread-1", "Still running");
+      expect(read).not.toHaveBeenCalled();
+      expect(f.mutations).toHaveLength(1);
+      expect(f.mutations[0]!.path).toMatch(/\/turns$/);
+    } finally {
+      f.runtime.close();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(vi.getTimerCount()).toBe(0);
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps a newer active Turn when a fallback refresh observes the old Turn's completion", async () => {
+    vi.useFakeTimers();
+    const state = threadState();
+    const readThread = vi.fn(async () => thread({ turns: [turn({ status: "completed" }), turn({ id: "turn-2" })] }));
+    try {
+      await sendMessageAction(baseSendParams({
+        client: { ...baseSendParams().client!, readThread },
+        setThreads: state.setThreads,
+        setActiveTurnByThread: state.setActiveTurnByThread,
+      }));
+      state.setActiveTurnByThread(() => ({ "thread-1": "turn-2" }));
+      await vi.advanceTimersByTimeAsync(250);
+      expect(readThread).toHaveBeenCalledOnce();
+      expect(state.activeTurns).toEqual({ "thread-1": "turn-2" });
+      expect(state.threads[0]!.turns.map((value) => value.id)).toEqual(["turn-1", "turn-2"]);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps pending composer mentions only while their visible tokens remain", () => {
     expect(
       visibleComposerMentionsForText("$files summarize", [

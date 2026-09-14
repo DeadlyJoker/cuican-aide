@@ -34,6 +34,10 @@ import {
   type TaskDetailWorkspaceGitClient,
 } from "../../lib/task-detail/useTaskDetailWorkspaceGit";
 import "./AppCommandShellRoute.css";
+import {
+  TaskWorkbenchActionsContext,
+  useTaskWorkbench,
+} from "../workbench/TaskWorkbenchContext";
 
 type AppCommandShellRouteProps = ComponentProps<typeof CommandWorkspace> & {
   capabilityDrawer: CommandWorkspaceCapabilityDrawerProps;
@@ -432,91 +436,100 @@ export function AppCommandShellRoute({
       <SlidersHorizontal aria-hidden="true" />
     </button>
   ) : null;
+  const taskWorkbench = useTaskWorkbench(openCapability);
 
   return (
-    <div
-      className="command-shell-route"
-      data-active-overlay={activeOverlay ?? "none"}
-      data-capability-sidebar-open={capabilityDrawer.open ? "true" : "false"}
-      data-task-detail-open={taskDetailOpen ? "true" : "false"}
-      onFocusCapture={(event) => activateOverlayFromTarget(event.target)}
-      onKeyDown={handleEscape}
-      onPointerDownCapture={(event) => activateOverlayFromTarget(event.target)}
-    >
-      <CommandWorkspace
-        {...commandWorkspaceProps}
-        onTaskDetailAvailabilityChange={handleTaskDetailAvailabilityChange}
-        taskChanges={
-          projection?.changes.complete && projection.changes.fileCount > 0
-            ? {
-                additions: projection.changes.recordedAdditions,
-                deletions: projection.changes.recordedDeletions,
-                files: projection.changes.fileCount,
-              }
-            : null
+    <TaskWorkbenchActionsContext.Provider value={taskWorkbench.actions}>
+      <div
+        className="command-shell-route"
+        data-active-overlay={activeOverlay ?? "none"}
+        data-capability-sidebar-open={capabilityDrawer.open ? "true" : "false"}
+        data-task-detail-open={taskDetailOpen ? "true" : "false"}
+        onFocusCapture={(event) => activateOverlayFromTarget(event.target)}
+        onKeyDown={handleEscape}
+        onPointerDownCapture={(event) =>
+          activateOverlayFromTarget(event.target)
         }
-        taskDetailTrigger={taskDetailTrigger}
-      />
-      {presentation ? (
-        <TaskDetailPopover
-          escapeOwner="route"
-          interactionInactive={taskDetailInactive}
-          locale={locale}
-          open={taskDetailOpen}
-          presentation={presentation}
-          processes={processPresentation}
-          onClose={closeTaskDetail}
-          onOpenReview={capabilityDrawer.disabled ? undefined : openReview}
-          onOpenTerminal={capabilityDrawer.disabled ? undefined : openTerminal}
-          onStopTask={
-            commandWorkspaceProps.activeTurnId &&
-            commandWorkspaceProps.connectionState === "connected" &&
-            commandWorkspaceProps.onStop
-              ? stopCurrentTask
-              : undefined
+      >
+        <CommandWorkspace
+          {...commandWorkspaceProps}
+          onTaskDetailAvailabilityChange={handleTaskDetailAvailabilityChange}
+          taskChanges={
+            projection?.changes.complete && projection.changes.fileCount > 0
+              ? {
+                  additions: projection.changes.recordedAdditions,
+                  deletions: projection.changes.recordedDeletions,
+                  files: projection.changes.fileCount,
+                }
+              : null
           }
-          stopTaskPending={stopTaskPending}
-          onTerminateProcess={
-            processAuthorityAvailable
-              ? (processId) => void processRuntime.terminate(processId)
-              : undefined
-          }
+          taskDetailTrigger={taskDetailTrigger}
         />
-      ) : null}
-      {taskDetailOpen && capabilityDrawer.open ? (
-        <button
-          aria-label={
-            activeOverlay === "workbench"
-              ? locale === "zh"
-                ? "显示任务详细信息"
-                : "Show task details"
-              : locale === "zh"
-                ? "显示工作台"
-                : "Show workbench"
-          }
-          aria-controls={
-            activeOverlay === "workbench"
-              ? DEFAULT_TASK_DETAIL_POPOVER_ID
-              : DEFAULT_COMMAND_WORKBENCH_ID
-          }
-          className="command-shell-overlay-switch"
-          type="button"
-          onClick={switchOverlay}
-        >
-          {activeOverlay === "workbench" ? (
-            <SlidersHorizontal aria-hidden="true" />
-          ) : (
-            <PanelRight aria-hidden="true" />
-          )}
-        </button>
-      ) : null}
-      <CommandWorkspaceCapabilityDrawer
-        {...capabilityDrawer}
-        interactionInactive={workbenchInactive}
-        onClose={closeCapabilityAndRestoreFocus}
-        onOpen={openCapability}
-      />
-      <AppConfirmDialog {...confirmDialog} />
-    </div>
+        {presentation ? (
+          <TaskDetailPopover
+            escapeOwner="route"
+            interactionInactive={taskDetailInactive}
+            locale={locale}
+            open={taskDetailOpen}
+            presentation={presentation}
+            processes={processPresentation}
+            onClose={closeTaskDetail}
+            onOpenReview={capabilityDrawer.disabled ? undefined : openReview}
+            onOpenTerminal={
+              capabilityDrawer.disabled ? undefined : openTerminal
+            }
+            onStopTask={
+              commandWorkspaceProps.activeTurnId &&
+              commandWorkspaceProps.connectionState === "connected" &&
+              commandWorkspaceProps.onStop
+                ? stopCurrentTask
+                : undefined
+            }
+            stopTaskPending={stopTaskPending}
+            onTerminateProcess={
+              processAuthorityAvailable
+                ? (processId) => void processRuntime.terminate(processId)
+                : undefined
+            }
+          />
+        ) : null}
+        {taskDetailOpen && capabilityDrawer.open ? (
+          <button
+            aria-label={
+              activeOverlay === "workbench"
+                ? locale === "zh"
+                  ? "显示任务详细信息"
+                  : "Show task details"
+                : locale === "zh"
+                  ? "显示工作台"
+                  : "Show workbench"
+            }
+            aria-controls={
+              activeOverlay === "workbench"
+                ? DEFAULT_TASK_DETAIL_POPOVER_ID
+                : DEFAULT_COMMAND_WORKBENCH_ID
+            }
+            className="command-shell-overlay-switch"
+            type="button"
+            onClick={switchOverlay}
+          >
+            {activeOverlay === "workbench" ? (
+              <SlidersHorizontal aria-hidden="true" />
+            ) : (
+              <PanelRight aria-hidden="true" />
+            )}
+          </button>
+        ) : null}
+        <CommandWorkspaceCapabilityDrawer
+          {...capabilityDrawer}
+          taskSnapshot={taskWorkbench.snapshot}
+          workbenchRequest={taskWorkbench.request}
+          interactionInactive={workbenchInactive}
+          onClose={closeCapabilityAndRestoreFocus}
+          onOpen={openCapability}
+        />
+        <AppConfirmDialog {...confirmDialog} />
+      </div>
+    </TaskWorkbenchActionsContext.Provider>
   );
 }

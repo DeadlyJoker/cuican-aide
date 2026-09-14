@@ -6,9 +6,9 @@ import {
   SquarePen,
   Trash2,
 } from "lucide-react";
-import type { FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { CommandSidebarThreadRow } from "./CommandSidebarThreadRow";
+import { CommandSidebarThreadList } from "./CommandSidebarThreadList";
 import type {
   CommandControlWorkspaceNav,
   CommandLinkedThread,
@@ -42,6 +42,8 @@ type Copy = {
   workspaceSelectFailed: (detail: string) => string;
   workspaceThreadsEmpty: string;
   workspaceTree: string;
+  showMoreThreads: (count: number) => string;
+  showFewerThreads: string;
 };
 
 function workspaceName(path: string, emptyLabel = "工作空间"): string {
@@ -112,21 +114,38 @@ export function CommandSidebarWorkspaceTree(props: {
     removeWorkspace,
     controlWorkspace,
   } = props;
-  const renderThreadItems = (
-    threads: CommandLinkedThread[],
-    workspaceLabel: string,
-  ) =>
-    threads.map((thread) => (
-      <CommandSidebarThreadRow
-        archiveLabel={copy.archiveThread}
-        key={thread.id}
-        onArchive={onArchiveThread}
-        onOpen={onOpenLinkedThread}
-        selected={selectedLinkedThreadId === thread.id}
-        thread={thread}
-        workspaceLabel={workspaceLabel}
-      />
-    ));
+  const [expandedThreadGroups, setExpandedThreadGroups] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
+  const renderThreadItems = ({
+    threads,
+    workspaceLabel,
+    workspaceKey,
+  }: {
+    threads: CommandLinkedThread[];
+    workspaceLabel: string;
+    workspaceKey: string;
+  }) => (
+    <CommandSidebarThreadList
+      archiveLabel={copy.archiveThread}
+      onArchive={onArchiveThread}
+      onOpen={onOpenLinkedThread}
+      selectedThreadId={selectedLinkedThreadId}
+      threads={threads}
+      workspaceLabel={workspaceLabel}
+      expanded={expandedThreadGroups.has(workspaceKey)}
+      onToggleExpanded={() =>
+        setExpandedThreadGroups((current) => {
+          const next = new Set(current);
+          if (next.has(workspaceKey)) next.delete(workspaceKey);
+          else next.add(workspaceKey);
+          return next;
+        })
+      }
+      showMoreLabel={copy.showMoreThreads}
+      showFewerLabel={copy.showFewerThreads}
+    />
+  );
   return (
     <TooltipProvider delayDuration={350}>
       <section
@@ -210,7 +229,11 @@ export function CommandSidebarWorkspaceTree(props: {
                   id="current-workspace-thread-list"
                 >
                   {linkedThreads.length > 0 ? (
-                    renderThreadItems(linkedThreads, controlWorkspace.name)
+                    renderThreadItems({
+                      threads: linkedThreads,
+                      workspaceLabel: controlWorkspace.name,
+                      workspaceKey: `control:${controlWorkspace.name}`,
+                    })
                   ) : (
                     <p className="sidebar-empty-hint">
                       {copy.workspaceThreadsEmpty}
@@ -257,7 +280,11 @@ export function CommandSidebarWorkspaceTree(props: {
                       hidden={standaloneWorkspaceCollapsed}
                       id="standalone-workspace-thread-list"
                     >
-                      {renderThreadItems(linkedThreads, copy.noWorkspace)}
+                      {renderThreadItems({
+                        threads: linkedThreads,
+                        workspaceLabel: copy.noWorkspace,
+                        workspaceKey: "control:standalone",
+                      })}
                     </div>
                   </div>
                 ) : null}
@@ -394,10 +421,11 @@ export function CommandSidebarWorkspaceTree(props: {
                   id="current-workspace-thread-list"
                 >
                   {currentWorkspaceThreads.length > 0 ? (
-                    renderThreadItems(
-                      currentWorkspaceThreads,
-                      currentWorkspaceName,
-                    )
+                    renderThreadItems({
+                      threads: currentWorkspaceThreads,
+                      workspaceLabel: currentWorkspaceName,
+                      workspaceKey: `legacy:${cwd}`,
+                    })
                   ) : (
                     <p className="sidebar-empty-hint">
                       {copy.workspaceThreadsEmpty}
@@ -453,7 +481,11 @@ export function CommandSidebarWorkspaceTree(props: {
                     className="conversation-list recent-thread-list"
                     id={`other-workspace-thread-list-${index}`}
                   >
-                    {renderThreadItems(group.threads, name)}
+                    {renderThreadItems({
+                      threads: group.threads,
+                      workspaceLabel: name,
+                      workspaceKey: `legacy:${group.path}`,
+                    })}
                   </div>
                 </div>
               );
@@ -491,7 +523,11 @@ export function CommandSidebarWorkspaceTree(props: {
                   hidden={standaloneWorkspaceCollapsed}
                   id="standalone-workspace-thread-list"
                 >
-                  {renderThreadItems(standaloneThreads, copy.noWorkspace)}
+                  {renderThreadItems({
+                    threads: standaloneThreads,
+                    workspaceLabel: copy.noWorkspace,
+                    workspaceKey: "legacy:standalone",
+                  })}
                 </div>
               </div>
             ) : null}

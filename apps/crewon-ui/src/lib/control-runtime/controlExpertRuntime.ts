@@ -18,6 +18,10 @@ const RECORD_MARKER = "[Control Experts · definition]";
 const OFFICE_TITLE_PREFIX = "专家团 · ";
 const PAGE_SIZE = 100;
 const MAX_PAGES = 100;
+const MAX_EXPERT_RESPONSIBILITY_CHARACTERS = 240;
+const MAX_EXPERT_ROLE_CHARACTERS = 32;
+
+type ExpertProfileStorage = Pick<Storage, "getItem" | "setItem"> | null;
 
 export type ControlExpertRuntimeClient = ControlOfficeClient &
   Pick<
@@ -39,30 +43,32 @@ export type ControlExpertCreateInput = Readonly<{
 export class ControlExpertRuntime {
   readonly #client: ControlExpertRuntimeClient;
   readonly #locale: Locale;
+  readonly #profileStorage: ExpertProfileStorage | undefined;
 
   constructor(config: {
     client: ControlExpertRuntimeClient;
     locale: Locale;
+    profileStorage?: ExpertProfileStorage;
   }) {
     this.#client = config.client;
     this.#locale = config.locale;
+    this.#profileStorage = config.profileStorage;
   }
 
   async createExpertTeam(input: {
     definition: ControlExpertCreateInput;
     agents: readonly { config: AgentConfig; filePath: string }[];
-  }): Promise<Readonly<{
-    record: ExpertTeamRecordReference;
-    office: OfficeConfigRecordReference;
-  }>> {
+  }): Promise<
+    Readonly<{
+      record: ExpertTeamRecordReference;
+      office: OfficeConfigRecordReference;
+    }>
+  > {
     validateDefinition(input.definition);
     if (input.agents.length === 0) {
       throw new Error("control_expert_agent_version_unavailable");
     }
-    const roles = [
-      input.definition.leader,
-      ...input.definition.experts,
-    ];
+    const roles = [input.definition.leader, ...input.definition.experts];
     const office = await createControlOffice({
       client: this.#client,
       locale: this.#locale,
@@ -70,13 +76,20 @@ export class ControlExpertRuntime {
       members: roles.map((role, index) => ({
         config: input.agents[index % input.agents.length]!.config,
         displayName: `${role.name} · ${role.role}`,
+        responsibility: expertRoleResponsibility(
+          role,
+          index === 0,
+          this.#locale,
+        ),
       })),
+      storage: this.#profileStorage,
     });
     if (office.authority !== "controlDefinition") {
       throw new Error("control_expert_office_response_invalid");
     }
     const record = recordFromDefinition(
       office.definition.officeVersionId,
+      office.definition.officeId,
       input.definition,
     );
     const marker = await this.#client.createThread(
@@ -107,9 +120,7 @@ export class ControlExpertRuntime {
     return records
       .filter((record): record is ExpertTeamRecordReference => record !== null)
       .sort((left, right) =>
-        right.config.recordRevision.localeCompare(
-          left.config.recordRevision,
-        ),
+        right.config.recordRevision.localeCompare(left.config.recordRevision),
       );
   }
 
@@ -135,10 +146,34 @@ export class ControlExpertRuntime {
       }
       return {
         filePath: `control:experts:${expertsId}`,
-        config,
+        config: await this.#withStableOfficeIdentity(config),
       };
     } catch {
       return null;
+    }
+  }
+
+  async #withStableOfficeIdentity(
+    config: ExpertTeamRecordReference["config"],
+  ): Promise<ExpertTeamRecordReference["config"]> {
+    if (config.officeId !== undefined) return config;
+    try {
+      const { office } = await this.#client.getOffice(config.expertsId);
+      const officeId = office.officeId.trim();
+      if (
+        !officeId ||
+        office.officeVersionId !== config.expertsId ||
+        office.title !== `${OFFICE_TITLE_PREFIX}${config.title.trim()}` ||
+        office.members.length !== config.experts.length + 1 ||
+        office.executionTargets.length !== office.members.length
+      ) {
+        return config;
+      }
+      return { ...config, officeId };
+    } catch {
+      // Legacy records remain usable as execution targets. Profile projection
+      // stays fail-closed until their backing Office identity can be proven.
+      return config;
     }
   }
 
@@ -146,7 +181,10 @@ export class ControlExpertRuntime {
     const data: ThreadView[] = [];
     let cursor: string | null = null;
     for (let page = 0; page < MAX_PAGES; page += 1) {
-      const response = await this.#client.listThreads({ cursor, limit: PAGE_SIZE });
+      const response = await this.#client.listThreads({
+        cursor,
+        limit: PAGE_SIZE,
+      });
       data.push(...response.data);
       if (response.nextCursor === null) return data;
       cursor = response.nextCursor;
@@ -174,12 +212,14 @@ export function isControlExpertOfficeRecord(
 
 function recordFromDefinition(
   expertsId: string,
+  officeId: string,
   definition: ControlExpertCreateInput,
 ): ExpertTeamRecordReference {
   return {
     filePath: `control:experts:${expertsId}`,
     config: {
       expertsId,
+      officeId,
       title: definition.title.trim(),
       goal: definition.goal.trim(),
       leader: normalizeRole(definition.leader),
@@ -198,6 +238,47 @@ function normalizeRole(role: ExpertRole): ExpertRole {
     agentType: role.agentType,
     instructions: role.instructions?.trim() || null,
   };
+}
+
+function expertRoleResponsibility(
+  role: ExpertRole,
+  isLeader: boolean,
+  locale: Locale,
+): string {
+  const roleDescription = role.role.trim().slice(0, MAX_EXPERT_ROLE_CHARACTERS);
+  const lines =
+    locale === "zh"
+      ? [
+          `角色职责：${roleDescription}`,
+          ...(isLeader
+            ? [
+                "组长：你是唯一汇总出口；综合成员报告并保留未解决分歧，不得抹平冲突。",
+              ]
+            : []),
+          role.agentType === "explorer"
+            ? "Explorer：枚举证据、冲突、假设和未知；区分事实与推断，证据不足时不得收敛。"
+            : "Worker：仅将已确认材料转成可执行方案、验收动作和完成标准；明确依赖与缺口，不得补造事实或证据。",
+        ]
+      : [
+          `Role: ${roleDescription}`,
+          ...(isLeader
+            ? [
+                "Leader: sole final synthesizer; preserve unresolved disagreements.",
+              ]
+            : []),
+          role.agentType === "explorer"
+            ? "Explorer: enumerate evidence, conflicts, assumptions and unknowns; distinguish fact from inference; no unsupported convergence."
+            : "Worker: convert confirmed material into executable steps and acceptance checks; expose gaps; fabricate no evidence.",
+        ];
+  const required = lines.join("\n");
+  const instructions = role.instructions?.trim();
+  if (!instructions) return required;
+  const label = locale === "zh" ? "补充要求：" : "Additional instructions: ";
+  const available =
+    MAX_EXPERT_RESPONSIBILITY_CHARACTERS - required.length - label.length - 1;
+  return available <= 0
+    ? required.slice(0, MAX_EXPERT_RESPONSIBILITY_CHARACTERS)
+    : `${required}\n${label}${instructions.slice(0, available)}`;
 }
 
 function validateDefinition(definition: ControlExpertCreateInput): void {
@@ -230,6 +311,8 @@ function isExpertConfig(
   if (!plain(value)) return false;
   return (
     typeof value.expertsId === "string" &&
+    (value.officeId === undefined ||
+      (typeof value.officeId === "string" && Boolean(value.officeId.trim()))) &&
     typeof value.title === "string" &&
     typeof value.goal === "string" &&
     typeof value.recordRevision === "string" &&

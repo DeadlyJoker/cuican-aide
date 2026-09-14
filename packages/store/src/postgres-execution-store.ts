@@ -1,3 +1,5 @@
+import { wakePostgresCanceledReconciliation } from "./postgres-reconciliation-cancellation-wake.ts";
+import type { RunLifecycleEvent } from "@crewon/domain";
 import {
   RunStoreError,
   evaluateGoalToolCall,
@@ -353,6 +355,19 @@ export class PostgresExecutionStore
     } finally {
       client.release();
     }
+  }
+
+  protected override async wakeCanceledReconciliationWithin(
+    client: PoolClient,
+    state: RunState,
+    events: readonly RunLifecycleEvent[],
+  ): Promise<void> {
+    await wakePostgresCanceledReconciliation(
+      client,
+      this.schemaSql(),
+      state,
+      events,
+    );
   }
 
   async loadToolExecutionReceipt(

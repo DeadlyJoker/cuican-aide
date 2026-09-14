@@ -1,3 +1,5 @@
+import type { StorageAdmissionPort } from "@crewon/application";
+import { createLocalStorageAdmissionOwner } from "@crewon/store";
 import {
   CrewONAgentKernel,
   type ModelTransportPort,
@@ -81,6 +83,8 @@ import {
 export { compileRuntimeAgentVersion } from "./agent-version-release.ts";
 
 export type RuntimeWorkerCompositionConfig = Readonly<{
+  storageAdmission?: StorageAdmissionPort;
+  localStoragePaths?: readonly string[];
   runtimeTenantId: string;
   route: RunRoute;
   transport: ModelTransportPort;
@@ -181,7 +185,10 @@ export async function createStandaloneRuntimeWorker(
     return await composeRuntimeWorker(
       store,
       workspaceReadStore,
-      config,
+      {
+        ...config,
+        localStoragePaths: [config.databasePath, ...(config.localStoragePaths ?? [])],
+      },
       releasePlan,
     );
   } catch (error) {
@@ -211,10 +218,9 @@ export async function createPostgresRuntimeWorker(
     workspaceReadStore =
       config.workspaceReadFile === undefined
         ? undefined
-        : await PostgresWorkspaceReadFileStore.open(
-            config.connectionString,
-            { schema: config.schema },
-          );
+        : await PostgresWorkspaceReadFileStore.open(config.connectionString, {
+            schema: config.schema,
+          });
   } catch (error) {
     await Promise.allSettled([
       workspaceReadStore?.close() ?? Promise.resolve(),
@@ -325,6 +331,7 @@ async function composeRuntimeWorker(
     tenantId: config.runtimeTenantId,
     runtime: {
       version: agentVersion,
+      executionAuthority: "crewonKernel",
       kernel,
       policy,
       toolRuntime,
@@ -350,7 +357,12 @@ async function composeRuntimeWorker(
       config.agentVersionRuntimeFactory ??
       staticAgentVersionRuntimeFactory(config, toolRuntime),
   });
+  const storageCapacity = createLocalStorageAdmissionOwner({
+    configured: config.storageAdmission,
+    paths: config.localStoragePaths ?? [],
+  });
   const execution = new RunExecutionService({
+    storageAdmission: storageCapacity.admission,
     store,
     clock,
     ids,
@@ -442,6 +454,7 @@ async function composeRuntimeWorker(
       });
     }
   } catch (error) {
+    storageCapacity.close();
     await Promise.allSettled([
       workspacePrivateServer?.close() ?? Promise.resolve(),
       providerProbeServer?.close() ?? Promise.resolve(),
@@ -462,6 +475,7 @@ async function composeRuntimeWorker(
         return;
       }
       closed = true;
+      storageCapacity.close();
       const results = await Promise.allSettled([
         workspacePrivateServer?.close() ?? Promise.resolve(),
         providerProbeServer?.close() ?? Promise.resolve(),
@@ -552,6 +566,7 @@ function staticAgentVersionRuntimeFactory(
       );
       return {
         version,
+        executionAuthority: "crewonKernel",
         kernel,
         policy: new PinnedRunExecutionPolicy({
           ...config.route,

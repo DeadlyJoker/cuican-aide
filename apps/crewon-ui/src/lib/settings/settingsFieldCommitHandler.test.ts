@@ -9,7 +9,7 @@ describe("settingsFieldCommitErrorText", () => {
         new Error("Local app-server is not connected"),
         "zh",
       ),
-    ).toBe("已应用到当前页面，暂时无法同步到其他设备。");
+    ).toBe("当前更改未确认保存，请检查连接后重试。");
   });
 
   it("does not expose an unexpected internal error", () => {

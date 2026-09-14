@@ -1,4 +1,4 @@
-import { memo, useDeferredValue } from "react";
+import { memo, useDeferredValue, type ReactNode } from "react";
 import {
   AlertTriangle,
   BookOpen,
@@ -16,6 +16,7 @@ import type { ThreadItem } from "@crewon/app-server-protocol/v2/ThreadItem";
 import type { Locale } from "../lib/i18n";
 import { itemPreview, userInputToText } from "../lib/shared/text";
 import { renderMarkdown } from "./TranscriptMarkdown";
+import { EditableMessageContent } from "./messages/MessageInlineEditor";
 import {
   ComposerResourceTags,
   type ComposerResourceTag,
@@ -266,15 +267,19 @@ function itemStatus(item: ThreadItem): string | undefined {
 }
 
 export const TranscriptMessage = memo(function TranscriptMessage({
+  durableMessageId,
   item,
   itemLabels,
   locale,
   variant = "message",
+  actions,
 }: {
+  durableMessageId?: string | null;
   item: ThreadItem;
   itemLabels: TranscriptItemLabels;
   locale: Locale;
   variant?: TranscriptMessageVariant;
+  actions?: ReactNode;
 }) {
   const role = itemRole(item, itemLabels, locale, variant);
   const icon = itemIcon(item);
@@ -286,6 +291,7 @@ export const TranscriptMessage = memo(function TranscriptMessage({
     <article
       className="message"
       data-kind={item.type}
+      data-message-id={durableMessageId ?? undefined}
       data-has-icon={icon ? "true" : "false"}
       data-process-note={isProcessAgentNote ? "true" : undefined}
       data-status={status}
@@ -300,7 +306,13 @@ export const TranscriptMessage = memo(function TranscriptMessage({
             {itemTypeLabel(item, locale, variant)}
           </span>
         </div>
-        {renderMessageContent(item, locale)}
+        <EditableMessageContent
+          messageId={item.type === "userMessage" ? item.id : undefined}
+          locale={locale}
+        >
+          {renderMessageContent(item, locale)}
+        </EditableMessageContent>
+        {actions}
       </div>
     </article>
   );
@@ -336,10 +348,12 @@ export function TranscriptStreamingMessage({
   crewonLabel,
   locale,
   streamingText,
+  partial = false,
 }: {
   crewonLabel: string;
   locale: Locale;
   streamingText: string;
+  partial?: boolean;
 }) {
   const deferredStreamingText = useDeferredValue(streamingText);
 
@@ -358,7 +372,20 @@ export function TranscriptStreamingMessage({
             {locale === "zh" ? "流式" : "Streaming"}
           </span>
         </div>
-        <TranscriptStreamingMarkdown text={deferredStreamingText} />
+        {partial ? (
+          <>
+            <p className="transcript-streaming-notice" role="status">
+              {locale === "zh"
+                ? "仅显示最近的实时内容。已保存内容可在会话历史中查看。"
+                : "Showing the latest live content only. Saved content is available in conversation history."}
+            </p>
+            <pre className="whitespace-pre-wrap break-words [font-family:inherit]">
+              {deferredStreamingText}
+            </pre>
+          </>
+        ) : (
+          <TranscriptStreamingMarkdown text={deferredStreamingText} />
+        )}
       </div>
     </article>
   );

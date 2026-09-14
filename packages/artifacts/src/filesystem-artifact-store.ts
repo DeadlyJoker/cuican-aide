@@ -26,8 +26,14 @@ import {
   type ArtifactStorePort,
   type PutArtifactInput,
   type PutArtifactResult,
+  type ArtifactRetentionStore,
 } from "@crewon/application";
 import { parseArtifactRecord, type ArtifactRecord } from "@crewon/domain";
+import {
+  configureArtifactRetention,
+  maintainFilesystemArtifacts,
+  artifactIsRetired,
+} from "./artifact-retention.ts";
 
 const FILE_MAGIC = Buffer.from("CRWARTV0", "ascii");
 const IV_BYTES = 12;
@@ -54,6 +60,35 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
   readonly #keyId: string;
   readonly #maxInlineBytes: number;
   #closed = false;
+  #maintenance: Promise<unknown> | null = null;
+  readonly #maintenanceAbort = new AbortController();
+  readonly retention: ArtifactRetentionStore = {
+    maintainArtifacts: async (input) => {
+      this.#assertOpen();
+      if (this.#maintenance !== null)
+        return {
+          disposition: "deferred",
+          indexed: 0,
+          checked: 0,
+          deleted: 0,
+          deletedBytes: 0,
+        };
+      const work = maintainFilesystemArtifacts({
+        ...input,
+        policy: { ...input.policy },
+        signal: AbortSignal.any([input.signal, this.#maintenanceAbort.signal]),
+        database: this.#database,
+        blobDirectory: this.#blobDirectory,
+        relativeBlobPath,
+      });
+      this.#maintenance = work;
+      try {
+        return await work;
+      } finally {
+        if (this.#maintenance === work) this.#maintenance = null;
+      }
+    },
+  };
 
   constructor(config: {
     rootDirectory: string;
@@ -160,6 +195,17 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
 
     const storedRecord = parseStoredRecord(row.record_json);
     try {
+      if (
+        artifactIsRetired(
+          this.#database,
+          record.tenantId,
+          storedRecord.artifactId,
+        )
+      )
+        return {
+          disposition: "replayed",
+          record: structuredClone(storedRecord),
+        };
       if (row.state === "writing") {
         this.#finishWrite(row, storedRecord, input.content);
       } else {
@@ -192,6 +238,10 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
       if (row === null || row.state !== "ready") {
         return null;
       }
+      if (
+        artifactIsRetired(this.#database, locator.tenantId, locator.artifactId)
+      )
+        return null;
       const record = parseStoredRecord(row.record_json);
       const content = this.#decrypt(row, record);
       this.#validateContent(record, content);
@@ -205,9 +255,15 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
     if (this.#closed) {
       return;
     }
+    this.#closed = true;
+    this.#maintenanceAbort.abort("artifact_store_closed");
+    try {
+      await this.#maintenance;
+    } catch {
+      /* maintenance cannot prevent normal close */
+    }
     this.#database.close();
     this.#encryptionKey.fill(0);
-    this.#closed = true;
   }
 
   #finishWrite(
@@ -370,13 +426,66 @@ export class FilesystemArtifactStore implements ArtifactStorePort {
 function configureDatabase(database: DatabaseSync): void {
   database.exec("PRAGMA busy_timeout = 5000");
   database.exec("PRAGMA journal_mode = WAL");
-  database.exec(`
-    CREATE TABLE IF NOT EXISTS artifact_schema (
-      singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
-      version INTEGER NOT NULL CHECK (version = 1)
-    ) STRICT;
-    INSERT OR IGNORE INTO artifact_schema (singleton, version) VALUES (1, 1);
-
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const registry = database
+      .prepare(
+        "SELECT 1 FROM sqlite_schema WHERE type='table' AND name='artifact_schema'",
+      )
+      .get();
+    const rows = registry
+      ? database.prepare("SELECT singleton,version FROM artifact_schema").all()
+      : [];
+    if (
+      registry &&
+      (rows.length !== 1 ||
+        rows[0]?.singleton !== 1 ||
+        ![1, 2].includes(Number(rows[0]?.version)))
+    )
+      throw new ArtifactStoreError("artifact_schema_unsupported");
+    const expected = registry
+      ? rows[0]?.version === 2
+        ? [
+            "artifacts",
+            "artifact_retention_queue",
+            "artifact_retention_due",
+            "artifact_maintenance",
+            "artifact_enqueue_retention",
+          ]
+        : ["artifacts"]
+      : [];
+    for (const name of expected) {
+      if (
+        database
+          .prepare("SELECT 1 FROM sqlite_schema WHERE name=?")
+          .get(name) === undefined
+      )
+        throw new ArtifactStoreError("artifact_schema_incomplete");
+    }
+    if (
+      !registry &&
+      database
+        .prepare(
+          "SELECT 1 FROM sqlite_schema WHERE name IN ('artifacts','artifact_retention_queue','artifact_maintenance') LIMIT 1",
+        )
+        .get()
+    )
+      throw new ArtifactStoreError("artifact_schema_incomplete");
+    if (rows[0]?.version === 2) {
+      const state = database
+        .prepare(
+          "SELECT singleton,indexed_tenant,indexed_artifact,indexing_complete,next_due_ms,owner FROM artifact_maintenance",
+        )
+        .all();
+      if (state.length !== 1 || state[0]?.singleton !== 1)
+        throw new ArtifactStoreError("artifact_schema_incomplete");
+    }
+    if (!registry || rows[0]?.version === 1) {
+      database.exec(
+        "DROP TABLE IF EXISTS artifact_schema; CREATE TABLE artifact_schema(singleton INTEGER PRIMARY KEY CHECK(singleton=1), version INTEGER NOT NULL CHECK(version=2)) STRICT; INSERT INTO artifact_schema VALUES (1,2);",
+      );
+    }
+    database.exec(`
     CREATE TABLE IF NOT EXISTS artifacts (
       tenant_id TEXT NOT NULL,
       artifact_id TEXT NOT NULL,
@@ -390,11 +499,11 @@ function configureDatabase(database: DatabaseSync): void {
       UNIQUE (tenant_id, idempotency_key)
     ) STRICT;
   `);
-  const schema = database
-    .prepare("SELECT version FROM artifact_schema WHERE singleton = 1")
-    .get() as { version: number } | undefined;
-  if (schema?.version !== 1) {
-    throw new ArtifactStoreError("artifact_schema_unsupported");
+    configureArtifactRetention(database);
+    database.exec("COMMIT");
+  } catch (error) {
+    rollback(database);
+    throw error;
   }
 }
 

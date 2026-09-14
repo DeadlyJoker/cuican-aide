@@ -1,4 +1,8 @@
 import {
+  StorageAdmissionError,
+  type StorageAdmissionPort,
+} from "./storage-admission-port.ts";
+import {
   canonicalActionIntent,
   parseActionIntent,
   parseCanonicalAgentEvent,
@@ -19,11 +23,13 @@ import type {
   ToolApprovalState,
   ToolExecutionEffect,
   ToolExecutionReceiptState,
+  ToolExecutionResult,
   ToolExecutionRecovery,
 } from "@crewon/domain";
 import {
   TURN_ABORTED_HISTORY_MARKER,
   accountThreadGoalAtToolBoundary,
+  cacheReadReportingError,
   advanceRunGoalAccounting,
   createToolApproval,
   isModelHistoryRetainedUserMessage,
@@ -38,6 +44,12 @@ import {
 } from "@crewon/domain";
 
 import { ApplicationError } from "./application-error.ts";
+import { prepareRunOutputAppendInput } from "./run-output-append.ts";
+import {
+  prepareToolSampleCommit,
+  type ToolSampleCommitRequest,
+} from "./run-tool-sample.ts";
+import type { AppendRunOutputEventsResult } from "./run-output-store-port.ts";
 import type {
   ApplicationClock,
   ApplicationIdGenerator,
@@ -169,17 +181,20 @@ export class RunExecutionService {
   readonly #clock: ApplicationClock;
   readonly #ids: ApplicationIdGenerator;
   readonly #digester: ContentDigester;
+  readonly #storageAdmission: StorageAdmissionPort | undefined;
 
   constructor(dependencies: {
     store: DomainStore;
     clock: ApplicationClock;
     ids: ApplicationIdGenerator;
     digester: ContentDigester;
+    storageAdmission?: StorageAdmissionPort;
   }) {
     this.#store = dependencies.store;
     this.#clock = dependencies.clock;
     this.#ids = dependencies.ids;
     this.#digester = dependencies.digester;
+    this.#storageAdmission = dependencies.storageAdmission;
   }
 
   async loadRun(claim: WorkItemClaim): Promise<RunState> {
@@ -316,6 +331,9 @@ export class RunExecutionService {
     if (state.status !== "running") {
       throw new ApplicationError("conflict", "run_not_running");
     }
+    if (!(state.cancelRequested && options.allowCancelPending === true)) {
+      await this.#storageAdmission?.assertNewWorkAllowed();
+    }
     try {
       return await this.#store.beginRunAttempt({
         tenantId: state.tenantId,
@@ -346,6 +364,7 @@ export class RunExecutionService {
       throughHistorySequence,
       "compaction_history_sequence_invalid",
     );
+    await this.#storageAdmission?.assertNewWorkAllowed();
     try {
       return await this.#store.beginRunAttempt({
         tenantId: state.tenantId,
@@ -375,6 +394,7 @@ export class RunExecutionService {
       usage: Readonly<{
         inputTokens: number;
         cachedInputTokens: number;
+        cachedInputTokensReported?: boolean;
         outputTokens: number;
         totalTokens: number;
       }>;
@@ -408,6 +428,13 @@ export class RunExecutionService {
     }
     requireNonEmpty(input.segmentId, "segment_id_invalid");
     requireBoundedContent(input.summary);
+    if (cacheReadReportingError(input.usage) !== null) {
+      throw new ApplicationError("validation", "usage_cache_reporting_invalid");
+    }
+    const cacheReporting =
+      input.usage.cachedInputTokensReported === undefined
+        ? {}
+        : { cachedInputTokensReported: input.usage.cachedInputTokensReported };
     const inputTokens = requireNonNegativeInteger(
       input.usage.inputTokens,
       "compaction_input_tokens_invalid",
@@ -489,6 +516,7 @@ export class RunExecutionService {
         replacesThroughSequence,
         inputTokens,
         cachedInputTokens,
+        ...cacheReporting,
         outputTokens,
         totalTokens,
       },
@@ -530,6 +558,7 @@ export class RunExecutionService {
               usage: {
                 inputTokens,
                 cachedInputTokens,
+                ...cacheReporting,
                 outputTokens,
                 totalTokens,
               },
@@ -580,6 +609,7 @@ export class RunExecutionService {
         this.#validateToolActionIntent(existing, actionIntent);
         return { disposition: "existing", receipt: existing, attempt: null };
       }
+      await this.#storageAdmission?.assertNewWorkAllowed();
       const stepId = `tool:${actionDigest.slice("sha256:".length)}`;
       const attempt = await this.#store.beginRunAttempt({
         tenantId: state.tenantId,
@@ -621,6 +651,7 @@ export class RunExecutionService {
         attempt,
       };
     } catch (error) {
+      if (error instanceof StorageAdmissionError) throw error;
       throw mapExecutionError(error);
     }
   }
@@ -1163,6 +1194,7 @@ export class RunExecutionService {
     claim: WorkItemClaim,
     receipt: ToolExecutionReceiptState,
   ): Promise<ToolExecutionReceiptState> {
+    await this.#storageAdmission?.assertNewWorkAllowed();
     return this.transitionToolExecution(claim, receipt, {
       kind: "dispatch",
       occurredAt: this.#now(),
@@ -1466,6 +1498,39 @@ export class RunExecutionService {
     });
   }
 
+  /** Keep execution evidence without publishing a completion into an aborted model turn. */
+  async completeToolExecutionAfterCancellation(
+    claim: WorkItemClaim,
+    receipt: ToolExecutionReceiptState,
+    providerReceiptId: string,
+    result: Omit<ToolExecutionResult, "outputDigest">,
+  ): Promise<ToolExecutionReceiptState> {
+    const state = await this.loadRun(claim);
+    if (
+      !state.cancelRequested ||
+      (state.status !== "running" && state.status !== "reconciling")
+    ) {
+      throw new ApplicationError(
+        "conflict",
+        "tool_completion_cancel_not_pending",
+      );
+    }
+    return this.transitionToolExecution(claim, receipt, {
+      kind: "complete",
+      occurredAt: this.#now(),
+      providerReceiptId,
+      result: {
+        output: result.output,
+        outputDigest: this.#digest(result.output),
+        isError: result.isError,
+        artifactRef: result.artifactRef,
+        ...(result.workspaceChanges === undefined
+          ? {}
+          : { workspaceChanges: result.workspaceChanges }),
+      },
+    });
+  }
+
   async beginToolReconciliation(
     claim: WorkItemClaim,
     receipt: ToolExecutionReceiptState,
@@ -1508,6 +1573,9 @@ export class RunExecutionService {
       claim.workItem.workItemId !== receipt.workItemId
     ) {
       throw new ApplicationError("conflict", "tool_recovery_not_current");
+    }
+    if (receipt.status === "prepared" && !state.cancelRequested) {
+      await this.#storageAdmission?.assertNewWorkAllowed();
     }
     try {
       return await this.#store.beginRunAttempt({
@@ -1850,12 +1918,54 @@ export class RunExecutionService {
     );
   }
 
+  async recordOutputEvents(
+    claim: WorkItemClaim,
+    events: readonly CanonicalAgentEvent[],
+  ): Promise<AppendRunOutputEventsResult> {
+    validateClaim(claim);
+    const state = await this.loadRun(claim);
+    const input = prepareRunOutputAppendInput({
+      state,
+      claim,
+      events,
+      occurredAt: this.#now(),
+      nextEventId: () => this.#nextId("runEvent"),
+      nextOutboxId: () => this.#nextId("outboxMessage"),
+    });
+    if (this.#store.appendRunOutputEvents === undefined) {
+      let latest = state;
+      const appendedEvents: AppendRunOutputEventsResult["appendedEvents"][number][] =
+        [];
+      let replayedCount = 0;
+      for (const event of events) {
+        const result = await this.recordAgentEvent(claim, event);
+        latest = result.state;
+        if (result.disposition === "replayed") replayedCount += 1;
+        else
+          for (const persisted of result.events)
+            if (persisted.type === "model.output.delta")
+              appendedEvents.push(persisted);
+      }
+      return {
+        state: replayedCount === 0 ? latest : await this.loadRun(claim),
+        appendedEvents,
+        replayedCount,
+      };
+    }
+    try {
+      return await this.#store.appendRunOutputEvents(input);
+    } catch (error) {
+      throw mapExecutionError(error);
+    }
+  }
+
   async commitAssistantSampleContinuation(
     claim: WorkItemClaim,
     attempt: RunAttemptIdentity,
     input: Readonly<{
       sampleIndex: number;
       segmentId: string;
+      continuationSequence: number;
       output: string;
       completedAssistantItems: readonly string[];
       events: readonly CanonicalAgentEvent[];
@@ -1871,6 +1981,10 @@ export class RunExecutionService {
     }>,
   ): Promise<CommitAssistantSampleContinuationResult> {
     requirePositiveInteger(input.sampleIndex, "assistant_sample_index_invalid");
+    const continuationSequence = requirePositiveInteger(
+      input.continuationSequence,
+      "assistant_continuation_sequence_invalid",
+    );
     requireBoundedContent(input.output);
     validateModelIdentity(input.identity);
     const checkpoint =
@@ -1901,6 +2015,18 @@ export class RunExecutionService {
       throw new ApplicationError(
         "validation",
         "assistant_sample_items_invalid",
+      );
+    }
+    if (
+      input.events.some(
+        (event) =>
+          event.segmentId !== input.segmentId ||
+          event.sequence >= continuationSequence,
+      )
+    ) {
+      throw new ApplicationError(
+        "validation",
+        "assistant_continuation_sequence_invalid",
       );
     }
     const historyItems: ModelHistoryItem[] = input.completedAssistantItems.map(
@@ -1967,7 +2093,7 @@ export class RunExecutionService {
       type: "segment.provider_continuation",
       data: {
         segmentId: input.segmentId,
-        segmentSequence: (input.events.at(-1)?.sequence ?? 0) + 1,
+        segmentSequence: continuationSequence,
         sampleIndex: input.sampleIndex,
         throughHistorySequence: historyItems.at(-1)!.sequence,
       },
@@ -2008,6 +2134,7 @@ export class RunExecutionService {
             `assistant-sample-continuation:${input.sampleIndex}`,
             {
               sampleIndex: input.sampleIndex,
+              continuationSequence,
               output: input.output,
               completedAssistantItems: input.completedAssistantItems,
               events: input.events,
@@ -2039,6 +2166,40 @@ export class RunExecutionService {
         },
         sampleIndex: input.sampleIndex,
       });
+    } catch (error) {
+      throw mapExecutionError(error);
+    }
+  }
+
+  supportsToolSampleCommit(): boolean {
+    return this.#store.commitToolSample !== undefined;
+  }
+
+  async commitToolSample(
+    claim: WorkItemClaim,
+    attempt: RunAttemptIdentity,
+    sample: ToolSampleCommitRequest,
+  ): Promise<CommitAssistantSampleContinuationResult> {
+    if (this.#store.commitToolSample === undefined) {
+      throw new ApplicationError("internal", "tool_sample_commit_unsupported");
+    }
+    const state = await this.loadRun(claim);
+    if (state.status !== "running" || state.cancelRequested) {
+      throw new ApplicationError("conflict", "run_not_running");
+    }
+    const head = await this.#modelHistoryHead(state);
+    const input = prepareToolSampleCommit({
+      state,
+      claim,
+      attempt,
+      sample,
+      historySequence: head.lastSequence,
+      occurredAt: this.#now(),
+      nextId: (kind) => this.#nextId(kind),
+      digest: (value) => this.#digest(value),
+    });
+    try {
+      return await this.#store.commitToolSample(input);
     } catch (error) {
       throw mapExecutionError(error);
     }

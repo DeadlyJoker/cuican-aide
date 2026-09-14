@@ -12,6 +12,12 @@ export type OfficeMemberAgentProfile = AgentConfig & {
   knowledge: AgentCapabilityOption[];
 };
 
+export type OfficeMemberTeamCoordination = Readonly<{
+  assignmentMode: "roleDirected";
+  responsibility: string;
+  source: "officeDefinition";
+}>;
+
 type StoredAgentConfig = AgentConfig & {
   knowledge?: AgentCapabilityOption[];
 };
@@ -19,6 +25,7 @@ type StoredAgentConfig = AgentConfig & {
 type StoredProfileRecord = Readonly<{
   profile: OfficeMemberAgentProfile;
   savedAt: number;
+  teamCoordination?: OfficeMemberTeamCoordination;
 }>;
 
 export function officeMemberAgentProfileId(
@@ -87,9 +94,28 @@ export function readOfficeMemberAgentProfile(
   }
 }
 
+export function readOfficeMemberTeamCoordination(
+  agentId: string,
+  storage: Pick<Storage, "getItem"> | null = browserStorage(),
+): OfficeMemberTeamCoordination | null {
+  if (!storage) return null;
+  try {
+    const records = JSON.parse(
+      storage.getItem(OFFICE_MEMBER_AGENT_PROFILES_STORAGE_KEY) ?? "{}",
+    ) as Record<string, unknown>;
+    const record = records[agentId];
+    return isStoredProfileRecord(record)
+      ? (record.teamCoordination ?? null)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
 export function writeOfficeMemberAgentProfile(
   profile: OfficeMemberAgentProfile,
   storage: Pick<Storage, "getItem" | "setItem"> | null = browserStorage(),
+  teamCoordination?: OfficeMemberTeamCoordination | null,
 ): void {
   if (!storage || !profile.agentId) return;
   try {
@@ -102,7 +128,16 @@ export function writeOfficeMemberAgentProfile(
         .sort((left, right) => right[1].savedAt - left[1].savedAt)
         .slice(0, MAX_STORED_PROFILES - 1),
     );
-    records[profile.agentId] = { profile, savedAt: Date.now() };
+    const preservedCoordination = isStoredProfileRecord(parsed[profile.agentId])
+      ? parsed[profile.agentId].teamCoordination
+      : undefined;
+    const nextCoordination =
+      teamCoordination === undefined ? preservedCoordination : teamCoordination;
+    records[profile.agentId] = {
+      profile,
+      savedAt: Date.now(),
+      ...(nextCoordination ? { teamCoordination: nextCoordination } : {}),
+    };
     storage.setItem(
       OFFICE_MEMBER_AGENT_PROFILES_STORAGE_KEY,
       JSON.stringify(records),
@@ -142,7 +177,28 @@ function isStoredProfileRecord(value: unknown): value is StoredProfileRecord {
     typeof value === "object" &&
     value !== null &&
     typeof (value as StoredProfileRecord).savedAt === "number" &&
-    isOfficeMemberAgentProfile((value as StoredProfileRecord).profile)
+    isOfficeMemberAgentProfile((value as StoredProfileRecord).profile) &&
+    ((value as StoredProfileRecord).teamCoordination === undefined ||
+      isOfficeMemberTeamCoordination(
+        (value as StoredProfileRecord).teamCoordination,
+      ))
+  );
+}
+
+function isOfficeMemberTeamCoordination(
+  value: unknown,
+): value is OfficeMemberTeamCoordination {
+  if (typeof value !== "object" || value === null) return false;
+  const coordination = value as Partial<OfficeMemberTeamCoordination>;
+  return (
+    coordination.assignmentMode === "roleDirected" &&
+    coordination.source === "officeDefinition" &&
+    typeof coordination.responsibility === "string" &&
+    coordination.responsibility.trim() === coordination.responsibility &&
+    coordination.responsibility.length > 0 &&
+    coordination.responsibility.normalize("NFC") ===
+      coordination.responsibility &&
+    [...coordination.responsibility].length <= 240
   );
 }
 

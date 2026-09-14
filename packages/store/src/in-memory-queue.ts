@@ -19,6 +19,7 @@ export type QueueRecord<T> = {
   leaseId: string | null;
   leaseEpoch: number;
   leaseExpiresAtMs: number | null;
+  cancellationWakeRequested: boolean;
 };
 
 export function queueRecord<T>(item: T, createdAt: string): QueueRecord<T> {
@@ -30,6 +31,7 @@ export function queueRecord<T>(item: T, createdAt: string): QueueRecord<T> {
     leaseId: null,
     leaseEpoch: 0,
     leaseExpiresAtMs: null,
+    cancellationWakeRequested: false,
   };
 }
 
@@ -66,6 +68,7 @@ export function claimNext<T>(
     record.leaseId = input.leaseId;
     record.leaseEpoch += 1;
     record.leaseExpiresAtMs = expiry.expiresAtMs;
+    record.cancellationWakeRequested = false;
     return {
       item: clone(record.item),
       lease: {
@@ -121,7 +124,8 @@ export function retry(
     throw new RunStoreError("queue_retry_delay_invalid");
   }
   record.status = "pending";
-  record.availableAtMs = availableAtMs;
+  record.availableAtMs = record.cancellationWakeRequested ? now : availableAtMs;
+  record.cancellationWakeRequested = false;
   clearLease(record);
 }
 

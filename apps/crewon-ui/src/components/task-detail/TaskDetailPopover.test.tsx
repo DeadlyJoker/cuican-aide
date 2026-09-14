@@ -24,7 +24,7 @@ const presentation: TaskDetailPresentation = {
         removed: 18,
       },
       status: { label: "运行中", tone: "success" },
-      target: "本地",
+      target: "控制运行时",
       workspace: "cuican-aide",
     },
   },
@@ -91,7 +91,7 @@ describe("TaskDetailPopover", () => {
     ]).toEqual(["+21,744", "-1,211,153"]);
   });
 
-  it("renders a modeless four-section task surface without a workbench", () => {
+  it("renders populated task sections without runtime implementation details", () => {
     const markup = renderToStaticMarkup(
       <TaskDetailPopover
         locale="zh"
@@ -120,11 +120,13 @@ describe("TaskDetailPopover", () => {
     }
     expect(markup).toContain("停止进程");
     expect(markup).toContain("停止任务");
+    expect(markup).not.toContain("控制运行时");
+    expect(markup).not.toContain("cuican-aide");
     expect(markup).not.toContain("command-workbench");
     expect(compactIcons(markup)).toMatchSnapshot();
   });
 
-  it("keeps partial data while loading, errors, unavailable runtime, and empty states coexist", () => {
+  it("keeps loading and error feedback while hiding empty resolved sections", () => {
     const partial: TaskDetailPresentation = {
       environment: {
         status: "error",
@@ -150,14 +152,39 @@ describe("TaskDetailPopover", () => {
     for (const text of [
       "main",
       "Git 状态刷新失败",
+      "子智能体",
       "task-detail-skeleton",
-      "当前运行环境未提供",
-      "暂无来源",
     ]) {
       expect(markup).toContain(text);
     }
-    expect(markup).toContain('data-status="unavailable"');
+    for (const text of ["后台进程", "来源", "当前运行环境未提供", "暂无来源"]) {
+      expect(markup).not.toContain(text);
+    }
+    expect(markup).not.toContain('data-status="unavailable"');
     expect(compactIcons(markup)).toMatchSnapshot();
+  });
+
+  it("keeps permission failures visible instead of treating them as empty", () => {
+    const markup = renderToStaticMarkup(
+      <TaskDetailPopover
+        locale="zh"
+        open
+        presentation={{
+          environment: { status: "ready", data: null },
+          agents: { status: "ready", data: { items: [] } },
+          sources: { status: "ready", data: { items: [] } },
+        }}
+        processes={{
+          status: "forbidden",
+          unavailableReason: "无权查看后台进程信息",
+        }}
+        onClose={vi.fn()}
+      />,
+    );
+
+    expect(markup).toContain("后台进程");
+    expect(markup).toContain("无权查看后台进程信息");
+    expect(markup).not.toContain("暂无后台进程");
   });
 
   it("closes with focus restoration and requires two clicks before termination", () => {
@@ -229,9 +256,15 @@ describe("TaskDetailPopover", () => {
     expect(rootRule).toContain("position: absolute");
     expect(rootRule).toContain("grid-column: 1 / 2");
     expect(rootRule).toContain("grid-row: 1 / 2");
+    expect(rootRule).toContain("width: 336px");
+    expect(rootRule).not.toContain("width: clamp(");
     expect(rootRule).not.toContain("position: fixed");
     expect(rootRule).not.toContain("grid-template-columns");
     expect(styles).toContain("overflow-y: auto");
+    expect(styles).toContain("scrollbar-gutter: auto");
+    expect(styles).toContain("width: calc(100% + 10px)");
+    expect(styles).toContain("width: min(336px, calc(100% - 16px))");
+    expect(styles).toContain("padding-inline-start: 25px");
     expect(styles).not.toContain("command-workbench");
     expect(styles).not.toContain("backdrop-filter");
   });

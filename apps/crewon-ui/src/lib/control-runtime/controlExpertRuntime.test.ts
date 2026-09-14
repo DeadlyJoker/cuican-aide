@@ -4,6 +4,10 @@ import type { MessageView, ThreadView } from "@crewon/contracts";
 
 import type { AgentConfig } from "../domain/crewonDomain";
 import {
+  officeMemberAgentProfileId,
+  readOfficeMemberAgentProfile,
+} from "../office/officeMemberAgentProfile";
+import {
   ControlExpertRuntime,
   isControlExpertOfficeRecord,
   isInternalControlExpertThread,
@@ -13,9 +17,10 @@ import {
 const now = "2026-08-29T08:00:00.000Z";
 
 describe("Control Expert Runtime", () => {
-  it("persists a real three-member Office and reloadable expert metadata", async () => {
+  it("persists expert metadata and materializes distinct agent-type runtime profiles", async () => {
     const threads: ThreadView[] = [];
     const messages = new Map<string, MessageView[]>();
+    const profileStorage = memoryProfileStorage();
     const createOffice = vi.fn(async (body) => ({
       disposition: "committed" as const,
       office: {
@@ -65,7 +70,11 @@ describe("Control Expert Runtime", () => {
         nextCursor: null,
       })),
     } as unknown as ControlExpertRuntimeClient;
-    const runtime = new ControlExpertRuntime({ client, locale: "zh" });
+    const runtime = new ControlExpertRuntime({
+      client,
+      locale: "zh",
+      profileStorage,
+    });
 
     const created = await runtime.createExpertTeam({
       definition: {
@@ -77,7 +86,12 @@ describe("Control Expert Runtime", () => {
           agentType: "worker",
         },
         experts: [
-          { name: "数据专家", role: "核验指标", agentType: "explorer" },
+          {
+            name: "数据专家",
+            role: "核验指标",
+            agentType: "explorer",
+            instructions: "只使用可追溯材料。".repeat(40),
+          },
           { name: "运维专家", role: "评估回滚", agentType: "worker" },
         ],
       },
@@ -106,7 +120,107 @@ describe("Control Expert Runtime", () => {
     );
     expect(isControlExpertOfficeRecord(created.office)).toBe(true);
     expect(isInternalControlExpertThread(threads[0]!)).toBe(true);
+    expect(created.record.config.officeId).toBe("office-1");
     expect((await runtime.listExpertTeams())[0]).toEqual(created.record);
+
+    const leaderProfile = readOfficeMemberAgentProfile(
+      officeMemberAgentProfileId("office-version-1", "member-1"),
+      profileStorage,
+    );
+    const explorerProfile = readOfficeMemberAgentProfile(
+      officeMemberAgentProfileId("office-version-1", "member-2"),
+      profileStorage,
+    );
+    const workerProfile = readOfficeMemberAgentProfile(
+      officeMemberAgentProfileId("office-version-1", "member-3"),
+      profileStorage,
+    );
+    expect(leaderProfile?.role).toContain("角色职责：统一裁决");
+    expect(leaderProfile?.role).not.toContain("Manager");
+    expect(leaderProfile?.systemPrompt).toContain("Worker：仅将已确认材料");
+    expect(leaderProfile?.systemPrompt).toContain("唯一汇总出口");
+    expect(leaderProfile?.systemPrompt).toContain("保留未解决分歧");
+    expect(explorerProfile?.systemPrompt).toContain(
+      "Explorer：枚举证据、冲突、假设和未知",
+    );
+    expect(explorerProfile?.systemPrompt).toContain("证据不足时不得收敛");
+    expect(explorerProfile?.role).not.toContain("Data");
+    expect(explorerProfile?.role.length).toBeLessThanOrEqual(240);
+    expect(workerProfile?.systemPrompt).toContain(
+      "Worker：仅将已确认材料转成可执行方案、验收动作和完成标准",
+    );
+    expect(workerProfile?.systemPrompt).toContain("不得补造事实或证据");
+    expect(workerProfile?.systemPrompt).not.toBe(explorerProfile?.systemPrompt);
+  });
+
+  it("hydrates stable Office identity for a legacy Experts record", async () => {
+    const expertsId = "office-version-legacy";
+    const legacyConfig = {
+      expertsId,
+      title: "历史评审",
+      goal: "恢复历史专家团",
+      leader: { name: "组长", role: "裁决", agentType: "worker" },
+      experts: [
+        { name: "专家一", role: "核验", agentType: "explorer" },
+        { name: "专家二", role: "执行", agentType: "worker" },
+      ],
+      recordRevision: now,
+      workspaceKey: "control",
+      ownerSubject: "control-session",
+    };
+    const marker = thread(
+      "thread-legacy",
+      `__crewon_experts_definition__:${encodeURIComponent(expertsId)}`,
+    );
+    const getOffice = vi.fn(async () => ({
+      office: {
+        schemaVersion: "crewon.office-definition.v0" as const,
+        tenantId: "tenant-1",
+        spaceId: "space-1",
+        officeId: "office-stable-legacy",
+        officeVersionId: expertsId,
+        revision: 1,
+        title: "专家团 · 历史评审",
+        members: ["lead", "expert-1", "expert-2"].map((memberId) => ({
+          memberId,
+          displayName: memberId,
+          agentVersionId: `agent-${memberId}`,
+        })),
+        executionTargets: ["lead", "expert-1", "expert-2"].map((memberId) => ({
+          targetId: `target-${memberId}`,
+          agentVersionId: `agent-${memberId}`,
+        })),
+        createdByActorId: "actor-1",
+        createdAt: now,
+      },
+    }));
+    const runtime = new ControlExpertRuntime({
+      client: {
+        getOffice,
+        listThreads: vi.fn(async () => ({ data: [marker], nextCursor: null })),
+        listThreadMessages: vi.fn(async () => ({
+          data: [
+            {
+              messageId: "message-legacy",
+              threadId: marker.threadId,
+              sequence: 1,
+              role: "user" as const,
+              content: `[Control Experts · definition]\n${JSON.stringify(legacyConfig)}`,
+              proposedPlan: null,
+              createdAt: now,
+            },
+          ],
+          nextCursor: null,
+        })),
+      } as unknown as ControlExpertRuntimeClient,
+      locale: "zh",
+    });
+
+    expect((await runtime.listExpertTeams())[0]?.config).toEqual({
+      ...legacyConfig,
+      officeId: "office-stable-legacy",
+    });
+    expect(getOffice).toHaveBeenCalledWith(expertsId);
   });
 });
 
@@ -140,5 +254,13 @@ function thread(threadId: string, title: string | null): ThreadView {
     updatedAt: now,
     archivedAt: null,
     deletedAt: null,
+  };
+}
+
+function memoryProfileStorage(): Pick<Storage, "getItem" | "setItem"> {
+  const values = new Map<string, string>();
+  return {
+    getItem: (key) => values.get(key) ?? null,
+    setItem: (key, value) => values.set(key, value),
   };
 }

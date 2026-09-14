@@ -318,7 +318,7 @@ describe("taskDetailProcessesPresentation", () => {
     };
 
     expect(taskDetailProcessesPresentation(state, "zh", false)).toEqual({
-      status: "unavailable",
+      status: "forbidden",
       unavailableReason: "无权查看后台进程信息",
     });
   });

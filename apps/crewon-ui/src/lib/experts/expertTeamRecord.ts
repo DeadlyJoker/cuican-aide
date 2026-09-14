@@ -9,6 +9,8 @@ export type ExpertRole = {
 
 export type ExpertTeamConfig = {
   expertsId: string;
+  /** Stable Control Office identity; absent only on legacy Experts records. */
+  officeId?: string;
   title: string;
   goal: string;
   leader: ExpertRole;

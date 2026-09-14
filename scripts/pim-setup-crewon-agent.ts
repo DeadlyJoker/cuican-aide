@@ -6,15 +6,64 @@
  *   node --experimental-strip-types scripts/pim-setup-crewon-agent.ts
  *
  * Prerequisites:
- *   - PIM reachable at PIM_BASE_URL (default http://123.56.172.85:3000)
+ *   - PIM reachable at the explicit PIM_BASE_URL (HTTPS, or loopback HTTP)
  *   - admin credentials in env: PIM_ADMIN_USERNAME / PIM_ADMIN_PASSWORD
  *   - crewon-ui dev server URL in CREWON_DEMO_URL
  */
 
-const PIM_BASE_URL =
-  (process.env.PIM_BASE_URL ?? "http://123.56.172.85:3000").replace(/\/+$/, "");
-const PIM_ADMIN_USERNAME = process.env.PIM_ADMIN_USERNAME ?? "admin";
-const PIM_ADMIN_PASSWORD = process.env.PIM_ADMIN_PASSWORD ?? "cuicantongxing@123";
+function requiredEnvironment(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`${name} is required`);
+  }
+  return value;
+}
+
+function isLoopbackHostname(hostname: string): boolean {
+  const normalized = hostname.toLowerCase();
+  if (
+    normalized === "localhost" ||
+    normalized === "::1" ||
+    normalized === "[::1]"
+  ) {
+    return true;
+  }
+
+  const octets = normalized.split(".");
+  return (
+    octets.length === 4 &&
+    octets[0] === "127" &&
+    octets.every((octet) => /^\d{1,3}$/.test(octet) && Number(octet) <= 255)
+  );
+}
+
+function pimBaseUrlFromEnvironment(): string {
+  const configured = requiredEnvironment("PIM_BASE_URL");
+  let url: URL;
+  try {
+    url = new URL(configured);
+  } catch {
+    throw new Error("PIM_BASE_URL must be an absolute URL");
+  }
+
+  if (url.username || url.password) {
+    throw new Error("PIM_BASE_URL must not contain credentials");
+  }
+  if (
+    url.protocol !== "https:" &&
+    !(url.protocol === "http:" && isLoopbackHostname(url.hostname))
+  ) {
+    throw new Error("PIM_BASE_URL must use HTTPS unless it targets loopback");
+  }
+
+  url.hash = "";
+  url.search = "";
+  return url.toString().replace(/\/+$/, "");
+}
+
+const PIM_BASE_URL = pimBaseUrlFromEnvironment();
+const PIM_ADMIN_USERNAME = requiredEnvironment("PIM_ADMIN_USERNAME");
+const PIM_ADMIN_PASSWORD = requiredEnvironment("PIM_ADMIN_PASSWORD");
 const CREWON_DEMO_URL =
   process.env.CREWON_DEMO_URL ?? "http://localhost:5173";
 
@@ -34,7 +83,7 @@ const SYSTEM_PROMPT = `你是 CrewON 智能助手，服务于企业 Agent 协作
 
 核心能力：
 - 知识检索：回答关于 CrewON 平台功能、Agent 配置、Workflow 编排、Tool 集成的问题时必须先调用 knowledge_retrieval。
-- 长期记忆：用户说"请记住""以后优先""我们的偏好"时，必须实际调用 save_memory 工具保存。
+- 长期记忆：用户说"请记住""以后优先""我们的偏好"时，仅使用本轮工具列表中实际提供的记忆写入工具，并严格使用该工具声明的名称；未提供时明确说明无法保存。
 - 工作区操作：可以创建/重命名/归档对话线程（Thread），绑定企业 Provider 资源。
 - Agent 配置：帮助用户创建和调整 Agent（系统提示词、模型、知识库、Skill、MCP 绑定）。
 - Workflow 编排：支持多 Agent 串行/并行协作流。
@@ -42,7 +91,7 @@ const SYSTEM_PROMPT = `你是 CrewON 智能助手，服务于企业 Agent 协作
 规则：
 1. 先给结论，再给行动建议，最后列出知识依据（文档名 + 条款 + 短摘录）。
 2. 知识库没有依据时明确说明"未命中"，不得伪造。
-3. 用户要求的记忆必须调用 save_memory 工具，得到成功返回后才能说"已记住"。
+3. 用户要求的记忆只有在本轮实际提供的记忆写入工具成功返回后，才能说"已记住"；不得猜测、改写或拼接工具名称。
 4. 区分平台功能事实和你的个人建议，不要把建议写成功能要求。
 5. 所有演示数据均为示例，不要暗示为真实生产数据。`;
 
@@ -131,7 +180,7 @@ CrewON 是企业级 Agent 协作工作台，统一组织 Agent、Skill、MCP 与
 
 规则：
 1. 凡是查询 [领域] 的信息，必须先调用 knowledge_retrieval
-2. 用户要求记住的信息，必须调用 save_memory
+2. 用户要求记住的信息，必须调用本轮实际提供的记忆写入工具；未提供时明确说明无法保存
 3. 先给结论，再给建议，最后列出知识依据
 
 输出格式：
@@ -215,11 +264,12 @@ Agent B ↗
 - 输入：自然语言查询
 - 输出：相关文档片段及来源
 
-### save_memory
+### 长期记忆写入工具
 - 保存用户偏好和长期记忆
 - 跨会话持久化
 - 输入：要记住的内容
 - 自动关联到当前用户
+- 具体工具名由当前 Runtime 的工具列表声明，Agent 不得猜测别名
 
 ## MCP 工具集成
 
@@ -262,7 +312,7 @@ Agent 调用 knowledge_retrieval → 返回制度依据 → 给出结论和建�
 ## 场景 2：合同审核
 用户粘贴合同文本。
 Agent 调用合同审核 Skill → 逐条分析风险 → 输出审核报告。
-用户说"请记住我们公司的合同审核标准"，Agent 调用 save_memory 保存。
+用户说"请记住我们公司的合同审核标准"，Agent 调用本轮 Runtime 实际提供的记忆写入工具保存；若未提供则如实说明无法保存。
 
 ## 场景 3：多 Agent Workflow
 创建一个 Workflow：

@@ -201,6 +201,16 @@ function parseBinding(
   ) {
     throw new Error("agent_version_runtime_binding_invalid");
   }
+  if (
+    provider.kind === "cloudAgent" &&
+    (value.workspaceBindingId !== null ||
+      value.mcpStdioConfigPath !== null ||
+      value.deviceToolConfigPath !== null ||
+      value.remoteMcpConfigPath !== null ||
+      toolRuntimeMode === "shared")
+  ) {
+    throw new Error("agent_version_runtime_provider_authority_invalid");
+  }
   return {
     tenantId: bounded(value.tenantId, 256),
     agentVersionId: bounded(value.agentVersionId, 512),
@@ -351,18 +361,21 @@ function runtimeBindings(
   nativeProviderApiKey: string | null | undefined,
 ): readonly AgentVersionRuntimeBinding[] {
   return config.bindings.map((binding) => {
-    const apiKey =
-      binding.provider.apiKeyEnvironment === null
-        ? null
-        : environment[binding.provider.apiKeyEnvironment]?.trim() ||
-          nativeProviderApiKey ||
-          requiredEnvironment(environment, binding.provider.apiKeyEnvironment);
+    const executionAuthority =
+      binding.provider.kind === "cloudAgent"
+        ? ("providerAgent" as const)
+        : ("crewonKernel" as const);
+    const apiKey = runtimeBindingApiKey(
+      binding.provider,
+      environment,
+      nativeProviderApiKey,
+    );
     const expectedMaterializationDigest = materializationDigest(binding);
     const createTransport = (() => {
       if (binding.provider.kind === "cloudAgent") {
         const provider = binding.provider;
-        return (version: CompiledAgentVersion) =>
-          createCloudAgentTransport(provider, version, apiKey);
+        return (_version: CompiledAgentVersion) =>
+          createCloudAgentTransport(provider, apiKey);
       }
       const provider = binding.provider;
       return (version: CompiledAgentVersion) =>
@@ -375,18 +388,36 @@ function runtimeBindings(
       authorityId: binding.authorityId,
       workspaceBindingId: binding.workspaceBindingId,
       materializationDigest: expectedMaterializationDigest,
+      executionAuthority,
       toolRuntimeMode: binding.toolRuntimeMode,
       createTransport,
-      createToolRuntime: (version) =>
-        createBoundToolRuntime(
-          binding,
-          version,
-          expectedMaterializationDigest,
-          environment,
-          remoteMcpDependencies,
-        ),
+      createToolRuntime:
+        executionAuthority === "providerAgent"
+          ? () => new InMemoryToolBroker()
+          : (version) =>
+              createBoundToolRuntime(
+                binding,
+                version,
+                expectedMaterializationDigest,
+                environment,
+                remoteMcpDependencies,
+              ),
     };
   });
+}
+
+function runtimeBindingApiKey(
+  provider: RuntimeBindingConfig["bindings"][number]["provider"],
+  environment: Readonly<Record<string, string | undefined>>,
+  nativeProviderApiKey: string | null | undefined,
+): string | null {
+  if (provider.apiKeyEnvironment === null) return null;
+  const configured = environment[provider.apiKeyEnvironment]?.trim();
+  if (configured) return configured;
+  if (provider.kind === "directResponses" && nativeProviderApiKey) {
+    return nativeProviderApiKey;
+  }
+  return requiredEnvironment(environment, provider.apiKeyEnvironment);
 }
 
 function sha256(value: string): string {
@@ -550,27 +581,15 @@ function createCloudAgentTransport(
     RuntimeBindingConfig["bindings"][number]["provider"],
     { kind: "cloudAgent" }
   >,
-  version: CompiledAgentVersion,
   apiKey: string | null,
 ): CloudAgentTransport {
-  return new CloudAgentTransport(
-    {
-      invocationUrl: provider.invocationUrl,
-      apiKey: apiKey ?? "",
-      model: provider.modelId,
-      agentId: provider.agentId,
-      idleTimeoutMs: provider.idleTimeoutMs,
-    },
-    {
-      identity: {
-        adapterName: version.model.adapterName,
-        adapterVersion: baseAdapterVersion(
-          version.model.adapterVersion,
-          provider.requestProfile,
-        ),
-      },
-    },
-  );
+  return new CloudAgentTransport({
+    invocationUrl: provider.invocationUrl,
+    apiKey: apiKey ?? "",
+    model: provider.modelId,
+    agentId: provider.agentId,
+    idleTimeoutMs: provider.idleTimeoutMs,
+  });
 }
 
 async function createConnectedMcpRuntime(

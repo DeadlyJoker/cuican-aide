@@ -1,4 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
+import { scheduledAutomationQuery } from "./scheduled-automation-query.ts";
+import type { ModelHistoryAppendState } from "./model-history-append-validation.ts";
 
 import type {
   ModelHistoryItem,
@@ -62,10 +64,10 @@ export type SqliteAutomationOperations = Readonly<{
     threadId: string;
   }) => ThreadState | null;
   loadRun: (locator: { tenantId: string; runId: string }) => RunState | null;
-  loadHistory: (locator: {
+  loadHistoryAppendState: (locator: {
     tenantId: string;
     threadId: string;
-  }) => ModelHistoryItem[];
+  }) => ModelHistoryAppendState;
   threadEventIdExists: (id: string) => boolean;
   messageIdExists: (id: string) => boolean;
   historyItemIdExists: (id: string) => boolean;
@@ -262,31 +264,11 @@ export class SqliteAutomationAuthority {
     query: ScheduledAutomationListQuery,
   ): Promise<readonly AutomationDefinitionRecord[]> {
     this.#operations.assertOpen();
-    if (
-      !Number.isSafeInteger(query.limit) ||
-      query.limit < 1 ||
-      query.limit > 100
-    ) {
-      throw normalizeAutomationStoreError(
-        new RunStoreError("automation_limit_invalid"),
-      );
-    }
     try {
+      const statement = scheduledAutomationQuery(query, { kind: "sqlite" });
       const rows = this.#database
-        .prepare(
-          `SELECT tenant_id, space_id, automation_id, thread_id, revision,
-        definition_digest, definition_json, updated_at FROM automations
-        WHERE json_extract(definition_json, '$.executionMode') = 'scheduled'
-          AND (? IS NULL OR updated_at < ? OR (updated_at = ? AND automation_id < ?))
-        ORDER BY updated_at DESC, automation_id DESC LIMIT ?`,
-        )
-        .all(
-          query.before?.updatedAt ?? null,
-          query.before?.updatedAt ?? null,
-          query.before?.updatedAt ?? null,
-          query.before?.automationId ?? null,
-          query.limit,
-        ) as unknown as SqliteAutomationRow[];
+        .prepare(statement.sql)
+        .all(...statement.parameters) as unknown as SqliteAutomationRow[];
       return rows.map(decodeSqliteAutomationRecord);
     } catch (error) {
       throw normalizeAutomationStoreError(error);
@@ -397,7 +379,7 @@ export class SqliteAutomationAuthority {
         tenantId: input.tenantId,
         threadId,
       });
-      const history = this.#operations.loadHistory({
+      const history = this.#operations.loadHistoryAppendState({
         tenantId: input.tenantId,
         threadId,
       });

@@ -1,225 +1,390 @@
+import {
+  appendStreamingTail,
+  boundedStreamingTail,
+  StreamingTextChunks,
+} from "./streamingTextChunks";
+
 export type StreamingTextByThread = Record<string, string>;
-
-// Gateways can release several provider deltas in one burst. Pace those bursts
-// at a stable 30 Hz instead of forcing a full Markdown render on every display
-// frame. A normal short answer still becomes visible in roughly one second.
-const STREAMING_UPDATE_INTERVAL_MS = 32;
-const MIN_STREAMING_CHARACTERS_PER_UPDATE = 8;
-const TARGET_BURST_STREAMING_UPDATES = 36;
-
+export type StreamingTextActivity = "none" | "received" | "unavailable";
+export type StreamingTextPresentation = {
+  previews: Record<string, { partial: boolean }>;
+  reclaimed: boolean;
+};
+export const EMPTY_STREAMING_PRESENTATION: StreamingTextPresentation = {
+  previews: {},
+  reclaimed: false,
+};
+export type StreamingTextBudget = {
+  maxStreams: number;
+  visibleBytesPerStream: number;
+  pendingBytesPerStream: number;
+  totalVisibleBytes: number;
+  totalPendingBytes: number;
+};
+// UTF-16 payload bounds, not a promise about React/V8 object overhead or RSS.
+export const DEFAULT_STREAMING_TEXT_BUDGET: StreamingTextBudget = {
+  maxStreams: 32,
+  visibleBytesPerStream: 256 * 1024,
+  pendingBytesPerStream: 1024 * 1024,
+  totalVisibleBytes: 4 * 1024 * 1024,
+  totalPendingBytes: 8 * 1024 * 1024,
+};
+const UPDATE_INTERVAL_MS = 32;
+const DRAIN_DEADLINE_MS = 2000;
 type StreamingTextSetter = (
   updater: (current: StreamingTextByThread) => StreamingTextByThread,
 ) => void;
-
 export type StreamingTextFrameScheduler = {
   cancelFrame: (handle: number) => void;
   requestFrame: (callback: () => void) => number;
 };
-
-function timeoutFrameScheduler(): StreamingTextFrameScheduler {
+export function browserStreamingTextFrameScheduler(): StreamingTextFrameScheduler {
   return {
-    cancelFrame: (handle) => {
-      globalThis.clearTimeout(handle);
-    },
+    cancelFrame: (handle) => globalThis.clearTimeout(handle),
     requestFrame: (callback) =>
-      globalThis.setTimeout(
-        callback,
-        STREAMING_UPDATE_INTERVAL_MS,
-      ) as unknown as number,
+      globalThis.setTimeout(callback, UPDATE_INTERVAL_MS) as unknown as number,
   };
 }
-
-export function browserStreamingTextFrameScheduler(): StreamingTextFrameScheduler {
-  return timeoutFrameScheduler();
-}
-
-function hasPendingText(pending: StreamingTextByThread): boolean {
-  return Object.values(pending).some((text) => text.length > 0);
-}
-
-function streamingChunkSize(characterCount: number): number {
-  return Math.max(
-    MIN_STREAMING_CHARACTERS_PER_UPDATE,
-    Math.ceil(characterCount / TARGET_BURST_STREAMING_UPDATES),
-  );
-}
-
-function takeStreamingChunk(
-  value: string,
-  characterLimit: number,
-): [chunk: string, remainder: string] {
-  let offset = 0;
+type Entry = {
+  text: string;
+  received: boolean;
+  pending: StreamingTextChunks;
+  pendingCharacters: number;
+  chunkSize: number;
+  partial: boolean;
+  drain?: {
+    promise: Promise<void>;
+    resolve: () => void;
+    timer: ReturnType<typeof setTimeout>;
+  };
+};
+function characterCount(value: string): number {
   let count = 0;
-  for (const character of value) {
-    if (count >= characterLimit) {
-      break;
-    }
-    offset += character.length;
-    count += 1;
-  }
-  return [value.slice(0, offset), value.slice(offset)];
+  for (const _character of value) count++;
+  return count;
 }
 
 export function createStreamingTextBuffer(
-  setStreamingTextByThread: StreamingTextSetter,
+  setText: StreamingTextSetter,
   scheduler: StreamingTextFrameScheduler = browserStreamingTextFrameScheduler(),
+  options: {
+    budget?: StreamingTextBudget;
+    onPresentation?: (value: StreamingTextPresentation) => void;
+  } = {},
 ) {
-  let pendingByThread: StreamingTextByThread = {};
-  let pendingCharacterCountByThread: Record<string, number> = {};
-  let chunkSizeByThread: Record<string, number> = {};
-  let scheduledFrame: number | null = null;
-  const drainWaiters = new Map<string, Set<() => void>>();
-
-  const resolveDrainWaiters = (threadId: string) => {
-    const waiters = drainWaiters.get(threadId);
-    if (waiters === undefined) {
-      return;
+  const budget = { ...(options.budget ?? DEFAULT_STREAMING_TEXT_BUDGET) };
+  if (
+    Object.values(budget).some((n) => !Number.isSafeInteger(n) || n <= 0) ||
+    budget.visibleBytesPerStream < 2 ||
+    budget.pendingBytesPerStream < 8192 ||
+    budget.visibleBytesPerStream > budget.totalVisibleBytes ||
+    budget.pendingBytesPerStream > budget.totalPendingBytes
+  ) {
+    throw new Error("invalid_streaming_text_budget");
+  }
+  const visibleUnits = Math.floor(budget.visibleBytesPerStream / 2);
+  const entries = new Map<string, Entry>();
+  let frame: number | null = null;
+  let shown = true;
+  let disposed = false;
+  let dirty = false;
+  let reclaimed = false;
+  let focusedThreadId: string | null = null;
+  let presentation = EMPTY_STREAMING_PRESENTATION;
+  const usage = () => {
+    let visibleBytes = 0,
+      pendingBytes = 0,
+      pendingUnits = 0;
+    for (const entry of entries.values()) {
+      visibleBytes += entry.text.length * 2;
+      pendingBytes += entry.pending.allocatedBytes;
+      pendingUnits += entry.pending.length;
     }
-    drainWaiters.delete(threadId);
-    for (const resolve of waiters) {
-      resolve();
+    return { streams: entries.size, visibleBytes, pendingBytes, pendingUnits };
+  };
+  const resolveDrain = (entry: Entry) => {
+    if (!entry.drain) return;
+    const drain = entry.drain;
+    delete entry.drain;
+    clearTimeout(drain.timer);
+    drain.resolve();
+  };
+  const clearQueue = (entry: Entry) => {
+    entry.pending.clear();
+    entry.pendingCharacters = 0;
+    entry.chunkSize = 8;
+    resolveDrain(entry);
+  };
+  const remove = (id: string) => {
+    const entry = entries.get(id);
+    if (!entry) return;
+    clearQueue(entry);
+    entries.delete(id);
+    dirty = true;
+  };
+  const cancelFrame = () => {
+    if (frame === null) return;
+    scheduler.cancelFrame(frame);
+    frame = null;
+  };
+  const evict = (keep: string | null): boolean => {
+    const ids = [...entries.keys()];
+    const id =
+      ids.find((id) => id !== focusedThreadId && id !== keep) ??
+      ids.find((id) => id !== focusedThreadId) ??
+      ids[0];
+    if (id === undefined) return false;
+    remove(id);
+    reclaimed = true;
+    return true;
+  };
+  const enforceBudget = (keep: string | null = null) => {
+    for (;;) {
+      const size = usage();
+      if (
+        size.streams <= budget.maxStreams &&
+        size.visibleBytes <= budget.totalVisibleBytes &&
+        size.pendingBytes <= budget.totalPendingBytes
+      )
+        return;
+      if (!evict(keep)) return;
     }
   };
-
-  const cancelScheduledFrame = () => {
-    if (scheduledFrame === null) {
-      return;
+  const publish = () => {
+    if (!dirty || disposed || !shown) return;
+    dirty = false;
+    const text = Object.fromEntries(
+      [...entries]
+        .filter(([, entry]) => entry.text)
+        .map(([id, entry]) => [id, entry.text]),
+    );
+    const nextPresentation = {
+      reclaimed,
+      previews: Object.fromEntries(
+        [...entries].map(([id, entry]) => [id, { partial: entry.partial }]),
+      ),
+    };
+    if (JSON.stringify(nextPresentation) !== JSON.stringify(presentation)) {
+      presentation = nextPresentation;
+      options.onPresentation?.(presentation);
     }
-
-    scheduler.cancelFrame(scheduledFrame);
-    scheduledFrame = null;
+    setText(() => text);
   };
-
-  const flush = () => {
-    scheduledFrame = null;
-    if (!hasPendingText(pendingByThread)) {
+  const fastForward = (entry: Entry) => {
+    if (!entry.pending.length) return;
+    const tail = entry.pending.tail(visibleUnits);
+    const omitted = entry.pending.length > tail.length;
+    const next = appendStreamingTail(
+      omitted ? "" : entry.text,
+      tail,
+      visibleUnits,
+    );
+    entry.text = next.text;
+    entry.partial ||= omitted || next.truncated;
+    clearQueue(entry);
+    dirty = true;
+  };
+  const schedule = () => {
+    if (
+      disposed ||
+      !shown ||
+      frame !== null ||
+      (!dirty && !usage().pendingUnits)
+    )
       return;
-    }
-
-    const visibleByThread: StreamingTextByThread = {};
-    const remainingByThread: StreamingTextByThread = {};
-    const remainingCharacterCountByThread: Record<string, number> = {};
-    for (const [threadId, pending] of Object.entries(pendingByThread)) {
-      if (!pending) {
-        resolveDrainWaiters(threadId);
-        continue;
-      }
-      const [visible, remaining] = takeStreamingChunk(
-        pending,
-        chunkSizeByThread[threadId] ?? MIN_STREAMING_CHARACTERS_PER_UPDATE,
+    frame = scheduler.requestFrame(flush);
+  };
+  function flush() {
+    cancelFrame();
+    if (disposed || !shown) return;
+    for (const entry of entries.values()) {
+      if (!entry.pending.length) continue;
+      const chunk = entry.pending.take(entry.chunkSize);
+      entry.pendingCharacters = Math.max(
+        0,
+        entry.pendingCharacters - characterCount(chunk),
       );
-      visibleByThread[threadId] = visible;
-      if (remaining) {
-        remainingByThread[threadId] = remaining;
-        remainingCharacterCountByThread[threadId] =
-          (pendingCharacterCountByThread[threadId] ?? 0) -
-          Array.from(visible).length;
-      } else {
-        delete chunkSizeByThread[threadId];
-        resolveDrainWaiters(threadId);
-      }
+      const next = appendStreamingTail(entry.text, chunk, visibleUnits);
+      entry.text = next.text;
+      entry.partial ||= next.truncated;
+      dirty = true;
+      if (!entry.pending.length) clearQueue(entry);
     }
-    pendingByThread = remainingByThread;
-    pendingCharacterCountByThread = remainingCharacterCountByThread;
-
-    setStreamingTextByThread((current) => {
-      let next = current;
-      for (const [threadId, delta] of Object.entries(visibleByThread)) {
-        if (!delta) {
-          continue;
-        }
-
-        if (next === current) {
-          next = { ...current };
-        }
-        next[threadId] = `${next[threadId] ?? ""}${delta}`;
-      }
-      return next;
-    });
-
-    if (hasPendingText(pendingByThread)) {
-      scheduleFlush();
-    }
-  };
-
-  const scheduleFlush = () => {
-    if (scheduledFrame !== null) {
-      return;
-    }
-
-    scheduledFrame = scheduler.requestFrame(flush);
-  };
+    enforceBudget();
+    publish();
+    schedule();
+  }
+  const createEntry = (): Entry => ({
+    text: "",
+    received: false,
+    pending: new StreamingTextChunks(),
+    pendingCharacters: 0,
+    chunkSize: 8,
+    partial: reclaimed,
+  });
+  // Protocol IDs are already bounded. Do not retain an unbounded malformed key.
+  const validId = (id: string) => id.length > 0 && id.length <= 512;
+  const combinedText = (entry: Entry) =>
+    entry.text + entry.pending.tail(entry.pending.length);
 
   return {
     append(threadId: string, delta: string): void {
-      if (!delta) {
+      if (disposed || !delta || !validId(threadId)) return;
+      const entry = entries.get(threadId) ?? createEntry();
+      entry.received ||= /\S/u.test(delta);
+      entries.delete(threadId);
+      entries.set(threadId, entry);
+      enforceBudget(threadId);
+      if (!entries.has(threadId)) {
+        schedule();
         return;
       }
-
-      const pending = `${pendingByThread[threadId] ?? ""}${delta}`;
-      const pendingCharacterCount =
-        (pendingCharacterCountByThread[threadId] ?? 0) +
-        Array.from(delta).length;
-      pendingByThread = {
-        ...pendingByThread,
-        [threadId]: pending,
-      };
-      pendingCharacterCountByThread = {
-        ...pendingCharacterCountByThread,
-        [threadId]: pendingCharacterCount,
-      };
-      chunkSizeByThread = {
-        ...chunkSizeByThread,
-        [threadId]: Math.max(
-          chunkSizeByThread[threadId] ?? 0,
-          streamingChunkSize(pendingCharacterCount),
-        ),
-      };
-      scheduleFlush();
+      const needed = entry.pending.capacityAfterAppend(delta.length);
+      if (needed > budget.pendingBytesPerStream) {
+        const tail = entry.pending.tail(visibleUnits);
+        const prefix =
+          entry.pending.length > tail.length
+            ? tail
+            : appendStreamingTail(entry.text, tail, visibleUnits).text;
+        const next = appendStreamingTail(prefix, delta, visibleUnits);
+        entry.text = next.text;
+        entry.partial = true;
+        clearQueue(entry);
+      } else {
+        while (
+          usage().pendingBytes - entry.pending.allocatedBytes + needed >
+          budget.totalPendingBytes
+        ) {
+          if (!evict(threadId) || !entries.has(threadId)) {
+            schedule();
+            return;
+          }
+        }
+        entry.pending.append(delta);
+        entry.pendingCharacters += characterCount(delta);
+        entry.chunkSize = Math.max(
+          entry.chunkSize,
+          Math.ceil(entry.pendingCharacters / 36),
+        );
+      }
+      dirty = true;
+      enforceBudget(threadId);
+      schedule();
+    },
+    // Evaluate updates against both displayed and queued text. Clearing a task
+    // must not drop another task's not-yet-painted deltas.
+    replace(
+      update:
+        | StreamingTextByThread
+        | ((current: StreamingTextByThread) => StreamingTextByThread),
+    ): void {
+      if (disposed) return;
+      const current = Object.fromEntries(
+        [...entries].map(([id, entry]) => [id, combinedText(entry)]),
+      );
+      const next = typeof update === "function" ? update(current) : update;
+      for (const id of entries.keys())
+        if (!Object.hasOwn(next, id) || !next[id]) remove(id);
+      for (const [id, value] of Object.entries(next)) {
+        if (
+          !value ||
+          !validId(id) ||
+          (entries.has(id) && value === current[id])
+        )
+          continue;
+        const prior = entries.get(id);
+        const entry = createEntry();
+        const bounded = boundedStreamingTail(value, visibleUnits);
+        entry.text = bounded.text;
+        entry.received = /\S/u.test(value) || (prior?.received ?? false);
+        entry.partial = bounded.truncated || (prior?.partial ?? reclaimed);
+        remove(id);
+        entries.set(id, entry);
+        dirty = true;
+        enforceBudget(id);
+      }
+      if (!Object.keys(next).length && reclaimed) {
+        reclaimed = false;
+        dirty = true;
+      }
+      enforceBudget();
+      publish();
+      cancelFrame();
+      schedule();
+    },
+    reset(threadId: string): void {
+      if (disposed) return;
+      remove(threadId);
+      publish();
+      cancelFrame();
+      schedule();
     },
     clearPending(threadId?: string): void {
-      if (threadId) {
-        const { [threadId]: _removed, ...remaining } = pendingByThread;
-        pendingByThread = remaining;
-        const { [threadId]: _removedCount, ...remainingCounts } =
-          pendingCharacterCountByThread;
-        pendingCharacterCountByThread = remainingCounts;
-        const { [threadId]: _removedSize, ...remainingSizes } =
-          chunkSizeByThread;
-        chunkSizeByThread = remainingSizes;
-        resolveDrainWaiters(threadId);
-      } else {
-        pendingByThread = {};
-        pendingCharacterCountByThread = {};
-        chunkSizeByThread = {};
-        for (const pendingThreadId of [...drainWaiters.keys()]) {
-          resolveDrainWaiters(pendingThreadId);
-        }
+      if (disposed) return;
+      for (const [id, entry] of entries) {
+        if (threadId !== undefined && id !== threadId) continue;
+        clearQueue(entry);
+        if (!entry.text) entries.delete(id);
       }
-
-      if (!hasPendingText(pendingByThread)) {
-        cancelScheduledFrame();
+      if (!usage().pendingUnits) {
+        cancelFrame();
+        dirty = false;
       }
     },
-    dispose(): void {
-      pendingByThread = {};
-      pendingCharacterCountByThread = {};
-      chunkSizeByThread = {};
-      cancelScheduledFrame();
-      for (const threadId of [...drainWaiters.keys()]) {
-        resolveDrainWaiters(threadId);
-      }
+    setVisible(visible: boolean): void {
+      if (disposed || shown === visible) return;
+      shown = visible;
+      cancelFrame();
+      for (const entry of entries.values()) fastForward(entry);
+      enforceBudget();
+      publish();
     },
-    flush,
+    setFocus(threadId: string | null): void {
+      focusedThreadId = threadId;
+    },
+    activity(threadId: string): StreamingTextActivity {
+      if (disposed) return "unavailable";
+      const entry = entries.get(threadId);
+      if (entry?.received) return "received";
+      // Eviction is not proof that the model has produced no output.
+      if ((!entry || entry.partial) && reclaimed) return "unavailable";
+      return "none";
+    },
     whenDrained(threadId: string): Promise<void> {
-      if (!pendingByThread[threadId]) {
+      const entry = entries.get(threadId);
+      if (disposed || !entry?.pending.length) {
+        publish();
         return Promise.resolve();
       }
-      return new Promise((resolve) => {
-        const waiters = drainWaiters.get(threadId) ?? new Set<() => void>();
-        waiters.add(resolve);
-        drainWaiters.set(threadId, waiters);
+      if (!shown) {
+        fastForward(entry);
+        enforceBudget();
+        return Promise.resolve();
+      }
+      if (entry.drain) return entry.drain.promise;
+      let resolve!: () => void;
+      const promise = new Promise<void>((done) => {
+        resolve = done;
       });
+      const timer = setTimeout(() => {
+        fastForward(entry);
+        enforceBudget();
+        publish();
+        cancelFrame();
+        schedule();
+      }, DRAIN_DEADLINE_MS);
+      entry.drain = { promise, resolve, timer };
+      schedule();
+      return promise;
     },
+    dispose(): void {
+      if (disposed) return;
+      disposed = true;
+      cancelFrame();
+      for (const entry of entries.values()) clearQueue(entry);
+      entries.clear();
+    },
+    flush,
+    usage,
   };
 }

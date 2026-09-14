@@ -5,17 +5,14 @@ import type {
   OfficeMemberContract,
 } from "@crewon/contracts";
 import type { ControlApiClient } from "@crewon/control-client";
-import {
-  ArrowLeft,
-  Check,
-  RotateCcw,
-  Trash2,
-  Users,
-} from "lucide-react";
+import { ArrowLeft, Check, RotateCcw, Trash2, Users } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import type { Locale } from "../../lib/i18n";
-import { controlOfficeRecord } from "../../lib/office/controlOfficeRuntime";
+import {
+  controlOfficeRecord,
+  publishControlOfficeRevision,
+} from "../../lib/office/controlOfficeRuntime";
 import {
   officeMemberAgentProfileHasChanges,
   officeMemberAgentProfileId,
@@ -376,13 +373,22 @@ export function ControlOfficeDefinitionRoom({
         });
       }
       if (officeDirty) {
-        const response = await client.createOffice(
-          controlOfficeSettingsRequest(office, drafts),
-          `office.settings.update:${crypto.randomUUID()}`,
-        );
+        const response = await publishControlOfficeRevision({
+          client,
+          office,
+          request: controlOfficeSettingsRequest(office, drafts),
+        });
         const nextDrafts = memberDraftsFromOffice(response.office);
         setOffice(response.office);
         setDrafts(nextDrafts);
+        setProfiles({});
+        setSavedProfiles({});
+        setProfileErrorByMember({});
+        setSelectedMemberId((current) =>
+          nextDrafts.some((draft) => draft.member.memberId === current)
+            ? current
+            : (nextDrafts[0]?.member.memberId ?? null),
+        );
         onSaved(controlOfficeRecord(response.office));
       }
       setSaved(true);
@@ -631,7 +637,6 @@ export function ControlOfficeDefinitionRoom({
                     </button>
                   </div>
                 </div>
-
               </>
             ) : (
               <div className="control-office-member-settings-empty">

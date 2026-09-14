@@ -1,13 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import test from "node:test";
 
 import {
   createControlDevEnvironment,
   defaultControlDataDirectory,
-  persistentDevelopmentAgentVersionId,
+  developmentAgentVersionId,
+  developmentRuntimeWorkerCount,
+  developmentRuntimeWorkerEnvironment,
   responsesEndpoint,
 } from "./crewon-control-web-dev.mjs";
 
@@ -76,28 +75,57 @@ test("creates a workspace-free TypeScript runtime environment", () => {
   );
 });
 
-test("keeps the local AgentVersion identity stable across runtime rebuilds", () => {
-  const directory = mkdtempSync(join(tmpdir(), "crewon-agent-identity-"));
-  try {
-    writeFileSync(
-      join(directory, "agent-version-runtime-bindings.json"),
-      JSON.stringify({
-        bindings: [
-          { agentVersionId: "local-web-existing" },
-          { agentVersionId: "local-web-existing-planner" },
-        ],
-      }),
-    );
+test("versions the local AgentVersion identity with the runtime fingerprint", () => {
+  assert.equal(
+    developmentAgentVersionId("a".repeat(64)),
+    "local-web-aaaaaaaaaaaaaaaaaaaaaaaa",
+  );
+  assert.notEqual(
+    developmentAgentVersionId("a".repeat(64)),
+    developmentAgentVersionId("b".repeat(64)),
+  );
+  assert.throws(
+    () => developmentAgentVersionId("not-a-fingerprint"),
+    /fingerprint is invalid/u,
+  );
+});
 
-    assert.equal(
-      persistentDevelopmentAgentVersionId(directory, "local-web-new-build"),
-      "local-web-existing",
+test("keeps local runtime concurrency explicit and bounded", () => {
+  assert.equal(developmentRuntimeWorkerCount(undefined), 1);
+  assert.equal(developmentRuntimeWorkerCount(" 2 "), 2);
+  for (const invalid of ["0", "9", "1.5", "many"]) {
+    assert.throws(
+      () => developmentRuntimeWorkerCount(invalid),
+      /CREWON_CONTROL_DEV_RUNTIME_WORKER_COUNT_invalid/u,
     );
-    assert.equal(
-      persistentDevelopmentAgentVersionId(directory, "local-web-next-build"),
-      "local-web-existing",
-    );
-  } finally {
-    rmSync(directory, { recursive: true });
   }
+});
+
+test("gives each local worker a unique owner and only one probe listener", () => {
+  const base = {
+    CREWON_PROVIDER_PROBE_PORT: "3211",
+    CREWON_PROVIDER_PROBE_TOKEN: "p".repeat(64),
+    CREWON_PROVIDER_PROBE_PROVIDER_ID: "provider-1",
+    CREWON_PROVIDER_PROBE_RUNTIME_BINDING_ID: "runtime-1",
+    CREWON_PROVIDER_PROBE_ENDPOINT: "https://provider.example/v1",
+    CREWON_PROVIDER_PROBE_CREDENTIAL_ENVIRONMENT: "CREWON_MODEL_API_KEY",
+    CREWON_MODEL_API_KEY: "a".repeat(32),
+  };
+  const primary = developmentRuntimeWorkerEnvironment(base, 0);
+  const secondary = developmentRuntimeWorkerEnvironment(base, 1);
+
+  assert.equal(primary.CREWON_WORKER_OWNER_ID, "control-web-runtime-worker-1");
+  assert.equal(primary.CREWON_PROVIDER_PROBE_PORT, "3211");
+  assert.equal(
+    secondary.CREWON_WORKER_OWNER_ID,
+    "control-web-runtime-worker-2",
+  );
+  assert.equal(secondary.CREWON_PROVIDER_PROBE_PORT, undefined);
+  assert.equal(secondary.CREWON_PROVIDER_PROBE_TOKEN, undefined);
+  assert.equal(secondary.CREWON_PROVIDER_PROBE_ENDPOINT, undefined);
+  assert.equal(secondary.CREWON_MODEL_API_KEY, base.CREWON_MODEL_API_KEY);
+  assert.throws(
+    () => developmentRuntimeWorkerEnvironment(base, -1),
+    /development_runtime_worker_index_invalid/u,
+  );
 });

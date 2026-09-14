@@ -1,4 +1,13 @@
-import type { OutboxClaim, OutboxMessage, RunStore } from "@crewon/application";
+import type {
+  OutboxClaim,
+  OutboxMessage,
+  OutboxRetentionPolicy,
+  RunStore,
+} from "@crewon/application";
+import {
+  DEFAULT_OUTBOX_RETENTION,
+  OutboxRetentionMaintenance,
+} from "./outbox-retention-maintenance.ts";
 
 import { RunEventHub } from "./run-event-hub.ts";
 
@@ -14,6 +23,7 @@ export type OutboxDispatcherConfig = Readonly<{
   retryAfterMs?: number;
   scanIntervalMs?: number | null;
   maxBatchSize?: number;
+  retention?: OutboxRetentionPolicy | null;
 }>;
 
 export class OutboxDispatcher {
@@ -25,6 +35,7 @@ export class OutboxDispatcher {
   readonly #retryAfterMs: number;
   readonly #scanIntervalMs: number | null;
   readonly #maxBatchSize: number;
+  readonly #retention: OutboxRetentionMaintenance;
   #timer: NodeJS.Timeout | null = null;
   #drain: Promise<void> | null = null;
   #closed = false;
@@ -56,6 +67,13 @@ export class OutboxDispatcher {
       config.maxBatchSize ?? DEFAULT_MAX_BATCH_SIZE,
       "outbox_batch_size_invalid",
     );
+    this.#retention = new OutboxRetentionMaintenance(
+      this.#store.outboxRetention,
+      config.retention === undefined
+        ? DEFAULT_OUTBOX_RETENTION
+        : config.retention,
+      () => this.#drain !== null,
+    );
   }
 
   start(): void {
@@ -63,6 +81,7 @@ export class OutboxDispatcher {
       return;
     }
     void this.wake();
+    this.#retention.start();
     if (this.#scanIntervalMs === null) {
       return;
     }
@@ -92,13 +111,19 @@ export class OutboxDispatcher {
     return this.#lastFailureCode;
   }
 
+  retentionStatus() {
+    return this.#retention.status();
+  }
+
   async close(): Promise<void> {
     this.#closed = true;
     if (this.#timer !== null) {
       clearInterval(this.#timer);
       this.#timer = null;
     }
+    const retentionClosed = this.#retention.close();
     await this.#drain;
+    await retentionClosed;
   }
 
   async #drainSafely(): Promise<void> {
@@ -111,6 +136,7 @@ export class OutboxDispatcher {
   }
 
   async #drainBatch(): Promise<void> {
+    let publishedEvents = 0;
     for (let delivered = 0; delivered < this.#maxBatchSize; delivered += 1) {
       const claim = await this.#store.claimNextOutbox({
         ownerId: this.#ownerId,
@@ -121,13 +147,16 @@ export class OutboxDispatcher {
         return;
       }
       try {
-        await this.#publish(claim.message);
+        publishedEvents += await this.#publish(claim.message);
         await this.#store.acknowledgeOutbox({
           messageId: claim.message.messageId,
           ownerId: claim.lease.ownerId,
           leaseId: claim.lease.leaseId,
           leaseEpoch: claim.lease.epoch,
         });
+        // A range is indivisible for acknowledgement. At most one bounded
+        // range can cross this per-drain event budget.
+        if (publishedEvents >= this.#maxBatchSize) return;
       } catch (error) {
         await this.#retry(claim, error);
         throw error;
@@ -135,7 +164,33 @@ export class OutboxDispatcher {
     }
   }
 
-  async #publish(message: OutboxMessage): Promise<void> {
+  async #publish(message: OutboxMessage): Promise<number> {
+    if (message.topic === "run.events.available") {
+      const range = parseRunEventRangeMessage(message);
+      const count = range.throughSequence - range.fromSequence + 1;
+      const events = await this.#store.listRunEvents(
+        { tenantId: message.tenantId, runId: message.runId },
+        range.fromSequence - 1,
+        count,
+      );
+      if (
+        events.length !== count ||
+        events[0]?.eventId !== range.firstEventId ||
+        events.at(-1)?.eventId !== range.lastEventId ||
+        events.some(
+          (event, index) =>
+            event.identity.runId !== message.runId ||
+            event.sequence !== range.fromSequence + index,
+        )
+      ) {
+        throw new Error("outbox_event_reference_invalid");
+      }
+      for (const event of events) {
+        this.#eventHub.publish([event]);
+        await Promise.resolve();
+      }
+      return count;
+    }
     const eventReference = parseRunUpdatedMessage(message);
     const events = await this.#store.listRunEvents(
       { tenantId: message.tenantId, runId: message.runId },
@@ -152,6 +207,7 @@ export class OutboxDispatcher {
       throw new Error("outbox_event_reference_invalid");
     }
     this.#eventHub.publish([event]);
+    return 1;
   }
 
   async #retry(claim: OutboxClaim, error: unknown): Promise<void> {
@@ -164,6 +220,41 @@ export class OutboxDispatcher {
       reasonCode: failureCode(error),
     });
   }
+}
+
+function parseRunEventRangeMessage(message: OutboxMessage): {
+  fromSequence: number;
+  throughSequence: number;
+  firstEventId: string;
+  lastEventId: string;
+} {
+  const {
+    fromSequence,
+    throughSequence,
+    firstEventId,
+    lastEventId,
+    schemaVersion,
+  } = message.payload;
+  if (
+    Object.keys(message.payload).sort().join(",") !==
+      "firstEventId,fromSequence,lastEventId,schemaVersion,throughSequence" ||
+    schemaVersion !== "crewon.run-event-range.v0" ||
+    typeof fromSequence !== "number" ||
+    !Number.isSafeInteger(fromSequence) ||
+    fromSequence < 1 ||
+    typeof throughSequence !== "number" ||
+    !Number.isSafeInteger(throughSequence) ||
+    throughSequence < fromSequence ||
+    throughSequence - fromSequence >= 32 ||
+    typeof firstEventId !== "string" ||
+    firstEventId.length < 1 ||
+    firstEventId.length > 512 ||
+    typeof lastEventId !== "string" ||
+    lastEventId.length < 1 ||
+    lastEventId.length > 512
+  )
+    throw new Error("outbox_payload_invalid");
+  return { fromSequence, throughSequence, firstEventId, lastEventId };
 }
 
 function parseRunUpdatedMessage(message: OutboxMessage): {

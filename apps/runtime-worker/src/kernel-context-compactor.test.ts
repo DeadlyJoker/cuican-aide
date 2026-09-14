@@ -37,6 +37,7 @@ test("turns one retrying Kernel segment into a bounded compaction result", async
     yield event(contract, 6, "usage.recorded", {
       inputTokens: 7,
       cachedInputTokens: 2,
+      cachedInputTokensReported: true,
       outputTokens: 1,
       totalTokens: 8,
     });
@@ -53,6 +54,7 @@ test("turns one retrying Kernel segment into a bounded compaction result", async
     usage: {
       inputTokens: 7,
       cachedInputTokens: 2,
+      cachedInputTokensReported: true,
       outputTokens: 1,
       totalTokens: 8,
     },

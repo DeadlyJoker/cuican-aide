@@ -89,7 +89,11 @@ export function SettingsFieldControl({
           step={field.step ?? 1}
           type="number"
           value={field.value}
-          onChange={(event) => emit(event.target.value)}
+          onChange={(event) => onChange(event.target.value, false)}
+          onBlur={(event) => emit(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.currentTarget.blur();
+          }}
         />
         {field.unit ? <small>{field.unit}</small> : null}
       </span>

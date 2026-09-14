@@ -5,6 +5,8 @@ import type {
   ThreadLifecycleEvent,
   ThreadState,
 } from "@crewon/domain";
+import { InMemoryAutomationScheduleIndex } from "./in-memory-automation-schedule-index.ts";
+import { validateScheduledAutomationQuery } from "./scheduled-automation-query.ts";
 import {
   RunStoreError,
   type AutomationCreateReceiptQuery,
@@ -58,6 +60,8 @@ export type InMemoryAutomationState = Readonly<{
   modelHistory: Map<string, ModelHistoryItem[]>;
   modelHistoryItemIds: Set<string>;
   outbox: Map<string, QueueRecord<OutboxMessage>>;
+  retiredOutboxIds: ReadonlySet<string>;
+  outboxReplayAuthority: Map<string, OutboxMessage>;
   workItems: Map<string, QueueRecord<WorkItem>>;
   appendModelHistory: (
     threadId: string,
@@ -68,9 +72,14 @@ export type InMemoryAutomationState = Readonly<{
 /** Owns in-memory Automation reads, receipts, and atomic mutations. */
 export class InMemoryAutomationAuthority {
   readonly #state: InMemoryAutomationState;
+  readonly #scheduleIndex = new InMemoryAutomationScheduleIndex();
 
   constructor(state: InMemoryAutomationState) {
     this.#state = state;
+    for (const record of state.automations.values()) {
+      if (record.definition.executionMode === "scheduled")
+        this.#scheduleIndex.insert(record.definition);
+    }
   }
 
   async loadCreateReceipt(
@@ -128,6 +137,8 @@ export class InMemoryAutomationAuthority {
         fingerprint: input.idempotency.requestFingerprint,
         result: clone(result),
       });
+      if (result.record.definition.executionMode === "scheduled")
+        this.#scheduleIndex.insert(result.record.definition);
       return clone(result);
     } catch (error) {
       throw normalizeAutomationStoreError(error);
@@ -200,36 +211,19 @@ export class InMemoryAutomationAuthority {
     query: ScheduledAutomationListQuery,
   ): Promise<readonly AutomationDefinitionRecord[]> {
     try {
-      if (
-        !Number.isSafeInteger(query.limit) ||
-        query.limit < 1 ||
-        query.limit > 100
-      ) {
-        throw new RunStoreError("automation_limit_invalid");
-      }
-      return [...this.#state.automations.values()]
-        .filter(
-          (record) =>
-            record.definition.executionMode === "scheduled" &&
-            (query.before === null ||
-              record.definition.updatedAt < query.before.updatedAt ||
-              (record.definition.updatedAt === query.before.updatedAt &&
-                record.definition.automationId < query.before.automationId)),
-        )
-        .sort(
-          (left, right) =>
-            right.definition.updatedAt.localeCompare(
-              left.definition.updatedAt,
-            ) ||
-            right.definition.automationId.localeCompare(
-              left.definition.automationId,
-            ),
-        )
-        .slice(0, query.limit)
-        .map((record) => {
-          validateAutomationRecord(record);
-          return clone(record);
-        });
+      validateScheduledAutomationQuery(query);
+      return this.#scheduleIndex.list(query.before, query.limit).map((key) => {
+        const record = this.#state.automations.get(key.automationId);
+        if (
+          record === undefined ||
+          record.definition.executionMode !== "scheduled" ||
+          record.definition.updatedAt !== key.updatedAt
+        ) {
+          throw new RunStoreError("automation_schedule_index_mismatch");
+        }
+        validateAutomationRecord(record);
+        return clone(record);
+      });
     } catch (error) {
       throw normalizeAutomationStoreError(error);
     }
@@ -333,7 +327,7 @@ export class InMemoryAutomationAuthority {
         messageIdExists: (id) => this.#state.messageIds.has(id),
         historyItemIdExists: (id) => this.#state.modelHistoryItemIds.has(id),
         runEventIdExists: (id) => this.#state.runEventIds.has(id),
-        outboxIdExists: (id) => this.#state.outbox.has(id),
+        outboxIdExists: (id) => (this.#state.outbox.has(id) || this.#state.retiredOutboxIds.has(id)),
         workItemIdExists: (id) => this.#state.workItems.has(id),
       });
       const outboxRecord = queueRecord(input.outbox, input.outbox.createdAt);
@@ -357,6 +351,7 @@ export class InMemoryAutomationAuthority {
       this.#state.runEvents.set(input.binding.runId, [clone(input.runEvent)]);
       this.#state.runEventIds.add(input.runEvent.eventId);
       this.#state.outbox.set(input.outbox.messageId, outboxRecord);
+      this.#state.outboxReplayAuthority.set(input.outbox.messageId, outboxRecord.item);
       this.#state.workItems.set(input.workItem.workItemId, workItemRecord);
       this.#state.invocationReceipts.set(key, {
         tenantId: input.tenantId,
@@ -390,7 +385,7 @@ export class InMemoryAutomationAuthority {
         ) ?? null,
       run: this.#state.runs.get(receipt.runId) ?? null,
       runEvents: this.#state.runEvents.get(receipt.runId) ?? [],
-      outbox: this.#state.outbox.get(result.outbox.messageId)?.item ?? null,
+      outbox: this.#state.outbox.get(result.outbox.messageId)?.item ?? this.#state.outboxReplayAuthority.get(result.outbox.messageId) ?? null,
       workItem:
         this.#state.workItems.get(result.workItem.workItemId)?.item ?? null,
     });

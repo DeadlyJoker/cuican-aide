@@ -76,11 +76,7 @@ describe("modelProviderListPanel", () => {
     expect(panel.body).not.toContain("已配置的模型服务");
   });
 
-  /*
-   * Both caveats have to be readable before a provider is saved: the key really
-   * is written in cleartext, and a Chat Completions endpoint cannot work at all.
-   */
-  it("states the OS credential storage and supervised-reload caveats", () => {
+  it("keeps the active-task warning and puts connection requirements on the form", () => {
     const panel = modelProviderListPanel({
       configRead: twoProviders,
       cwd: null,
@@ -89,10 +85,23 @@ describe("modelProviderListPanel", () => {
       probeAvailable: true,
     });
 
-    expect(panel.body).toContain("LiteLLM Gateway is recommended");
-    expect(panel.body).toContain("Responses bridge");
-    expect(panel.body).toContain("stored only in the OS credential store");
-    expect(panel.body).toContain("supervised Worker restart");
+    expect(panel.body).toContain("Wait for running tasks to finish");
+    expect(panel.body).not.toContain("Worker");
+    expect(panel.body).not.toContain("LiteLLM Gateway is recommended");
+    const form = modelProviderFormPanel({
+      entry: null,
+      isSelected: false,
+      locale: "en",
+    });
+    expect(
+      form.fields?.find(
+        (field) => field.id === MODEL_PROVIDER_FIELD_IDS.baseUrl,
+      )?.description,
+    ).toContain("Responses-compatible");
+    expect(
+      form.fields?.find((field) => field.id === MODEL_PROVIDER_FIELD_IDS.apiKey)
+        ?.secret,
+    ).toBe(true);
   });
 
   it("attaches a per-row action set, without re-selecting the current one", () => {
@@ -109,19 +118,20 @@ describe("modelProviderListPanel", () => {
       "model-provider-add",
       "refresh-model-providers",
     ]);
-    expect(panel.rows?.map((row) => row.actions?.map((action) => action.id)))
-      .toEqual([
-        [
-          "model-provider-test:gateway",
-          "model-provider-edit:gateway",
-          "model-provider-delete:gateway",
-        ],
-        [
-          "model-provider-edit:local",
-          "model-provider-select:local",
-          "model-provider-delete:local",
-        ],
-      ]);
+    expect(
+      panel.rows?.map((row) => row.actions?.map((action) => action.id)),
+    ).toEqual([
+      [
+        "model-provider-test:gateway",
+        "model-provider-edit:gateway",
+        "model-provider-delete:gateway",
+      ],
+      [
+        "model-provider-edit:local",
+        "model-provider-select:local",
+        "model-provider-delete:local",
+      ],
+    ]);
     expect(panel.rows?.[0].actions?.map((action) => action.label)).toEqual([
       "Test",
       "Edit",
@@ -137,7 +147,7 @@ describe("modelProviderListPanel", () => {
       mutationAvailable: true,
     });
 
-    expect(panel.body).toContain("还没有配置任何模型服务");
+    expect(panel.body).toContain("尚未添加模型服务");
     expect(panel.actions?.map((action) => action.id)).toEqual([
       "model-provider-add",
       "refresh-model-providers",
@@ -243,7 +253,10 @@ describe("modelProviderFormPanel", () => {
 
 describe("modelFieldOptions", () => {
   it("keeps the current value selectable when it is not advertised", () => {
-    const options = modelFieldOptions(["gpt-5.6-sol", "claude-sonnet-4"], "gateway-model");
+    const options = modelFieldOptions(
+      ["gpt-5.6-sol", "claude-sonnet-4"],
+      "gateway-model",
+    );
 
     expect(options.map((o) => o.value)).toEqual([
       "gateway-model",
@@ -253,9 +266,15 @@ describe("modelFieldOptions", () => {
   });
 
   it("does not duplicate the current value when it is already advertised", () => {
-    const options = modelFieldOptions(["gpt-5.6-sol", "claude-sonnet-4"], "gpt-5.6-sol");
+    const options = modelFieldOptions(
+      ["gpt-5.6-sol", "claude-sonnet-4"],
+      "gpt-5.6-sol",
+    );
 
-    expect(options.map((o) => o.value)).toEqual(["gpt-5.6-sol", "claude-sonnet-4"]);
+    expect(options.map((o) => o.value)).toEqual([
+      "gpt-5.6-sol",
+      "claude-sonnet-4",
+    ]);
   });
 });
 
@@ -266,7 +285,11 @@ describe("applyModelOptionsToPanel", () => {
       isSelected: false,
       locale: "en",
     });
-    const result = applyModelOptionsToPanel(panel, ["gpt-5.6-sol", "claude-sonnet-4"], "en");
+    const result = applyModelOptionsToPanel(
+      panel,
+      ["gpt-5.6-sol", "claude-sonnet-4"],
+      "en",
+    );
 
     const modelField = result?.fields?.find(
       (f) => f.id === MODEL_PROVIDER_FIELD_IDS.modelId,

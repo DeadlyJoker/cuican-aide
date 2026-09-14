@@ -4,6 +4,21 @@ import { describe, expect, it, vi } from "vitest";
 import { SettingsNavigation } from "./SettingsNavigation";
 
 describe("SettingsNavigation", () => {
+  it("hides unsupported device management without removing other settings", () => {
+    const markup = renderToStaticMarkup(
+      <SettingsNavigation
+        activeSection="mcp-servers"
+        hiddenSections={["computer-control"]}
+        locale="zh"
+        onBack={vi.fn()}
+        onSectionChange={vi.fn()}
+      />,
+    );
+    expect(markup).not.toContain("设备协助");
+    expect(markup).toContain("工具与扩展");
+    expect(markup).toContain("安全与权限");
+    expect(markup).toMatchSnapshot();
+  });
   it("shows only available settings with product-facing labels", () => {
     const markup = renderToStaticMarkup(
       <SettingsNavigation
@@ -14,11 +29,12 @@ describe("SettingsNavigation", () => {
       />,
     );
 
-    expect(markup).not.toContain("键盘快捷键");
+    expect(markup).toContain("键盘快捷键");
+    expect(markup).toContain('aria-current="page"');
     expect(markup).not.toContain("应用快照");
     expect(markup).not.toContain("工作树");
     expect(markup).toContain("AI 模型");
-    expect(markup).toContain("工具与服务");
+    expect(markup).toContain("工具与扩展");
     expect(markup).toContain("设备协助");
     expect(markup).not.toContain("Provider");
     expect(markup).not.toContain("MCP");
