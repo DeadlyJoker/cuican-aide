@@ -509,16 +509,23 @@ export class RecordingHost {
         });
         item.setSaveDialogOptions({ title: "保存教学下载" });
         const downloadPage = view.webContents.getURL();
-        const appended = this.#enqueue(() =>
-          this.store.append({
+        const downloadEpoch = this.#controlEpoch;
+        const appended = this.#enqueue(() => {
+          if (
+            this.#controlEpoch !== downloadEpoch ||
+            this.store.current?.recordingId !== current.recordingId ||
+            this.store.current.status !== "recording"
+          )
+            return Promise.resolve(null);
+          return this.store.append({
             ...this.#step("download", downloadPage),
             relatedStepId: this.store.current?.steps.at(-1)?.stepId ?? null,
             outcome: "unknown",
-          }),
-        );
+          });
+        });
         void appended
           .then(async (value) => {
-            const step = value.steps.at(-1);
+            const step = value?.steps.at(-1);
             if (!step || step.kind !== "download") return;
             const update = () =>
               void this.store
