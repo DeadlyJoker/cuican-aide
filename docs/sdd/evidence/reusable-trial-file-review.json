@@ -1,0 +1,24 @@
+{
+  "sourceCommit": "94c6934e1567c34ce410d301f84af8a1ce596de0",
+  "scope": "Root independently read committed owner files and checked references; root did not rerun the provider or runtime restart.",
+  "methodContainsNoFixtureAnswers": true,
+  "runId": "01a09e55-ef4a-764a-8642-3931fa9c21b9",
+  "skill": {
+    "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+    "versionId": "v5",
+    "contentDigest": "sha256:3a64fab98a1cfa135d58c8e094d0412f419e3f3830e93144baa55e1e871673ea"
+  },
+  "deliveryVersion": "bf8160cb-2e66-476b-8a84-0c007aebc1d0",
+  "contentDigest": "sha256:3f3c14cb0febdfb7fb4803ffab88688fc280c5d3ad889208ce82812e63a304ac",
+  "byteLength": 8531,
+  "reader": "SheetJS",
+  "detailOrderIds": ["A101", "A103"],
+  "summary": ["direct", "CNY", 200],
+  "completedToolReceipts": 16,
+  "modelCalls": 24,
+  "ownerRestartEvidence": true,
+  "limitations": [
+    "One explicit per-action approval in the reusable Skill trial; not unattended scheduling.",
+    "Synthetic business data and agent review; no manual/CUA or enterprise-login claim."
+  ]
+}

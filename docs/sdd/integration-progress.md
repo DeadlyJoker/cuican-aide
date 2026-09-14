@@ -77,3 +77,5 @@ F05 已在同一真实 WebContentsView 上验证 Puppeteer 动作、下载和 fo
 已追加 Responses `b6bd56205` 与 Worker `5a912c9b2`，根分别取为 `c3b065a8b` / `03d6c2d41`。前者明确发送 `strict:false` 保留已有可选参数与联合 schema，不更改工具本地校验；根完整 Responses 125 项和类型检查通过。后者在工具派发前取得 Store 返回的新租约，并将同一新租约用于命令与持久 dispatch；根跨原期限、失租/新 owner 拒绝、真实浏览器/文件恢复与工具续跑五文件共 25 通过、7 个 Postgres 条件跳过，Worker 类型检查通过。此前完整 Worker 计数与构建仍按原 source 记录，不冒称是在这两个后续提交后执行。
 
 F05 实际录制来源的首次真实模型交付证据 `34053bcbb` 已合入根 `da57a7764`。唯一 add/add 冲突是复现脚本的 source 路径：保留 F02 原始路径，逐字节确认 F05 归档副本与原始 C01 一致。根独立读取提交的实际 XLSX，8533 字节与摘要一致，明细 A101/A103、direct/CNY 汇总 200，来源与 assemble 回执均关联同一完成 Run。根没有重跑提供方或 Runtime 重启；重启逐字节相同由 owner 的实际证据支持，见 [根文件核验](evidence/real-trial-file-review.json)。此次包含一次正常具体审批，且审阅后的 v4 方法内嵌当期验收 ID/金额；正在移除这种验收答案依赖并用通用完成条件重做固定版本试跑。原 v4 成功与此前失败证据全部保留，尚不标为 E05 无人值守通过。
+
+可复用 v5 的真实试跑证据 `94c6934e1` 与所有浏览器动作受同一 scoped grant 约束的修复 `ea7c1faa8` 已合入根 `7e2ee0b54` / `2c6db5b06`。v5 方法不含当期订单号、日期或预期金额，根再次独立读取实际 8531 字节 XLSX，摘要与来源 Run 一致，明细和汇总正确；16 条工具回执均完成。见 [可复用方法文件核验](evidence/reusable-trial-file-review.json)。根运行 Host 与浏览器授权 UI 两文件共 **45 项通过**。这次试跑仍有一次明确具体审批；F01/F03 正补齐已有审批模式的显式请求/日程保存与 UI，F04 准备真实 occurrence helper，E05 仍待执行。

@@ -104,6 +104,17 @@
       "scope": "At 03d6c2d41; later rounds cross the original expiry, lost lease/new owner refuse before dispatch, actual Worker/browser/file recovery and tool continuation. PostgreSQL skips retained.",
       "logPath": "/tmp/crewon-integration-lease-final.log",
       "logSha256": "eb6a2c15aa35044d9d79537255d1a93de80adbc3e65364e1a27298ed0fca6fca"
+    },
+    {
+      "name": "Browser scope enforced across both action tools",
+      "counts": {
+        "filesPassed": 2,
+        "passed": 45,
+        "failed": 0
+      },
+      "scope": "At 7e2ee0b54; Host behavior and authorization UI snapshot. Per-action approval cannot expand an existing scoped grant; ordinary non-scoped authorization remains unchanged.",
+      "logPath": "/tmp/crewon-integration-browser-scope-final.log",
+      "logSha256": "18e27e54d7c0e0e3ec9578e19f3537214ccb90560d2d153c64d404095e7d123f"
     }
   ],
   "currentPackageBoundaryViolations": [
@@ -150,7 +161,7 @@
     "workerTypecheck": "passed after fresh-lease dispatch fix"
   },
   "remainingAcceptance": [
-    "F05 actual recorded-source real-provider trial, real XLSX verification, and repeated/scheduled execution are still in progress.",
+    "Reusable recorded-source v5 real-provider trial and actual model XLSX passed owner execution plus root file verification. Explicit existing approval mode wiring and real scheduled occurrence are still in progress.",
     "Manual/CUA validation remains unavailable while the macOS desktop is locked.",
     "New Skill-backed scheduling and delivery use the supported local SQLite deployment; live PostgreSQL/remote delivery is not claimed."
   ],
