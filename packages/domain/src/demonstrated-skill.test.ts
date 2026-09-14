@@ -77,7 +77,7 @@ test("F03-R03 versions are content verified and independent of later draft edits
   assert.deepEqual(parseSkillVersion(v, digester), v);
   assert.throws(
     () => parseSkillVersion({ ...v, markdown: "changed" }, digester),
-    /skill_digest_mismatch/,
+    /skill_version_invalid/,
   );
   const edited = createSkillVersion(
     {

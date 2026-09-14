@@ -25,6 +25,7 @@ export type DemonstratedSkillRecord = SkillLocator &
   }>;
 export type SkillTrialReview = Readonly<{
   confirmedAt: string;
+  resultNote: string;
   criteria: readonly string[];
   coverage: readonly ("new-date" | "new-input" | "handled-exception")[];
 }>;
