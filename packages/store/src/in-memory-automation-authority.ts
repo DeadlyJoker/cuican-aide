@@ -183,6 +183,9 @@ export class InMemoryAutomationAuthority {
           (record) =>
             record.definition.tenantId === query.tenantId &&
             record.definition.spaceId === query.spaceId &&
+            (query.definitionSchemaVersion === undefined ||
+              record.definition.schemaVersion ===
+                query.definitionSchemaVersion) &&
             (query.before === null ||
               record.definition.updatedAt < query.before.updatedAt ||
               (record.definition.updatedAt === query.before.updatedAt &&
@@ -327,7 +330,8 @@ export class InMemoryAutomationAuthority {
         messageIdExists: (id) => this.#state.messageIds.has(id),
         historyItemIdExists: (id) => this.#state.modelHistoryItemIds.has(id),
         runEventIdExists: (id) => this.#state.runEventIds.has(id),
-        outboxIdExists: (id) => (this.#state.outbox.has(id) || this.#state.retiredOutboxIds.has(id)),
+        outboxIdExists: (id) =>
+          this.#state.outbox.has(id) || this.#state.retiredOutboxIds.has(id),
         workItemIdExists: (id) => this.#state.workItems.has(id),
       });
       const outboxRecord = queueRecord(input.outbox, input.outbox.createdAt);
@@ -351,7 +355,10 @@ export class InMemoryAutomationAuthority {
       this.#state.runEvents.set(input.binding.runId, [clone(input.runEvent)]);
       this.#state.runEventIds.add(input.runEvent.eventId);
       this.#state.outbox.set(input.outbox.messageId, outboxRecord);
-      this.#state.outboxReplayAuthority.set(input.outbox.messageId, outboxRecord.item);
+      this.#state.outboxReplayAuthority.set(
+        input.outbox.messageId,
+        outboxRecord.item,
+      );
       this.#state.workItems.set(input.workItem.workItemId, workItemRecord);
       this.#state.invocationReceipts.set(key, {
         tenantId: input.tenantId,
@@ -385,7 +392,10 @@ export class InMemoryAutomationAuthority {
         ) ?? null,
       run: this.#state.runs.get(receipt.runId) ?? null,
       runEvents: this.#state.runEvents.get(receipt.runId) ?? [],
-      outbox: this.#state.outbox.get(result.outbox.messageId)?.item ?? this.#state.outboxReplayAuthority.get(result.outbox.messageId) ?? null,
+      outbox:
+        this.#state.outbox.get(result.outbox.messageId)?.item ??
+        this.#state.outboxReplayAuthority.get(result.outbox.messageId) ??
+        null,
       workItem:
         this.#state.workItems.get(result.workItem.workItemId)?.item ?? null,
     });

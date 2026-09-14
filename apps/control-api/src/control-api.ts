@@ -1,5 +1,6 @@
 import { registerDemonstratedSkillRoutes } from "./demonstrated-skill-routes.ts";
 import type { DemonstratedSkillService, SkillRecordingStore } from "@crewon/application";
+import { requireSkillScheduleClient, supportsSkillSchedules } from "./automation-client-compatibility.ts";
 import { registerThreadActiveRunRoute } from "./thread-active-run-route.ts";
 import { registerThreadCatalogRoute } from "./thread-catalog-route.ts";
 import type { StorageAdmissionPort } from "@crewon/application";
@@ -399,6 +400,7 @@ export function buildControlApi(
                   automationId: query.before.resourceId,
                 },
           limit: query.limit,
+          ...(supportsSkillSchedules(request.headers) ? {} : { definitionSchemaVersion: "crewon.automation.v0" as const }),
         },
       );
       const data = definitions.map(projectAutomation);
@@ -422,8 +424,11 @@ export function buildControlApi(
       requestContext(request),
     );
     const body = parseCreateAutomationRequest(request.body);
+    if (body.skillInvocation !== undefined) requireSkillScheduleClient(request.headers);
     const result = await dependencies.automations.createAutomation(actor, {
       kind: "automation.create",
+      ...(body.skillInvocation === undefined ? {} : { skillInvocation: body.skillInvocation }),
+      ...(body.parameterBindings === undefined ? {} : { parameterBindings: body.parameterBindings }),
       idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
       threadId: body.threadId,
       expectedThreadRevision: body.expectedThreadRevision,
@@ -452,6 +457,7 @@ export function buildControlApi(
         actor,
         parseAutomationId(request.params.automationId),
       );
+      if (definition.skillBinding) requireSkillScheduleClient(request.headers);
       const response: GetAutomationResponse = {
         automation: projectAutomation(definition),
       };
@@ -466,6 +472,10 @@ export function buildControlApi(
         requestContext(request),
       );
       const body = parseRunAutomationNowRequest(request.body);
+      if (!supportsSkillSchedules(request.headers)) {
+        const definition = await dependencies.automations.getAutomation(actor, parseAutomationId(request.params.automationId));
+        if (definition.skillBinding) requireSkillScheduleClient(request.headers);
+      }
       const result = await dependencies.automations.runAutomationNow(actor, {
         kind: "automation.runNow",
         idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),

@@ -1,9 +1,24 @@
-import { MAX_THREAD_ACTIVE_RUN_RESPONSE_BYTES, type GetThreadActiveRunResponse } from "@crewon/contracts";
-import { parseThreadActiveRunResponse } from "./thread-active-run-response.ts";
-import { MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES, parseThreadTranscriptWindowResponse, type GetThreadTranscriptWindowResponse } from "@crewon/contracts";
 import {
-  MAX_THREAD_CATALOG_RESPONSE_BYTES, parseThreadCatalogQuery, parseThreadCatalogResponse,
-  threadCatalogPath, type ThreadCatalogRequest, type ThreadCatalogResponse,
+  parseSkillInvocationSpec,
+  parseAutomationParameterBindings,
+} from "@crewon/contracts";
+import {
+  MAX_THREAD_ACTIVE_RUN_RESPONSE_BYTES,
+  type GetThreadActiveRunResponse,
+} from "@crewon/contracts";
+import { parseThreadActiveRunResponse } from "./thread-active-run-response.ts";
+import {
+  MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES,
+  parseThreadTranscriptWindowResponse,
+  type GetThreadTranscriptWindowResponse,
+} from "@crewon/contracts";
+import {
+  MAX_THREAD_CATALOG_RESPONSE_BYTES,
+  parseThreadCatalogQuery,
+  parseThreadCatalogResponse,
+  threadCatalogPath,
+  type ThreadCatalogRequest,
+  type ThreadCatalogResponse,
 } from "@crewon/contracts";
 import {
   MAX_THREAD_MESSAGE_WINDOW_RESPONSE_BYTES,
@@ -255,6 +270,7 @@ export class ControlApiClient {
       body,
       {
         ...options,
+        automationVersion: 1,
         idempotencyKey,
         requireCsrf: true,
         requireIdempotency: true,
@@ -270,6 +286,7 @@ export class ControlApiClient {
   ): Promise<ListAutomationsResponse> {
     return this.#json("GET", withQuery("/api/v1/automations", query), null, {
       ...options,
+      automationVersion: 1,
       expectedStatuses: [200],
     });
   }
@@ -282,7 +299,7 @@ export class ControlApiClient {
       "GET",
       `/api/v1/automations/${resourceId(automationId)}`,
       null,
-      { ...options, expectedStatuses: [200] },
+      { ...options, automationVersion: 1, expectedStatuses: [200] },
     );
   }
 
@@ -298,6 +315,7 @@ export class ControlApiClient {
       body,
       {
         ...options,
+        automationVersion: 1,
         idempotencyKey,
         requireCsrf: true,
         requireIdempotency: true,
@@ -852,11 +870,30 @@ export class ControlApiClient {
     options: ControlApiRequestOptions = {},
   ): Promise<GetThreadTranscriptWindowResponse> {
     const parsedQuery = parseThreadMessageWindowQuery(query, threadId);
-    const response = await this.#json<unknown>("GET", withQuery(
-      `/api/v1/threads/${resourceId(threadId)}/transcript-window`, query,
-    ), null, { ...options, expectedStatuses: [200], maximumResponseBytes: MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES });
-    try { return parseThreadTranscriptWindowResponse(response, threadId, parsedQuery); }
-    catch { throw new ControlApiProtocolError("control_client_transcript_window_invalid"); }
+    const response = await this.#json<unknown>(
+      "GET",
+      withQuery(
+        `/api/v1/threads/${resourceId(threadId)}/transcript-window`,
+        query,
+      ),
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES,
+      },
+    );
+    try {
+      return parseThreadTranscriptWindowResponse(
+        response,
+        threadId,
+        parsedQuery,
+      );
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_transcript_window_invalid",
+      );
+    }
   }
 
   listThreadMessages(
@@ -1054,7 +1091,11 @@ export class ControlApiClient {
     });
   }
 
-  async getRunInThread(threadId: string, runId: string, options: ControlApiRequestOptions = {}): Promise<GetRunResponse> {
+  async getRunInThread(
+    threadId: string,
+    runId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetRunResponse> {
     const response = await this.getRun(runId, options);
     try {
       const run = parseRunView(response.run, threadId);
@@ -1395,11 +1436,14 @@ export class ControlApiClient {
       expectedStatuses: readonly number[];
       maximumResponseBytes?: number;
       accept?: string;
+      automationVersion?: 1;
     },
   ): Promise<T> {
     const headers = this.#authenticatedHeaders(
       options.accept ?? "application/json",
     );
+    if (options.automationVersion === 1)
+      headers.set("x-crewon-automation-version", "1");
     if (method !== "GET") {
       headers.set("content-type", "application/json");
       if (options.requireCsrf === true && this.#csrfToken === null) {
@@ -1992,6 +2036,10 @@ function parseAutomationMutationResponse(
     automation.threadId !== command.threadId ||
     automation.title !== command.title ||
     automation.prompt !== command.prompt ||
+    automationWireJson(automation.skillInvocation ?? null) !==
+      automationWireJson(command.skillInvocation ?? null) ||
+    automationWireJson(automation.parameterBindings ?? {}) !==
+      automationWireJson(command.parameterBindings ?? {}) ||
     (command.agentVersionId !== null &&
       automation.agentVersionId !== command.agentVersionId) ||
     automation.automaticScheduling !== (command.schedule !== null)
@@ -2053,6 +2101,12 @@ function parseRunAutomationNowResponse(
 function parseAutomationView(input: unknown): AutomationView {
   if (
     !hasExactKeys(input, [
+      ...(isPlainObject(input) && input.skillInvocation !== undefined
+        ? ["skillInvocation"]
+        : []),
+      ...(isPlainObject(input) && input.parameterBindings !== undefined
+        ? ["parameterBindings"]
+        : []),
       "agentVersionId",
       "automaticScheduling",
       "automationId",
@@ -2080,6 +2134,16 @@ function parseAutomationView(input: unknown): AutomationView {
     input.updatedAt !== input.createdAt ||
     !isAutomationSchedule(input.schedule)
   ) {
+    throw new ControlApiProtocolError("control_client_automation_view_invalid");
+  }
+  try {
+    if (input.skillInvocation !== undefined)
+      parseSkillInvocationSpec(input.skillInvocation);
+    if (input.parameterBindings !== undefined) {
+      if (input.skillInvocation === undefined) throw new Error("missing skill");
+      parseAutomationParameterBindings(input.parameterBindings);
+    }
+  } catch {
     throw new ControlApiProtocolError("control_client_automation_view_invalid");
   }
   return structuredClone(input) as AutomationView;
@@ -2142,4 +2206,16 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   }
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
+}
+
+function automationWireJson(value: unknown): string {
+  return JSON.stringify(value, (_key, item) =>
+    item && typeof item === "object" && !Array.isArray(item)
+      ? Object.fromEntries(
+          Object.keys(item)
+            .sort()
+            .map((key) => [key, item[key]]),
+        )
+      : item,
+  );
 }
