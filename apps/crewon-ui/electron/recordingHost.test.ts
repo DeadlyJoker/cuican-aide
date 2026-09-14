@@ -379,6 +379,23 @@ describe("F02 R02/R03 host IPC identity and lifecycle", () => {
     await vi.waitFor(() => expect(f.generation()).not.toBe(oldGeneration));
   });
 
+  it("persists the source's fixed sensitive-input reason without accepting secret values", async () => {
+    const f = await setup();
+    await f.start();
+    f.source(
+      click({
+        kind: "input",
+        input: { classification: "runtime-required" },
+        reason: "sensitive-or-unbounded-input-omitted",
+      }),
+    );
+    await vi.waitFor(() => expect(f.host.store.current?.steps).toHaveLength(1));
+    expect(f.host.store.current?.status).toBe("recording");
+    expect(f.host.store.current?.steps[0]?.input).toEqual({
+      classification: "runtime-required",
+    });
+  });
+
   it("never encodes a frame rejected by the post-capture source check", async () => {
     const f = await setup();
     await f.start();
@@ -403,7 +420,6 @@ describe("F02 R02/R03 host IPC identity and lifecycle", () => {
     const f = await setup();
     const first = await f.start();
     f.source(click());
-    await vi.waitFor(() => expect(f.host.store.current?.steps).toHaveLength(1));
     f.view.webContents.emit(
       "did-start-navigation",
       {},
