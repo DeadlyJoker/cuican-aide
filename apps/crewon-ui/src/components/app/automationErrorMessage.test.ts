@@ -5,6 +5,14 @@ import { automationErrorMessage } from "./automationErrorMessage";
 describe("Skill schedule recovery messages", () => {
   it.each([
     ["automation_skill_unavailable", "恢复连接"],
+    ["skill_authority_unavailable", "恢复连接"],
+    ["automation_skill_backend_unsupported", "本地服务"],
+    ["skill_disabled", "激活该版本"],
+    ["skill_version_not_found", "重新选择"],
+    ["skill_ref_mismatch", "重新确认固定版本"],
+    ["skill_store_corrupt", "重新确认固定版本"],
+    ["skill_scope_mismatch", "恢复访问权限"],
+    ["skill_tool_unavailable", "恢复依赖"],
     ["skill_not_found", "重新选择"],
     ["skill_not_active", "激活该版本"],
     ["skill_access_denied", "恢复访问权限"],
