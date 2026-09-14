@@ -5,7 +5,10 @@ import type {
   WebIdentitySessionPort,
 } from "./identity-session-adapter.ts";
 
-const MAX_REQUEST_BODY_BYTES = 64 * 1024;
+import {
+  readFetchRequestBody,
+  RequestBodyTooLargeError,
+} from "./request-body.ts";
 const MAX_HEADER_BYTES = 16 * 1024;
 const SESSION_PATH = "/control-api/session";
 const LIVE_PATH = "/control-api/health/live";
@@ -172,24 +175,13 @@ function browserCsrf(
 async function boundedRequestBody(
   request: Request,
 ): Promise<ArrayBuffer | null | Response> {
-  if (request.method === "GET" || request.method === "HEAD") {
-    return null;
-  }
-  const contentLength = request.headers.get("content-length");
-  if (contentLength !== null) {
-    const parsed = Number(contentLength);
-    if (
-      !Number.isSafeInteger(parsed) ||
-      parsed < 0 ||
-      parsed > MAX_REQUEST_BODY_BYTES
-    ) {
+  try {
+    return await readFetchRequestBody(request);
+  } catch (error) {
+    if (error instanceof RequestBodyTooLargeError)
       return errorResponse(413, "request_body_too_large");
-    }
+    throw error;
   }
-  const body = await request.arrayBuffer();
-  return body.byteLength > MAX_REQUEST_BODY_BYTES
-    ? errorResponse(413, "request_body_too_large")
-    : body;
 }
 
 function proxyRequestHeaders(source: Headers): Headers {

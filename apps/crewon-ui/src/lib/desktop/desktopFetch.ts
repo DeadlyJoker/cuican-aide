@@ -45,6 +45,7 @@ export async function desktopBridgeFetch(
   ).toUpperCase();
   const budget = acquireDesktopHttpRequest(
     method === "GET" || method === "HEAD" ? "read" : "write",
+    { method, url: input instanceof Request ? input.url : String(input) },
   );
   const requestId = globalThis.crypto.randomUUID();
   const controller = new AbortController();

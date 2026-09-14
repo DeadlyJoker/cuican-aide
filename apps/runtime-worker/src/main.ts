@@ -36,6 +36,8 @@ import {
   createRuntimeNativeRemoteMcpOwner,
   type RuntimeNativeRemoteMcpOwner,
 } from "./runtime-native-remote-mcp.ts";
+import { createConfiguredRuntimeDelivery } from "./delivery-composition.ts";
+import { configuredDeliveryToolCatalog } from "./delivery-tool-catalog.ts";
 
 const agentVersionRuntimeBindingsPath =
   process.env.CREWON_AGENT_VERSION_RUNTIME_BINDINGS_PATH?.trim();
@@ -45,6 +47,7 @@ const initialized = await (async () => {
   let transport: ReturnType<typeof createModelTransport> | undefined;
   let toolRuntime: Awaited<ReturnType<typeof createConfiguredToolRuntime>>;
   let artifactAuthority: ReturnType<typeof createConfiguredArtifactAuthority>;
+  let delivery: ReturnType<typeof createConfiguredRuntimeDelivery>;
   try {
     const securityMode = parseRuntimeWorkerSecurityMode(
       process.env.CREWON_CONTROL_SECURITY_MODE ?? "standalone",
@@ -132,10 +135,12 @@ const initialized = await (async () => {
     );
     toolRuntime = await createConfiguredToolRuntime();
     artifactAuthority = createConfiguredArtifactAuthority();
+    delivery = createConfiguredRuntimeDelivery(process.env);
     return {
       agentVersionRuntimeFactory,
       ambientProviderProbe,
       artifactAuthority,
+      delivery,
       nativeWorkspaceReadCatalog,
       remoteMcpOwner,
       route,
@@ -147,6 +152,7 @@ const initialized = await (async () => {
   } catch (error) {
     await Promise.allSettled([
       artifactAuthority?.store.close(),
+      delivery?.store.close(),
       toolRuntime?.close?.(),
       transport?.close?.(),
     ]);
@@ -159,6 +165,7 @@ const {
   agentVersionRuntimeFactory,
   ambientProviderProbe,
   artifactAuthority,
+  delivery,
   nativeWorkspaceReadCatalog,
   remoteMcpOwner,
   route,
@@ -180,15 +187,25 @@ try {
           route,
         });
   const config = {
-    localStoragePaths: artifactAuthority === undefined ? [] : [
-      requiredEnvironment("CREWON_ARTIFACT_ROOT"),
-      requiredEnvironment("CREWON_ARTIFACT_DB_PATH"),
-    ],
+    localStoragePaths:
+      artifactAuthority === undefined
+        ? []
+        : [
+            requiredEnvironment("CREWON_ARTIFACT_ROOT"),
+            requiredEnvironment("CREWON_ARTIFACT_DB_PATH"),
+            ...(delivery === undefined
+              ? []
+              : [
+                  `${requiredEnvironment("CREWON_ARTIFACT_DB_PATH")}.delivery.sqlite`,
+                ]),
+          ],
     runtimeTenantId,
     route,
     transport,
     agentInstructions: process.env.CREWON_AGENT_INSTRUCTIONS?.trim() || null,
     toolRuntime,
+    delivery,
+    deliveryToolCatalog: configuredDeliveryToolCatalog(process.env),
     ...(artifactAuthority === undefined
       ? {}
       : {
@@ -242,13 +259,12 @@ try {
       ? {}
       : {
           agentVersionRuntimeFactory,
-          agentVersionDeployments:
-            agentVersionRuntimeFactory
-              .deploymentBindings(runtimeTenantId)
-              .filter(
-                (deployment) =>
-                  deployment.agentVersionId !== route.agentVersionId,
-              ),
+          agentVersionDeployments: agentVersionRuntimeFactory
+            .deploymentBindings(runtimeTenantId)
+            .filter(
+              (deployment) =>
+                deployment.agentVersionId !== route.agentVersionId,
+            ),
         }),
     ...(nativeBootstrap?.provider === null ||
     nativeBootstrap?.provider === undefined
@@ -298,6 +314,7 @@ try {
     nativeWorkspaceResources?.readGateway.close(),
   ]);
   await artifactAuthority?.store.close();
+  await delivery?.store.close();
   await toolRuntime?.close?.();
   await transport.close?.();
   remoteMcpOwner?.destroy();

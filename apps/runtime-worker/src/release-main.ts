@@ -27,6 +27,7 @@ import {
   responsesCompatibilityProfile,
 } from "./runtime-process-environment.ts";
 import { SystemApplicationClock } from "./standalone-adapters.ts";
+import { configuredDeliveryToolCatalog } from "./delivery-tool-catalog.ts";
 import {
   loadRuntimeReleaseActor,
   RuntimeReleaseAuthorization,
@@ -65,6 +66,7 @@ try {
     transport,
     agentInstructions: process.env.CREWON_AGENT_INSTRUCTIONS?.trim() || null,
     toolRuntime,
+    deliveryToolCatalog: configuredDeliveryToolCatalog(process.env),
     nativeWorkspaceReadCatalog: parseNativeWorkspaceReadCatalog(
       process.env.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
     ),

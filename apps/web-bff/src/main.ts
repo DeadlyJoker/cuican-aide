@@ -9,7 +9,7 @@ import type { ReadableStream as NodeReadableStream } from "node:stream/web";
 import { HttpIdentitySessionAdapter } from "./identity-session-adapter.ts";
 import { createWebBff } from "./web-bff.ts";
 
-const MAX_INCOMING_BODY_BYTES = 64 * 1024;
+import { readIncomingBody, RequestBodyTooLargeError } from "./request-body.ts";
 
 const publicOrigin = requiredEnvironment("CREWON_WEB_PUBLIC_ORIGIN");
 const bff = createWebBff({
@@ -45,6 +45,9 @@ const server = createServer(async (incoming, outgoing) => {
     await writeFetchResponse(outgoing, await bff.handle(request));
   } catch (error) {
     const bodyTooLarge = error instanceof RequestBodyTooLargeError;
+    // Drain rejected bytes without retaining them so clients can receive 413.
+    // requestTimeout still bounds an unfinished sender.
+    if (bodyTooLarge) incoming.resume();
     writeJsonError(
       outgoing,
       bodyTooLarge ? 413 : 500,
@@ -89,46 +92,13 @@ async function toFetchRequest(
   const body =
     method === "GET" || method === "HEAD"
       ? null
-      : await readIncomingBody(incoming);
+      : await readIncomingBody(incoming, origin);
   return new Request(new URL(incoming.url ?? "/", origin), {
     method,
     headers,
     signal,
     ...(body === null ? {} : { body }),
   });
-}
-
-async function readIncomingBody(
-  incoming: IncomingMessage,
-): Promise<ArrayBuffer> {
-  const declaredLength = incoming.headers["content-length"];
-  if (declaredLength !== undefined) {
-    const parsed = Number(declaredLength);
-    if (
-      !Number.isSafeInteger(parsed) ||
-      parsed < 0 ||
-      parsed > MAX_INCOMING_BODY_BYTES
-    ) {
-      throw new RequestBodyTooLargeError();
-    }
-  }
-  const chunks: Buffer[] = [];
-  let total = 0;
-  for await (const value of incoming) {
-    const chunk = Buffer.isBuffer(value) ? value : Buffer.from(value);
-    total += chunk.byteLength;
-    if (total > MAX_INCOMING_BODY_BYTES) {
-      throw new RequestBodyTooLargeError();
-    }
-    chunks.push(chunk);
-  }
-  const body = new Uint8Array(total);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return body.buffer;
 }
 
 async function writeFetchResponse(
@@ -199,5 +169,3 @@ function parsePositiveInteger(value: string, code: string): number {
   }
   return parsed;
 }
-
-class RequestBodyTooLargeError extends Error {}

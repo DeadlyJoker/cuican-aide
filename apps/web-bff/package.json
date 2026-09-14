@@ -15,5 +15,8 @@
   },
   "engines": {
     "node": ">=24 <25"
+  },
+  "dependencies": {
+    "@crewon/domain": "workspace:*"
   }
 }

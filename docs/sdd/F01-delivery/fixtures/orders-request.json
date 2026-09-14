@@ -1,0 +1,57 @@
+{
+  "templateInputId": "template",
+  "name": "orders-delivery.xlsx",
+  "sources": [
+    {
+      "inputId": "a",
+      "sheet": "CSV",
+      "headerRow": 1
+    },
+    {
+      "inputId": "b",
+      "sheet": "CSV",
+      "headerRow": 1
+    }
+  ],
+  "targetSheet": "明细",
+  "startRow": 2,
+  "columns": [
+    {
+      "sourceHeader": "order_id",
+      "targetColumn": "A"
+    },
+    {
+      "sourceHeader": "channel",
+      "targetColumn": "B"
+    },
+    {
+      "sourceHeader": "currency",
+      "targetColumn": "C"
+    },
+    {
+      "sourceHeader": "amount",
+      "targetColumn": "D"
+    },
+    {
+      "sourceHeader": "status",
+      "targetColumn": "E"
+    }
+  ],
+  "rules": {
+    "exclude": [
+      {
+        "header": "status",
+        "equals": "canceled"
+      }
+    ],
+    "requiredHeaders": ["amount"],
+    "exceptionSheet": "异常",
+    "lineageSheet": "来源",
+    "summary": {
+      "sheet": "汇总",
+      "startRow": 2,
+      "groupBy": ["channel", "currency"],
+      "valueHeader": "amount"
+    }
+  }
+}

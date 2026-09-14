@@ -1,3 +1,4 @@
+import { deliveryRequestBodyLimit } from "@crewon/domain/delivery-http-policy";
 import type {
   DesktopHttpRequest,
   DesktopHttpResponse,
@@ -251,7 +252,14 @@ function validateRequest(request: DesktopHttpRequest): void {
     !(request.body === null || request.body instanceof Uint8Array)
   )
     throw new Error("desktop_http_request_invalid");
-  if ((request.body?.byteLength ?? 0) > limits.requestBodyBytes)
+  if (
+    (request.body?.byteLength ?? 0) >
+    deliveryRequestBodyLimit({
+      method: request.method,
+      url: request.url,
+      defaultLimit: limits.requestBodyBytes,
+    })
+  )
     throw new Error("desktop_http_request_too_large");
   validateHeaders(request.headers);
   const url = new URL(request.url);

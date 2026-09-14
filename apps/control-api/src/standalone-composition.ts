@@ -1,4 +1,6 @@
 import type { StorageAdmissionPort } from "@crewon/application";
+import type { DeliveryStorePort } from "@crewon/application";
+import { composeDeliveries } from "./delivery-composition.ts";
 import { createLocalStorageAdmissionOwner } from "@crewon/store";
 import type { OutboxRetentionPolicy } from "@crewon/application";
 import {
@@ -53,6 +55,7 @@ import type { ProcessLocalActivationGate } from "./paused-admission.ts";
 import type { ThreadSandboxPort } from "./pim-sandbox-client.ts";
 
 type ControlApiCompositionConfig = Readonly<{
+  deliveryStore?: DeliveryStorePort;
   storageAdmission?: StorageAdmissionPort;
   localStoragePaths?: readonly string[];
   actor: ActorContext;
@@ -106,7 +109,10 @@ export function createStandaloneControlApi(
   try {
     return composeControlApi(store, {
       ...config,
-      localStoragePaths: [config.databasePath, ...(config.localStoragePaths ?? [])],
+      localStoragePaths: [
+        config.databasePath,
+        ...(config.localStoragePaths ?? []),
+      ],
     });
   } catch (error) {
     void store.close();
@@ -153,7 +159,11 @@ function composeControlApi(
   let workspaceWorker: LoopbackRuntimeWorkspaceWorkerClient | null = null;
   let artifactMaintenance: ArtifactRetentionMaintenance | undefined;
   try {
-    artifactMaintenance = new ArtifactRetentionMaintenance(config.artifactStore.retention, store, config.artifactRetention);
+    artifactMaintenance = new ArtifactRetentionMaintenance(
+      config.artifactStore.retention,
+      store,
+      config.artifactRetention,
+    );
     const authorization = new StandaloneAuthorization(config.actor);
     const clock = new SystemApplicationClock();
     const digester = new NodeSha256ContentDigester();
@@ -294,6 +304,14 @@ function composeControlApi(
       authorization,
     });
     const app = buildControlApi({
+      deliveries: config.deliveryStore
+        ? composeDeliveries({
+            store: config.deliveryStore,
+            threads,
+            runs: application,
+            authorization,
+          })
+        : null,
       application,
       offices,
       threads,
@@ -346,6 +364,7 @@ function composeControlApi(
       eventHub.close();
       await workspaceWorker?.close();
       await config.artifactStore.close();
+      await config.deliveryStore?.close();
       await store.close();
     });
     return {
@@ -365,6 +384,7 @@ function composeControlApi(
     eventHub.close();
     void workspaceWorker?.close();
     void config.artifactStore.close();
+    void config.deliveryStore?.close();
     void store.close();
     throw error;
   }
