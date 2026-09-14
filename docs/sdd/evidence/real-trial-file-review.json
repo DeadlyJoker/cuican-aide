@@ -1,0 +1,25 @@
+{
+  "sourceCommit": "34053bcbb0859b4f45c879c7d6ed2d634dbf01a3",
+  "scope": "Root independently read committed owner files and checked their references; root did not rerun the provider or restart the runtime.",
+  "recordingBytesMatchF02": true,
+  "runId": "01a09e50-6630-7286-bac0-ca27ff229539",
+  "skill": {
+    "skillId": "skill-3efd90f936a76a0e7644b317e9f8a4cd6ce3fde9e802d844e53d617b9112eab7",
+    "versionId": "v4",
+    "contentDigest": "sha256:088c42233a749115c364dfa2a5b8f5b21ca4d6b1af66adc1075dd7b5c9e6329e"
+  },
+  "deliveryVersion": "89242b01-c3c1-45f3-8b7b-f41595dc50d0",
+  "contentDigest": "sha256:08608f9f5c4558e59622deb8ed93ffe25114b73604f2c803def14389c6f3c161",
+  "byteLength": 8533,
+  "reader": "SheetJS",
+  "detailOrderIds": ["A101", "A103"],
+  "summary": ["direct", "CNY", 200],
+  "all15ToolReceiptsCompleted": true,
+  "modelAssembleReceiptPresent": true,
+  "ownerRestartEvidence": true,
+  "limitations": [
+    "One explicit per-action approval in this trial; not unattended scheduling.",
+    "Reviewed v4 method includes period-specific expected IDs/amount; a reusable version is being revised and re-tested.",
+    "Synthetic business data and agent review; no manual/CUA or enterprise-login claim."
+  ]
+}
