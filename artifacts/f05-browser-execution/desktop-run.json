@@ -1,0 +1,53 @@
+{
+  "schemaVersion": "crewon.f05-desktop-run-evidence.v1",
+  "model": "scripted Responses SSE fixture",
+  "businessPage": "synthetic local HTTP fixture",
+  "runtime": "actual RuntimeSupervisor Control/Worker child processes",
+  "recordingHost": "actual F02 RecordingHost/WebContentsView",
+  "threadId": "01a09e31-4321-723c-91dd-30e40c8d042f",
+  "runId": "01a09e31-4330-73eb-a298-e769ec1814c8",
+  "sessionId": "teaching-1385b26c-9e2f-4e7b-8bed-0792f51c96a7",
+  "runStatus": "completed",
+  "modelRequests": 10,
+  "downloadRequests": 1,
+  "pageState": {
+    "date": "2026-09",
+    "channel": "partner",
+    "result": "2026-09 / partner"
+  },
+  "file": {
+    "sourceRunId": "01a09e31-4330-73eb-a298-e769ec1814c8",
+    "inputId": "e03c7bde-d222-406c-ae16-e126bf2313c0",
+    "target": {
+      "schemaVersion": "crewon.delivery-target.v1",
+      "tenantId": "standalone-tenant",
+      "spaceId": "standalone-space",
+      "threadId": "01a09e31-4321-723c-91dd-30e40c8d042f",
+      "targetId": "thread-deliveries"
+    },
+    "ownerActorId": "standalone-actor",
+    "name": "orders.csv",
+    "role": "data",
+    "mediaType": "text/csv",
+    "byteLength": 39,
+    "contentDigest": "sha256:8bad3bb086e9ce930f0edf6ffcbc332600edbbe8c674509c8762d34710eaa29a",
+    "inspection": {
+      "sheets": [
+        {
+          "name": "CSV",
+          "rows": 3,
+          "columns": 2
+        }
+      ],
+      "formulaCount": 0
+    },
+    "createdAt": "2026-09-14T04:33:48.470Z"
+  },
+  "restartedRead": true,
+  "grantRevokedOnRestart": true,
+  "notCovered": [
+    "real model reasoning",
+    "enterprise login",
+    "scheduled Skill invocation"
+  ]
+}
