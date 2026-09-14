@@ -358,10 +358,8 @@ export function skillInvocationContext(
   return context;
 }
 
-export function parseSkillVersion(
-  value: unknown,
-  digester: SkillDigester,
-): SkillVersion {
+/** Wire snapshot shape only. Host/store must subsequently verify the digest. */
+export function parseSkillVersionSnapshot(value: unknown): SkillVersion {
   skillKeys(value, [
     "schemaVersion",
     "ref",
@@ -370,15 +368,47 @@ export function parseSkillVersion(
     "markdown",
     "createdAt",
   ]);
-  parseSkillVersionRef(value.ref);
-  parseSkillMethod(value.method);
+  if (value.schemaVersion !== "crewon.skill-version.v1")
+    throw new SkillError("skill_version_unsupported");
+  const ref = parseSkillVersionRef(value.ref);
+  const method = parseSkillMethod(value.method);
+  skillKeys(value.source, [
+    "recordingId",
+    "revision",
+    "contentDigest",
+    "provenance",
+  ]);
+  const source = value.source;
+  skillText(source.recordingId, 128);
   if (
-    !skillObject(value.source) ||
-    typeof value.markdown !== "string" ||
-    typeof value.createdAt !== "string"
+    !Number.isSafeInteger(source.revision) ||
+    (source.revision as number) < 1 ||
+    typeof source.contentDigest !== "string" ||
+    !/^sha256:[a-f0-9]{64}$/u.test(source.contentDigest) ||
+    !["recording", "contract-fixture"].includes(source.provenance as string)
+  )
+    throw new SkillError("skill_source_invalid");
+  if (
+    typeof value.createdAt !== "string" ||
+    !Number.isFinite(Date.parse(value.createdAt)) ||
+    value.markdown !== renderSkillMarkdown(method)
   )
     throw new SkillError("skill_version_invalid");
-  verifySkillVersion(value as SkillVersion, digester);
-  return structuredClone(value) as SkillVersion;
+  return {
+    schemaVersion: "crewon.skill-version.v1",
+    ref,
+    method,
+    source: structuredClone(source) as SkillRecordingSource,
+    markdown: value.markdown as string,
+    createdAt: value.createdAt,
+  };
+}
+export function parseSkillVersion(
+  value: unknown,
+  digester: SkillDigester,
+): SkillVersion {
+  const version = parseSkillVersionSnapshot(value);
+  verifySkillVersion(version, digester);
+  return version;
 }
 export const renderSkillInvocationContext = skillInvocationContext;
