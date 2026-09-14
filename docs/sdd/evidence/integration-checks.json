@@ -1,0 +1,133 @@
+{
+  "schemaVersion": "crewon.sdd-integration-evidence.v1",
+  "sourceCommit": "01116dff2746b22384914890135d0c07cbfbcc66",
+  "checks": [
+    {
+      "name": "UI full after app-boundary test relocation",
+      "counts": {
+        "filesPassed": 434,
+        "passed": 2972,
+        "failed": 0
+      },
+      "scope": "At 269a4c8f9; subsequent browser catalog fingerprint change separately tested with 15 Supervisor tests.",
+      "logPath": "/tmp/crewon-integration-ui-full-final.log",
+      "logSha256": "f3880fec6938fc8460a56cdcdf534e65fe9895a8ad6fca8d5203d36e911c267f"
+    },
+    {
+      "name": "UI initial full result",
+      "counts": {
+        "filesPassed": 433,
+        "filesFailed": 1,
+        "passed": 2971,
+        "failed": 1
+      },
+      "scope": "New Skill integration test location violated libArchitecture; fixed by relocation without weakening the rule.",
+      "logPath": "/tmp/crewon-integration-ui-full.log",
+      "logSha256": "b50543a2265bd5b4e943c8a488a94fa7e4179e5a87a0d06a3caa2b05af304f1b"
+    },
+    {
+      "name": "Runtime Worker full",
+      "counts": {
+        "passed": 470,
+        "failed": 0,
+        "skipped": 46
+      },
+      "scope": "At 7cd0d8806, including malformed input correction and durable recovery; provider/environment-dependent skips remain skips.",
+      "logPath": "/tmp/crewon-integration-worker-full.log",
+      "logSha256": "692d0e08bcf27d33dd46db523b011758422ccd0543cfb955ff6be0f8f31bfef8"
+    },
+    {
+      "name": "Control API full",
+      "counts": {
+        "passed": 212,
+        "failed": 0,
+        "skipped": 5
+      },
+      "scope": "At 7cd0d8806; includes real standalone SQLite schedule/delivery authority and compatibility.",
+      "logPath": "/tmp/crewon-integration-control-full.log",
+      "logSha256": "5ebc38cf2b7f27b85bf608b9755407d37cbadb82e8cabb23e8e0ca95c12b2bff"
+    },
+    {
+      "name": "Contracts full",
+      "counts": {
+        "passed": 118,
+        "failed": 0,
+        "skipped": 0
+      },
+      "scope": "Includes license and generated OpenAPI consistency checks.",
+      "logPath": "/tmp/crewon-integration-contracts-full.log",
+      "logSha256": "db3b7a79eca1bb0f153e19e3cb23307407893d08b563093b989299548c40d2a3"
+    },
+    {
+      "name": "Package architecture",
+      "counts": {
+        "passed": 6,
+        "failed": 3,
+        "skipped": 0
+      },
+      "scope": "Failures retained; current 23 violations are a subset of the separately reproduced baseline 25.",
+      "logPath": "/tmp/crewon-integration-package-boundaries.log",
+      "logSha256": "55221306c5fce4bbf38c3c9ef77aab261f6a55f5cf87391c624d12d30e88b0f0"
+    },
+    {
+      "name": "All packages typecheck",
+      "counts": null,
+      "scope": "All selected workspace packages completed successfully.",
+      "logPath": "/tmp/crewon-integration-packages-types.log",
+      "logSha256": "aa598a1a14e846ae2e0146bc67d00ff539eb61b081bf8234f0b840aa37a5d0a4"
+    },
+    {
+      "name": "Current UI build",
+      "counts": null,
+      "scope": "Built current UI including client identity guards; existing bundle size warnings retained.",
+      "logPath": "/tmp/crewon-integration-ui-build-final.log",
+      "logSha256": "9485033cf175077ba5cf5bab75a963f766f4561808ec996c3702431f2e3f3a9e"
+    }
+  ],
+  "currentPackageBoundaryViolations": [
+    "agent-kernel -> @crewon/domain",
+    "apps/control-api/src/main.ts -> node:net",
+    "apps/control-api/src/paused-admission.ts -> node:stream",
+    "apps/control-api/src/pim-sandbox-client.ts -> node:path",
+    "apps/control-api/src/provider-settings-native-coordinator.ts -> node:readline",
+    "packages/agent-kernel/src/agent-kernel-port.ts -> @crewon/domain",
+    "packages/agent-kernel/src/crewon-agent-kernel.ts -> @crewon/domain",
+    "packages/agent-kernel/src/model-call-observer.ts -> @crewon/domain",
+    "packages/agent-kernel/src/model-call-observer.ts -> node:crypto",
+    "packages/agent-kernel/src/model-transport-port.ts -> @crewon/domain",
+    "packages/agent-kernel/src/model-usage-observer.ts -> @crewon/domain",
+    "packages/agent-kernel/src/model-usage-observer.ts -> node:crypto",
+    "packages/application/src/office-application-service.ts -> node:crypto",
+    "packages/domain/src/execution-lifecycle.ts -> @crewon/contracts",
+    "packages/mcp-runtime/src/crewon-remote-mutation-provider.ts -> node:crypto",
+    "packages/mcp-runtime/src/fixtures/retained-mcp-catalog-gc.ts -> node:assert/strict",
+    "packages/mcp-runtime/src/fixtures/retained-mcp-catalog-gc.ts -> node:timers/promises",
+    "packages/store/src/in-memory-thread-message-window.ts -> node:buffer",
+    "packages/store/src/model-accounting-reader.ts -> node:timers/promises",
+    "packages/store/src/sqlite-execution-receipt-codec.ts -> node:zlib",
+    "packages/store/src/tool-sample-commit.ts -> @crewon/contracts",
+    "packages/store/src/workspace-read-file-store-support.ts -> @crewon/contracts",
+    "store -> @crewon/contracts"
+  ],
+  "baselineCommit": "79bf09d88b06fe1d823e5b6107843e13b34f0f4e",
+  "newPackageBoundaryViolations": [],
+  "additionalChecks": {
+    "browserModelInputRecovery": {
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0
+    },
+    "latestSupervisorFingerprint": {
+      "passed": 15,
+      "failed": 0
+    },
+    "desktopRuntimeStage": "passed at current source commit",
+    "desktopHostBuild": "passed at current source commit",
+    "publicRegistryFrozenInstall": "passed with existing workspace store; F01 independently downloaded and verified all 50 new public packages"
+  },
+  "remainingAcceptance": [
+    "F05 actual recorded-source real-provider trial, real XLSX verification, and repeated/scheduled execution are still in progress.",
+    "Manual/CUA validation remains unavailable while the macOS desktop is locked.",
+    "New Skill-backed scheduling and delivery use the supported local SQLite deployment; live PostgreSQL/remote delivery is not claimed."
+  ]
+}

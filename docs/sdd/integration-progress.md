@@ -58,6 +58,18 @@ F03 真实模型/独立 Control 进程重开证据 `86d37ead2` 已取入本树�
 
 第八批已合入 F05 完整接线历史至 `13bf049a1`：同一 F02 视图上的 Puppeteer driver、显式可撤销 grant、实际 Run 事实读取、认证本机桥、持久效果回执、下载字节向 F01 导入，以及桌面 Supervisor 启动/退出接线。保留根已有最新 UI、能力请求头、C03 validator 与 F02/F04 证据。清理自动合并产生的重复交付属性、导出和关闭调用。Puppeteer 作为单一生产依赖，复用 F02 已验证的公开 SHA512 锁条目和 modern-tar 0.8.5。
 
-根协调在本树运行 host/driver/授权/下载/录制十一文件 138 项、Control/Worker/交付恢复/契约八文件 37 项，均通过、无跳过；Control API、Runtime Worker、Contracts、UI 与 Electron 类型检查通过。日志分别为 `/tmp/crewon-integration-browser-host-tests.log` 和 `/tmp/crewon-integration-browser-runtime-tests.log`。包含真实 Worker/HTTP/10MiB 文件持久恢复，但不把脚本模型场景记为真实提供方执行。F05 独立任务继续联合真实模型验收；F03 身份切换期间的 UI 请求失效修复仍待取入。
+根协调在本树运行 host/driver/授权/下载/录制十一文件 138 项、Control/Worker/交付恢复/契约八文件 37 项，均通过、无跳过；Control API、Runtime Worker、Contracts、UI 与 Electron 类型检查通过。日志分别为 `/tmp/crewon-integration-browser-host-tests.log` 和 `/tmp/crewon-integration-browser-runtime-tests.log`。包含真实 Worker/HTTP/10MiB 文件持久恢复，但不把脚本模型场景记为真实提供方执行。后续身份切换修复与联合验收进度见下一节。
 
-F05 已报告同一真实 WebContentsView 上的 Puppeteer 动作、下载和 focus emulation 恢复探针通过；尚未贯通本树的录制/授权/交付路径，不能冒称人工 GUI 验收或完整后台执行。已找到原工作区现有模型配置，F03 将只在隔离验收进程读取，使用合成材料验证；凭据不复制、不输出，不使用原用户数据库。
+## 当前整体验证与已知限制
+
+已取入 F03 `16e5c67be` 的身份切换修复及最终证据。总 UI 首跑 2971 通过、1 失败：新 Skill 宿主集成测试从底层组件目录引用 app 协调模块，触犯现有架构规则。根以 `269a4c8f9` 将原测试移至 app 同层，仅调整三个 import，全部断言和规则保留；22 项窄验证通过后，第二次完整 UI 为 **434 文件 / 2972 项全部通过**。
+
+F05 真实模型首先暴露空 sessionId 被严格拒绝后没有反馈给模型的问题。已合入 `d8d601ec9`：只将合法 Tool 命令内、尚未发送到宿主的参数错误返回有界 `isError`，协议/租约错误及已发送动作的不确定结果保持原语义。根验证真实 Worker 的模型纠正、提交前崩溃及下载恢复共 19 项通过；工具描述与最终桌面指纹 `v1.2` 的两个后续提交一起取入，Supervisor 15 项通过。实际提供方重跑由 F05 继续，先前失败 Run 的证据保留。
+
+当前组合的 Control API 全套 **212 通过 / 5 跳过**，Runtime Worker 全套 **470 通过 / 46 跳过**，Contracts **118 通过**；所有 packages 类型检查通过。实际执行了当前代码的 UI build、桌面 runtime stage 与 Electron host build，均成功，保留既有体积/模块类型警告。完整 UI 执行在上述最终指纹微调之前，微调后只重跑受影响的 Supervisor，未冒称重复跑了整套 UI。
+
+packages 架构测试仍 **6 通过 / 3 失败**。本树 23 条违规逐项与基线证据比较，无新增违规，未放宽既有检查。不能称整仓全绿。详细计数、验证范围、原始日志摘要与已知缺口见 [集成检查记录](evidence/integration-checks.json)。
+
+F01 新增 50 个公开包已改为核验过的官方 HTTPS 下载与 SHA512，原版本/依赖图不变；其误改的既有 tmp resolution 已恢复。根 frozen install 通过，公开 tarball 的逐包下载证据由 F01 保留。历史基线的其它内部源未改，不能据此承诺整个历史依赖树已能在外部 CI 安装。
+
+F05 已在同一真实 WebContentsView 上验证 Puppeteer 动作、下载和 focus emulation 恢复，脚本模型下的 Supervisor/Worker/授权/文件导入路径也已有独立证据。真实提供方消费实际录制后的联合试跑仍未通过：第二次失败继续暴露 Responses 工具参数序列化和 Worker 续租后传递旧租约的问题，正在修复并保留失败证据。不能将这些阶段性验证称为完整 E05 或人工 GUI 验收。已有模型配置只供隔离验收进程读取，使用合成业务材料；凭据不复制、不输出，不使用原用户数据库。
