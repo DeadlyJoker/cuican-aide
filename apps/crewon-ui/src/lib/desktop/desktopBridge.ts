@@ -1,3 +1,4 @@
+import type { BrowserExecutionBridge } from "../browser-execution/browserExecutionGrant.ts";
 import type {
   DesktopHttpReadResult,
   DESKTOP_HTTP_VERSION,
@@ -121,6 +122,7 @@ export interface CrewonDesktopBridge {
     isFullscreen(): Promise<boolean>;
     onBoundsChanged(listener: () => void): () => void;
   };
+  readonly browserExecution?: BrowserExecutionBridge;
   readonly browser: {
     create(id: string, url: string, bounds: DesktopRectangle): Promise<void>;
     updateBounds(id: string, bounds: DesktopRectangle): Promise<void>;
