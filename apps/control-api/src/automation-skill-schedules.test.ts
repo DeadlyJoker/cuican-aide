@@ -295,6 +295,45 @@ for (const backend of ["memory", "sqlite"] as const) {
   });
 }
 
+for (const explicitMode of [false, true]) {
+  test(`F04 manual-only Skill dates (${explicitMode ? "explicit" : "default"}) validate at creation and freeze actual run time`, async (context) => {
+    const f = await setup(context, "sqlite");
+    const service = f.services().automations;
+    const { executionMode: _mode, ...command } = f.command;
+    const created = await service.createAutomation(actor, {
+      ...command,
+      ...(explicitMode ? { executionMode: "manualOnly" as const } : {}),
+      schedule: {
+        ...f.command.schedule,
+        scheduleType: "once",
+        nextRunAt: "9999-12-31T23:59:59Z",
+        intervalSeconds: 0,
+      },
+    });
+    assert.deepEqual(f.calls[0]?.invocation.parameters, {
+      start: "2026-09-07",
+      end: "2026-09-13",
+    });
+    assert.equal(
+      created.record.definition.schedule.nextRunAt,
+      "9999-12-31T23:59:59Z",
+    );
+    f.setNow("2026-09-20T17:00:00.000Z");
+    const result = await service.runAutomationNow(actor, {
+      kind: "automation.runNow",
+      idempotencyKey: "manual-date-run",
+      automationId: created.record.definition.automationId,
+      expectedAutomationRevision: 1,
+      expectedThreadRevision: 1,
+    });
+    assert.equal(result.binding.scheduledFor, f.now());
+    assert.deepEqual(result.binding.skillInvocation?.parameters, {
+      start: "2026-09-14",
+      end: "2026-09-20",
+    });
+  });
+}
+
 test("F04-R03/R04 rejects invalid parameters, missing capability and untrusted contexts without writes", async (context) => {
   const f = await setup(context);
   const absent = new AutomationApplicationService({

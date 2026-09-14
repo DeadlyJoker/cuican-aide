@@ -51,6 +51,8 @@
 
 最终宿主文件 8 项通过；相关七个 Control 测试文件 32/32 通过（`/tmp/f04-fence-control-final.log`）；相关 Store/原始 SQLite Run/F03直接Skill/生成/自动化回归 182 通过、6 跳过、0 失败（`/tmp/f04-fence-store-final.log`）；Store、Control typecheck、boundary 通过；UI 恢复文案 24 项通过。新增 PostgreSQL 不支持 v1 新写入的行为测试因未配置 `CREWON_TEST_POSTGRES_URL` 跳过，不能视为 live PostgreSQL 验证。此轮没有重复整仓全量测试，前述全量失败/跳过记录继续保留。
 
+手动日程补充：`manualOnly` 的保存准入和定义字节预算校验使用创建时间，不使用既有 `9999-12-31T23:59:59Z` 调度占位值；后者在正时区还可能溢出 ISO 四位年份。实际手动触发仍冻结当次 server now，定义/占位值和旧 v0 不变。新增真实 SQLite 回归覆盖显式/默认手动模式，跨周验证保存样例与实际运行参数不同且正确，相关 19 项通过（`/tmp/f04-manual-dates.log`），Control typecheck 与 format 通过。
+
 UI 子任务以真正 React 生产组件挂载显式 fixture：1440×900、1280×540、390×640 无横向溢出、提交控件可见；实际选择 previousWeekStart 并提交 version-1；交付目标不匹配时禁用。临时本地预览已清理。该检查不是真实 Skill 生命周期 GUI。
 
 真正 `/#view-schedule` 在当前环境停在登录页，后端 8000 未启动；未据此声称真实上游 UI 成功。Skill 面板「添加到日程」公共 shell 入口及 standalone `skills` 宿主注入由 F03 集成，F04 提供 `skillAutomationDraft` 和可选 `SkillInvocationPort`。无端口时拒绝保存/执行。
