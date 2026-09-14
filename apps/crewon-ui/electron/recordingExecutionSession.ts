@@ -22,5 +22,5 @@ export interface RecordingExecutionAccess {
   }): RecordingExecutionLease;
   releaseExecution(leaseId: string): void;
   revokeExecution(reason: string): void;
-  subscribeExecutionRevoked(listener:(reason:string)=>void):()=>void;
+  subscribeExecutionRevoked(listener: (reason: string) => void): () => void;
 }

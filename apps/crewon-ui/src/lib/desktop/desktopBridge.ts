@@ -1,4 +1,8 @@
 import type {
+  RecordingBridge,
+  RecordingSkillImportListener,
+} from "./recordingBridge.ts";
+import type {
   DesktopHttpReadResult,
   DESKTOP_HTTP_VERSION,
 } from "./desktopHttpProtocol.ts";
@@ -120,6 +124,9 @@ export interface CrewonDesktopBridge {
     isMaximized(): Promise<boolean>;
     isFullscreen(): Promise<boolean>;
     onBoundsChanged(listener: () => void): () => void;
+  };
+  readonly recording?: Pick<RecordingBridge, "open"> & {
+    onSkillImportRequest(listener: RecordingSkillImportListener): () => void;
   };
   readonly browser: {
     create(id: string, url: string, bounds: DesktopRectangle): Promise<void>;

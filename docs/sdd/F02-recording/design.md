@@ -22,39 +22,58 @@ type RecordingExport = {
   contentDigest: `sha256:${string}`;
   scope: { ownerId: string; workspaceId: string | null };
   authorization: {
-    source: 'desktop-user-start';
+    source: "desktop-user-start";
     authorizedAt: string;
     allowedOrigins: string[];
   };
   startedAt: string;
   updatedAt: string;
-  status: 'recording' | 'paused' | 'completed' | 'interrupted' | 'budget-exceeded';
+  status:
+    | "recording"
+    | "paused"
+    | "completed"
+    | "interrupted"
+    | "budget-exceeded";
   steps: Array<{
     stepId: string;
     sequence: number; // 原始单调序号，删步不重排身份或序号
-    kind: 'navigate' | 'click' | 'input' | 'select' | 'download' | 'unsupported';
+    kind:
+      | "navigate"
+      | "click"
+      | "input"
+      | "select"
+      | "download"
+      | "unsupported";
     occurredAt: string;
     page: { origin: string; routeTemplate: string; routeDigest: string };
-    target: { tag: string; selector: string; description: string; role: string | null; accessibleName: string | null } | null;
-    input: { classification: 'ordinary' | 'parameter-candidate'; value: string }
-      | { classification: 'runtime-required' } | null;
+    target: {
+      tag: string;
+      selector: string;
+      description: string;
+      role: string | null;
+      accessibleName: string | null;
+    } | null;
+    input:
+      | { classification: "ordinary" | "parameter-candidate"; value: string }
+      | { classification: "runtime-required" }
+      | null;
     note: string | null;
     evidenceIds: string[];
-    outcome: 'observed' | 'completed' | 'cancelled' | 'unknown';
+    outcome: "observed" | "completed" | "cancelled" | "unknown";
     reason: string | null;
     relatedStepId: string | null;
   }>;
   evidence: Array<{
     evidenceId: string;
-    kind: 'redacted-layout' | 'redacted-screenshot';
-    mediaType: 'image/svg+xml' | 'image/png';
+    kind: "redacted-layout" | "redacted-screenshot";
+    mediaType: "image/svg+xml" | "image/png";
     byteLength: number;
     contentDigest: string;
   }>;
   edits: Array<{
     revision: number;
     stepId: string;
-    operation: 'delete' | 'annotate';
+    operation: "delete" | "annotate";
     at: string;
   }>;
 };
@@ -85,3 +104,15 @@ type RecordingExport = {
 复用仓库 canonicalJsonValue、ContractValidationError、React、Electron/esbuild/vitest 构建测试、桌面桥与当前设计主题。必要自有代码仅为 C01 业务形状、输入和目标过滤、授权/会话隔离、预算、revision、持久化、下载关联与UI控制。执行定位交由 F05 的成熟浏览器执行能力评审，不从录制 selector 推演新执行引擎。
 
 参考：[dom-accessibility-api 官方仓库](https://github.com/eps1lon/dom-accessibility-api)、[rrweb 隐私配置](https://github.com/rrweb-io/rrweb/blob/main/docs/recipes/privacy.md)。开源语义支持不代表任意网站、跨源框架或任意敏感内容均已验证。
+
+## 接口收敛与实测修订
+
+录制控制 IPC 以 recordingId 绑定当前录制，pause/resume/finish 在宿主串行处理当前状态；expectedRevision 用于兼容传输而不让持续到达的新事件阻断暂停。删步/说明修改仍严格 expectedRevision，错录制 ID 一律拒绝。远程 preload 回报对应 generation 的 armed ACK 后才标为可采集；重复导航就绪通知复用同 generation，导航使已接受动作只丢弃过期画面，不丢失先前动作语义。暂停/结束/关闭以独立 control epoch 拒收迟到采集。
+
+F03 交接端口是主窗口 desktop.recording.onSkillImportRequest(listener)：教学页显式“生成 Skill 草稿”后，宿主校验当前快照与有界证据并只向确切 ownerWindow 发送 requestId、recording、evidence{evidenceId,mediaType,dataBase64}。消费者注册前按钮禁用；消费者通过现有认证客户端导入并返回真实结果。预备阶段串行锁、requestId 匹配、60 秒超时、主框架导航撤销用于防止串任务/重复响应；超时保持结果未确认提示，不声称导入成功。该调用不授予执行权限。
+
+F05 的 main-only `RecordingExecutionAccess` 与 `RecordingExecutionLease` 在独立模块中。录制 recording/paused/interrupted 阻止 acquire；结束后可供 F05 按已授权任务获取同一个 WebContentsView，租约包含 AbortSignal。录制开始/控制、用户导航和窗口关闭同步 revoke；generation 变化只失效当前租约，F05 决定任务 grant 的保留。即使没有租约，subscribeExecutionRevoked 仍收到用户接管事件，避免旧 grant 复用。Cookie 由 Electron 的 persist:crewon-teaching 分区自行保存，与录制数据分离，录制器不读取/复制 Cookie。人工输入与 Puppeteer 输入的区分和当前任务授权控件由 F05 负责并验收，F02 不宣称已验证该识别。
+
+## 实现期故障闭环
+
+截图候选保存在隔离 preload 的有界私有表中。宿主截图前后分别复核同 generation、目标与同步 DOM mutation 版本；变化、超时、错误 sender 或无法确认时不编码/持久化 PNG。同 selector 的旧候选不能由后续点击更新借用。下载导致的临时导航会关闭源，但下载关联仍按确切 view 与正在录制的 session 记录；did-stop-loading 为仍存活的页面重新握手。
