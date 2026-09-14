@@ -1,4 +1,6 @@
 import { registerThreadActiveRunRoute } from "./thread-active-run-route.ts";
+import { registerDeliveryRoutes } from "./delivery-routes.ts";
+import type { DeliveryApplicationService } from "@crewon/application";
 import { registerThreadCatalogRoute } from "./thread-catalog-route.ts";
 import type { StorageAdmissionPort } from "@crewon/application";
 import { installStorageAdmission } from "./storage-admission.ts";
@@ -209,6 +211,7 @@ import type {
 } from "./pim-sandbox-client.ts";
 
 export type ControlApiDependencies = Readonly<{
+  deliveries?: DeliveryApplicationService | null;
   application: RunApplicationService;
   offices?: OfficeApplicationService | null;
   threads: ThreadApplicationService;
@@ -313,6 +316,7 @@ export function buildControlApi(
   });
 
   app.get("/api/v1/health/live", async () => ({ status: "ok" as const }));
+  registerDeliveryRoutes(app, dependencies);
 
   app.get("/api/v1/health/ready", async (request, reply) => {
     try {

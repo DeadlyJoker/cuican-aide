@@ -1,0 +1,5 @@
+order_id,channel,currency,amount,status
+A001,直营,CNY,100.00,paid
+A002,直营,CNY,50.00,canceled
+A003,直营,CNY,80.00,paid
+A004,直营,USD,10.00,paid

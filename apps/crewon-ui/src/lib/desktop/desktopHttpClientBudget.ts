@@ -1,10 +1,20 @@
+import { deliveryRequestBodyLimit } from "@crewon/domain/delivery-http-policy";
 import { DESKTOP_HTTP_LIMITS as limits } from "./desktopHttpProtocol";
 
 let active = 0,
   reads = 0,
   bodyBytes = 0;
 /** Shared across callers in this renderer, including requests still preparing their body. */
-export function acquireDesktopHttpRequest(kind: "read" | "write") {
+export function acquireDesktopHttpRequest(
+  kind: "read" | "write",
+  request?: { method: string; url: string },
+) {
+  const maximumBodyBytes = request
+    ? deliveryRequestBodyLimit({
+        ...request,
+        defaultLimit: limits.requestBodyBytes,
+      })
+    : limits.requestBodyBytes;
   if (
     active >= limits.activeRequests ||
     (kind === "read" && reads >= limits.readRequests)
@@ -21,7 +31,7 @@ export function acquireDesktopHttpRequest(kind: "read" | "write") {
   return {
     reserve(bytes: number) {
       if (released) throw new Error("desktop_http_request_aborted");
-      if (ownedBytes + bytes > limits.requestBodyBytes)
+      if (ownedBytes + bytes > maximumBodyBytes)
         throw new Error("desktop_http_request_too_large");
       if (bodyBytes + bytes > limits.requestBytes)
         throw new Error("desktop_http_capacity");

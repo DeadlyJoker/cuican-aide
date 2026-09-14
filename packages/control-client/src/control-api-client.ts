@@ -1,9 +1,20 @@
-import { MAX_THREAD_ACTIVE_RUN_RESPONSE_BYTES, type GetThreadActiveRunResponse } from "@crewon/contracts";
-import { parseThreadActiveRunResponse } from "./thread-active-run-response.ts";
-import { MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES, parseThreadTranscriptWindowResponse, type GetThreadTranscriptWindowResponse } from "@crewon/contracts";
 import {
-  MAX_THREAD_CATALOG_RESPONSE_BYTES, parseThreadCatalogQuery, parseThreadCatalogResponse,
-  threadCatalogPath, type ThreadCatalogRequest, type ThreadCatalogResponse,
+  MAX_THREAD_ACTIVE_RUN_RESPONSE_BYTES,
+  type GetThreadActiveRunResponse,
+} from "@crewon/contracts";
+import { parseThreadActiveRunResponse } from "./thread-active-run-response.ts";
+import {
+  MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES,
+  parseThreadTranscriptWindowResponse,
+  type GetThreadTranscriptWindowResponse,
+} from "@crewon/contracts";
+import {
+  MAX_THREAD_CATALOG_RESPONSE_BYTES,
+  parseThreadCatalogQuery,
+  parseThreadCatalogResponse,
+  threadCatalogPath,
+  type ThreadCatalogRequest,
+  type ThreadCatalogResponse,
 } from "@crewon/contracts";
 import {
   MAX_THREAD_MESSAGE_WINDOW_RESPONSE_BYTES,
@@ -93,6 +104,7 @@ import {
   RunPlanViewValidationError,
 } from "./run-plan-view.ts";
 import { WorkspaceControlClient } from "./workspace-control-client.ts";
+import { DeliveryControlClient } from "./delivery-control-client.ts";
 import { readBoundedWorkspaceJson } from "./workspace-response-reader.ts";
 
 export type ControlApiClientConfig = Readonly<{
@@ -172,6 +184,7 @@ const MAX_SANDBOX_GIT_SUMMARY_BYTES = 16 * 1024;
 const MAX_GIT_BRANCH_BYTES = 1_024;
 
 export class ControlApiClient {
+  readonly delivery: DeliveryControlClient;
   readonly #baseUrl: URL;
   readonly #accessToken: string | null;
   readonly #csrfToken: string | null;
@@ -190,6 +203,21 @@ export class ControlApiClient {
     );
     this.#origin = optionalOrigin(config.origin);
     this.#fetch = config.fetch ?? globalThis.fetch.bind(globalThis);
+    this.delivery = new DeliveryControlClient({
+      json: (method, path, body, options) =>
+        this.#json(method, path, body, options),
+      binary: async (path, options) => {
+        const response = await this.#fetch(new URL(path, this.#baseUrl), {
+          method: "GET",
+          headers: this.#authenticatedHeaders("application/octet-stream"),
+          credentials: "include",
+          signal: options.signal,
+        });
+        if (response.status !== 200)
+          throw await controlApiError(response, 16 * 1024);
+        return response;
+      },
+    });
   }
 
   async getExecutionIntentCapability(
@@ -838,11 +866,30 @@ export class ControlApiClient {
     options: ControlApiRequestOptions = {},
   ): Promise<GetThreadTranscriptWindowResponse> {
     const parsedQuery = parseThreadMessageWindowQuery(query, threadId);
-    const response = await this.#json<unknown>("GET", withQuery(
-      `/api/v1/threads/${resourceId(threadId)}/transcript-window`, query,
-    ), null, { ...options, expectedStatuses: [200], maximumResponseBytes: MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES });
-    try { return parseThreadTranscriptWindowResponse(response, threadId, parsedQuery); }
-    catch { throw new ControlApiProtocolError("control_client_transcript_window_invalid"); }
+    const response = await this.#json<unknown>(
+      "GET",
+      withQuery(
+        `/api/v1/threads/${resourceId(threadId)}/transcript-window`,
+        query,
+      ),
+      null,
+      {
+        ...options,
+        expectedStatuses: [200],
+        maximumResponseBytes: MAX_THREAD_TRANSCRIPT_WINDOW_RESPONSE_BYTES,
+      },
+    );
+    try {
+      return parseThreadTranscriptWindowResponse(
+        response,
+        threadId,
+        parsedQuery,
+      );
+    } catch {
+      throw new ControlApiProtocolError(
+        "control_client_transcript_window_invalid",
+      );
+    }
   }
 
   listThreadMessages(
@@ -1040,7 +1087,11 @@ export class ControlApiClient {
     });
   }
 
-  async getRunInThread(threadId: string, runId: string, options: ControlApiRequestOptions = {}): Promise<GetRunResponse> {
+  async getRunInThread(
+    threadId: string,
+    runId: string,
+    options: ControlApiRequestOptions = {},
+  ): Promise<GetRunResponse> {
     const response = await this.getRun(runId, options);
     try {
       const run = parseRunView(response.run, threadId);
@@ -1381,6 +1432,7 @@ export class ControlApiClient {
       expectedStatuses: readonly number[];
       maximumResponseBytes?: number;
       accept?: string;
+      responseShape?: "object" | "array";
     },
   ): Promise<T> {
     const headers = this.#authenticatedHeaders(
@@ -1416,7 +1468,11 @@ export class ControlApiClient {
     if (!options.expectedStatuses.includes(response.status)) {
       throw await controlApiError(response, options.maximumResponseBytes);
     }
-    return (await responseJson(response, options.maximumResponseBytes)) as T;
+    return (await responseJson(
+      response,
+      options.maximumResponseBytes,
+      options.responseShape,
+    )) as T;
   }
 
   #authenticatedHeaders(accept: string): Headers {
@@ -1518,6 +1574,7 @@ async function controlApiError(
 async function responseJson(
   response: Response,
   maximumResponseBytes?: number,
+  responseShape: "object" | "array" = "object",
 ): Promise<unknown> {
   const contentType = response.headers.get("content-type") ?? "";
   if (!/^application\/json(?:;|$)/iu.test(contentType)) {
@@ -1531,7 +1588,9 @@ async function responseJson(
           maximumResponseBytes,
           (code) => new ControlApiProtocolError(code),
         );
-  if (!isPlainObject(value)) {
+  if (
+    responseShape === "array" ? !Array.isArray(value) : !isPlainObject(value)
+  ) {
     throw new ControlApiProtocolError("control_api_response_invalid");
   }
   return value;

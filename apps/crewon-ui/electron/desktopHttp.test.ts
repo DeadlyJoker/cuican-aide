@@ -1,3 +1,4 @@
+import { DELIVERY_UPLOAD_BODY_BYTES } from "@crewon/domain/delivery-http-policy";
 import { EventEmitter } from "node:events";
 import type { WebContents } from "electron";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -367,5 +368,71 @@ describe("desktop HTTP pull transport", () => {
     contents.emit("destroyed");
     expect(close).toHaveBeenCalledTimes(3);
     expect(contents.eventNames()).toEqual([]);
+  });
+});
+
+describe("delivery host upload admission", () => {
+  const upload =
+    "http://127.0.0.1:3210/api/v1/threads/thread_1/delivery/inputs";
+  it("validates the larger upload by route on the host and preserves default limits elsewhere", async () => {
+    const upstream = vi.fn(async () => new Response(null, { status: 204 }));
+    vi.stubGlobal("fetch", upstream);
+    const transport = owner();
+    const body = new Uint8Array(DELIVERY_UPLOAD_BODY_BYTES);
+    expect(
+      (await transport.fetch(request({ url: upload, method: "POST", body })))
+        .status,
+    ).toBe(204);
+    expect(upstream.mock.calls.length).toBe(1);
+    for (const url of [
+      upload + "?x=1",
+      upload + "/",
+      upload.replace("inputs", "assemble"),
+    ])
+      await expect(
+        transport.fetch(request({ url, method: "POST", body })),
+      ).rejects.toThrow("desktop_http_request_too_large");
+    await expect(
+      transport.fetch(
+        request({
+          url: upload,
+          method: "POST",
+          body: new Uint8Array(DELIVERY_UPLOAD_BODY_BYTES + 1),
+        }),
+      ),
+    ).rejects.toThrow("desktop_http_request_too_large");
+  });
+  it("holds a large upload in the shared byte budget until an aborted native handshake settles", async () => {
+    let finish!: (response: Response) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Promise<Response>((resolve) => {
+            finish = resolve;
+          }),
+      ),
+    );
+    const transport = owner();
+    const first = request({
+      url: upload,
+      method: "POST",
+      body: new Uint8Array(13 * 1024 * 1024),
+    });
+    const pending = transport.fetch(first).catch((error) => error);
+    await expect(
+      owner().fetch(
+        request({
+          url: upload,
+          method: "POST",
+          body: new Uint8Array(4 * 1024 * 1024),
+        }),
+      ),
+    ).rejects.toThrow("desktop_http_capacity");
+    transport.abort(first.requestId);
+    expect(transport.usage.globalRequestBytes).toBe(13 * 1024 * 1024);
+    finish(new Response(null, { status: 204 }));
+    expect(await pending).toBeInstanceOf(Error);
+    expect(transport.usage.globalRequestBytes).toBe(0);
   });
 });

@@ -34,6 +34,7 @@ export type RuntimeAgentVersionReleaseConfig = Readonly<{
   agentInstructions?: string | null;
   governedContext?: GovernedContextBundle;
   toolRuntime?: ToolRuntimePort;
+  deliveryToolCatalog?: "disabled" | "enabled";
   nativeWorkspaceReadCatalog?: "disabled" | "enabled";
   streamMaxRetries?: number;
   maxToolRounds?: number;
@@ -256,6 +257,7 @@ export function compileRuntimeAgentVersion(
       },
       tools: runtimeReleaseToolDefinitions({
         toolRuntime: config.toolRuntime,
+        deliveryToolCatalog: config.deliveryToolCatalog,
         nativeWorkspaceReadCatalog:
           config.nativeWorkspaceReadCatalog ?? "disabled",
       }),

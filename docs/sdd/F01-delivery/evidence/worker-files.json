@@ -1,0 +1,23 @@
+{
+  "assembled": {
+    "versionId": "5f27e592-f12f-4978-8684-542edb4f2be8",
+    "contentDigest": "sha256:e898c41b06696211bc61d0124f842939472c406e3e42502e5796dc9559fb82d0",
+    "byteLength": 8093,
+    "sourceRunId": "run-6"
+  },
+  "revised": {
+    "versionId": "bdb2c503-c4a6-4cf8-b159-c8374b5f5df2",
+    "contentDigest": "sha256:144a5d39ec219d3aa000b21f5ce79dda18e7781801905c2a12667107a80978eb",
+    "byteLength": 8219,
+    "sourceRunId": "run-64"
+  },
+  "expectations": {
+    "dataRows": 7,
+    "amountTotal": 217,
+    "formulaB10": 217,
+    "formulaC10": 434,
+    "preservedD1": "User reviewed",
+    "revisedA2": "Reviewed order",
+    "revisedB2NumberFormat": "0.0"
+  }
+}

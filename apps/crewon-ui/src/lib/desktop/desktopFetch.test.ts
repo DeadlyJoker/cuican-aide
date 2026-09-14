@@ -1,3 +1,4 @@
+import { DELIVERY_UPLOAD_BODY_BYTES } from "@crewon/domain/delivery-http-policy";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CrewonDesktopBridge } from "./desktopBridge";
 import { desktopBridgeFetch, installDesktopFetch } from "./desktopFetch";
@@ -337,5 +338,56 @@ describe("desktop HTTP fetch", () => {
     vi.stubGlobal("window", desktopWindow(1));
     await expect(open()).rejects.toThrow("desktop_http_version_incompatible");
     expect(hostFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("delivery upload request budget", () => {
+  const upload =
+    "http://127.0.0.1:3210/api/v1/threads/thread_1/delivery/inputs";
+  it("prepares the complete large CSV envelope only on the exact upload route", async () => {
+    const body = JSON.stringify({
+      contentBase64: btoa("a".repeat(10 * 1024 * 1024)),
+    });
+    await open(upload, { method: "POST", body });
+    expect(hostFetch.mock.calls[0][0].body?.byteLength).toBe(
+      new TextEncoder().encode(body).byteLength,
+    );
+    for (const target of [upload + "?x=1", upload + "/", url])
+      await expect(open(target, { method: "POST", body })).rejects.toThrow(
+        "desktop_http_request_too_large",
+      );
+    await expect(
+      open(upload, {
+        method: "POST",
+        body: new Uint8Array(DELIVERY_UPLOAD_BODY_BYTES + 1),
+      }),
+    ).rejects.toThrow("desktop_http_request_too_large");
+  });
+  it("a large upload consumes the existing global 16 MiB budget and releases it after failure", async () => {
+    hostFetch.mockImplementation(() => new Promise(() => {}));
+    const first = open(upload, {
+      method: "POST",
+      body: new Uint8Array(13 * 1024 * 1024),
+    }).catch((error) => error);
+    await vi.waitFor(() => expect(hostFetch).toHaveBeenCalledTimes(1));
+    await expect(
+      open(upload, { method: "POST", body: new Uint8Array(4 * 1024 * 1024) }),
+    ).rejects.toThrow("desktop_http_capacity");
+    await vi.advanceTimersByTimeAsync(15000);
+    expect(await first).toBeInstanceOf(Error);
+    hostFetch.mockImplementation(async (request) => ({
+      url: request.url,
+      status: 204,
+      statusText: "No Content",
+      headers: [],
+    }));
+    expect(
+      (
+        await open(upload, {
+          method: "POST",
+          body: new Uint8Array(13 * 1024 * 1024),
+        })
+      ).status,
+    ).toBe(204);
   });
 });

@@ -1,0 +1,26 @@
+{
+  "producer": "ExcelJS 4.4.0 + xlsx-calc 0.9.2 via real Worker SSE fixture",
+  "reader": "Python standard-library ZipFile + ElementTree (independent of SpreadsheetEngine)",
+  "checks": [
+    {
+      "file": "worker-assembled.xlsx",
+      "bytes": 8093,
+      "digest": "sha256:e898c41b06696211bc61d0124f842939472c406e3e42502e5796dc9559fb82d0",
+      "zipCrc": "passed",
+      "formulaCache": [217, 434],
+      "mergedCells": "D1:E1",
+      "columnWidth": 22,
+      "rowHeight": 28
+    },
+    {
+      "file": "worker-revised.xlsx",
+      "bytes": 8219,
+      "digest": "sha256:144a5d39ec219d3aa000b21f5ce79dda18e7781801905c2a12667107a80978eb",
+      "zipCrc": "passed",
+      "formulaCache": [217, 434],
+      "mergedCells": "D1:E1",
+      "columnWidth": 22,
+      "rowHeight": 28
+    }
+  ]
+}

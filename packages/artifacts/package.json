@@ -12,7 +12,12 @@
   },
   "dependencies": {
     "@crewon/application": "workspace:*",
-    "@crewon/domain": "workspace:*"
+    "@crewon/domain": "workspace:*",
+    "csv-parse": "7.0.2",
+    "exceljs": "4.4.0",
+    "fast-xml-parser": "5.3.6",
+    "fflate": "0.8.2",
+    "xlsx-calc": "0.9.2"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",

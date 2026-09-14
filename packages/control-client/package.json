@@ -11,7 +11,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@crewon/contracts": "workspace:*"
+    "@crewon/contracts": "workspace:*",
+    "@crewon/domain": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
