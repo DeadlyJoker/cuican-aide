@@ -1,19 +1,25 @@
 # F01 设计与 C03 契约
 
-状态：S1 自检完成；无上游依赖，待协调确认 C03。2026-09-14。
+2026-09-14。S1 契约已由协调方、F03、F04 接受；实现使用 Node.js 24 / pnpm 10，不增加运行时或构建系统。
 
-## 源码事实
+## 复用与自研边界
 
-- `packages/domain/src/artifact.ts` 仅允许 `kind: toolOutput` / `text/plain`，具有 run 到期时间。
-- `packages/application/src/artifact-application-service.ts` 校验工具输出正文和来源；`packages/artifacts/src/artifact-retention.ts` 清理到期 blob。不能复用作用户文件存储。
-- `apps/crewon-ui/src/lib/shared/composerAttachments.ts` 使用 XLSX 抽取前三张表并裁剪文本；原字节没有持久身份。
-- `CommandWorkbenchFiles.tsx` 为文本/代码预览；`taskWorkbenchProjection.ts` 的普通回复不能作为文件存在证据。
-- Control 由 `request-context.ts` / identity 解析 session，独立 route 模块接线可复用；standalone composition 已有授权与 thread 服务。
-- Worker 的 `ToolRuntimePort` / `InMemoryToolBroker` 负责工具定义、effect 与恢复策略；不将文件引擎塞入 UI 或 Control。
+| 能力                              | 采用方案                                             | 本项目保留的职责与理由                                                               |
+| --------------------------------- | ---------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| XLSX 读取、工作簿模型、样式、写出 | ExcelJS 4.4.0，MIT                                   | 显式业务映射、准入和输出复验。已删除自写 OOXML 单元格/样式 writer。                  |
+| CSV 解析                          | csv-parse 7.0.2，MIT                                 | UTF-8、资源上限、保守数值转换；前导零标识保持文本。已删除自写 CSV 状态机。           |
+| 公式计算与依赖执行                | xlsx-calc 0.9.2，MIT                                 | 支持语法、资源预算、错误及循环防护。没有自写通用公式执行器或依赖排序。               |
+| ZIP/XML 准入                      | fflate 0.8.2、fast-xml-parser 5.3.6，MIT             | 加载前检查展开量、结构、关系、坐标和合并膨胀；核对序列化 cache，不承担高层表格读写。 |
+| 用户、任务、Run 权限              | 现有 session/CSRF、thread/workspace 授权和 Run store | C03 使用时再次鉴权；模型或 HTTP 字段不提供来源身份。                                 |
+| 工具执行与恢复                    | 现有 ToolRuntimePort、broker、SSE 与执行记录         | 注册有界工具，以同一幂等键恢复已提交文件。                                           |
+| 用户文件保管                      | 新 DeliveryStorePort / SQLite adapter                | 旧 Artifact 只支持 text/plain toolOutput 且到期清理，不能存用户输入和文件版本。      |
+| 订单规则                          | 显式业务规则模块                                     | 排除、必填、异常、来源记录、按渠道/币种汇总是需求语义，不由通用库决定。              |
 
-## 最小跨 feature 契约 C03 v1
+一手资料：[ExcelJS 官方文档](https://github.com/exceljs/exceljs/blob/master/README.md)、[发布记录](https://github.com/exceljs/exceljs/releases)、[csv-parse 官方文档](https://github.com/adaltas/node-csv/tree/master/packages/csv-parse)、[xlsx-calc 官方仓库](https://github.com/fabiooshiro/xlsx-calc)。ExcelJS 不计算公式，因此组合独立计算库。选型探针见 [公式复用记录](reuse-probe-formula.md) 与 [引擎证据](engine-evidence.md)。验收核对实际内容、公式、字体、填充、边框、对齐、数字格式、合并、尺寸和已声明文档属性；不以 ZIP 字节或样式编号相等定义保真。
 
-权威类型和严格解析器位于 `packages/domain/src/delivery.ts`，包根导出。
+## C03 v1
+
+权威定义和严格解析器在 packages/domain/src/delivery.ts。包根供服务端使用；浏览器使用明确导出的 delivery、delivery-requests、delivery-http-policy 子入口。
 
 ```ts
 type DeliveryTargetRef = Readonly<{
@@ -30,35 +36,44 @@ type DeliveryResultRef = Readonly<{
   versionId: string;
   contentDigest: string; // sha256:<64 lowercase hex>
   mediaType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-  sourceRunId: string | null; // null explicitly denotes a user operation
-  availability: "ready"; // emitted only after durable byte commit
+  sourceRunId: string | null;
+  availability: "ready";
 }>;
 ```
 
-目标是受既有 thread 权限保护的托管输出集合，threadId 是任务身份，不能以 cwd 字符串获得权限。F03/F04 保存此引用；使用时通过 F01 服务重新鉴权目标，不接受本机绝对路径、latest 或未知版本。历史结果固定 versionId/digest；来源 Run 由 Worker 上下文绑定，HTTP 人工操作固定 null。目标删除/任务撤权阻止新读写；暂不自动级联删除保存文件。
+引用没有路径，也不授予权限。F03/F04 保存固定 versionId/digest，使用时重新鉴权。人工操作 sourceRunId 为 null，Worker 从真实 Run 绑定来源；ready 只在字节、验证、幂等操作与 head 全部提交后返回。输入记录可选 sourceRunId 保持早期记录兼容。
 
-## 层次与状态
+F05 通过 RuntimeWorkerCompositionConfig.configureDeliveryDownloads 获取 DeliveryDownloadImporter，再传给现有浏览器 runtime。导入器接收执行标识、文件名、MIME 和真实 Uint8Array，由 StoreBackedDeliveryAccess 从 Run 推导 actor/thread，幂等键为 browser-download:executionId。复用同一 application，不新增第二套服务，不接收模型提供的本机路径。
 
-- Domain：C03、输入/交付记录、工作表目录、检查结论、单元格补丁与汇集请求。
-- Application：DeliveryStorePort、SpreadsheetEnginePort、DeliveryApplicationService；检查 actor/thread、输入归属、限额；输出先完整验证再 CAS 提交。内部版本 `parentVersionId` 追踪，用户与 Run 来源区分。
-- Store：独立 SQLite 表与二进制内容，事务同时提交字节、不可变元数据、idempotency 与 head。受保护数据目录，与 Artifact 到期表完全分离。单任务限额与总存储 admission 避免无限增长；不进行自动过期删除。SQLite 本地部署为首版，生产远程存储必须配置对应端口，否则不启用。
-- 可复用 TypeScript 表格引擎：完整解包验证并保留模板 ZIP 内容，定向更新 XML 单元格；不通过会损坏未识别格式的整书重建宣称保真。检查全部公式，首版支持有限确定性公式；未支持公式明确阻止处理。具体语法和拒绝结构由实际行为测试固定。
-- Control：独立 `/api/v1/threads/:threadId/delivery` 路由；上传、目录、分页读取、汇集、补丁、版本下载。身份/CSRF 复用现有链路，bodyLimit 独立覆盖，未知字段 fail closed。
-- Worker：bounded delivery 工具，输入读取、汇集与补丁复用同一服务，Run 来源由执行命令绑定；在已有工具组合中最小接线。恢复用相同幂等键，不重新覆盖 head。
-- UI：任务内专用文件面板；选择原件/模板、显示所有工作表、显式映射、真实交付清单、表格页与版本下载，单元格编辑和冲突后重新加载。请求按 threadId/AbortSignal 隔离；处理时保留已保存版本。
+## 分层与持久状态
 
-## 数据、处理与验证
+- Domain：C03、目录、检查、分页、汇集/补丁 DTO；拒绝未知字段、重复映射、无效范围及伪造就绪结果。
+- Application：读取前检查 tenant/space/owner/thread 和输入归属；处理完成后再次检查权限及 Run，再提交已验证 bytes。
+- Store：独立 SQLite vault，路径为 Artifact 数据库路径加 .delivery.sqlite。WAL/FULL 和 BEGIN IMMEDIATE 事务保存不可变文件、元数据、幂等操作与 head。AES-256-GCM 加密 bytes，HMAC 认证 metadata，密钥从现有 Artifact key 按独立用途派生；数据库文件权限 0600。
+- Control：独立路由接入既有身份/CSRF；目录、分页、历史、汇集、补丁和二进制下载都读取 service，不从模型回复推导文件。
+- Worker：同一 service/store，工具每次输出至多 9 KiB；broker 恢复使用原操作身份，不重复覆盖 head。
+- UI：App 提供既有 ControlApiClient.delivery；任务内页签读取真实目录。切任务中止旧请求，预览/下载绑定版本；普通回复不产生交付记录。
 
-上传保存完整原字节并附所有工作表维度；不把正文注入会话。分页最多 100 行且总响应至多 16 KiB，下一页位置明确。汇集以来源 sheet/headerRow 与列名映射为规则，遍历全部选择行，不隐含前三张表。空行可明确排除并计数；缺失表头/重复映射等阻止提交。保留来源计数、数值列合计及异常。单元格写入只改变显式范围；公式和值分别编码，CSV 公式样字符串作为数据保留。
+首版支持 SQLite standalone，只有 Artifact 存储和密钥正确配置时启用。远程/Postgres 没有隐式本地降级；未配置时明确不可用。保存的输入与版本不进入旧 toolOutput 到期清理。
 
-修改采用 `(deliveryId, expectedVersionId, expectedContentDigest)` 原子比较。成功创建新 versionId，历史版本保持可下载。重试幂等键相同且内容一致返回原结果，参数不同冲突；数据库事务失败没有 ready 记录。文件实际 bytes/hash 不符视为损坏，不用验证标签掩盖缺失。
+## 全量处理、验证与保存
 
-## 兼容、恢复与风险
+上传存原始字节，检查所有工作表。分页限制上下文，不限制处理范围。汇集明确选择 inputId/sheet/headerRow、目标表/起始行和映射，遍历全部所选行。规则显式指定排除值、必填列、异常/来源表和分组求和；缺金额进入异常而非补零，有币种字段时要求按币种分组。业务数据写入非空单元格时拒绝，避免覆盖人工内容。
 
-C03 为全新增包导出与路由，旧 Artifact schema、toolOutput read、retention 不改。新工具结果正文可以包含 C03，但 UI 必须从授权文件目录读取确认。已有附件文本抽取用于普通问答；完整文件任务使用新上传入口并明确范围。服务重启直接恢复数据库已提交 head；写入中断 rollback；跨进程 CAS 防止用户更新被 Worker 覆盖。客户端刷新先取目录，预览下载绑定明确版本，旧响应不能切入新任务。
+公式首版支持同表 A1、十进制数、SUM、四则运算和括号，引用仅数字/空值。去掉旧缓存后由 xlsx-calc 计算，验证所有结果为有限数值且没有错误类型。ExcelJS 的零缓存 getter 行为有明确兼容：读取实际序列化 v 元素核对 0，之后才允许重算。未知函数、共享/数组公式、外链、宏、透视、图表图片、表对象、自定义文档属性等未验证结构明确拒绝。
 
-首版不承诺任意 Excel 功能；未知 ZIP part、外链、宏、复杂透视/图表等需要明确拒绝或有证据保持。公式验证是实际受支持语法计算，不依赖陈旧缓存；未验证不标通过。加密/共享远程 store 与更多格式后续扩展，不能因此扩大首版运行时。
+输出 bytes 由 ExcelJS 重新读取，先核对实际值、公式、缓存，再计算验证。未触及单元格使用库原生模型保留；只有显式值/公式/数字格式被修改。初始模板、输入原字节永不改写。
 
-## 自检与接线记录
+补丁要求 deliveryId、expectedVersionId、expectedContentDigest；CAS 成功创建新 versionId/parentVersionId，保留历史。相同 key/参数重试返回原结果，参数漂移或过期 head 返回冲突。409 保留草稿，仅显式载入最新版本才更新编辑基线。补丁后的公式检查针对当前文件；来源计数/合计明确标注仍描述初次汇集。
 
-跨 feature 仅 C03 权威类型/解析器；不占用 F02/F03/F04 模块。公共入口限 domain/application/store exports、Control composition/routes、Worker composition、UI 任务面板及依赖 lockfile。必要新增依赖统一由 F01 root 修改并记录许可证；实现前先写行为测试。真实模型 GUI 和恢复证据分栏验收。
+## 资源与传输边界
+
+每文件 10 MiB，每任务 20 输入/100 版本；vault 默认总量 512 MiB，满额拒绝且不自动删成果。ZIP 展开 64 MiB，最多 256 表、100000 行、256 列。加载 ExcelJS 前验证 sheetId、坐标、最多 1024 合并范围及 100000 个展开单元格。公式最多 128 个、引用预算 200 万，另限嵌套/token 数；模型页最多 100 行且完整 JSON 至多 9 KiB。
+
+Web BFF / desktop bridge 只有精确 POST /api/v1/threads/:threadId/delivery/inputs 允许 13,985,110 bytes 的 base64 JSON。流式累加先检查长度，普通请求保持原预算。Nginx 精确路径匹配该限额，容器包含 domain 子入口所需依赖。见 [上传传输证据](upload-transport-evidence.md)。
+
+## 兼容与验收边界
+
+不改旧 Artifact schema、toolOutput read 或 retention。客户端旧接口仍要求对象响应，只有新历史接口显式使用数组。新 HTTP、持久字段、缓存与 CAS 有行为测试。
+
+Worker 验收使用确定性脚本模型，但 broker/SSE/SQLite/reopen 为真实实现；GUI 使用生产组件及真实 Control 服务的合成材料入口。正常 App 企业登录、真实外部模型、部署容器运行分别保留待验收状态，见 [总证据](evidence.md)，不宣称生产环境已验收。

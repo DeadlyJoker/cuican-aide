@@ -1,0 +1,28 @@
+
+> @crewon/ui@0.1.0 build /Users/cheneywang/.codex/worktrees/7171/cuican-aide/apps/crewon-ui
+> tsc -b && vite build
+
+vite v7.3.5 building client environment for production...
+transforming...
+✓ 5029 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                                    1.36 kB │ gzip:   0.61 kB
+dist/assets/SettingsContent-CB4Q8jUM.css           1.32 kB │ gzip:   0.48 kB
+dist/assets/CommandSettingsRoute-CE0GADDQ.css      1.83 kB │ gzip:   0.67 kB
+dist/assets/vendor-DLuoa74B.css                    3.60 kB │ gzip:   0.99 kB
+dist/assets/index-BgGdKtw3.css                   675.61 kB │ gzip:  98.03 kB
+dist/assets/LibraryView-BYJBa8ag.js               16.51 kB │ gzip:   4.80 kB
+dist/assets/CommandSettingsRoute-Sl_MO8q_.js      18.95 kB │ gzip:   8.33 kB
+dist/assets/icons-DgziPzWD.js                     28.57 kB │ gzip:   8.78 kB
+dist/assets/SettingsContent-DSClyLbY.js           32.10 kB │ gzip:  11.20 kB
+dist/assets/react-CSnVaw7M.js                    193.58 kB │ gzip:  60.71 kB
+dist/assets/index-Bqg5raHC.js                  1,484.28 kB │ gzip: 447.28 kB
+dist/assets/vendor-DbRc8QWo.js                 1,685.50 kB │ gzip: 487.75 kB
+dist/assets/mermaid-Dvg_IO89.js                3,414.46 kB │ gzip: 931.54 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 7.80s

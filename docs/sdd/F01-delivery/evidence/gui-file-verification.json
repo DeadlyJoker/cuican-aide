@@ -1,0 +1,22 @@
+{
+  "file": "gui-订单核对.xlsx",
+  "bytes": 3880,
+  "sha256": "sha256:46b202f8e00a3482ae966bc571ffbbf050c9a90c80c409ec1d988100c3447a66",
+  "D2": {
+    "value": "100",
+    "numberFormatId": "2"
+  },
+  "H1": "GUI人工备注：保留到下一版本",
+  "sheet1MergeCells": [
+    {
+      "ref": "H1:I1"
+    }
+  ],
+  "summaryFormulas": [
+    {
+      "cell": "D2",
+      "formula": "C2*1",
+      "result": "180"
+    }
+  ]
+}

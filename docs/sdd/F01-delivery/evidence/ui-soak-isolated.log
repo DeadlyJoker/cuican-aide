@@ -1,0 +1,8 @@
+
+ RUN  v4.1.8 /Users/cheneywang/.codex/worktrees/7171/cuican-aide/apps/crewon-ui
+
+
+ Test Files  1 passed (1)
+      Tests  4 passed (4)
+   Start at  12:13:07
+   Duration  3.77s (transform 25ms, setup 0ms, import 36ms, tests 3.66s, environment 0ms)

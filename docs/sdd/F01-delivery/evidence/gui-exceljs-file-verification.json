@@ -1,0 +1,25 @@
+{
+  "engine": "ExcelJS 4.4.0 / csv-parse 7.0.2 / xlsx-calc 0.9.2",
+  "versionId": "054391c9-863a-4dc2-ba1f-3f21d0945ffc",
+  "file": "gui-exceljs-订单核对.xlsx",
+  "bytes": 8770,
+  "sha256": "sha256:ad5986d7d32d33605f65d1b221eb34a795bed308f0a76d6702ebc6e46e1e6f46",
+  "D2": {
+    "value": "100",
+    "numberFormatId": "164",
+    "formatCode": "0.0"
+  },
+  "H1": "ExcelJS GUI 人工备注保留",
+  "sheet1MergeCells": [
+    {
+      "ref": "H1:I1"
+    }
+  ],
+  "summaryFormulas": [
+    {
+      "cell": "D2",
+      "formula": "C2*1",
+      "result": "180"
+    }
+  ]
+}

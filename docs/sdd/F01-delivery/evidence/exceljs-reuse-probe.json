@@ -4,9 +4,7 @@
     {
       "name": "明细",
       "rows": 2,
-      "merges": [
-        "H1:I1"
-      ]
+      "merges": ["H1:I1"]
     },
     {
       "name": "汇总",

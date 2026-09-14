@@ -1,0 +1,7 @@
+
+> @crewon/ui@0.1.0 lint /Users/cheneywang/.codex/worktrees/7171/cuican-aide/apps/crewon-ui
+> tsc -b --noEmit && pnpm desktop:host:lint
+
+
+> @crewon/ui@0.1.0 desktop:host:lint /Users/cheneywang/.codex/worktrees/7171/cuican-aide/apps/crewon-ui
+> tsc -p electron/tsconfig.json --noEmit

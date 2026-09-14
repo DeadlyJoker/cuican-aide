@@ -1,0 +1,26 @@
+{
+  "engine": "ExcelJS 4.4.0 / csv-parse 7.0.2 / xlsx-calc 0.9.2 (after zero cached value fix)",
+  "versionId": "370ed5d9-f211-4671-b436-87b981bed4b3",
+  "file": "gui-final-订单核对.xlsx",
+  "bytes": 8597,
+  "sha256": "sha256:9ff1d523aa9b91cac75b192fe833c3d744cb1b19414bd0ff522937206bbdef4b",
+  "orderIds": ["A001", "A003", "A004", "B001", "B003"],
+  "summary": [
+    ["直营", "CNY", "180"],
+    ["直营", "USD", "10"],
+    ["渠道", "CNY", "150"]
+  ],
+  "templateNote": "用户原始备注",
+  "sheet1MergeCells": [
+    {
+      "ref": "H1:I1"
+    }
+  ],
+  "summaryFormula": {
+    "cell": "D2",
+    "formula": "C2*1",
+    "result": "180"
+  },
+  "exceptionOrderId": "B002",
+  "lineageRows": 8
+}
