@@ -1,4 +1,19 @@
 import { parseDeliveryTargetRef, type DeliveryTargetRef } from "./delivery.ts";
+import { JSON_SCHEMA, load as loadYaml } from "js-yaml";
+import {
+  parseSkillSchema,
+  skillAllowedKeysSchema,
+  skillFrontmatterSchema,
+  skillInvocationSchema,
+  skillMethodSchema,
+  skillObjectSchema,
+  skillRecordingSourceSchema,
+  skillTextSchema,
+  skillTimestampSchema,
+  skillVersionRefSchema,
+  skillVersionSchema,
+} from "./demonstrated-skill-schema.ts";
+export { skillMethodJsonSchema } from "./demonstrated-skill-schema.ts";
 /** C02: immutable identity; aliases such as latest are never execution identities. */
 export type SkillVersionRef = Readonly<{
   skillId: string;
@@ -72,154 +87,46 @@ export function skillJson(value: unknown): string {
   return JSON.stringify(sort(value, 0));
 }
 export function skillObject(value: unknown): value is Record<string, unknown> {
-  return (
-    typeof value === "object" &&
-    value !== null &&
-    !Array.isArray(value) &&
-    [null, Object.prototype].includes(Object.getPrototypeOf(value))
-  );
+  return skillObjectSchema.safeParse(value).success;
 }
 export function skillText(
   value: unknown,
   max: number,
   code = "skill_text_invalid",
 ): asserts value is string {
-  if (
-    typeof value !== "string" ||
-    !value.trim() ||
-    new TextEncoder().encode(value).length > max
-  )
-    throw new SkillError(code);
+  readSchema(skillTextSchema(max, code), value, code);
 }
 export function skillKeys(
   value: unknown,
   keys: readonly string[],
 ): asserts value is Record<string, unknown> {
-  if (!skillObject(value) || Object.keys(value).some((k) => !keys.includes(k)))
-    throw new SkillError("skill_shape_invalid");
-}
-function texts(
-  value: unknown,
-  maxItems: number,
-  maxBytes: number,
-  allowEmpty = false,
-): asserts value is string[] {
-  if (
-    !Array.isArray(value) ||
-    (!allowEmpty && value.length === 0) ||
-    value.length > maxItems
-  )
-    throw new SkillError("skill_list_invalid");
-  for (const item of value) skillText(item, maxBytes);
+  readSchema(skillAllowedKeysSchema(keys), value, "skill_shape_invalid");
 }
 export function parseSkillVersionRef(value: unknown): SkillVersionRef {
-  skillKeys(value, ["skillId", "versionId", "contentDigest"]);
-  for (const key of ["skillId", "versionId"] as const) {
-    skillText(value[key], 128, "skill_ref_invalid");
-    if (
-      !/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/u.test(value[key]) ||
-      value[key].toLowerCase() === "latest"
-    )
-      throw new SkillError("skill_ref_invalid");
-  }
-  if (
-    typeof value.contentDigest !== "string" ||
-    !/^sha256:[a-f0-9]{64}$/u.test(value.contentDigest)
-  )
-    throw new SkillError("skill_digest_invalid");
-  return structuredClone(value) as SkillVersionRef;
+  return readSchema(skillVersionRefSchema, value, "skill_ref_invalid");
 }
 export function parseSkillMethod(value: unknown): SkillMethod {
-  skillKeys(value, [
-    "name",
-    "purpose",
-    "steps",
-    "parameters",
-    "requiredToolRefs",
-    "completionCriteria",
-    "knownExceptions",
-    "runtimeRequirements",
-  ]);
-  skillText(value.name, 160);
-  skillText(value.purpose, 1024);
-  texts(value.steps, 40, 1024);
-  texts(value.requiredToolRefs, 24, 256, true);
-  texts(value.completionCriteria, 12, 512);
-  texts(value.knownExceptions, 12, 512);
-  texts(value.runtimeRequirements, 12, 256, true);
-  if (new Set(value.requiredToolRefs).size !== value.requiredToolRefs.length)
-    throw new SkillError("skill_tool_refs_invalid");
-  if (!Array.isArray(value.parameters) || value.parameters.length > 24)
-    throw new SkillError("skill_parameters_schema_invalid");
-  const names = new Set<string>();
-  for (const field of value.parameters) {
-    skillKeys(field, ["name", "label", "type", "required", "enum"]);
-    skillText(field.name, 64);
-    skillText(field.label, 160);
-    if (
-      !/^[A-Za-z][A-Za-z0-9_]*$/u.test(field.name) ||
-      ["constructor", "prototype", "__proto__"].includes(field.name) ||
-      names.has(field.name)
-    )
-      throw new SkillError("skill_parameter_name_invalid");
-    names.add(field.name);
-    if (
-      !["string", "number", "boolean"].includes(field.type as string) ||
-      typeof field.required !== "boolean"
-    )
-      throw new SkillError("skill_parameter_type_invalid");
-    if (field.enum !== undefined) {
-      if (field.type !== "string")
-        throw new SkillError("skill_parameter_enum_invalid");
-      texts(field.enum, 32, 256);
-    }
-  }
-  const method = structuredClone(value) as SkillMethod;
+  const method = readSchema(skillMethodSchema, value, "skill_method_invalid");
   if (new TextEncoder().encode(renderSkillMarkdown(method)).length > 8192)
     throw new SkillError("skill_method_too_large");
   return method;
 }
 export function parseSkillInvocationSpec(value: unknown): SkillInvocationSpec {
-  skillKeys(value, [
-    "schemaVersion",
-    "skill",
-    "parameters",
-    "requiredToolRefs",
-    "deliveryTarget",
-  ]);
-  if (value.schemaVersion !== "crewon.skill-invocation.v1")
-    throw new SkillError("skill_invocation_version_unsupported");
-  const ref = parseSkillVersionRef(value.skill);
-  if (
-    !skillObject(value.parameters) ||
-    Object.keys(value.parameters).length > 24
-  )
-    throw new SkillError("skill_parameters_invalid");
-  for (const [key, item] of Object.entries(value.parameters)) {
-    if (["__proto__", "constructor", "prototype"].includes(key))
-      throw new SkillError("skill_parameter_name_invalid");
-    if (typeof item === "string") {
-      if (new TextEncoder().encode(item).length > 2048)
-        throw new SkillError("skill_parameter_too_large");
-    } else if (
-      typeof item !== "boolean" &&
-      !(typeof item === "number" && Number.isFinite(item))
-    )
-      throw new SkillError("skill_parameter_type_invalid");
-  }
-  if (new TextEncoder().encode(skillJson(value.parameters)).length > 4096)
+  const parsed = readSchema(
+    skillInvocationSchema,
+    value,
+    "skill_parameters_invalid",
+  );
+  if (new TextEncoder().encode(skillJson(parsed.parameters)).length > 4096)
     throw new SkillError("skill_parameters_too_large");
-  texts(value.requiredToolRefs, 24, 256, true);
   return {
     schemaVersion: "crewon.skill-invocation.v1",
-    skill: ref,
-    ...(value.deliveryTarget === undefined
+    skill: parsed.skill,
+    ...(parsed.deliveryTarget === undefined
       ? {}
-      : { deliveryTarget: parseDeliveryTargetRef(value.deliveryTarget) }),
-    parameters: structuredClone(
-      value.parameters,
-    ) as SkillInvocationSpec["parameters"],
-    requiredToolRefs: [...value.requiredToolRefs],
+      : { deliveryTarget: parseDeliveryTargetRef(parsed.deliveryTarget) }),
+    parameters: parsed.parameters,
+    requiredToolRefs: parsed.requiredToolRefs,
   };
 }
 export function validateSkillInvocation(
@@ -249,10 +156,23 @@ export function validateSkillInvocation(
   return spec;
 }
 export function renderSkillMarkdown(method: SkillMethod): string {
+  // Keep the committed v1 JSON-quoted YAML bytes; a serializer change would change every digest.
+  const frontmatter = `name: ${JSON.stringify(method.name)}\ndescription: ${JSON.stringify(method.purpose)}`;
+  let parsed;
+  try {
+    parsed = readSchema(
+      skillFrontmatterSchema,
+      loadYaml(frontmatter, { schema: JSON_SCHEMA }),
+      "skill_frontmatter_invalid",
+    );
+  } catch {
+    throw new SkillError("skill_frontmatter_invalid");
+  }
+  if (parsed.name !== method.name || parsed.description !== method.purpose)
+    throw new SkillError("skill_frontmatter_invalid");
   return [
     `---`,
-    `name: ${JSON.stringify(method.name)}`,
-    `description: ${JSON.stringify(method.purpose)}`,
+    frontmatter,
     `---`,
     ``,
     `# ${method.name}`,
@@ -295,18 +215,12 @@ export function createSkillVersion(
   digester: SkillDigester,
 ): SkillVersion {
   const method = parseSkillMethod(input.method);
-  const source = input.source;
-  skillKeys(source, ["recordingId", "revision", "contentDigest", "provenance"]);
-  skillText(source.recordingId, 128);
-  if (
-    !Number.isSafeInteger(source.revision) ||
-    source.revision < 1 ||
-    !/^sha256:[a-f0-9]{64}$/u.test(source.contentDigest) ||
-    !["recording", "contract-fixture"].includes(source.provenance)
-  )
-    throw new SkillError("skill_source_invalid");
-  if (!Number.isFinite(Date.parse(input.createdAt)))
-    throw new SkillError("skill_timestamp_invalid");
+  const source = readSchema(
+    skillRecordingSourceSchema,
+    input.source,
+    "skill_source_invalid",
+  );
+  readSchema(skillTimestampSchema, input.createdAt, "skill_timestamp_invalid");
   const markdown = renderSkillMarkdown(method);
   const contentDigest = digester.sha256(
     skillJson({
@@ -334,8 +248,7 @@ export function verifySkillVersion(
   version: SkillVersion,
   digester: SkillDigester,
 ): void {
-  if (version.schemaVersion !== "crewon.skill-version.v1")
-    throw new SkillError("skill_version_unsupported");
+  readSchema(skillVersionSchema, version, "skill_version_invalid");
   const rebuilt = createSkillVersion(
     {
       ...version.ref,
@@ -366,48 +279,15 @@ export function skillInvocationContext(
 
 /** Wire snapshot shape only. Host/store must subsequently verify the digest. */
 export function parseSkillVersionSnapshot(value: unknown): SkillVersion {
-  skillKeys(value, [
-    "schemaVersion",
-    "ref",
-    "method",
-    "source",
-    "markdown",
-    "createdAt",
-  ]);
-  if (value.schemaVersion !== "crewon.skill-version.v1")
-    throw new SkillError("skill_version_unsupported");
-  const ref = parseSkillVersionRef(value.ref);
-  const method = parseSkillMethod(value.method);
-  skillKeys(value.source, [
-    "recordingId",
-    "revision",
-    "contentDigest",
-    "provenance",
-  ]);
-  const source = value.source;
-  skillText(source.recordingId, 128);
-  if (
-    !Number.isSafeInteger(source.revision) ||
-    (source.revision as number) < 1 ||
-    typeof source.contentDigest !== "string" ||
-    !/^sha256:[a-f0-9]{64}$/u.test(source.contentDigest) ||
-    !["recording", "contract-fixture"].includes(source.provenance as string)
-  )
-    throw new SkillError("skill_source_invalid");
-  if (
-    typeof value.createdAt !== "string" ||
-    !Number.isFinite(Date.parse(value.createdAt)) ||
-    value.markdown !== renderSkillMarkdown(method)
-  )
+  const version = readSchema(
+    skillVersionSchema,
+    value,
+    "skill_version_invalid",
+  );
+  const method = parseSkillMethod(version.method);
+  if (version.markdown !== renderSkillMarkdown(method))
     throw new SkillError("skill_version_invalid");
-  return {
-    schemaVersion: "crewon.skill-version.v1",
-    ref,
-    method,
-    source: structuredClone(source) as SkillRecordingSource,
-    markdown: value.markdown as string,
-    createdAt: value.createdAt,
-  };
+  return { ...version, method };
 }
 export function parseSkillVersion(
   value: unknown,
@@ -418,3 +298,19 @@ export function parseSkillVersion(
   return version;
 }
 export const renderSkillInvocationContext = skillInvocationContext;
+
+function readSchema<T>(
+  schema: Parameters<typeof parseSkillSchema<T>>[0],
+  value: unknown,
+  fallback: string,
+): T {
+  try {
+    return parseSkillSchema(schema, value, fallback);
+  } catch (error) {
+    throw new SkillError(
+      error instanceof Error && error.message.startsWith("skill_")
+        ? error.message
+        : fallback,
+    );
+  }
+}
