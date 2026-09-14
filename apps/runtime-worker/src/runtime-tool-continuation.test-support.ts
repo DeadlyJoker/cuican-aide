@@ -483,6 +483,10 @@ export async function createFixture(
     retryDelays,
     broker,
     worker: () => worker,
+    advanceStorageTime: (milliseconds: number) => {
+      assert.ok(Number.isSafeInteger(milliseconds) && milliseconds >= 0);
+      storageTime += milliseconds;
+    },
     executions: () => executed,
     run: () =>
       store.loadRun({ tenantId: actor.tenantId, runId: run.state.runId }),

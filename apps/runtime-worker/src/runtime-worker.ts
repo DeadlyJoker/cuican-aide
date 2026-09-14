@@ -2143,15 +2143,21 @@ export class RuntimeWorker {
         receipt,
         attempt:
           prepared.attempt === null ? null : attemptIdentity(prepared.attempt),
-        resolve: () =>
-          withToolExecutionCapacity(
+        resolve: async () => {
+          signal.throwIfAborted();
+          // Heartbeats renew storage without replacing earlier claim snapshots.
+          // Bind each dispatch to the current authoritative deadline, including
+          // later model rounds and serial calls that waited for another tool.
+          const dispatchClaim = await this.#renewClaim(claim);
+          signal.throwIfAborted();
+          return withToolExecutionCapacity(
             {
               runtime: runtime.toolRuntime,
               command: toolExecutionCommand(
                 receipt,
                 call.input,
                 toolApproval,
-                claim,
+                dispatchClaim,
               ),
               signal,
               operation: shouldExecute ? "execute" : "reconcile",
@@ -2160,7 +2166,7 @@ export class RuntimeWorker {
               preparedCall.attempt ??= await getToolAttempt();
               if (shouldExecute) {
                 receipt = await this.#execution.dispatchToolExecution(
-                  claim,
+                  dispatchClaim,
                   receipt,
                 );
                 preparedCall.receipt = receipt;
@@ -2170,7 +2176,8 @@ export class RuntimeWorker {
               await this.#afterToolProviderResolved?.(resolution);
               return resolution;
             },
-          ),
+          );
+        },
       };
       preparedCalls.push(preparedCall);
     }
