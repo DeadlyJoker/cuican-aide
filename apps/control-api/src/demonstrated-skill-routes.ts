@@ -1,3 +1,4 @@
+import { parseSkillRunToolPermissionMode } from "@crewon/contracts";
 import {
   ApplicationError,
   type ActorContext,
@@ -240,6 +241,7 @@ export function registerDemonstratedSkillRoutes(
     "/api/v1/skills/:id/executions",
     async (request, actor, skills) => {
       const body = exact(request.body, [
+        ...(Object.hasOwn(queryObject(request.body), "toolPermissionMode") ? ["toolPermissionMode"] : []),
         "executionId",
         "threadId",
         "expectedThreadRevision",
@@ -258,6 +260,7 @@ export function registerDemonstratedSkillRoutes(
             ? null
             : identifier(body.agentVersionId, 512),
         purpose: body.purpose,
+        ...(body.toolPermissionMode === undefined ? {} : { toolPermissionMode: parseSkillRunToolPermissionMode(body.toolPermissionMode) }),
         invocation: parseSkillInvocationSpec(body.invocation),
       });
       void dependencies.outboxWakeup.wake().catch(() => {

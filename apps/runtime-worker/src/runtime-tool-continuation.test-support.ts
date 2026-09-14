@@ -5,6 +5,7 @@ import { type TestContext } from "node:test";
 import { CrewONAgentKernel } from "@crewon/agent-kernel";
 import { DirectResponsesTransport } from "@crewon/agent-responses";
 import type { GovernedContextBundle } from "@crewon/context";
+import type { RunToolPermissionMode } from "@crewon/domain";
 import {
   RunApplicationService,
   RunExecutionService,
@@ -36,6 +37,8 @@ export async function createFixture(
     backend: "sqlite" | "postgres";
     storeResponses: boolean;
     crashAfterCommit: boolean;
+    /** Unset preserves the legacy fullAccess fixture; null omits Run consent. */
+    toolPermissionMode?: RunToolPermissionMode | null;
     legacyStore?: boolean;
     rejectPreviousResponse?: boolean;
     resultCapacity?: ToolResultCapacity;
@@ -108,6 +111,10 @@ export async function createFixture(
     policySnapshotId: "policy-1",
     workspaceBindingId: null,
   };
+  const runPermission: { toolPermissionMode?: RunToolPermissionMode } =
+    options.toolPermissionMode === null
+      ? {}
+      : { toolPermissionMode: options.toolPermissionMode ?? "fullAccess" };
   const threads = new ThreadApplicationService({
     store,
     clock,
@@ -159,7 +166,7 @@ export async function createFixture(
         threadId: thread.state.threadId,
         idempotencyKey: "run",
         route,
-        toolPermissionMode: "fullAccess",
+        ...runPermission,
       });
   let executed = 0;
   const broker = new InMemoryToolBroker(
@@ -585,7 +592,7 @@ export async function createFixture(
         threadId: thread.state.threadId,
         idempotencyKey: "next-run",
         route,
-        toolPermissionMode: "fullAccess",
+        ...runPermission,
       });
     },
   };

@@ -1,3 +1,4 @@
+import { matchesAutomationRunPermissionMode } from "@crewon/domain";
 import {
   parseAutomationDefinition,
   parseAutomationInvocationBinding,
@@ -49,6 +50,7 @@ export async function resolveAutomationSkillForRun(
   if (!record) throw new ApplicationError("notFound", "automation_not_found");
   const definition = parseAutomationDefinition(record.definition);
   if (
+    !matchesAutomationRunPermissionMode(definition, run.toolPermissionMode) ||
     definition.tenantId !== actor.tenantId ||
     definition.spaceId !== actor.spaceId ||
     definition.threadId !== run.threadId ||

@@ -52,6 +52,7 @@ export function bindSqliteSkillTurn(
     execution.tenantId !== run.tenantId ||
     execution.spaceId !== run.spaceId ||
     command.threadId !== run.threadId ||
+    (command.toolPermissionMode ?? "requestApproval") !== (run.toolPermissionMode ?? "requestApproval") ||
     command.route.agentVersionId !== run.agentVersionId ||
     command.route.policySnapshotId !== run.policySnapshotId ||
     command.route.runtimeGeneration !== run.runtimeGeneration ||

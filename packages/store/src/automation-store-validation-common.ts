@@ -1,3 +1,4 @@
+import { matchesAutomationRunPermissionMode } from "@crewon/domain";
 import { createHash } from "node:crypto";
 
 import {
@@ -33,6 +34,7 @@ export function validateAutomationInvocationArtifacts(
   const origin = stableJson({ kind: "automation", binding: input.binding });
   if (
     input.instruction !== instruction ||
+    !matchesAutomationRunPermissionMode(definition, input.runEvent.data.toolPermissionMode) ||
     input.binding.automationId !== definition.automationId ||
     input.binding.automationRevision !== definition.revision ||
     input.binding.definitionDigest !== record.definitionDigest ||

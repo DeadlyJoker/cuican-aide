@@ -1,3 +1,4 @@
+import { matchesAutomationRunPermissionMode } from "@crewon/domain";
 import { parseSkillInvocationSpec } from "@crewon/contracts";
 import type { AutomationInvocationResult } from "@crewon/application";
 import type {
@@ -19,6 +20,7 @@ export function projectAutomation(
     ...(definition.skillBinding === undefined
       ? {}
       : {
+          toolPermissionMode: definition.toolPermissionMode ?? "requestApproval",
           skillInvocation: parseSkillInvocationSpec(
             definition.skillBinding.invocation,
           ),
@@ -55,6 +57,7 @@ export function projectAutomationInvocation(
 ): RunAutomationNowResponse {
   const definition = result.record.definition;
   if (
+    !matchesAutomationRunPermissionMode(definition, result.runState.toolPermissionMode) ||
     result.binding.automationId !== definition.automationId ||
     result.binding.automationRevision !== definition.revision ||
     result.binding.runId !== result.runState.runId ||

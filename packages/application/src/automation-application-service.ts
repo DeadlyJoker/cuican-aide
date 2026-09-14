@@ -1,3 +1,4 @@
+import { matchesAutomationRunPermissionMode } from "@crewon/domain";
 import { createAutomationInvocationInput } from "./automation-invocation-input.ts";
 import {
   prepareAutomationSkillBinding,
@@ -370,7 +371,7 @@ export class AutomationApplicationService {
   ): AutomationDefinition {
     try {
       return createAutomationDefinition({
-        ...(skillBinding === undefined ? {} : { skillBinding }),
+        ...(skillBinding === undefined ? {} : { skillBinding, toolPermissionMode: command.toolPermissionMode ?? "requestApproval" }),
         automationId: this.#nextId("automation"),
         tenantId: actor.tenantId,
         spaceId: actor.spaceId,
@@ -459,6 +460,7 @@ export class AutomationApplicationService {
       (result.disposition !== "committed" &&
         result.disposition !== "replayed") ||
       definition.threadId !== command.threadId ||
+      (definition.skillBinding !== undefined && (definition.toolPermissionMode ?? "requestApproval") !== (command.toolPermissionMode ?? "requestApproval")) ||
       definition.title !== command.title ||
       definition.prompt !== command.prompt ||
       canonicalJson(definition.skillBinding?.invocation ?? null) !==
@@ -601,6 +603,7 @@ export class AutomationApplicationService {
     const occurredAt = artifacts.runEvent.occurredAt;
     if (
       artifacts.instruction !== instruction ||
+      !matchesAutomationRunPermissionMode(definition, artifacts.runEvent.data.toolPermissionMode) ||
       binding.automationId !== definition.automationId ||
       binding.automationRevision !== definition.revision ||
       binding.definitionDigest !== record.definitionDigest ||
@@ -939,6 +942,7 @@ function createIdempotency(
       prompt: command.prompt,
       requestedAgentVersionId: command.requestedAgentVersionId,
       schedule: command.schedule,
+      ...(command.toolPermissionMode === undefined ? {} : { toolPermissionMode: command.toolPermissionMode }),
       ...(command.skillInvocation === undefined
         ? {}
         : { skillInvocation: command.skillInvocation }),

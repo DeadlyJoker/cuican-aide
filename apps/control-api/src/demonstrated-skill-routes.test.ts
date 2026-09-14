@@ -256,6 +256,64 @@ test("Run Skill binding lookup returns only the admitted pinned identity and con
   assert.equal(f.wakeups(), 0);
 });
 
+test("Skill execution HTTP accepts omitted permission or either supported top-level Run mode", async (t) => {
+  const f = fixture();
+  t.after(() => f.app.close());
+  for (const mode of [undefined, "requestApproval", "approveForMe"] as const) {
+    const execution = {
+      executionId: `execution-${mode ?? "default"}`,
+      threadId: "thread-1",
+      expectedThreadRevision: 1,
+      agentVersionId: null,
+      purpose: "trial",
+      invocation,
+      ...(mode === undefined ? {} : { toolPermissionMode: mode }),
+    };
+    const response = await f.app.inject({
+      method: "POST",
+      url: "/api/v1/skills/skill-1/executions",
+      headers,
+      payload: execution,
+    });
+    assert.equal(response.statusCode, 200, response.body);
+    assert.deepEqual(f.calls.at(-1), {
+      name: "startExecution",
+      args: [actor, "skill-1", execution],
+    });
+  }
+  assert.equal(f.calls.length, 3);
+  assert.equal(f.wakeups(), 3);
+});
+
+test("Skill execution HTTP rejects fullAccess, null and unknown permission before service admission", async (t) => {
+  const f = fixture();
+  t.after(() => f.app.close());
+  for (const mode of ["fullAccess", null, "alwaysAllow"]) {
+    const response = await f.app.inject({
+      method: "POST",
+      url: "/api/v1/skills/skill-1/executions",
+      headers,
+      payload: {
+        executionId: "execution-1",
+        threadId: "thread-1",
+        expectedThreadRevision: 1,
+        agentVersionId: null,
+        purpose: "trial",
+        invocation,
+        toolPermissionMode: mode,
+      },
+    });
+    assert.equal(response.statusCode, 400, response.body);
+    assert.equal(response.json().error.category, "validation");
+    assert.equal(
+      response.json().error.code,
+      "skill_tool_permission_mode_invalid",
+    );
+  }
+  assert.equal(f.calls.length, 0);
+  assert.equal(f.wakeups(), 0);
+});
+
 test("Run Skill binding lookup rechecks disabled/unknown runs and rejects caller-selected binding or scope", async (t) => {
   const f = fixture();
   t.after(() => f.app.close());

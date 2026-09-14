@@ -1,3 +1,4 @@
+import { parseSkillRunToolPermissionMode } from "@crewon/contracts";
 import {
   parseSkillInvocationSpec,
   parseAutomationParameterBindings,
@@ -2060,6 +2061,7 @@ function parseAutomationMutationResponse(
   }
   const automation = parseAutomationView(input.automation);
   if (
+    (automation.skillInvocation !== undefined && (automation.toolPermissionMode ?? "requestApproval") !== (command.toolPermissionMode ?? "requestApproval")) ||
     automation.threadId !== command.threadId ||
     automation.title !== command.title ||
     automation.prompt !== command.prompt ||
@@ -2128,6 +2130,7 @@ function parseRunAutomationNowResponse(
 function parseAutomationView(input: unknown): AutomationView {
   if (
     !hasExactKeys(input, [
+      ...(isPlainObject(input) && input.toolPermissionMode !== undefined ? ["toolPermissionMode"] : []),
       ...(isPlainObject(input) && input.skillReadiness !== undefined
         ? ["skillReadiness"]
         : []),
@@ -2167,6 +2170,10 @@ function parseAutomationView(input: unknown): AutomationView {
     throw new ControlApiProtocolError("control_client_automation_view_invalid");
   }
   try {
+    if (input.toolPermissionMode !== undefined) {
+      if (input.skillInvocation === undefined) throw new Error("missing skill");
+      parseSkillRunToolPermissionMode(input.toolPermissionMode);
+    }
     if (input.skillInvocation !== undefined)
       parseSkillInvocationSpec(input.skillInvocation);
     if (input.skillReadiness !== undefined) {

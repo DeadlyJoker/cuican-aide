@@ -1,3 +1,4 @@
+import type { RunToolPermissionMode } from "./run-lifecycle.ts";
 import { parseDeliveryTargetRef, type DeliveryTargetRef } from "./delivery.ts";
 import { JSON_SCHEMA, load as loadYaml } from "js-yaml";
 import {
@@ -58,6 +59,14 @@ export type SkillInvocationSpec = Readonly<{
   parameters: Readonly<Record<string, string | number | boolean>>;
   requiredToolRefs: readonly string[];
 }>;
+export type SkillRunToolPermissionMode = Exclude<RunToolPermissionMode, "fullAccess">;
+
+export function parseSkillRunToolPermissionMode(value: unknown): SkillRunToolPermissionMode {
+  if (value !== "requestApproval" && value !== "approveForMe")
+    throw new SkillError("skill_tool_permission_mode_invalid");
+  return value;
+}
+
 export class SkillError extends Error {
   readonly code: string;
   constructor(code: string) {

@@ -4008,6 +4008,14 @@
           },
           "parameterBindings": {
             "$ref": "#/components/schemas/AutomationParameterBindings"
+          },
+          "toolPermissionMode": {
+            "type": "string",
+            "enum": [
+              "requestApproval",
+              "approveForMe"
+            ],
+            "description": "Explicit permission mode for each entire Skill Run. Omission defaults to requestApproval. Only supported with skillInvocation."
           }
         },
         "description": " Optional Skill invocation and calendar parameter rules require x-crewon-automation-version: 1. Omission preserves prompt-only v0 behavior."
@@ -4128,6 +4136,14 @@
               }
             },
             "description": "Current read-only Skill admission check, not a failed Run or durable permission grant."
+          },
+          "toolPermissionMode": {
+            "type": "string",
+            "enum": [
+              "requestApproval",
+              "approveForMe"
+            ],
+            "description": "Explicit permission mode for each entire Skill Run. Omission defaults to requestApproval. Only supported with skillInvocation."
           }
         }
       },

@@ -1,3 +1,4 @@
+import { parseSkillRunToolPermissionMode, type SkillRunToolPermissionMode } from "@crewon/domain";
 import {
   createSkillVersion,
   parseSkillMethod,
@@ -338,9 +339,11 @@ export class DemonstratedSkillService implements SkillInvocationPort {
       expectedThreadRevision: number;
       agentVersionId: string | null;
       purpose: "trial" | "execute";
+      toolPermissionMode?: SkillRunToolPermissionMode;
       invocation: SkillInvocationSpec;
     },
   ) {
+    const toolPermissionMode = parseSkillRunToolPermissionMode(input.toolPermissionMode === undefined ? "requestApproval" : input.toolPermissionMode);
     skillText(input.executionId, 128);
     skillText(input.threadId, 256);
     if (
@@ -357,6 +360,7 @@ export class DemonstratedSkillService implements SkillInvocationPort {
       if (
         skillJson(prior.invocation) !== skillJson(input.invocation) ||
         prior.purpose !== input.purpose ||
+        (prior.command.toolPermissionMode ?? "requestApproval") !== toolPermissionMode ||
         prior.command.threadId !== input.threadId ||
         prior.command.expectedThreadRevision !== input.expectedThreadRevision ||
         prior.command.requestedAgentVersionId !== input.agentVersionId
@@ -397,7 +401,7 @@ export class DemonstratedSkillService implements SkillInvocationPort {
       content: admission.context,
       requestedAgentVersionId: input.agentVersionId,
       executionIntent: "none" as const,
-      toolPermissionMode: "requestApproval" as const,
+      toolPermissionMode,
       route,
     };
     const execution: SkillExecutionRecord = prior ?? {
@@ -555,7 +559,8 @@ export class DemonstratedSkillService implements SkillInvocationPort {
     if (
       result &&
       (result.threadId !== run.threadId ||
-        result.agentVersionId !== run.agentVersionId)
+        result.agentVersionId !== run.agentVersionId ||
+        (execution !== null && (execution.command.toolPermissionMode ?? "requestApproval") !== (run.toolPermissionMode ?? "requestApproval")))
     )
       throw new ApplicationError("authorization", "skill_run_binding_mismatch");
     if (result) await this.resolveVersion(actor, result.invocation.skill);

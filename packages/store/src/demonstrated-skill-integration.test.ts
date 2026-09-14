@@ -239,6 +239,181 @@ test("F03-R04 real Turn/SQLite crash receipt recovery preserves one Run and immu
     /skill_execution_id_conflict/,
   );
 });
+
+for (const mode of [undefined, "requestApproval", "approveForMe"] as const) {
+  test(`F03 Skill ${mode ?? "default"} permission persists in the Run and execution receipt across SQLite reopen and replay`, async (t) => {
+    const f = await fixture(t);
+    const input = {
+      ...f.input,
+      ...(mode === undefined ? {} : { toolPermissionMode: mode }),
+    };
+    const expectedMode = mode ?? "requestApproval";
+    const execution = await f.service.startExecution(
+      actor,
+      f.skill.skillId,
+      input,
+    );
+    assert.ok(execution.runId);
+    assert.equal(execution.command.toolPermissionMode, expectedMode);
+    const locator = { tenantId: actor.tenantId, runId: execution.runId };
+    assert.equal(
+      (await f.runs.loadRun(locator))?.toolPermissionMode,
+      expectedMode,
+    );
+    const created = (await f.runs.listRunEvents(locator, 0, 100)).find(
+      (event) => event.type === "run.created",
+    );
+    assert.equal(created?.data.toolPermissionMode, expectedMode);
+
+    const reopenedRuns = new SqliteRunStore(f.path);
+    const reopenedSkills = new SqliteDemonstratedSkillStore(f.path, digester);
+    try {
+      const reopenedService = new DemonstratedSkillService({
+        ...f.service.dependencies,
+        store: reopenedSkills,
+        turns: new TurnApplicationService({
+          store: reopenedRuns,
+          authorization: { authorize: async () => ({ outcome: "allow" }) },
+          clock,
+          digester,
+          ids: { nextId: () => randomUUID() },
+        }),
+      });
+      assert.equal(
+        (await reopenedRuns.loadRun(locator))?.toolPermissionMode,
+        expectedMode,
+      );
+      assert.deepEqual(
+        await reopenedSkills.getExecution(f.skill, input.executionId),
+        execution,
+      );
+      const replay = await reopenedService.startExecution(
+        actor,
+        f.skill.skillId,
+        input,
+      );
+      assert.equal(replay.runId, execution.runId);
+      assert.equal(replay.command.toolPermissionMode, expectedMode);
+      // Explicit requestApproval is equivalent to the safe default on replay.
+      const equivalent = await reopenedService.startExecution(
+        actor,
+        f.skill.skillId,
+        {
+          ...input,
+          toolPermissionMode: expectedMode,
+        },
+      );
+      assert.equal(equivalent.runId, execution.runId);
+      await assert.rejects(
+        reopenedService.startExecution(actor, f.skill.skillId, {
+          ...input,
+          toolPermissionMode:
+            expectedMode === "approveForMe"
+              ? "requestApproval"
+              : "approveForMe",
+        }),
+        /skill_execution_id_conflict/,
+      );
+      assert.deepEqual(
+        await reopenedSkills.getExecution(f.skill, input.executionId),
+        execution,
+      );
+      assert.equal(
+        (await reopenedRuns.loadRun(locator))?.toolPermissionMode,
+        expectedMode,
+      );
+      const runs = await reopenedRuns.listThreadRuns({
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        threadId: input.threadId,
+        before: null,
+        limit: 10,
+      });
+      assert.deepEqual(
+        runs.map((run) => run.runId),
+        [execution.runId],
+      );
+      assert.equal(
+        (
+          await reopenedRuns.listMessages(
+            { tenantId: actor.tenantId, threadId: input.threadId },
+            0,
+            100,
+          )
+        ).length,
+        1,
+      );
+    } finally {
+      await reopenedSkills.close();
+      await reopenedRuns.close();
+    }
+  });
+}
+
+for (const selectedMode of ["requestApproval", "approveForMe"] as const) {
+  test(`F03 Skill ${selectedMode} permission rejects a forged Run mode atomically during Turn binding`, async (t) => {
+    const f = await fixture(t);
+    const original = f.service.dependencies.turns.startTurn;
+    f.service.dependencies.turns.startTurn = (a, command) =>
+      original(a, {
+        ...command,
+        toolPermissionMode:
+          selectedMode === "requestApproval" ? "approveForMe" : "fullAccess",
+      });
+    const input = { ...f.input, toolPermissionMode: selectedMode };
+    await assert.rejects(
+      f.service.startExecution(actor, f.skill.skillId, input),
+      /skill_execution_binding_mismatch/,
+    );
+    const pending = await f.skills.getExecution(f.skill, input.executionId);
+    assert.ok(pending);
+    assert.equal(pending.runId, null);
+    assert.equal(pending.command.toolPermissionMode, selectedMode);
+    assert.equal(
+      (
+        await f.runs.listThreadRuns({
+          tenantId: actor.tenantId,
+          spaceId: actor.spaceId,
+          threadId: input.threadId,
+          before: null,
+          limit: 10,
+        })
+      ).length,
+      0,
+    );
+    assert.equal(
+      (
+        await f.runs.listMessages(
+          { tenantId: actor.tenantId, threadId: input.threadId },
+          0,
+          100,
+        )
+      ).length,
+      0,
+    );
+    assert.equal(
+      (
+        await f.runs.loadThreadInSpace({
+          tenantId: actor.tenantId,
+          spaceId: actor.spaceId,
+          threadId: input.threadId,
+        })
+      )?.revision,
+      input.expectedThreadRevision,
+    );
+    f.service.dependencies.turns.startTurn = original;
+    const recovered = await f.service.startExecution(
+      actor,
+      f.skill.skillId,
+      input,
+    );
+    assert.ok(recovered.runId);
+    assert.equal(
+      (await f.runService.getRun(actor, recovered.runId)).toolPermissionMode,
+      selectedMode,
+    );
+  });
+}
 test("F03-R05 simulated or unfinished trials cannot activate; real-evidence port requires reviewed new material", async (t) => {
   const f = await fixture(t);
   await assert.rejects(

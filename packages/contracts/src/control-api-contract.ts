@@ -191,6 +191,11 @@ export function parseCreateThreadRequest(input: unknown): CreateThreadRequest {
   };
 }
 
+export function parseSkillRunToolPermissionMode(value: unknown): Exclude<ToolPermissionMode, "fullAccess"> {
+  if (value !== "requestApproval" && value !== "approveForMe") throw new ContractValidationError("skill_tool_permission_mode_invalid");
+  return value;
+}
+
 export function parseCreateAutomationRequest(
   input: unknown,
 ): CreateAutomationRequest {
@@ -199,6 +204,7 @@ export function parseCreateAutomationRequest(
       ...(isPlainObject(input) && input.skillInvocation !== undefined
         ? ["skillInvocation"]
         : []),
+      ...(isPlainObject(input) && input.toolPermissionMode !== undefined ? ["toolPermissionMode"] : []),
       ...(isPlainObject(input) && input.parameterBindings !== undefined
         ? ["parameterBindings"]
         : []),
@@ -219,7 +225,7 @@ export function parseCreateAutomationRequest(
     throw new ContractValidationError("expected_revision_invalid");
   }
   if (
-    input.parameterBindings !== undefined &&
+    (input.parameterBindings !== undefined || input.toolPermissionMode !== undefined) &&
     input.skillInvocation === undefined
   ) {
     throw new ContractValidationError("automation_skill_binding_invalid");
@@ -233,6 +239,7 @@ export function parseCreateAutomationRequest(
     throw new ContractValidationError("automation_prompt_too_large");
   }
   return {
+    ...(input.toolPermissionMode === undefined ? {} : { toolPermissionMode: parseSkillRunToolPermissionMode(input.toolPermissionMode) }),
     ...(input.skillInvocation === undefined
       ? {}
       : { skillInvocation: parseSkillInvocationSpec(input.skillInvocation) }),

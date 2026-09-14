@@ -1,5 +1,7 @@
 import {
   SkillError,
+  parseSkillRunToolPermissionMode,
+  type SkillRunToolPermissionMode,
   parseSkillInvocationSpec,
   parseAutomationParameterBindings,
   type SkillInvocationSpec,
@@ -88,6 +90,7 @@ export interface AutomationAuthorizationPort {
 }
 
 export type CreateAutomationCommand = Readonly<{
+  toolPermissionMode?: SkillRunToolPermissionMode;
   skillInvocation?: SkillInvocationSpec;
   parameterBindings?: AutomationParameterBindings;
   kind: "automation.create";
@@ -302,6 +305,7 @@ export function validateAutomationCreateCommand(
     command,
     [
       ...(command.skillInvocation === undefined ? [] : ["skillInvocation"]),
+      ...(command.toolPermissionMode === undefined ? [] : ["toolPermissionMode"]),
       ...(command.parameterBindings === undefined ? [] : ["parameterBindings"]),
       "expectedThreadRevision",
       ...(command.executionMode === undefined ? [] : ["executionMode"]),
@@ -348,6 +352,10 @@ export function validateAutomationCreateCommand(
   }
   try {
     parseAutomationSchedule(command.schedule);
+    if (command.toolPermissionMode !== undefined) {
+      if (command.skillInvocation === undefined) throw new ApplicationError("validation", "automation_skill_binding_invalid");
+      parseSkillRunToolPermissionMode(command.toolPermissionMode);
+    }
     if (command.skillInvocation !== undefined)
       parseSkillInvocationSpec(command.skillInvocation);
     if (command.parameterBindings !== undefined) {

@@ -1003,6 +1003,11 @@ export interface components {
       schedule: components["schemas"]["AutomationSchedule"] | null;
       skillInvocation?: components["schemas"]["SkillInvocationSpec"];
       parameterBindings?: components["schemas"]["AutomationParameterBindings"];
+      /**
+       * @description Explicit permission mode for each entire Skill Run. Omission defaults to requestApproval. Only supported with skillInvocation.
+       * @enum {string}
+       */
+      toolPermissionMode?: "requestApproval" | "approveForMe";
     };
     RunAutomationNowRequest: {
       /** @constant */
@@ -1034,6 +1039,11 @@ export interface components {
         state: "ready" | "blocked";
         code: string | null;
       };
+      /**
+       * @description Explicit permission mode for each entire Skill Run. Omission defaults to requestApproval. Only supported with skillInvocation.
+       * @enum {string}
+       */
+      toolPermissionMode?: "requestApproval" | "approveForMe";
     };
     AutomationMutationResponse: {
       /** @enum {string} */

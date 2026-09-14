@@ -1,5 +1,7 @@
 import {
   parseSkillInvocationSpec,
+  parseSkillRunToolPermissionMode,
+  type SkillRunToolPermissionMode,
   type SkillInvocationSpec,
   skillJson,
 } from "./demonstrated-skill.ts";
@@ -48,15 +50,17 @@ type AutomationDefinitionFields = Readonly<{
 
 export type AutomationDefinition = AutomationDefinitionFields &
   (
-    | Readonly<{ schemaVersion: "crewon.automation.v0"; skillBinding?: never }>
+    | Readonly<{ schemaVersion: "crewon.automation.v0"; skillBinding?: never; toolPermissionMode?: never }>
     | Readonly<{
         schemaVersion: "crewon.automation.v1";
         skillBinding: AutomationSkillBinding;
+        toolPermissionMode?: SkillRunToolPermissionMode;
       }>
   );
 
 export type CreateAutomationDefinitionInput = Readonly<{
   skillBinding?: AutomationSkillBinding;
+  toolPermissionMode?: SkillRunToolPermissionMode;
   automationId: string;
   tenantId: string;
   spaceId: string;
@@ -122,6 +126,7 @@ export function createAutomationDefinition(
         : ["createdByPrincipalId"]),
       ...(value.executionMode === undefined ? [] : ["executionMode"]),
       ...(value.skillBinding === undefined ? [] : ["skillBinding"]),
+      ...(value.skillBinding !== undefined && value.toolPermissionMode !== undefined ? ["toolPermissionMode"] : []),
     ],
     "automation_definition_input_invalid",
   );
@@ -136,7 +141,7 @@ export function createAutomationDefinition(
         : "crewon.automation.v1",
     ...(value.skillBinding === undefined
       ? {}
-      : { skillBinding: value.skillBinding }),
+      : { skillBinding: value.skillBinding, toolPermissionMode: value.toolPermissionMode === undefined ? "requestApproval" : value.toolPermissionMode }),
     automationId: value.automationId,
     tenantId: value.tenantId,
     spaceId: value.spaceId,
@@ -176,7 +181,7 @@ export function parseAutomationDefinition(
       "schedule",
       "schemaVersion",
       ...(value.schemaVersion === "crewon.automation.v1"
-        ? ["skillBinding"]
+        ? ["skillBinding", ...(value.toolPermissionMode === undefined ? [] : ["toolPermissionMode"])]
         : []),
       "spaceId",
       "tenantId",
@@ -250,6 +255,7 @@ export function parseAutomationDefinition(
       ? {
           schemaVersion: value.schemaVersion,
           skillBinding: parseAutomationSkillBinding(value.skillBinding),
+          ...(value.toolPermissionMode === undefined ? {} : { toolPermissionMode: parseSkillRunToolPermissionMode(value.toolPermissionMode) }),
         }
       : { schemaVersion: value.schemaVersion }),
     automationId,
@@ -277,6 +283,13 @@ export function parseAutomationDefinition(
     throw new AutomationDefinitionError("automation_delivery_target_mismatch");
   requireInstructionWithinLimit(definition);
   return structuredClone(definition);
+}
+
+/** Legacy definitions retain their bytes/digest; omitted permission is requestApproval. */
+export function matchesAutomationRunPermissionMode(definition: AutomationDefinition, mode: import("./run-lifecycle.ts").RunToolPermissionMode | undefined): boolean {
+  return definition.schemaVersion === "crewon.automation.v1"
+    ? (mode ?? "requestApproval") === (definition.toolPermissionMode ?? "requestApproval")
+    : mode === undefined;
 }
 
 export function validateAutomationDefinition(

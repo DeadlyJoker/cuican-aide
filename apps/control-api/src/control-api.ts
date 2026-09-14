@@ -437,6 +437,7 @@ export function buildControlApi(
       kind: "automation.create",
       ...(body.skillInvocation === undefined ? {} : { skillInvocation: body.skillInvocation }),
       ...(body.parameterBindings === undefined ? {} : { parameterBindings: body.parameterBindings }),
+      ...(body.toolPermissionMode === undefined ? {} : { toolPermissionMode: body.toolPermissionMode }),
       idempotencyKey: parseIdempotencyKey(request.headers["idempotency-key"]),
       threadId: body.threadId,
       expectedThreadRevision: body.expectedThreadRevision,

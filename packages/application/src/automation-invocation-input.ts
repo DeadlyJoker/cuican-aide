@@ -138,6 +138,7 @@ export function createAutomationInvocationInput(dependencies: {
       policySnapshotId: route.policySnapshotId,
       workspaceBindingId: route.workspaceBindingId,
       collaborationMode: "default" as const,
+      ...(definition.schemaVersion === "crewon.automation.v1" ? { toolPermissionMode: definition.toolPermissionMode ?? "requestApproval" } : {}),
       goalBinding: null,
       purpose: "turn" as const,
       origin,
