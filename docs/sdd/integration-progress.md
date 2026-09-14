@@ -36,7 +36,7 @@ Control API、Store、Control Client 类型检查、OpenAPI 生成一致性和 T
 
 本树新增实际验证：生成路由、生成 SQLite 恢复、严格 schema、standalone 宿主、真实 Skill 日程宿主及兼容性八个文件共 32 项通过、0 失败、0 跳过；Control API 类型检查通过。日志位于 `/tmp/crewon-integration-generation-host-tests.log`。真实宿主测试的已激活 Skill 是合成前置数据；生成生命周期测试的提供方输出是显式夹具，这些不证明真实模型生成成功。
 
-F03 仍在补充固定无工具生成 AgentVersion 的执行硬门禁和 UI。F04 的 SQLite 原子性修复 `ff84a9e80` 已取入本树 `7ec329c4f`：保存日程和创建新 Run 时，在同一事务内复用完整 Skill 行校验；旧 v0 和既有 receipt 早返回行为保留，Postgres 新 v1 明确拒绝。根协调运行真实宿主交错禁用/损坏、旧客户端、Skill Store/直接 Turn/生成恢复七个测试文件，40 项通过、0 失败、0 跳过；Store/Control API 类型检查、OpenAPI 生成一致性通过。日志 `/tmp/crewon-integration-skill-fence-tests.log`。它不替代执行中每次浏览器动作的撤权检查。
+F04 的 SQLite 原子性修复 `ff84a9e80` 已取入本树 `7ec329c4f`：保存日程和创建新 Run 时，在同一事务内复用完整 Skill 行校验；旧 v0 和既有 receipt 早返回行为保留，Postgres 新 v1 明确拒绝。根协调运行真实宿主交错禁用/损坏、旧客户端、Skill Store/直接 Turn/生成恢复七个测试文件，40 项通过、0 失败、0 跳过；Store/Control API 类型检查、OpenAPI 生成一致性通过。日志 `/tmp/crewon-integration-skill-fence-tests.log`。它不替代执行中每次浏览器动作的撤权检查。追加 `9d241ee3d` 后，手动模式保存不再用 9999 年调度占位值解析日期，实际执行仍按当次发生时间冻结。
 
 第三批已合并 F01 `3745d6a797a2eb9f560aefe4dd1f91797da1154a`：ExcelJS/csv-parse/xlsx-calc 表格处理、加密文件与版本 CAS、Worker 工具与下载导入、Control/客户端接口、BFF/桌面/代理上传预算。C03 沿用 owner 新增的可选数字格式和输入 Run 来源字段，同时保留 F03/F04 的契约入口。BFF 保留 `x-crewon-automation-version` 转发。
 
@@ -47,5 +47,9 @@ F03 仍在补充固定无工具生成 AgentVersion 的执行硬门禁和 UI。F0
 第五批已合并 F01 UI 与最终 feature 证据 `14b8fc895e36abd2faa762fd01634a8b4fb2a5e8`。复用 App 的 Control 客户端，在任务工作台接入文件交付。根协调在本树运行交付面板、任务工作台、Skill 日程与浏览器授权四个组件文件，24 项通过；UI 与 Electron 类型检查通过，日志 `/tmp/crewon-integration-delivery-ui-tests.log`。feature 中的文件/GUI 证据保留其原始验证范围，不等同于根协调重新完成整体验收。
 
 F05 成熟浏览器动作宿主尚未在本树集成。真实模型、浏览器取数、文件结果及完整周期执行的 E04/E05 尚未验收；此树当前用于逐批集成，不作为已可发布成品。
+
+第六批已合并 F03 `505cbeeb9`：固定生成角色通过正式 release/binding 发布，`maxToolRounds: 0` 在首次流式采样、动态 goal/plan、审批与恢复入口均禁止工具；手写 C01 的 fixture 标记只允许降级。根协调补齐 C03 接线：同一 `DeliveryApplicationService` 同时供 HTTP 和 Skill 目标写权限校验，缺少交付存储仍拒绝。新增真实 standalone/SQLite 回归验证带交付目标的日程保存、到时 Run 准入与重开，以及缺少目标验证器时拒绝保存。
+
+本树第六批九个测试文件共 51 项通过、0 失败、0 跳过；Control API/Runtime Worker 类型检查通过，日志 `/tmp/crewon-integration-generation-delivery-authority-tests.log`。F03 另报告真实提供方固定无工具生成成功：一次模型调用、零工具回执、候选确认后草稿 revision 增加；输入为显式 contract-fixture，未激活。该报告尚不等于真实录制试跑或周期交付验收，原始 evidence 随其最终提交补入。
 
 F05 已报告同一真实 WebContentsView 上的 Puppeteer 动作、下载和 focus emulation 恢复探针通过；尚未贯通本树的录制/授权/交付路径，不能冒称人工 GUI 验收或完整后台执行。已找到原工作区现有模型配置，F03 将只在隔离验收进程读取，使用合成材料验证；凭据不复制、不输出，不使用原用户数据库。

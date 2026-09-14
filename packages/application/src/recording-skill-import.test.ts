@@ -28,7 +28,7 @@ test("F03-R01/R02 C01 synthetic contract extraction retains route, roles, candid
   );
   assert.deepEqual(method.requiredToolRefs, [
     "crewon_browser_observe",
-    "crewon_browser_act",
+    "crewon_browser_act", "crewon_browser_act_scoped",
   ]);
   assert.ok(method.runtimeRequirements.some((s) => s.includes("敏感")));
 });

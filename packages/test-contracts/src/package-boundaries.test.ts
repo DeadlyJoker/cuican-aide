@@ -89,8 +89,9 @@ const boundaries: readonly Boundary[] = [
   },
   {
     packageName: "domain",
-    allowedBareImports: [],
-    allowedRuntimeDependencies: [],
+    // C02 keeps validation in its domain API; both libraries are portable, pure parsers.
+    allowedBareImports: ["zod", "js-yaml"],
+    allowedRuntimeDependencies: ["zod", "js-yaml"],
   },
   {
     packageName: "eval-harness",
@@ -133,6 +134,7 @@ const boundaries: readonly Boundary[] = [
       "node:sqlite",
       "@crewon/application",
       "@crewon/domain",
+      "@crewon/contracts/recording",
       "pg",
     ],
     allowedRuntimeDependencies: ["@crewon/application", "@crewon/domain", "pg"],

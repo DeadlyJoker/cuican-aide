@@ -14,7 +14,11 @@ import {
 } from "@crewon/application";
 import { InMemoryArtifactStore } from "@crewon/artifacts";
 import { createSkillVersion } from "@crewon/domain";
-import { SqliteDemonstratedSkillStore, SqliteRunStore } from "@crewon/store";
+import {
+  SqliteDeliveryStore,
+  SqliteDemonstratedSkillStore,
+  SqliteRunStore,
+} from "@crewon/store";
 import { NodeSha256ContentDigester } from "./standalone-adapters.ts";
 import { createStandaloneControlApi } from "./standalone-composition.ts";
 
@@ -33,7 +37,11 @@ const headers = {
   "x-crewon-automation-version": "1",
 };
 
-async function hostFixture(t: TestContext, requiredTool = "browser") {
+async function hostFixture(
+  t: TestContext,
+  requiredTool = "browser",
+  options: { delivery?: "enabled" } = {},
+) {
   const directory = mkdtempSync(join(tmpdir(), "f04-real-skill-host-"));
   const databasePath = join(directory, "state.sqlite");
   const runs = new SqliteRunStore(databasePath);
@@ -161,6 +169,13 @@ async function hostFixture(t: TestContext, requiredTool = "browser") {
   const open = () =>
     createStandaloneControlApi({
       databasePath,
+      deliveryStore:
+        options.delivery === "enabled"
+          ? new SqliteDeliveryStore({
+              databasePath: join(directory, "delivery.sqlite"),
+              encryptionKey: new Uint8Array(32).fill(9),
+            })
+          : undefined,
       actor,
       defaultAgentVersionId: agent.agentVersionId,
       sessionToken: "s".repeat(32),
@@ -531,3 +546,79 @@ for (const mutation of [
     );
   });
 }
+
+test("integration: Skill schedules use the real delivery target authority and persist its exact target", async (t) => {
+  const f = await hostFixture(t, "browser", { delivery: "enabled" });
+  const deliveryTarget = {
+    schemaVersion: "crewon.delivery-target.v1",
+    tenantId: actor.tenantId,
+    spaceId: actor.spaceId,
+    threadId: f.threadId,
+    targetId: "thread-deliveries",
+  };
+  const saved = await f.host.app.inject({
+    method: "POST",
+    url: "/api/v1/automations",
+    headers: { ...headers, "idempotency-key": "delivery-schedule" },
+    payload: {
+      ...f.body,
+      skillInvocation: { ...f.body.skillInvocation, deliveryTarget },
+    },
+  });
+  assert.equal(saved.statusCode, 201, saved.body);
+  await f.host.automationScheduler.wake();
+  assert.equal(f.host.automationScheduler.lastFailureCode(), null);
+  const work = await f.runs.listPendingWorkItems(100);
+  assert.equal(work.length, 1);
+  const response = await f.host.app.inject({
+    url: `/api/v1/runs/${work[0]!.runId}/skill-invocation`,
+    headers,
+  });
+  assert.equal(response.statusCode, 200, response.body);
+  const locator = {
+    tenantId: actor.tenantId,
+    spaceId: actor.spaceId,
+    automationId: saved.json().automation.automationId as string,
+  };
+  assert.deepEqual(
+    (await f.runs.loadAutomation(locator))?.definition.skillBinding?.invocation
+      .deliveryTarget,
+    deliveryTarget,
+  );
+  await f.restart();
+  const reopened = await f.host.app.inject({
+    url: `/api/v1/runs/${work[0]!.runId}/skill-invocation`,
+    headers,
+  });
+  assert.equal(reopened.statusCode, 200, reopened.body);
+  assert.deepEqual(
+    (await f.runs.loadAutomation(locator))?.definition.skillBinding?.invocation
+      .deliveryTarget,
+    deliveryTarget,
+  );
+});
+
+test("integration: a Skill delivery target remains unavailable without a configured delivery authority", async (t) => {
+  const f = await hostFixture(t);
+  const saved = await f.host.app.inject({
+    method: "POST",
+    url: "/api/v1/automations",
+    headers: { ...headers, "idempotency-key": "missing-delivery-authority" },
+    payload: {
+      ...f.body,
+      skillInvocation: {
+        ...f.body.skillInvocation,
+        deliveryTarget: {
+          schemaVersion: "crewon.delivery-target.v1",
+          tenantId: actor.tenantId,
+          spaceId: actor.spaceId,
+          threadId: f.threadId,
+          targetId: "thread-deliveries",
+        },
+      },
+    },
+  });
+  assert.equal(saved.statusCode, 403, saved.body);
+  assert.equal(saved.json().error.code, "skill_delivery_target_unavailable");
+  assert.deepEqual(await f.runs.listPendingWorkItems(100), []);
+});

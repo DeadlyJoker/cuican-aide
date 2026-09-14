@@ -58,6 +58,7 @@ import type { ThreadSandboxPort } from "./pim-sandbox-client.ts";
 type ControlApiCompositionConfig = Readonly<{
   skillDatabasePath?: string;
   deliveryStore?: DeliveryStorePort;
+  generationAgentVersionId?: string;
   storageAdmission?: StorageAdmissionPort;
   localStoragePaths?: readonly string[];
   actor: ActorContext;
@@ -112,7 +113,10 @@ export function createStandaloneControlApi(
     return composeControlApi(store, {
       ...config,
       skillDatabasePath: config.databasePath,
-      localStoragePaths: [config.databasePath, ...(config.localStoragePaths ?? [])],
+      localStoragePaths: [
+        config.databasePath,
+        ...(config.localStoragePaths ?? []),
+      ],
     });
   } catch (error) {
     void store.close();
@@ -231,7 +235,34 @@ function composeControlApi(
       digester,
       admission: new StoreBackedAgentVersionAdmission(store),
     });
-    skillHost = config.skillDatabasePath === undefined ? null : createStandaloneSkillHost({databasePath:config.skillDatabasePath,actor:config.actor,store,turns,routes:routeResolver,application,digester,clock});
+    const deliveries = config.deliveryStore
+      ? composeDeliveries({
+          store: config.deliveryStore,
+          threads,
+          runs: application,
+          authorization,
+        })
+      : null;
+    skillHost =
+      config.skillDatabasePath === undefined
+        ? null
+        : createStandaloneSkillHost({
+            databasePath: config.skillDatabasePath,
+            actor: config.actor,
+            store,
+            turns,
+            routes: routeResolver,
+            application,
+            digester,
+            clock,
+            generationAgentVersionId: config.generationAgentVersionId,
+            deliveryTargets: deliveries
+              ? {
+                  validateTarget: (actor, target) =>
+                    deliveries.validateTarget(actor, target, "write"),
+                }
+              : undefined,
+          });
     const automations = new AutomationApplicationService({
       skills: skillHost?.skills,
       store,
@@ -310,14 +341,7 @@ function composeControlApi(
       skills: skillHost?.skills ?? null,
       skillRecordings: skillHost?.recordings ?? null,
       skillGenerations: skillHost?.generations ?? null,
-      deliveries: config.deliveryStore
-        ? composeDeliveries({
-            store: config.deliveryStore,
-            threads,
-            runs: application,
-            authorization,
-          })
-        : null,
+      deliveries,
       application,
       offices,
       threads,

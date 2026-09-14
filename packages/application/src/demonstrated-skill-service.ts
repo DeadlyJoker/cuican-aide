@@ -4,6 +4,7 @@ import {
   parseSkillVersionRef,
   renderSkillInvocationContext,
   skillJson,
+  skillKeys,
   skillText,
   validateSkillInvocation,
   verifySkillVersion,
@@ -159,20 +160,44 @@ export class DemonstratedSkillService implements SkillInvocationPort {
     actor: ActorContext,
     recording: unknown,
     evidence: readonly SkillEvidenceUpload[] = [],
-    importId?: string,
+    options: Readonly<{
+      importId?: string;
+      provenance?: "contract-fixture";
+    }> = {},
   ) {
-    if (importId !== undefined) skillText(importId,128,"skill_import_id_invalid");
-    const skillId = importId === undefined ? this.dependencies.nextId() : `skill-${this.dependencies.digester.sha256(skillJson({tenantId:actor.tenantId,spaceId:actor.spaceId,ownerActorId:actor.actorId,importId})).slice(7)}`;
+    skillKeys(options, ["importId", "provenance"]);
+    if (
+      options.provenance !== undefined &&
+      options.provenance !== "contract-fixture"
+    )
+      throw new ApplicationError(
+        "validation",
+        "skill_import_provenance_invalid",
+      );
+    const { importId } = options;
+    if (importId !== undefined)
+      skillText(importId, 128, "skill_import_id_invalid");
+    const skillId =
+      importId === undefined
+        ? this.dependencies.nextId()
+        : `skill-${this.dependencies.digester.sha256(skillJson({ tenantId: actor.tenantId, spaceId: actor.spaceId, ownerActorId: actor.actorId, importId })).slice(7)}`;
     await this.authorize(actor, skillId, "write");
-    const { method, source } =
+    const { method, source: validatedSource } =
       await this.dependencies.recording.importRecording(
         actor,
         recording,
         evidence,
       );
-    const existing = await this.dependencies.store.getSkill(this.locator(actor,skillId));
+    const source =
+      options.provenance === "contract-fixture"
+        ? { ...validatedSource, provenance: "contract-fixture" as const }
+        : validatedSource;
+    const existing = await this.dependencies.store.getSkill(
+      this.locator(actor, skillId),
+    );
     if (existing) {
-      if (skillJson(existing.source) !== skillJson(source)) throw new ApplicationError("conflict","skill_import_id_conflict");
+      if (skillJson(existing.source) !== skillJson(source))
+        throw new ApplicationError("conflict", "skill_import_id_conflict");
       return existing;
     }
     const now = this.dependencies.clock.now();
@@ -187,11 +212,15 @@ export class DemonstratedSkillService implements SkillInvocationPort {
       createdAt: now,
       updatedAt: now,
     };
-    try { await this.dependencies.store.saveSkill(record, 0); }
-    catch(error) {
+    try {
+      await this.dependencies.store.saveSkill(record, 0);
+    } catch (error) {
       if (importId === undefined) throw error;
-      const concurrent = await this.dependencies.store.getSkill(this.locator(actor,skillId));
-      if (!concurrent || skillJson(concurrent.source)!==skillJson(source)) throw error;
+      const concurrent = await this.dependencies.store.getSkill(
+        this.locator(actor, skillId),
+      );
+      if (!concurrent || skillJson(concurrent.source) !== skillJson(source))
+        throw error;
       return concurrent;
     }
     return record;

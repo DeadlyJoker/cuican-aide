@@ -59,7 +59,7 @@ export class SkillDraftGenerationService {
     skills: Pick<DemonstratedSkillService, "get" | "edit" | "authorize">;
     turns: Pick<TurnApplicationService, "startTurn" | "replayTurn">;
     routes: RunRouteResolverPort;
-    threads: Pick<ThreadStore, "listMessages">;
+    threads: Pick<ThreadStore, "loadThreadInSpace" | "messageWindows">;
     evidence: SkillRunEvidencePort;
     digester: ContentDigester;
     clock: ApplicationClock;
@@ -108,13 +108,14 @@ export class SkillDraftGenerationService {
       throw new ApplicationError("authorization", "skill_disabled");
     if (skill.revision !== parsed.expectedSkillRevision)
       throw new ApplicationError("conflict", "skill_revision_conflict");
-    const route =
-      record?.command.route ??
-      (await this.dependencies.routes.resolveRoute({
-        actor,
-        threadId: parsed.threadId,
-        agentVersionId: parsed.agentVersionId,
-      }));
+    const route = await this.dependencies.routes.resolveRoute({
+      actor,
+      threadId: parsed.threadId,
+      agentVersionId:
+        record?.command.route.agentVersionId ?? parsed.agentVersionId,
+    });
+    if (record && skillJson(record.command.route) !== skillJson(route))
+      throw new ApplicationError("conflict", "skill_generation_route_changed");
     await this.dependencies.skills.authorize(
       actor,
       skillId,
@@ -212,16 +213,32 @@ export class SkillDraftGenerationService {
       record.startMessageId !== null &&
       record.startMessageSequence !== null
     ) {
-      let afterSequence = record.startMessageSequence - 1;
-      let foundStart = false;
+      const locator = {
+        tenantId: actor.tenantId,
+        spaceId: actor.spaceId,
+        threadId: record.command.threadId,
+      };
+      const windows = this.dependencies.threads.messageWindows;
+      const thread = await this.dependencies.threads.loadThreadInSpace(locator);
+      if (!windows || !thread)
+        throw new ApplicationError(
+          "conflict",
+          "skill_generation_message_evidence_unavailable",
+        );
+      let afterSequence = record.startMessageSequence;
       let finished = false;
       for (let page = 0; page < 4 && !finished; page++) {
-        const messages = await this.dependencies.threads.listMessages(
-          { tenantId: actor.tenantId, threadId: record.command.threadId },
-          afterSequence,
-          64,
-        );
-        for (const message of messages) {
+        const window = await windows.readWindow({
+          ...locator,
+          position: {
+            direction: "newer",
+            messageSequence: afterSequence,
+            threadRevision: thread.revision,
+          },
+          limit: 64,
+          view: "transcript",
+        });
+        for (const message of window.messages) {
           if (
             message.tenantId !== actor.tenantId ||
             message.threadId !== record.command.threadId ||
@@ -232,27 +249,16 @@ export class SkillDraftGenerationService {
             break;
           }
           afterSequence = message.sequence;
-          if (!foundStart) {
-            if (
-              message.messageId !== record.startMessageId ||
-              message.role !== "user" ||
-              message.sequence !== record.startMessageSequence ||
-              message.content !== record.command.content
-            ) {
-              finished = true;
-              break;
-            }
-            foundStart = true;
-            continue;
-          }
-          // A later user Turn may not supply the candidate for this generation.
-          if (message.role === "user") {
-            finished = true;
-            break;
-          }
           if (message.messageId !== outputId) continue;
           finished = true;
+          // The completion event is authoritative even if another user message
+          // was appended while this Run was still producing its output.
+          const binding = window.runBindings?.find(
+            (entry) => entry.messageId === outputId,
+          );
           if (
+            binding?.runId !== record.runId ||
+            binding.source !== "messageCompletedEvent" ||
             message.role !== "assistant" ||
             this.dependencies.digester.sha256(message.content) !==
               message.contentDigest
@@ -267,7 +273,7 @@ export class SkillDraftGenerationService {
           }
           break;
         }
-        if (messages.length < 64) break;
+        if (!window.hasNewer) break;
       }
     }
     const result: SkillDraftGenerationResult = {

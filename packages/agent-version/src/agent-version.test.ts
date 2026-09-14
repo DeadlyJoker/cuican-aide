@@ -32,6 +32,37 @@ test("compiles a deeply immutable AgentVersion and keeps ordered Tool content st
   assert.notEqual(reordered.contentDigest, version.contentDigest);
 });
 
+test("zero tool rounds round-trip as an immutable text-only version and negative limits fail", () => {
+  const source = agentVersionSource();
+  const version = compileAgentVersion(
+    {
+      ...source,
+      execution: { ...source.execution, maxToolRounds: 0 },
+      tools: [],
+    },
+    { sha256 },
+  );
+  const asset = createAgentVersionAsset({
+    tenantId: "tenant-1",
+    version,
+    createdAt: "2026-09-14T00:00:00Z",
+  });
+  assert.equal(
+    parseAgentVersionAsset(asset, { sha256 }).execution.maxToolRounds,
+    0,
+  );
+  for (const maxToolRounds of [-1, 0.5, 129]) {
+    assert.throws(
+      () =>
+        compileAgentVersion(
+          { ...source, execution: { ...source.execution, maxToolRounds } },
+          { sha256 },
+        ),
+      hasCode("agent_version_execution_invalid"),
+    );
+  }
+});
+
 test("registers one digest per stable AgentVersion ID and never replaces it", () => {
   const registry = new InMemoryAgentVersionRegistry();
   const first = compileAgentVersion(agentVersionSource(), { sha256 });

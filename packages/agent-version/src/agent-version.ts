@@ -22,6 +22,7 @@ export type AgentVersionSource = Readonly<{
   }>;
   execution: Readonly<{
     streamMaxRetries: number;
+    /** Zero disables all tools, including runtime-owned tools; text generation remains allowed. */
     maxToolRounds: number;
   }>;
   resources: Readonly<{
@@ -317,7 +318,7 @@ function validateExecution(value: AgentVersionSource["execution"]): void {
     value.streamMaxRetries < 0 ||
     value.streamMaxRetries > 10 ||
     !Number.isSafeInteger(value.maxToolRounds) ||
-    value.maxToolRounds < 1 ||
+    value.maxToolRounds < 0 ||
     value.maxToolRounds > 128
   ) {
     throw new AgentVersionError("agent_version_execution_invalid");

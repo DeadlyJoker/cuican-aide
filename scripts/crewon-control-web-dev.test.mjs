@@ -53,6 +53,8 @@ test("creates a workspace-free TypeScript runtime environment", () => {
   assert.deepEqual(
     {
       agentVersionId: environment.CREWON_AGENT_VERSION_ID,
+      generationAgentVersionId:
+        environment.CREWON_SKILL_GENERATION_AGENT_VERSION_ID,
       controlDatabase: environment.CREWON_CONTROL_DB_PATH,
       modelId: environment.CREWON_MODEL_ID,
       nativeWorkspace: environment.CREWON_NATIVE_WORKSPACE_READ_ENABLED,
@@ -64,6 +66,7 @@ test("creates a workspace-free TypeScript runtime environment", () => {
     },
     {
       agentVersionId: "agent-version-1",
+      generationAgentVersionId: "agent-version-1-skill-generator",
       controlDatabase: "/runtime data/control.sqlite",
       modelId: "gpt-5.5",
       nativeWorkspace: "0",
