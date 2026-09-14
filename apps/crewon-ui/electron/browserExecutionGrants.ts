@@ -83,9 +83,11 @@ export function parseBrowserGrantScope(
         r.urlTemplate !== undefined ||
         !r.target ||
         Object.keys(r.target).sort().join() !== "name,role" ||
-        ![r.target.name, r.target.role].every(
-          (v) => typeof v === "string" && v.length > 0 && v.length <= 120,
-        )
+        typeof r.target.name !== "string" ||
+        r.target.name.length === 0 ||
+        r.target.name.length > 120 ||
+        typeof r.target.role !== "string" ||
+        r.target.role.length > 120
       )
         return deny();
       if (["fill", "select"].includes(r.action)) {

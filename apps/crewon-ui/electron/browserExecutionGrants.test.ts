@@ -52,6 +52,52 @@ const fill = (value: string): BrowserActInput => ({
 });
 
 describe("browser scoped task grants", () => {
+  it("matches a named native date control without inventing an ARIA role", () => {
+    const dateTarget = { role: "", name: "日期" };
+    const grant = parseBrowserGrantScope({
+      skillVersionRef: ref,
+      origins: [origin],
+      rules: [
+        { action: "fill", target: dateTarget, value: { parameter: "date" } },
+      ],
+    });
+    expect(() =>
+      assertBrowserGrantAllows(
+        grant,
+        identity(),
+        fill("2026-09-14"),
+        origin,
+        dateTarget,
+        origin,
+      ),
+    ).not.toThrow();
+    for (const other of [
+      { role: "textbox", name: "日期" },
+      { role: "", name: "其他日期" },
+    ])
+      expect(() =>
+        assertBrowserGrantAllows(
+          grant,
+          identity(),
+          fill("2026-09-14"),
+          origin,
+          other,
+          origin,
+        ),
+      ).toThrow("requires_explicit_approval");
+    expect(() =>
+      parseBrowserGrantScope({
+        ...grant,
+        rules: [
+          {
+            action: "fill",
+            target: { role: "", name: "" },
+            value: { parameter: "date" },
+          },
+        ],
+      }),
+    ).toThrow();
+  });
   it("retains an immutable copy of the reviewed scope", () => {
     const proposed = scope();
     const parsed = parseBrowserGrantScope(proposed);
