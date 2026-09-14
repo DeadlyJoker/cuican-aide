@@ -1,3 +1,5 @@
+import type { BrowserExecutionToolRuntime } from "./browser-execution-tool-runtime.ts";
+import type { DeliveryDownloadImporter } from "./delivery-composition.ts";
 import {
   FilesystemArtifactStore,
   loadArtifactEncryptionKey,
@@ -45,6 +47,7 @@ const nativeBootstrap = takeRuntimeNativeBootstrap();
 const initialized = await (async () => {
   let remoteMcpOwner: RuntimeNativeRemoteMcpOwner | undefined;
   let transport: ReturnType<typeof createModelTransport> | undefined;
+  let browserRuntime: BrowserExecutionToolRuntime | undefined;
   let toolRuntime: Awaited<ReturnType<typeof createConfiguredToolRuntime>>;
   let artifactAuthority: ReturnType<typeof createConfiguredArtifactAuthority>;
   let delivery: ReturnType<typeof createConfiguredRuntimeDelivery>;
@@ -133,12 +136,17 @@ const initialized = await (async () => {
         providerId: nativeBootstrap?.provider?.providerId,
       },
     );
-    toolRuntime = await createConfiguredToolRuntime();
+    toolRuntime = await createConfiguredToolRuntime(process.env, {
+      onBrowserRuntime: (runtime) => {
+        browserRuntime = runtime;
+      },
+    });
     artifactAuthority = createConfiguredArtifactAuthority();
     delivery = createConfiguredRuntimeDelivery(process.env);
     return {
       agentVersionRuntimeFactory,
       ambientProviderProbe,
+      browserRuntime,
       artifactAuthority,
       delivery,
       nativeWorkspaceReadCatalog,
@@ -162,6 +170,7 @@ const initialized = await (async () => {
   }
 })();
 const {
+  browserRuntime,
   agentVersionRuntimeFactory,
   ambientProviderProbe,
   artifactAuthority,
@@ -206,6 +215,8 @@ try {
     toolRuntime,
     delivery,
     deliveryToolCatalog: configuredDeliveryToolCatalog(process.env),
+    configureDeliveryDownloads: (importer: DeliveryDownloadImporter) =>
+      browserRuntime?.setDownloadImporter(importer),
     ...(artifactAuthority === undefined
       ? {}
       : {

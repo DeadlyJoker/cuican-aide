@@ -3,6 +3,7 @@ import type { DemonstratedSkillService, SkillRecordingStore, SkillDraftGeneratio
 import { projectAutomationWithReadiness } from "./automation-readiness-projection.ts";
 import { requireSkillScheduleClient, supportsSkillSchedules } from "./automation-client-compatibility.ts";
 import { registerThreadActiveRunRoute } from "./thread-active-run-route.ts";
+import { registerBrowserExecutionAuthorityRoute } from "./browser-execution-authority-route.ts";
 import { registerDeliveryRoutes } from "./delivery-routes.ts";
 import type { DeliveryApplicationService } from "@crewon/application";
 import { registerThreadCatalogRoute } from "./thread-catalog-route.ts";
@@ -1276,6 +1277,7 @@ export function buildControlApi(
   registerThreadTranscriptWindowRoute(app, dependencies);
   registerThreadCatalogRoute(app, dependencies);
   registerThreadActiveRunRoute(app, dependencies);
+  registerBrowserExecutionAuthorityRoute(app, dependencies);
 
   app.post<{ Params: { threadId: string }; Body: unknown }>(
     "/api/v1/threads/:threadId/forks",

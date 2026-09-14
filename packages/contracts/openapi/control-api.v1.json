@@ -3173,6 +3173,52 @@
           }
         }
       }
+    },
+    "/api/v1/runs/{runId}/browser-execution-authority": {
+      "get": {
+        "operationId": "getBrowserExecutionAuthority",
+        "summary": "Read authenticated current Run facts for the browser host; this response is not an execution grant",
+        "parameters": [
+          {
+            "$ref": "#/components/parameters/RunId"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Current identity, workspace binding and cancellation state. Never cached.",
+            "headers": {
+              "Cache-Control": {
+                "schema": {
+                  "type": "string",
+                  "const": "no-store"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrowserExecutionAuthorityResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error"
+          }
+        }
+      }
     }
   },
   "components": {
@@ -8852,6 +8898,57 @@
             "previousWeekStart",
             "previousWeekEnd"
           ]
+        }
+      },
+      "BrowserExecutionAuthorityResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "runId",
+          "threadId",
+          "workspaceBindingId",
+          "status",
+          "cancelRequested",
+          "revision"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.browser-execution-authority.v1"
+          },
+          "runId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+          },
+          "workspaceBindingId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "minLength": 1,
+            "maxLength": 512,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,511}$"
+          },
+          "status": {
+            "$ref": "#/components/schemas/RunStatus"
+          },
+          "cancelRequested": {
+            "type": "boolean"
+          },
+          "revision": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 9007199254740991
+          }
         }
       }
     }

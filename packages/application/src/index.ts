@@ -73,6 +73,8 @@ export * from "./tool-approval-replacement.ts";
 export * from "./tool-approval-application-service.ts";
 export * from "./tool-execution-store-port.ts";
 export * from "./artifact-retention-port.ts";
+export * from "./delivery-ports.ts";
+export * from "./delivery-application-service.ts";
 
 export * from "./skill-invocation-port.ts";
 export * from "./demonstrated-skill-store-port.ts";
@@ -84,5 +86,3 @@ export * from "./skill-draft-generation.ts";
 export * from "./skill-recording-store-port.ts";
 export * from "./recording-skill-import.ts";
 
-export * from "./delivery-ports.ts";
-export * from "./delivery-application-service.ts";

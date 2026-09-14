@@ -76,6 +76,8 @@ export class RuntimeSupervisor {
     provider: ActiveProvider,
   ) => Promise<readonly string[] | null>;
   readonly #agentPlatformApiKeyForOrigin: (origin: string) => string | null;
+  readonly #browserExecution: () => { url: string; token: string } | null;
+  readonly #revokeBrowserExecutions: () => void;
   readonly #workspaceRoot: () => string | null;
   #controlPort = 0;
   #probePort = 0;
@@ -96,6 +98,8 @@ export class RuntimeSupervisor {
     ) => Promise<readonly string[] | null>;
     agentPlatformApiKeyForOrigin: (origin: string) => string | null;
     workspaceRoot: () => string | null;
+    browserExecution?: () => { url: string; token: string } | null;
+    revokeBrowserExecutions?: () => void;
     logOutputs?: { stdout: Writable; stderr: Writable };
   }) {
     this.#dataDirectory = options.dataDirectory;
@@ -105,6 +109,9 @@ export class RuntimeSupervisor {
     this.#providerModelCatalog = options.providerModelCatalog;
     this.#agentPlatformApiKeyForOrigin = options.agentPlatformApiKeyForOrigin;
     this.#workspaceRoot = options.workspaceRoot;
+    this.#browserExecution = options.browserExecution ?? (() => null);
+    this.#revokeBrowserExecutions =
+      options.revokeBrowserExecutions ?? (() => {});
     this.#logs = new RuntimeLogForwarder(
       options.logOutputs ?? {
         stdout: process.stdout,
@@ -225,6 +232,7 @@ export class RuntimeSupervisor {
   }
 
   async stop(): Promise<void> {
+    this.#revokeBrowserExecutions();
     this.#ready = false;
     this.#stopWatchingChildren?.();
     this.#stopWatchingChildren = null;
@@ -305,6 +313,7 @@ export class RuntimeSupervisor {
       },
     ] as const;
     const workspace = this.#workspaceRoot();
+    const browserExecution = this.#browserExecution();
     const mcpConfig =
       workspace === null ? null : this.#writeMcpConfig(workspace);
     const fingerprint = desktopRuntimeFingerprint({
@@ -313,6 +322,9 @@ export class RuntimeSupervisor {
       modelId: provider.modelId,
       modelCatalog,
       agentProfiles,
+      ...(browserExecution === null
+        ? {}
+        : { browserExecutionContract: "crewon.browser-execution.v1" }),
       localWorkspaceMcp:
         mcpConfig === null
           ? null
@@ -392,6 +404,12 @@ export class RuntimeSupervisor {
       CREWON_TENANT_ID: "standalone-tenant",
     };
     bindDesktopWorkspaceEnvironment(environment, { mcpConfig, workspace });
+    delete environment.CREWON_BROWSER_BRIDGE_URL;
+    delete environment.CREWON_BROWSER_BRIDGE_TOKEN;
+    if (browserExecution !== null) {
+      environment.CREWON_BROWSER_BRIDGE_URL = browserExecution.url;
+      environment.CREWON_BROWSER_BRIDGE_TOKEN = browserExecution.token;
+    }
     for (const name of [
       "CREWON_AGENT_PLATFORM_API_KEY",
       "CREWON_CONTROL_DATABASE_URL",
@@ -528,6 +546,7 @@ export async function terminateRuntimeChild(
 }
 
 export function desktopRuntimeFingerprint(input: {
+  browserExecutionContract?: string;
   providerId: string;
   endpoint: string;
   modelId: string;

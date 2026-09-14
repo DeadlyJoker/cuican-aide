@@ -97,6 +97,9 @@ importers:
       '@crewon/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@crewon/tool-broker':
+        specifier: workspace:*
+        version: link:../../packages/tool-broker
       '@xterm/addon-fit':
         specifier: ^0.11.0
         version: 0.11.0
@@ -130,6 +133,9 @@ importers:
       mermaid:
         specifier: ^11.16.0
         version: 11.16.0
+      puppeteer-core:
+        specifier: 25.9.0
+        version: 25.9.0
       radix-ui:
         specifier: ^1.6.7
         version: 1.6.7(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -194,9 +200,6 @@ importers:
       happy-dom:
         specifier: 20.13.1
         version: 20.13.1
-      puppeteer-core:
-        specifier: 25.9.0
-        version: 25.9.0
       tailwindcss:
         specifier: ^4.3.3
         version: 4.3.3

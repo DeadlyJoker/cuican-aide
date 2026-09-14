@@ -56,8 +56,8 @@ import type { ProcessLocalActivationGate } from "./paused-admission.ts";
 import type { ThreadSandboxPort } from "./pim-sandbox-client.ts";
 
 type ControlApiCompositionConfig = Readonly<{
-  skillDatabasePath?: string;
   deliveryStore?: DeliveryStorePort;
+  skillDatabasePath?: string;
   generationAgentVersionId?: string;
   storageAdmission?: StorageAdmissionPort;
   localStoragePaths?: readonly string[];

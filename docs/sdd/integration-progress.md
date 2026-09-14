@@ -46,7 +46,7 @@ F04 的 SQLite 原子性修复 `ff84a9e80` 已取入本树 `7ec329c4f`：保存�
 
 第五批已合并 F01 UI 与最终 feature 证据 `14b8fc895e36abd2faa762fd01634a8b4fb2a5e8`。复用 App 的 Control 客户端，在任务工作台接入文件交付。根协调在本树运行交付面板、任务工作台、Skill 日程与浏览器授权四个组件文件，24 项通过；UI 与 Electron 类型检查通过，日志 `/tmp/crewon-integration-delivery-ui-tests.log`。feature 中的文件/GUI 证据保留其原始验证范围，不等同于根协调重新完成整体验收。
 
-F05 成熟浏览器动作宿主尚未在本树集成。真实模型、浏览器取数、文件结果及完整周期执行的 E04/E05 尚未验收；此树当前用于逐批集成，不作为已可发布成品。
+真实模型、浏览器取数、文件结果及完整周期执行的 E04/E05 尚未验收；此树当前用于逐批集成，不作为已可发布成品。
 
 第六批已合并 F03 `505cbeeb9`：固定生成角色通过正式 release/binding 发布，`maxToolRounds: 0` 在首次流式采样、动态 goal/plan、审批与恢复入口均禁止工具；手写 C01 的 fixture 标记只允许降级。根协调补齐 C03 接线：同一 `DeliveryApplicationService` 同时供 HTTP 和 Skill 目标写权限校验，缺少交付存储仍拒绝。新增真实 standalone/SQLite 回归验证带交付目标的日程保存、到时 Run 准入与重开，以及缺少目标验证器时拒绝保存。
 
@@ -55,5 +55,9 @@ F05 成熟浏览器动作宿主尚未在本树集成。真实模型、浏览器�
 F03 真实模型/独立 Control 进程重开证据 `86d37ead2` 已取入本树；重开后的 GET/collect/apply 重放保留原 Run 和 revision，模型调用数未增加，这只证明完成后的 HTTP 恢复。F02 最终 `45b8ee383`/`aa81fecb0` 也已合入：重复 arm 与排队下载生命周期修复、实际 source 导出及同端口站点复现脚本。根协调运行两个变更宿主文件，13 项通过；锁文件合并后 frozen install 通过。实际录制数据位于 `artifacts/f02-recording/recording-export.json`，站点和业务材料合成，采集链路是真实 Electron。
 
 第七批已合入 F03 UI `ee79f42c8`：录制交接、模型候选审阅、版本/试跑/启用、浏览器授权与 Skill 日程入口。保留 F01 App 的 DeliveryClientContext，同时接入录制导入 hook。根协调运行 Skill/导入/日程/交付等十个界面测试文件，58 项通过；UI/Electron 类型检查通过，日志 `/tmp/crewon-integration-skill-ui-tests.log`。F05 正在用实际 C01、真实模型与第二周期数据执行联合验收，尚未结束。
+
+第八批已合入 F05 完整接线历史至 `13bf049a1`：同一 F02 视图上的 Puppeteer driver、显式可撤销 grant、实际 Run 事实读取、认证本机桥、持久效果回执、下载字节向 F01 导入，以及桌面 Supervisor 启动/退出接线。保留根已有最新 UI、能力请求头、C03 validator 与 F02/F04 证据。清理自动合并产生的重复交付属性、导出和关闭调用。Puppeteer 作为单一生产依赖，复用 F02 已验证的公开 SHA512 锁条目和 modern-tar 0.8.5。
+
+根协调在本树运行 host/driver/授权/下载/录制十一文件 138 项、Control/Worker/交付恢复/契约八文件 37 项，均通过、无跳过；Control API、Runtime Worker、Contracts、UI 与 Electron 类型检查通过。日志分别为 `/tmp/crewon-integration-browser-host-tests.log` 和 `/tmp/crewon-integration-browser-runtime-tests.log`。包含真实 Worker/HTTP/10MiB 文件持久恢复，但不把脚本模型场景记为真实提供方执行。F05 独立任务继续联合真实模型验收；F03 身份切换期间的 UI 请求失效修复仍待取入。
 
 F05 已报告同一真实 WebContentsView 上的 Puppeteer 动作、下载和 focus emulation 恢复探针通过；尚未贯通本树的录制/授权/交付路径，不能冒称人工 GUI 验收或完整后台执行。已找到原工作区现有模型配置，F03 将只在隔离验收进程读取，使用合成材料验证；凭据不复制、不输出，不使用原用户数据库。
