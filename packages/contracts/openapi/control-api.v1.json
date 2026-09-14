@@ -130,6 +130,18 @@
           },
           {
             "$ref": "#/components/parameters/Limit"
+          },
+          {
+            "in": "header",
+            "name": "x-crewon-automation-version",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "Opt in to fixed-version Skill schedule representations. Legacy list readers see prompt-only definitions."
           }
         ],
         "responses": {
@@ -165,6 +177,18 @@
           },
           {
             "$ref": "#/components/parameters/RequiredCsrfToken"
+          },
+          {
+            "in": "header",
+            "name": "x-crewon-automation-version",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "Opt in to fixed-version Skill schedule representations. Legacy list readers see prompt-only definitions."
           }
         ],
         "requestBody": {
@@ -228,6 +252,18 @@
         "parameters": [
           {
             "$ref": "#/components/parameters/AutomationId"
+          },
+          {
+            "in": "header",
+            "name": "x-crewon-automation-version",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "Opt in to fixed-version Skill schedule representations. Legacy list readers see prompt-only definitions."
           }
         ],
         "responses": {
@@ -271,6 +307,18 @@
           },
           {
             "$ref": "#/components/parameters/RequiredCsrfToken"
+          },
+          {
+            "in": "header",
+            "name": "x-crewon-automation-version",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "1"
+              ]
+            },
+            "description": "Opt in to fixed-version Skill schedule representations. Legacy list readers see prompt-only definitions."
           }
         ],
         "requestBody": {
@@ -3954,8 +4002,15 @@
                 "type": "null"
               }
             ]
+          },
+          "skillInvocation": {
+            "$ref": "#/components/schemas/SkillInvocationSpec"
+          },
+          "parameterBindings": {
+            "$ref": "#/components/schemas/AutomationParameterBindings"
           }
-        }
+        },
+        "description": " Optional Skill invocation and calendar parameter rules require x-crewon-automation-version: 1. Omission preserves prompt-only v0 behavior."
       },
       "RunAutomationNowRequest": {
         "type": "object",
@@ -3978,7 +4033,7 @@
       "AutomationView": {
         "type": "object",
         "additionalProperties": false,
-        "description": "Redacted immutable Automation definition. Tenant, actor, digests and invocation routes are private.",
+        "description": "Redacted immutable Automation definition. Tenant, actor, digests and invocation routes are private. Optional Skill invocation and calendar parameter rules require x-crewon-automation-version: 1. Omission preserves prompt-only v0 behavior.",
         "required": [
           "automationId",
           "threadId",
@@ -4042,6 +4097,37 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "skillInvocation": {
+            "$ref": "#/components/schemas/SkillInvocationSpec"
+          },
+          "parameterBindings": {
+            "$ref": "#/components/schemas/AutomationParameterBindings"
+          },
+          "skillReadiness": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "state",
+              "code"
+            ],
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "ready",
+                  "blocked"
+                ]
+              },
+              "code": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "maxLength": 128
+              }
+            },
+            "description": "Current read-only Skill admission check, not a failed Run or durable permission grant."
           }
         }
       },
@@ -8687,6 +8773,131 @@
               }
             }
           }
+        }
+      },
+      "SkillVersionRef": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "skillId",
+          "versionId",
+          "contentDigest"
+        ],
+        "properties": {
+          "skillId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+          },
+          "versionId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]*$"
+          },
+          "contentDigest": {
+            "type": "string",
+            "pattern": "^sha256:[a-f0-9]{64}$"
+          }
+        }
+      },
+      "SkillScheduleDeliveryTarget": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "tenantId",
+          "spaceId",
+          "threadId",
+          "targetId"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.delivery-target.v1"
+          },
+          "tenantId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "spaceId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512
+          },
+          "threadId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "targetId": {
+            "type": "string",
+            "const": "thread-deliveries"
+          }
+        }
+      },
+      "SkillInvocationSpec": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "schemaVersion",
+          "skill",
+          "parameters",
+          "requiredToolRefs"
+        ],
+        "properties": {
+          "schemaVersion": {
+            "type": "string",
+            "const": "crewon.skill-invocation.v1"
+          },
+          "skill": {
+            "$ref": "#/components/schemas/SkillVersionRef"
+          },
+          "parameters": {
+            "type": "object",
+            "maxProperties": 24,
+            "additionalProperties": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 2048
+                },
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "boolean"
+                }
+              ]
+            }
+          },
+          "requiredToolRefs": {
+            "type": "array",
+            "maxItems": 24,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            }
+          },
+          "deliveryTarget": {
+            "$ref": "#/components/schemas/SkillScheduleDeliveryTarget"
+          }
+        }
+      },
+      "AutomationParameterBindings": {
+        "type": "object",
+        "maxProperties": 24,
+        "additionalProperties": {
+          "type": "string",
+          "enum": [
+            "runDate",
+            "previousWeekStart",
+            "previousWeekEnd"
+          ]
         }
       },
       "BrowserExecutionAuthorityResponse": {

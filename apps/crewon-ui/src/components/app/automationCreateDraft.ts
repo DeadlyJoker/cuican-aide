@@ -1,4 +1,9 @@
-import type { AutomationSchedule } from "@crewon/contracts";
+import {
+  parseSkillInvocationSpec,
+  type AutomationSchedule,
+  type CreateAutomationRequest,
+  type SkillInvocationSpec,
+} from "@crewon/contracts";
 
 import type { Locale } from "../../lib/i18n";
 
@@ -7,10 +12,35 @@ export type AutomationCreateDraft = Readonly<{
   intervalMinutes?: number;
   prompt: string;
   requestId: number;
+  skillInvocation?: SkillInvocationSpec;
+  parameterBindings?: CreateAutomationRequest["parameterBindings"];
   time?: string;
   title: string;
   weekday?: number;
 }>;
+
+export function skillAutomationDraft(
+  input: Readonly<{
+    title: string;
+    invocation: Readonly<
+      Omit<SkillInvocationSpec, "requiredToolRefs"> & {
+        requiredToolRefs: readonly string[];
+      }
+    >;
+  }>,
+  requestId: number,
+): AutomationCreateDraft {
+  return {
+    frequency: "daily",
+    prompt: "按已绑定的 Skill 版本和参数执行。",
+    requestId,
+    skillInvocation: structuredClone(
+      parseSkillInvocationSpec(input.invocation),
+    ),
+    time: "18:00",
+    title: boundedTitle(input.title.trim(), "Skill 定时执行"),
+  };
+}
 
 export function assistantAutomationDraft(
   text: string,

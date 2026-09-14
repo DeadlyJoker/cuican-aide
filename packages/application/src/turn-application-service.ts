@@ -153,6 +153,7 @@ export class TurnApplicationService {
       },
     };
     const input: CommitTurnStartInput = {
+      ...(command.skillExecution === undefined ? {} : { skillExecution: command.skillExecution }),
       tenantId: actor.tenantId,
       idempotency: idempotencyDescriptor(actor, command),
       goal: goal.mutation,
@@ -470,6 +471,7 @@ function idempotencyDescriptor(
 ) {
   const semanticCommand = {
     kind: command.kind,
+    ...(command.skillExecution === undefined ? {} : { skillExecution: command.skillExecution }),
     ...(command.executionIntentVersion === undefined
       ? {}
       : { executionIntentVersion: command.executionIntentVersion }),
@@ -514,6 +516,11 @@ function validateRequestCommand(command: StartTurnRequestCommand): void {
       "validation",
       "turn_execution_intent_version_invalid",
     );
+  }
+  if (command.skillExecution !== undefined) {
+    if (!isPlainObject(command.skillExecution) || Object.keys(command.skillExecution).length !== 2) throw new ApplicationError("validation", "skill_execution_binding_invalid");
+    requireNonEmpty(command.skillExecution.skillId, "skill_id_invalid");
+    requireNonEmpty(command.skillExecution.executionId, "skill_execution_id_invalid");
   }
   requireNonEmpty(command.idempotencyKey, "idempotency_key_invalid");
   requireNonEmpty(command.threadId, "thread_id_invalid");
@@ -629,6 +636,8 @@ function isRfc3339Utc(value: string): boolean {
 function mapApplicationError(error: unknown): ApplicationError {
   if (error instanceof ApplicationError) return error;
   if (error instanceof RunStoreError) {
+    if (["skill_disabled", "skill_not_active"].includes(error.code)) return new ApplicationError("authorization", error.code, {cause:error});
+    if (error.code === "skill_execution_binding_mismatch") return new ApplicationError("conflict", error.code, {cause:error});
     if (error.code === "thread_not_found" || error.code === "run_not_found") {
       return new ApplicationError("notFound", error.code, { cause: error });
     }

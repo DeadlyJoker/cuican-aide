@@ -1,5 +1,11 @@
+import { createAutomationInvocationInput } from "./automation-invocation-input.ts";
 import {
-  MAX_AUTOMATION_INSTRUCTION_BYTES,
+  prepareAutomationSkillBinding,
+  assertAutomationSkillExecution,
+} from "./automation-skill-admission.ts";
+import type { SkillInvocationPort } from "./skill-invocation-port.ts";
+import { parseSkillVersion, type AutomationSkillBinding } from "@crewon/domain";
+import {
   createAutomationDefinition,
   parseAutomationInvocationBinding,
   parseAutomationInvocationOrigin,
@@ -57,6 +63,7 @@ export type {
 } from "./automation-store-port.ts";
 
 export class AutomationApplicationService {
+  readonly #skills: SkillInvocationPort | undefined;
   readonly #store: AutomationStore;
   readonly #authorization: AutomationAuthorizationPort;
   readonly #clock: ApplicationClock;
@@ -65,6 +72,7 @@ export class AutomationApplicationService {
   readonly #routeResolver: RunRouteResolverPort;
 
   constructor(dependencies: {
+    skills?: SkillInvocationPort;
     store: AutomationStore;
     authorization: AutomationAuthorizationPort;
     clock: ApplicationClock;
@@ -72,6 +80,7 @@ export class AutomationApplicationService {
     digester: ContentDigester;
     routeResolver: RunRouteResolverPort;
   }) {
+    this.#skills = dependencies.skills;
     this.#store = dependencies.store;
     this.#authorization = dependencies.authorization;
     this.#clock = dependencies.clock;
@@ -113,7 +122,18 @@ export class AutomationApplicationService {
       command.threadId,
       command.requestedAgentVersionId,
     );
-    const definition = this.#createDefinition(actor, command, route);
+    const skillBinding = await prepareAutomationSkillBinding(
+      { skills: this.#skills, digester: this.#digester },
+      actor,
+      command,
+      route,
+    );
+    const definition = this.#createDefinition(
+      actor,
+      command,
+      route,
+      skillBinding,
+    );
     const record = this.#record(definition);
     const result = await this.#storeCall(() =>
       this.#store.commitAutomationCreate({
@@ -160,7 +180,11 @@ export class AutomationApplicationService {
 
   async listAutomations(
     actor: ActorContext,
-    query: Readonly<{ before: AutomationListCursor | null; limit: number }>,
+    query: Readonly<{
+      before: AutomationListCursor | null;
+      limit: number;
+      definitionSchemaVersion?: "crewon.automation.v0";
+    }>,
   ): Promise<readonly AutomationDefinition[]> {
     validateAutomationActor(actor);
     validateAutomationListQuery(query);
@@ -172,6 +196,9 @@ export class AutomationApplicationService {
       this.#store.listAutomations({
         tenantId: actor.tenantId,
         spaceId: actor.spaceId,
+        ...(query.definitionSchemaVersion === undefined
+          ? {}
+          : { definitionSchemaVersion: query.definitionSchemaVersion }),
         before: query.before,
         limit: query.limit,
       }),
@@ -182,9 +209,44 @@ export class AutomationApplicationService {
     });
   }
 
+  /** Current read model only; creating a Run always performs its own fresh admission. */
+  async checkAutomationReadiness(
+    actor: ActorContext,
+    automationId: string,
+  ): Promise<Readonly<{ state: "ready" | "blocked"; code: string | null }>> {
+    const definition = await this.getAutomation(actor, automationId);
+    try {
+      await this.#authorizeInvocation(actor, definition);
+      const route = await this.#resolveRoute(
+        actor,
+        definition.threadId,
+        definition.agentVersionId,
+      );
+      await assertAutomationSkillExecution(
+        { skills: this.#skills, digester: this.#digester },
+        actor,
+        definition,
+        route,
+        this.#now(),
+      );
+      return { state: "ready", code: null };
+    } catch (error) {
+      return {
+        state: "blocked",
+        code:
+          error instanceof ApplicationError
+            ? error.code
+            : "automation_skill_admission_failed",
+      };
+    }
+  }
+
   async runAutomationNow(
     actor: ActorContext,
     command: RunAutomationNowCommand,
+    options: { supportedDefinitionVersion: "v0" | "v1" } = {
+      supportedDefinitionVersion: "v1",
+    },
   ): Promise<AutomationInvocationResult> {
     validateAutomationActor(actor);
     validateAutomationRunNowCommand(command);
@@ -202,6 +264,23 @@ export class AutomationApplicationService {
     );
     if (replay !== null) {
       this.#validateInvocationResult(actor, command, replay);
+      if (
+        replay.record.definition.skillBinding &&
+        options.supportedDefinitionVersion === "v0"
+      )
+        throw new ApplicationError(
+          "conflict",
+          "automation_client_upgrade_required",
+        );
+      if (
+        replay.record.definition.skillBinding &&
+        command.scheduledFor !== undefined &&
+        command.scheduledFor !== replay.binding.scheduledFor
+      )
+        throw new ApplicationError(
+          "conflict",
+          "automation_occurrence_conflict",
+        );
       await this.#authorizeInvocation(actor, replay.record.definition);
       return replay;
     }
@@ -217,6 +296,14 @@ export class AutomationApplicationService {
       throw new ApplicationError("notFound", "automation_not_found");
     }
     this.#validateInvocationContext(actor, command, context);
+    if (
+      context.record.definition.skillBinding &&
+      options.supportedDefinitionVersion === "v0"
+    )
+      throw new ApplicationError(
+        "conflict",
+        "automation_client_upgrade_required",
+      );
     await this.#authorizeInvocation(actor, context.record.definition);
     const route = await this.#resolveRoute(
       actor,
@@ -229,12 +316,34 @@ export class AutomationApplicationService {
         "automation_frozen_agent_version_mismatch",
       );
     }
-    const input = this.#invocationInput(
+    const scheduledFor = context.record.definition.skillBinding
+      ? (command.scheduledFor ?? this.#now())
+      : undefined;
+    if (scheduledFor !== undefined)
+      await assertAutomationSkillExecution(
+        { skills: this.#skills, digester: this.#digester },
+        actor,
+        context.record.definition,
+        route,
+        scheduledFor,
+      );
+    const input = createAutomationInvocationInput({
       actor,
       command,
       context,
       route,
       idempotency,
+      scheduledFor,
+      now: () => this.#now(),
+      nextId: (kind) => this.#nextId(kind),
+      digest: (value, code) => this.#digest(value, code),
+    });
+    this.#validateGeneratedInvocationInput(
+      actor,
+      command,
+      context,
+      route,
+      input,
     );
     const result = await this.#storeCall(() =>
       this.#store.commitAutomationInvocation(input),
@@ -251,9 +360,11 @@ export class AutomationApplicationService {
     actor: ActorContext,
     command: CreateAutomationCommand,
     route: RunRoute,
+    skillBinding?: AutomationSkillBinding,
   ): AutomationDefinition {
     try {
       return createAutomationDefinition({
+        ...(skillBinding === undefined ? {} : { skillBinding }),
         automationId: this.#nextId("automation"),
         tenantId: actor.tenantId,
         spaceId: actor.spaceId,
@@ -272,174 +383,6 @@ export class AutomationApplicationService {
     } catch (error) {
       throw mapAutomationError(error);
     }
-  }
-
-  #invocationInput(
-    actor: ActorContext,
-    command: RunAutomationNowCommand,
-    context: AutomationInvocationContext,
-    route: RunRoute,
-    idempotency: ReturnType<typeof runIdempotency>,
-  ): CommitAutomationInvocationInput {
-    const definition = context.record.definition;
-    const occurredAt = this.#now();
-    const runId = this.#nextId("run");
-    const instruction = renderAutomationInstruction(definition);
-    if (
-      new TextEncoder().encode(instruction).byteLength >
-      MAX_AUTOMATION_INSTRUCTION_BYTES
-    ) {
-      throw new ApplicationError(
-        "internal",
-        "automation_instruction_too_large",
-      );
-    }
-    const contentDigest = this.#digest(
-      instruction,
-      "automation_instruction_digest_invalid",
-    );
-    const routeDigest = this.#digest(
-      canonicalJson(route),
-      "automation_route_digest_invalid",
-    );
-    const binding: AutomationInvocationBinding =
-      parseAutomationInvocationBinding({
-        automationId: definition.automationId,
-        automationRevision: definition.revision,
-        definitionDigest: context.record.definitionDigest,
-        instructionDigest: contentDigest,
-        invocationId: this.#nextId("automationInvocation"),
-        runId,
-        routeDigest,
-      });
-    const origin = parseAutomationInvocationOrigin({
-      kind: "automation",
-      binding,
-    });
-    const messageId = this.#nextId("message");
-    const threadEvent = {
-      schemaVersion: "crewon.thread-event.v0" as const,
-      identity: { threadId: definition.threadId },
-      eventId: this.#nextId("threadEvent"),
-      sequence: context.thread.lastEventSequence + 1,
-      occurredAt,
-      type: "thread.message.appended" as const,
-      data: {
-        messageId,
-        messageSequence: context.thread.lastMessageSequence + 1,
-        role: "user" as const,
-        contentDigest,
-      },
-    };
-    const message = {
-      messageId,
-      tenantId: actor.tenantId,
-      threadId: definition.threadId,
-      sequence: context.thread.lastMessageSequence + 1,
-      role: "user" as const,
-      content: instruction,
-      contentDigest,
-      createdAt: occurredAt,
-      proposedPlan: null,
-      origin,
-    };
-    const historyItem = {
-      schemaVersion: "crewon.model-history-item.v0" as const,
-      itemId: this.#nextId("modelHistoryItem"),
-      tenantId: actor.tenantId,
-      threadId: definition.threadId,
-      sequence: context.historyHead.lastSequence + 1,
-      runId,
-      segmentId: null,
-      createdAt: occurredAt,
-      type: "message" as const,
-      role: "user" as const,
-      source: "automation_invocation" as const,
-      content: instruction,
-      contentDigest,
-      origin,
-    };
-    const runEvent = {
-      schemaVersion: "crewon.run-event.v0" as const,
-      identity: { runId },
-      eventId: this.#nextId("runEvent"),
-      sequence: 1,
-      occurredAt,
-      type: "run.created" as const,
-      data: {
-        threadId: definition.threadId,
-        tenantId: actor.tenantId,
-        spaceId: actor.spaceId,
-        createdByActorId: actor.actorId,
-        authorityId: route.authorityId,
-        runtimeGeneration: route.runtimeGeneration,
-        agentVersionId: route.agentVersionId,
-        policySnapshotId: route.policySnapshotId,
-        workspaceBindingId: route.workspaceBindingId,
-        collaborationMode: "default" as const,
-        goalBinding: null,
-        purpose: "turn" as const,
-        origin,
-      },
-    };
-    const input: CommitAutomationInvocationInput = {
-      tenantId: actor.tenantId,
-      spaceId: actor.spaceId,
-      idempotency,
-      definitionFence: {
-        automationId: definition.automationId,
-        expectedRevision: definition.revision,
-        expectedDefinitionDigest: context.record.definitionDigest,
-      },
-      threadFence: {
-        threadId: definition.threadId,
-        tenantId: actor.tenantId,
-        spaceId: actor.spaceId,
-        expectedRevision: command.expectedThreadRevision,
-        expectedStatus: "active",
-        expectedHistorySequence: context.historyHead.lastSequence,
-        expectedActiveRunId: null,
-      },
-      binding,
-      instruction,
-      threadEvent,
-      message,
-      historyItem,
-      runEvent,
-      outbox: {
-        messageId: this.#nextId("outboxMessage"),
-        tenantId: actor.tenantId,
-        runId,
-        topic: "run.updated",
-        payload: {
-          eventId: runEvent.eventId,
-          eventType: runEvent.type,
-          throughSequence: runEvent.sequence,
-        },
-        createdAt: occurredAt,
-      },
-      workItem: {
-        workItemId: this.#nextId("workItem"),
-        tenantId: actor.tenantId,
-        runId,
-        kind: "run.execute",
-        payload: {
-          schemaVersion: "crewon.automation-invocation-work-item.v0",
-          trigger: "automationInvocation",
-          throughSequence: 1,
-          binding,
-        },
-        createdAt: occurredAt,
-      },
-    };
-    this.#validateGeneratedInvocationInput(
-      actor,
-      command,
-      context,
-      route,
-      input,
-    );
-    return input;
   }
 
   async #loadRecord(
@@ -477,6 +420,11 @@ export class AutomationApplicationService {
     this.#hideCrossSpaceRecord(actor, record);
     try {
       validateAutomationDefinition(record.definition);
+      if (record.definition.skillBinding)
+        parseSkillVersion(
+          record.definition.skillBinding.version,
+          this.#digester,
+        );
     } catch (error) {
       throw mapAutomationError(error, "internal");
     }
@@ -507,6 +455,10 @@ export class AutomationApplicationService {
       definition.threadId !== command.threadId ||
       definition.title !== command.title ||
       definition.prompt !== command.prompt ||
+      canonicalJson(definition.skillBinding?.invocation ?? null) !==
+        canonicalJson(command.skillInvocation ?? null) ||
+      canonicalJson(definition.skillBinding?.parameterBindings ?? {}) !==
+        canonicalJson(command.parameterBindings ?? {}) ||
       canonicalJson(definition.schedule) !== canonicalJson(command.schedule) ||
       (command.requestedAgentVersionId !== null &&
         definition.agentVersionId !== command.requestedAgentVersionId)
@@ -615,7 +567,11 @@ export class AutomationApplicationService {
     code: string,
   ) {
     const definition = record.definition;
-    const instruction = renderAutomationInstruction(definition);
+    const instruction = renderAutomationInstruction(
+      definition,
+      artifacts.binding.scheduledFor,
+      artifacts.binding.skillInvocation,
+    );
     const contentDigest = this.#digest(
       instruction,
       "automation_instruction_digest_invalid",
@@ -722,7 +678,11 @@ export class AutomationApplicationService {
     this.#hideCrossSpaceRecord(actor, result.record);
     this.#validateRecord(actor, result.record);
     const definition = result.record.definition;
-    const instruction = renderAutomationInstruction(definition);
+    const instruction = renderAutomationInstruction(
+      definition,
+      result.binding.scheduledFor,
+      result.binding.skillInvocation,
+    );
     const route =
       fresh?.route ??
       ({
@@ -973,6 +933,12 @@ function createIdempotency(
       prompt: command.prompt,
       requestedAgentVersionId: command.requestedAgentVersionId,
       schedule: command.schedule,
+      ...(command.skillInvocation === undefined
+        ? {}
+        : { skillInvocation: command.skillInvocation }),
+      ...(command.parameterBindings === undefined
+        ? {}
+        : { parameterBindings: command.parameterBindings }),
       ...(command.executionMode === undefined
         ? {}
         : { executionMode: command.executionMode }),

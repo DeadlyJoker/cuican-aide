@@ -1,3 +1,14 @@
+import {
+  parseSkillInvocationSpec,
+  type SkillInvocationSpec,
+  skillJson,
+} from "./demonstrated-skill.ts";
+import { resolveAutomationSkillInvocation } from "./automation-skill-binding.ts";
+import {
+  parseAutomationSkillBinding,
+  renderAutomationSkillContext,
+  type AutomationSkillBinding,
+} from "./automation-skill-binding.ts";
 export const AUTOMATION_SCHEDULE_TYPES = [
   "daily",
   "weekly",
@@ -18,8 +29,7 @@ export type AutomationSchedule = Readonly<{
   timezone: string;
 }>;
 
-export type AutomationDefinition = Readonly<{
-  schemaVersion: "crewon.automation.v0";
+type AutomationDefinitionFields = Readonly<{
   automationId: string;
   tenantId: string;
   spaceId: string;
@@ -36,7 +46,17 @@ export type AutomationDefinition = Readonly<{
   updatedAt: string;
 }>;
 
+export type AutomationDefinition = AutomationDefinitionFields &
+  (
+    | Readonly<{ schemaVersion: "crewon.automation.v0"; skillBinding?: never }>
+    | Readonly<{
+        schemaVersion: "crewon.automation.v1";
+        skillBinding: AutomationSkillBinding;
+      }>
+  );
+
 export type CreateAutomationDefinitionInput = Readonly<{
+  skillBinding?: AutomationSkillBinding;
   automationId: string;
   tenantId: string;
   spaceId: string;
@@ -60,6 +80,9 @@ export type AutomationInvocationBinding = Readonly<{
   invocationId: string;
   runId: string;
   routeDigest: string;
+  scheduledFor?: string;
+  skillInvocation?: Omit<SkillInvocationSpec, "requiredToolRefs"> &
+    Readonly<{ requiredToolRefs: string[] }>;
 }>;
 
 export type AutomationInvocationOrigin = Readonly<{
@@ -83,35 +106,23 @@ export function createAutomationDefinition(
   const value = requireObject(input, "automation_definition_input_invalid");
   requireExactKeys(
     value,
-    value.executionMode === undefined && value.createdByPrincipalId === undefined
-      ? [
-          "agentVersionId",
-          "automationId",
-          "createdAt",
-          "createdByActorId",
-          "prompt",
-          "schedule",
-          "spaceId",
-          "tenantId",
-          "threadId",
-          "title",
-        ]
-      : [
-          "agentVersionId",
-          "automationId",
-          "createdAt",
-          "createdByActorId",
-          ...(value.createdByPrincipalId === undefined
-            ? []
-            : ["createdByPrincipalId"]),
-          ...(value.executionMode === undefined ? [] : ["executionMode"]),
-          "prompt",
-          "schedule",
-          "spaceId",
-          "tenantId",
-          "threadId",
-          "title",
-        ],
+    [
+      "agentVersionId",
+      "automationId",
+      "createdAt",
+      "createdByActorId",
+      "prompt",
+      "schedule",
+      "spaceId",
+      "tenantId",
+      "threadId",
+      "title",
+      ...(value.createdByPrincipalId === undefined
+        ? []
+        : ["createdByPrincipalId"]),
+      ...(value.executionMode === undefined ? [] : ["executionMode"]),
+      ...(value.skillBinding === undefined ? [] : ["skillBinding"]),
+    ],
     "automation_definition_input_invalid",
   );
   const createdAt = requireTimestamp(
@@ -119,7 +130,13 @@ export function createAutomationDefinition(
     "automation_created_at_invalid",
   );
   return parseAutomationDefinition({
-    schemaVersion: "crewon.automation.v0",
+    schemaVersion:
+      value.skillBinding === undefined
+        ? "crewon.automation.v0"
+        : "crewon.automation.v1",
+    ...(value.skillBinding === undefined
+      ? {}
+      : { skillBinding: value.skillBinding }),
     automationId: value.automationId,
     tenantId: value.tenantId,
     spaceId: value.spaceId,
@@ -158,6 +175,9 @@ export function parseAutomationDefinition(
       "revision",
       "schedule",
       "schemaVersion",
+      ...(value.schemaVersion === "crewon.automation.v1"
+        ? ["skillBinding"]
+        : []),
       "spaceId",
       "tenantId",
       "threadId",
@@ -167,7 +187,8 @@ export function parseAutomationDefinition(
     "automation_state_invalid",
   );
   if (
-    value.schemaVersion !== "crewon.automation.v0" ||
+    (value.schemaVersion !== "crewon.automation.v0" &&
+      value.schemaVersion !== "crewon.automation.v1") ||
     (value.executionMode !== "manualOnly" &&
       value.executionMode !== "scheduled") ||
     value.revision !== 1
@@ -225,7 +246,12 @@ export function parseAutomationDefinition(
     throw new AutomationDefinitionError("automation_state_invalid");
   }
   const definition: AutomationDefinition = {
-    schemaVersion: value.schemaVersion,
+    ...(value.schemaVersion === "crewon.automation.v1"
+      ? {
+          schemaVersion: value.schemaVersion,
+          skillBinding: parseAutomationSkillBinding(value.skillBinding),
+        }
+      : { schemaVersion: value.schemaVersion }),
     automationId,
     tenantId,
     spaceId,
@@ -241,6 +267,14 @@ export function parseAutomationDefinition(
     createdAt,
     updatedAt,
   };
+  const target = definition.skillBinding?.invocation.deliveryTarget;
+  if (
+    target &&
+    (target.tenantId !== tenantId ||
+      target.spaceId !== spaceId ||
+      target.threadId !== threadId)
+  )
+    throw new AutomationDefinitionError("automation_delivery_target_mismatch");
   requireInstructionWithinLimit(definition);
   return structuredClone(definition);
 }
@@ -320,6 +354,9 @@ export function parseAutomationInvocationBinding(
       "invocationId",
       "routeDigest",
       "runId",
+      ...(value.scheduledFor === undefined
+        ? []
+        : ["scheduledFor", "skillInvocation"]),
     ],
     "automation_invocation_binding_invalid",
   );
@@ -337,6 +374,17 @@ export function parseAutomationInvocationBinding(
     );
   }
   return {
+    ...(value.scheduledFor === undefined
+      ? {}
+      : { skillInvocation: invocationJson(value.skillInvocation) }),
+    ...(value.scheduledFor === undefined
+      ? {}
+      : {
+          scheduledFor: requireTimestamp(
+            value.scheduledFor,
+            "automation_scheduled_for_invalid",
+          ),
+        }),
     automationId: requireOpaqueId(
       value.automationId,
       "automation_invocation_binding_invalid",
@@ -392,15 +440,28 @@ export function validateAutomationInvocationOrigin(
 
 export function renderAutomationInstruction(
   definition: AutomationDefinition,
+  scheduledFor?: string,
+  skillInvocation?: SkillInvocationSpec,
 ): string {
   const parsed = parseAutomationDefinition(definition);
-  return renderAutomationInstructionUnchecked(parsed);
+  const instruction = renderAutomationInstructionUnchecked(
+    parsed,
+    scheduledFor,
+    skillInvocation,
+  );
+  if (utf8ByteLength(instruction) > MAX_AUTOMATION_INSTRUCTION_BYTES)
+    throw new AutomationDefinitionError("automation_instruction_too_large");
+  return instruction;
 }
 
 function requireInstructionWithinLimit(definition: AutomationDefinition): void {
   if (
-    utf8ByteLength(renderAutomationInstructionUnchecked(definition)) >
-    MAX_AUTOMATION_INSTRUCTION_BYTES
+    utf8ByteLength(
+      renderAutomationInstructionUnchecked(
+        definition,
+        definition.skillBinding ? definition.schedule.nextRunAt : undefined,
+      ),
+    ) > MAX_AUTOMATION_INSTRUCTION_BYTES
   ) {
     throw new AutomationDefinitionError("automation_instruction_too_large");
   }
@@ -408,7 +469,39 @@ function requireInstructionWithinLimit(definition: AutomationDefinition): void {
 
 function renderAutomationInstructionUnchecked(
   definition: AutomationDefinition,
+  scheduledFor?: string,
+  skillInvocation?: SkillInvocationSpec,
 ): string {
+  if (definition.skillBinding) {
+    if (scheduledFor === undefined)
+      throw new AutomationDefinitionError("automation_scheduled_for_required");
+    const resolved = resolveAutomationSkillInvocation(
+      definition.skillBinding,
+      scheduledFor,
+      definition.schedule.timezone,
+    );
+    if (
+      skillInvocation !== undefined &&
+      skillJson(skillInvocation) !== skillJson(resolved)
+    )
+      throw new AutomationDefinitionError(
+        "automation_skill_invocation_mismatch",
+      );
+    return [
+      `<automation_run automation_id="${xmlEscape(definition.automationId)}" automation_revision="${definition.revision}">`,
+      `<title>${xmlEscape(definition.title)}</title>`,
+      `Scheduled occurrence: ${scheduledFor} (${definition.schedule.timezone})`,
+      renderAutomationSkillContext(
+        definition.skillBinding,
+        scheduledFor,
+        definition.schedule.timezone,
+      ),
+      "Record the result, next steps, and risks in this Automation result thread.",
+      "</automation_run>",
+    ].join("\n");
+  }
+  if (scheduledFor !== undefined || skillInvocation !== undefined)
+    throw new AutomationDefinitionError("automation_scheduled_for_unexpected");
   return [
     `<automation_run automation_id="${xmlEscape(definition.automationId)}" automation_revision="${definition.revision}">`,
     `<title>${xmlEscape(definition.title)}</title>`,
@@ -511,4 +604,12 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   }
   const prototype = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
+}
+
+function invocationJson(
+  input: unknown,
+): Omit<SkillInvocationSpec, "requiredToolRefs"> &
+  Readonly<{ requiredToolRefs: string[] }> {
+  const invocation = parseSkillInvocationSpec(input);
+  return { ...invocation, requiredToolRefs: [...invocation.requiredToolRefs] };
 }

@@ -1,3 +1,4 @@
+import { parseSkillInvocationSpec } from "@crewon/contracts";
 import type { AutomationInvocationResult } from "@crewon/application";
 import type {
   AutomationMutationResponse,
@@ -15,6 +16,16 @@ export function projectAutomation(
     throw new Error("automation_projection_state_invalid");
   }
   return {
+    ...(definition.skillBinding === undefined
+      ? {}
+      : {
+          skillInvocation: parseSkillInvocationSpec(
+            definition.skillBinding.invocation,
+          ),
+          parameterBindings: structuredClone(
+            definition.skillBinding.parameterBindings,
+          ),
+        }),
     automationId: definition.automationId,
     threadId: definition.threadId,
     title: definition.title,

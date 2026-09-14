@@ -166,6 +166,7 @@ export async function listPostgresAutomations(
        WHERE tenant_id=$1 AND space_id=$2
          AND ($3::timestamptz IS NULL OR updated_at < $3::timestamptz
            OR (updated_at = $3::timestamptz AND automation_id < $4))
+         AND ($6::text IS NULL OR definition_json->>'schemaVersion' = $6::text)
        ORDER BY updated_at DESC, automation_id DESC LIMIT $5`,
       [
         query.tenantId,
@@ -173,6 +174,7 @@ export async function listPostgresAutomations(
         query.before?.updatedAt ?? null,
         query.before?.automationId ?? null,
         query.limit,
+        query.definitionSchemaVersion ?? null,
       ],
     );
     return rows.rows.map(decodeAutomationRow);

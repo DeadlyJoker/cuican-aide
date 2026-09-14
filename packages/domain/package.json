@@ -8,7 +8,8 @@
     "./delivery": "./src/delivery.ts",
     "./delivery-requests": "./src/delivery-requests.ts",
     "./delivery-http-policy": "./src/delivery-http-policy.ts",
-    "./thread-title": "./src/thread-title.ts"
+    "./thread-title": "./src/thread-title.ts",
+    "./demonstrated-skill": "./src/demonstrated-skill.ts"
   },
   "scripts": {
     "test": "node --experimental-strip-types --test src/*.test.ts",
@@ -17,10 +18,15 @@
   "devDependencies": {
     "@crewon/contracts": "workspace:*",
     "@crewon/test-contracts": "workspace:*",
+    "@types/js-yaml": "4.0.9",
     "@types/node": "^24.10.1",
     "typescript": "^5.9.3"
   },
   "engines": {
     "node": ">=24 <25"
+  },
+  "dependencies": {
+    "js-yaml": "4.3.0",
+    "zod": "4.4.3"
   }
 }

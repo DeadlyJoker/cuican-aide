@@ -1,3 +1,4 @@
+import { verifySkillVersion } from "@crewon/domain";
 import { createHash } from "node:crypto";
 import {
   validateModelHistoryIncrementalAppend,
@@ -126,6 +127,10 @@ export function validateAutomationRecord(
   );
   try {
     validateAutomationDefinition(record.definition);
+    if (record.definition.skillBinding)
+      verifySkillVersion(record.definition.skillBinding.version, {
+        sha256: digest,
+      });
   } catch (error) {
     throw new AutomationStoreError("automation_record_invalid", {
       cause: error instanceof Error ? error : undefined,

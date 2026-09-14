@@ -993,6 +993,7 @@ export interface components {
       weekday: number;
       timezone: string;
     };
+    /** @description Optional Skill invocation and calendar parameter rules require x-crewon-automation-version: 1. Omission preserves prompt-only v0 behavior. */
     CreateAutomationRequest: {
       threadId: string;
       expectedThreadRevision: number;
@@ -1000,13 +1001,15 @@ export interface components {
       prompt: string;
       agentVersionId: string | null;
       schedule: components["schemas"]["AutomationSchedule"] | null;
+      skillInvocation?: components["schemas"]["SkillInvocationSpec"];
+      parameterBindings?: components["schemas"]["AutomationParameterBindings"];
     };
     RunAutomationNowRequest: {
       /** @constant */
       expectedAutomationRevision: 1;
       expectedThreadRevision: number;
     };
-    /** @description Redacted immutable Automation definition. Tenant, actor, digests and invocation routes are private. */
+    /** @description Redacted immutable Automation definition. Tenant, actor, digests and invocation routes are private. Optional Skill invocation and calendar parameter rules require x-crewon-automation-version: 1. Omission preserves prompt-only v0 behavior. */
     AutomationView: {
       automationId: string;
       threadId: string;
@@ -1023,6 +1026,14 @@ export interface components {
       createdAt: string;
       /** Format: date-time */
       updatedAt: string;
+      skillInvocation?: components["schemas"]["SkillInvocationSpec"];
+      parameterBindings?: components["schemas"]["AutomationParameterBindings"];
+      /** @description Current read-only Skill admission check, not a failed Run or durable permission grant. */
+      skillReadiness?: {
+        /** @enum {string} */
+        state: "ready" | "blocked";
+        code: string | null;
+      };
     };
     AutomationMutationResponse: {
       /** @enum {string} */
@@ -2149,6 +2160,33 @@ export interface components {
         source: "turnStartReceipt" | "messageCompletedEvent" | "unassociated";
       }[];
     };
+    SkillVersionRef: {
+      skillId: string;
+      versionId: string;
+      contentDigest: string;
+    };
+    SkillScheduleDeliveryTarget: {
+      /** @constant */
+      schemaVersion: "crewon.delivery-target.v1";
+      tenantId: string;
+      spaceId: string;
+      threadId: string;
+      /** @constant */
+      targetId: "thread-deliveries";
+    };
+    SkillInvocationSpec: {
+      /** @constant */
+      schemaVersion: "crewon.skill-invocation.v1";
+      skill: components["schemas"]["SkillVersionRef"];
+      parameters: {
+        [key: string]: string | number | boolean;
+      };
+      requiredToolRefs: string[];
+      deliveryTarget?: components["schemas"]["SkillScheduleDeliveryTarget"];
+    };
+    AutomationParameterBindings: {
+      [key: string]: "runDate" | "previousWeekStart" | "previousWeekEnd";
+    };
     BrowserExecutionAuthorityResponse: {
       /** @constant */
       schemaVersion: "crewon.browser-execution-authority.v1";
@@ -2291,7 +2329,10 @@ export interface operations {
         cursor?: components["parameters"]["ResourceCursor"];
         limit?: components["parameters"]["Limit"];
       };
-      header?: never;
+      header?: {
+        /** @description Opt in to fixed-version Skill schedule representations. Legacy list readers see prompt-only definitions. */
+        "x-crewon-automation-version"?: "1";
+      };
       path?: never;
       cookie?: never;
     };
@@ -2319,6 +2360,8 @@ export interface operations {
         "Idempotency-Key": components["parameters"]["IdempotencyKey"];
         /** @description Required for Control mutations that do not permit a credential-mode exception. */
         "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+        /** @description Opt in to fixed-version Skill schedule representations. Legacy list readers see prompt-only definitions. */
+        "x-crewon-automation-version"?: "1";
       };
       path?: never;
       cookie?: never;
@@ -2359,7 +2402,10 @@ export interface operations {
   getAutomation: {
     parameters: {
       query?: never;
-      header?: never;
+      header?: {
+        /** @description Opt in to fixed-version Skill schedule representations. Legacy list readers see prompt-only definitions. */
+        "x-crewon-automation-version"?: "1";
+      };
       path: {
         automationId: components["parameters"]["AutomationId"];
       };
@@ -2390,6 +2436,8 @@ export interface operations {
         "Idempotency-Key": components["parameters"]["IdempotencyKey"];
         /** @description Required for Control mutations that do not permit a credential-mode exception. */
         "X-CSRF-Token": components["parameters"]["RequiredCsrfToken"];
+        /** @description Opt in to fixed-version Skill schedule representations. Legacy list readers see prompt-only definitions. */
+        "x-crewon-automation-version"?: "1";
       };
       path: {
         automationId: components["parameters"]["AutomationId"];

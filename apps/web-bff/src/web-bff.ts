@@ -21,6 +21,7 @@ const REQUEST_HEADER_ALLOWLIST = [
   "if-none-match",
   "last-event-id",
   "range",
+  "x-crewon-automation-version",
 ] as const;
 const RESPONSE_HEADER_ALLOWLIST = [
   "accept-ranges",

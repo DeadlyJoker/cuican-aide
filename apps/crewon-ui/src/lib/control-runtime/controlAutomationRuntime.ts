@@ -1,3 +1,7 @@
+import {
+  parseAutomationParameterBindings,
+  parseSkillInvocationSpec,
+} from "@crewon/contracts";
 import type {
   AutomationMutationResponse,
   AutomationView,
@@ -8,6 +12,7 @@ import type {
   RunAutomationNowResponse,
   RunView,
   AutomationSchedule,
+  SkillInvocationSpec,
 } from "@crewon/contracts";
 import {
   ControlApiClient,
@@ -27,6 +32,8 @@ export type AutomationCreateIntent = Readonly<{
   prompt: string;
   agentVersionId: string | null;
   schedule: AutomationSchedule | null;
+  skillInvocation?: SkillInvocationSpec;
+  parameterBindings?: CreateAutomationRequest["parameterBindings"];
 }>;
 
 export type AutomationRunAdopter = Readonly<{
@@ -108,20 +115,39 @@ export class ControlAutomationRuntime {
       intent,
       ["agentVersionId", "prompt", "schedule", "threadId", "title"],
       "control_automation_create_intent_invalid",
+      ["skillInvocation", "parameterBindings"],
     );
-    const current = await this.#client.getThread(intent.threadId, options);
-    validateActiveThread(current, intent.threadId);
+    if (Object.hasOwn(intent, "skillInvocation")) {
+      validateSkillInvocation(
+        intent.skillInvocation,
+        intent.threadId,
+        "control_automation_create_intent_invalid",
+      );
+    }
+    validateParameterBindings(
+      intent,
+      "control_automation_create_intent_invalid",
+    );
+    const snapshot = structuredClone(intent);
+    const current = await this.#client.getThread(snapshot.threadId, options);
+    validateActiveThread(current, snapshot.threadId);
     const command: CreateAutomationRequest = {
-      threadId: intent.threadId,
+      threadId: snapshot.threadId,
       expectedThreadRevision: current.thread.revision,
-      title: intent.title,
-      prompt: intent.prompt,
-      agentVersionId: intent.agentVersionId,
-      schedule: intent.schedule,
+      title: snapshot.title,
+      prompt: snapshot.prompt,
+      agentVersionId: snapshot.agentVersionId,
+      schedule: snapshot.schedule,
+      ...(snapshot.skillInvocation === undefined
+        ? {}
+        : { skillInvocation: snapshot.skillInvocation }),
+      ...(snapshot.parameterBindings === undefined
+        ? {}
+        : { parameterBindings: snapshot.parameterBindings }),
     };
     return this.#commit(
       "automation.create",
-      () => this.#rehydrateThread(intent.threadId, options),
+      () => this.#rehydrateThread(snapshot.threadId, options),
       async (idempotencyKey) =>
         validateCreateResponse(
           await this.#client.createAutomation(command, idempotencyKey, options),
@@ -245,6 +271,11 @@ function validateCreateResponse(
     automation.threadId !== command.threadId ||
     automation.title !== command.title ||
     automation.prompt !== command.prompt ||
+    !sameSkillInvocation(automation.skillInvocation, command.skillInvocation) ||
+    !sameParameterBindings(
+      automation.parameterBindings,
+      command.parameterBindings,
+    ) ||
     (command.agentVersionId !== null &&
       automation.agentVersionId !== command.agentVersionId) ||
     automation.automaticScheduling !== (command.schedule !== null) ||
@@ -321,6 +352,8 @@ function sameAutomation(left: AutomationView, right: AutomationView): boolean {
     left.threadId === right.threadId &&
     left.title === right.title &&
     left.prompt === right.prompt &&
+    sameSkillInvocation(left.skillInvocation, right.skillInvocation) &&
+    sameParameterBindings(left.parameterBindings, right.parameterBindings) &&
     left.agentVersionId === right.agentVersionId &&
     left.executionMode === right.executionMode &&
     left.automaticScheduling === right.automaticScheduling &&
@@ -348,7 +381,32 @@ function validateAutomationView(input: AutomationView): AutomationView {
       "updatedAt",
     ],
     "control_automation_view_invalid",
+    ["skillInvocation", "parameterBindings", "skillReadiness"],
   );
+  if (Object.hasOwn(input, "skillInvocation")) {
+    validateSkillInvocation(
+      input.skillInvocation,
+      input.threadId,
+      "control_automation_view_invalid",
+    );
+  }
+  validateParameterBindings(input, "control_automation_view_invalid");
+  if (Object.hasOwn(input, "skillReadiness")) {
+    const readiness = input.skillReadiness;
+    if (!input.skillInvocation || !readiness)
+      throw new ControlApiProtocolError("control_automation_view_invalid");
+    requireExactKeys(
+      readiness,
+      ["state", "code"],
+      "control_automation_view_invalid",
+    );
+    if (
+      (readiness.state === "ready" && readiness.code !== null) ||
+      (readiness.state === "blocked" && !isBoundedText(readiness.code, 256)) ||
+      (readiness.state !== "ready" && readiness.state !== "blocked")
+    )
+      throw new ControlApiProtocolError("control_automation_view_invalid");
+  }
   if (
     (input.executionMode !== "manualOnly" &&
       input.executionMode !== "scheduled") ||
@@ -389,6 +447,77 @@ function isAutomationSchedule(input: AutomationSchedule): boolean {
     isBoundedText(input.timezone, 256) &&
     isTimestamp(input.nextRunAt)
   );
+}
+
+function validateSkillInvocation(
+  input: unknown,
+  threadId: string,
+  code: string,
+): void {
+  try {
+    const invocation = parseSkillInvocationSpec(input);
+    if (
+      invocation.deliveryTarget !== undefined &&
+      invocation.deliveryTarget.threadId !== threadId
+    ) {
+      throw new Error("delivery thread mismatch");
+    }
+  } catch {
+    throw new ControlApiProtocolError(code);
+  }
+}
+
+function validateParameterBindings(
+  input: Pick<AutomationCreateIntent, "skillInvocation" | "parameterBindings">,
+  code: string,
+): void {
+  if (!Object.hasOwn(input, "parameterBindings")) return;
+  try {
+    const bindings = parseAutomationParameterBindings(input.parameterBindings);
+    if (
+      input.skillInvocation === undefined ||
+      Object.keys(bindings).some(
+        (key) => typeof input.skillInvocation?.parameters[key] !== "string",
+      )
+    )
+      throw new Error("invalid binding parameter");
+  } catch {
+    throw new ControlApiProtocolError(code);
+  }
+}
+
+function sameSkillInvocation(
+  left: SkillInvocationSpec | undefined,
+  right: SkillInvocationSpec | undefined,
+): boolean {
+  if (left === undefined || right === undefined) return left === right;
+  return (
+    left.schemaVersion === right.schemaVersion &&
+    left.skill.skillId === right.skill.skillId &&
+    left.skill.versionId === right.skill.versionId &&
+    left.skill.contentDigest === right.skill.contentDigest &&
+    sameRecord(left.parameters, right.parameters) &&
+    JSON.stringify(left.requiredToolRefs) ===
+      JSON.stringify(right.requiredToolRefs) &&
+    (left.deliveryTarget === undefined || right.deliveryTarget === undefined
+      ? left.deliveryTarget === right.deliveryTarget
+      : sameRecord(left.deliveryTarget, right.deliveryTarget))
+  );
+}
+
+function sameParameterBindings(
+  left: AutomationCreateIntent["parameterBindings"],
+  right: AutomationCreateIntent["parameterBindings"],
+): boolean {
+  return left === undefined || right === undefined
+    ? left === right
+    : sameRecord(left, right);
+}
+
+function sameRecord(left: object, right: object): boolean {
+  const entries = (value: object) =>
+    Object.entries(value).sort(([a], [b]) => a.localeCompare(b));
+  return JSON.stringify(entries(left)) === JSON.stringify(entries(right));
 }
 
 function validateActiveThread(
@@ -442,16 +571,20 @@ function requireExactKeys(
   input: object,
   expected: readonly string[],
   code: string,
+  optional: readonly string[] = [],
 ): void {
   if (
     input === null ||
+    typeof input !== "object" ||
     Array.isArray(input) ||
     (Object.getPrototypeOf(input) !== Object.prototype &&
       Object.getPrototypeOf(input) !== null)
   ) {
     throw new ControlApiProtocolError(code);
   }
-  const actual = Object.keys(input).sort();
+  const actual = Object.keys(input)
+    .filter((key) => !optional.includes(key))
+    .sort();
   const wanted = [...expected].sort();
   if (JSON.stringify(actual) !== JSON.stringify(wanted)) {
     throw new ControlApiProtocolError(code);
@@ -462,9 +595,10 @@ function requireIntentExactKeys(
   input: object,
   expected: readonly string[],
   code: string,
+  optional: readonly string[] = [],
 ): void {
   try {
-    requireExactKeys(input, expected, code);
+    requireExactKeys(input, expected, code, optional);
   } catch {
     throw new Error(code);
   }
