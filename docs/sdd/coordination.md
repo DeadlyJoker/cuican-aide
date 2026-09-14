@@ -11,7 +11,8 @@
 - 四个 feature 的新任务均已启动，各自在独立 worktree 中读取基线并开展 SDD。创建或启动不代表 feature 完成。
 - 接线检查发现浏览器缺少 Agent 执行动作端口，已新增 F05 独立配套任务，补齐既定示教执行路径。边界见 [browser-execution-gap.md](browser-execution-gap.md)。
 - 原工作区还有“分析内存泄露与磁盘积累”任务进行中。本批任务在隔离基线与独立 worktree 开发，不覆盖其工作。
-- 已建立 `codex/sdd-integration-20260914` 独立集成树。已合入 F04 消费端/事务内准入、F03 无工具生成生命周期与 UI/双向宿主、F01 表格引擎/传输/交付 UI、F02 完整录制宿主/实际 source 证据；根补齐 C03 同一服务的目标权限验证。分批合并后行为检查通过。F05 实际动作接线和完整 E04/E05 联合验收继续，见 [集成记录](integration-progress.md)。
+- 已建立 `codex/sdd-integration-20260914` 独立集成树。F01–F04 的独立实现及证据已合入；F05 实际动作、授权、下载与桌面启动接线也已合入。根补齐 C03 同一服务的权限验证，修复跨 feature 接线与测试目录架构冲突。完整 UI、Control、Worker 和 Contracts 已有本树验证，具体计数、跳过项及基线包边界失败见 [集成记录](integration-progress.md)。
+- 当前剩余工作是 E04/E05：真实模型消费实际录制的新输入试跑，以及固定 Skill 经现有日程再次交付。必须由实际 Run 调用表格工具产出 XLSX，验收脚本只能读取和独立核验，不能补做 assemble；两次 trial 不能替代日程 occurrence 验收。真实试跑暴露的参数序列化与续租问题正在修复，失败记录保留。
 
 ## 开发任务
 
@@ -56,4 +57,4 @@ F03 S2 已报告 `bd1e2f309`（持久生命周期与原子 Run 绑定）、`d6c8
 - C04 新客户端通过 `x-crewon-automation-version: 1` 显式声明能力后读取 v0/v1；旧列表只返回 v0，在分页前过滤并覆盖混合分页行为；旧客户端直接访问 v1 返回沿用现有错误封装的升级提示。旧 v0 序列化和执行摘要保持不变。
 - C05 已确认独立 `crewon_browser_act_scoped`，宿主强制验证显式 grant，保留原 act 的逐次审批。授权 epoch 与导航 generation 分开，具体输入绑定本次权威 Skill 参数，F03/F04 分别提供真实 Run/日程 invocation 映射；详见浏览器补充边界，仍待实现验收。
 - 产品发布的多样本/异常验收与每个用户 Skill 的启用流程分开，避免把示教变成复杂测试配置。
-- 全链路共同材料见 [integration-acceptance.md](integration-acceptance.md)，是尚未执行的合成验收标准。
+- 全链路共同材料见 [integration-acceptance.md](integration-acceptance.md)。合成材料的基准设计与实际验证分开；不能把部分路径通过称为完整联合验收。
