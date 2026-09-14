@@ -236,7 +236,7 @@ export class ControlWorkspaceRuntimeComposition {
       confirmed = await authority.status();
     } catch {
       if (this.#isAuthorityCurrent(generation)) {
-        this.#safeError = "rehydrationFailed";
+        this.#safeError = "nativeUnavailable";
         this.#publish();
       }
       return;
@@ -265,9 +265,22 @@ export class ControlWorkspaceRuntimeComposition {
         return;
       }
       await this.#runtime.selectThread(selectedThreadId);
+      if (
+        !this.#isAuthorityCurrent(generation) ||
+        threadGeneration !== this.#threadGeneration
+      ) {
+        return;
+      }
       this.#safeError = null;
       this.#publish();
-    } catch {
+    } catch (error) {
+      if (
+        !this.#isAuthorityCurrent(generation) ||
+        threadGeneration !== this.#threadGeneration ||
+        (error instanceof Error && error.name === "AbortError")
+      ) {
+        return;
+      }
       this.#safeError = "rehydrationFailed";
       this.#publish();
     }
@@ -355,10 +368,10 @@ export class ControlWorkspaceRuntimeComposition {
             workspaceId: this.#nativeStatus?.current?.workspaceId ?? null,
             displayName: this.#nativeStatus?.current?.displayName ?? null,
           };
+    // Thread refresh errors do not revoke independently confirmed native scope.
     const unsafeOutcome =
       this.#safeError === "nativeUnavailable" ||
-      this.#safeError === "nativeUnknown" ||
-      this.#safeError === "rehydrationFailed";
+      this.#safeError === "nativeUnknown";
     const mutationAuthority =
       !this.#controlConfigured || unsafeOutcome
         ? "unavailable"

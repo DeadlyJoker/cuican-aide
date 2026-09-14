@@ -403,7 +403,9 @@ export async function sendMessageAction({
     }
 
     const resumedThread =
-      activeThread.status.type === "notLoaded"
+      // Creation already established this conversation. A fresh first turn
+      // must not wait for a replaceable history read owned by selection.
+      !createdThreadForMessage && activeThread.status.type === "notLoaded"
         ? await client?.resumeThread(activeThread.id)
         : activeThread;
 
@@ -569,9 +571,11 @@ async function refreshThreadAfterTurnStart({
     setThreads((current) => upsertThread(current, thread));
     const turn = thread.turns.find((candidate) => candidate.id === turnId);
     if (turn && turn.status !== "inProgress") {
-      setActiveTurnByThread((current) => current[threadId] === turnId
-        ? removeRecordKey(current, threadId)
-        : current);
+      setActiveTurnByThread((current) =>
+        current[threadId] === turnId
+          ? removeRecordKey(current, threadId)
+          : current,
+      );
       return;
     }
   }

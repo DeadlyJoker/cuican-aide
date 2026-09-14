@@ -7,6 +7,8 @@ import {
 import { ThreadDetailSize } from "./threadDetailSize";
 import { detailThread } from "./threadDetailCache.test-support";
 import { mergeThreadListSummaries, upsertThread } from "./threadModel";
+import { controlThreadWorkspaceId } from "../control-runtime/controlThreadWorkspace";
+import { groupControlWorkspaceThreads } from "../workspace/controlWorkspaceGroups";
 import {
   commandSidebarThreadEventFingerprint,
   commandSidebarThreadState,
@@ -14,6 +16,73 @@ import {
 } from "../../components/app/commandSidebarThreadPresentation";
 
 describe("Thread detail cache", () => {
+  it("keeps canonical workspace ownership before opening catalog conversations", () => {
+    const reduce = createThreadCollectionReducer();
+    const threads = [
+      {
+        ...detailThread("owned-a"),
+        workspaceId: "workspace-a",
+        status: { type: "notLoaded" as const },
+        turns: [],
+      },
+      {
+        ...detailThread("owned-b"),
+        workspaceId: "workspace-b",
+        status: { type: "notLoaded" as const },
+        turns: [],
+      },
+      {
+        ...detailThread("unbound"),
+        workspaceId: null,
+        status: { type: "notLoaded" as const },
+        turns: [],
+      },
+    ];
+    const state = reduce(initialThreadCollection(), {
+      type: "catalogPage",
+      threads,
+    });
+    expect(state.details.size).toBe(0);
+    const materialized = materializeThreads(state);
+    expect(materialized.map(controlThreadWorkspaceId)).toEqual([
+      "workspace-a",
+      "workspace-b",
+      null,
+    ]);
+    const groups = groupControlWorkspaceThreads(
+      [
+        { workspaceId: "workspace-a", displayName: "A" },
+        { workspaceId: "workspace-b", displayName: "B" },
+      ],
+      materialized,
+    );
+    expect(
+      groups.groups.map((group) => group.threads.map((thread) => thread.id)),
+    ).toEqual([["owned-a"], ["owned-b"]]);
+    expect(groups.unbound.map((thread) => thread.id)).toEqual(["unbound"]);
+  });
+
+  it("keeps ownership when a previously opened conversation body is evicted", () => {
+    const reduce = createThreadCollectionReducer({
+      maxThreads: 1,
+      maxBytes: 1_000_000,
+    });
+    const threads = [
+      { ...detailThread("new"), workspaceId: "workspace-new" },
+      { ...detailThread("old"), workspaceId: "workspace-old" },
+    ];
+    const state = reduce(initialThreadCollection(), {
+      type: "threads",
+      update: threads,
+    });
+    expect(state.details.has("old")).toBe(false);
+    const old = materializeThreads(state).find(
+      (thread) => thread.id === "old",
+    )!;
+    expect(old.turns).toEqual([]);
+    expect(controlThreadWorkspaceId(old)).toBe("workspace-old");
+  });
+
   it("preserves completed/failed indicators and read receipts when only the body is evicted", () => {
     for (const status of ["completed", "failed", "interrupted"] as const) {
       const reduce = createThreadCollectionReducer({
@@ -96,7 +165,9 @@ describe("Thread detail cache", () => {
     const first = {
       ...detailThread("a", "文".repeat(3_000)),
       controlTaskChangeLedger: { paths: ["账".repeat(3_000)] },
-      controlTranscriptWindow: { rows: [{ kind: "unassociated", item: { text: "旧".repeat(3_000) } }] },
+      controlTranscriptWindow: {
+        rows: [{ kind: "unassociated", item: { text: "旧".repeat(3_000) } }],
+      },
     };
     const second = { ...first, id: "b" };
     const weight = new ThreadDetailSize(1_000_000).measure(first);
@@ -115,7 +186,9 @@ describe("Thread detail cache", () => {
     expect(
       state.summaries.every((thread) => !("controlTaskChangeLedger" in thread)),
     ).toBe(true);
-    expect(state.summaries.every((thread) => !("controlTranscriptWindow" in thread))).toBe(true);
+    expect(
+      state.summaries.every((thread) => !("controlTranscriptWindow" in thread)),
+    ).toBe(true);
     expect(first.turns[0]!.items).toHaveLength(2);
   });
 

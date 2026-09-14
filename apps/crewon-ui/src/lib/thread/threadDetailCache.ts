@@ -1,4 +1,7 @@
-import { replaceThreadCatalogPage, boundThreadCatalogWorkingSet } from "./threadCatalogWorkingSet";
+import {
+  replaceThreadCatalogPage,
+  boundThreadCatalogWorkingSet,
+} from "./threadCatalogWorkingSet";
 import type { SetStateAction } from "react";
 import type { Thread } from "@crewon/app-server-protocol/v2/Thread";
 import { ThreadDetailSize } from "./threadDetailSize";
@@ -88,8 +91,13 @@ export function createThreadCollectionReducer(
     let threads = materializeThreads(state);
     switch (action.type) {
       case "catalogPage":
-        catalogIds = action.threads.map(thread => thread.id);
-        threads = replaceThreadCatalogPage(threads, action.threads, selectedThreadId, activeTurnByThread);
+        catalogIds = action.threads.map((thread) => thread.id);
+        threads = replaceThreadCatalogPage(
+          threads,
+          action.threads,
+          selectedThreadId,
+          activeTurnByThread,
+        );
         break;
       case "threads":
         threads = apply(action.update, threads);
@@ -101,7 +109,13 @@ export function createThreadCollectionReducer(
         activeTurnByThread = apply(action.update, activeTurnByThread);
         break;
     }
-    if (catalogIds !== null) threads = boundThreadCatalogWorkingSet(threads, catalogIds, selectedThreadId, activeTurnByThread);
+    if (catalogIds !== null)
+      threads = boundThreadCatalogWorkingSet(
+        threads,
+        catalogIds,
+        selectedThreadId,
+        activeTurnByThread,
+      );
     const details = new Map<string, Thread>();
     const nextSummaries = threads.map((thread) => {
       if (
@@ -212,6 +226,12 @@ function detailFreeSummary(thread: Thread): ThreadListSummary {
     status: { type: "notLoaded" },
     path: thread.path,
     cwd: thread.cwd,
+    ...("workspaceId" in thread
+      ? {
+          workspaceId:
+            typeof thread.workspaceId === "string" ? thread.workspaceId : null,
+        }
+      : {}),
     clientVersion: thread.clientVersion,
     source: thread.source,
     threadSource: thread.threadSource,

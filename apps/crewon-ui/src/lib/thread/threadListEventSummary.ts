@@ -8,6 +8,7 @@ export type ThreadListEventSummary = Readonly<{
 
 export type ThreadListSummary = Thread &
   Readonly<{
+    workspaceId?: string | null;
     uiListEventSummary: ThreadListEventSummary;
   }>;
 

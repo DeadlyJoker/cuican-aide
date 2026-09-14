@@ -24,18 +24,33 @@ describe("ControlWorkspaceRuntimeComposition", () => {
     const first = status({ current: workspaces[0]!, workspaces });
     const second = status({ current: workspaces[1]!, workspaces, revision: 5 });
     native.status.mockResolvedValueOnce(first).mockResolvedValue(second);
-    native.activate.mockResolvedValue({ outcome: "committed", snapshot: second });
-    const test = composition({ controlConfigured: true, nativeAuthority: native.port });
+    native.activate.mockResolvedValue({
+      outcome: "committed",
+      snapshot: second,
+    });
+    const test = composition({
+      controlConfigured: true,
+      nativeAuthority: native.port,
+    });
     await test.value.refreshNativeAuthority();
     await test.value.activateNativeWorkspace("workspace-b");
-    expect(native.activate).toHaveBeenCalledWith("workspace-b", { expectedRevision: 4, idempotencyKey: expect.any(String) });
+    expect(native.activate).toHaveBeenCalledWith("workspace-b", {
+      expectedRevision: 4,
+      idempotencyKey: expect.any(String),
+    });
     expect(native.selectAndRegister).not.toHaveBeenCalled();
-    expect(test.value.getSnapshot()).toMatchObject({ nativeWorkspace: { workspaceId: "workspace-b", displayName: "Project B" }, nativeWorkspaces: workspaces });
+    expect(test.value.getSnapshot()).toMatchObject({
+      nativeWorkspace: { workspaceId: "workspace-b", displayName: "Project B" },
+      nativeWorkspaces: workspaces,
+    });
     const cleared = status({ current: null, workspaces, revision: 6 });
     native.clear.mockResolvedValue({ outcome: "committed", snapshot: cleared });
     native.status.mockResolvedValue(cleared);
     await test.value.clearNativeWorkspace();
-    expect(test.value.getSnapshot()).toMatchObject({ nativeWorkspace: { workspaceId: null, displayName: null }, nativeWorkspaces: workspaces });
+    expect(test.value.getSnapshot()).toMatchObject({
+      nativeWorkspace: { workspaceId: null, displayName: null },
+      nativeWorkspaces: workspaces,
+    });
     expect(test.runtime.close).not.toHaveBeenCalled();
     test.value.close();
   });
@@ -186,7 +201,11 @@ describe("ControlWorkspaceRuntimeComposition", () => {
         mutationAuthority: "desktop",
         nativeBusy: false,
         nativeWorkspaceRevision: "6:9",
-        nativeWorkspace: { availability: "available", workspaceId: null, displayName: null },
+        nativeWorkspace: {
+          availability: "available",
+          workspaceId: null,
+          displayName: null,
+        },
       }),
     );
   });
@@ -263,7 +282,7 @@ describe("ControlWorkspaceRuntimeComposition", () => {
     ]);
   });
 
-  it("keeps a committed native snapshot and projects safe error when main authority recovery fails", async () => {
+  it("keeps confirmed native mutations available when the independent Thread recovery fails", async () => {
     const before = status();
     const after = status({
       current: { displayName: "selected" },
@@ -297,7 +316,8 @@ describe("ControlWorkspaceRuntimeComposition", () => {
           workspaceId: null,
           displayName: "selected",
         },
-        mutationAuthority: "unavailable",
+        mutationAuthority: "desktop",
+        nativeBusy: false,
         safeError: "rehydrationFailed",
       }),
     );
@@ -305,6 +325,74 @@ describe("ControlWorkspaceRuntimeComposition", () => {
       "raw secret-bearing failure",
     );
     expect(test.runtime.selectThread).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a canceled recovery after switching conversations and releases native busy", async () => {
+    const native = authority();
+    const after = status({
+      current: { workspaceId: "workspace-a", displayName: "A" },
+      revision: 5,
+    });
+    native.status.mockResolvedValueOnce(status()).mockResolvedValue(after);
+    native.activate.mockResolvedValue({
+      outcome: "committed",
+      snapshot: after,
+    });
+    const entered = deferred<void>();
+    const release = deferred<void>();
+    const test = composition({
+      controlConfigured: true,
+      nativeAuthority: native.port,
+      rehydrateThreadAuthority: async () => {
+        entered.resolve();
+        await release.promise;
+        throw new DOMException("Selection superseded", "AbortError");
+      },
+    });
+    await test.value.selectThread("thread-old");
+    await test.value.refreshNativeAuthority();
+    const mutation = test.value.activateNativeWorkspace("workspace-a");
+    await entered.promise;
+    await test.value.selectThread(null);
+    release.resolve();
+    await mutation;
+    expect(test.value.getSnapshot()).toMatchObject({
+      mutationAuthority: "desktop",
+      nativeBusy: false,
+      safeError: null,
+      nativeWorkspace: { workspaceId: "workspace-a" },
+    });
+    expect(test.runtime.selectThread.mock.calls).toEqual([
+      ["thread-old"],
+      [null],
+    ]);
+  });
+
+  it("still disables mutations when the native confirmation itself is unavailable", async () => {
+    const native = authority();
+    const after = status({
+      current: { workspaceId: "workspace-a", displayName: "A" },
+      revision: 5,
+    });
+    native.status
+      .mockResolvedValueOnce(status())
+      .mockRejectedValueOnce(new Error("native disconnected"));
+    native.activate.mockResolvedValue({
+      outcome: "committed",
+      snapshot: after,
+    });
+    const test = composition({
+      controlConfigured: true,
+      nativeAuthority: native.port,
+    });
+    await test.value.refreshNativeAuthority();
+    await test.value.activateNativeWorkspace("workspace-a");
+    expect(test.value.getSnapshot()).toMatchObject({
+      mutationAuthority: "unavailable",
+      nativeBusy: false,
+      safeError: "nativeUnavailable",
+    });
+    expect(test.runtime.selectThread).not.toHaveBeenCalled();
   });
 
   it("does not rehydrate on user cancellation and clears safe error", async () => {

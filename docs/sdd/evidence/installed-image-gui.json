@@ -1,0 +1,98 @@
+{
+  "version": "0.1.3",
+  "runId": "01a09f92-bb58-7433-87c1-ab953f225d59",
+  "threadId": "01a09f92-48b0-747e-95eb-9542fe9abafe",
+  "status": "completed",
+  "createdAt": "2026-09-14T10:59:48.696Z",
+  "terminalAt": "2026-09-14T11:00:16.543Z",
+  "imageEvents": [
+    {
+      "data": {
+        "itemId": "ig_03e32c8e08fc338f016aa7d3a7b1dc87d0806e006d1ae7961e",
+        "segmentId": "segment:01a09f92-bd48-7759-9dcc-88b8b6d7c67c",
+        "segmentSequence": 2,
+        "stage": "in_progress"
+      },
+      "eventId": "01a09f92-c792-747e-8f64-16d197a8a72c",
+      "identity": {
+        "runId": "01a09f92-bb58-7433-87c1-ab953f225d59"
+      },
+      "occurredAt": "2026-09-14T10:59:51.826Z",
+      "schemaVersion": "crewon.run-event.v0",
+      "sequence": 4,
+      "type": "model.image.progress"
+    },
+    {
+      "data": {
+        "itemId": "ig_03e32c8e08fc338f016aa7d3a7b1dc87d0806e006d1ae7961e",
+        "segmentId": "segment:01a09f92-bd48-7759-9dcc-88b8b6d7c67c",
+        "segmentSequence": 3,
+        "stage": "generating"
+      },
+      "eventId": "01a09f92-ccbc-72e8-bc04-a8ce6d1d7f02",
+      "identity": {
+        "runId": "01a09f92-bb58-7433-87c1-ab953f225d59"
+      },
+      "occurredAt": "2026-09-14T10:59:53.148Z",
+      "schemaVersion": "crewon.run-event.v0",
+      "sequence": 5,
+      "type": "model.image.progress"
+    },
+    {
+      "data": {
+        "itemId": "ig_03e32c8e08fc338f016aa7d3a7b1dc87d0806e006d1ae7961e",
+        "segmentId": "segment:01a09f92-bd48-7759-9dcc-88b8b6d7c67c",
+        "segmentSequence": 4,
+        "stage": "completed"
+      },
+      "eventId": "01a09f93-1b6d-752d-9644-a51ae328901b",
+      "identity": {
+        "runId": "01a09f92-bb58-7433-87c1-ab953f225d59"
+      },
+      "occurredAt": "2026-09-14T11:00:13.293Z",
+      "schemaVersion": "crewon.run-event.v0",
+      "sequence": 6,
+      "type": "model.image.progress"
+    },
+    {
+      "data": {
+        "artifactRef": "artifact-ae59e9a1fb5ccfd4fcb58611be92bf2b25ccd383f1ac9bc0f688e5d3ad8b6bbe",
+        "byteLength": 2041789,
+        "itemId": "ig_03e32c8e08fc338f016aa7d3a7b1dc87d0806e006d1ae7961e",
+        "mimeType": "image/png",
+        "segmentId": "segment:01a09f92-bd48-7759-9dcc-88b8b6d7c67c",
+        "segmentSequence": 5
+      },
+      "eventId": "01a09f93-2815-756a-a354-fadb83485a1b",
+      "identity": {
+        "runId": "01a09f92-bb58-7433-87c1-ab953f225d59"
+      },
+      "occurredAt": "2026-09-14T11:00:16.533Z",
+      "schemaVersion": "crewon.run-event.v0",
+      "sequence": 7,
+      "type": "model.image.generated"
+    }
+  ],
+  "download": {
+    "path": "/Users/cheneywang/Downloads/CrewON图片验收/CrewON-安装验收咖啡海报.png",
+    "byteLength": 2041789,
+    "sha256": "sha256:26e08ade435654f816e2f3172a61c55358a2db8f23231269e72e85ebc4be4d3a",
+    "matchesStoredArtifact": true,
+    "additionalSavedFile": "/Users/cheneywang/Downloads/CrewON-0.1.4-图片验收.png"
+  },
+  "ui": {
+    "imageProgressVisible": true,
+    "imagePreviewVisuallyVerified": true,
+    "saveButtonAndNativeSaveDialog": true,
+    "restartImagePreviewVerified": true
+  },
+  "restartVerified": true,
+  "latestVerifiedInstalledVersion": "0.1.4",
+  "firstSend": {
+    "threadId": "01a09f9a-050b-72ab-a932-9c3f6aa41572",
+    "runId": "01a09f9a-0568-7469-8899-7272d8e3c4af",
+    "singleSendCompleted": true,
+    "response": "首次发送正常，17×23=391"
+  },
+  "note": "Image created in 0.1.3; native save, first-send and restart UI independently verified in installed 0.1.4. Final 0.1.5 checks are recorded separately."
+}
