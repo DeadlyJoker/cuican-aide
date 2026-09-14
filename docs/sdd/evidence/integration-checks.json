@@ -115,6 +115,28 @@
       "scope": "At 7e2ee0b54; Host behavior and authorization UI snapshot. Per-action approval cannot expand an existing scoped grant; ordinary non-scoped authorization remains unchanged.",
       "logPath": "/tmp/crewon-integration-browser-scope-final.log",
       "logSha256": "18e27e54d7c0e0e3ec9578e19f3537214ccb90560d2d153c64d404095e7d123f"
+    },
+    {
+      "name": "Explicit Skill/schedule approval mode first integration",
+      "counts": {
+        "passed": 52,
+        "failed": 2,
+        "skipped": 0
+      },
+      "scope": "At 99cd3d53d; only scheduler fixture completion failed because fake model emitted no text (message_content_invalid), not a mode/provenance failure.",
+      "logPath": "/tmp/crewon-integration-permission-final.log",
+      "logSha256": "d707a54d4eb20cd46c16794623284bb1c9d74657e061f80547dad865e0292a2e"
+    },
+    {
+      "name": "Explicit Skill/schedule approval mode after fixture correction",
+      "counts": {
+        "passed": 54,
+        "failed": 0,
+        "skipped": 0
+      },
+      "scope": "At 9d628460b; actual Control HTTP/SQLite/scheduler/Worker, mode freezing, defaults, replay, old v0/v1 compatibility, forged mode rejection and delivery approvals. Helper fake model now emits valid text; no timeout or scheduler settings weakened.",
+      "logPath": "/tmp/crewon-integration-permission-rerun.log",
+      "logSha256": "af395bd6d20e33bca67dc620cdc6861adb486b89136ec5710472fd1ffcba460c"
     }
   ],
   "currentPackageBoundaryViolations": [

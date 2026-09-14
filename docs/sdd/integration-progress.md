@@ -79,3 +79,7 @@ F05 已在同一真实 WebContentsView 上验证 Puppeteer 动作、下载和 fo
 F05 实际录制来源的首次真实模型交付证据 `34053bcbb` 已合入根 `da57a7764`。唯一 add/add 冲突是复现脚本的 source 路径：保留 F02 原始路径，逐字节确认 F05 归档副本与原始 C01 一致。根独立读取提交的实际 XLSX，8533 字节与摘要一致，明细 A101/A103、direct/CNY 汇总 200，来源与 assemble 回执均关联同一完成 Run。根没有重跑提供方或 Runtime 重启；重启逐字节相同由 owner 的实际证据支持，见 [根文件核验](evidence/real-trial-file-review.json)。此次包含一次正常具体审批，且审阅后的 v4 方法内嵌当期验收 ID/金额；正在移除这种验收答案依赖并用通用完成条件重做固定版本试跑。原 v4 成功与此前失败证据全部保留，尚不标为 E05 无人值守通过。
 
 可复用 v5 的真实试跑证据 `94c6934e1` 与所有浏览器动作受同一 scoped grant 约束的修复 `ea7c1faa8` 已合入根 `7e2ee0b54` / `2c6db5b06`。v5 方法不含当期订单号、日期或预期金额，根再次独立读取实际 8531 字节 XLSX，摘要与来源 Run 一致，明细和汇总正确；16 条工具回执均完成。见 [可复用方法文件核验](evidence/reusable-trial-file-review.json)。根运行 Host 与浏览器授权 UI 两文件共 **45 项通过**。这次试跑仍有一次明确具体审批；F01/F03 正补齐已有审批模式的显式请求/日程保存与 UI，F04 准备真实 occurrence helper，E05 仍待执行。
+
+已合入 F01 显式审批模式 `3e5d6af1d`（根 `99cd3d53d`）：仅本次执行/Skill 日程顶层显式选择 requestApproval 或 approveForMe，缺省请求批准；模式冻结并在事务、Run 绑定、receipt、解析及客户端回显逐层校验。v0 不接受新模式字段，旧 v1 未携带该字段时保留原始摘要，执行按请求批准。F01 工具的 perAction 策略不改。F04 helper 通过真实 activate/create/到期调度及只读 receipt key 验证，不调用 run-now、approve 或 assemble。
+
+根首次相关八文件组合 52 通过、2 失败：helper 测试用模型只发送完成事件、没有正文，实际 Worker 因 message_content_invalid 重试。F04 `8dba99f82` 仅补一行有效 output.delta；同组合重跑 **54/54 通过、0 跳过**，保留首次失败日志，未放宽超时或调度行为。根全部 packages、Control API 与 Worker 类型检查通过。真实 E05 已由既有 scheduler 产生独立到期 Run，正在等待最终文件和重启核验；界面模式选择由 F03 收尾。
