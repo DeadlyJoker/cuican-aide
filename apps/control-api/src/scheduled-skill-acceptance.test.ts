@@ -149,6 +149,7 @@ async function setup(
     modelId: "scheduler-fixture-model",
     async *stream() {
       modelCalls++;
+      yield { type: "output.delta", delta: "Scheduled fixture completed." };
       yield { type: "completed", checkpoint: null };
     },
   };
