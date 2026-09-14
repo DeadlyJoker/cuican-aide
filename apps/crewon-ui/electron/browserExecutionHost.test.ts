@@ -334,6 +334,112 @@ describe("BrowserExecutionHost authorization and recovery boundaries", () => {
     expect(automation.act).toHaveBeenCalledTimes(1);
   });
 
+  it.each(["value", "target", "navigation"] as const)(
+    "a valid per-action approval cannot bypass a scoped grant's %s boundary",
+    async (boundary) => {
+      const fixture = setup();
+      await fixture.host.authorize({ threadId: "thread-1", scope: scoped() });
+      const observed = await observe(fixture.host);
+      const action: BrowserActInput =
+        boundary === "value"
+          ? {
+              ...observed,
+              action: "fill",
+              target: { targetId: "target-date" },
+              value: "2026-09-15",
+            }
+          : boundary === "target"
+            ? {
+                ...observed,
+                action: "click",
+                target: { targetId: "target-date" },
+              }
+            : { ...observed, action: "navigate", url: `${origin}/unreviewed` };
+      const request = command("crewon_browser_act", action);
+      expect(request.approvalProof?.actionDigest).toBe(request.actionDigest);
+      expect(() => fixture.host.validate(request)).not.toThrow();
+      expect(errorCode(await fixture.host.execute(request))).toBe(
+        "requires_explicit_approval",
+      );
+      expect(fixture.sessions.acquireExecution).toHaveBeenCalledTimes(1);
+      expect(automation.act).not.toHaveBeenCalled();
+      expect(fixture.wc.loadURL).not.toHaveBeenCalled();
+    },
+  );
+
+  it("allows an approved per-action call that matches the existing scoped grant", async () => {
+    const fixture = setup();
+    const grant = await fixture.host.authorize({
+      threadId: "thread-1",
+      scope: scoped(),
+    });
+    const observed = await observe(fixture.host);
+    const action: BrowserActInput = {
+      ...observed,
+      action: "fill",
+      target: { targetId: "target-date" },
+      value: "2026-09-14",
+    };
+    const request = command("crewon_browser_act", action);
+    expect(request.approvalProof).not.toBeNull();
+    expect(errorCode(await fixture.host.execute(request))).toBeNull();
+    expect(automation.act).toHaveBeenCalledTimes(1);
+    expect(automation.act.mock.calls[0]?.[0]).toEqual(action);
+    expect(fixture.host.status("thread-1")).toEqual(grant);
+  });
+
+  it.each(["missing-skill", "different-skill", "revoked"] as const)(
+    "a per-action approval cannot replace a scoped grant's %s authority",
+    async (change) => {
+      const fixture = setup();
+      await fixture.host.authorize({ threadId: "thread-1", scope: scoped() });
+      const observed = await observe(fixture.host);
+      const request = command("crewon_browser_act", click(observed));
+      expect(() => fixture.host.validate(request)).not.toThrow();
+      if (change === "revoked") fixture.host.revoke("thread-1");
+      else
+        fixture.authority.resolveRun.mockResolvedValue({
+          ...runIdentity(),
+          skill:
+            change === "missing-skill"
+              ? null
+              : {
+                  ref: { ...ref, versionId: "other-version" },
+                  parameters: { date: "2026-09-14" },
+                },
+        });
+      expect(errorCode(await fixture.host.execute(request))).toBe(
+        change === "revoked"
+          ? "browser_authorization_required"
+          : "requires_explicit_approval",
+      );
+      expect(fixture.sessions.acquireExecution).toHaveBeenCalledTimes(1);
+      expect(automation.act).not.toHaveBeenCalled();
+    },
+  );
+
+  it("still requires scope for the scoped tool while a normal per-action grant remains usable", async () => {
+    const fixture = setup();
+    await fixture.host.authorize({ threadId: "thread-1" });
+    const observed = await observe(fixture.host);
+    expect(
+      errorCode(
+        await fixture.host.execute(
+          command("crewon_browser_act_scoped", click(observed)),
+        ),
+      ),
+    ).toBe("requires_explicit_approval");
+    expect(automation.act).not.toHaveBeenCalled();
+    expect(
+      errorCode(
+        await fixture.host.execute(
+          command("crewon_browser_act", click(observed)),
+        ),
+      ),
+    ).toBeNull();
+    expect(automation.act).toHaveBeenCalledTimes(1);
+  });
+
   it("scoped authorization permits the next periodic Run to navigate from yesterday's report to today's reviewed URL", async () => {
     const fixture = setup();
     const dates: Record<string, string> = {

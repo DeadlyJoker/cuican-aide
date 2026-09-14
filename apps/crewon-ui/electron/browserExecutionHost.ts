@@ -328,9 +328,13 @@ export class BrowserExecutionHost {
           observation.observationId !== action.observationId)
       )
         throw new Error("browser_stale_observation");
-      if (command.name === "crewon_browser_act_scoped") {
-        if (!grant.scope || !action)
-          throw new Error("requires_explicit_approval");
+      if (
+        command.name === "crewon_browser_act_scoped" &&
+        (!grant.scope || !action)
+      )
+        throw new Error("requires_explicit_approval");
+      // A per-action approval cannot expand an existing scoped authorization.
+      if (action && grant.scope) {
         const target =
           "target" in action
             ? observation!.targets.filter((t) =>
