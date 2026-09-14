@@ -6,9 +6,9 @@
 
 新增独立 teaching host/source/store，普通 browser manager 保持其原有行为。教学宿主拥有一个 BrowserWindow 和 WebContentsView；本地 React 控制页沿用中性主题，在上方放地址与录制控制，下方分页回看，页面在独立有界区域展示。独立 renderer preload 只暴露录制端口；远程页面 preload 不暴露任何 main-world API。只允许教学控制主框架调用控制 IPC；事件 IPC 同时验证确切 webContents 和顶层 senderFrame，远程页面不能调用控制能力。
 
-页面捕获使用 isolated preload 中受信任的 click/change 与顶层导航观察。选择框 change 表达选择/筛选，文本 change 表达提交的普通输入；不记录每次按键。结构 CSS 路径和控件类别解释对象，不复制整段 DOM/正文。只支持标准 HTML 控件；框架、canvas、弹窗、file、contenteditable 均产生 unsupported。跨源导航暂停并等待用户点击继续授权当前源。
+页面捕获使用 isolated preload 中受信任的 click/change 与顶层导航观察。选择框 change 表达选择/筛选，文本 change 表达提交的普通输入；不记录每次按键。结构 CSS 路径、角色与经过过滤的安全可访问名称解释对象，不复制整段 DOM/正文。只支持标准 HTML 控件；框架、canvas、弹窗、file、contenteditable 均产生 unsupported。跨源导航暂停并等待用户点击继续授权当前源。
 
-源头排除 password、credential autocomplete、含敏感语义的控件与疑似令牌值，敏感输入只留下 runtime-required 标记、不读取或发送原值；不访问 Cookie、storage、网络正文。普通文本及标识有长度限制与第二道宿主过滤。页面地址仅保留 origin；路径用 SHA-256 `routeDigest` 关联，不保留查询、片段、用户信息或原路径。不能由摘要重建目标 URL，F03 应请求运行时目标地址参数。关键画面为可视区域及目标的脱敏几何定位 SVG，完全不包含页面像素或文本。原事件与图分离保存；不向模型整段注入录制。
+源头排除 password、credential autocomplete、含敏感语义的控件与疑似令牌值，敏感输入只留下 runtime-required 标记、不读取或发送原值；不访问 Cookie、storage、网络正文。普通文本及标识有长度限制与第二道宿主过滤。页面地址保留 origin 和经过过滤的 `routeTemplate`：普通路由保留，敏感或高熵路径段替换 `{runtime}`，query 值全部替换 `{runtime}`；去掉片段、用户信息，保留 `routeDigest` 辅助完整性校验。F03 可复用安全路由并要求运行时补齐参数。关键画面首发为经过安全检查的标准按钮/链接/选择控件局部 PNG；存在敏感输入、嵌套未知内容或无法确认安全时不抓像素，明确显示画面不可采集。输入字段仅用几何图辅助定位，几何图不称为真实截图。不会采集整页像素或正文。原事件与图分离保存；不向模型整段注入录制。
 
 ## C01 RecordingExport v1（F02 owner）
 
@@ -34,8 +34,8 @@ type RecordingExport = {
     sequence: number; // 原始单调序号，删步不重排身份或序号
     kind: 'navigate' | 'click' | 'input' | 'select' | 'download' | 'unsupported';
     occurredAt: string;
-    page: { origin: string; routeDigest: string };
-    target: { tag: string; selector: string; description: string } | null;
+    page: { origin: string; routeTemplate: string; routeDigest: string };
+    target: { tag: string; selector: string; description: string; role: string | null; accessibleName: string | null } | null;
     input: { classification: 'ordinary' | 'parameter-candidate'; value: string }
       | { classification: 'runtime-required' } | null;
     note: string | null;
@@ -46,8 +46,8 @@ type RecordingExport = {
   }>;
   evidence: Array<{
     evidenceId: string;
-    kind: 'redacted-layout';
-    mediaType: 'image/svg+xml';
+    kind: 'redacted-layout' | 'redacted-screenshot';
+    mediaType: 'image/svg+xml' | 'image/png';
     byteLength: number;
     contentDigest: string;
   }>;
@@ -71,3 +71,7 @@ type RecordingExport = {
 ## 行为和发布条件
 
 按 spec 的 R01–R07 覆盖 schema 摘要/权限语义、source 隐私、store revision/恢复/预算、主框架 IPC 验证、下载迟到关联、UI 暂停/删步/导出和桌面实际窗口。证据区分合成 fixture、组件模拟、真实 Electron GUI 与重启恢复。F03 真实模型转换不属于 F02，不将 fixture 宣称全链路完成。
+
+## S1 契约修订（协调评审）
+
+初稿只保留摘要与几何图会丢失示教语义。根据协调任务评审，在 schema v1 首次实现前补充 routeTemplate、role、accessibleName 和受控局部截图。敏感 query 值保留运行时参数位置；普通业务语义可保留，捕获不安全的截图明确不可用。共享来源身份策略已获协调确认。
