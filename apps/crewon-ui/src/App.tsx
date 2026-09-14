@@ -114,6 +114,7 @@ import { selectThreadRuntimeAuthority } from "./lib/control-runtime/threadRuntim
 import { desktopWorkspaceAuthority } from "./lib/desktop/desktopWorkspaceAuthorityAdapter";
 import { desktopSandboxClient } from "./lib/desktop/desktopSandboxClient";
 import { providerCredentialStore } from "./lib/model-provider/providerCredentialStore";
+import { useRecordingSkillImport } from "./components/skill/useRecordingSkillImport";
 
 export function App({
   controlClient = null,
@@ -186,6 +187,17 @@ export function App({
     }
     setAppViewBase(view);
   };
+  const recordingSkillImport = useRecordingSkillImport({
+    controlClient,
+    onImported: () => {
+      setAppView("chat");
+      setNotice({
+        text: "录制已导入为待审阅草稿，请继续整理方法。",
+        tone: "success",
+      });
+    },
+    onFailure: (message) => setNotice({ text: message, tone: "warning" }),
+  });
   /*
    * The group stays intact so coordinators can be handed the whole thing, while
    * the values this file reads directly are also named. That keeps each state
@@ -1315,6 +1327,11 @@ export function App({
             officeControlClient={
               workspaceUiAuthority === "control" ? controlClient : null
             }
+            skillControlClient={
+              workspaceUiAuthority === "control" ? controlClient : null
+            }
+            skillOpenRequest={recordingSkillImport.openRequest}
+            onSkillOpenRequestHandled={recordingSkillImport.acknowledgeOpen}
             controlOfficeRoomAdapter={
               workspaceUiAuthority === "control"
                 ? controlOfficeRoomAdapter
