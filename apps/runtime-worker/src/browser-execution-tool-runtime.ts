@@ -353,7 +353,7 @@ export function browserExecutionToolDefinitions(): readonly ToolDefinition[] {
       kind: "function",
       name: BROWSER_OBSERVE_TOOL_NAME,
       description:
-        "Observe the browser page authorized for this Run. Omit sessionId to discover the bound session; never pass an empty string. Returns bounded standard-control targets; input values and page secrets are excluded.",
+        "Observe the browser page authorized for this Run. Omit sessionId to discover the bound session; never pass an empty string. Returns bounded standard-control targets and ordinary control values; sensitive fields, sensitive values, and page secrets are excluded.",
       execution: "serial",
       inputSchema: {
         type: "object",
