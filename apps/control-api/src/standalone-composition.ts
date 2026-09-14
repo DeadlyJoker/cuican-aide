@@ -1,3 +1,4 @@
+import { createStandaloneSkillHost } from "./standalone-skill-host.ts";
 import type { StorageAdmissionPort } from "@crewon/application";
 import { createLocalStorageAdmissionOwner } from "@crewon/store";
 import type { OutboxRetentionPolicy } from "@crewon/application";
@@ -53,6 +54,7 @@ import type { ProcessLocalActivationGate } from "./paused-admission.ts";
 import type { ThreadSandboxPort } from "./pim-sandbox-client.ts";
 
 type ControlApiCompositionConfig = Readonly<{
+  skillDatabasePath?: string;
   storageAdmission?: StorageAdmissionPort;
   localStoragePaths?: readonly string[];
   actor: ActorContext;
@@ -106,6 +108,7 @@ export function createStandaloneControlApi(
   try {
     return composeControlApi(store, {
       ...config,
+      skillDatabasePath: config.databasePath,
       localStoragePaths: [config.databasePath, ...(config.localStoragePaths ?? [])],
     });
   } catch (error) {
@@ -152,6 +155,7 @@ function composeControlApi(
   );
   let workspaceWorker: LoopbackRuntimeWorkspaceWorkerClient | null = null;
   let artifactMaintenance: ArtifactRetentionMaintenance | undefined;
+  let skillHost: ReturnType<typeof createStandaloneSkillHost> | null = null;
   try {
     artifactMaintenance = new ArtifactRetentionMaintenance(config.artifactStore.retention, store, config.artifactRetention);
     const authorization = new StandaloneAuthorization(config.actor);
@@ -220,6 +224,7 @@ function composeControlApi(
       digester,
       admission: new StoreBackedAgentVersionAdmission(store),
     });
+    skillHost = config.skillDatabasePath === undefined ? null : createStandaloneSkillHost({databasePath:config.skillDatabasePath,actor:config.actor,store,turns,routes:routeResolver,application,digester,clock});
     const automations = new AutomationApplicationService({
       store,
       authorization,
@@ -294,6 +299,8 @@ function composeControlApi(
       authorization,
     });
     const app = buildControlApi({
+      skills: skillHost?.skills ?? null,
+      skillRecordings: skillHost?.recordings ?? null,
       application,
       offices,
       threads,
@@ -346,6 +353,7 @@ function composeControlApi(
       eventHub.close();
       await workspaceWorker?.close();
       await config.artifactStore.close();
+      await skillHost?.close();
       await store.close();
     });
     return {
@@ -365,6 +373,7 @@ function composeControlApi(
     eventHub.close();
     void workspaceWorker?.close();
     void config.artifactStore.close();
+    void skillHost?.close();
     void store.close();
     throw error;
   }
