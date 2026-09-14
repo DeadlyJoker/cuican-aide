@@ -209,9 +209,44 @@ export class AutomationApplicationService {
     });
   }
 
+  /** Current read model only; creating a Run always performs its own fresh admission. */
+  async checkAutomationReadiness(
+    actor: ActorContext,
+    automationId: string,
+  ): Promise<Readonly<{ state: "ready" | "blocked"; code: string | null }>> {
+    const definition = await this.getAutomation(actor, automationId);
+    try {
+      await this.#authorizeInvocation(actor, definition);
+      const route = await this.#resolveRoute(
+        actor,
+        definition.threadId,
+        definition.agentVersionId,
+      );
+      await assertAutomationSkillExecution(
+        { skills: this.#skills, digester: this.#digester },
+        actor,
+        definition,
+        route,
+        this.#now(),
+      );
+      return { state: "ready", code: null };
+    } catch (error) {
+      return {
+        state: "blocked",
+        code:
+          error instanceof ApplicationError
+            ? error.code
+            : "automation_skill_admission_failed",
+      };
+    }
+  }
+
   async runAutomationNow(
     actor: ActorContext,
     command: RunAutomationNowCommand,
+    options: { supportedDefinitionVersion: "v0" | "v1" } = {
+      supportedDefinitionVersion: "v1",
+    },
   ): Promise<AutomationInvocationResult> {
     validateAutomationActor(actor);
     validateAutomationRunNowCommand(command);
@@ -229,6 +264,14 @@ export class AutomationApplicationService {
     );
     if (replay !== null) {
       this.#validateInvocationResult(actor, command, replay);
+      if (
+        replay.record.definition.skillBinding &&
+        options.supportedDefinitionVersion === "v0"
+      )
+        throw new ApplicationError(
+          "conflict",
+          "automation_client_upgrade_required",
+        );
       if (
         replay.record.definition.skillBinding &&
         command.scheduledFor !== undefined &&
@@ -253,6 +296,14 @@ export class AutomationApplicationService {
       throw new ApplicationError("notFound", "automation_not_found");
     }
     this.#validateInvocationContext(actor, command, context);
+    if (
+      context.record.definition.skillBinding &&
+      options.supportedDefinitionVersion === "v0"
+    )
+      throw new ApplicationError(
+        "conflict",
+        "automation_client_upgrade_required",
+      );
     await this.#authorizeInvocation(actor, context.record.definition);
     const route = await this.#resolveRoute(
       actor,
@@ -277,11 +328,23 @@ export class AutomationApplicationService {
         scheduledFor,
       );
     const input = createAutomationInvocationInput({
-      actor, command, context, route, idempotency, scheduledFor,
-      now: () => this.#now(), nextId: (kind) => this.#nextId(kind),
+      actor,
+      command,
+      context,
+      route,
+      idempotency,
+      scheduledFor,
+      now: () => this.#now(),
+      nextId: (kind) => this.#nextId(kind),
       digest: (value, code) => this.#digest(value, code),
     });
-    this.#validateGeneratedInvocationInput(actor, command, context, route, input);
+    this.#validateGeneratedInvocationInput(
+      actor,
+      command,
+      context,
+      route,
+      input,
+    );
     const result = await this.#storeCall(() =>
       this.#store.commitAutomationInvocation(input),
     );
@@ -507,6 +570,7 @@ export class AutomationApplicationService {
     const instruction = renderAutomationInstruction(
       definition,
       artifacts.binding.scheduledFor,
+      artifacts.binding.skillInvocation,
     );
     const contentDigest = this.#digest(
       instruction,
@@ -617,6 +681,7 @@ export class AutomationApplicationService {
     const instruction = renderAutomationInstruction(
       definition,
       result.binding.scheduledFor,
+      result.binding.skillInvocation,
     );
     const route =
       fresh?.route ??

@@ -14,6 +14,8 @@ import {
   createAutomationAuthorityEpoch,
   isCurrentAutomationAuthorityEpoch,
 } from "./CommandWorkspaceAutomations";
+import { skillAutomationDraft } from "./automationCreateDraft";
+import { scheduleSkillInvocation } from "./automationSkill.test-support";
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -165,5 +167,44 @@ describe("schedule view on the Control runtime", () => {
 
   it("keeps the calendar model exports honest for scheduled definitions", () => {
     expect(scheduledDefinition().executionMode).toBe("scheduled");
+  });
+
+  it("snapshots a fixed Skill version, typed parameters, and delivery target in the existing modal", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-08-28T23:19:00.000Z"));
+    const options = new Intl.DateTimeFormat().resolvedOptions();
+    const timezone = vi
+      .spyOn(Intl.DateTimeFormat.prototype, "resolvedOptions")
+      .mockReturnValue({ ...options, timeZone: "UTC" });
+    try {
+      const markup = renderToStaticMarkup(
+        <AutomationView
+          active
+          connected
+          controlConfigured
+          modalOpen
+          createDraft={skillAutomationDraft(
+            { title: "每周报告", invocation: scheduleSkillInvocation() },
+            9,
+          )}
+          runtime={null}
+          selectedThreadId="thread-1"
+          spaceAuthorityKey="space-1"
+          onCloseModal={() => {}}
+          onOpenModal={() => {}}
+        />,
+      );
+      expect(markup).toContain("固定 Skill 版本");
+      expect(markup).toContain("weekly-report · version-1");
+      expect(markup).toContain('type="number"');
+      expect(markup).toContain("上一完整周开始（周一）");
+      expect(markup).toContain("已选交付目标");
+      expect(markup).not.toContain("要完成什么");
+      expect(markup).not.toContain("已从助理带入");
+      expect(markup).toMatchSnapshot();
+    } finally {
+      timezone.mockRestore();
+      vi.useRealTimers();
+    }
   });
 });

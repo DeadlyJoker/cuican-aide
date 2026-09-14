@@ -50,7 +50,7 @@ R01 → 既有 domain/application/contracts/store/scheduler 兼容基线；R02�
 
 ## S1 补充：周期日期与客户端能力协商
 
-协调评审要求动态日期进入首版。C02 仍只接受具体标量。C04 在定义中保存固定版本快照、literal 参数以及显式 `parameterBindings`：参数名 → `runDate` / `previousWeekStart` / `previousWeekEnd`，仅 ISO 日期字符串；上一完整周按日程时区、周一至周日。无任意表达式或模型算日期。首次保存按 nextRunAt 解析校验；每次触发按 scheduler 的 occurrence 解析。内部 run command 带 scheduledFor；手动运行使用服务端 now。invocation binding 保存该时间，Store 从 definition+scheduledFor 确定性解析参数/渲染 instruction，receipt 重放复用同一值。固定 SkillVersion 内容不变，日期变更不视作方法漂移。未知回执重试先查 receipt，不能重算成另一日。
+协调评审要求动态日期进入首版。C02 仍只接受具体标量。C04 在定义中保存固定版本快照、literal 参数以及显式 `parameterBindings`：参数名 → `runDate` / `previousWeekStart` / `previousWeekEnd`，仅 ISO 日期字符串；上一完整周按日程时区、周一至周日。无任意表达式或模型算日期。首次保存按 nextRunAt 解析校验；每次触发按 scheduler 的 occurrence 解析。内部 run command 带 scheduledFor；手动运行使用服务端 now。invocation binding 保存该时间与具体 `skillInvocation`（版本、已解析参数、工具和目标），Store 从 definition+scheduledFor 确定性解析参数/渲染 instruction，receipt 重放复用同一值。固定 SkillVersion 内容不变，日期变更不视作方法漂移。未知回执重试先查 receipt，不能重算成另一日。
 
 新增客户端请求头 `x-crewon-automation-version: 1` 明确支持 Skill 日程。旧 list 请求仅返回 v0，在 Store 查询中先按 v0 过滤再 LIMIT，游标使用过滤后页末项；内存、SQLite、Postgres 保持相同排序和分页语义，避免中间 v1 页造成空页或丢失后续 v0。旧 get/run-now 若身份指向 v1，在执行前返回明确升级错误；旧客户端不接收新增字段，不让一条 v1 破坏整个列表。新客户端请求头获取混合列表。旧 create 原样；Skill create 必须携带支持声明。此能力头只影响表示/兼容，不能授予执行权限。
 
@@ -59,3 +59,18 @@ R01 → 既有 domain/application/contracts/store/scheduler 兼容基线；R02�
 v1 HTTP 表示增加 `skillReadiness: {state: "ready" | "blocked", code: string | null}`；它是当前执行前检查，不是一次已发生的失败 Run。list/get 在既有刷新请求内按有界页依次调用只读准入检查：重新加载绑定、授权、解析现时日期参数、解析现有 route、调用 C02 execute。准入无存储副作用，不另建 scheduler 或轮询。缺依赖/撤权/参数/目标/预算错误返回稳定 code，卡片据此展示具体恢复动作；运行仍再次准入，ready 不是持久权限票据。执行后结果和取消继续走原 Run/history；排队后撤权/未知外部结果属 runtime gate 和 F05 真实执行验收边界，不能由 readiness 冒称覆盖。
 
 能力头必须由 ControlApiClient 经 Web BFF 允许列表透传至 Control；测试分别验证新头保留与旧客户端无头兼容。skillReadiness 为动态读模型，不参与 definitionDigest 或 sameAutomation 固定绑定比较；Run identity 和历史摘要不变。
+
+## C05 运行时消费端口
+
+`resolveAutomationSkillForRun({store,digester}, actor, runId)` 从已持久 Run.origin.binding 和对应 AutomationDefinition 读取并交叉校验 scope/thread/agentVersion/definitionDigest/routeDigest/instructionDigest，校验 scheduledFor 与已冻结的具体 skillInvocation，并直接返回持久的 C02 spec。返回 null 表示非Skill日程；已损坏或不可读绑定 fail closed。无新映射表，不能接受模型传来的Skill身份。此读端口只证明调用身份，F03 `ensureRunSkillAllowed` 和 C05 工具执行时仍重新验证当前撤权/授权范围。
+
+## 复用与自研边界（用户新增约束评审）
+
+| 领域             | 采用的成熟能力                                                                                                                                   | 候选与取舍                                                                                                                   | 必要 C04 适配                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| 调度、幂等、恢复 | 仓库现有 AutomationScheduler、SQLite/Postgres 原子 receipt、Run/队列、日历组件                                                                   | 不引入 cron/BullMQ/第二 scheduler；日程更新和队列权威必须保持单源                                                            | scheduler 仅透传既有 occurrence；定义/Run增加固定绑定                         |
+| 时区和日期       | Node 24 自带 ICU/ECMA Intl.DateTimeFormat + UTC 日历日期运算                                                                                     | 查到 dayjs 仅为传递依赖；未发现应用直接使用 luxon/date-fns/Temporal。三个有限日期规则无需增加日期引擎，避免改变现有 DST 策略 | 将已确认 occurrence 转日程本地日期，再计算周一至周日；不解析自然语言/表达式   |
+| UI 与可访问交互  | React 19、既有 ModalDialog/Button、原生 input/select、仓库 CommandScheduleCalendar；现有 radix-ui 1.6.7 工具链                                   | 不另建表单/日历系统；只新增既有参数控件和值来源选择                                                                          | 固定版本和目标展示、类型保持、日期规则和错误恢复文案                          |
+| Schema 与传输    | C02/C03 权威 parser/renderer；现有 OpenAPI + openapi-typescript 7.13.0、Fastify 5.11.0/AJV 8.20.0 传输工具链、既有严格 request/response 解析惯例 | zod/AJV 为传递依赖，F04不将其当未声明的直接依赖；不另造通用 schema 引擎或改变旧 v0 parser 语义                               | wire parser仅验证新增 C04结构/字节上限；声明参数/激活/权限仍由C02/C03唯一验证 |
+
+本 feature 无新增包或 lockfile 变更。复用包版本来自仓库锁文件；许可沿用现有 scripts/check-\*-licenses 检查，实际结果见 evidence。时区兼容验证覆盖沪/洛跨日、纽约 DST 重复小时、跨年上一完整周，以及现有 scheduler 的夏令时/离线最新 occurrence；这些证明有限规则，不承诺任意表达式或另一套时区调度算法。

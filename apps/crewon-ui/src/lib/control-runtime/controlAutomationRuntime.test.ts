@@ -3,9 +3,14 @@ import {
   ControlApiClient,
   ControlApiClientError,
 } from "@crewon/control-client";
-import type { AutomationView, RunView } from "@crewon/contracts";
+import type {
+  AutomationView,
+  RunView,
+  SkillInvocationSpec,
+} from "@crewon/contracts";
 
 import { ControlAutomationRuntime } from "./controlAutomationRuntime";
+import { scheduleSkillInvocation } from "../../components/app/automationSkill.test-support";
 
 describe("ControlAutomationRuntime", () => {
   it("propagates the authority AbortSignal through paginated list requests", async () => {
@@ -298,6 +303,230 @@ describe("ControlAutomationRuntime", () => {
       "control_automation_thread_response_invalid",
     );
     expect(adopter.adoptAutomationRun).not.toHaveBeenCalled();
+  });
+});
+
+describe("ControlAutomationRuntime Skill schedule compatibility", () => {
+  it("reads prompt-only and fixed-version definitions in the same list", async () => {
+    const skill = automation({
+      automationId: "automation-skill",
+      skillInvocation: scheduleSkillInvocation(),
+      parameterBindings: { date: "previousWeekStart" },
+    });
+    const runtime = new ControlAutomationRuntime({
+      client: client(async () =>
+        json({ data: [automation(), skill], nextCursor: null }),
+      ),
+      adopter: { adoptAutomationRun: async () => undefined },
+    });
+    await expect(runtime.listAutomations()).resolves.toEqual([
+      automation(),
+      skill,
+    ]);
+  });
+
+  it.each([
+    { skillInvocation: null },
+    { skillInvocation: { ...scheduleSkillInvocation(), unexpected: true } },
+    {
+      skillInvocation: {
+        ...scheduleSkillInvocation(),
+        parameters: { nested: { secret: true } },
+      },
+    },
+    {
+      skillInvocation: {
+        ...scheduleSkillInvocation(),
+        skill: { ...scheduleSkillInvocation().skill, versionId: "latest" },
+      },
+    },
+    {
+      skillInvocation: {
+        ...scheduleSkillInvocation(),
+        deliveryTarget: {
+          ...scheduleSkillInvocation().deliveryTarget,
+          threadId: "other-thread",
+        },
+      },
+    },
+    { parameterBindings: { date: "runDate" } },
+    {
+      skillInvocation: scheduleSkillInvocation(),
+      parameterBindings: { count: "runDate" },
+    },
+    {
+      skillInvocation: scheduleSkillInvocation(),
+      parameterBindings: { date: "tomorrow" },
+    },
+    { skillReadiness: { state: "ready", code: null } },
+    {
+      skillInvocation: scheduleSkillInvocation(),
+      skillReadiness: { state: "ready", code: "skill_access_denied" },
+    },
+    {
+      skillInvocation: scheduleSkillInvocation(),
+      skillReadiness: { state: "blocked", code: null },
+    },
+    {
+      skillInvocation: scheduleSkillInvocation(),
+      skillReadiness: {
+        state: "blocked",
+        code: "skill_access_denied",
+        privateContext: "hidden",
+      },
+    },
+  ])("rejects malformed Skill schedule transport %#", async (invalid) => {
+    const runtime = new ControlAutomationRuntime({
+      client: client(async () =>
+        json({ data: [{ ...automation(), ...invalid }], nextCursor: null }),
+      ),
+      adopter: { adoptAutomationRun: async () => undefined },
+    });
+    await expect(runtime.listAutomations()).rejects.toThrow(
+      "control_automation_view_invalid",
+    );
+  });
+
+  it("sends a fixed snapshot and retries a substituted binding with the same receipt key", async () => {
+    const invocation = scheduleSkillInvocation();
+    const original = structuredClone(invocation);
+    const commands: unknown[] = [];
+    const keys: (string | null)[] = [];
+    const runtime = new ControlAutomationRuntime({
+      client: client(async (input, init = {}) => {
+        if (String(input).endsWith("/threads/thread-1")) {
+          invocation.skill.versionId = "version-2";
+          return json(threadResponse());
+        }
+        commands.push(JSON.parse(String(init.body)));
+        keys.push(new Headers(init.headers).get("idempotency-key"));
+        return json({
+          disposition: commands.length === 1 ? "committed" : "replayed",
+          automation: automation({
+            skillInvocation: original,
+            parameterBindings: {
+              date: commands.length === 1 ? "runDate" : "previousWeekStart",
+            },
+          }),
+        });
+      }),
+      adopter: { adoptAutomationRun: async () => undefined },
+      idempotencyKey: () => "same-skill-key",
+    });
+    await expect(
+      runtime.createAutomation({
+        threadId: "thread-1",
+        title: "Review changes",
+        prompt: "Review the current changes.",
+        agentVersionId: "agent-version-1",
+        schedule: null,
+        skillInvocation: invocation,
+        parameterBindings: { date: "previousWeekStart" },
+      }),
+    ).resolves.toMatchObject({
+      skillInvocation: original,
+      parameterBindings: { date: "previousWeekStart" },
+    });
+    expect(keys).toEqual(["same-skill-key", "same-skill-key"]);
+    expect(commands).toEqual([
+      expect.objectContaining({ skillInvocation: original }),
+      expect.objectContaining({ skillInvocation: original }),
+    ]);
+  });
+
+  it.each(["version", "parameter", "target", "binding"])(
+    "never adopts a Run whose %s has drifted",
+    async (drift) => {
+      const pinned = automation({
+        skillInvocation: scheduleSkillInvocation(),
+        parameterBindings: { date: "runDate" },
+      });
+      const changed = structuredClone(pinned);
+      const changedInvocation = changed.skillInvocation as SkillInvocationSpec;
+      if (drift === "version") changedInvocation.skill.versionId = "version-2";
+      if (drift === "parameter") changedInvocation.parameters.count = 100;
+      if (drift === "target" && changedInvocation.deliveryTarget)
+        changedInvocation.deliveryTarget.spaceId = "space-other";
+      if (drift === "binding")
+        changed.parameterBindings = { date: "previousWeekEnd" };
+      const adopter = { adoptAutomationRun: vi.fn(async () => undefined) };
+      const keys: (string | null)[] = [];
+      const runtime = new ControlAutomationRuntime({
+        client: client(async (input, init = {}) => {
+          const url = String(input);
+          if (url.endsWith("/automations/automation-1"))
+            return json({ automation: pinned });
+          if (url.endsWith("/threads/thread-1")) return json(threadResponse());
+          keys.push(new Headers(init.headers).get("idempotency-key"));
+          return json({
+            disposition: "committed",
+            automation: changed,
+            invocation: { automationId: "automation-1", runId: "run-1" },
+            run: run(),
+          });
+        }),
+        adopter,
+        idempotencyKey: () => "fixed-run-key",
+      });
+      await expect(runtime.runAutomationNow("automation-1")).rejects.toThrow(
+        "control_automation_run_response_invalid",
+      );
+      expect(keys).toEqual(["fixed-run-key", "fixed-run-key"]);
+      expect(adopter.adoptAutomationRun).not.toHaveBeenCalled();
+    },
+  );
+
+  it("rejects a mismatched delivery thread before issuing any request", async () => {
+    const fetch = vi.fn(async () => json(threadResponse()));
+    const runtime = new ControlAutomationRuntime({
+      client: client(fetch),
+      adopter: { adoptAutomationRun: async () => undefined },
+    });
+    await expect(
+      runtime.createAutomation({
+        threadId: "thread-other",
+        title: "Report",
+        prompt: "Run Skill",
+        agentVersionId: null,
+        schedule: null,
+        skillInvocation: scheduleSkillInvocation(),
+      }),
+    ).rejects.toThrow("control_automation_create_intent_invalid");
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("accepts a Run after readiness recovers while the fixed binding remains unchanged", async () => {
+    const pinned = automation({
+      skillInvocation: scheduleSkillInvocation(),
+      skillReadiness: {
+        state: "blocked",
+        code: "skill_dependency_unavailable",
+      },
+    });
+    const recovered = {
+      ...pinned,
+      skillReadiness: { state: "ready" as const, code: null },
+    };
+    const adopter = { adoptAutomationRun: vi.fn(async () => undefined) };
+    const runtime = new ControlAutomationRuntime({
+      client: client(async (input) => {
+        const url = String(input);
+        if (url.endsWith("/automations/automation-1"))
+          return json({ automation: pinned });
+        if (url.endsWith("/threads/thread-1")) return json(threadResponse());
+        return json({
+          disposition: "committed",
+          automation: recovered,
+          invocation: { automationId: "automation-1", runId: "run-1" },
+          run: run(),
+        });
+      }),
+      adopter,
+    });
+    await expect(
+      runtime.runAutomationNow("automation-1"),
+    ).resolves.toMatchObject({ automation: recovered });
+    expect(adopter.adoptAutomationRun).toHaveBeenCalledOnce();
   });
 });
 

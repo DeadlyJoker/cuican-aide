@@ -2103,6 +2103,9 @@ function parseRunAutomationNowResponse(
 function parseAutomationView(input: unknown): AutomationView {
   if (
     !hasExactKeys(input, [
+      ...(isPlainObject(input) && input.skillReadiness !== undefined
+        ? ["skillReadiness"]
+        : []),
       ...(isPlainObject(input) && input.skillInvocation !== undefined
         ? ["skillInvocation"]
         : []),
@@ -2141,6 +2144,20 @@ function parseAutomationView(input: unknown): AutomationView {
   try {
     if (input.skillInvocation !== undefined)
       parseSkillInvocationSpec(input.skillInvocation);
+    if (input.skillReadiness !== undefined) {
+      const readiness = input.skillReadiness;
+      if (
+        input.skillInvocation === undefined ||
+        !hasExactKeys(readiness, ["state", "code"]) ||
+        !(
+          (readiness.state === "ready" && readiness.code === null) ||
+          (readiness.state === "blocked" &&
+            typeof readiness.code === "string" &&
+            /^[A-Za-z0-9_]{1,128}$/u.test(readiness.code))
+        )
+      )
+        throw new Error("invalid readiness");
+    }
     if (input.parameterBindings !== undefined) {
       if (input.skillInvocation === undefined) throw new Error("missing skill");
       parseAutomationParameterBindings(input.parameterBindings);

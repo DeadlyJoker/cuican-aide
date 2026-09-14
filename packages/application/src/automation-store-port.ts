@@ -1,4 +1,5 @@
 import {
+  SkillError,
   parseSkillInvocationSpec,
   parseAutomationParameterBindings,
   type SkillInvocationSpec,
@@ -527,6 +528,15 @@ export function mapAutomationError(
   fallbackCategory: "validation" | "internal" = "validation",
 ): ApplicationError {
   if (error instanceof ApplicationError) return error;
+  if (error instanceof SkillError)
+    return new ApplicationError(fallbackCategory, error.code, { cause: error });
+  if (
+    error instanceof Error &&
+    error.message === "automation_parameter_bindings_invalid"
+  )
+    return new ApplicationError(fallbackCategory, error.message, {
+      cause: error,
+    });
   if (error instanceof AutomationDefinitionError) {
     return new ApplicationError(fallbackCategory, error.code, { cause: error });
   }
