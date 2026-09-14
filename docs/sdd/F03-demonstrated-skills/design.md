@@ -100,3 +100,11 @@ C05 已由协调新增 F05 owner：`crewon_browser_observe`、`crewon_browser_ac
 ## 显式契约样本来源
 
 C01 描述录制结构与摘要，不含真假来源证明。HTTP 导入新增可选 `provenance:"contract-fixture"`，仅允许降低为测试来源；不接受客户端指定 `"recording"` 来提升来源。该标记经完整 C01 校验后写入 SkillSource，与 importId 一起参与幂等一致性检查，重试不能去掉标记改写原记录。普通 F02 handoff 保持原请求形状。样本可验证模型生成和审阅 UI，但即便有真实模型完成的试跑也不能确认真实试跑或激活。首次真实模型验收遗漏该标记的记录保持原样并单列部分证据，修正后另建一条独立的真实生成链，不移接旧输出。
+
+## 整个任务的工具审批模式
+
+联合验收发现文件交付沿用 `perAction` 时，每个日程任务都会等待审批。协调裁决复用既有 `toolPermissionMode` 与真实 approval receipt，由 F01 接线共享契约、F03/F04 后端冻结逻辑；不修改工具的 `perAction` 要求，不新增授权引擎。Skill execution 和含 Skill 的日程 create 请求顶层可选 `requestApproval | approveForMe`，缺省 `requestApproval`；旧 prompt-only v0 不接受该字段。C01、SkillInvocation 与参数绑定均不含审批模式。
+
+UI 复用 `CommandComposerSelect`，以独立两项选择器说明设置影响整个本次任务或每次日程任务，包括文件交付。试跑在异步准备 Thread 之前冻结选择；未知 ACK 和页面重挂载重放原 body/key，旧缓存缺字段不补写以免改原请求。服务端确认绑定 Run 后，新尝试重置为请求批准；身份切换清理状态并保留 epoch 防护。日程表单独立默认请求批准，不继承试跑或 Composer 选择；保存后在日程卡显示持久模式。UI runtime 校验请求、回显和 run-now definition 的模式一致性，缺省旧响应按请求批准解释。RunView 不新增模式字段，实际 Run 冻结由现有宿主校验。
+
+选择帮我批准只改变工具审批处理，不创建浏览器 grant。浏览器仍单独绑定任务/session，限定范围仍约束固定 Skill、参数、网站与动作；越界停止。浏览器授权文案根据整个任务的模式说明审批方式，保留原 requestApproval 调用方行为。

@@ -73,3 +73,18 @@ F01同一DeliveryService validator与完整F05 bridge由共同集成任务接线
 协调分支的首次全 UI 检查发现新增 `SkillLibraryHost.test.tsx` 引用 app 外壳违反既有组件分层规则。协调提交 `269a4c8f9` 合入本分支为 `bc1c52a95`：仅将完整测试移至 `components/app/CommandWorkspaceSkillLibrary.test.tsx` 并修改3个相对导入；原断言与架构规则均保留。本分支重跑新位置测试及 `libArchitecture.test.ts`，2文件/22项通过。全 UI 结果由协调分支另行记录，不将此窄集冒作全量通过。
 
 收口运行 `pnpm format`，并显式检查 F03 文档、脚本与 JSON 的 Prettier 格式；均通过。分支完成 F03 独立实现与证据交付，T08 保留为协调任务与 F05 的联合验收待办。
+
+## S6 整个任务的工具审批模式
+
+联合验收追加 F03-R10。UI 提交 `a77cd9f2b` 必须在 F01 共享后端 `3e5d6af1d` 后集成；后端的真实 Run 冻结、approval receipt 与交付行为由 F01 验证。为保持本分支 UI 交付独立，未复制整段 F01 历史：在临时隔离 worktree 以 `3e5d6af1d` 为基线应用 UI 改动，23个 UI 文件与 `a77cd9f2b` 逐字节相同，在该组合上完成类型与全量检查。
+
+- 复用既有 `CommandComposerSelect`，只提供请求批准/帮我批准；缺省请求批准，不继承 Composer 或已有 Skill/交付目标。试跑和调用在准备 Thread 前冻结选择，ACK 重试与页面重挂载保留原 body/key；旧缓存省略字段时保持原请求。确认真实绑定 Run 后，新尝试恢复请求批准，运行记录仍展示旧 Run 的模式。
+- Skill 日程表单独立选择，提交中锁定选择；请求顶层传递模式，日程卡显示已保存模式。UI runtime 校验非法模式、旧 v0 禁止携带模式、回执替换及手动 run-now definition 漂移，未知结果沿用原幂等键；不向 SkillInvocation 或参数绑定注入权限。
+- 浏览器文案按整个任务的模式说明审批处理，保留 F05 `94c6934e1` 的限定范围说明。可选 mode prop 仅参与文案，不进入授权 identity 或 bridge payload；切换模式不触发 authorize。原 requestApproval 文案与独立浏览器授权逻辑保持；限定范围仍约束自动批准后的动作。
+- 新行为反例先复现失败，再修复；覆盖缺省与显式模式、执行/日程传参、异步冻结、重试、旧请求、身份变化、回显和浏览器无自动授权。组件/身份等8文件71项通过；隔离组合的窄集除新增日程选择器对应的既有快照外259项通过，补充可见性断言并更新该快照后相关6项通过。`pnpm --filter @crewon/ui lint` 与 `build` 通过。
+
+使用系统 Chrome 实际渲染并操作生产 React 组件，试跑和日程各1440×900、1100×600、390×844，均验证默认请求批准、仅两选项、显式选择后请求顶层传参、菜单在视口内及无横向溢出/pageerror。追加1100×600、390×844浏览器授权阶段，未连接时授权按钮禁用，明确继续前无执行请求。见 [审批选择布局和交互](./artifacts/approval-mode-ui/checks.json) 与 [浏览器授权说明检查](./artifacts/approval-mode-ui/browser-checks.json)。这些是明确标注的 UI 契约样本，提交回调仅保存在内存，不证明实际模型、工具、授权或文件交付。
+
+默认全 UI 两次均3001通过、1项既有 `scripts/soak/trend.test.ts` 七天采样在5秒阈值超时；首次与构建并行，第二次未并行构建。该未修改测试单独运行4/4通过，耗时3.31秒。保留测试与阈值，降低 worker 数量后的完整结果单列记录，避免把窄集或默认超时冒作默认全量通过。
+
+最终运行 `pnpm --filter @crewon/ui exec vitest run --maxWorkers=2`：436文件/3002项全通过，耗时44.57秒。检查覆盖完整 UI 测试集，包括既有 CommandWorkspace 与架构规则；没有跳过测试或调整超时阈值。精确命令、组合基线与结果保存在 [本轮检查记录](./artifacts/approval-mode-ui/validation.json)。T10 完成；真实自动到期交付及幂等重放仍由协调/F05 的 E05 证据验收。

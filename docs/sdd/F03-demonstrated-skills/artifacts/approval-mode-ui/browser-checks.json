@@ -1,0 +1,25 @@
+{
+  "checkedAt": "2026-09-14T05:23:42.576Z",
+  "evidenceKind": "UI contract fixture; real Chrome rendering, no browser grant or backend action",
+  "checks": [
+    {
+      "width": 1100,
+      "height": 600,
+      "bodyWidth": 1100,
+      "mode": "approveForMe",
+      "commandBeforeExplicitProceed": 0,
+      "unconnectedBrowserAuthorizationDisabled": true,
+      "copyExplainsIndependentBrowserAuthorization": true
+    },
+    {
+      "width": 390,
+      "height": 844,
+      "bodyWidth": 390,
+      "mode": "approveForMe",
+      "commandBeforeExplicitProceed": 0,
+      "unconnectedBrowserAuthorizationDisabled": true,
+      "copyExplainsIndependentBrowserAuthorization": true
+    }
+  ],
+  "errors": []
+}

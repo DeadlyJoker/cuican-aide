@@ -1,0 +1,73 @@
+{
+  "checkedAt": "2026-09-14T05:19:08.751Z",
+  "evidenceKind": "UI contract fixture; real Chrome rendering and component interaction, no model/browser-tool/backend execution",
+  "checks": [
+    {
+      "scope": "execution",
+      "width": 1440,
+      "height": 900,
+      "bodyWidth": 1440,
+      "default": "requestApproval",
+      "selected": "approveForMe",
+      "modeSubmitted": "approveForMe",
+      "options": 2,
+      "menuFitsViewport": true
+    },
+    {
+      "scope": "schedule",
+      "width": 1440,
+      "height": 900,
+      "bodyWidth": 1440,
+      "default": "requestApproval",
+      "selected": "approveForMe",
+      "modeSubmitted": "approveForMe",
+      "options": 2,
+      "menuFitsViewport": true
+    },
+    {
+      "scope": "execution",
+      "width": 1100,
+      "height": 600,
+      "bodyWidth": 1100,
+      "default": "requestApproval",
+      "selected": "approveForMe",
+      "modeSubmitted": "approveForMe",
+      "options": 2,
+      "menuFitsViewport": true
+    },
+    {
+      "scope": "schedule",
+      "width": 1100,
+      "height": 600,
+      "bodyWidth": 1100,
+      "default": "requestApproval",
+      "selected": "approveForMe",
+      "modeSubmitted": "approveForMe",
+      "options": 2,
+      "menuFitsViewport": true
+    },
+    {
+      "scope": "execution",
+      "width": 390,
+      "height": 844,
+      "bodyWidth": 390,
+      "default": "requestApproval",
+      "selected": "approveForMe",
+      "modeSubmitted": "approveForMe",
+      "options": 2,
+      "menuFitsViewport": true
+    },
+    {
+      "scope": "schedule",
+      "width": 390,
+      "height": 844,
+      "bodyWidth": 390,
+      "default": "requestApproval",
+      "selected": "approveForMe",
+      "modeSubmitted": "approveForMe",
+      "options": 2,
+      "menuFitsViewport": true
+    }
+  ],
+  "errors": []
+}

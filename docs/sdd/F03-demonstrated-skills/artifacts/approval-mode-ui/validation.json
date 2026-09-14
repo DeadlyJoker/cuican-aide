@@ -1,0 +1,58 @@
+{
+  "uiCommit": "a77cd9f2b73570e1fc3ef7c4354775d515d0554e",
+  "backendIntegrationBase": "3e5d6af1ddd11489e7129805ecfeb84d28351268",
+  "verificationMethod": "Isolated worktree based on the backend integration commit; all 23 changed UI files match the UI commit byte for byte.",
+  "commands": [
+    {
+      "command": "pnpm --filter @crewon/ui lint",
+      "exitCode": 0,
+      "logSha256": "5781b6b5948a713532381bacd16df276aef7f5738ef1d7dccf1af92703c7a2f5"
+    },
+    {
+      "command": "pnpm --filter @crewon/ui build",
+      "exitCode": 0,
+      "logSha256": "8b08285860443f75b6295a96705cd6e0625c097046bc201aa27624df1a987827"
+    },
+    {
+      "command": "pnpm --filter @crewon/ui test",
+      "exitCode": 1,
+      "logSha256": "1a8e3abcd52df62dcd0d094466093d946639c033ac5683feca584e8feb466c3e"
+    },
+    {
+      "command": "pnpm --filter @crewon/ui test",
+      "exitCode": 1,
+      "logSha256": "858027549a644c64ca668dce5ae7f7cca583135c55f5543a362f58a0f55c67b6"
+    },
+    {
+      "command": "pnpm --filter @crewon/ui exec vitest run scripts/soak/trend.test.ts",
+      "exitCode": 0,
+      "logSha256": "9f0747b5c96deb2273ede86f20d1877bf83f4bd99143816a63d6a814b6311e00"
+    },
+    {
+      "command": "pnpm --filter @crewon/ui exec vitest run --maxWorkers=2",
+      "exitCode": 0,
+      "logSha256": "92cf0f8ef9377567ccd366057a057c104e5cd5134cf5772c02a0e5f3f515c93c"
+    }
+  ],
+  "defaultFullSuite": {
+    "attempts": 2,
+    "passedPerAttempt": 3001,
+    "failedPerAttempt": 1,
+    "failure": "Unmodified scripts/soak/trend.test.ts seven-day simulation exceeded the existing 5000ms limit."
+  },
+  "isolatedSoak": {
+    "passed": 4,
+    "testSeconds": 3.31
+  },
+  "boundedFullSuite": {
+    "workers": 2,
+    "filesPassed": 436,
+    "testsPassed": 3002,
+    "durationSeconds": 44.57
+  },
+  "limits": [
+    "Timeout threshold and all test assertions remain unchanged.",
+    "UI browser screenshots use explicit contract fixtures and do not establish real model, tool, grant or delivery execution.",
+    "Real occurrence and delivery acceptance remain in the coordinated E05 evidence."
+  ]
+}
