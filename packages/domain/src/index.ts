@@ -32,5 +32,6 @@ export * from "./workflow-value-flow.ts";
 export * from "./workflow-version-error.ts";
 export * from "./workflow-version.ts";
 export * from "./workflow-version-codec.ts";
-
 export * from "./demonstrated-skill.ts";
+export * from "./delivery.ts";
+export * from "./delivery-requests.ts";
