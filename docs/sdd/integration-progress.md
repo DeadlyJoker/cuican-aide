@@ -83,3 +83,5 @@ F05 实际录制来源的首次真实模型交付证据 `34053bcbb` 已合入根
 已合入 F01 显式审批模式 `3e5d6af1d`（根 `99cd3d53d`）：仅本次执行/Skill 日程顶层显式选择 requestApproval 或 approveForMe，缺省请求批准；模式冻结并在事务、Run 绑定、receipt、解析及客户端回显逐层校验。v0 不接受新模式字段，旧 v1 未携带该字段时保留原始摘要，执行按请求批准。F01 工具的 perAction 策略不改。F04 helper 通过真实 activate/create/到期调度及只读 receipt key 验证，不调用 run-now、approve 或 assemble。
 
 根首次相关八文件组合 52 通过、2 失败：helper 测试用模型只发送完成事件、没有正文，实际 Worker 因 message_content_invalid 重试。F04 `8dba99f82` 仅补一行有效 output.delta；同组合重跑 **54/54 通过、0 跳过**，保留首次失败日志，未放宽超时或调度行为。根全部 packages、Control API 与 Worker 类型检查通过。真实 E05 已由既有 scheduler 产生独立到期 Run，正在等待最终文件和重启核验；界面模式选择由 F03 收尾。
+
+F03 审批选择 UI `a77cd9f2b` 已合入根 `541056f4f`，复用现有 CommandComposerSelect；试跑与日程分别默认请求批准，明确选择后冻结本次请求，丢失响应重试保持原模式，已绑定执行后的新尝试恢复默认。运行记录与日程卡回显保存模式，范围说明明确为整个任务的工具审批。两处合并冲突仅是 F05 已有 scope 文案的格式和新增快照，保留新版完整内容。根九个受影响组件/客户端文件 **104 项通过**；包含身份失效、重试及浏览器授权文案。权限/范围修复后的 desktop runtime stage 与 Electron host build 也已通过。

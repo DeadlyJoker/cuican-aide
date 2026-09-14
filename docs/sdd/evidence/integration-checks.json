@@ -137,6 +137,38 @@
       "scope": "At 9d628460b; actual Control HTTP/SQLite/scheduler/Worker, mode freezing, defaults, replay, old v0/v1 compatibility, forged mode rejection and delivery approvals. Helper fake model now emits valid text; no timeout or scheduler settings weakened.",
       "logPath": "/tmp/crewon-integration-permission-rerun.log",
       "logSha256": "af395bd6d20e33bca67dc620cdc6861adb486b89136ec5710472fd1ffcba460c"
+    },
+    {
+      "name": "Final permission UI narrow integration",
+      "counts": {
+        "filesPassed": 9,
+        "passed": 104,
+        "failed": 0
+      },
+      "scope": "At 92799a723; nine affected component/client files, including default/explicit choices, frozen retries, identity guards and browser scope copy.",
+      "logPath": "/tmp/crewon-integration-ui-permission-narrow.log",
+      "logSha256": "b9940d4ea15acbe6bc1e6fc44c361c9f220b8f983d37843e2f6d69500e8a861f"
+    },
+    {
+      "name": "Packages types after explicit permission integration",
+      "counts": null,
+      "scope": "All selected packages completed at 99cd3d53d.",
+      "logPath": "/tmp/crewon-integration-packages-types-permission.log",
+      "logSha256": "820a5921756171efeb7caed5f01e5d8ca6e6fdf02f278451c97a6b3650e038c6"
+    },
+    {
+      "name": "Desktop runtime stage after permission and scope fixes",
+      "counts": null,
+      "scope": "At 9d628460b; actual Control/Worker/runtime bundles rebuilt.",
+      "logPath": "/tmp/crewon-integration-runtime-stage-permission.log",
+      "logSha256": "74caee953c7b7ab9130ffa1d9e5fb36b992db9571e3975e37adb944d856e38f7"
+    },
+    {
+      "name": "Electron host build after scope enforcement",
+      "counts": null,
+      "scope": "At 9d628460b; actual desktop host/preloads rebuilt.",
+      "logPath": "/tmp/crewon-integration-host-build-permission.log",
+      "logSha256": "0615ee1efe08d6721b4f41b6a87362962b0c2dee55de2903ea6c8a45a91e3cbc"
     }
   ],
   "currentPackageBoundaryViolations": [
